@@ -12,7 +12,6 @@ import re
 import secrets
 import stat
 import time
-import ssl
 import urllib.request
 from itertools import islice
 
@@ -536,7 +535,8 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def listener_probe(url, certificate):
-    context = ssl.create_default_context(cadata=certificate)
+    context, unused = tls_trust.context(certificate)
+    del unused
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPSHandler(context=context), NoRedirect())
     request = urllib.request.Request(url, headers={"Range": "bytes=0-0"})
     with absolute_deadline.limited(30):

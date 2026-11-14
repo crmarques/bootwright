@@ -12,10 +12,11 @@ import http.server
 from pathlib import Path
 import ssl
 import threading
+import urllib.error
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import redfish_control, tls_trust
+from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_controller, redfish_control, tls_trust
 
 FIXTURES = Path(__file__).parent / "fixtures" / "tls-trust"
 
@@ -25,16 +26,18 @@ def pem(name):
 
 
 @contextlib.contextmanager
-def serving(name):
+def serving(name, status=200, content=b"{}"):
     received = []
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
             received.append(self.headers.get("Authorization"))
-            self.send_response(200)
-            self.send_header("Content-Length", "2")
+            self.send_response(status)
+            if 300 <= status < 400:
+                self.send_header("Location", "/SECRET-redirected")
+            self.send_header("Content-Length", str(len(content)))
             self.end_headers()
-            self.wfile.write(b"{}")
+            self.wfile.write(content)
 
         def log_message(self, *args):
             return
@@ -118,3 +121,46 @@ def test_certificate_mode_cannot_silently_use_plain_http():
     with pytest.raises(redfish_control.ControllerError, match="HTTPS"):
         redfish_control.Client("http://bmc.example.test/redfish/v1/Systems/1", "test-user", "test-password",
                                ca_data=pem("issued"), verification="certificate")
+
+
+@pytest.mark.parametrize("name", ["self-signed", "issued"])
+def test_discovery_delivery_accepts_bound_leaf_on_older_python_defaults(monkeypatch, name):
+    original = ssl.create_default_context
+
+    def older_defaults(*args, **kwargs):
+        result = original(*args, **kwargs)
+        result.verify_flags &= ~tls_trust.PARTIAL_CHAIN
+        return result
+
+    monkeypatch.setattr(ssl, "create_default_context", older_defaults)
+    for variable in ("HTTPS_PROXY", "https_proxy"):
+        monkeypatch.setenv(variable, "http://127.0.0.1:1")
+    for variable in ("NO_PROXY", "no_proxy"):
+        monkeypatch.setenv(variable, "")
+    with serving(name) as (endpoint, received):
+        disk_discovery_controller.listener_probe(endpoint, pem(name))
+        assert len(received) == 1
+
+
+@pytest.mark.parametrize("name", ["wrong-name", "expired", "future", "client-only", "other-leaf"])
+def test_discovery_delivery_refuses_invalid_identity_before_http(name):
+    with serving(name) as (endpoint, received):
+        bound = "issued" if name == "other-leaf" else name
+        with pytest.raises(urllib.error.URLError):
+            disk_discovery_controller.listener_probe(endpoint, pem(bound))
+        assert not received
+
+
+@pytest.mark.parametrize("status", [302, 403, 404, 503])
+def test_discovery_delivery_preserves_http_refusals_without_following_redirects(status):
+    with serving("issued", status=status) as (endpoint, received):
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            disk_discovery_controller.listener_probe(endpoint, pem("issued"))
+        assert caught.value.code == status and len(received) == 1
+
+
+def test_discovery_delivery_refuses_an_empty_successful_response():
+    with serving("issued", content=b"") as (endpoint, received):
+        with pytest.raises(ValueError, match="private discovery listener unavailable"):
+            disk_discovery_controller.listener_probe(endpoint, pem("issued"))
+        assert len(received) == 1
