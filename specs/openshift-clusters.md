@@ -182,13 +182,10 @@ the explicit per-Machine [unverified-fetch exception](api/machines.md#bmc-and-ro
 recorded in the request and plan. An insert under `established` requires the
 deciding setting on, enabling it by default when permitted.
 
-A virtual node's emulated BMC on the Machine its artifact server is placed on
-keeps `established`: its unverified fetch never leaves that host. One on
-another Machine freezes `importCertificate` with certificate removal after the
-boot, so its insert imports the server's certificate, turns the device's
-verification on and fetches verified, and its eject deletes the certificate,
-through the same client a physical BMC uses
-([BMC trust](substrates.md#identity-and-power-operations)).
+Every emulated BMC freezes automatic verified media trust with certificate
+removal after boot, independent of artifact-server placement. Its insert and
+eject use the same Redfish adapter and verification implementation as physical
+BMCs. Media sensitivity follows the image's contents on every substrate.
 
 ### Cluster size
 
@@ -604,17 +601,9 @@ URL or a token
 
 That contract requires the fetching controller to verify the serving
 certificate. A physical management controller does so under the trust its
-Machine declares. An [emulated BMC](substrates.md#machine-realization)
-on the artifact server's own placement Machine does not: it fetches over HTTPS
-without verifying the server's certificate, so there confidentiality rests on
-the token and on the fetch never leaving that host. An emulated BMC on any
-other Machine imports the server's certificate and verifies its fetch, as
-[selection](#refusal-table) freezes. This is the one exception, and it is
-recorded here rather than implied. The [managed-OS installation](managed-os.md#refusal-table) of a
-virtual Machine shares it, bounded more narrowly: a virtual Machine whose
-provider host is not its image server's placement Machine refuses before
-registration ([B1088](milestones/backlog.md#b1088)). It extends to no other
-consumer.
+Machine declares. An [emulated BMC](substrates.md#machine-realization) imports
+the same serving
+certificate and verifies the fetch whether the server is local or remote.
 
 **Pushed delivery.** A cluster whose every node takes pushed delivery needs no
 artifact server: the block builds its image in the work area

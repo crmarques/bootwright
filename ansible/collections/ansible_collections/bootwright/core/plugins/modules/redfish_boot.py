@@ -108,8 +108,9 @@ options:
       - C(established) imports no certificate; I(enable_verification) controls
         whether deciding verification is configured automatically.
       - C(importCertificate) adds the first certificate of I(certificate) to the
-        device's certificate collection unless it is there and turns
-        VerifyCertificate on, with no fallback to any other trust.
+        device's certificate collection unless it is there. Verification is
+        enabled through the shared conditional-write procedure only when
+        I(enable_verification) is true; otherwise it must already be on.
       - Without that collection, a qualified discovered SecurityService imports
         the terminal issuer from the full chain into an unused FileTransfer
         slot and reads it back. Transfer verification is enabled first when

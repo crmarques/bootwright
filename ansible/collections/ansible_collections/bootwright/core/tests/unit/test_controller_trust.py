@@ -44,7 +44,7 @@ ENTRY_FILES = {"target_proof": "pre_boot", "firmware": "pre_boot"}
 # The roles that reach a controller a bundle can anchor, and how many Redfish
 # module tasks each holds. Finding another number means the walk or a role
 # changed, and either must be looked at.
-BUNDLED = {"substrate_baremetal_machine": 14, "substrate_libvirt_machine": 14}
+BUNDLED = {"substrate_baremetal_machine": 12, "substrate_libvirt_machine": 12, "substrate_machine": 2}
 # The roles that make Redfish calls without a bundle, and why.
 UNBUNDLED = {
     "containercluster_media_agent": "it makes no Redfish call",
@@ -232,8 +232,8 @@ def test_the_managed_os_installation_sets_and_settles_the_frozen_trust(lookups, 
                 assert "trust" not in port and "enable_verification" not in port
                 assert port["restore_verification"] is restore
                 assert port["remove_certificate"] is remove
-            native = next(args for filename, module, args, _task in calls("substrate_baremetal_machine")
-                          if filename == entry + ".yml" and module == BOOT)
+            native = next(args for filename, module, args, _task in calls("substrate_machine")
+                          if filename == "redfish_" + entry + ".yml" and module == BOOT)
             assert Templar(loader=LOADER, variables={"bootwright_machine_port": port}).template(native["certificate"]) == certificate
             if entry == "media_insert":
                 assert Templar(loader=LOADER, variables={"bootwright_machine_port": port}).template(native["enable_verification"]) is enable
@@ -257,7 +257,7 @@ def test_cluster_media_calls_carry_each_nodes_frozen_trust(physical, enable):
         port = rendering.template(invocation["vars"]["bootwright_machine_port"])
         assert port["ca"] == "/run/ca"
         if operation == "media_insert":
-            assert port["private"] is physical
+            assert port["private"] is True
             assert port["enable_verification"] is enable
             assert port["trust"] == "importCertificate" and port["certificate"] == "/run/certificate"
         elif operation == "media_eject":

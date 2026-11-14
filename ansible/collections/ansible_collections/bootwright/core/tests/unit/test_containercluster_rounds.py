@@ -101,7 +101,7 @@ def test_each_install_port_request_matches_the_selected_arm_entrypoint():
                          bootwright_run_scratch='/scratch', bootwright_cluster_install_material={'artifactCertificate': '/material/certificate'})
             request = Templar(loader=loader, variables=scope).template(port['vars']['bootwright_machine_port'])
             if operation == 'media_insert':
-                assert request['private'] is (arm == 'baremetal')
+                assert request['private'] is True
                 assert request['enable_verification'] is (arm == 'baremetal')
             result = ArgumentSpecValidator(specs[operation]['options']).validate({'bootwright_machine_port': request})
             assert not result.error_messages, (arm, operation, result.error_messages)

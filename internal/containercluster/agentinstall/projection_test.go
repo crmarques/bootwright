@@ -509,8 +509,8 @@ func onRemote(machine api.Object) api.Object {
 }
 
 func TestAnEmulatedNodeOffTheServersHostImportsTheServerCertificate(t *testing.T) {
-	verified := VirtualMedia{Trust: substrate.TrustImportCertificate, RemoveCertificate: true}
-	colocated := VirtualMedia{Trust: substrate.TrustEstablished}
+	verified := VirtualMedia{Trust: substrate.TrustImportCertificate, EnableVerification: true, RemoveCertificate: true}
+	colocated := verified
 	for name, test := range map[string]struct {
 		objects []api.Object
 		want    map[string]VirtualMedia

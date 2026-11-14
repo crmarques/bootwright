@@ -95,7 +95,7 @@ func TestDiskEncryptionPublishesPrivatelyOnTheGuestAgentChannel(t *testing.T) {
 		t.Fatalf("secret references = %v", request.SecretReferences())
 	}
 	plain, _ := onlyRequest(t, labCatalog())
-	if plain.Private != nil || plain.Image == nil || plain.DiskEncryption != nil || plain.TLSCertificateRef != "" {
+	if plain.Private != nil || plain.Image == nil || plain.DiskEncryption != nil || plain.TLSCertificateRef != plain.Image.CertificateRef {
 		t.Fatalf("a plain lab request is not public: %+v", plain)
 	}
 }

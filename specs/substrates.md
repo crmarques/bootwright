@@ -979,10 +979,10 @@ listens on the provider's `bindAddress` at the port the
 [allocation rule](api/machines.md#libvirt-arm) assigns this Machine, serves
 HTTPS with the bound `certificateRef` serving certificate, requires the bound
 `auth.credentialsRef` credential through basic
-authentication with a bcrypt password file published `0600`, and fetches
-inserted media without verifying the artifact server's certificate unless a
-consumer's `importCertificate` insert added that certificate to the
-virtual-media device and turned its verification on. It stores
+authentication with a bcrypt password file published `0600`, and starts with
+media-fetch verification enabled.
+Each consumer imports the artifact server's certificate through the common
+Redfish media adapter before insertion, without changing that default. It stores
 that media as a volume in the provider's pool through its libvirt connection,
 so its unit mounts no pool directory: it mounts its configuration and password
 file and TLS certificate/key read-only and the host's libvirt socket directory.
@@ -2133,14 +2133,14 @@ the insert needed: it turns verification back on after `disableVerification`
 unless the Machine declares otherwise, and deletes the imported certificate
 after `importCertificate` when the Machine asks. Settling converges to that
 target rather than undoing the attempt's own writes, so the eject after an
-interrupted attempt settles what it left. On the emulated arm `established`
-means that no per-boot setting is made, not that the fetch is verified: the
-emulator is configured to fetch media without verifying the server
-([container clusters](openshift-clusters.md#boot-media) records the one
-exception this allows). A container-cluster node whose emulated BMC is on a
-Machine other than its artifact server's freezes `importCertificate` with
-certificate removal instead, and its insert and eject run the device-level
-import above against the emulator's virtual-media certificate collection.
+interrupted attempt settles what it left. The emulated arm uses the same
+automatic verified trust policy, with
+certificate removal after boot. It starts verification enabled because the
+pinned emulator supplies no ETag for changing that property. A drifted false
+setting therefore refuses automatic setup until the operator restores the
+verified configuration; no unconditional write weakens the common contract.
+The shared Redfish insert and eject task entry points translate the full port
+request for both arms. Substrate wrappers publish their own result channels.
 
 **SecurityService media trust.** A manager-discovered security service can
 provide the qualified remote-HTTPS CA actions. Bootwright requires the full

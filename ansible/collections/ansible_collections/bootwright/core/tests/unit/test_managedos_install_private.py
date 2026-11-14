@@ -315,17 +315,17 @@ def test_the_insert_asks_for_the_verified_fetch_read_back_exactly_when_delivery_
     insert = boot[index_of(boot, named("Insert the published installer image as virtual media"), "insert")]
     assert insert["ansible.builtin.include_role"]["tasks_from"] == "media_insert"
     arguments = render(insert["vars"]["bootwright_machine_port"], managedos_install_anaconda_port_access={},
-                       managedos_install_anaconda_media_trust={"trust": "importCertificate", "enableVerification": False})
+                       managedos_install_anaconda_media_trust={"trust": "importCertificate", "enableVerification": True})
     assert "private" in arguments, "the insert never asks for the D104 (b) read-back"
     assert arguments["private"] is True
     assert render(insert["vars"]["bootwright_machine_port"], private=False,
                   managedos_install_anaconda_port_access={},
-                  managedos_install_anaconda_media_trust={"trust": "importCertificate", "enableVerification": False})["private"] is False
+                  managedos_install_anaconda_media_trust={"trust": "importCertificate", "enableVerification": True})["private"] is False
     virtual = scope()["bootwright_os_install_request"]
     virtual["target"] = {"channel": "guest-agent", "physical": False}
     assert render(insert["vars"]["bootwright_machine_port"], bootwright_os_install_request=virtual,
                   managedos_install_anaconda_port_access={},
-                  managedos_install_anaconda_media_trust={"trust": "importCertificate", "enableVerification": False})["private"] is False
+                  managedos_install_anaconda_media_trust={"trust": "importCertificate", "enableVerification": True})["private"] is True
     assert arguments["image_url_file"] == "/var/tmp/bootwright-scratch-1-1/managedos-media-url"
 
 

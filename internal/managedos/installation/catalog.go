@@ -137,7 +137,7 @@ func ContentDigest() string {
 		"bootwright.managedos.install-anaconda-v1",
 		Implementation, requestVersion, kickstartVersion,
 		consumerPrefix, privatePrefix, servedRoot, MarkerPath, HostKeyPath,
-		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), provedDiskBoot,
+		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), provedDiskBoot, substrate.RedfishMediaPolicy,
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

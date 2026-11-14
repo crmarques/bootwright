@@ -109,13 +109,10 @@ TRUST_DISABLED = "disableVerification"
 CERTIFICATE_MEMBERS = 8
 # The answers of a controller whose VerifyCertificate cannot be written: 501 on
 # iBMC, 400 or 405 elsewhere (.agents/knowledge/redfish-physical-bmc.md).
-READ_ONLY = (400, 405, 501)
 PEM_BEGIN = "-----BEGIN CERTIFICATE-----"
 PEM_END = "-----END CERTIFICATE-----"
 # What importing leaves an operator when a controller cannot take it: no other
 # trust is ever substituted.
-NO_IMPORT = "no fallback: establish trust, or explicitly select disableVerification on this Machine"
-NO_DISABLE = "verification stays on; use importCertificate or established"
 STALE = ("remove the stale certificate from the controller's virtual-media certificate collection,"
          " or set removeCertificateAfterBoot")
 # What an operator checks when the controller reports that it could not fetch
@@ -540,9 +537,8 @@ class Client:
         attach is never refused as occupied; and the device is made to trust
         the server once, before the first attempt and never again inside the
         retry. A failed attempt is retried only from a device proved empty and,
-        under an imported certificate the device flag decides, only once reads
-        prove that verification is still on, since a controller that restarted
-        between attempts may have lost the trust it was given. A fetch the
+        under verified trust, only once reads prove verification is still on.
+        A controller that restarted between attempts may have lost its trust. A fetch the
         controller reports failed names the causes on its side.
         """
         if enable_verification is not True and enable_verification is not False:
@@ -554,15 +550,15 @@ class Client:
             raise ControllerError("attaching: the controller exposes no virtual-media device")
         if enable_verification and trust == TRUST_DISABLED:
             raise ControllerError("enabling media verification conflicts with disableVerification", cause="media-verification-config")
-        delegated = enable_verification or trust == TRUST_DISABLED and (private or bool(self._manager_verification("disabling verification")))
+        delegated = enable_verification or trust == TRUST_DISABLED
         configured = self._configure_media_verification(member, image, trust != TRUST_DISABLED) if delegated else False
         if redfish_discovery.image_matches(self.inserted(), image):
-            if enable_verification or private and trust != TRUST_DISABLED:
+            if trust != TRUST_DISABLED:
                 self._verified_fetch(member)
             elif delegated:
                 self._unverified_fetch(member)
             return configured
-        if private and trust == TRUST_ESTABLISHED:
+        if trust == TRUST_ESTABLISHED or trust == TRUST_IMPORT and not enable_verification:
             self._verified_fetch(member)
         manager_verified = trust == TRUST_IMPORT and self._verified_managers()
         if redfish_discovery.media_present(self._device(member, "attaching")):
@@ -575,9 +571,7 @@ class Client:
         for attempt in range(INSERT_ATTEMPTS):
             if attempt:
                 self.sleep(INSERT_RETRY_DELAY)
-                if trust == TRUST_IMPORT and not manager_verified:
-                    self._verified_fetch(member)
-            if enable_verification or private and trust != TRUST_DISABLED:
+            if trust != TRUST_DISABLED:
                 self._verified_fetch(member)
             elif delegated and trust == TRUST_DISABLED:
                 self._unverified_fetch(member)
@@ -779,14 +773,14 @@ class Client:
         if trust == TRUST_IMPORT:
             return self._import(member, certificate, manager_verified)
         if trust == TRUST_DISABLED:
-            return self._verification(member, False, "disabling verification", NO_DISABLE)
+            return self._configure_media_verification(member, "", False)
         if trust != TRUST_ESTABLISHED:
             raise ControllerError("attaching: %s is not a virtual-media trust" % _printable(trust, 32))
         return False
 
     def _import(self, member, certificate, manager_verified=False):
         """Add the server's certificate to the device unless its DER is there,
-        then turn verification on and read it back: whether a write was sent."""
+        then prove verification remains on: whether a write was sent."""
         doing = "importing"
         leaf = _leaf(certificate)
         if leaf is None:
@@ -807,7 +801,8 @@ class Client:
             written = True
         if manager_verified:
             return written
-        return self._verification(member, True, doing, NO_IMPORT) or written
+        self._verified_fetch(member)
+        return written
 
     def _settle(self, member, restore, remove, certificate):
         """Undo what a boot's trust needed once the device is proved empty:
@@ -878,40 +873,6 @@ class Client:
             leaf = _leaf(string)
             found.append((url, leaf[1] if leaf else None))
         return collection, found
-
-    def _verification(self, member, wanted, doing, remedy=""):
-        """Bring the device's VerifyCertificate to wanted unless it already
-        reads so, and read it back: whether a write was sent.
-
-        On is only a VerifyCertificate that reads true; the schema reads an
-        absent one as off. The write carries the device's entity tag when it
-        has one, and `*` is the one retry after a 412. With a remedy, any
-        refused write fails naming it, because no other trust is substituted;
-        without one, restoring, exactly 400, 405 and 501 pass as a controller
-        that cannot write the property.
-        """
-        status, body, headers = self.fetch(member, doing=doing)
-        if status != 200 or not isinstance(body, dict):
-            raise _failure(doing, member, status, body)
-        if (body.get("VerifyCertificate") is True) == wanted:
-            return False
-        tag = headers.get("etag") or body.get("@odata.etag")
-        payload = {"VerifyCertificate": wanted}
-        status, body, _headers = self.fetch(
-            member, "PATCH", payload, headers={"If-Match": tag} if isinstance(tag, str) and tag else {}, doing=doing)
-        if status == 412:
-            status, body, _headers = self.fetch(member, "PATCH", payload, headers={"If-Match": "*"}, doing=doing)
-        if redfish_remote_ca.denied(status, body):
-            raise _privilege(doing, member, status, body)
-        if status in READ_ONLY and not remedy:
-            return False
-        if status != 0 and not 200 <= status < 300:
-            raise _failure(doing, member, status, body, remedy)
-        status, body = self._probe(member)
-        if status != 200 or not isinstance(body, dict) or (body.get("VerifyCertificate") is True) != wanted:
-            raise _failure(doing, member, status, body, remedy or "the device does not report VerifyCertificate %s" % (
-                "true" if wanted else "false"))
-        return True
 
     def _release(self, member):
         """Detach what the device presents: whether a detach was sent, and why the

@@ -78,7 +78,7 @@ func TestLabCompactExamplePlansThreeMastersAndInstallerVIPsGolden(t *testing.T) 
 				t.Fatal("compact deadline changed", request.Deadline(), err)
 			}
 			deadline = request.Deadline()
-			if !slices.Equal(block.Exclusive, []string{"container-cluster-install"}) || len(block.Impacts) != 6 {
+			if !slices.Equal(block.Exclusive, []string{"container-cluster-install"}) || len(block.Impacts) != 9 {
 				t.Fatal("compact installation lost exclusivity or per-node impacts", block)
 			}
 		default:

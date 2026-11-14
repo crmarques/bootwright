@@ -128,9 +128,8 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		"A package tree server off the controller": {labCatalog(servicesHost(), trees, treesProfile), "Machine/rhel-01", map[string]string{
 			"<server>": "ArtifactServer/lab-trees", "<server host>": "Machine/services", "<profile>": "MachineInstallProfile/rhel-9-8",
 		}},
-		"A Machine off the artifact server's host": {labCatalog(hypervisorHost(), providerOnHypervisor), "Machine/rhel-01", map[string]string{
-			"<machine>": "Machine/rhel-01", "<provider host>": "Machine/hv-01", "<server>": "ArtifactServer/lab-artifacts",
-			"<server host>": "Machine/controller", "<provider>": "InfraProvider/lab-libvirt",
+		"A Machine off the installation host": {labCatalog(hypervisorHost(), providerOnHypervisor), "Machine/rhel-01", map[string]string{
+			"<machine>": "Machine/rhel-01", "<provider host>": "Machine/hv-01", "<server host>": "Machine/controller", "<provider>": "InfraProvider/lab-libvirt",
 		}},
 	}
 	for _, row := range refusalTable(t) {

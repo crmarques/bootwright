@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 const DiscoveryImplementation = "os-disk-discovery-v1"
@@ -48,7 +49,7 @@ func DiscoveryBlockID(name string) string {
 	return reconciliation.BlockIdentity("os-disk-discovery-", name)
 }
 func DiscoveryContentDigest() string {
-	h := sha256.Sum256([]byte(DiscoveryImplementation + ":" + discoveryVersion + ":private-custom-init-readonly-inventory-pinned-tls-receipt-cleanup-v1"))
+	h := sha256.Sum256([]byte(DiscoveryImplementation + ":" + discoveryVersion + ":private-custom-init-readonly-inventory-pinned-tls-receipt-cleanup-v1" + ":" + substrate.RedfishMediaPolicy))
 	return hex.EncodeToString(h[:])
 }
 func (r DiscoveryRequest) Canonical() ([]byte, error) {

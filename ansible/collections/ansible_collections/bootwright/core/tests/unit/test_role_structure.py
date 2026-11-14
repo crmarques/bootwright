@@ -529,7 +529,7 @@ def test_every_insert_follows_a_complete_pre_boot_proof():
     problems, seen = [], set()
     for path in task_files():
         tasks = load(path)
-        if path.parent.parent.name.startswith("substrate_") and path.name == "media_insert.yml":
+        if path.parent.parent.name.startswith("substrate_") and path.name in ("media_insert.yml", "redfish_media_insert.yml"):
             continue
         if any(inserts(task) for task, _names in walk(tasks)):
             seen.add(label(path))

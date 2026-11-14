@@ -527,7 +527,7 @@ func installerPublication(catalog api.Catalog, selection api.Value, private bool
 		if err != nil {
 			return api.Object{}, nil, nil, "", err
 		}
-		return server, &public, nil, "", nil
+		return server, &public, nil, public.CertificateRef, nil
 	}
 	server, err := artifactserver.Selected(catalog, selection, identity)
 	if err != nil {

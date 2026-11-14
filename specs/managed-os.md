@@ -221,12 +221,9 @@ stand beside the `wwn` as proofs the installer compares
 ([physical installation](#physical-installation)). The installation publishes
 through artifact servers placed on the controller, where the installer image
 is built and the package tree extracted, so an image or tree server placed on
-any other Machine refuses before registration. A virtual Machine whose
-provider host is not the image server's placement Machine refuses too, naming
-both: its emulated BMC uses verified HTTPS but fetches the image
-without verifying the server, which the
-[security spec](security.md#network-remote-systems-and-privilege) bounds to
-that one host. The network the Kickstart carries is one static IPv4 install
+any other Machine refuses before registration. A virtual Machine also requires
+its libvirt provider on that host for the guest-agent identity channel.
+The network the Kickstart carries is one static IPv4 install
 address on its install interface, its default route and the selected name
 servers, as the [derived installation](#derived-installation) states;
 [network convergence](#network-convergence) applies the rest of the declared
@@ -1370,9 +1367,8 @@ it with its host or port rewritten.
 
 An encrypting virtual installation uses the same subtree, token and proofs for
 its installer image and its `recovery`, the latter published inside the boot
-as [Root-disk encryption](#root-disk-encryption) states; its BMC leg is
-bounded by the emulated-BMC exception stated there rather than by the
-verified-fetch read-back.
+as [Root-disk encryption](#root-disk-encryption) states; its BMC uses the
+same verified-fetch proof as physical installation.
 
 Physical FIPS and TPM2 root encryption use this private delivered-key path
 and its pinned identity and completion proofs. Managed registration uses the
@@ -1650,14 +1646,9 @@ substrate's pre-boot proof and before the media is inserted, with its first
 byte fetched through the listener the installer uses, so a replay, or an apply
 that finds the frozen marker, never publishes it. The completion withdraws it
 with the subtree before its inspection, the inverse removes it, and the next
-apply clears it after a failure. A virtual Machine's emulated BMC
-fetches the private installer image without verifying the server and never
-proves a verified fetch, so its insert does not ask for the verified-fetch
-read-back a physical insert requires; that leg never leaves the provider host
-the artifact server is placed on, as the
-[security spec](security.md#network-remote-systems-and-privilege) bounds every
-emulated BMC and the [refusal table](#refusal-table) enforces before
-registration. The recovery fetch retains the admitted IP-literal artifact
+apply clears it after a failure. An emulated BMC imports the serving
+certificate and proves verification through the same media path as a physical
+BMC. The recovery fetch retains the admitted IP-literal artifact
 server endpoint; a profile selecting a hostname endpoint still refuses before
 registration.
 
@@ -2170,7 +2161,7 @@ the length of that many bytes in base64url without padding.
 | A credentialed proxy | a Machine's effective `spec.proxy` naming a Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, while its profile configures a repository | `the installed system's repositories would reach <proxy> through a credential or private trust anchor, which an installation cannot carry` | `select direct: {} or an external Proxy without spec.connection.auth and spec.connection.trustBundleRef in spec.proxy of <machine> or of <profile>` |
 | An installer image server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation builds and publishes its installer image on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A package tree server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation extracts and publishes its package tree on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint on <profile>` |
-| A Machine off the artifact server's host | a virtual Machine whose provider's `spec.libvirt.machineRef` is not the image server's `spec.machineRef` | `an emulated BMC fetches the installer image without verifying its server, so the provider host it runs on is the Machine the artifact server is placed on` | `<machine> is booted through a BMC on <provider host> and <server> is placed on <server host>; place <provider> on <server host>` |
+| A Machine off the installation host | a virtual Machine whose libvirt provider is on another Machine than the artifact server | `a managed-OS installation reads its guest agent on the installation host, so the libvirt provider and artifact server must share that host` | `<machine> uses <provider host> for its guest agent; place <provider> on <server host>` |
 
 ## Adapter boundary
 

@@ -348,14 +348,14 @@ def test_completion_evidence_carries_the_proved_root_encryption(name):
         assert render(arguments["rootEncryption"], managedos_install_anaconda_root_encryption=proved) is proved
 
 
-def test_a_virtual_private_insert_skips_the_verified_fetch_read_back():
+def test_private_insert_sensitivity_is_independent_of_substrate():
     boot = flattened("boot.yml")
     insert = boot[only(boot, named("Insert the published installer image as virtual media"), "insert")]
     assert insert["ansible.builtin.include_role"]["tasks_from"] == "media_insert"
-    for shape, expected in (("delivered-key", True), ("encrypting", False), ("public", False)):
+    for shape, expected in (("delivered-key", True), ("encrypting", True), ("public", False)):
         arguments = render(insert["vars"]["bootwright_machine_port"], shape,
                            managedos_install_anaconda_port_access={},
-                           managedos_install_anaconda_media_trust={"trust": "importCertificate", "enableVerification": False},
+                           managedos_install_anaconda_media_trust={"trust": "importCertificate", "enableVerification": True},
                            bootwright_run_scratch="/var/tmp/bootwright-scratch-1-1")
         assert arguments["private"] is expected
 

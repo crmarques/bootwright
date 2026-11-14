@@ -203,6 +203,9 @@
       "ntp-lab-ntp"
     ],
     "impacts": [
+      "enable-bmc-media-verification compact-01 (BMC-wide; retained)",
+      "enable-bmc-media-verification compact-02 (BMC-wide; retained)",
+      "enable-bmc-media-verification compact-03 (BMC-wide; retained)",
       "install-cluster compact-01",
       "install-cluster compact-02",
       "install-cluster compact-03",
@@ -223,6 +226,7 @@
     ],
     "impacts": [
       "configure-network rhel-01",
+      "enable-bmc-media-verification rhel-01 (BMC-wide; retained)",
       "install-operating-system rhel-01",
       "power-on rhel-01",
       "publish-content /var/lib/bootwright-hosted/lab-compact-df/services/artifact-server/lab-artifacts/public/os/rhel-01/install.iso",
@@ -241,6 +245,7 @@
     ],
     "impacts": [
       "configure-network rhel-02",
+      "enable-bmc-media-verification rhel-02 (BMC-wide; retained)",
       "install-operating-system rhel-02",
       "power-on rhel-02",
       "publish-content /var/lib/bootwright-hosted/lab-compact-df/services/artifact-server/lab-artifacts/public/os/rhel-02/install.iso",
@@ -259,6 +264,7 @@
     ],
     "impacts": [
       "configure-network rhel-03",
+      "enable-bmc-media-verification rhel-03 (BMC-wide; retained)",
       "install-operating-system rhel-03",
       "power-on rhel-03",
       "publish-content /var/lib/bootwright-hosted/lab-compact-df/services/artifact-server/lab-artifacts/public/os/rhel-03/install.iso",

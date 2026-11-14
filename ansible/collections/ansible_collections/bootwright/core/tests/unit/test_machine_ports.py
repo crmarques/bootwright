@@ -20,7 +20,7 @@ def test_machine_port_contract(arm, entry):
     for credential in ("user", "password", "ca"):
         assert request["options"][credential]["type"] == "path"
     tasks = yaml.safe_load((directory / "tasks" / (entry + ".yml")).read_text())
-    assert any(task.get("register") == role + "_port_result" for task in tasks)
+    assert any(task.get("register") == role + "_port_result" or role + "_port_result" in task.get("ansible.builtin.set_fact", {}) for task in tasks)
     assert any(role + "_port_refusal" in task.get("ansible.builtin.set_fact", {}) for task in tasks)
     for task in tasks:
         if any(key.startswith("bootwright.core.redfish_") for key in task):
@@ -40,8 +40,8 @@ def test_media_insert_admits_and_forwards_verification_setup(arm, enable):
     port = {"endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "user": "/run/user", "password": "/run/password",
             "verify": True, "private": True, "image_url_file": "/run/image-url", "trust": "established", "enable_verification": enable}
     assert not ArgumentSpecValidator(spec).validate({"bootwright_machine_port": port}).error_messages
-    native = next(task["bootwright.core.redfish_boot"] for task in yaml.safe_load((role / "tasks/media_insert.yml").read_text())
-                  if "bootwright.core.redfish_boot" in task)
+    translated = yaml.safe_load((ROOT / "roles/substrate_machine/tasks/redfish_media_insert.yml").read_text())
+    native = next(task["bootwright.core.redfish_boot"] for task in translated if "bootwright.core.redfish_boot" in task)
     templar = Templar(loader=DataLoader(), variables={"bootwright_machine_port": port})
     assert templar.template(trust_as_template(native["enable_verification"])) is enable
 

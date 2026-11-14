@@ -26,6 +26,9 @@
     ],
     "id": "cluster-install-compact",
     "impacts": [
+      "enable-bmc-media-verification compact-01 (BMC-wide; retained)",
+      "enable-bmc-media-verification compact-02 (BMC-wide; retained)",
+      "enable-bmc-media-verification compact-03 (BMC-wide; retained)",
       "install-cluster compact-01",
       "install-cluster compact-02",
       "install-cluster compact-03",

@@ -79,7 +79,7 @@ func HostContentDigest() string {
 
 func MachineContentDigest() string {
 	return contentDigest("bootwright.substrate.libvirt.machine-v1", MachineImplementation, machineRequestVersion,
-		emulatorImage, substrate.ImagePrefix, substrate.Prefix, "data-media-ssd-scsi-v1", "shared-bmc-claim", "attached-disk-evidence-v1")
+		emulatorImage, substrate.ImagePrefix, substrate.Prefix, "data-media-ssd-scsi-v1", "shared-bmc-claim", "attached-disk-evidence-v1", substrate.RedfishMediaPolicy)
 }
 
 func contentDigest(parts ...string) string {

@@ -307,6 +307,8 @@ argument_specs:
             required: true
           ca:
             type: path
+          verification:
+            type: str
           verify:
             type: bool
             required: true
@@ -351,6 +353,8 @@ argument_specs:
             required: true
           ca:
             type: path
+          verification:
+            type: str
           verify:
             type: bool
             required: true

@@ -9086,3 +9086,10 @@ remain verified. Authorizes a separate downstream chart update with a secure
 default and local ignored test values opting out. This supersedes the blanket
 private-media refusal only for the explicit policy; no real-host operation or
 push is authorized.
+
+### D270
+
+**owner** (2026-11-14): implement the Redfish reuse audit plan to maximize shared
+logic between physical and emulated BMCs. Authorizes X464 (M1, B1398), including
+removing the colocated emulated-media transport exception. Retain provider
+mechanics and ownership-specific safeguards behind the machine port.

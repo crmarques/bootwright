@@ -107,6 +107,7 @@
       "ntp-lab-ntp"
     ],
     "impacts": [
+      "enable-bmc-media-verification sno-01 (BMC-wide; retained)",
       "install-cluster sno-01",
       "power-on sno-01"
     ]

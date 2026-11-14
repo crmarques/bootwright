@@ -517,15 +517,10 @@ by default. Its one insecure exception, `disableVerification`, is explicit,
 declared on one Machine and visible in that Machine's effective state. It is
 never inherited, never a provider default and never an Environment kind
 default. Private media may use the explicit per-Machine exception with its
-weaker bootstrap provenance recorded; management TLS remains verified. The
-separate bounded implicit exception is the emulated BMC of a
-virtual Machine, whose BMC uses verified HTTPS but fetches media
-without verifying the artifact server only while that server is placed on the
-BMC's own provider host, so the unverified fetch never leaves that host. A
-[container-cluster node](openshift-clusters.md#boot-media) booted through an
-emulated BMC on another Machine imports the server's certificate and verifies
-the fetch; the [managed-OS installation](managed-os.md#refusal-table) refuses
-before registration there. A
+weaker bootstrap provenance recorded; management TLS remains verified. Both
+physical and emulated BMCs import the serving certificate and prove
+media-fetch verification through the same client. Colocation of the artifact
+server and BMC grants no transport exception. A
 BMC's own transport verifies against its declared public trust bundle alone, or
 against the system trust store when it declares none
 ([Machine BMC trust](api/machines.md#bmc-and-root-device-shape)).
@@ -666,9 +661,8 @@ procedure and ports by source.
 | Emulated BMC | Controller/provider-host clients | Verified HTTPS with basic authentication and the provider's bound serving certificate | Root container with host networking, SELinux label disabled and access to the libvirt socket | Lab examples bind loopback; other binds require a trusted network |
 
 Private URL capabilities travel over verified TLS by default. The
-[emulated-controller boot-media exception](openshift-clusters.md#boot-media) and
 explicit per-Machine [unverified media policy](api/machines.md#bmc-and-root-device-shape)
-are the only exceptions. Unverified media has weaker bootstrap provenance;
+is the only media exception. Unverified media has weaker bootstrap provenance;
 connection pinning does not restore assurance in keys delivered through it.
 Public package trees carry no credentials.
 Preflight and plan report each declared controller listener's runtime firewall

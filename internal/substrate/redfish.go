@@ -2,6 +2,10 @@ package substrate
 
 import "time"
 
+// RedfishMediaPolicy pins the shared verified-media behavior in each consumer's
+// content identity, independently of management endpoint and substrate.
+const RedfishMediaPolicy = "verified-media-default"
+
 // The fixed bounds of the collection's one Redfish client, which every
 // management-controller call goes through (plugins/module_utils/redfish_control.py),
 // and the poll count a power operation takes by default

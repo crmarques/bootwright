@@ -1,5 +1,5 @@
 implementation: os-disk-discovery-v1
-content-digest: 42c900f8466a0d1fb461c9266f6b9ce3e84e08352ed94680a2caea7b38936ed9
+content-digest: fb6a880f3acae4f91a444462899a067cacc1931a835856bd44f3015b2fc9c26a
 request-version: os-disk-discovery-v1
 automation-formats: none
 mark-formats: none
@@ -7,6 +7,7 @@ proof-ids: none
 fixed-places: none
 effect-pins:
   private-custom-init-readonly-inventory-pinned-tls-receipt-cleanup-v1
+  verified-media-default
 request-identity:
   identity.context
   identity.object

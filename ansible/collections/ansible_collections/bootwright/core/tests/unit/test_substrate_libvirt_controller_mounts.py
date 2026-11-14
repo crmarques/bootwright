@@ -65,3 +65,7 @@ def test_the_controller_reaches_the_pool_by_name_through_its_libvirt_connection(
     assert settings(configuration, "SUSHY_EMULATOR_LIBVIRT_URI") == [' "qemu:///system"']
     assert settings(configuration, "SUSHY_EMULATOR_STORAGE_POOL") == [' "%s"' % REQUEST["poolName"]]
     assert REQUEST["poolPath"] not in configuration
+
+
+def test_the_emulator_starts_with_media_verification_enabled():
+    assert settings(render("emulator.conf.j2"), "SUSHY_EMULATOR_VMEDIA_VERIFY_SSL") == [' True']

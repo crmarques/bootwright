@@ -336,3 +336,10 @@ func TestTargetCarriesTheControllerTrustBundle(t *testing.T) {
 		t.Fatalf("a controller declaring no bundle carries %q", bundle)
 	}
 }
+
+func TestEmulatedMediaUsesAutomaticVerifiedTrust(t *testing.T) {
+	media := targetOf(t, "guest").Controller.VirtualMedia
+	if media != (VirtualMedia{Trust: TrustImportCertificate, EnableVerification: true, RemoveCertificate: true}) {
+		t.Fatalf("emulated media policy = %+v", media)
+	}
+}

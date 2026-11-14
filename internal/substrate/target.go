@@ -254,10 +254,10 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 		Endpoint:       ControllerEndpoint(address, port, DomainUUID(contextName, machine.Name())),
 		CredentialsRef: credentials,
 		// The serving certificate anchors this connection. The emulator
-		// establishes artifact-fetch trust when its container is realized.
+		// enables fetch verification at realization; each insert imports its anchor.
 		TLSVerify:      true,
 		TrustBundleRef: certificate,
-		VirtualMedia:   VirtualMedia{Trust: TrustEstablished},
+		VirtualMedia:   VirtualMedia{Trust: TrustImportCertificate, EnableVerification: true, RemoveCertificate: true},
 	}
 	target.Identity = Identity{
 		Channel: ChannelGuestAgent,

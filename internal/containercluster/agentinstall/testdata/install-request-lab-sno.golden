@@ -39,10 +39,10 @@
         "tlsVerify": true,
         "trustBundleRef": "lab-bmc-tls",
         "virtualMedia": {
-          "enableVerification": false,
-          "removeCertificate": false,
+          "enableVerification": true,
+          "removeCertificate": true,
           "restoreVerification": false,
-          "trust": "established"
+          "trust": "importCertificate"
         }
       },
       "controllerKind": "emulated",
