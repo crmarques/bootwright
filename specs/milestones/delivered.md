@@ -16025,6 +16025,25 @@ contract changes. The delivering commit records focused verification under
 the owner's shortened test-loop instruction; no full gate or native replay is
 claimed. [B1400](m3.md#b1400)'s live qualification remains open.
 
+## X487 — Unreadable operation recovery diagnostics
+
+### B1422
+
+M1 defect authorized by the owner's request to diagnose lifecycle-state
+refusals and restore the cleanup journey. A record missing a required member
+was refused as noncanonical, then sent `status` back to itself. Operation
+decode failures now name an unambiguous registering executable and direct
+inspection and removal to that build. A refusal by that same executable names
+whole-store backup recovery instead. Ambiguous or invalid identities produce
+no build-specific hint.
+
+The [record contract](../state-reconciliation.md#record-encoding-and-versions)
+keeps its closed reader, canonical encoding and refusal of other formats.
+Regression tests reproduce the missing-member failure, prove no durable
+change, and cover unsupported members and ambiguous executable identities.
+The delivering commit records focused and full verification. Environment
+cleanup and its evidence remain private and confer no operator acceptance.
+
 ## X484 — Cleanup at the end of the SNO runbook
 
 ### B1419

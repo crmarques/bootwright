@@ -557,6 +557,17 @@ rather than overwriting durable evidence. An exclusively created record is
 staged and then renamed without replacement, so its name appears only with
 complete, synchronized bytes.
 
+An operation refused as malformed, unsupported or noncanonical during record
+decoding names its registering executable when its
+`executable` member is uniquely and exactly spelled, canonical and bounded.
+That identity is a recovery hint only; it admits no other format or evidence.
+The remedy names that build for inspection and removal, followed by context
+deletion before using the current build. If it names the running executable,
+the remedy is a matching whole-store backup and retaining the unreadable
+record for a defect report. An unavailable or ambiguous identity names the
+registering build and backup recovery generically. None of these refusals
+sends the operator back to `status`, which needs the same unreadable record.
+
 ## State machine
 
 | Durable state | Allowed lifecycle transition |

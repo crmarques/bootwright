@@ -258,6 +258,9 @@ func decodeUnder(data []byte, maximum int, target any, running *Executable) erro
 	case errors.Is(err, canonicaljson.ErrTrailing):
 		return recordError("lifecycle record contains trailing data")
 	case err != nil:
+		if _, operation := target.(*Operation); operation {
+			return operationDecodeError(data, "lifecycle record is malformed or unsupported", running)
+		}
 		if build, ok := recordBuild(data); ok {
 			named := buildName(build)
 			if running != nil && *running != (Executable{}) && build.Executable == *running && !build.Modified {
@@ -273,9 +276,37 @@ func decodeUnder(data []byte, maximum int, target any, running *Executable) erro
 		return err
 	}
 	if !bytes.Equal(canonical, data) {
+		if operation, ok := target.(*Operation); ok {
+			message := "lifecycle record is not canonical"
+			if operation.Contracts == nil {
+				message += "; operation execution contracts are missing"
+			}
+			return operationDecodeError(data, message, running)
+		}
 		return recordError("lifecycle record is not canonical")
 	}
 	return nil
+}
+
+// An unreadable operation cannot direct the operator back to status, which
+// needs the same record. Its unambiguous registering identity is a recovery
+// hint only: no other format is read or adopted.
+func operationDecodeError(data []byte, message string, running *Executable) error {
+	remedy := "use the Bootwright build that registered this operation to inspect and remove it; if that build also refuses, restore the whole context store from a matching backup"
+	var executable Executable
+	raw, found := recordMember(data, "executable")
+	if found && canonicaljson.Decode(raw, &executable, canonicaljson.Bare) == nil &&
+		executable != (Executable{}) && len(executable.Version) <= maxIdentifier && len(executable.Commit) <= maxIdentifier {
+		named := buildName(Build{Executable: executable})
+		message += "; it names " + named + " as its registering build"
+		if running != nil && executable == *running {
+			message += ", this executable"
+			remedy = "restore the whole context store from a matching backup; retain the unreadable record when reporting this refusal"
+		} else {
+			remedy = "inspect and remove this operation with " + named + ", then delete its context before using this build"
+		}
+	}
+	return diagnostics.NewFailureWithRemediation("lifecycle.state", message, "", remedy)
 }
 
 func validateIndex(index Index) error {
@@ -435,9 +466,20 @@ func validateAttempt(record Attempt) error {
 
 // recordBuild is the canonical build of a record's one member spelled build in any case.
 func recordBuild(data []byte) (Build, bool) {
+	raw, found := recordMember(data, "build")
+	var build Build
+	if !found || canonicaljson.Decode(raw, &build, canonicaljson.Bare) != nil || validateBuild(build) != nil {
+		return Build{}, false
+	}
+	return build, true
+}
+
+// recordMember extracts only a uniquely and exactly spelled member. This
+// never makes the containing record readable or usable as effect evidence.
+func recordMember(data []byte, member string) (json.RawMessage, bool) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
-		return Build{}, false
+		return nil, false
 	}
 	var raw json.RawMessage
 	found := false
@@ -446,20 +488,16 @@ func recordBuild(data []byte) (Build, bool) {
 		key, ok := token.(string)
 		var value json.RawMessage
 		if err != nil || !ok || decoder.Decode(&value) != nil {
-			return Build{}, false
+			return nil, false
 		}
-		if strings.EqualFold(key, "build") {
-			if key != "build" || found {
-				return Build{}, false
+		if strings.EqualFold(key, member) {
+			if key != member || found {
+				return nil, false
 			}
 			raw, found = value, true
 		}
 	}
-	var build Build
-	if !found || canonicaljson.Decode(raw, &build, canonicaljson.Bare) != nil || validateBuild(build) != nil {
-		return Build{}, false
-	}
-	return build, true
+	return raw, found
 }
 
 func buildName(build Build) string {

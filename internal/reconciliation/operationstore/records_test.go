@@ -2,11 +2,88 @@ package operationstore
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
+
+func TestUnreadableOperationNamesItsRegisteringBuildWithoutAdoptingTheRecord(t *testing.T) {
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	data, err := encode(operation, MaxOperationBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Removing a required member reproduces a record from a different format,
+	// without keeping a reader or fixture for that format.
+	data = bytes.Replace(data, []byte(`"contracts":{"artifact-server-nginx-v1":"`+strings.Repeat("4", 64)+`"},`), nil, 1)
+	for name, running := range map[string]Executable{
+		"another build":         {Version: "devel", Commit: "fedcba1"},
+		"the registering build": operation.Executable,
+	} {
+		t.Run(name, func(t *testing.T) {
+			store, area := newStore(t)
+			store = store.Running(running)
+			recordPath := operation.ID + "/operation.json"
+			area.files[recordPath] = bytes.Clone(data)
+			_, err := store.ReadOperation(context.Background(), operation.ID)
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, `build "devel" at commit "abcdef1"`) {
+				t.Fatalf("refusal does not name the registering build: %+v", reported)
+			}
+			remedy := reported[0].Remediation
+			if remedy == "" || strings.Contains(remedy, "bootwright status") {
+				t.Fatalf("unreadable record sends the operator back to status: %q", remedy)
+			}
+			if running == operation.Executable {
+				if !strings.Contains(remedy, "backup") {
+					t.Fatalf("the registering build refuses without a backup remedy: %q", remedy)
+				}
+			} else if !strings.Contains(remedy, `build "devel" at commit "abcdef1"`) {
+				t.Fatalf("remedy does not name the registering build: %q", remedy)
+			}
+			if !bytes.Equal(area.files[recordPath], data) || len(area.files) != 1 {
+				t.Fatal("reading an unsupported record changed durable state")
+			}
+		})
+	}
+}
+
+func TestAnUnsupportedOperationMemberStillNamesItsRegisteringBuild(t *testing.T) {
+	data, err := encode(testOperation(t, testPlan(t, "alpha")), MaxOperationBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = bytes.Replace(data, []byte("{"), []byte(`{"unsupported":true,`), 1)
+	var operation Operation
+	reported := diagnostics.Of(decodeUnder(data, MaxOperationBytes, &operation, nil))
+	if len(reported) != 1 || !strings.Contains(reported[0].Message, "malformed or unsupported") || !strings.Contains(reported[0].Remediation, `build "devel" at commit "abcdef1"`) {
+		t.Fatalf("unsupported operation did not name its build: %+v", reported)
+	}
+}
+
+func TestUnreadableOperationDoesNotTrustAnAmbiguousExecutableHint(t *testing.T) {
+	const executable = `{"version":"devel","commit":"abcdef1"}`
+	for name, member := range map[string]string{
+		"missing":                "",
+		"empty":                  `"executable":{"version":"","commit":""},`,
+		"case variant":           `"Executable":` + executable + `,`,
+		"duplicate":              `"executable":` + executable + `,"executable":` + executable + `,`,
+		"case variant duplicate": `"Executable":` + executable + `,"executable":` + executable + `,`,
+		"noncanonical":           `"executable":{"commit":"abcdef1","version":"devel"},`,
+		"oversized":              `"executable":{"version":"devel","commit":"` + strings.Repeat("a", maxIdentifier+1) + `"},`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var operation Operation
+			reported := diagnostics.Of(decodeUnder([]byte(`{`+member+`"version":1}`+"\n"), MaxOperationBytes, &operation, nil))
+			if len(reported) != 1 || strings.Contains(reported[0].Message, "abcdef1") || reported[0].Remediation == "" || strings.Contains(reported[0].Remediation, "bootwright status") {
+				t.Fatalf("ambiguous identity became a build hint or a status loop: %+v", reported)
+			}
+		})
+	}
+}
 
 // A lifecycle record reads back only as the exact canonical bytes its type
 // encodes, LF-terminated, and every other encoding refuses in its own words.
