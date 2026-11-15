@@ -29,12 +29,19 @@
     msg: "{{ cluster_objects_result.msg | default('cluster object execution did not return evidence') }}"
   when: cluster_objects_result.state is not defined
 
-- name: Publish bounded cluster object evidence
-  bootwright.core.cluster_objects_protocol:
-    phase: completed
-    version: "{{ cluster_objects_evidence_version }}"
-    digest: "{{ cluster_objects_digest }}"
-    state: "{{ cluster_objects_result.state }}"
-    outcome: "{{ 'changed' if cluster_objects_result.changed else 'unchanged' }}"
-    observed: false
-  no_log: true
+- name: Complete the shared cluster object program
+  block:
+    - name: Publish bounded cluster object evidence
+      bootwright.core.cluster_objects_protocol:
+        phase: completed
+        version: "{{ cluster_objects_evidence_version }}"
+        digest: "{{ cluster_objects_digest }}"
+        state: "{{ cluster_objects_result.state }}"
+        outcome: "{{ 'changed' if cluster_objects_result.changed else 'unchanged' }}"
+        observed: false
+      no_log: true
+
+  rescue:
+    - name: Report the bounded cluster object refusal after retaining partial evidence
+      ansible.builtin.fail:
+        msg: "{{ cluster_objects_result.msg | default('cluster object result could not be published') }}"

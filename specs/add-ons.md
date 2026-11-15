@@ -316,6 +316,13 @@ Results name objects by kind, namespace and name only; no request body, API
 response or material reaches evidence, logs or output. The adapter has no
 removal entry point: an instance is [retired](#retirement).
 
+When execution refuses after partial progress, its receipts and observations
+are published on the private result channel before the attempt fails. The
+retained task output reports the bounded refusal naming the object and the
+failed proof; censoring request and evidence values must not hide that reason.
+If publication itself fails without an execution refusal, the task reports a
+fixed publication diagnostic. A failure remains a failure in either case.
+
 ## OLM installation
 
 A package or authored add-on that installs an operator creates its owned namespace, its
