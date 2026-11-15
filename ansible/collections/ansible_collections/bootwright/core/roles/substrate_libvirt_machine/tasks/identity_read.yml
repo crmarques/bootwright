@@ -1,42 +1,18 @@
 ---
-# The identity operation for a machine with a hypervisor channel: a bounded
-# guest file read out of band, so nothing about the network is trusted.
-#
-# The inputs are this entry point's argument spec, passed explicitly by the
-# consuming role and never inherited from a shared fact, and the answers are
-# published under this role's own names.
-# The caller owns the budget: a pre-boot read and an observation take the answer
-# that is already true, while an installation waits for one. The wait lives here
-# rather than in a looped include, because a dynamic include expands its loop up
-# front and a fact set by one iteration cannot gate the next, so such a loop
-# always runs every attempt and never returns early.
-- name: Read the install marker through the guest agent
-  bootwright.core.guest_agent_read:
-    uri: '{{ substrate_libvirt_machine_identity_uri }}'
-    domain: '{{ substrate_libvirt_machine_identity_domain }}'
-    path: '{{ substrate_libvirt_machine_identity_marker_path }}'
-  register: substrate_libvirt_machine_marker_read
-  retries: '{{ substrate_libvirt_machine_identity_retries | int }}'
-  delay: '{{ substrate_libvirt_machine_identity_delay | int }}'
-  until: ((substrate_libvirt_machine_marker_read.answered | default(false))
-          and ((substrate_libvirt_machine_marker_read.content | default('') | string | trim | length) > 0))
-         or ((substrate_libvirt_machine_marker_read.attempts | default(1) | int)
-             > (substrate_libvirt_machine_identity_retries | int))
-  failed_when: false
+- name: Read the machine through its hypervisor channel
+  ansible.builtin.include_tasks: identity_agent.yml
+  when: (bootwright_machine_identity.key | default('') | length) == 0
 
-- name: Read the guest's own host key through the same channel
-  bootwright.core.guest_agent_read:
-    uri: '{{ substrate_libvirt_machine_identity_uri }}'
-    domain: '{{ substrate_libvirt_machine_identity_domain }}'
-    path: '{{ substrate_libvirt_machine_identity_host_key_path }}'
-  register: substrate_libvirt_machine_key_read
-  when: substrate_libvirt_machine_marker_read.answered
+- name: Read the installed machine through its delivered SSH host key
+  ansible.builtin.include_role:
+    name: bootwright.core.machine_ssh_identity
+    tasks_from: main
+  when: (bootwright_machine_identity.key | default('') | length) > 0
 
-- name: Publish what the channel answered
+- name: Publish the delivered-key channel answer
   ansible.builtin.set_fact:
-    substrate_libvirt_machine_identity_answered: '{{ substrate_libvirt_machine_marker_read.answered }}'
-    substrate_libvirt_machine_identity_marker: >-
-      {{ substrate_libvirt_machine_marker_read.content | default('') | trim }}
-    substrate_libvirt_machine_identity_host_key: >-
-      {{ substrate_libvirt_machine_key_read.content | default('') | trim }}
+    substrate_libvirt_machine_identity_answered: '{{ machine_ssh_identity_answered }}'
+    substrate_libvirt_machine_identity_marker: '{{ machine_ssh_identity_marker }}'
+    substrate_libvirt_machine_identity_host_key: '{{ machine_ssh_identity_host_key }}'
   changed_when: false
+  when: (bootwright_machine_identity.key | default('') | length) > 0

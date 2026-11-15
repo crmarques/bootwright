@@ -264,6 +264,9 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 		URI:     provider.Spec().Get("libvirt", "uri").Text(),
 		Domain:  DomainName(contextName, machine.Name()),
 	}
+	if key := machine.Spec().Get("os", "install", "hostKeyRef").Text(); key != "" {
+		target.Identity = Identity{Channel: ChannelDeliveredKey, HostKeyRef: key}
+	}
 	interfaces, err := VirtualInterfaces(contextName, machine)
 	if err != nil {
 		return Target{}, err

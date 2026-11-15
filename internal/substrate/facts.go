@@ -9,6 +9,7 @@ import (
 )
 
 type facts struct {
+	deliveredHostKey bool
 	delivery         string
 	accessCredential bool
 	bridgedGuests    bool
@@ -21,10 +22,14 @@ type facts struct {
 var account = [2]secrets.Part{secrets.UsernamePart, secrets.PasswordPart}
 
 var armFacts = map[string]facts{
-	ArmBaremetal: {delivery: DeliveryFetch, accessCredential: true, credential: account},
-	ArmLibvirt:   {delivery: DeliveryFetch, bridgedGuests: true, credential: account, emulatedBMC: true},
+	ArmBaremetal: {deliveredHostKey: true, delivery: DeliveryFetch, accessCredential: true, credential: account},
+	ArmLibvirt:   {deliveredHostKey: true, delivery: DeliveryFetch, bridgedGuests: true, credential: account, emulatedBMC: true},
 	ArmVSphere:   {delivery: DeliveryFetch, tools: []string{"govc"}, credential: account},
 	ArmKubeVirt:  {delivery: DeliveryPush, accessCredential: true, tools: []string{"virtctl"}, credential: [2]secrets.Part{secrets.ValuePart}, portPinned: true},
+}
+
+func SupportsDeliveredHostKey(provider api.Object) bool {
+	return armFacts[Variant(provider)].deliveredHostKey
 }
 
 func PortPinned(arm string) bool { return armFacts[arm].portPinned }

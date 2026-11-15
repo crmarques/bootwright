@@ -1,0 +1,38 @@
+argument_specs:
+  main:
+    short_description: Read an install marker using only the delivered host key.
+    options:
+      bootwright_machine_identity:
+        type: dict
+        required: true
+        options:
+          address:
+            type: str
+            required: true
+          key:
+            type: str
+            required: true
+          work:
+            type: path
+            required: true
+          file:
+            type: path
+            required: true
+          user:
+            type: str
+            required: true
+          marker_path:
+            type: path
+            required: true
+          retries:
+            type: int
+            required: true
+          delay:
+            type: int
+            required: true
+          uri:
+            type: str
+          domain:
+            type: str
+          host_key_path:
+            type: path

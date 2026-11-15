@@ -140,10 +140,10 @@ POLLS = {
     ("managedos_package_tree/tasks/apply.yml", "managedos_package_tree_listener_fetch"),
     ("containercluster_media_agent/tasks/publish.yml", "containercluster_media_agent_probe"),
     ("physical_erase/tasks/boot.yml", "physical_erase_listener_fetch"),
-    ("substrate_baremetal_machine/tasks/identity_read.yml", "substrate_baremetal_machine_marker_read"),
+    ("machine_ssh_identity/tasks/main.yml", "machine_ssh_identity_marker_read"),
     ("substrate_libvirt_host/tasks/apply.yml", "substrate_libvirt_host_connection"),
     ("substrate_libvirt_machine/tasks/apply.yml", "substrate_libvirt_machine_controller"),
-    ("substrate_libvirt_machine/tasks/identity_read.yml", "substrate_libvirt_machine_marker_read"),
+    ("substrate_libvirt_machine/tasks/identity_agent.yml", "substrate_libvirt_machine_marker_read"),
 }
 
 # A management controller is reached only through these modules.

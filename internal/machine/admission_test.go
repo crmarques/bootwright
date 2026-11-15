@@ -412,7 +412,7 @@ func TestBaremetalInstallationRequiresTheHostKeyItDelivers(t *testing.T) {
 
 // The key belongs to the one lifecycle that delivers it. A machine nothing
 // installs, and one its substrate creates and proves another way, declare none.
-func TestOnlyABaremetalInstallationDeclaresAHostKey(t *testing.T) {
+func TestInstalledLibvirtAndBaremetalMayDeclareAHostKey(t *testing.T) {
 	machine, catalog := installedFixture()
 	spec := machine.Spec()
 	provided := machine.WithSpec(spec.With("os", m("provided", true, "install", m("hostKeyRef", "node-host-key"))))
@@ -427,8 +427,8 @@ func TestOnlyABaremetalInstallationDeclaresAHostKey(t *testing.T) {
 			objects = append(objects, existing)
 		}
 	}
-	if !mentions(Validate(machine, api.NewCatalog(objects)), "$.spec.os.install.hostKeyRef") {
-		t.Fatal("a Machine proved through its hypervisor was allowed to deliver a host key")
+	if issues := Validate(machine, api.NewCatalog(objects)); mentions(issues, "$.spec.os.install.hostKeyRef") {
+		t.Fatalf("an installed libvirt Machine cannot select delivered identity: %+v", issues)
 	}
 }
 

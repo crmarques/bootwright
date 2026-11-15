@@ -178,3 +178,16 @@ def test_a_synthetic_arm_reaches_machine_power_through_its_own_entry_points(plug
                     substrate_vsphere_machine_port_result={"power": "Off"})
     answer = Templar(loader=LOADER, variables=answered).template(published[SET_FACT]["substrate_machine_port_result"])
     assert answer == {"power": "Off"}
+
+
+def test_shared_pinned_ssh_identity_accepts_the_complete_consumer_dictionary():
+    from ansible.module_utils.common.arg_spec import ArgumentSpecValidator
+
+    options = specs("machine_ssh_identity")["main"]["options"]
+    identity = {"uri": "", "domain": "", "address": "192.0.2.11", "user": "bootwright", "file": "/private/fleet-key",
+                "key": "ecdsa-sha2-nistp256 synthetic-key", "marker_path": "/private/marker", "host_key_path": "/private/host-key",
+                "work": "/private/scratch", "retries": 0, "delay": 1}
+    assert not ArgumentSpecValidator(options).validate({"bootwright_machine_identity": identity}).error_messages
+    for member in ("key", "file", "address", "work"):
+        missing = {name: value for name, value in identity.items() if name != member}
+        assert ArgumentSpecValidator(options).validate({"bootwright_machine_identity": missing}).error_messages

@@ -607,9 +607,9 @@ func validateHostKey(o api.Object, c api.Catalog) []api.Issue {
 		return nil
 	}
 	provider, found := Provider(o, c)
-	if !installed(o) || found && !substrate.RealizesPhysicalNICs(provider) {
+	if !installed(o) || found && !substrate.SupportsDeliveredHostKey(provider) {
 		return []api.Issue{invariant("$.spec.os.install.hostKeyRef",
-			"only a bare-metal Bootwright-installed Machine delivers its own SSH host key", "remove spec.os.install.hostKeyRef; only a bare-metal Bootwright-installed Machine delivers its own host key")}
+			"only a libvirt or bare-metal Bootwright-installed Machine delivers its own SSH host key", "remove spec.os.install.hostKeyRef; only a libvirt or bare-metal Bootwright-installed Machine delivers its own host key")}
 	}
 	for _, other := range c.OfKind(api.Machine) {
 		if other.Identity() != o.Identity() && other.Spec().Get("os", "install", "hostKeyRef").Equal(reference) {

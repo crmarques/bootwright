@@ -327,3 +327,23 @@ func TestTheContentDigestIsPinned(t *testing.T) {
 		t.Fatalf("content digest = %s", digest)
 	}
 }
+
+func TestRemoteLibvirtDeliveredKeyUsesPrivateMediaAndPinnedIdentity(t *testing.T) {
+	remote := provider()
+	remote = remote.WithSpec(remote.Spec().WithPath(api.StringValue("hv-01"), "libvirt", "machineRef"))
+	machine := guest()
+	machine = machine.WithSpec(machine.Spec().WithPath(api.StringValue("metal-01-host-key"), "os", "install", "hostKeyRef"))
+	key := sshKeySecret(api.MapValue(field("generated", api.MapValue(text("keyType", "ecdsaP256")))))
+	catalog := labCatalog(hypervisorHost(), remote, machine, key)
+	if refused := Refusals(catalog); len(refused) != 0 {
+		t.Fatalf("remote delivered-key installation refused: %+v", refused)
+	}
+	request, _ := onlyRequest(t, catalog)
+	if request.Target.Channel != substrate.ChannelDeliveredKey || request.Target.HostKeyRef != key.Name() || request.Private == nil || request.Image != nil || request.TLSCertificateRef == "" || !request.Placement.Local() || request.Target.Domain != "" || request.Target.URI != "" {
+		t.Fatalf("remote delivered-key installation lost its private, pinned boundary: %+v", request)
+	}
+	withoutKey := guest()
+	if refused := Refusals(labCatalog(hypervisorHost(), remote, withoutKey)); len(refused) != 1 || !strings.Contains(refused[0].Reason, "guest agent") {
+		t.Fatalf("guest-agent colocation refusal changed: %+v", refused)
+	}
+}

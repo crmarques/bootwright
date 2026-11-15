@@ -78,7 +78,7 @@ func refusedPublication(catalog api.Catalog, machine, profile api.Object, derive
 			}
 		}
 	}
-	if derivedOK && !derived.Physical && imageHost != "" && derived.PlacementMachine.Name() != imageHost {
+	if derivedOK && derived.Identity.Channel == substrate.ChannelGuestAgent && imageHost != "" && derived.PlacementMachine.Name() != imageHost {
 		return "a managed-OS installation reads its guest agent on the installation host, so the libvirt provider and artifact server must share that host",
 			machine.Identity() + " uses " + derived.PlacementMachine.Identity() + " for its guest agent; place " + string(api.InfraProvider) + "/" + derived.Provider + " on " + machineIdentity(imageHost)
 	}

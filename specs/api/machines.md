@@ -252,7 +252,7 @@ own refusal.
 | `spec.os.installProfileRef` | string | conditional | — | Global `MachineInstallProfile`; valid only when `provided: false`. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
 | `spec.hardware.eraseOnRemoval` | object | no | retain | The bare-metal [physical erase policy](#physical-erase-policy). |
-| `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` whose pair the installation delivers as this machine's SSH host key; required for a bare-metal Bootwright-installed Machine and forbidden on every other Machine. Unique across Machines and no other credential. Effect material. |
+| `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` delivered as the installed SSH host key; required on bare metal, optional on libvirt ([completion channel](../managed-os.md#delivered-identity-off-the-hypervisor)), forbidden otherwise. Unique per Machine and no other credential. Effect material. |
 | `spec.proxy` | choice object | no | profile choice or direct access | Lifecycle-dependent atomic Machine-owned selection below; emits immediately after `os`. |
 | `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments and interface matches below. |
 | `spec.access` | object | lifecycle-dependent | normalized as below | Local or SSH access plus optional root-login posture. |

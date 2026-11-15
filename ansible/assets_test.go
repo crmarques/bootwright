@@ -102,13 +102,14 @@ func TestDocumentationLeavesTheAutomationDigest(t *testing.T) {
 // only one of them follows, every call through that role fails on the stale
 // assertion before the adapter reports anything, so the two are kept in step
 // here rather than on a host. The substrate's machine port dispatcher takes no
-// frozen request of its own, so it states no version.
+// frozen request of its own, so it states no version. The shared pinned-SSH
+// identity helper likewise consumes its caller's validated identity port.
 func TestRoleVersionAssertionsMatchTheirArgumentSpecs(t *testing.T) {
 	admitted := map[string]string{}
 	asserted := map[string][]string{}
 	for name, data := range Assets() {
 		role, ok := roleOwning(name)
-		if !ok || role == "substrate_machine" {
+		if !ok || role == "substrate_machine" || role == "machine_ssh_identity" {
 			continue
 		}
 		switch {

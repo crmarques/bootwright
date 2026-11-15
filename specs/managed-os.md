@@ -1467,6 +1467,20 @@ records each arm's result on a registered clean build. Host qualification and
 B70 erase evidence feed [B485](milestones/m2.md#b485)'s complete physical Ceph
 matrix; each retains its own operator exit.
 
+## Delivered identity off the hypervisor
+
+A libvirt Machine that explicitly names `os.install.hostKeyRef` uses the
+existing delivered-key completion channel: private installer publication and
+SSH pinned to precisely the unique host key the installer delivered. It needs
+no guest-agent connection from the installation controller to the hypervisor.
+The provider's emulated BMC and its verified media trust still perform boot
+and power operations. A libvirt installation omitting the key retains its
+guest-agent channel and colocation requirement. The substrate's two arms share
+one pinned-SSH identity procedure; an arm publishes its own port result.
+`TestLibvirtExplicitHostKeySelectsDeliveredIdentity` and the case's planning
+check cover selection; live acceptance belongs to
+[B1421](milestones/m1.md#b1421).
+
 ## Automatic root-disk discovery
 
 The [automatic selector](api/machines.md#automatic-root-disk-discovery) obtains

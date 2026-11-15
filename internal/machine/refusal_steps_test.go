@@ -28,7 +28,7 @@ func TestMachineRefusalsNameTheirStep(t *testing.T) {
 				return alone(object(api.Machine, "probe", m("os", m("provided", false))))
 			}},
 		{"a host key outside a bare-metal installation", "api.invariant", "$.spec.os.install.hostKeyRef",
-			"remove spec.os.install.hostKeyRef; only a bare-metal Bootwright-installed Machine delivers its own host key",
+			"remove spec.os.install.hostKeyRef; only a libvirt or bare-metal Bootwright-installed Machine delivers its own host key",
 			func() (api.Object, api.Catalog) {
 				machine, catalog := installedFixture()
 				return machine.WithSpec(machine.Spec().With("os", m("provided", true, "install", m("hostKeyRef", "node-host-key")))), catalog

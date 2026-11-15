@@ -80,6 +80,16 @@ func TestAVirtualMachineIsReachedThroughItsEmulatedController(t *testing.T) {
 	}
 }
 
+func TestLibvirtExplicitHostKeySelectsDeliveredIdentity(t *testing.T) {
+	catalog := targetCatalog()
+	guest, _ := catalog.Find(api.Machine, "guest")
+	guest = guest.WithSpec(guest.Spec().WithPath(api.StringValue("guest-host-key"), "os", "install", "hostKeyRef"))
+	target, err := TargetFor(catalog, guest, "lab", "controller")
+	if err != nil || target.Identity.Channel != ChannelDeliveredKey || target.Identity.HostKeyRef != "guest-host-key" || target.Identity.URI != "" || target.Identity.Domain != "" || target.Physical {
+		t.Fatalf("explicit host key did not select a private, pinned identity: %+v %v", target, err)
+	}
+}
+
 // An emulated controller on an IPv6 listener is named with the address
 // bracketed, so its endpoint reads under the one grammar an authored controller
 // address meets and claims the same bracketed authority. An IPv4 listener's
