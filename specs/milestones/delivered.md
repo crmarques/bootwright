@@ -15903,3 +15903,15 @@ and contract tests, documentation checks, the full gate, race checks and an
 independent safety review. Existing development state has no cross-build
 compatibility guarantee. No host state is changed and no production acceptance
 is claimed.
+
+## X470 — Artifact-server comment budget
+
+### B1404
+
+M1 repository defect, recorded while X469 verification was blocked: the
+artifact-server package held 184 production comment lines against its existing
+182-line ceiling. The same failure reproduced on local main. Condensed the
+shared refusal comment to restore the [comment contract](../architecture.md)
+without changing behavior, frozen contracts or the ceiling. No deferral or
+operator gate applies. The delivering commit records focused verification and
+the full integration gate.

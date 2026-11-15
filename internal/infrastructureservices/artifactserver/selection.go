@@ -15,10 +15,8 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-// Refusals refuses every artifact server this capability cannot realize, with
-// its reason and remedy: the placement and reservation rows it shares with
-// the managed network services. Kinds no
-// capability claims at all are the engine's own refusal, not this one's.
+// Refusals reports unsupported artifact servers using the shared placement and
+// reservation rules. The engine handles kinds no capability claims.
 func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 	var found []lifecycle.Refusal
 	for _, server := range catalog.OfKind(api.ArtifactServer) {
