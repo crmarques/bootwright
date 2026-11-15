@@ -67,6 +67,7 @@ spec:
             - {{ $env.gatewayAddress }}/32
             - {{ $env.nodeAddress }}/32
             - {{ $env.appAddress }}/32
+            - {{ $env.egressAddress }}/32
             - {{ $env.pool }}
 
         namespaceSelector:

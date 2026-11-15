@@ -1,0 +1,11 @@
+{{- range $name := list "staging" "production" }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $name }}
+
+  labels:
+    lab.example.test/environment: {{ $name }}
+    pod-security.kubernetes.io/enforce: restricted
+{{ end }}

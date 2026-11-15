@@ -1,0 +1,5 @@
+apiVersion: v2
+name: sno-environment-isolation
+description: Native OpenShift objects for the SNO environment isolation case
+type: application
+version: 0.1.0

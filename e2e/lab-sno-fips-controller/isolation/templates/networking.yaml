@@ -1,0 +1,149 @@
+{{- range $name, $env := dict "staging" .Values.environments.staging "production" .Values.environments.production }}
+---
+apiVersion: operator.openshift.io/v1
+kind: IngressController
+metadata:
+  name: {{ $name }}
+  namespace: openshift-ingress-operator
+
+spec:
+  domain: {{ $name }}.apps.sno.{{ $.Values.host.domain }}
+  replicas: 1
+
+  endpointPublishingStrategy:
+    type: LoadBalancerService
+
+    loadBalancer:
+      scope: External
+      dnsManagementPolicy: Unmanaged
+
+      allowedSourceRanges:
+        - {{ $env.cidr }}
+
+  namespaceSelector:
+    matchLabels:
+      lab.example.test/environment: {{ $name }}
+
+---
+apiVersion: k8s.ovn.org/v1
+kind: EgressIP
+metadata:
+  name: {{ $name }}
+
+spec:
+  egressIPs:
+    - {{ $env.egressAddress }}
+
+  namespaceSelector:
+    matchLabels:
+      lab.example.test/environment: {{ $name }}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: isolate
+  namespace: {{ $name }}
+
+spec:
+  podSelector: {}
+
+  policyTypes:
+    - Ingress
+
+  ingress:
+    - from:
+        - podSelector: {}
+
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-ingress
+
+          podSelector:
+            matchLabels:
+              ingresscontroller.operator.openshift.io/deployment-ingresscontroller: {{ $name }}
+
+      ports:
+        - protocol: TCP
+          port: 8080
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress
+  namespace: {{ $name }}
+
+spec:
+  podSelector: {}
+
+  policyTypes:
+    - Egress
+
+  egress:
+    - to:
+        - podSelector: {}
+
+      ports:
+        - protocol: TCP
+          port: 8080
+
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+
+      ports:
+        - protocol: UDP
+          port: 53
+
+        - protocol: TCP
+          port: 53
+
+        # OpenShift's DNS Service targets the resolver's port 5353.
+        - protocol: UDP
+          port: 5353
+
+        - protocol: TCP
+          port: 5353
+
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-ingress
+
+          podSelector:
+            matchLabels:
+              ingresscontroller.operator.openshift.io/deployment-ingresscontroller: {{ $name }}
+
+      ports:
+        - protocol: TCP
+          port: 80
+
+    - to:
+        - ipBlock:
+            cidr: {{ $env.cidr }}
+
+      ports:
+        - protocol: TCP
+          port: 8080
+
+---
+apiVersion: k8s.ovn.org/v1
+kind: EgressFirewall
+metadata:
+  name: default
+  namespace: {{ $name }}
+
+spec:
+  egress:
+    - type: Allow
+
+      to:
+        cidrSelector: {{ $env.cidr }}
+
+    - type: Deny
+
+      to:
+        cidrSelector: 0.0.0.0/0
+{{ end }}

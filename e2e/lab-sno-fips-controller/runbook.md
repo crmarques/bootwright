@@ -1,5 +1,10 @@
 # lab-sno-fips-controller
 
+For enforced staging/production isolation, dedicated egress addresses and
+automated traffic assertions, use the [strict profile](isolation/runbook.md).
+It reuses this case's two VMs and provisioning steps, then replaces its
+original environment workload checks. It requires a new live qualification.
+
 A FIPS single-node OpenShift cluster built from a FIPS-mode controller that is
 not the libvirt host. Two contexts run on two controllers:
 

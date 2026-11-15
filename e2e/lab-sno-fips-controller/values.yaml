@@ -84,6 +84,7 @@ environments:
     gatewayAddress: 192.0.2.1
     nodeAddress: 192.0.2.31
     appAddress: 192.0.2.50
+    egressAddress: 192.0.2.60
     pool: 192.0.2.200/29
 
   production:
@@ -94,6 +95,7 @@ environments:
     gatewayAddress: 203.0.113.1
     nodeAddress: 203.0.113.31
     appAddress: 203.0.113.50
+    egressAddress: 203.0.113.60
     pool: 203.0.113.200/29
 
 # The operators' OLM channel and exact CSV, read from the release's operator
@@ -108,3 +110,8 @@ addons:
     metallb:
       channel: ""
       startingCSV: ""
+
+# The stricter acceptance profile uses native OpenShift objects after provisioning.
+# Resolve an approved Python 3 UBI image to its digest before rendering it.
+isolation:
+  image: ""

@@ -1,0 +1,84 @@
+{{- $rules := "add table inet sno_e2e_isolation\nflush table inet sno_e2e_isolation\ntable inet sno_e2e_isolation {\n" -}}
+{{- range $name, $env := dict "staging" .Values.environments.staging "production" .Values.environments.production -}}
+{{- $rules = printf "%s  chain %s {\n    meta nfproto ipv6 counter drop\n    ip saddr != %s counter drop\n    ip daddr %s ct direction reply ct state established,related counter accept\n    ip daddr %s tcp dport { 80, 443 } counter accept\n    counter drop\n  }\n" $rules $name $env.cidr $env.egressAddress $env.pool -}}
+{{- end -}}
+{{- $rules = printf "%s  chain external_ingress {\n    type filter hook prerouting priority -150; policy accept;\n" $rules -}}
+{{- range $name, $env := dict "staging" .Values.environments.staging "production" .Values.environments.production -}}
+{{- $rules = printf "%s    iifname { \"%s\", \"%s.%v\" } jump %s\n" $rules $env.bridge $.Values.environments.trunk.interface $env.vlan $name -}}
+{{- end -}}
+{{- $rules = printf "%s  }\n}\n" $rules -}}
+# Case-owned host enforcement, applied before any environment workload or peer.
+# Match original destinations before DNAT: a cross-environment LoadBalancer,
+# NodePort or ClusterIP must not become an apparently permitted router address.
+# The only new external connections admitted are to the arriving VLAN's ingress.
+# The other allowance is a reply to a connection using its explicit EgressIP.
+# No global ruleset flush and no change to OVN's tables or the management NIC.
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-sno-e2e-isolation
+
+  labels:
+    machineconfiguration.openshift.io/role: master
+
+spec:
+  config:
+    ignition:
+      version: 3.2.0
+
+    storage:
+      files:
+        - path: /etc/sno-e2e-isolation.nft
+          mode: 384
+          overwrite: true
+
+          contents:
+            source: {{ printf "data:text/plain;base64,%s" ($rules | b64enc) | quote }}
+
+    systemd:
+      units:
+        - name: sno-e2e-isolation.service
+          enabled: true
+          contents: |
+            [Unit]
+            Description=Isolate the SNO E2E environment interfaces
+            DefaultDependencies=no
+            After=local-fs.target
+            Wants=network-pre.target
+            Before=network-pre.target NetworkManager.service crio.service kubelet.service
+
+            [Service]
+            Type=oneshot
+            RemainAfterExit=yes
+            ExecStart=/usr/sbin/nft -f /etc/sno-e2e-isolation.nft
+            ExecReload=/usr/sbin/nft -f /etc/sno-e2e-isolation.nft
+
+            [Install]
+            WantedBy=multi-user.target
+
+        - name: NetworkManager.service
+
+          dropins:
+            - name: 90-sno-e2e-isolation.conf
+              contents: |
+                [Unit]
+                Requires=sno-e2e-isolation.service
+                After=sno-e2e-isolation.service
+
+        - name: crio.service
+
+          dropins:
+            - name: 90-sno-e2e-isolation.conf
+              contents: |
+                [Unit]
+                Requires=sno-e2e-isolation.service
+                After=sno-e2e-isolation.service
+
+        - name: kubelet.service
+
+          dropins:
+            - name: 90-sno-e2e-isolation.conf
+              contents: |
+                [Unit]
+                Requires=sno-e2e-isolation.service
+                After=sno-e2e-isolation.service
