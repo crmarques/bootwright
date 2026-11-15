@@ -89,11 +89,15 @@ private evidence archive.
 ## Preserve evidence before context purge
 
 After destroy and the final status check, while no command is active for the
-context, set `EVIDENCE_CONTEXT` as the case directs and run this Bash block
-from the checkout. Context purge removes operation and power logs; it makes no
-archive. This step keeps only their logs and adapter output plus final status,
-outside `RUN_DIR`, under a Git-verified ignored shared-cache directory, so
-removing a task worktree keeps the evidence. It excludes input
+context, set `EVIDENCE_CONTEXT` as the case directs and run this Bash block.
+From a checkout it uses the shared ignored cache. On a provisioned controller
+without a checkout, first set `EVIDENCE_BW` to the installed executable and
+`EVIDENCE_ROOT` to an absolute private directory outside any checkout and
+outside the disposable `RUN_DIR`. Context purge removes operation and power
+logs; it makes no archive. This step keeps only their logs and adapter output plus final status,
+outside `RUN_DIR`; a checkout uses the Git-verified ignored shared cache, so
+removing a task worktree keeps the evidence. A provisioned controller uses
+the private evidence root supplied above. The archive excludes input
 revisions, keyrings, frozen plans and records, registry and SSH-trust data.
 Bounded power output retains only the newest 16 runs; preserve earlier
 checkpoints separately when the case needs them.
@@ -103,16 +107,23 @@ checkpoints separately when the case needs them.
     set -euo pipefail
     umask 077
     : "${EVIDENCE_CONTEXT:?Set the context to preserve}"
+    EVIDENCE_BW=${EVIDENCE_BW:-./bin/bootwright}
     sudo -v
-    EVIDENCE_CACHE=$(./scripts/cache-dir)
-    EVIDENCE_ROOT="$EVIDENCE_CACHE/e2e-evidence"
-    git -C "$(dirname -- "$EVIDENCE_CACHE")" check-ignore -q -- "$EVIDENCE_ROOT/.ignore-check"
+    if [[ -z ${EVIDENCE_ROOT:-} ]]; then
+        EVIDENCE_CACHE=$(./scripts/cache-dir)
+        EVIDENCE_ROOT="$EVIDENCE_CACHE/e2e-evidence"
+        git -C "$(dirname -- "$EVIDENCE_CACHE")" check-ignore -q -- "$EVIDENCE_ROOT/.ignore-check"
+    fi
+    [[ "$EVIDENCE_ROOT" = /* ]]
+    if [[ -n ${RUN_DIR:-} ]]; then
+        [[ "$EVIDENCE_ROOT/" != "$RUN_DIR/"* ]]
+    fi
     test ! -L "$EVIDENCE_ROOT"
     mkdir -p -m 0700 -- "$EVIDENCE_ROOT"
     chmod 0700 -- "$EVIDENCE_ROOT"
     EVIDENCE_DIR=$(mktemp -d "$EVIDENCE_ROOT/${EVIDENCE_CONTEXT}.XXXXXXXX")
     LOG_DIR="/var/log/bootwright/contexts/$EVIDENCE_CONTEXT"
-    ./bin/bootwright status --context "$EVIDENCE_CONTEXT" --output json > "$EVIDENCE_DIR/status.json"
+    "$EVIDENCE_BW" status --context "$EVIDENCE_CONTEXT" --output json > "$EVIDENCE_DIR/status.json"
     sudo bash -euo pipefail -c '
         find "$1/operations" -mindepth 1 -maxdepth 1 -type d -print0 |
             sort -z | while IFS= read -r -d "" LOGS; do

@@ -12,9 +12,12 @@ administrator; workloads have no host networking or privileged capabilities.
 | --- | --- |
 | Bootwright core | Existing Machine, Network, NetworkConfig, provider and OpenShiftCluster fields: two VMs, installation, FIPS, TPM2, node VLAN connectivity and addressed-bridge intent |
 | Existing add-ons | NMState applies the bridge configuration; MetalLB provides per-environment address pools |
-| E2E fixtures, later GitOps-owned in an estate | Namespaces, apps, ingress shards, EgressIP, policies, node filter, external peers and assertions |
+| Native fixtures, later GitOps-owned in an estate | Namespaces, apps, ingress shards, EgressIP, policies and node filter |
+| External E2E harness | Addressless host trunk, external peers, adversarial routes and traffic assertions |
 
-No new core API or add-on is required. The native schema follows the
+No new core API or add-on is required for the native isolation manifests.
+The parent runbook's [setup audit](../runbook.md#declarative-setup-and-remaining-gaps)
+names the remaining trunk and resolver setup gaps. The native schema follows the
 [product boundary](../../../specs/project.md#product-scope). The
 [IngressController API](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/operator_apis/ingresscontroller-operator-openshift-io-v1)
 provides namespace selection and source ranges.
@@ -47,22 +50,23 @@ FIPS controller bootstrap. Keep all actual overrides and evidence outside
 tracked files.
 The parent defaults reserve egress `.60` outside Localnet IPAM and MetalLB.
 
-Set `CASE` to this case's absolute directory, `PROFILE` to a private directory
-outside the checkout, and `VALUES` to the same private overrides passed to
-`e2e/render.sh`. An empty mapping is sufficient when using the case defaults
-and setting operator subscriptions on the renderer's command line.
+Parent step 1 defines `RUN_DIR` and `CASE_VALUES`. Use that same host shell;
+do not create a second run directory. `CASE_VALUES` is the private overrides
+file parent step 2 passes to `e2e/render.sh`; merge any overrides into it
+before either render. Operator subscription pins are resolved in parent step 2.
 Resolve the approved UBI Python image by digest with the installed `oc`:
 
 ```sh
 CASE="$PWD/e2e/lab-sno-fips-controller"
 PROFILE="$RUN_DIR/isolation"
-VALUES="$RUN_DIR/isolation-values.yaml"
+VALUES="${CASE_VALUES:?Complete parent step 1 first}"
 mkdir -m 700 -p "$PROFILE"
-printf '# Private case overrides\n' > "$VALUES"
+test ! -e "$PROFILE/config.json"
 IMAGE=registry.access.redhat.com/ubi9/python-312
 DIGEST=$(oc image info "$IMAGE" -o json | jq -er '.digest')
-printf '\nisolation:\n  image: %s@%s\n' "$IMAGE" "$DIGEST" >> "$VALUES"
+printf '%s@%s\n' "$IMAGE" "$DIGEST" > "$PROFILE/image.txt"
 helm template isolation "$CASE/isolation" -f "$CASE/values.yaml" -f "$VALUES" \
+    --set-string "isolation.image=$IMAGE@$DIGEST" \
     --output-dir "$PROFILE/rendered"
 MANIFESTS="$PROFILE/rendered/sno-environment-isolation/templates"
 python3 - "$MANIFESTS/verification-config.yaml" "$PROFILE/config.json" <<'PY'
@@ -78,11 +82,11 @@ cp -a "$CASE/app" "$PROFILE/app"
 python3 "$PROFILE/app/verify.py" --config "$PROFILE/config.json" --mode config
 ```
 
-If overriding addresses, VLANs, bridges, image or domain, merge those values
-into this private file before rendering, and pass this same file to the parent
-Bootwright renderer. Both renders must use identical effective values. The
+For an approved alternative image, change `IMAGE` before resolving its digest.
+Both renders use identical topology overrides. The image pin is recorded
+separately because it is used only by this profile's fixtures. The
 verification configuration travels with the manifests. No environment-specific
-facts belong in the chart or Git metadata.
+facts belong in the chart or Git metadata. Now perform parent steps 2–5.
 
 ## Replace parent step 6: isolated host networks
 
@@ -93,10 +97,16 @@ container name already exists; never adopt or delete a pre-existing resource.
 Run this block in Bash with `set -euo pipefail`.
 
 ```sh
+PROFILE="$RUN_DIR/isolation"
 TRUNK=$(jq -er '.trunk.bridge' "$PROFILE/config.json")
 if ip link show "$TRUNK" >/dev/null 2>&1; then echo 'trunk already exists'; exit 1; fi
-sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null || true
-# Require absent or 0 above, as in the parent runbook.
+BRIDGE_FILTER=$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null || true)
+[[ -z "$BRIDGE_FILTER" || "$BRIDGE_FILTER" == 0 ]]
+for env in staging production; do
+    if sudo podman network exists "e2e-$env" || sudo podman container exists "e2e-$env-app"; then
+        echo 'test peer resource already exists'; exit 1
+    fi
+done
 sudo ip link add "$TRUNK" type bridge
 sudo ip link set "$TRUNK" up
 while IFS=$'\t' read -r env vlan cidr; do
@@ -118,12 +128,12 @@ Transfer the profile from the host to the FIPS controller using the parent's
 `CTX_BOOT` session:
 
 ```sh
-tar -C "$PROFILE" -cf - . | \
-    ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- \
-    sh -c 'umask 077; mkdir -p isolation; tar -xf - -C isolation'
+./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
+    "local:$PROFILE" remote:isolation
 ```
 
-On the FIPS controller, use the parent's exported `KUBECONFIG`:
+On the FIPS controller, keep the parent's `RUN_DIR`, private client wrapper and
+`oc` shell function from step 9. Do not reuse the host's `RUN_DIR` value here:
 
 ```sh
 PROFILE="$HOME/isolation"
@@ -140,8 +150,30 @@ is insufficient. Bound the rollout to 30 minutes; on timeout collect status
 and stop. Confirm the rendered master config contains this MachineConfig.
 
 ```sh
-oc get mcp master -o yaml
-oc get node master-0 -o yaml
+deadline=$((SECONDS + 1800))
+while :; do
+    if oc get mcp master --request-timeout=30s -o json > "$PROFILE/mcp.json" &&
+       oc get node master-0 --request-timeout=30s -o json > "$PROFILE/node.json" &&
+       jq -e '
+           [.spec.configuration.source[]? | select(.kind == "MachineConfig") | .name] |
+           index("99-sno-e2e-isolation") != null' "$PROFILE/mcp.json" >/dev/null &&
+       jq -e '.spec.configuration.name as $wanted |
+           ($wanted | type == "string" and length > 0) and
+           .status.configuration.name == $wanted and
+           any(.status.conditions[]?; .type == "Updated" and .status == "True")' "$PROFILE/mcp.json" >/dev/null; then
+        wanted=$(jq -er '.spec.configuration.name' "$PROFILE/mcp.json")
+        if jq -e --arg wanted "$wanted" '.metadata.annotations |
+            .["machineconfiguration.openshift.io/currentConfig"] == $wanted and
+            .["machineconfiguration.openshift.io/desiredConfig"] == $wanted and
+            .["machineconfiguration.openshift.io/state"] == "Done"' "$PROFILE/node.json" >/dev/null; then
+            break
+        fi
+    fi
+    if ((SECONDS >= deadline)); then
+        echo 'isolation MachineConfig did not converge within 30 minutes'; exit 1
+    fi
+    sleep 10
+done
 oc wait mcp/master --for=condition=Updated --timeout=30m
 oc wait node/master-0 --for=condition=Ready --timeout=10m
 oc debug node/master-0 -- chroot /host systemctl is-active sno-e2e-isolation.service
@@ -173,6 +205,19 @@ for env in staging production; do
 done
 oc get egressip -o yaml
 oc get svc -n openshift-ingress router-staging router-production
+deadline=$((SECONDS + 300))
+while :; do
+    if oc get egressip staging production --request-timeout=30s -o json > "$PROFILE/egress.json" &&
+       jq -e --slurpfile config "$PROFILE/config.json" '
+           .items | length == 2 and all(.[];
+               .metadata.name as $env | .status.items | length == 1 and
+               .[0].node == "master-0" and
+               .[0].egressIP == $config[0].environments[$env].egressAddress)' "$PROFILE/egress.json" >/dev/null; then
+        break
+    fi
+    if ((SECONDS >= deadline)); then echo 'EgressIP assignment timed out'; exit 1; fi
+    sleep 5
+done
 ```
 
 Require one assigned EgressIP per environment on `master-0` and each router
@@ -213,7 +258,7 @@ On the FIPS controller:
 
 ```sh
 python3 "$PROFILE/app/verify.py" --config "$PROFILE/config.json" \
-    --mode pods --snapshot "$PROFILE/snapshot.json"
+    --mode pods --oc "$RUN_DIR/oc" --snapshot "$PROFILE/snapshot.json" | tee "$PROFILE/pods-before-reboot.log"
 ```
 
 Every positive and negative assertion must pass; any command, HTTP, parsing
@@ -223,10 +268,10 @@ written only after the pod checks pass. On the host, retrieve it and run the
 external assertions:
 
 ```sh
-./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- \
-    cat isolation/snapshot.json > "$PROFILE/snapshot.json"
+./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
+    remote:isolation/snapshot.json "local:$PROFILE/snapshot.json"
 sudo python3 "$PROFILE/app/verify.py" --config "$PROFILE/config.json" \
-    --mode external --snapshot "$PROFILE/snapshot.json"
+    --mode external --snapshot "$PROFILE/snapshot.json" | tee "$PROFILE/external-before-reboot.log"
 ```
 
 The matrix covers both directions: own app/service/ingress success, cross
@@ -235,12 +280,31 @@ other external app denial, and management denial. Any HTTP response, including
 403 or 503, fails a negative connectivity assertion. API/exec errors are not
 network isolation evidence. Positive controls bracket negative probes.
 
-Repeat the parent's TPM2 reboot drill with a bounded 20-minute boot-ID change
+Repeat the parent's TPM2 reboot drill with its bounded 20-minute boot-ID change
 wait. Require root `crypto_LUKS`, a Clevis TPM2 binding, unattended restart,
 `fips_enabled=1`, Ready node, healthy operators and an active filter with its
-rules. Rerun both verifier modes with a new snapshot after the reboot. Failure
-to recover in the bound is a failure; never let an unbounded loop count as a
-pass. This proves persistence of encryption and filtering together.
+rules. Rerun both verifier modes with a new snapshot after the reboot; retain
+separate before/after verifier logs with `tee` and Bash `pipefail`.
+On the FIPS controller:
+
+```sh
+oc debug node/master-0 -- chroot /host systemctl is-active sno-e2e-isolation.service
+oc debug node/master-0 -- chroot /host nft list table inet sno_e2e_isolation | tee "$PROFILE/filter-after-reboot.log"
+python3 "$PROFILE/app/verify.py" --config "$PROFILE/config.json" \
+    --mode pods --oc "$RUN_DIR/oc" --snapshot "$PROFILE/snapshot-after-reboot.json" | tee "$PROFILE/pods-after-reboot.log"
+```
+
+On the host:
+
+```sh
+./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
+    remote:isolation/snapshot-after-reboot.json "local:$PROFILE/snapshot-after-reboot.json"
+sudo python3 "$PROFILE/app/verify.py" --config "$PROFILE/config.json" \
+    --mode external --snapshot "$PROFILE/snapshot-after-reboot.json" | tee "$PROFILE/external-after-reboot.log"
+```
+
+Failure to recover in the bound is a failure; never let an unbounded loop
+count as a pass. This proves persistence of encryption and filtering together.
 
 ## Evidence and cleanup
 
@@ -250,13 +314,25 @@ filter counters before/after probes, boot IDs and the parent's operation logs
 in the private evidence directory. Record no live acceptance until the full
 sequence passes and the owner accepts it.
 
-Remove external containers and networks, then their VLAN interfaces and trunk,
-using the parent cleanup only for the objects this run created. Delete the
-fixture ingress controllers and namespaces before destroying the cluster so
-Services do not outlive MetalLB pools. Delete the two `EgressIP` objects. The
+Before parent step 10, remove the fixture ingress controllers and namespaces
+so Services do not outlive MetalLB pools, and delete the two EgressIP objects:
+
+```sh
+oc delete ingresscontroller staging production -n openshift-ingress-operator --wait=true --timeout=5m
+oc delete egressip staging production --wait=true --timeout=5m
+oc delete namespace staging production --wait=true --timeout=10m
+jq '{spec: {namespaceSelector: (.spec.namespaceSelector // null)}}' \
+    "$PROFILE/default-ingress.before.json" > "$PROFILE/restore-selector.json"
+oc patch ingresscontroller/default -n openshift-ingress-operator --type=merge \
+    --patch-file "$PROFILE/restore-selector.json"
+```
+
+These are fresh-case fixtures; do not use their names to delete another
+operator's pre-existing objects. The
 filter remains installed until the disposable VM is destroyed; deleting it
-while apps are present would reopen transit. Restore the default selector
-from the saved object if keeping the cluster for diagnosis. Continue the
-parent's verified-fetch drill, destroy, evidence preservation and controller
-cleanup. The parent uses fixed default names; with custom values use the
-names in the rendered verification configuration instead.
+while apps are present would reopen transit. Continue the parent's
+verified-fetch drill, destroy and evidence preservation. Parent step 11 removes
+the external containers and networks, then their VLAN interfaces and trunk,
+only after the node is gone. Its cleanup reads custom trunk/VLAN values from
+this profile's configuration. Preserve all evidence before either context is
+purged or the controller VM is removed.

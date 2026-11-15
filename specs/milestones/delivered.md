@@ -16004,3 +16004,23 @@ The fixtures now carry synthetic contract metadata for every plan block. The
 remain unchanged. Focused context-store and log-view tests passed; the
 delivering commits record the combined full gate and safety checks. This
 repository-only defect needs no live operator acceptance.
+
+## X475 — FIPS SNO runbook replay and setup audit
+
+### B1408
+
+M3 defect authorized by the owner's 2026-11-15 request to audit a fresh
+FIPS-controller SNO replay and replace manual setup where current APIs allow.
+The [base runbook](../../e2e/lab-sno-fips-controller/runbook.md) and
+[strict profile](../../e2e/lab-sno-fips-controller/isolation/runbook.md) now
+share explicit private values, use the qualified client handoff and native
+file copies, bind destroy authorization to the current plan, preserve evidence
+before purge, bound waits and refuse stale MachineConfig readiness.
+
+The setup audit distinguishes existing Machine/Network/service and add-on
+ownership from native GitOps fixtures and external test peers. Addressless
+host trunks and the resolver handoff remain candidates [B1409](backlog.md#b1409)
+and [B1410](backlog.md#b1410). No core API, security topology or execution
+contract changes. The delivering commit records focused verification under
+the owner's shortened test-loop instruction; no full gate or native replay is
+claimed. [B1400](m3.md#b1400)'s live qualification remains open.

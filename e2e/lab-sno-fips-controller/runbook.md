@@ -62,7 +62,9 @@ Bootwright's ([D246](../../specs/milestones/backlog.md#d246)).
 Steps marked **host** run in one Bash session in the checkout being tested on
 this host. Steps marked **FIPS controller** run in an interactive session on
 `fips-controller` opened in step 4. Stop on any unexpected failure; that
-attempt is not a successful run.
+attempt is not a successful run. Use Bash with `set -euo pipefail` in both
+sessions. The base `workloads/` checks use the default addresses and names;
+use the strict profile's rendered fixtures when overriding that topology.
 
 ## Inputs
 
@@ -76,11 +78,33 @@ attempt is not a successful run.
 [values.yaml](values.yaml) holds the rest: addresses, the release
 (`openshift.version`), the guest sizes and both BMC ports.
 
+### Declarative setup and remaining gaps
+
+| Setup | Current owner and runbook action |
+| --- | --- |
+| Controller packages, host firewall grants, management NAT network, VMs, emulated BMCs, FIPS and TPM2 installation | Existing Bootwright Machine, Network, provider and install APIs; apply performs the setup. No manual firewall rules or libvirt definitions. |
+| DNS records, forwarding, NTP and artifacts | Existing managed infrastructure APIs; both contexts declare their services. No manual zone-file or artifact-server setup. |
+| Node NICs/VLANs, secondary bridges and address pools | NetworkConfig, OpenShiftCluster secondary networks and the NMState/MetalLB add-ons. |
+| Addressless host trunk and test peers | External laboratory fixtures in step 6. Managed tagged Networks currently require a host address on each VLAN leg; substituting them changes this test's isolation topology. Addressless ownership is a [candidate](../../specs/milestones/backlog.md#b1409), not an existing values switch. |
+| FIPS controller resolver handoff | Step 7 uses nmstate after its DNS service is ready. A provided Machine cannot declare OS network configuration, and DNSServer has no per-zone forwarding; the [candidate](../../specs/milestones/backlog.md#b1410) needs a design before this can be automated. |
+| Namespaces, ingress shards, EgressIP, policies and strict node filter | Native declarative OpenShift fixtures, applied explicitly for this test. Existing [GitOps bootstrap](../../specs/api/addons.md#package-gitops) can own them in an estate using an approved repository/revision/path and a suitable ClusterRole. No such repository or additional operator is assumed here. |
+| SSH authorization, credential import, negative tests and evidence | Operator trust establishment and test assertions. They are not infrastructure lifecycle configuration. |
+
+The `ClusterAddon.manifestSet` arm is currently refused by execution; it is
+not a way to apply these native fixtures. No arbitrary-command add-on is
+needed. The two candidates above remain unimplemented; their absence is why
+the corresponding manual setup remains in this runbook.
+
 ## 1. Prepare (host)
 
 - Complete [host preparation](../README.md#prepare-the-host), including RHEL
   9.8 media and `~/openshift-pull-secret`. No other case may run: this one
   uses `virbr-e2e`, `198.51.100.0/24` and the service ports.
+- This OpenShift case also installs a RHEL controller VM: complete the shared
+  RHEL media-import step. Require both case contexts absent before a fresh
+  replay. If an old context remains, finish its destroy, preserve evidence
+  and purge it first; use its registering executable if the new build refuses
+  its saved state. Do not overwrite a running context with fresh inputs.
 - Capacity: `CTX_BOOT` needs 5 CPUs, 6 GiB of `MemAvailable` and 70 GiB free
   under `/var/lib/libvirt/images`. With `fips-controller` running, `CTX_FIPS`
   needs 9 more CPUs not reserved by libvirt domains, 18 GiB of `MemAvailable`
@@ -93,14 +117,22 @@ attempt is not a successful run.
   running so that cleanup restores it:
 
   ```sh
+  set -euo pipefail
   umask 077
   RUN_DIR=$(mktemp -d)
+  CASE_VALUES="$RUN_DIR/values.yaml"
+  printf '{}\n' > "$CASE_VALUES"
   printf 'Run records: %s\n' "$RUN_DIR"
   systemctl is-active sshd > "$RUN_DIR/sshd-before" || true
   sudo sshd -T | grep -i '^permitrootlogin'     # yes or prohibit-password
   sudo systemctl start sshd
   ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub
   ```
+
+Merge any private overrides into `CASE_VALUES` before rendering. For the
+strict profile, now complete its **Prepare and render on the host** section,
+then return here. Keep `RUN_DIR` and `CASE_VALUES` in this host session for
+the entire run; do not recreate them in the second terminal.
 
 ## 2. Render and build the bootstrap context (host)
 
@@ -114,14 +146,18 @@ head_csv() {
     mkdir -p "$directory"
     oc image extract "$CATALOG" -a ~/openshift-pull-secret --confirm \
         --path "/configs/$package/:$directory" > /dev/null
-    jq -rs --arg package "$package" '
-        (map(select(.schema == "olm.package"))[0].defaultChannel) as $channel
-        | (map(select(.schema == "olm.channel" and .name == $channel))[0].entries) as $entries
+    jq -ers '
+        (map(select(.schema == "olm.package")) | if length == 1 then .[0].defaultChannel else error("No unique package") end) as $channel
+        | (map(select(.schema == "olm.channel" and .name == $channel)) | if length == 1 then .[0].entries else error("No unique channel") end) as $entries
         | ([$entries[] | (.replaces // empty), (.skips // [])[]]) as $old
-        | [$channel, ([$entries[].name] - $old)[0]] | @tsv' "$directory"/*.json
+        | ([$entries[].name] - $old | unique) as $heads
+        | if ($channel | type) == "string" and ($heads | length) == 1
+          then [$channel, $heads[0]] | @tsv else error("No unique channel head") end' "$directory"/*.json
 }
-read -r NMSTATE_CHANNEL NMSTATE_CSV < <(head_csv kubernetes-nmstate-operator)
-read -r METALLB_CHANNEL METALLB_CSV < <(head_csv metallb-operator)
+NMSTATE_PIN=$(head_csv kubernetes-nmstate-operator)
+METALLB_PIN=$(head_csv metallb-operator)
+read -r NMSTATE_CHANNEL NMSTATE_CSV <<< "$NMSTATE_PIN"
+read -r METALLB_CHANNEL METALLB_CSV <<< "$METALLB_PIN"
 printf '%s %s\n%s %s\n' "$NMSTATE_CHANNEL" "$NMSTATE_CSV" "$METALLB_CHANNEL" "$METALLB_CSV"
 ```
 
@@ -132,6 +168,7 @@ Then render:
 
 ```sh
 e2e/render.sh lab-sno-fips-controller \
+    --values "$CASE_VALUES" \
     --set "addons.subscriptions.nmstate.channel=$NMSTATE_CHANNEL" \
     --set "addons.subscriptions.nmstate.startingCSV=$NMSTATE_CSV" \
     --set "addons.subscriptions.metallb.channel=$METALLB_CHANNEL" \
@@ -173,8 +210,8 @@ match:
 ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sudo -n install -m 0755 /dev/stdin /usr/local/bin/bootwright < bin/bootwright
 sha256sum bin/bootwright
 ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sha256sum /usr/local/bin/bootwright
-tar -C "$INPUT_DIR" -cf - fips | ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- tar -xf -
-./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sh -c 'umask 077; cat > openshift-pull-secret' < ~/openshift-pull-secret
+./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller "local:$INPUT_DIR/fips" remote:fips
+./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller "local:$HOME/openshift-pull-secret" remote:openshift-pull-secret
 ```
 
 Hand over `libvirt-host`'s ECDSA host key as one known-hosts line for its
@@ -198,10 +235,11 @@ Open the session and keep it for the FIPS controller steps, 4 to 10:
 ./bin/bootwright machine rsh --context "$CTX_BOOT" --name fips-controller
 ```
 
-On `fips-controller`:
+On `fips-controller` (the version must name the same clean build as the host):
 
 ```sh
 CTX_FIPS="lab-sno-fips-controller"
+set -euo pipefail
 umask 077
 RUN_DIR=$(mktemp -d)
 bootwright version
@@ -228,6 +266,8 @@ In a second host terminal in the checkout, authorize the key for root, only
 from `fips-controller`'s address, keeping the previous file for cleanup:
 
 ```sh
+set -euo pipefail
+umask 077
 CTX_BOOT="lab-sno-fips-controller-bootstrap"
 RUN_DIR="<the run records directory step 1 printed>"
 ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- cat libvirt-host-key.pub > "$RUN_DIR/libvirt-host-key.pub"
@@ -246,8 +286,14 @@ container per environment on its VLAN. These are runtime links, gone at the
 next boot; nothing here is Bootwright's:
 
 ```sh
-ip link show br-e2e-trunk 2>/dev/null && echo "br-e2e-trunk exists: stop"
-sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null       # absent or 0
+if ip link show br-e2e-trunk >/dev/null 2>&1; then echo 'trunk already exists'; exit 1; fi
+BRIDGE_FILTER=$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null || true)
+[[ -z "$BRIDGE_FILTER" || "$BRIDGE_FILTER" == 0 ]]
+for env in staging production; do
+    if sudo podman network exists "e2e-$env" || sudo podman container exists "e2e-$env-app"; then
+        echo 'test peer resource already exists'; exit 1
+    fi
+done
 sudo ip link add br-e2e-trunk type bridge
 sudo ip link set br-e2e-trunk up
 for vlan in 10 20; do
@@ -354,10 +400,10 @@ reclaims run directories it does not own ([B1095](../../specs/milestones/backlog
 
 ## 9. Verify (FIPS controller)
 
-Install an independent `oc` matching `openshift.version` from the release's
-RHEL 9 client archive, `openshift-client-linux-amd64-rhel9-<version>.tar.gz`,
-checked with `sha256sum --ignore-missing -c sha256sum.txt` against the
-release's published list. Then:
+Use the `oc` executable already qualified in this controller's dependency
+closure. `cluster oc` returns a descriptor; it does not execute the client.
+Export the kubeconfig explicitly into the private run directory, then create
+a local wrapper with its own working directory, cache and clean environment:
 
 ```sh
 bootwright status --context "$CTX_FIPS"
@@ -366,6 +412,21 @@ bootwright diff --context "$CTX_FIPS" --observe        # clean
 bootwright apply --context "$CTX_FIPS" --yes           # settles: boots nothing
 KUBECONFIG="$RUN_DIR/kubeconfig"; export KUBECONFIG
 bootwright cluster kubeconfig --context "$CTX_FIPS" --name sno > "$KUBECONFIG"
+bootwright cluster oc --context "$CTX_FIPS" --name sno --output json -- get nodes > "$RUN_DIR/oc-handoff.json"
+jq -er '.result.client.executable | select(startswith("/"))' "$RUN_DIR/oc-handoff.json" > "$RUN_DIR/oc-client"
+mkdir -m 700 "$RUN_DIR/oc-home" "$RUN_DIR/oc-cache"
+cat > "$RUN_DIR/oc" <<'SH'
+#!/bin/sh
+set -eu
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+IFS= read -r client < "$here/oc-client"
+cd -- "$here"
+exec env -i HOME="$here/oc-home" PATH=/usr/bin:/bin \
+    "$client" --kubeconfig "$here/kubeconfig" --cache-dir "$here/oc-cache" \
+    "$@"
+SH
+chmod 700 "$RUN_DIR/oc"
+oc() { "$RUN_DIR/oc" "$@"; }
 oc get nodes; oc get clusterversion; oc get co
 oc debug node/master-0 -- chroot /host cat /proc/sys/crypto/fips_enabled   # 1
 oc debug node/master-0 -- chroot /host lsblk -f                            # with tpm2: a crypto_LUKS root
@@ -381,9 +442,16 @@ LUKS=$(oc debug node/master-0 -- chroot /host lsblk -nrpo NAME,FSTYPE 2>/dev/nul
 oc debug node/master-0 -- chroot /host clevis luks list -d "$LUKS"         # 1: tpm2 '{...}'
 BOOT=$(oc get node master-0 -o jsonpath='{.status.nodeInfo.bootID}')
 oc debug node/master-0 -- chroot /host shutdown -r +1                      # the pod ends first: one it never ends reruns on each boot
-until [ "$(oc get node master-0 -o jsonpath='{.status.nodeInfo.bootID}' 2>/dev/null)" != "" ] && \
-      [ "$(oc get node master-0 -o jsonpath='{.status.nodeInfo.bootID}' 2>/dev/null)" != "$BOOT" ]; do sleep 20; done
+deadline=$((SECONDS + 1200))
+while :; do
+    AFTER=$(oc get node master-0 --request-timeout=30s -o jsonpath='{.status.nodeInfo.bootID}' 2>/dev/null || true)
+    [[ -n "$AFTER" && "$AFTER" != "$BOOT" ]] && break
+    if ((SECONDS >= deadline)); then echo 'node did not reboot within 20 minutes'; exit 1; fi
+    sleep 20
+done
 oc wait node/master-0 --for=condition=Ready --timeout=20m
+oc debug node/master-0 -- chroot /host cat /proc/sys/crypto/fips_enabled   # still 1
+oc debug node/master-0 -- chroot /host clevis luks list -d "$LUKS"         # still tpm2
 oc get co                                                                  # every operator Available again
 ```
 
@@ -405,17 +473,22 @@ oc patch ingresscontroller/default -n openshift-ingress-operator --type=merge \
     -p '{"spec":{"namespaceSelector":{"matchExpressions":[{"key":"lab.example.test/environment","operator":"DoesNotExist"}]}}}'
 for env in staging production; do
     oc apply -f ~/workloads/$env/namespace.yaml
-    until oc get network-attachment-definitions -n "$env" "$env" > /dev/null 2>&1; do sleep 5; done
+    deadline=$((SECONDS + 600))
+    until oc get network-attachment-definitions -n "$env" "$env" --request-timeout=30s > /dev/null 2>&1; do
+        if ((SECONDS >= deadline)); then echo 'NAD did not appear within 10 minutes'; exit 1; fi
+        sleep 5
+    done
     oc get network-attachment-definitions -n "$env"                       # exactly one, named $env
     oc apply -f ~/workloads/$env/
     oc apply -f ~/workloads/ingress/$env.yaml
 done
-lb_ip() { oc get svc -n openshift-ingress "router-$1" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null; }
+lb_ip() { oc get svc -n openshift-ingress "router-$1" --request-timeout=30s -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null; }
 for env in staging production; do
     oc wait -n "$env" deployment/app --for=condition=Available --timeout=10m
     oc wait -n "$env" pod/probe --for=condition=Ready --timeout=10m
     for _ in $(seq 60); do [ -n "$(lb_ip "$env")" ] && break; sleep 5; done
     echo "router-$env $(lb_ip "$env")"
+    test -n "$(lb_ip "$env")"
 done
 ```
 
@@ -446,7 +519,7 @@ except urllib.error.HTTPError as error:
 except Exception:
     print("000")'
 probe() { oc exec -n "$1" probe -- python3 -c "$PROBE" "$2" ${3:+"$3"}; }
-check() { got=$(probe "$1" "$2" ${4:+"$4"} | tr -d '\r'); [ "$got" = "$3" ] && r=ok || r=FAIL; printf '%-4s got=%s want=%s  %s -> %s %s\n' "$r" "$got" "$3" "$1" "$2" "${4:-}"; }
+check() { got=$(probe "$1" "$2" ${4:+"$4"} | tr -d '\r'); printf 'got=%s want=%s  %s -> %s %s\n' "$got" "$3" "$1" "$2" "${4:-}"; test "$got" = "$3"; }
 ```
 
 Inside each environment everything answers, from OpenShift and from the
@@ -455,7 +528,7 @@ separate VLANs, and each EgressFirewall denies the other environment's
 network. The ingress operator admits any source to every router, so each
 environment's egress NetworkPolicy keeps its pods off the other router: by
 its MetalLB address, its pod address and its NodePort alike. In this
-session, every line must print `ok`:
+session, every assertion must exit successfully:
 
 ```sh
 check staging    "http://$STG_APP:8080/"            200    # pod to pod on the staging network
@@ -586,17 +659,76 @@ Record the exact answers of the first run.
 ## 10. Destroy the FIPS context (FIPS controller)
 
 ```sh
-bootwright destroy --context "$CTX_FIPS" --authorize data-loss    # must refuse, naming sno-01
+bootwright plan --context "$CTX_FIPS" --output json > "$RUN_DIR/destroy-plan.json"
+AUTH=$(jq -er '.result | select(.verb == "destroy") | .authorizations | select(length == 1) | .[0] | select(startswith("data-loss="))' "$RUN_DIR/destroy-plan.json")
+if bootwright destroy --context "$CTX_FIPS" --authorize "$AUTH" --yes \
+    --output json > "$RUN_DIR/destroy-while-running.json"; then
+    echo 'unexpected success: expected powered-on refusal'; exit 1
+fi
+jq -e '.diagnostics | any(.code == "lifecycle.live" and (.message | contains("sno-01")) and (.message | contains("its domain is running")))' \
+    "$RUN_DIR/destroy-while-running.json"
 bootwright machine stop --context "$CTX_FIPS" --name sno-01 --yes
-bootwright destroy --context "$CTX_FIPS" --authorize data-loss
+bootwright plan --context "$CTX_FIPS" --output json > "$RUN_DIR/destroy-plan-stopped.json"
+AUTH=$(jq -er '.result | select(.verb == "destroy") | .authorizations | select(length == 1) | .[0] | select(startswith("data-loss="))' "$RUN_DIR/destroy-plan-stopped.json")
+bootwright destroy --context "$CTX_FIPS" --authorize "$AUTH" --yes
 bootwright status --context "$CTX_FIPS"
-bootwright context delete --name "$CTX_FIPS" --purge --yes
 ```
 
 Require `sno-01`, its disks, its BMC and pool on `libvirt-host`, the media, the
-work area and the services to be removed. Then leave the session.
+work area and the services to be removed. A final destroy reports `done`;
+desired cluster/service rows return to `PENDING` and the handoff is not ready
+because the latest operation is a destroy. Those are expected.
+
+Preserve evidence before purging. On this controller set:
+
+```sh
+EVIDENCE_CONTEXT="$CTX_FIPS"
+EVIDENCE_BW=/usr/local/bin/bootwright
+EVIDENCE_ROOT=$(mktemp -d "$HOME/fips-evidence.XXXXXXXX")
+printf '%s\n' "$EVIDENCE_ROOT" > "$HOME/fips-evidence-path"
+```
+
+Run [Preserve evidence before context purge](../README.md#preserve-evidence-before-context-purge)
+in this session with those variables. Add the selected run records and, for
+the strict profile, its verifier results to this evidence root. Leave the
+exported kubeconfig and temporary BMC credential out of the archive:
+
+```sh
+mkdir -m 700 "$EVIDENCE_ROOT/run-records"
+for record in oc-handoff.json destroy-plan.json destroy-plan-stopped.json destroy-while-running.json dns.yml; do
+    cp -- "$RUN_DIR/$record" "$EVIDENCE_ROOT/run-records/"
+done
+if [[ -d "$HOME/isolation" ]]; then cp -a -- "$HOME/isolation" "$EVIDENCE_ROOT/isolation"; fi
+bootwright context delete --name "$CTX_FIPS" --purge --yes
+```
+
+Keep this controller VM until the host retrieves the evidence in step 11.
+Then leave the session.
 
 ## 11. Destroy the bootstrap context and clean up (host)
+
+Return to the original host shell used for steps 1–4, after leaving the FIPS
+controller session. Keep that host's `CTX_BOOT`, `CTX_FIPS`, `RUN_DIR`,
+`INPUT_DIR` and `HOST_CHECKS`; the second terminal and the controller session
+do not carry all of them.
+
+Before removing the controller VM, copy its evidence to the host's ignored
+cache and verify the archived logs again:
+
+```sh
+FIPS_EVIDENCE=$(./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- cat fips-evidence-path)
+EVIDENCE_CACHE=$(./scripts/cache-dir)
+HOST_EVIDENCE="$EVIDENCE_CACHE/e2e-evidence"
+git -C "$(dirname -- "$EVIDENCE_CACHE")" check-ignore -q -- "$HOST_EVIDENCE/.ignore-check"
+mkdir -m 700 -p "$HOST_EVIDENCE"
+FIPS_COPY=$(mktemp -d "$HOST_EVIDENCE/fips-controller.XXXXXXXX")
+./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
+    "remote:$FIPS_EVIDENCE" "local:$FIPS_COPY/evidence"
+for archive in "$FIPS_COPY"/evidence/"$CTX_FIPS".*; do
+    (cd -- "$archive"; sha256sum -c SHA256SUMS)
+done
+printf 'FIPS evidence retained: %s\n' "$FIPS_COPY"
+```
 
 Restore root's authorized keys and sshd:
 
@@ -612,32 +744,61 @@ grep -qx active "$RUN_DIR/sshd-before" || sudo systemctl stop sshd
 ```
 
 Remove the trunk and the app containers (with `environments.enabled`):
+use the strict profile's configuration to select the trunk and VLAN IDs when
+that profile was used. Run this only for resources this attempt created, after
+SNO has been destroyed; a failed partial setup is not permission to remove an
+existing network or container.
 
 ```sh
 for env in staging production; do
     sudo podman rm -f "e2e-$env-app"
     sudo podman network rm "e2e-$env"
 done
-sudo ip link del br-e2e-trunk.10
-sudo ip link del br-e2e-trunk.20
-sudo ip link del br-e2e-trunk
-ip link show br-e2e-trunk 2>&1 | tail -1                                   # does not exist
+TRUNK=br-e2e-trunk
+VLANS=(10 20)
+if [[ -f "$RUN_DIR/isolation/config.json" ]]; then
+    TRUNK=$(jq -er '.trunk.bridge' "$RUN_DIR/isolation/config.json")
+    mapfile -t VLANS < <(jq -r '.environments[].vlan' "$RUN_DIR/isolation/config.json")
+fi
+for vlan in "${VLANS[@]}"; do sudo ip link del "$TRUNK.$vlan"; done
+sudo ip link del "$TRUNK"
+if ip link show "$TRUNK" >/dev/null 2>&1; then echo 'trunk still exists'; exit 1; fi
 ```
 
 Remove the controller guest and the bootstrap context:
 
 ```sh
 ./bin/bootwright machine stop --context "$CTX_BOOT" --name fips-controller --yes
-./bin/bootwright destroy --context "$CTX_BOOT" --authorize data-loss
+./bin/bootwright plan --context "$CTX_BOOT" --output json > "$RUN_DIR/bootstrap-destroy-plan.json"
+AUTH=$(jq -er '.result | select(.verb == "destroy") | .authorizations | select(length == 1) | .[0] | select(startswith("data-loss="))' "$RUN_DIR/bootstrap-destroy-plan.json")
+./bin/bootwright destroy --context "$CTX_BOOT" --authorize "$AUTH" --yes
 ./bin/bootwright status --context "$CTX_BOOT"
+```
+
+Set `EVIDENCE_CONTEXT="$CTX_BOOT"`, run `unset EVIDENCE_ROOT EVIDENCE_BW`, and complete
+[Preserve evidence before context purge](../README.md#preserve-evidence-before-context-purge)
+on this host, using its default cache location. Then purge:
+
+```sh
 ./bin/bootwright context delete --name "$CTX_BOOT" --purge --yes
-virsh --connect qemu:///system list --all --name | grep bootwright-     # nothing
+if virsh --connect qemu:///system list --all --name | grep bootwright-; then
+    echo 'case domains remain'; exit 1
+fi
 ```
 
 Complete [Restore listener firewall](../README.md#restore-listener-firewall)
-and [Remove diagnostic tools](../README.md#remove-diagnostic-tools), then:
+and [Remove diagnostic tools](../README.md#remove-diagnostic-tools). Retain
+the selected host records before deleting temporary inputs. Do not copy the
+root authorized-keys backup or credential files into the archive:
 
 ```sh
+mkdir -m 700 "$FIPS_COPY/host-run-records"
+for record in values.yaml bootstrap-destroy-plan.json isolation; do
+    if [[ -e "$RUN_DIR/$record" ]]; then
+        cp -a -- "$RUN_DIR/$record" "$FIPS_COPY/host-run-records/"
+    fi
+done
+cp -a -- "$INPUT_DIR" "$FIPS_COPY/rendered-inputs"
 rm -rf -- "${RUN_DIR:?}" "${INPUT_DIR:?}"
 ```
 
