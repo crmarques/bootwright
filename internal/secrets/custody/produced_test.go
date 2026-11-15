@@ -175,3 +175,28 @@ func TestReadProducedViewsTheNamedEntry(t *testing.T) {
 		t.Fatalf("an uninitialized store held an entry: %v", err)
 	}
 }
+
+func TestProducedAvailabilityInspectsMetadataWithoutUnlockingOrReadingMaterial(t *testing.T) {
+	service, access, _, _ := serviceFixture(t, declarationYAML("token", ""))
+	withProduced(access)
+	for _, test := range []struct {
+		name    string
+		present bool
+	}{{"token", true}, {"missing", false}} {
+		present, err := service.ProducedAvailable(t.Context(), ReadProducedRequest{ContextName: "fixture", Block: "cluster-install-sno", Name: test.name})
+		if err != nil || present != test.present || access.session.reads != 0 || access.session.writes != 0 {
+			t.Fatalf("presence %t, error %v, reads %d, writes %d", present, err, access.session.reads, access.session.writes)
+		}
+	}
+	if !slices.Equal(access.unlocks, []bool{false, false}) {
+		t.Fatalf("unlocks %v", access.unlocks)
+	}
+	access.session.snapshot.Produced[0].Unproved = true
+	if present, err := service.ProducedAvailable(t.Context(), ReadProducedRequest{ContextName: "fixture", Block: "cluster-install-sno", Name: "token"}); err != nil || present {
+		t.Fatalf("unproved presence %t, error %v", present, err)
+	}
+	access.session = nil
+	if present, err := service.ProducedAvailable(t.Context(), ReadProducedRequest{ContextName: "fixture", Block: "cluster-install-sno", Name: "token"}); err != nil || present {
+		t.Fatalf("uninitialized presence %t, error %v", present, err)
+	}
+}

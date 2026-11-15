@@ -54,22 +54,38 @@ func nodeRemedy(cluster api.Object, contextName string, nodes []environment.Memb
 }
 
 func matchNode(nodes []environment.Member, selector string) (environment.Member, nodeMatch) {
-	if index := slices.Index(nodeNames(nodes), selector); index >= 0 {
-		return nodes[index], nodeFound
-	}
-	var matched []environment.Member
-	for _, node := range nodes {
-		if node.FQDN == selector {
-			matched = append(matched, node)
+	for _, value := range []func(environment.Member) string{
+		func(n environment.Member) string { return n.Name },
+		func(n environment.Member) string { return n.FQDN },
+	} {
+		var matched []environment.Member
+		for _, node := range nodes {
+			if value(node) == selector {
+				matched = append(matched, node)
+			}
+		}
+		if len(matched) == 1 {
+			return matched[0], nodeFound
+		}
+		if len(matched) > 1 {
+			return environment.Member{}, nodeShared
 		}
 	}
-	switch len(matched) {
-	case 0:
-		return environment.Member{}, nodeMissing
-	case 1:
-		return matched[0], nodeFound
+	if split := strings.LastIndexByte(selector, '-'); split > 0 {
+		role, ordinal := selector[:split], selector[split+1:]
+		index, err := strconv.Atoi(ordinal)
+		if err == nil && index >= 0 && strconv.Itoa(index) == ordinal {
+			for _, node := range nodes {
+				if node.Role == role {
+					if index == 0 {
+						return node, nodeFound
+					}
+					index--
+				}
+			}
+		}
 	}
-	return environment.Member{}, nodeShared
+	return environment.Member{}, nodeMissing
 }
 
 func administratorNode(cluster api.Object, contextName string, nodesOf roster, administrator func(api.Object) string) (environment.Member, error) {
@@ -115,7 +131,7 @@ func selectMachines(clusters []api.Object, contextName string, selectors []strin
 			switch match {
 			case nodeShared:
 				return nil, failure("access.target",
-					"the FQDN "+selector+" names several nodes of "+string(cluster.Kind())+" "+cluster.Name()+", so it selects none", nodeRemedy(cluster, contextName, nodes))
+					"the selector "+selector+" names several nodes of "+string(cluster.Kind())+" "+cluster.Name()+", so it selects none", nodeRemedy(cluster, contextName, nodes))
 			case nodeFound:
 				declared[selector], hit = true, true
 				add(node)

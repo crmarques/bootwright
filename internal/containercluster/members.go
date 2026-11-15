@@ -12,3 +12,17 @@ func MemberMachines(object api.Object) (environment.Membership, bool) {
 	field, nodes, _ := api.ClusterNodes(object)
 	return environment.MembersOf(field, nodes), true
 }
+
+func SessionNode(object api.Object) string {
+	membership, ok := MemberMachines(object)
+	if !ok {
+		return ""
+	}
+	var first string
+	for _, node := range membership.Nodes {
+		if first == "" || node.Name < first {
+			first = node.Name
+		}
+	}
+	return first
+}

@@ -89,12 +89,12 @@ func sessionTargets(catalog api.Catalog, command, contextName string, names []st
 		return nil, failure("access.target", "no cluster name was supplied", "name one with --name <cluster>; "+discovery+" lists them")
 	}
 	var unknown []string
-	var clusters, containers []api.Object
+	var clusters []api.Object
 	for _, name := range names {
 		if storage, ok := catalog.FindInCategory(api.StorageClusterCategory, name); ok {
 			clusters = append(clusters, storage)
 		} else if container, ok := catalog.FindInCategory(api.ContainerClusterCategory, name); ok {
-			containers = append(containers, container)
+			clusters = append(clusters, container)
 		} else {
 			unknown = append(unknown, name)
 		}
@@ -112,10 +112,6 @@ func sessionTargets(catalog api.Catalog, command, contextName string, names []st
 				"bootwright "+command+" does not apply to "+storage.Name()+", an "+management+" "+string(storage.Kind())+"; it applies to managed "+string(storage.Kind())+"s, whose declared nodes it opens a session on",
 				discovery+" lists the clusters this context selects and their kinds")
 		}
-	}
-	if len(containers) > 0 {
-		return nil, diagnostics.NewFailure("access.unavailable",
-			"bootwright "+command+" is not available for "+containers[0].Name()+", "+api.Article(containers[0].Kind())+" "+string(containers[0].Kind())+": sessions are not yet implemented for that kind, and the cluster is reached through bootwright cluster kubeconfig", "")
 	}
 	return clusters, nil
 }

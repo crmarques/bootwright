@@ -188,6 +188,8 @@ func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path
 			return false, nil
 		}
 		shown = exportedResult("application/octet-stream", value)
+	case (path == "cluster oc" || path == "cluster kubectl") && result.handoff != nil:
+		shown = displayHandoff(result.handoff)
 	case path == "cluster kubeconfig" && result.kubeconfig != nil:
 		r := result.kubeconfig
 		value, present := r.Material.Part(secrets.ValuePart)

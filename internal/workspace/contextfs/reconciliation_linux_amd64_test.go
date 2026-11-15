@@ -903,15 +903,26 @@ func TestARunFileWhosePublicationFailedIsRemoved(t *testing.T) {
 	}
 }
 
-// An inspection runs no adapter, so it is offered neither the bundle nor a
-// writable area: a read that creates nothing is what plan and status rely on.
+// Inspection can locate retained clients but receives no writable or run area.
 func TestALifecycleInspectionRunsNothing(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
-	sealedBundleFixture(t, store, record)
+	digest := sealedBundleFixture(t, store, record)
+	var escaped prerequisites.BundleArea
 	if err := store.ReadLifecycle(ctx, "example", func(view lifecycle.View) error {
-		if view.Controller().OpenBundle != nil {
-			t.Fatal("an inspection was offered a tool area")
+		area, err := view.Controller().OpenBundle(ctx, digest)
+		if err != nil || area == nil {
+			t.Fatalf("retained client area unavailable: %v", err)
+		}
+		escaped = area
+		if data, err := area.Read(ctx, "manifest.json", 128); err != nil || string(data) != "{}\n" {
+			t.Fatalf("read-only metadata %q, error %v", data, err)
+		}
+		if err := area.Write(ctx, "manifest.json", []byte("changed"), false); err == nil {
+			t.Fatal("inspection could write client metadata")
+		}
+		if err := area.EnsureDirectory(ctx, "new"); err == nil {
+			t.Fatal("inspection could create a client directory")
 		}
 		if _, ok := view.(lifecycle.RunView); ok {
 			t.Fatal("an inspection was offered a bounded run's own area")
@@ -919,6 +930,9 @@ func TestALifecycleInspectionRunsNothing(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatalf("lifecycle read failed: %#v", diagnostics.Of(err))
+	}
+	if _, err := escaped.Read(ctx, "manifest.json", 128); err == nil {
+		t.Fatal("client inspection escaped its callback lifetime")
 	}
 }
 

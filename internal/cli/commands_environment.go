@@ -43,13 +43,13 @@ func environmentClusterCommands() []commandSpec {
 func clusterSessionCommand(spec commandSpec) commandSpec {
 	spec.flags = []flagSpec{nameFlag(), stringFlag("node", "Select a declared node by name, then FQDN (default: the cluster's administrator node)")}
 	spec = sessionCommand(spec)
-	spec.long += " The session opens on the Machine behind one node of a managed CephCluster: --node selects" +
+	spec.long += " The session opens on the Machine behind one node of an OpenShiftCluster or managed CephCluster: --node selects" +
 		" the node by name, then by FQDN, and defaults to the administrator node that cluster info names." +
 		clusterSessionLimits
 	return spec
 }
 
-const clusterSessionLimits = " External CephClusters are inapplicable, and sessions on OpenShiftClusters are not yet available."
+const clusterSessionLimits = " For an OpenShiftCluster, the default is its first node in name order, and --node also accepts <role>-<ordinal> with a zero-based ordinal in that order (for example, controlPlane-0 or worker-0). External CephClusters are inapplicable."
 
 func clusterExecCommand() commandSpec {
 	spec := sessionCommand(commandSpec{path: "cluster exec", short: "Run a command over SSH on cluster nodes' Machines", payload: true,

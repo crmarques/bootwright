@@ -12,8 +12,8 @@
         "accessCommands": [
           {
             "command": "cluster exec",
-            "status": "not-implemented",
-            "reason": "sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+            "status": "ready",
+            "node": "node-01"
           },
           {
             "command": "cluster keyring",
@@ -26,18 +26,16 @@
           },
           {
             "command": "cluster kubectl",
-            "status": "not-implemented",
-            "reason": "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+            "status": "ready"
           },
           {
             "command": "cluster oc",
-            "status": "not-implemented",
-            "reason": "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+            "status": "ready"
           },
           {
             "command": "cluster rsh",
-            "status": "not-implemented",
-            "reason": "sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+            "status": "ready",
+            "node": "node-01"
           }
         ]
       },
@@ -47,8 +45,8 @@
         "accessCommands": [
           {
             "command": "cluster exec",
-            "status": "not-implemented",
-            "reason": "sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+            "status": "ready",
+            "node": "node-01"
           },
           {
             "command": "cluster keyring",
@@ -62,18 +60,18 @@
           },
           {
             "command": "cluster kubectl",
-            "status": "not-implemented",
-            "reason": "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+            "status": "unavailable",
+            "reason": "this context holds no administrator kubeconfig for okd-lab until an apply proves its installation complete; run bootwright apply --context lab"
           },
           {
             "command": "cluster oc",
-            "status": "not-implemented",
-            "reason": "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+            "status": "unavailable",
+            "reason": "this context holds no administrator kubeconfig for okd-lab until an apply proves its installation complete; run bootwright apply --context lab"
           },
           {
             "command": "cluster rsh",
-            "status": "not-implemented",
-            "reason": "sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+            "status": "ready",
+            "node": "node-01"
           }
         ]
       }

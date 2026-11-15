@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "cluster oc",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "cluster": "example",
+    "client": {
+      "executable": "/installed/oc",
+      "version": "4.19.3",
+      "distribution": "openshift"
+    },
+    "arguments": [
+      "get",
+      "nodes"
+    ],
+    "kubeconfigCommand": [
+      "bootwright",
+      "cluster",
+      "kubeconfig",
+      "--context",
+      "lab",
+      "--name",
+      "example"
+    ],
+    "instructions": "Export the kubeconfig into a private mode-0600 file. Run the absolute client executable with --kubeconfig pointing to that file, --cache-dir pointing to a private temporary directory, and the arguments as separate values. Use a clean environment and private working directory; do not load ambient configuration or plugins. Remove the private files after use. No client has been launched."
+  },
+  "diagnostics": [],
+  "logs": []
+}

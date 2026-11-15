@@ -253,6 +253,8 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 		if err := s.prepareBoundedController(ctx, root, registry, record, stored, &controllerView, live, &areas); err != nil {
 			return err
 		}
+	} else {
+		s.inspectControllerBundles(root, registry, stored, &controllerView, live, &areas)
 	}
 
 	born, err := incarnation(record, dir)

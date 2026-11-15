@@ -20,6 +20,7 @@ type Service struct {
 	keys      HostKeys
 	selection CurrentSelection
 	custody   Custody
+	clients   ClientAccess
 	members   func(api.Object) (environment.Membership, bool)
 
 	administrator func(api.Object) string
@@ -27,6 +28,11 @@ type Service struct {
 
 func New(graph Graph, storage StorageEvidence, installs InstallEvidence, keys HostKeys, selection CurrentSelection, custody Custody) Service {
 	return Service{graph: graph, storage: storage, installs: installs, keys: keys, selection: selection, custody: custody}
+}
+
+func (s Service) WithClients(clients ClientAccess) Service {
+	s.clients = clients
+	return s
 }
 
 func (s Service) WithAdministrator(administrator func(api.Object) string) Service {
@@ -91,7 +97,7 @@ func (s Service) ClusterInfo(ctx context.Context, request ClusterInfoRequest) (*
 	}
 	result := &InfoResult{Context: selected, Clusters: make([]ContainerEntry, 0, len(containers)), Storage: make([]StorageEntry, 0, len(storages))}
 	for _, cluster := range containers {
-		entry, err := s.containerEntry(ctx, selected, cluster)
+		entry, err := s.containerEntry(ctx, selected, catalog, cluster)
 		if err != nil {
 			return nil, err
 		}
@@ -244,26 +250,47 @@ func secretsTarget(selected string, names []string, containers, storages []api.O
 	return failure("access.target", "the context "+selected+" selects no "+api.KindPhrase(api.ClusterKinds(), false)+" named "+name, discovery+" lists them")
 }
 
-func (s Service) containerEntry(ctx context.Context, selected string, cluster api.Object) (ContainerEntry, error) {
+func (s Service) containerEntry(ctx context.Context, selected string, catalog api.Catalog, cluster api.Object) (ContainerEntry, error) {
 	installed, err := s.installs.Installed(ctx, selected, cluster.Name())
 	if err != nil {
 		return ContainerEntry{}, err
 	}
-	sessions := "sessions on " + api.Article(cluster.Kind()) + " " + string(cluster.Kind()) + " are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
-	handoff := "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+	session, err := s.sessionAccess(ctx, selected, catalog, cluster)
+	if err != nil {
+		return ContainerEntry{}, err
+	}
+	exec, rsh := session, session
+	exec.Command, rsh.Command = CommandExec, CommandRsh
 	kubeconfig := AccessCommand{Command: CommandKubeconfig, Status: StatusReady}
 	if !installed {
 		kubeconfig.Status = StatusUnavailable
 		kubeconfig.Reason = "this context holds no administrator kubeconfig for " + cluster.Name() +
 			" until an apply proves its installation complete; run bootwright apply --context " + selected
 	}
+	oc, kubectl := kubeconfig, kubeconfig
+	oc.Command, kubectl.Command = CommandOC, CommandKubectl
+	if installed {
+		for _, access := range []*AccessCommand{&oc, &kubectl} {
+			access.Status, access.Reason = StatusUnavailable, "client access metadata is unavailable"
+			if s.clients != nil {
+				reason, err := s.clients.ClientReason(ctx, selected, cluster.Name(), strings.TrimPrefix(access.Command, "cluster "))
+				if err != nil {
+					return ContainerEntry{}, err
+				}
+				access.Reason = reason
+				if reason == "" {
+					access.Status = StatusReady
+				}
+			}
+		}
+	}
 	return ContainerEntry{Name: cluster.Name(), Kind: string(cluster.Kind()), AccessCommands: []AccessCommand{
-		{Command: CommandExec, Status: StatusNotImplemented, Reason: sessions},
+		exec,
 		{Command: CommandKeyring, Status: StatusNotApplicable, Reason: storageOnly()},
 		kubeconfig,
-		{Command: CommandKubectl, Status: StatusNotImplemented, Reason: handoff},
-		{Command: CommandOC, Status: StatusNotImplemented, Reason: handoff},
-		{Command: CommandRsh, Status: StatusNotImplemented, Reason: sessions},
+		kubectl,
+		oc,
+		rsh,
 	}}, nil
 }
 

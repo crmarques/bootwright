@@ -11,6 +11,9 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
+	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -193,7 +196,7 @@ func TestClusterSessionRefusalsExitTwoFiftyFiveBeforeAnyCredential(t *testing.T)
 		{name: "unknown node", code: "access.target", args: []string{"--name", "ceph-lab", "--node", "rhel-09"}},
 		{name: "duplicate FQDN", code: "access.target", edit: shared, args: []string{"--name", "ceph-lab", "--node", "rhel-02.lab.example.test"}},
 		{name: "external storage", code: "cluster.not-applicable", edit: external, args: []string{"--name", "ceph-outside"}},
-		{name: "OpenShift OpenShiftCluster", code: "access.unavailable", edit: external, args: []string{"--name", "ocp"}},
+		{name: "container without a roster", code: "access.target", edit: external, args: []string{"--name", "ocp"}},
 	}
 	for _, tt := range tests {
 		for _, verb := range []string{"rsh", "exec"} {
@@ -253,4 +256,68 @@ func TestClusterExecOnSeveralNodesRunsEachMachineOnceTogether(t *testing.T) {
 		rig.lender.requested != nil || len(rig.client.sessions) != 0 {
 		t.Fatalf("exit %d, out %q, err %q, lent %v", code, out, errOut, rig.lender.requested)
 	}
+}
+
+type containerSessionOwnership map[string]machine.OwnershipState
+
+func (o containerSessionOwnership) Ownership(context.Context, string) (map[string]machine.OwnershipState, error) {
+	return o, nil
+}
+
+func TestOpenShiftClusterCommandsReachTheDeclaredNodeUsingMachineCredentials(t *testing.T) {
+	compiled, _ := compileAcceptance(t, exampleDirectory(t, "lab-compact"))
+	catalog := openshift.AccessCatalog(compiled.Effective())
+	cluster := catalog.OfKind(api.OpenShiftCluster)[0]
+	membership, _ := containercluster.MemberMachines(cluster)
+	slices.SortFunc(membership.Nodes, func(a, b environment.Member) int { return strings.Compare(a.Name, b.Name) })
+	first := membership.Nodes[0]
+	host := requireObject(t, catalog, api.Machine, first.Machine)
+	target, ok := machine.SSH(host)
+	if !ok || target.PrivateKeyRef == "" {
+		t.Fatalf("node Machine has no SSH identity: %+v", target)
+	}
+	proved, err := trust.ParseAuthorizedKey("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICG+RadYRVwHqO7OQsOpyh8SDf1tbTQ8PUmgn7UEmou/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, selector := range []string{"", first.Name, first.FQDN, "controlPlane-0"} {
+		for _, command := range []string{"exec", "rsh"} {
+			lender := &labSessionLender{held: map[string]secrets.Material{target.PrivateKeyRef: secrets.NewMaterial(map[secrets.Part][]byte{secrets.PrivateKeyPart: []byte("CLUSTER KEY")})}}
+			client := &labSessionClient{}
+			state := labSessionState{effective: catalog}
+			sessions := machineaccess.New(state, nil, machineaccess.Options{Lender: lender, Ownership: containerSessionOwnership{"Machine/" + first.Machine: {Verb: machine.VerbApply, State: machine.BlockDone}}, Evidence: cephSessionProof{catalog: catalog, key: proved}, Launcher: client, Trust: fixedNodeTrust{data: nodeTrust(t, first.Machine, target, proved)}})
+			args := []string{"cluster", command, "--context", "example", "--name", cluster.Name()}
+			if selector != "" {
+				args = append(args, "--node", selector)
+			}
+			if command == "exec" {
+				args = append(args, "--", "printf", "%s", "")
+			}
+			var out, errOut bytes.Buffer
+			status := runServices(t.Context(), args, &out, &errOut, cli.Services{EnvironmentAccess: clusterSessions(state, sessions, nil)})
+			if status != 0 || errOut.Len() != 0 || len(client.sessions) != 1 || client.sessions[0].Address != target.Address || client.sessions[0].User != target.User || client.keys[0] != "CLUSTER KEY" {
+				t.Fatalf("%s selector %q: status %d, error %s, sessions %+v, keys %v", command, selector, status, errOut.String(), client.sessions, client.keys)
+			}
+			if command == "exec" && !slices.Equal(client.sessions[0].Command, []string{"printf", "%s", ""}) {
+				t.Fatalf("payload %+v", client.sessions[0])
+			}
+		}
+	}
+}
+
+type fixedNodeTrust struct{ data []byte }
+
+func (r fixedNodeTrust) ReadHostKeys(context.Context, string) ([]byte, error) {
+	return slices.Clone(r.data), nil
+}
+func (fixedNodeTrust) ReplaceHostKeys(context.Context, string, []byte, []byte) error {
+	panic("the pinned session must not write trust")
+}
+func nodeTrust(t *testing.T, name string, target machine.SSHTarget, key trust.HostKey) []byte {
+	t.Helper()
+	data, err := (trust.Store{Hosts: []trust.Record{{Machine: name, Address: target.Address, Port: target.Port, KeyType: key.Type, PublicKey: key.PublicKey, Fingerprint: key.Fingerprint(), Source: trust.SourceEnrollment, Recorded: "2026-11-03T00:00:00Z"}}}).Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }

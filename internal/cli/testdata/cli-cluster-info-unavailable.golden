@@ -2,42 +2,36 @@
     Topology
       Type  OpenShiftCluster
     Access
-      cluster exec  not-implemented
-      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
-      bootwright cluster kubeconfig
+      cluster exec  ready
+      bootwright cluster exec --context lab --name edge --node node-01 -- <command>...
       cluster keyring  not-applicable
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name edge
-      cluster kubectl  not-implemented
-      this handoff is not yet implemented; the cluster is reached through bootwright cluster
-      kubeconfig
-      cluster oc  not-implemented
-      this handoff is not yet implemented; the cluster is reached through bootwright cluster
-      kubeconfig
-      cluster rsh  not-implemented
-      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
-      bootwright cluster kubeconfig
+      cluster kubectl  ready
+      bootwright cluster kubectl --context lab --name edge -- <command>...
+      cluster oc  ready
+      bootwright cluster oc --context lab --name edge -- <command>...
+      cluster rsh  ready
+      bootwright cluster rsh --context lab --name edge --node node-01
 
   ○ cluster | okd-lab
     Topology
       Type  OpenShiftCluster
     Access
-      cluster exec  not-implemented
-      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
-      bootwright cluster kubeconfig
+      cluster exec  ready
+      bootwright cluster exec --context lab --name okd-lab --node node-01 -- <command>...
       cluster keyring  not-applicable
       cluster kubeconfig  unavailable
       this context holds no administrator kubeconfig for okd-lab until an apply proves its
       installation complete; run bootwright apply --context lab
-      cluster kubectl  not-implemented
-      this handoff is not yet implemented; the cluster is reached through bootwright cluster
-      kubeconfig
-      cluster oc  not-implemented
-      this handoff is not yet implemented; the cluster is reached through bootwright cluster
-      kubeconfig
-      cluster rsh  not-implemented
-      sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through
-      bootwright cluster kubeconfig
+      cluster kubectl  unavailable
+      this context holds no administrator kubeconfig for okd-lab until an apply proves its
+      installation complete; run bootwright apply --context lab
+      cluster oc  unavailable
+      this context holds no administrator kubeconfig for okd-lab until an apply proves its
+      installation complete; run bootwright apply --context lab
+      cluster rsh  ready
+      bootwright cluster rsh --context lab --name okd-lab --node node-01
 
   ○ cluster | archive
     Topology

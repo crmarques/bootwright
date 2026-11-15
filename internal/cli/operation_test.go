@@ -25,7 +25,6 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 		"add-ons list",
 		"add-ons info --name metallb",
 		"preflight --stage add-ons",
-		"cluster oc --name example get pods",
 		"render installer", "render storage",
 	} {
 		t.Run(invocation, func(t *testing.T) {

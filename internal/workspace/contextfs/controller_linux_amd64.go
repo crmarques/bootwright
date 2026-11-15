@@ -263,15 +263,15 @@ func (s *Store) ReadController(ctx context.Context, name string, callback func(p
 	}
 	view.Exists = exists
 	active := true
-	areas := []*controllerBundleArea{}
-	defer func() {
-		active = false
-		for _, area := range areas {
-			area.close()
-		}
-	}()
+	var areas openedBundles
+	defer func() { active = false; areas.closeAll() }()
+	s.inspectControllerBundles(root, registry, stored, &view, func() bool { return active }, &areas)
+	return safeError(callback(view))
+}
+
+func (s *Store) inspectControllerBundles(root *directory, registry contexts.Registry, stored controllerStored, view *prerequisites.StorageView, active func() bool, areas *openedBundles) {
 	view.OpenBundle = func(call context.Context, id string) (prerequisites.BundleArea, error) {
-		if !active {
+		if !active() {
 			return nil, state("controller inspection capability has closed")
 		}
 		guard := func(call context.Context) error {
@@ -281,17 +281,13 @@ func (s *Store) ReadController(ctx context.Context, name string, callback func(p
 			}
 			return nil
 		}
-		area, err := openControllerBundle(call, s, root, registry, stored, id, func() bool { return active }, false, guard)
-		if err != nil {
+		area, err := openControllerBundle(call, s, root, registry, stored, id, active, false, guard)
+		if err != nil || area == nil {
 			return nil, err
 		}
-		if area == nil {
-			return nil, nil
-		}
-		areas = append(areas, area)
+		areas.keep(area)
 		return area, nil
 	}
-	return safeError(callback(view))
 }
 
 // initializeController attributes the controller directory and publishes the

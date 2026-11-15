@@ -264,6 +264,7 @@ and their output goldens:
 | `apply`, `destroy` | `context`, `verb`, `steps`, `blocks`, `settled`, `recovered`, `next`, `receipt` |
 | `cluster info` | `context`, `clusters`, `storage` |
 | `cluster keyring`, `cluster kubeconfig`, `completion bash`, `completion fish`, `completion powershell`, `completion zsh`, `secret show` | `export` |
+| `cluster kubectl`, `cluster oc` | `context`, `cluster`, `client`, `arguments`, `kubeconfigCommand`, `instructions` |
 | `cluster list` | `context`, `clusters` |
 | `context current`, `context use` | `context` |
 | `context delete` | `name`, `outcome`, `currentCleared`, `orphansAbandoned`, `releasedReservations` |
@@ -673,6 +674,19 @@ refusal before any check runs unless the clusters stage selects a CephCluster
 `TestEveryStageMergesInfrastructureAndClusterChecks`,
 `TestClustersRunsBothChecksAndReportsTheirUnion`).
 
+## Cluster client handoffs
+
+The `cluster oc` and `cluster kubectl` descriptor orders `context`, `cluster`,
+`client`, `arguments`, `kubeconfigCommand`, and `instructions`. `client` orders
+`executable` (an absolute path), `version`, and `distribution`. Both argument
+members are arrays of separate strings, never shell commands. `instructions`
+explains the private file, cache and environment required for independent
+operator execution. Text output is the indented JSON descriptor with one LF;
+structured output places the same object under `result`. No credential value
+is a descriptor field. The [handoff contract](../cli.md#cluster-client-handoffs)
+owns prerequisites and refusal behavior. Discovery checks those local
+prerequisites for `oc` and `kubectl` before reporting either ready.
+
 ## Cluster discovery
 
 `cluster list` and `cluster info` read only validated desired state, durable
@@ -756,8 +770,7 @@ Within an available `cluster info` result, evaluate each entry as follows:
 1. `not-applicable`: the cluster fails the catalog's
    [applicability rule](commands.md#cluster-command-applicability).
 2. `not-implemented`: the command applies but this executable does not implement
-   the requested access use case, as for `cluster oc`, `cluster kubectl` and the
-   sessions of an OpenShiftCluster.
+   the requested access use case.
 3. `unavailable`: the command applies and is implemented, but local access
    metadata, credential-artifact availability, identity, ownership, or context
    state does not establish the prerequisites. The reason identifies the

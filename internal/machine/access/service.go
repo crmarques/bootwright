@@ -106,7 +106,7 @@ func (s Service) open(ctx context.Context, contextName, name string, options mac
 	request := lifecycle.MaterialRequest{ContextName: selected, Secrets: references(resolved, privateKeyRef)}
 	err = s.options.Lender.WithMaterial(ctx, request, func(inner context.Context, material map[string]secrets.Material) error {
 		if privateKeyRef != "" {
-			key, err := privateKey(privateKeyRef, material)
+			key, err := privateKey(privateKeyRef, material, privateKeyPart(effective.Effective, privateKeyRef))
 			if err != nil {
 				return err
 			}

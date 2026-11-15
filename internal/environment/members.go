@@ -4,6 +4,7 @@ import api "github.com/crmarques/bootwright/api/v1alpha1"
 
 type Member struct {
 	Name, FQDN, Machine string
+	Role                string
 }
 
 type Membership struct {
@@ -28,7 +29,7 @@ func Members(owners ...func(api.Object) (Membership, bool)) func(api.Object) (Me
 func MembersOf(field string, nodes api.Value) Membership {
 	membership := Membership{Field: field, Nodes: []Member{}}
 	for _, node := range nodes.Items() {
-		membership.Nodes = append(membership.Nodes, Member{Name: node.Get("name").Text(), FQDN: node.Get("fqdn").Text(), Machine: node.Get("machineRef").Text()})
+		membership.Nodes = append(membership.Nodes, Member{Name: node.Get("name").Text(), FQDN: node.Get("fqdn").Text(), Machine: node.Get("machineRef").Text(), Role: node.Get("role").Text()})
 	}
 	return membership
 }

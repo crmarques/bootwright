@@ -71,6 +71,7 @@ type commandResult struct {
 	encryptionMutation *encryption.MutationResult
 	encryptionStatus   *encryption.StatusResult
 
+	handoff    *containeraccess.Handoff
 	kubeconfig *containeraccess.KubeconfigResult
 	keyring    *inspection.KeyringResult
 

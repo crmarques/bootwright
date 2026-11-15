@@ -202,7 +202,7 @@ those of `cluster rsh` and `cluster exec` in the
 --secrets` on a managed Ceph cluster in the
 [storage dashboard access](../cli.md#storage-dashboard-access); those of
 `cluster oc` and `cluster kubectl` are
-[deferred](../deferred/cli-access-and-rendering.md#openshiftcluster-access-handoffs-and-sessions).
+[client handoffs](../cli.md#cluster-client-handoffs).
 
 | Command | Applicable targets |
 | --- | --- |
@@ -213,13 +213,7 @@ those of `cluster rsh` and `cluster exec` in the
 
 Applicability does not establish implementation availability, access readiness,
 identity, or ownership. Missing access material on an applicable target is an
-access failure, not a change in applicability. A session on an OpenShift/OKD
-OpenShiftCluster is applicable and refuses `access.unavailable`: only managed
-Ceph sessions are specified.
-
-Not yet met: `cluster oc` and `cluster kubectl` hand off nothing and sessions on
-an OpenShiftCluster do not open; tracked as
-[B101](../milestones/backlog.md#b101).
+access failure, not a change in applicability.
 
 ## Help content
 

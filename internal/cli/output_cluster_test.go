@@ -15,21 +15,21 @@ import (
 const clusterDashboardPassword = "Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_"
 
 const (
-	clusterNotImplementedSessions = "sessions on an OpenShiftCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
-	clusterNotImplementedHandoff  = "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
-	clusterContainerOnly          = "applies to OpenShiftClusters only"
-	clusterManagedCephOnly        = "applies to managed CephClusters only"
+	clusterContainerOnly   = "applies to OpenShiftClusters only"
+	clusterManagedCephOnly = "applies to managed CephClusters only"
 )
 
 func containerAccess(kubeconfig inspection.AccessCommand) []inspection.AccessCommand {
 	kubeconfig.Command = inspection.CommandKubeconfig
+	oc, kubectl := kubeconfig, kubeconfig
+	oc.Command, kubectl.Command = inspection.CommandOC, inspection.CommandKubectl
 	return []inspection.AccessCommand{
-		{Command: inspection.CommandExec, Status: inspection.StatusNotImplemented, Reason: clusterNotImplementedSessions},
+		{Command: inspection.CommandExec, Status: inspection.StatusReady, Node: "node-01"},
 		{Command: inspection.CommandKeyring, Status: inspection.StatusNotApplicable, Reason: clusterManagedCephOnly},
 		kubeconfig,
-		{Command: inspection.CommandKubectl, Status: inspection.StatusNotImplemented, Reason: clusterNotImplementedHandoff},
-		{Command: inspection.CommandOC, Status: inspection.StatusNotImplemented, Reason: clusterNotImplementedHandoff},
-		{Command: inspection.CommandRsh, Status: inspection.StatusNotImplemented, Reason: clusterNotImplementedSessions},
+		kubectl,
+		oc,
+		{Command: inspection.CommandRsh, Status: inspection.StatusReady, Node: "node-01"},
 	}
 }
 

@@ -145,7 +145,7 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 				prefix = "  error  input.not-found\n"
 			} else if args[0] == "context" || args[0] == "secret" || args[0] == "validate" || args[0] == "preflight" && (len(args) == 1 || args[2] == "clusters") ||
 				args[0] == "plan" || args[0] == "status" || args[0] == "apply" || args[0] == "destroy" ||
-				args[0] == "machine" || args[0] == "cluster" && (args[1] == "kubeconfig" || args[1] == "rsh" || args[1] == "exec" || args[1] == "list" || args[1] == "info") ||
+				args[0] == "machine" || args[0] == "cluster" && (args[1] == "kubeconfig" || args[1] == "oc" || args[1] == "kubectl" || args[1] == "rsh" || args[1] == "exec" || args[1] == "list" || args[1] == "info") ||
 				args[0] == "render" && len(args) > 1 && args[1] == "effective" {
 				prefix = "  error  context.state\n"
 			}

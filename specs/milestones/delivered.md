@@ -15904,6 +15904,27 @@ independent safety review. Existing development state has no cross-build
 compatibility guarantee. No host state is changed and no production acceptance
 is claimed.
 
+## X469 — OpenShift cluster access
+
+The owner's explicit request to implement the missing OpenShift access
+commands delivers the OpenShift access portion of [B101](backlog.md#b101).
+The scope is [cluster sessions](../cli.md#cluster-sessions) and
+[client handoffs](../cli.md#cluster-client-handoffs), including their discovery
+readiness; B101 retains unrelated additional views and dashboard work.
+
+The existing membership boundary now carries roles; container-cluster policy
+selects the default node, and generic session selection consumes those facts.
+Sessions retain the Machine credential and host-key boundary. Client discovery
+and descriptors use read-only installed-client and produced-custody metadata.
+The controller bundle inspection helper is shared with lifecycle reads, with
+its held shared lock, read-only areas and callback lifetime preserved.
+
+Verification is recorded in the delivering commit: focused contract and
+command tests, `make focus`, `make check`, safety review and `make race`, with
+an additional race run for changed access packages outside that target.
+These are in-tree checks using synthetic or tracked example inputs; no live
+cluster access or operator acceptance is claimed.
+
 ## X470 — Artifact-server comment budget
 
 ### B1404

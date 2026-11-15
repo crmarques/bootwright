@@ -134,3 +134,35 @@ func (s Service) ReadProducedInArea(ctx context.Context, selected secretstore.Co
 	}
 	return result, found, nil
 }
+
+// ProducedAvailable inspects custody metadata without unlocking or reading
+// credential bytes. ReadProduced remains the authority for a later export.
+func (s Service) ProducedAvailable(ctx context.Context, request ReadProducedRequest) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if s.access == nil {
+		return false, secretstore.Failure("store.implementation", "secret service is not configured")
+	}
+	selected, err := s.access.Context(ctx, request.ContextName)
+	if err != nil {
+		return false, err
+	}
+	found := false
+	err = s.access.View(ctx, selected.Context, false, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		if session == nil {
+			return nil
+		}
+		snapshot, err := session.Inspect(ctx)
+		if err != nil {
+			return err
+		}
+		for _, entry := range snapshot.Produced {
+			if entry.Block == request.Block && entry.Name == request.Name && !entry.Unproved {
+				found = true
+			}
+		}
+		return nil
+	})
+	return found, err
+}

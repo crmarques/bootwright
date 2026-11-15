@@ -211,8 +211,8 @@ func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("another context's stage could not retain its sources: %#v", diagnostics.Of(err))
 	}
-	err = store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
-		view := tx.Controller()
+	err = store.ReadLifecycle(ctx, record.Name, func(read lifecycle.View) error {
+		view := read.Controller()
 		if view.State.Bindings[0].Tools != area {
 			t.Fatalf("the binding names tool area %q, want %s", view.State.Bindings[0].Tools, area)
 		}

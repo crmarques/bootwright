@@ -23,9 +23,10 @@ read error propagates.
 
 ## Custody presence
 
-Custody has no presence read that avoids decrypting the entry: `Holds` runs in
-a lent mutation area and `ReadProduced` returns the material. Inspection must
-read no credential bytes, so an OpenShiftCluster's kubeconfig readiness is
-derived from the proved completion of its install block, the event that fills
-custody, and not from custody itself. A copy a removal kept unproved is
-therefore not reported ready until a presence read exists.
+`custody.Service.ProducedAvailable` reads the produced-entry index with no
+unlock or credential read. OpenShift client handoffs and their inspection rows
+require that proved entry, completed install evidence and the matching
+controller client. This is metadata readiness, not proof that decryption or
+remote access will succeed; the explicit export still validates its bytes.
+The `cluster kubeconfig` row retains its install-completion readiness proxy.
+See the [handoff contract](../../specs/cli.md#cluster-client-handoffs).

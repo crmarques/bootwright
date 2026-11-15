@@ -141,7 +141,7 @@ func TestClusterSessionRefusalsOpenNothing(t *testing.T) {
 		{name: "unknown cluster", cluster: "missing", code: "access.target", nodes: labNodes()},
 		{name: "no cluster name", code: "access.target", nodes: labNodes()},
 		{name: "external storage", cluster: "outside", code: "cluster.not-applicable", nodes: labNodes()},
-		{name: "OpenShift OpenShiftCluster", cluster: "ocp", code: "access.unavailable", nodes: labNodes()},
+		{name: "container without a roster", cluster: "ocp", code: "access.target", nodes: labNodes()},
 		{name: "unknown node", cluster: "ceph", node: "rhel-09", code: "access.target", nodes: labNodes()},
 		{name: "role ordinal is no selector", cluster: "ceph", node: "mon-0", code: "access.target", nodes: labNodes()},
 		{name: "duplicate FQDN", cluster: "ceph", node: "s.lab.test", code: "access.target", nodes: shared},

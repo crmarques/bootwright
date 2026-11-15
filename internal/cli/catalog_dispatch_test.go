@@ -39,7 +39,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"machine cp": true, "machine list": true, "machine info": true, "machine rsh": true, "machine exec": true,
 		"cluster rsh": true, "cluster exec": true, "cluster list": true, "cluster info": true,
 		"machine discover": true, "machine start": true, "machine stop": true, "machine restart": true, "machine trust": true,
-		"cluster kubeconfig": true, "cluster keyring": true,
+		"cluster oc": true, "cluster kubectl": true, "cluster kubeconfig": true, "cluster keyring": true,
 	}
 	for _, spec := range commandCatalog() {
 		if implementedOperation(spec.path) != (want[spec.path] || spec.path == "add-ons list" || spec.path == "add-ons info") {
@@ -49,7 +49,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 			t.Errorf("%s: privileged = %t, want %t", spec.path, privilegedOperation(spec.path), want[spec.path])
 		}
 	}
-	if implementedOperation("controller") || privilegedOperation("cluster oc") {
+	if implementedOperation("controller") || privilegedOperation("render installer") {
 		t.Fatal("an incomplete path or unavailable command claimed a mode")
 	}
 }

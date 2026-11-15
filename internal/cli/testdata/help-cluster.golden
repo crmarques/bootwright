@@ -21,14 +21,14 @@
 
   ○ Command | kubectl
       PURPOSE  Print a kubectl access descriptor for independent operator execution; do not
-               launch a client or connect (unavailable)
+               launch a client or connect
 
   ○ Command | list
       PURPOSE  List container and storage clusters
 
   ○ Command | oc
       PURPOSE  Print an oc access descriptor for independent operator execution; do not launch
-               a client or connect (unavailable)
+               a client or connect
 
   ○ Command | rsh
       PURPOSE  Open an SSH session on a cluster node's Machine as the Machine's resolved

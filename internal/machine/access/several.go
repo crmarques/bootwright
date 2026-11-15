@@ -19,9 +19,10 @@ import (
 const launchFailedStatus = 255
 
 type member struct {
-	target        target
-	identity      machine.Identity
-	privateKeyRef string
+	target         target
+	identity       machine.Identity
+	privateKeyRef  string
+	privateKeyPart secrets.Part
 }
 
 type outcome struct {
@@ -126,7 +127,7 @@ func (s Service) members(ctx context.Context, catalog api.Catalog, contextName s
 			if err != nil {
 				return nil, err
 			}
-			members = append(members, member{target: resolved, identity: identity, privateKeyRef: privateKeyRef})
+			members = append(members, member{target: resolved, identity: identity, privateKeyRef: privateKeyRef, privateKeyPart: privateKeyPart(catalog, privateKeyRef)})
 			continue
 		}
 		if !proved {
@@ -149,7 +150,7 @@ func (s Service) members(ctx context.Context, catalog api.Catalog, contextName s
 					"which concurrent sessions cannot share",
 				remediation)
 		}
-		members = append(members, member{target: resolved, identity: identity, privateKeyRef: privateKeyRef})
+		members = append(members, member{target: resolved, identity: identity, privateKeyRef: privateKeyRef, privateKeyPart: privateKeyPart(catalog, privateKeyRef)})
 	}
 	return members, nil
 }
@@ -163,7 +164,7 @@ func (s Service) prove(ctx context.Context, contextName string, members []member
 			Identity: selected.identity, Command: words, Batch: true,
 		}
 		if selected.privateKeyRef != "" {
-			key, err := privateKey(selected.privateKeyRef, material)
+			key, err := privateKey(selected.privateKeyRef, material, selected.privateKeyPart)
 			if err != nil {
 				return sessions, err
 			}

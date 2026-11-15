@@ -20,6 +20,7 @@ type Service struct {
 	reader    ProducedReader
 	locate    AccessLocator
 	selection CurrentSelection
+	metadata  AccessMetadata
 }
 
 func New(state EffectiveState, reader ProducedReader, locate AccessLocator, selection CurrentSelection) Service {
@@ -32,11 +33,8 @@ type OCRequest struct {
 	Command     []string
 }
 
-func (Service) OC(ctx context.Context, _ OCRequest) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return availability.ErrNotImplemented
+func (s Service) OC(ctx context.Context, request OCRequest) (*Handoff, error) {
+	return s.handoff(ctx, "oc", request.ContextName, request.Name, request.Command)
 }
 
 type KubectlRequest struct {
@@ -45,11 +43,8 @@ type KubectlRequest struct {
 	Command     []string
 }
 
-func (Service) Kubectl(ctx context.Context, _ KubectlRequest) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return availability.ErrNotImplemented
+func (s Service) Kubectl(ctx context.Context, request KubectlRequest) (*Handoff, error) {
+	return s.handoff(ctx, "kubectl", request.ContextName, request.Name, request.Command)
 }
 
 // Kubeconfig reveals the administrator kubeconfig the context's custody holds
@@ -72,7 +67,7 @@ func (s Service) Kubeconfig(ctx context.Context, request KubeconfigRequest) (*Ku
 	if err != nil {
 		return nil, err
 	}
-	if err := kubeconfigTarget(effective.Effective, name, request.Name); err != nil {
+	if err := accessTarget(effective.Effective, name, request.Name, "kubeconfig"); err != nil {
 		return nil, err
 	}
 	block, output := s.locate(request.Name)
@@ -89,10 +84,10 @@ func (s Service) Kubeconfig(ctx context.Context, request KubeconfigRequest) (*Ku
 	return &KubeconfigResult{Context: name, Cluster: request.Name, Material: custodied.Material, Unproved: custodied.Unproved}, nil
 }
 
-// kubeconfigTarget resolves --name in the selected graph's shared cluster
+// accessTarget resolves --name in the selected graph's shared cluster
 // namespace. Only an OpenShiftCluster (OpenShift or OKD) is a
-// kubeconfig target.
-func kubeconfigTarget(catalog api.Catalog, contextName, cluster string) error {
+// container client or kubeconfig target.
+func accessTarget(catalog api.Catalog, contextName, cluster, command string) error {
 	discovery := "bootwright cluster info --context " + contextName
 	if _, ok := catalog.Find(api.OpenShiftCluster, cluster); ok {
 		return nil
@@ -103,7 +98,7 @@ func kubeconfigTarget(catalog api.Catalog, contextName, cluster string) error {
 			management = "managed"
 		}
 		return failure("cluster.not-applicable",
-			"bootwright cluster kubeconfig does not apply to "+cluster+", a "+management+" CephCluster; it applies to OpenShiftClusters only",
+			"bootwright cluster "+command+" does not apply to "+cluster+", a "+management+" CephCluster; it applies to OpenShiftClusters only",
 			discovery+" lists the clusters this context selects and their kinds")
 	}
 	return failure("access.target", "the context "+contextName+" selects no OpenShiftCluster named "+cluster,

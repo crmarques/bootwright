@@ -364,6 +364,9 @@ func displayClusterInfo(result *inspection.InfoResult) clusterInfoPresentation {
 }
 
 func writeClusterResult(out, errOut io.Writer, command string, result commandResult, jsonMode bool) (bool, error) {
+	if (command == "cluster oc" || command == "cluster kubectl") && result.handoff != nil {
+		return true, writeHandoff(out, result.handoff)
+	}
 	if command == "cluster list" && validClusterList(result.clusterList) {
 		return true, writeClusterList(out, command, result.clusterList, jsonMode)
 	}

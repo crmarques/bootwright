@@ -10,8 +10,9 @@
       comma-separated list and selects those nodes, by name then by FQDN, in every listed
       cluster that declares them. The command runs on every resolved Machine concurrently, at
       most eight at a time, each output line is prefixed by its Machine, and the exit status is
-      the highest any client returned. External CephClusters are inapplicable, and sessions on
-      OpenShiftClusters are not yet available.
+      the highest any client returned. For an OpenShiftCluster, the default is its first node
+      in name order, and --node also accepts <role>-<ordinal> with a zero-based ordinal in that
+      order (for example, controlPlane-0 or worker-0). External CephClusters are inapplicable.
 
   Usage
     bootwright cluster exec <command>... [flags]

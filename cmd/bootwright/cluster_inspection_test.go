@@ -76,7 +76,7 @@ func TestClusterListAndInfoReadOnlyLocalStateForAnExplicitOrCurrentContext(t *te
 			t.Fatalf("kubeconfig reason = %q", command.Reason)
 		}
 	}
-	if sno.Name != "sno" || statuses["cluster kubeconfig"] != "unavailable" || statuses["cluster oc"] != "not-implemented" || statuses["cluster rsh"] != "not-implemented" {
+	if sno.Name != "sno" || statuses["cluster kubeconfig"] != "unavailable" || statuses["cluster oc"] != "unavailable" || statuses["cluster rsh"] != "unavailable" {
 		t.Fatalf("sno access = %v", statuses)
 	}
 	external := info.Result.Storage[0]

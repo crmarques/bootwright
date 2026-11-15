@@ -61,6 +61,7 @@ func TestCommandResultFieldRegistryMatchesSpec(t *testing.T) {
 		{reflect.TypeFor[mediaListPresentation](), "media list"},
 		{reflect.TypeFor[clusterListPresentation](), "cluster list"},
 		{reflect.TypeFor[clusterInfoPresentation](), "cluster info"},
+		{reflect.TypeFor[clusterHandoffPresentation](), "cluster oc|cluster kubectl"},
 		{reflect.TypeFor[logsResult](), "logs"},
 		{reflect.TypeFor[logsOutputResult](), "logs"},
 	} {

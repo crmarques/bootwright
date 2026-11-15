@@ -402,8 +402,10 @@ list` and `cluster info` (B519,
 [X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)) and
 managed-Ceph `cluster rsh` and `cluster exec` (B517,
 [X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)) move to M2.
-This item keeps ContainerCluster sessions, the `oc` and `kubectl` handoffs and
-the remaining matrix.
+The OpenShiftCluster sessions, `oc` and `kubectl` handoffs and their access
+matrix were subsequently requested explicitly and are delivered by
+[X469](delivered.md#x469--openshift-cluster-access). This item keeps other
+additional evidence views, dashboards and completion extensions.
 
 ### B102
 

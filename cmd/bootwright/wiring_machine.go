@@ -66,19 +66,20 @@ func wireMachine(deps machineDependencies) cli.Services {
 	powered := power.New(deps.State, machineRealization{reconciler: deps.Lifecycle}, machineIdentities{reconciler: deps.Lifecycle},
 		deps.Lifecycle, runner, runner.BeginInvocation, deps.Confirmer, deps.Reporter, selection).
 		WithHostAccess(hostedAccess{lender: kubevirt.NewLender(runner), custody: deps.Custody})
-	sessions := machineaccess.New(deps.State, selection, machineaccess.Options{
+	accessState := nodeAccessState{state: deps.State}
+	sessions := machineaccess.New(accessState, selection, machineaccess.Options{
 		Copier: sshlocal.Copier{SSH: client, Account: deps.CopyAccount},
 		Lender: deps.Lifecycle, Ownership: evidence, Evidence: machineHostKeys{reconciler: deps.Lifecycle},
 		Trust: deps.Trust, Observer: client, Confirmer: deps.Session, Launcher: client,
 		Streams: deps.Streams, Terminal: deps.Terminal,
 	})
 	return cli.Services{
-		MachineInventory:  inventory.New(deps.State, evidence, powered, selection),
+		MachineInventory:  inventory.New(accessState, evidence, powered, selection),
 		MachineAccess:     sessions,
 		MachineCopy:       sessions,
 		EnvironmentAccess: clusterSessions(deps.State, sessions, selection),
 		MachinePower:      powered,
-		MachineTrust:      enrollment.New(deps.State, deps.Trust, selection, trustOptions(deps, client)),
+		MachineTrust:      enrollment.New(accessState, deps.Trust, selection, trustOptions(deps, client)),
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/trust"
@@ -209,12 +210,12 @@ func references(selected target, privateKeyRef string) []string {
 
 // privateKey takes the bound half the session authenticates with. The bytes
 // stay in the caller's memory and reach the client as a descriptor alone.
-func privateKey(reference string, material map[string]secrets.Material) ([]byte, error) {
+func privateKey(reference string, material map[string]secrets.Material, part secrets.Part) ([]byte, error) {
 	bound, ok := material[reference]
 	if !ok {
 		return nil, failure("access.unavailable", "the SSH private key Secret "+reference+" is not available", "")
 	}
-	value, ok := bound.Part(secrets.PrivateKeyPart)
+	value, ok := bound.Part(part)
 	if !ok || len(value) == 0 {
 		return nil, failure("access.unavailable", "the SSH private key Secret "+reference+" carries no private half", "")
 	}
@@ -231,4 +232,12 @@ func passwordAdvisory(selected target, contextName string) string {
 	return "this Machine authenticates with the " + selected.ssh.PasswordRef +
 		" Secret; the client will ask for it, and bootwright secret show --context " + contextName + " --name " +
 		selected.ssh.PasswordRef + " --part password reveals it"
+}
+
+func privateKeyPart(catalog api.Catalog, reference string) secrets.Part {
+	secret, found := catalog.Find(api.Secret, reference)
+	if found && secret.Spec().Get("type").Text() == "opaque" {
+		return secrets.ValuePart
+	}
+	return secrets.PrivateKeyPart
 }

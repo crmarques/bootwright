@@ -1,71 +1,15 @@
 # Deferred CLI access, rendering and preflight
 
-The parked item [B101](../milestones/backlog.md#b101) revives this page's
-OpenShiftCluster access detail, the items [B52](../milestones/m7.md#b52) and
-[B55](../milestones/m7.md#b55) its rendering detail, and the first slice that
-implements an Environment preflight family its preflight detail. None of it is
+The items [B52](../milestones/m7.md#b52) and
+[B55](../milestones/m7.md#b55) revive this page's rendering detail; the first
+slice implementing an Environment preflight family revives its preflight detail. None of it is
 a contract until that slice moves it back into the [CLI](../cli.md), the
 [command catalog](../cli/commands.md) or the [output contract](../cli/output.md),
 which keep what admission and the current code enforce. Cluster inspection
-and the sessions of a managed Ceph cluster are not deferred: the
+and cluster access are not deferred: the
 [cluster discovery contract](../cli/output.md#cluster-discovery) and the
-[cluster sessions](../cli.md#cluster-sessions) own them.
-
-## OpenShiftCluster access handoffs and sessions
-
-`cluster oc` and `cluster kubectl` resolve their target and applicability under
-the [administrator access export](../cli.md#administrator-access-export), then
-check the
-[applicability table](../cli/commands.md#cluster-command-applicability). An
-inapplicable command fails `cluster.not-applicable` with exit `1`, empty
-standard output, and one diagnostic on standard error naming the canonical
-command, selected cluster name and kind, applicable targets, and `bootwright
-cluster info --context <context> --name <cluster>` as the next discovery action.
-It reads no credential material, produces no descriptor or sensitive output, and
-performs no write, process, network, or remote access. This target check
-follows, and never bypasses, the
-[unavailable-command gate](../cli.md#recognized-but-unavailable-commands).
-
-On an applicable target, establish access readiness from local context-owned
-metadata and evidence. Missing access metadata or a required credential
-artifact fails `access.unavailable` with exit `1`, empty standard output, and a
-diagnostic identifying the missing prerequisite and its safe next action.
-Missing target or ownership evidence remains `access.target`; unsafe descriptor
-encoding remains `access.handoff`. An access prerequisite failure never
-produces a partial descriptor or sensitive result and never falls back to
-ambient configuration. Applicability and prerequisite checks precede any
-permitted credential read.
-
-`cluster oc` and `cluster kubectl` are explicit access handoffs, not
-desired-state automation or lifecycle blocks. Bootwright resolves one exact
-target and emits a bounded, deterministically escaped descriptor for independent
-operator execution. It does not launch a client, connect to the target, open an
-interactive stream, or treat later execution as operation evidence. The
-descriptor names the pinned client identity, exact target, minimal
-non-sensitive configuration, and requested argument vector as data, never shell
-text; sensitive argument values have no supported transport. They preserve the
-payload argument vector but never inherit ambient kubeconfig, plugins,
-credentials, proxy settings, cache, or executable lookup.
-
-`cluster rsh` and `cluster exec` on an OpenShiftCluster open a
-session under the same contract as those of a managed Ceph cluster, as
-[cluster sessions](../cli.md#cluster-sessions) states, with this node
-selection. They resolve `--node` only within `OpenShiftCluster.spec.nodes`,
-whose canonical order is ascending bytewise order of node `name`. Omission
-selects the first node in that order. For a supplied value, use the first
-matching tier:
-
-1. exact declared node `name`;
-2. exact effective node FQDN, including an authored override; then
-3. `<role>-<ordinal>`, where the role is the node's authored role, including
-   `infra`, and the ordinal is a zero-based decimal integer spelled `0` or
-   `[1-9][0-9]*`. Filter nodes by that role, sort them in canonical node order,
-   and select the indexed node.
-
-A literal node name wins even if it looks like a role selector. Multiple
-matches in a tier, an unknown name or role, an absent role, an out-of-range
-ordinal, or a malformed selector fails `access.target`; resolution never falls
-through from an ambiguous tier or silently selects the default.
+[cluster sessions](../cli.md#cluster-sessions) and
+[client handoffs](../cli.md#cluster-client-handoffs) own them.
 
 ## Rendering
 

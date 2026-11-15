@@ -30,3 +30,7 @@ type Custodied struct {
 	Material secrets.Material
 	Unproved bool
 }
+
+type AccessMetadata interface {
+	Client(ctx context.Context, contextName, cluster, executable string) (Client, error)
+}

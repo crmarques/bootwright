@@ -59,3 +59,7 @@ type InstallEvidence interface {
 type HostKeys interface {
 	HostKeyProved(ctx context.Context, contextName, name string, object api.Object) (bool, error)
 }
+
+type ClientAccess interface {
+	ClientReason(context.Context, string, string, string) (string, error)
+}

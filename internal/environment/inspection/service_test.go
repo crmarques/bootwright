@@ -171,7 +171,7 @@ func (f *fixture) ObjectUserProved(context.Context, string, api.Catalog, api.Obj
 }
 
 func (f *fixture) service(current string) Service {
-	return New(f, f, f, f, func(context.Context) (string, error) { return current, nil }, f).WithMembers(storageMembers).WithAdministrator(bootstrapNode)
+	return New(f, f, f, f, func(context.Context) (string, error) { return current, nil }, f).WithMembers(storageMembers).WithAdministrator(bootstrapNode).WithClients(f)
 }
 
 func (f *fixture) untouched() {
@@ -242,7 +242,7 @@ func TestClusterInfoReportsEachKindFromDesiredStateAndEvidence(t *testing.T) {
 	}
 	edge, okd := commandStatuses(result.Clusters[0].AccessCommands), commandStatuses(result.Clusters[1].AccessCommands)
 	if edge[CommandKubeconfig] != StatusReady || okd[CommandKubeconfig] != StatusUnavailable ||
-		edge[CommandRsh] != StatusNotImplemented || edge[CommandOC] != StatusNotImplemented {
+		edge[CommandRsh] != StatusUnavailable || edge[CommandOC] != StatusReady {
 		t.Fatalf("container statuses edge %v okd %v", edge, okd)
 	}
 	if reason := result.Clusters[1].AccessCommands[2].Reason; !strings.Contains(reason, "bootwright apply --context lab") {
@@ -638,4 +638,8 @@ func TestSessionAccessIsUnavailableWhenNoDeclaredNodeIsTheAdministrator(t *testi
 	if f.keyReads != 0 {
 		t.Fatalf("host key reads = %d, want none", f.keyReads)
 	}
+}
+
+func (f *fixture) ClientReason(context.Context, string, string, string) (string, error) {
+	return "", nil
 }

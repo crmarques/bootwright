@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/containercluster"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
@@ -37,8 +38,8 @@ type trustRecords interface {
 }
 
 func wireInspection(state inventory.EffectiveState, reconciler lifecycle.Service, binder *custody.Service, selection contexts.SelectionStore, records trustRecords) inspection.Service {
-	return inspection.New(effectiveGraph{state: state}, cephInspection{reconciler: reconciler}, installProofs{reconciler: reconciler},
-		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}, records: records}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}}).WithMembers(clusterMembers()).WithAdministrator(clusterAdministrator)
+	return inspection.New(effectiveGraph{state: nodeAccessState{state: state}}, cephInspection{reconciler: reconciler}, installProofs{reconciler: reconciler},
+		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}, records: records}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}}).WithMembers(clusterMembers()).WithAdministrator(clusterAdministrator).WithClients(clusterClientMetadata{reconciler: reconciler, custody: binder})
 }
 
 type producedEntries interface {
@@ -139,7 +140,12 @@ func (c cephInspection) Resources(ctx context.Context, contextName string, catal
 	return rows, nil
 }
 
-func clusterAdministrator(cluster api.Object) string { return ceph.ClusterAdministration(cluster).Node }
+func clusterAdministrator(cluster api.Object) string {
+	if node := containercluster.SessionNode(cluster); node != "" {
+		return node
+	}
+	return ceph.ClusterAdministration(cluster).Node
+}
 
 func (cephInspection) ObjectUserGateway(user api.Object) string { return ceph.ObjectUserGateway(user) }
 

@@ -1038,6 +1038,10 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-secret-show", args: "secret show --name lab-bmc-credentials --part username", quoted: true, record: func(r *dispatchRecord) {
 			r.result.secretReveal = &custody.RevealResult{Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte("admin"), secrets.PasswordPart: []byte("unused")}), Part: secrets.UsernamePart}
 		}},
+		{golden: "cli-cluster-oc", args: "cluster oc --name example -- get nodes", record: handoffGolden("oc")},
+		{golden: "cli-cluster-oc-json", args: "cluster oc --name example --output json -- get nodes", record: handoffGolden("oc")},
+		{golden: "cli-cluster-kubectl", args: "cluster kubectl --name example -- get nodes", record: handoffGolden("kubectl")},
+		{golden: "cli-cluster-kubectl-json", args: "cluster kubectl --name example --output json -- get nodes", record: handoffGolden("kubectl")},
 		// The administrator kubeconfig is an explicit sensitive result too.
 		{golden: "cli-cluster-kubeconfig", args: "cluster kubeconfig --name sno", quoted: true, record: func(r *dispatchRecord) {
 			r.result.kubeconfig = &containeraccess.KubeconfigResult{Context: "lab", Cluster: "sno", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(kubeconfigFixture)})}
@@ -1529,4 +1533,10 @@ func goldenAcquisitions(api.Catalog) ([]Acquisition, error) {
 		{Kind: "client", Artifact: "helm", Version: "4.3.1", Origin: "https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz", Class: "public", SHA256: strings.Repeat("0", 64), Bytes: 20368240, Machines: []string{"controller"}, Consumer: "Environment/lab"},
 		{Kind: "host package", Artifact: "podman", Class: "host repositories", Origin: "the controller's dnf repositories", Machines: []string{"controller"}, Consumer: "Environment/lab"},
 	}, nil
+}
+
+func handoffGolden(executable string) func(*dispatchRecord) {
+	return func(r *dispatchRecord) {
+		r.result.handoff = &containeraccess.Handoff{Context: "lab", Cluster: "example", Client: containeraccess.Client{Executable: "/installed/" + executable, Version: "4.19.3", Distribution: "openshift"}, Arguments: []string{"get", "nodes"}, KubeconfigCommand: []string{"bootwright", "cluster", "kubeconfig", "--context", "lab", "--name", "example"}}
+	}
 }

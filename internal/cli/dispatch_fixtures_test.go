@@ -300,12 +300,12 @@ func (s machineTrustSpy) Enroll(ctx context.Context, request enrollment.EnrollRe
 
 type clusterAccessSpy struct{ record *dispatchRecord }
 
-func (s clusterAccessSpy) OC(ctx context.Context, request containeraccess.OCRequest) error {
-	return s.record.called(ctx, "cluster oc", request)
+func (s clusterAccessSpy) OC(ctx context.Context, request containeraccess.OCRequest) (*containeraccess.Handoff, error) {
+	return s.record.result.handoff, s.record.called(ctx, "cluster oc", request)
 }
 
-func (s clusterAccessSpy) Kubectl(ctx context.Context, request containeraccess.KubectlRequest) error {
-	return s.record.called(ctx, "cluster kubectl", request)
+func (s clusterAccessSpy) Kubectl(ctx context.Context, request containeraccess.KubectlRequest) (*containeraccess.Handoff, error) {
+	return s.record.result.handoff, s.record.called(ctx, "cluster kubectl", request)
 }
 
 func (s clusterAccessSpy) Kubeconfig(ctx context.Context, request containeraccess.KubeconfigRequest) (*containeraccess.KubeconfigResult, error) {

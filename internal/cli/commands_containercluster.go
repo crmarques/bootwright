@@ -15,8 +15,8 @@ func installerRenderCommand() commandSpec {
 
 func containerAccessCommands() []commandSpec {
 	return []commandSpec{
-		accessCommand(commandSpec{path: "cluster oc", short: "Print an oc access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag()}, payload: true}, " Applicable to OpenShiftClusters only."),
-		accessCommand(commandSpec{path: "cluster kubectl", short: "Print a kubectl access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag()}, payload: true}, " Applicable to OpenShiftClusters only."),
+		available(accessCommand(commandSpec{path: "cluster oc", short: "Print an oc access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag()}, payload: true}, " Applicable to OpenShiftClusters only.")),
+		available(accessCommand(commandSpec{path: "cluster kubectl", short: "Print a kubectl access descriptor; do not launch a client or connect", flags: []flagSpec{nameFlag()}, payload: true}, " Applicable to OpenShiftClusters only.")),
 		available(commandSpec{path: "cluster kubeconfig", short: "Export raw sensitive kubeconfig bytes to standard output", flags: []flagSpec{nameFlag()}, long: "Export raw sensitive kubeconfig bytes to standard output. Applicable to OpenShiftClusters only."}),
 	}
 }
@@ -26,8 +26,8 @@ type InstallerService interface {
 }
 
 type ClusterAccessService interface {
-	OC(context.Context, containeraccess.OCRequest) error
-	Kubectl(context.Context, containeraccess.KubectlRequest) error
+	OC(context.Context, containeraccess.OCRequest) (*containeraccess.Handoff, error)
+	Kubectl(context.Context, containeraccess.KubectlRequest) (*containeraccess.Handoff, error)
 	Kubeconfig(context.Context, containeraccess.KubeconfigRequest) (*containeraccess.KubeconfigResult, error)
 }
 
@@ -53,17 +53,19 @@ func (s Services) invokeClusterAccess(ctx context.Context, path string, values *
 	}
 	switch path {
 	case "cluster oc":
-		return commandResult{}, invokeRequest(ctx, values, containeraccess.OCRequest{
+		result, err := invokeResult(ctx, values, containeraccess.OCRequest{
 			ContextName: values.text("context"),
 			Name:        values.text("name"),
 			Command:     slices.Clone(args),
 		}, s.ClusterAccess.OC)
+		return commandResult{handoff: result}, err
 	case "cluster kubectl":
-		return commandResult{}, invokeRequest(ctx, values, containeraccess.KubectlRequest{
+		result, err := invokeResult(ctx, values, containeraccess.KubectlRequest{
 			ContextName: values.text("context"),
 			Name:        values.text("name"),
 			Command:     slices.Clone(args),
 		}, s.ClusterAccess.Kubectl)
+		return commandResult{handoff: result}, err
 	case "cluster kubeconfig":
 		result, err := invokeResult(ctx, values, containeraccess.KubeconfigRequest{
 			ContextName: values.text("context"),
