@@ -257,7 +257,7 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 			if err != nil {
 				return err
 			}
-			applyProved, err := applyDependencies(ctx, store, applyOperation, block.ID)
+			applyProved, err := s.applyDependencies(ctx, store, applyOperation, block.ID)
 			if err != nil {
 				return err
 			}

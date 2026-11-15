@@ -181,7 +181,7 @@ type PlanResult struct {
 	// Finalizes marks a preview whose verb only completes the operation's
 	// interrupted finalization and then settles, running no block.
 	Finalizes bool
-	// AnotherBuild is set only on a continuation another build proved it freezes.
+	// AnotherBuild is set on a continuation proved against current execution contracts.
 	AnotherBuild *AnotherBuild
 	// Stops names, in plan order, the Machines a fresh destroy proves stopped
 	// before it registers, so the plan says what to stop before it is

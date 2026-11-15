@@ -94,7 +94,7 @@ func (r storeMediaRecords) MediaRecords(ctx context.Context) (map[string]install
 }
 
 // automationDigest is the content identity of the embedded collection this
-// build would run. An operation records it; other builds prove the same blocks.
+// build would run. An operation records it; current execution contracts prove recovery.
 type automationDigest struct{}
 
 func (automationDigest) CatalogDigest() string { return ansible.Digest() }
@@ -416,6 +416,7 @@ func runtimeGuard(python prerequisites.PythonRuntime) lifecycle.ExecutionGuard {
 // every capability shares, so its copies admit their siblings' live jobs.
 func lifecycleOptions(deps lifecycleDependencies, clock systemClock, runner ansiblerunner.Runner) lifecycle.Options {
 	return lifecycle.Options{
+		Contracts: currentExecutionContract,
 		Confirmer: deps.Confirmer, Presenter: deps.Presenter, Progress: deps.Progress,
 		Clock: clock, Entropy: rand.Read, Selection: currentSelection(deps.Selection),
 		BeginInvocation: runner.BeginInvocation, EffectBearing: effectBearing,

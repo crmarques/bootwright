@@ -162,8 +162,8 @@ type ControllerHostKeys interface {
 }
 
 // AutomationIdentity is the content identity of the embedded automation and
-// dependency catalog this executable would run. A continuation refuses when it
-// no longer matches what the operation froze.
+// dependency catalog this executable would run. Attempts record it; execution
+// support is proved independently against the saved implementation contracts.
 type AutomationIdentity interface {
 	CatalogDigest() string
 }

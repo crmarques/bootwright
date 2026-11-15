@@ -39,7 +39,7 @@ type operationPlan struct {
 	// replacedPhases are those of the failed removal a fresh removal replaces,
 	// whose own plan its resolution observes.
 	phases, replacedPhases removalPhases
-	sameBlocks             sameBlocksProof
+	executionProof         executionProof
 	lineagePlan            reconciliation.Plan
 	predecessor            string
 	takes                  []string

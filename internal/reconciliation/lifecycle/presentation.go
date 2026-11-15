@@ -40,7 +40,7 @@ func (s Service) presentation(decided operationPlan) PlanResult {
 	if decided.verb == reconciliation.Destroy {
 		result.StopsAfterOnline = stopsAfterOnline(decided.plan, decided.phases, decided.states)
 	}
-	if result.Continuation && !result.Finalizes && decided.operation.ID != "" && s.otherBuild(decided.operation) && decided.sameBlocks.proved {
+	if result.Continuation && !result.Finalizes && decided.operation.ID != "" && s.otherBuild(decided.operation) && decided.executionProof.proved {
 		result.AnotherBuild = anotherBuildOf(decided.operation, result.Steps)
 	}
 	return result

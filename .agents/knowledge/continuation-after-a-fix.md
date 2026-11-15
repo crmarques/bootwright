@@ -23,7 +23,8 @@ values directly and another a version tag moved by hand, so a pin change moves
 the latter's digest only when its author moves the tag. No capability package
 reads the automation, so a fix confined to automation moves the automation
 digest and no content digest, request byte or version. Another build continues
-an operation exactly when it freezes the same blocks
+an operation when its current execution contracts match the saved blocks
+and their producers
 ([dependency safety](../../specs/state-reconciliation.md#dependency-safety-during-recovery),
 D142). Each invocation stages the running executable's embedded
 automation itself, and the execution closure (`execution-closure-v1`) is only
@@ -60,23 +61,16 @@ lock continues with no `controller install`.
 - An exhausted image pull continues too: each host preparation run makes up
   to three bounded pull attempts of its own, and the retained `pull-attempt-N`
   records serve crash diagnosis and recovery only (B648, X102).
-- A destroy is needed when planning the current build no longer freezes the
-  same blocks, including a changed request or effect pin. The contract goldens
+- A planner-only default or ordering change does not prevent continuation: the
+  saved plan remains authoritative. A changed execution contract or runtime
+  requires finishing or removing with its registering build. Operations written
+  before the required contract metadata also use that build. The contract goldens
   in `cmd/bootwright` pin the current shape and are regenerated after review.
   Versions remain fixed under the
   [development policy](../../specs/project.md#design-priorities-and-non-goals);
   they do not establish compatibility with existing development effects.
-- An add-on package's rendering change, such as another object, field or
-  approval rule in what a package's program renders, changes that instance's
-  request, so another build does not continue the operation: the continuation
-  refuses naming the first block that differs, and the way out is a destroy. A
-  fix confined to the cluster objects role or its modules (planned by
-  [B751](../../specs/milestones/delivered.md#b751)) moves no content digest and no
-  request byte, so it continues a live operation like any other automation fix
-  here: rebuild, then `apply`. The approval-rule tags of
-  [B750](../../specs/milestones/delivered.md#b750) were in the content digest from its
-  first delivery. [B759](../../specs/milestones/delivered.md#b759) also adds bounded
-  namespace plan/CSV evidence absent from the original evidence schema, so its
-  delivery moves the add-on and network evidence to v2 and their content
-  digests with it. An old operation therefore keeps its original executable;
-  this change is not an automation-only continuation fix.
+- A changed add-on package render affects newly planned requests; an existing
+  operation keeps its saved program while its execution contract remains
+  supported. A changed execution or evidence contract refuses as above. The
+  current runtime manifest is checked by the same contract guard before a
+  supported build ships; it carries no earlier manifest or historical reader.

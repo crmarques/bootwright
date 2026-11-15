@@ -24,7 +24,14 @@ type Executable struct {
 // It must not reopen lifecycle services while holding its snapshot.
 type ApplyAdmission func(context.Context, string, api.Catalog, map[string]ObjectOwnership, []reconciliation.Block) error
 
+// ExecutionContract identifies the current request, evidence, persisted formats and effect pins.
+type ExecutionContract struct {
+	ContentDigest string `json:"contentDigest"`
+	Fingerprint   string `json:"fingerprint"`
+}
+
 type Options struct {
+	Contracts         func(reconciliation.Block) (ExecutionContract, bool)
 	Preparations      []PreparationDefinition
 	BeginInvocation   BeginInvocation
 	Confirmer         Confirmer

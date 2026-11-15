@@ -3,12 +3,11 @@ package lifecycle
 import (
 	"context"
 
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
-type sameBlocksProof struct {
+type executionProof struct {
 	proved  bool
 	refusal error
 }
@@ -18,47 +17,44 @@ func (s Service) otherBuild(operation operationstore.Operation) bool {
 	return operation.AutomationDigest != s.automation.CatalogDigest() || operation.Executable != current || s.options.Executable.Modified
 }
 
-func (s Service) proveSameBlocks(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) sameBlocksProof {
-	if !s.otherBuild(operation) {
-		return sameBlocksProof{proved: true}
+func (s Service) proveExecution(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) executionProof {
+	if err := s.proveContracts(frozen, operation.Contracts); err != nil {
+		return executionProof{refusal: failure("lifecycle.state", contractMessage(err), remediationFor(view, operation, s.canTakeBack(ctx, operation, frozen, states)))}
 	}
-	fresh, err := s.replanned(ctx, view, operation, frozen)
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return sameBlocksProof{refusal: ctxErr}
-	}
-	remediation := remediationFor(view, operation, s.canTakeBack(ctx, operation, frozen, states))
-	if err != nil {
-		detail := ""
-		if reported := diagnostics.Of(err); len(reported) != 0 {
-			detail = ": " + reported[0].Message
-		}
-		return sameBlocksProof{refusal: failure("lifecycle.state",
-			"this executable cannot plan this operation again to prove it freezes the same blocks"+detail, remediation)}
-	}
-	held, _, err := appliedView(ctx, s.store(view), operation, frozen, states)
-	if err != nil {
-		return sameBlocksProof{refusal: err}
-	}
-	if change, differs := reconciliation.Compare(held, fresh).First(); differs {
-		return sameBlocksProof{refusal: failure("lifecycle.state",
-			"this executable would freeze the block "+change.Block+" differently from the plan this operation froze", remediation)}
-	}
-	return sameBlocksProof{proved: true}
-}
-
-func (s Service) replanned(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan) (reconciliation.Plan, error) {
+	// Removal strictly reads every frozen request through its owning capability.
+	// For a continued destroy it also proves the saved authorization and inverse.
+	fresh := frozen
+	var err error
 	if operation.Verb == reconciliation.Destroy {
-		return s.removalOf(ctx, frozen, operation.Executable)
+		fresh, err = s.removalOf(ctx, frozen, operation.Executable)
+	} else {
+		for _, block := range frozen.Blocks {
+			capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
+			if !ok {
+				err = failure("lifecycle.state", "this executable provides no "+block.Implementation+" to read block "+block.ID, removeWith(operation.Executable))
+				break
+			}
+			if _, why := capability.Removal(ctx, block); why != nil {
+				err = unreadable(block, operation.Executable, why)
+				break
+			}
+		}
 	}
-	state, err := s.compile(ctx, view)
+	if ctx.Err() != nil {
+		return executionProof{refusal: ctx.Err()}
+	}
 	if err != nil {
-		return reconciliation.Plan{}, err
+		if s.canTakeBack(ctx, operation, frozen, states) {
+			err = failure("lifecycle.state", firstMessage(err), remediationFor(view, operation, true))
+		}
+		return executionProof{refusal: err}
 	}
-	if err := s.refuseUnsupported(state); err != nil {
-		return reconciliation.Plan{}, err
+	if operation.Verb == reconciliation.Destroy {
+		if change, differs := reconciliation.Compare(frozen, fresh).First(); differs {
+			return executionProof{refusal: failure("lifecycle.state", "this executable would remove block "+change.Block+" differently from its frozen removal", remediationFor(view, operation, false))}
+		}
 	}
-	plan, _, err := s.planFrom(ctx, view, state)
-	return plan, err
+	return executionProof{proved: true}
 }
 
 func (s Service) canTakeBack(ctx context.Context, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) bool {
@@ -70,6 +66,9 @@ func (s Service) canTakeBack(ctx context.Context, operation operationstore.Opera
 		owned, startedNothing = reconciliation.OwnedSubset(frozen, states), mayHaveStartedNothing(operation)
 	}
 	if len(owned.Blocks) == 0 && !startedNothing {
+		return false
+	}
+	if s.proveContracts(owned, operation.Contracts) != nil {
 		return false
 	}
 	_, err := s.removalOf(ctx, owned, operation.Executable)

@@ -3,7 +3,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -28,6 +30,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
@@ -710,6 +713,7 @@ func TestEveryImplementationContractMatchesItsGolden(t *testing.T) {
 	}
 	directory := filepath.Join("testdata", "contracts")
 	wanted := map[string]bool{}
+	manifest := map[string]lifecycle.ExecutionContract{}
 	for _, version := range versions {
 		name := version.implementation + ".golden"
 		wanted[name] = true
@@ -729,6 +733,22 @@ func TestEveryImplementationContractMatchesItsGolden(t *testing.T) {
 		listed["request-identity"] = identities[version.implementation]
 		text := contractText(version, recipe.requestVersionOf(), listed)
 		contractHoldGolden(t, version, filepath.Join(directory, name), text)
+		sum := sha256.Sum256([]byte(text))
+		manifest[version.implementation] = lifecycle.ExecutionContract{ContentDigest: version.digest, Fingerprint: hex.EncodeToString(sum[:])}
+	}
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = append(data, '\n')
+	if *update {
+		if err := os.WriteFile("execution-contracts.json", data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		if string(executionManifest) != string(data) {
+			t.Error("execution-contracts.json differs from the current contracts; regenerate with the contract golden guard -update")
+		}
 	}
 	entries, err := os.ReadDir(directory)
 	if err != nil && !*update {
@@ -812,6 +832,30 @@ func contractOfferedImplementations(t *testing.T, versions []contractVersion) {
 
 // contractListSections are the sections that list values one per line.
 var contractListSections = []string{"effect-pins", "request-identity", "request-schema", "evidence-schema"}
+
+func TestExecutionFingerprintIncludesOptionalSchemaAndPersistedContracts(t *testing.T) {
+	type original struct {
+		Name string `json:"name"`
+	}
+	type extended struct {
+		Name     string `json:"name"`
+		Optional string `json:"optional,omitempty"`
+	}
+	fingerprint := func(request, evidence reflect.Type, persisted string) [32]byte {
+		contract := contractVersion{implementation: "fixture", digest: strings.Repeat("a", 64), request: request, evidence: evidence}
+		return sha256.Sum256([]byte(contractText(contract, "fixture-v1", map[string][]string{"automation-formats": {persisted}})))
+	}
+	baseline := fingerprint(reflect.TypeFor[original](), reflect.TypeFor[original](), "saved-record-v1")
+	for _, changed := range [][32]byte{
+		fingerprint(reflect.TypeFor[extended](), reflect.TypeFor[original](), "saved-record-v1"),
+		fingerprint(reflect.TypeFor[original](), reflect.TypeFor[extended](), "saved-record-v1"),
+		fingerprint(reflect.TypeFor[original](), reflect.TypeFor[original](), "changed-saved-record-v1"),
+	} {
+		if changed == baseline {
+			t.Fatal("a changed optional schema or persisted contract kept its execution fingerprint")
+		}
+	}
+}
 
 func contractText(version contractVersion, requestVersion string, listed map[string][]string) string {
 	var text strings.Builder

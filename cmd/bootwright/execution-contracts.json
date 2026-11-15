@@ -1,0 +1,126 @@
+{
+  "addon-instance-v1": {
+    "contentDigest": "993b57e89d799b7d6b525517aa2dd88e8f31ece5cba2c1f1dcf19e590385f16c",
+    "fingerprint": "34f85969cff6f2e380b7ba97cae54cbe8c76a00c56306efd76d5bded79a994a6"
+  },
+  "artifact-server-nginx-v1": {
+    "contentDigest": "bf86e520d3598c08a123833594b0c684e4dca36593794207fdbd3a7727c7003d",
+    "fingerprint": "d4249f7d7da97ec7940a020e1403b330e8d1cfd7d8a2527ba954d9c52e2b5c36"
+  },
+  "ceph-export-v1": {
+    "contentDigest": "65d626bbba8a32a2a1fe2b5168467dbf4c48aff8ded24688ac55a52b7ea5fc66",
+    "fingerprint": "6600a312f3f2b99551e3fb401fd34840d5a6355e83194129a1f13035a260467a"
+  },
+  "cluster-install-agent-v1": {
+    "contentDigest": "78bb10d8aecbb6c788fcc283270ab82273abf798d5e6f12d71c6e13e5a0e20f5",
+    "fingerprint": "2c0244d88b670b790cda88bbd36983747bccc3a5d536281559d22ca27008875b"
+  },
+  "cluster-media-agent-v1": {
+    "contentDigest": "9cc635edd8410397e96582c7a68d34c40c6323d63ddba65101a192b6e60d7c04",
+    "fingerprint": "e7a15245d5537aa31ac76b9dcdd8b69127cff45a9238fa2f34685aeb45c6af30"
+  },
+  "cluster-network-v1": {
+    "contentDigest": "afe1ceb61b97e6e1db46f9f8cdbd258e943fc721257cb7753b63aab63457e366",
+    "fingerprint": "b57e88294b3b12ee1131d930dd70745b471b6903c7859f15aaa35944ecd7b7c7"
+  },
+  "controller-prerequisites": {
+    "contentDigest": "d3a2b16a74e0a6bec87b04a72745a571687edb5caf26414a3c1d119081925714",
+    "fingerprint": "c96a737f12b7ae4ccad16f23e16ae294e6f9359333ab8d8037bd285200b1a5a3"
+  },
+  "dns-server-dnsmasq-v1": {
+    "contentDigest": "544a52237167283339c48158b98dc4639c72040c96fb129f3ba84675bde743df",
+    "fingerprint": "7db5dad751e35e05d2a721851b55fbe9c58aa1e5cf45ab867edbec3641596308"
+  },
+  "machine-baremetal-v1": {
+    "contentDigest": "6e57381a45700b2ebe2c119278761057eea0347af980ff6f84c5b759b3e43ed8",
+    "fingerprint": "9d2fbedd8bfbd73851e863a53ebe8cdb4b7fd48a8852a404fb37b6ea8243ae59"
+  },
+  "machine-hardware-v1": {
+    "contentDigest": "c4e732ece12ed8edb121aa943d55d7d72b1fae18b451fe8fc34eddef652454f1",
+    "fingerprint": "c5868651401814252f7c71ab7d4f7154db62193a4187501d0115f2818914e53c"
+  },
+  "machine-kubevirt-v1": {
+    "contentDigest": "51ddb3590eb7ac455201230a9d7cc259fa7373e1ee5b647b9e8b3af828b40b92",
+    "fingerprint": "4c986fedd77dfedcd659c41235ce4bc0de426f1846f9a5a8201634cff0f4e786"
+  },
+  "machine-libvirt-v1": {
+    "contentDigest": "27d017d249d6121f4e3dab49d246824d3c5a534fa867a2a923ce49ca5748381f",
+    "fingerprint": "06f7cd0c33899ed31b1bc415518a2f4ebdaaae5262083520ad4d736cb973f4f6"
+  },
+  "mirror-files-v1": {
+    "contentDigest": "7f421389ad05c85f01d902ce68f64cb09332ca6d734b7fa7268c72eac8b5206f",
+    "fingerprint": "3be9c5f25657208b74a9268115d8effcce4c2b24a2c33f8fb09efd410d5f98b1"
+  },
+  "mirror-images-v1": {
+    "contentDigest": "c45de799c2c391b50126647a5dba104b0e2b84fdaa1af59833cfd4f912934eb6",
+    "fingerprint": "db265fb50c77819832b6ac9f43dd7a700408743a9134190b7dc42ba271fef3b8"
+  },
+  "mirror-release-v1": {
+    "contentDigest": "89a5d0852835510f616ddcae6a812a292bfa70e2a031fdccfef5fdb8b6340610",
+    "fingerprint": "b77a5607638b88ebb23c1efac5b1138d301098b220ff3305d36006e7bf677615"
+  },
+  "ntp-server-chrony-v1": {
+    "contentDigest": "ec5e1a6ce989dff7c9cb987f5f0f6c97f8dc6f166f8ad2572f2394727e3ef029",
+    "fingerprint": "a5233f7c86bc92785fe3d9f26d877ee3226af80fea9587b8cbbb185dc2f638cc"
+  },
+  "os-disk-discovery-v1": {
+    "contentDigest": "0afccf1786a1f36e05534505062e6c439e5cbf90cf2b6fe12b020f68eddc79a7",
+    "fingerprint": "21b7d83aabf1b7c1f1a4b7428981b5714a87029d0ef704b88b7987814ab66090"
+  },
+  "os-host-firewall-v1": {
+    "contentDigest": "ef74fbe8098b01389b0dcef264da682b89702c0bc590db7d5a40412626a3c9cd",
+    "fingerprint": "e68add80db6226d9a5e355d8f95ae8223bf0da2bfe4068a6eceece2e122e7283"
+  },
+  "os-install-anaconda-v1": {
+    "contentDigest": "d908d85a05a18c58cfb4662fbfe0ad2c44b60f14d22aafb7432b77a956258fa7",
+    "fingerprint": "171cac31b8cae56fda99dba24cfb7d02544ce4dc3c561531a2f426c888c0eac7"
+  },
+  "os-package-tree-v1": {
+    "contentDigest": "62218223d7cca3604594c231a1265d351e6c12e0e9d6d8b31f2f51086a839445",
+    "fingerprint": "a5f3a062fdb876fe98f3dcbb989ee6535917b9b86cfd58c5acea0b51f3165ac9"
+  },
+  "physical-erase-v1": {
+    "contentDigest": "6c1c49685138b533ada39706c004909f33a27c52b3694793cb4e121e09f6643e",
+    "fingerprint": "1bf7ed745f43ff51a380dc75271c178b84643b03ee511f0884d75c710683f839"
+  },
+  "proxy-squid-v1": {
+    "contentDigest": "f6f3786ce9c60b6b307aa8169bc8e87ab296769ab62d47fcfc5e536479147c16",
+    "fingerprint": "879264f00c76e2b2a054e997b6bf020ac26d27fe654b5ecae8372c1cc1a48995"
+  },
+  "registry-distribution-v1": {
+    "contentDigest": "ab7691f481d99811bee30ccdff566e66b40cd54ecb12e76346b31808b59d9241",
+    "fingerprint": "e4ba9d68bff71b695eb7c6ebf33485ecbf53ea496762c32c5703b65c76581982"
+  },
+  "storage-ceph-core-v1": {
+    "contentDigest": "36df5d9340708fbe7420c946057dfc09548e3e870f8431a06157718186c137c3",
+    "fingerprint": "95162e7c76f14da631920ecfcccdd087a33adf366397476abe434624494439a9"
+  },
+  "storage-ceph-host-v1": {
+    "contentDigest": "2469d1ad9c460f12913d7d2eb465d6605722b1ff5f6fc2cb47cc7ba64d1f05b6",
+    "fingerprint": "35c789f23231469407083ce020c5fae8d3be2ec39a32c292ae9e110febdc3271"
+  },
+  "storage-ceph-image-v1": {
+    "contentDigest": "f0822b3d0eb59977829abbed7248c391a51d33a21602d3cbba5e3035d50b62d8",
+    "fingerprint": "affaf3a5fa4eb4efa5ca15672d90a0915dccccca0a4d85fc41a2ad1e3688c111"
+  },
+  "storage-ceph-physical-retirement-v1": {
+    "contentDigest": "c278273c035e12b44eca61c1c7ec12c2bd31f3f7fba10e9e54c009cd6c4a6190",
+    "fingerprint": "ddc6a83ce238e0025802ed26bde7fdf21b939b0745e715dadadb014c3ab7d108"
+  },
+  "storage-ceph-replication-v1": {
+    "contentDigest": "bed82437951d8d81d0c419da99c864d488e0fe128c38cce355d2a0618a51f956",
+    "fingerprint": "425dd23e1b75c295572a028179a0b4ddcbc99ffa7a13c80ac3ee0591f3a7e6f1"
+  },
+  "storage-ceph-smb-v1": {
+    "contentDigest": "8881e871ae65d1dae0f830b683954cbcd665a792c4d7dd5ee808710605c9bcda",
+    "fingerprint": "0443b7892f83fd4afb215b6a62202c80ce2f60a0d06f4fb68eabf9fd300a8f8c"
+  },
+  "substrate-host-kubevirt-v1": {
+    "contentDigest": "712073aec40ccf2e0e5022b4cda1155858296525dab94bfb77736ff9b8e1c6b9",
+    "fingerprint": "4f3a26a14789a0b64ad6918869676c99601c8375cea3d3ea15c6812bfd1d47bb"
+  },
+  "substrate-host-libvirt-v1": {
+    "contentDigest": "8e372972481cf79cb1f5756fb88b4f3940138d6125b616721b64efc8041c2f94",
+    "fingerprint": "f5d73fed3132280628f46aada4524f9eb2f9605449a727bf81f7af2ba6eb9eee"
+  }
+}

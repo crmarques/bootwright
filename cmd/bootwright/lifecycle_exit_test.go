@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -30,7 +31,7 @@ func exitPlan(t *testing.T) reconciliation.Plan {
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{{
 		ID: "alpha", Description: "serve alpha", Stage: reconciliation.StageInfrastructureServices,
 		Kind: "ArtifactServer", Object: "alpha", Implementation: "artifact-server-nginx-v1",
-		ContentDigest: strings.Repeat("c", 64), Request: json.RawMessage(`{"name":"alpha"}`),
+		ContentDigest: artifactserver.ContentDigest(), Request: json.RawMessage(`{"name":"alpha"}`),
 		Groups: []reconciliation.Group{{ID: "pull-image", Description: "acquire the pinned server image", Machines: []string{"service-host"}}},
 	}})
 	if err != nil {
@@ -56,7 +57,8 @@ func registerDoneUnder(ctx context.Context, t *testing.T, store *operationstore.
 	}
 	stamp := exitStamp().Format(time.RFC3339)
 	operation := operationstore.Operation{
-		Version: operationstore.OperationVersion, ID: id, Verb: plan.Verb, Context: "alpha", Revision: revision,
+		Contracts: fixtureContracts(t, plan),
+		Version:   operationstore.OperationVersion, ID: id, Verb: plan.Verb, Context: "alpha", Revision: revision,
 		InputDigest: input, PlanDigest: digest, AutomationDigest: strings.Repeat("b", 64),
 		Closure: exitClosure(), Source: source, Bindings: []string{}, State: reconciliation.OperationRunning, Created: stamp, Updated: stamp,
 	}
@@ -76,6 +78,19 @@ func registerDoneUnder(ctx context.Context, t *testing.T, store *operationstore.
 	if err := store.UpdateOperation(ctx, operation); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func fixtureContracts(t *testing.T, plan reconciliation.Plan) map[string]string {
+	t.Helper()
+	contracts := map[string]string{}
+	for _, block := range plan.Blocks {
+		contract, ok := currentExecutionContract(block)
+		if !ok {
+			t.Fatalf("fixture names an unknown implementation %s", block.Implementation)
+		}
+		contracts[block.Implementation] = contract.Fingerprint
+	}
+	return contracts
 }
 
 // exitClosure is the execution closure a registration of this build freezes;

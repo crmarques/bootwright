@@ -17,16 +17,26 @@ type removalScope struct {
 	reopen     string
 	release    []string
 	operations []string
+	contracts  map[string]string
 }
 
 func removalOver(ctx context.Context, store recordReader, applied operationstore.Operation, frozen, started reconciliation.Plan) (removalScope, error) {
-	scope := removalScope{owned: started, started: len(started.Blocks), reopen: firstBinding(applied.Bindings), release: applied.Bindings}
+	scope := removalScope{contracts: applied.Contracts, owned: started, started: len(started.Blocks), reopen: firstBinding(applied.Bindings), release: applied.Bindings}
 	if applied.Predecessor == "" {
 		return scope, nil
 	}
 	held, err := lineageOf(ctx, store, lineageMember{operation: applied, plan: frozen})
 	if err != nil {
 		return removalScope{}, err
+	}
+	scope.contracts = map[string]string{}
+	for _, member := range held {
+		for implementation, contract := range member.operation.Contracts {
+			if previous, ok := scope.contracts[implementation]; ok && previous != contract {
+				return removalScope{}, failure("lifecycle.state", "the lineage holds conflicting execution contracts for "+implementation, removeWith(applied.Executable))
+			}
+			scope.contracts[implementation] = contract
+		}
 	}
 	plans := make([]reconciliation.Plan, 0, len(held))
 	for _, member := range held[:len(held)-1] {
@@ -49,7 +59,7 @@ func unremovable(applied operationstore.Operation, cause error) error {
 }
 
 func replacementOf(ctx context.Context, store recordReader, removal operationstore.Operation, remaining reconciliation.Plan) (removalScope, error) {
-	scope := removalScope{owned: remaining, started: len(remaining.Blocks), reopen: firstBinding(removal.Bindings), release: slices.Clone(removal.Bindings)}
+	scope := removalScope{contracts: removal.Contracts, owned: remaining, started: len(remaining.Blocks), reopen: firstBinding(removal.Bindings), release: slices.Clone(removal.Bindings)}
 	if removal.Source == "" {
 		return scope, nil
 	}

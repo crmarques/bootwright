@@ -1833,6 +1833,14 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 	h.service = New(workspace, nil, testCompiler{state: compilation.NewState(catalog, catalog, nil)}, binder,
 		testHost{identity: host}, testAutomation{digest: testAutomaton}, guard, testResolver{capability: capability},
 		Options{
+			Contracts: func(block reconciliation.Block) (ExecutionContract, bool) {
+				for _, definition := range h.capability.definitions {
+					if definition.ID == block.ID {
+						return ExecutionContract{ContentDigest: definition.ContentDigest, Fingerprint: strings.Repeat("4", 64)}, true
+					}
+				}
+				return ExecutionContract{ContentDigest: block.ContentDigest, Fingerprint: strings.Repeat("4", 64)}, true
+			},
 			Confirmer: confirmer, Presenter: presenter, Clock: clock, EffectBearing: domainEffects,
 			Entropy: func(buffer []byte) (int, error) {
 				for index := range buffer {
@@ -3712,26 +3720,18 @@ func TestDestroyOverAFailedApplyRemovesEveryStartedBlock(t *testing.T) {
 	}
 }
 
-// A repair that changes what a block freezes leaves the failed apply's
-// continuation refused. The removal is the road out, so the refusal names it
-// and the context returns to rest under the new executable.
-func TestARepairThatMovesABlockLeavesAFailedApplyDestroyable(t *testing.T) {
+// A new planner default leaves the old request executable and removable.
+func TestAPlannerDefaultChangeLeavesAFailedApplyContinuableAndDestroyable(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
 		t.Fatal("a failed block reported success")
 	}
 	h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
-	h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
+	h.capability.definitions[0].Request = json.RawMessage(`{"name":"new-default"}`)
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	remediation := ""
-	for _, reported := range diagnostics.Of(err) {
-		if reported.Code == "lifecycle.state" {
-			remediation = reported.Remediation
-		}
-	}
-	if !strings.Contains(remediation, "destroy") {
-		t.Fatalf("the drift refusal does not name the road out: %q", remediation)
+	if err != nil {
+		t.Fatalf("the new default prevented continuation: %v", err)
 	}
 	removed, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err != nil {

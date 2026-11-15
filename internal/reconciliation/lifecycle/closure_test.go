@@ -259,8 +259,8 @@ func TestARecordWithOnlyACommitNamesDevelAndTheCommit(t *testing.T) {
 			}
 			h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
 			h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
-			refusedUnchanged(t, h, reconciliation.Apply, "this executable would freeze the block artifact-server-lab differently from the plan this operation froze",
-				"take back what this operation owns under this executable with bootwright destroy --context lab, or install "+test.build+", which registered it")
+			refusedUnchanged(t, h, reconciliation.Apply, "this executable does not support the execution contract of block artifact-server-lab",
+				"install "+test.build+", which registered this operation, and run bootwright controller install")
 			h.capability.removalErr = failure("lifecycle.state", "the frozen request has an unsupported version", "")
 			_, err = h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
 			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Remediation != "remove it with "+test.build {

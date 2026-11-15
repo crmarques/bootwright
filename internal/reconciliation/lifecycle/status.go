@@ -406,7 +406,7 @@ func (s Service) offered(ctx context.Context, view View, store OperationStore, o
 	if len(refused) == 0 || next == string(reconciliation.Destroy) {
 		steps = append(steps, s.continuation(ctx, view, operation, frozen, states, next)...)
 	}
-	if operation.Verb == reconciliation.Apply && len(contradicted) == 0 {
+	if operation.Verb == reconciliation.Apply && len(contradicted) == 0 && s.canTakeBack(ctx, operation, frozen, states) {
 		// The removal proves the host's setup before it resolves or registers
 		// anything, so setup takes its place while setup gates it.
 		removal := contextCommand(view.Identity().Name, string(reconciliation.Destroy))
@@ -460,7 +460,7 @@ func (s Service) continuation(ctx context.Context, view View, operation operatio
 		}
 		return []string{command}
 	}
-	if err := s.recordedRefusal(view, operation, s.proveSameBlocks(ctx, view, operation, frozen, states)); err != nil {
+	if err := s.recordedRefusal(view, operation, s.proveExecution(ctx, view, operation, frozen, states)); err != nil {
 		return refusalExit(view, err)
 	}
 	if s.setupGates(ctx, view) {

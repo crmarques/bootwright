@@ -28,7 +28,7 @@ func TestClusterInfoAfterDestroyReadsRemovalEvidenceAsUnavailable(t *testing.T) 
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{{
 		ID: "install-rhel-01", Description: "install the guest", Stage: reconciliation.StageInfrastructureServices,
 		Kind: installation.Kind, Object: "rhel-01", Implementation: installation.Implementation,
-		ContentDigest: strings.Repeat("c", 64), Request: json.RawMessage(`{}`),
+		ContentDigest: installation.ContentDigest(), Request: json.RawMessage(`{}`),
 		Groups: []reconciliation.Group{{ID: "install", Description: "install the guest", Machines: []string{"rhel-01"}}},
 	}})
 	if err != nil {
@@ -47,7 +47,8 @@ func TestClusterInfoAfterDestroyReadsRemovalEvidenceAsUnavailable(t *testing.T) 
 		}
 		stamp := exitStamp().Format(time.RFC3339)
 		operation := operationstore.Operation{Version: operationstore.OperationVersion, ID: "op-" + strings.Repeat("02", 16), Verb: reconciliation.Destroy,
-			Context: "alpha", Revision: "rev-1", InputDigest: strings.Repeat("a", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("b", 64),
+			Contracts: fixtureContracts(t, removal),
+			Context:   "alpha", Revision: "rev-1", InputDigest: strings.Repeat("a", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("b", 64),
 			Closure: exitClosure(), Source: applied, Bindings: []string{}, State: reconciliation.OperationRunning, Created: stamp, Updated: stamp}
 		if err := store.Register(ctx, operation, removal); err != nil {
 			t.Fatal(err)

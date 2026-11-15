@@ -170,7 +170,7 @@ func TestTheBuildRecipeWritesTheNoticesFromTheBillOfMaterials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, recipe, _ := strings.Cut(string(data), "\nbuild: wheels vulngate\n")
+	_, recipe, _ := strings.Cut(string(data), "\nbuild: wheels vulngate execution-contracts-check\n")
 	recipe, _, _ = strings.Cut(recipe, "\n\n")
 	bom := strings.Index(recipe, "mv -f bin/bootwright.cdx.json.tmp bin/bootwright.cdx.json")
 	notices := strings.Index(recipe, "./licenses notices ")

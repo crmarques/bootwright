@@ -469,7 +469,7 @@ destroy that settles beside it [reclaims](#context-mutation-evidence) it.
 `operation.json` binds the operation to its verb, context
 identity, input revision and digest, plan digest, selected implementation and
 automation identities, executable identity, the Python and Ansible
-[execution closure](#dependency-safety-during-recovery) it registered with,
+[execution closure and contract fingerprints](#dependency-safety-during-recovery) it registered with,
 secret bindings, durable state and log-fault flag. The `operation.json` of a
 removal that replaces a failed removal also names that removal (`replaces`),
 and an apply that adds to a completed one names it (`predecessor`), each an
@@ -594,8 +594,8 @@ Changed desired state never turns continuation into reconciliation. A
 continuation verifies, before doing work, the operation's verb, its context
 identity and input revision, the frozen-input digest, the plan digest its
 record names, the block states and attempt counts it read (unchanged since the
-command read them), that this executable is the build the operation registered
-under or [freezes the same blocks](#dependency-safety-during-recovery), and the
+command read them), that this executable supports the saved blocks'
+[execution contracts](#dependency-safety-during-recovery), and the
 host binding with completed setup. Only a fresh
 apply binds, so a continuation whose context the controller state records no
 binding for names the `destroy` that supersedes its operation where one may,
@@ -604,8 +604,7 @@ and otherwise the binding's restoration or the context's deletion, never an
 implementation identity the block froze. A block whose implementation this
 executable does not offer refuses before its attempt or resolution starts. A
 block's content digest travels with the block: a removal keeps the one its apply
-froze, and a continuation compares it only as part of proving that another build
-freezes the same blocks.
+froze, and execution checks it against the current implementation contract.
 
 This table and the four below state the transition code exactly:
 `TestTransitionTablesMatchSpec` drives that code with every row of each, so a
@@ -1323,16 +1322,14 @@ never re-resolves to a different implementation.
 
 ### Dependency safety during recovery
 
-A continuation of either verb uses the exact frozen execution closure its
-operation registered with, and the automation of the build in hand only where
-that build freezes the same blocks, as below; a fresh removal, which registers
-an
-operation of its own, runs under the build and runtime in hand, as below. If
-required content is unavailable, changed, or its safe use for the requested
-operation cannot be established, refuse before the affected observation or
-effect and report the recovery requirement. Preserve the plan and ownership
-evidence; never silently upgrade, substitute a dependency, or discard recovery
-state.
+A continuation executes its immutable saved plan through the current build's
+implementations only while their execution contracts still match. Planning is
+for new operations and for `diff`'s comparison: continuation never requires the
+current planner to reproduce the saved requests, defaults, blocks or ordering.
+A fresh removal uses the saved ownership requests and current supported removal
+contract. No invocation converts or interprets an earlier contract through a
+historical reader. Required content that is unavailable, changed or unsafe to
+use refuses before its observation or effect, preserving recovery evidence.
 
 Every effect of an operation runs inside the controller runtime of the build
 in hand: the venv its embedded runtime lock builds on the interpreter the setup
@@ -1350,59 +1347,50 @@ that keeps the lock, an OS Python update within the ABI and an OS upgrade that
 keeps it all continue a live operation, and an automation-only fix needs no
 setup.
 
-Before a continuation of either verb restores its operation's log, raises
-evidence or marks its operation `running`, it refuses `lifecycle.state`, with no
-effect and no record changed, when this build's runtime carries another closure (another
-runtime lock or another interpreter ABI), naming the build that registered it,
-whose `controller install` restores its runtime from the wheels that build
-carries, then continues it, and for an
-apply the removal that takes back what it owns, or when
-another build registered the operation and this executable does not freeze the
-same blocks. Another build is one whose automation differs from the one the
-operation registered under or whose version or commit differs from the ones it
-records, and any build whose own stamp says its source was modified, since no
-recorded identity tells two such builds apart. For an apply, a build freezes the
-same blocks when planning the operation's frozen input again gives exactly the
-operation's blocks, each with every member its plan froze except the words it is
-presented in: its description, its impacts and its groups' descriptions. For a
-destroy, the proof derives the removal again from the operation's own frozen
-plan, which copies each block's request, implementation, content digest, stage
-and dependencies from that plan, so it compares what the removal decides, the
-authorizations it consumes and its groups, and whether every block's capability
-resolves and reads its frozen request, as a fresh removal does. That proof
-plans, and planning reads the media store under the store's own shared lock, so
-the decision proves it under the shared lock and the exclusive re-proof keeps it
-once it finds every record it read unchanged. The proof compares blocks only: a
-continuation keeps the host reservations and the Secret binding its registration
-took. A refusal names the first block that differs, or why the operation could
-not be planned again. A continuation that passes runs this executable's
-automation, which is how an automation fix reaches a failed or unknown block,
-and its record keeps naming the build that registered it. Every content digest
-is computed from the implementation's declared contract (its identity, its
-request and evidence versions and its effect pins) and never from automation
-bytes. An *effect pin* is a value Go owns outside the frozen request that
-fixes what an effect is, such as an artifact digest, a package set, a host
-path, a name prefix or an ownership mark; the digest hashes each one, and a
-value the request carries needs no pin
-([when a digest moves](#continuation-and-removal)). A fix confined to
-automation, or to Go code that moves no version or pin, therefore continues
-with no `controller install` between, because automation is staged per invocation and a
-continuation needs only the same runtime lock and Python ABI. Such a
-continuation resolves an
-unknown block first and, when the observation leaves it failed, retries it in
-the same invocation (D146). Each attempt names the build that ran it, while the operation
-keeps naming the one that registered it. Each refusal names the executable
-version and commit the operation registered under, and the closure refusal
-also names the Python and
-`ansible-core` releases the operation needs and the ones this build's runtime holds. Each
-remedy restores what the operation registered under, and where a fresh removal
-may [supersede](#continuation-and-removal) the operation, it also offers that
-removal. Where the build it registered under cannot read the records a later
-build wrote, the way out is the superseding removal under the build in hand, or
-the [deletion exit](#lifecycle-unit) where none may take its place. A fresh
-verb always runs under the build and runtime in hand.
+Every operation records a bounded `contracts` map: exactly the implementations
+its saved plan uses, each identified by a SHA-256 fingerprint of its reviewed
+contract manifest. The manifest includes the content digest, request and
+evidence schemas, persisted-format and ownership identifiers, fixed places,
+request identity fields and effect pins. Composition embeds only the current
+manifest, generated and checked by
+`TestEveryImplementationContractMatchesItsGolden`; `make build` runs that guard
+before producing a binary. Missing metadata is unsupported state under the
+[development policy](project.md#design-priorities-and-non-goals), never an
+invitation to infer an older contract. No earlier manifest is retained.
 
-A removal keeps the content digest its apply froze and compares none, so every
+Before continuation restores logs, changes records, binds material or starts an
+observation, it proves each saved block's fingerprint and content digest against
+the current implementation and strictly reads its frozen request through that
+capability. The proof applies even to the registering executable. The original
+plan digest, input revision and bytes, dependencies, reservations, bindings and
+authorizations remain authoritative and are re-proved under the exclusive lock.
+A continued removal also re-derives only its removal policy and refuses changed
+authorizations or groups. A fresh removal proves the contracts of the blocks it
+owns; evidence lent from its original apply is checked against its producing
+implementation before use, including transitive dependencies already removed.
+An additive apply or preparation also proves its predecessor contracts before
+borrowing their evidence or produced material. Live diff observations and tool
+lookups prove the producing contracts before interpreting evidence.
+
+A new planner default or newly planned work affects a fresh operation and never
+changes a saved operation. A changed required authorization, safety dependency,
+reservation or trust/ownership rule is an execution-contract change: its owner
+moves an effect pin even when request bytes and schemas are unchanged. Such a
+change cannot be treated as a planning-only improvement. Effect pins are
+Go-owned values outside the frozen request that fix an effect's semantics;
+a value already frozen in the request needs no redundant default pin.
+
+The runtime closure must also remain equal: a different runtime lock or Python
+ABI refuses before effects, naming the registering build and the Python and
+Ansible releases required. An implementation-contract refusal names its block
+and the build that registered it. The unchanged contract admits current Go and
+automation fixes without setup when their runtime lock remains equal. An
+unknown block is observed first and, when observation leaves it failed, retried
+in the same invocation. Each attempt records the build that actually ran it;
+the operation continues naming its registering build. Completed bookkeeping
+that interprets no implementation evidence needs no execution-contract match.
+
+A removal keeps the content digest its apply froze and proves its execution contract, so every
 value that fixes a removal's target identity, place, ownership mark or host
 claim travels in the request that apply froze, and the removal reads it from
 there, never from the build in hand. The automation values that are exceptions,
@@ -1796,8 +1784,7 @@ stopped it.
 
 A capability's current contract records what a block's effect is: the objects it creates, their
 names and places, the mark that proves them this context's own, the host
-resources it claims, or what its observation proves. An apply continuation under
-another build compares content digests and never automation bytes, so automation
+resources it claims, or what its observation proves. An apply continuation compares execution-contract fingerprints and never automation bytes, so automation
 that moves no content digest reaches the blocks a continuation still runs, and a
 removal still reads the request its apply froze. A mechanical guard,
 `TestEveryImplementationContractMatchesItsGolden`, pins each implementation's

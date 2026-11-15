@@ -13,12 +13,9 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-// moved is what a later build derives from the same input: a different content
-// digest and a different request, which is exactly what used to refuse every
-// removal of a context applied before it.
+// moved changes a planner default while retaining the execution contract.
 func moved(id string) reconciliation.BlockDefinition {
 	block := definition(id)
-	block.ContentDigest = strings.Repeat("d", 64)
 	block.Request = json.RawMessage(`{"name":"` + id + `","tuned":true}`)
 	return block
 }

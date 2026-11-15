@@ -33,7 +33,7 @@ func (s Service) proveShared(ctx context.Context, name string, decided operation
 		if removal {
 			return s.verifyRemovalHost(ctx, view)
 		}
-		if err := s.verifyContinuation(ctx, view, decided.operation, decided.sameBlocks, nil); err != nil {
+		if err := s.verifyContinuation(ctx, view, decided.operation, decided.executionProof, nil); err != nil {
 			return err
 		}
 		_, err := s.approvedRuntime(ctx)
@@ -149,7 +149,7 @@ func contextChanged(verb reconciliation.Verb, planned, current basis) error {
 
 // verifyContinuation re-proves everything a continuation depends on before it
 // does work. Drift refuses; it never re-resolves to another implementation.
-func (s Service) verifyContinuation(ctx context.Context, view View, operation operationstore.Operation, proof sameBlocksProof, located *approved) error {
+func (s Service) verifyContinuation(ctx context.Context, view View, operation operationstore.Operation, proof executionProof, located *approved) error {
 	if err := s.recordedRefusal(view, operation, proof); err != nil {
 		return err
 	}
@@ -180,21 +180,18 @@ func (s Service) verifyRemovalHost(ctx context.Context, view View) error {
 	return verifyHostBinding(view.Controller(), view.Identity(), host, "", true)
 }
 
-// recordedRefusal is the part of a continuation's re-proof that reads only
-// what the context and this executable record: the input the operation froze,
-// the closure it froze, and another build's proof of the same blocks. status reads it without probing the host.
-func (s Service) recordedRefusal(view View, operation operationstore.Operation, proof sameBlocksProof) error {
+func (s Service) recordedRefusal(view View, operation operationstore.Operation, proof executionProof) error {
 	switch inputDrift(view, operation) {
 	case driftRevision:
 		return failure("lifecycle.state", "the context input changed after this operation registered", "restore the exact input revision this operation froze")
 	case driftBytes:
 		return failure("lifecycle.state", "the frozen input no longer matches this operation", "restore the exact input revision this operation froze")
 	}
-	if s.otherBuild(operation) && !proof.proved {
+	if !proof.proved {
 		if proof.refusal != nil {
 			return proof.refusal
 		}
-		return failure("lifecycle.state", "this executable has not proved it freezes the blocks this operation froze", otherBuildRemediation(view, operation))
+		return failure("lifecycle.state", "this executable has not proved the recorded execution contracts", otherBuildRemediation(view, operation))
 	}
 	return nil
 }

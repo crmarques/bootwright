@@ -49,6 +49,10 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		}
 		identity = allocated
 	}
+	contracts, err := s.executionContracts(decided.plan)
+	if err != nil {
+		return fail(err)
+	}
 	closure := located.closure
 	if decided.predecessor == "" || decided.reserveAddition {
 		if err := s.reserve(ctx, tx, decided, material); err != nil {
@@ -69,8 +73,8 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		Context: tx.Identity().Name, Revision: tx.Identity().Revision,
 		InputDigest: inputDigest(tx), PlanDigest: digest, AutomationDigest: s.automation.CatalogDigest(),
 		Executable: operationstore.Executable{Version: s.options.Executable.Version, Commit: s.options.Executable.Commit},
-		Closure:    &closure,
-		Source:     decided.source, Predecessor: decided.predecessor, Bindings: bindings, State: reconciliation.OperationRunning,
+		Closure:    &closure, Contracts: contracts,
+		Source: decided.source, Predecessor: decided.predecessor, Bindings: bindings, State: reconciliation.OperationRunning,
 		Created: stamp, Updated: stamp,
 	}
 	if decided.verb == reconciliation.Destroy && decided.basis.record.Verb == reconciliation.Destroy &&
@@ -103,7 +107,7 @@ func (s Service) resume(ctx context.Context, tx Transaction, store OperationStor
 	if err != nil {
 		return fail(err)
 	}
-	if err := s.verifyContinuation(ctx, tx, operation, decided.sameBlocks, &located); err != nil {
+	if err := s.verifyContinuation(ctx, tx, operation, decided.executionProof, &located); err != nil {
 		return fail(err)
 	}
 	operation, log, err := restore(ctx, store, operation)

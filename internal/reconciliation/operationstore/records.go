@@ -161,6 +161,7 @@ type Operation struct {
 	InputDigest      string                        `json:"inputDigest"`
 	PlanDigest       string                        `json:"planDigest"`
 	AutomationDigest string                        `json:"automationDigest"`
+	Contracts        map[string]string             `json:"contracts"`
 	Executable       Executable                    `json:"executable"`
 	Closure          *Closure                      `json:"closure,omitempty"`
 	Source           string                        `json:"source"`
@@ -290,6 +291,15 @@ func validateIndex(index Index) error {
 func validateOperation(operation Operation) error {
 	if operation.Version != OperationVersion {
 		return recordError("lifecycle operation version is unsupported")
+	}
+	if operation.Contracts == nil || len(operation.Contracts) > reconciliation.MaxBlocks {
+		return recordError("lifecycle operation execution contracts are missing or exceed their bound")
+	}
+	for implementation, digest := range operation.Contracts {
+		decoded, err := hex.DecodeString(digest)
+		if !reconciliation.ValidSegment(implementation) || err != nil || len(decoded) != 32 || hex.EncodeToString(decoded) != digest {
+			return recordError("lifecycle operation execution contract is invalid")
+		}
 	}
 	if err := validateClosure(operation.Closure); err != nil {
 		return err

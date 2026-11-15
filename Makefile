@@ -1,4 +1,4 @@
-.PHONY: build release wheels vulngate licenses licenses-check tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
+.PHONY: build release wheels vulngate licenses licenses-check tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check execution-contracts-check focus quick race check-offline check check-go
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -78,7 +78,10 @@ licenses-check:
 # names exactly what that build carries and pins, and the third-party notices
 # are composed from that document and the license texts it holds: a build that
 # cannot write them fails.
-build: wheels vulngate
+execution-contracts-check: wheels
+	$(GO) test ./cmd/bootwright -run '^TestEveryImplementationContractMatchesItsGolden$$'
+
+build: wheels vulngate execution-contracts-check
 	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=false -ldflags '$(STAMP)' -o bin/bootwright.tmp ./cmd/bootwright
 	rm -f bin/bootwright.cdx.json bin/bootwright.notices.txt
 	./bin/bootwright.tmp sbom --format cyclonedx-json >bin/bootwright.cdx.json.tmp

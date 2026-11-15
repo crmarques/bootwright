@@ -28,6 +28,9 @@ func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy 
 			"the operation this removal supersedes records no block it still owns",
 			reviewStatus(contextName))
 	}
+	if err := s.proveContracts(scope.owned, scope.contracts); err != nil {
+		return operationPlan{}, failure("lifecycle.state", contractMessage(err), removeWith(frozenBy))
+	}
 	plan, err := s.removalOf(ctx, scope.owned, frozenBy)
 	if err != nil {
 		return operationPlan{}, err

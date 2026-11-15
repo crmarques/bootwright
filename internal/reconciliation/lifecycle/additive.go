@@ -243,6 +243,9 @@ func (s Service) admitted(ctx context.Context, held reconciliation.Plan, block r
 }
 
 func (s Service) custodyProved(ctx context.Context, view View, chain lineage, added reconciliation.Plan) error {
+	if err := s.proveLineageContracts(chain); err != nil {
+		return err
+	}
 	for _, block := range added.Blocks {
 		references, err := s.producedReferences(block)
 		if err != nil {
@@ -306,6 +309,9 @@ func (s Service) prerequisitesRefusal(ctx context.Context, view View, operation 
 	}
 	chain, err := lineageOf(ctx, store, lineageMember{operation: operation, plan: plan})
 	if err != nil {
+		return err
+	}
+	if err := s.proveLineageContracts(chain); err != nil {
 		return err
 	}
 	for _, block := range plan.Blocks {

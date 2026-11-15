@@ -224,11 +224,8 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
-	plan, err = plan.WithPreparation(s.preparation)
-	if err != nil {
-		return reconciliation.Plan{}, capabilityBinding{}, err
-	}
-	return plan, binding, nil
+	plan, err = s.freezeExecutionPlan(plan)
+	return plan, binding, err
 }
 
 func (s Service) planInput(view View, state *compilation.State, controller string) PlanInput {

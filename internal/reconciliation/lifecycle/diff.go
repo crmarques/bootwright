@@ -108,6 +108,13 @@ func (s Service) Diff(ctx context.Context, request DiffRequest) (*DiffResult, er
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
 		value, err := s.readDiff(ctx, view, request.Observe)
 		read = value
+		if err == nil && request.Observe && read.owning.ID != "" {
+			chain, why := appliedLineage(ctx, s.store(view), read.owning)
+			if why != nil {
+				return why
+			}
+			return s.proveLineageContracts(chain)
+		}
 		return err
 	})
 	if err != nil {

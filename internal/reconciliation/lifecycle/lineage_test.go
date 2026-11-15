@@ -320,7 +320,7 @@ func TestEveryReaderOfALineageRefusesAMissingPredecessorRecord(t *testing.T) {
 		"the applied view":       func() error { _, _, err := appliedView(ctx, f.store, orphan, f.headPlan, states); return err },
 		"the unfinished":         func() error { _, err := unfinishedOver(ctx, f.store, orphan, f.headPlan, states); return err },
 		"the kept bindings":      func() error { _, err := lineageBindings(ctx, f.store, orphan.ID); return err },
-		"the dependencies":       func() error { _, err := applyDependencies(ctx, f.store, orphan.ID, "consumer"); return err },
+		"the dependencies":       func() error { _, err := h.service.applyDependencies(ctx, f.store, orphan.ID, "consumer"); return err },
 		"the removed apply":      func() error { _, _, _, err := removedApply(ctx, f.store, orphan.ID); return err },
 		"the produced lender": func() error {
 			_, err := h.service.prepareProducedExecution(ctx, nil, f.store, orphan, f.headPlan, &Execution{Block: reconciliation.Block{BlockDefinition: consumerDefinition()}})
@@ -432,7 +432,7 @@ func TestADependencyClosureReadsEachBlocksEvidenceFromItsOwner(t *testing.T) {
 	h, _ := producerAndConsumer(t)
 	f := newLineageFixture(t, h, consumerDefinition())
 	f.finish(t, "consumer", `{"head":true}`)
-	proved, err := applyDependencies(ctx, f.store, f.head.ID, "consumer")
+	proved, err := h.service.applyDependencies(ctx, f.store, f.head.ID, "consumer")
 	if err != nil || len(proved) != 1 || proved[0].Block.ID != "producer-a" || string(proved[0].Evidence) != `{"ok":true}` || proved[0].State != reconciliation.BlockDone {
 		t.Fatalf("the closure read %+v (%v), want the predecessor's block with its own evidence", proved, err)
 	}
@@ -441,7 +441,7 @@ func TestADependencyClosureReadsEachBlocksEvidenceFromItsOwner(t *testing.T) {
 	if err != nil || len(direct) != 1 || direct[0].Object != "producer-a" || string(direct[0].Evidence) != `{"ok":true}` {
 		t.Fatalf("an attempt of the addition is handed %+v (%v), want its prerequisite's proof", direct, err)
 	}
-	before, err := applyDependencies(ctx, f.store, f.root.ID, "producer-a")
+	before, err := h.service.applyDependencies(ctx, f.store, f.root.ID, "producer-a")
 	if err != nil || len(before) != 0 {
 		t.Fatalf("the root's closure read %+v (%v)", before, err)
 	}

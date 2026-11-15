@@ -67,13 +67,13 @@ func refusedContinuations() []refusedContinuation {
 		},
 		{
 			name: "a failed apply another build freezes differently", arrange: failedApplyUnder(movedApply),
-			steps: []string{"bootwright destroy --context lab"}, verb: reconciliation.Apply,
-			code: "lifecycle.state", message: "this executable would freeze the block alpha differently from the plan this operation froze",
+			steps: []string{}, verb: reconciliation.Apply,
+			code: "lifecycle.state", message: "this executable does not support the execution contract of block alpha",
 		},
 		{
 			name: "an unknown removal another build freezes differently", arrange: unknownRemovalUnder(movedRemoval),
 			steps: []string{}, verb: reconciliation.Destroy,
-			code: "lifecycle.state", message: "this executable would freeze the block alpha differently from the plan this operation froze",
+			code: "lifecycle.state", message: "this executable would remove block alpha differently from its frozen removal",
 		},
 		{
 			name: "a failed apply under a moved closure", arrange: failedApplyUnder(closure),

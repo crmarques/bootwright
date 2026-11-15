@@ -9,9 +9,7 @@
         "alpha (failed, 1 attempts)"
       ],
       "contradictions": [],
-      "nextSteps": [
-        "bootwright destroy --context lab"
-      ]
+      "nextSteps": []
     },
     "plan": {
       "presented": "apply",
@@ -25,17 +23,13 @@
     },
     "apply": {
       "code": "lifecycle.state",
-      "message": "this executable would freeze the block alpha differently from the plan this operation froze",
-      "remediation": "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it"
+      "message": "this executable does not support the execution contract of block alpha",
+      "remediation": "install bootwright devel (abcdef1), which registered this operation, and run bootwright controller install"
     },
     "destroy": {
-      "presented": "destroy",
-      "steps": [
-        "alpha (pending)"
-      ],
-      "operation": "operation-2",
-      "state": "done",
-      "next": "none"
+      "code": "lifecycle.state",
+      "message": "this executable does not support the execution contract of block alpha",
+      "remediation": "remove it with bootwright devel (abcdef1)"
     }
   },
   "an unbound failed apply": {

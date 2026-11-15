@@ -139,7 +139,7 @@ func continuationRefusal(t *testing.T, h *harness) (applied, recorded []diagnost
 	operation, _ := durableOperation(t, h)
 	var proof error
 	if err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
-		proof = h.service.recordedRefusal(view, operation, sameBlocksProof{proved: true})
+		proof = h.service.recordedRefusal(view, operation, executionProof{proved: true})
 		return nil
 	}); err != nil {
 		t.Fatal(err)

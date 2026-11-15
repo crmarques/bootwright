@@ -4330,7 +4330,7 @@ under.
 
 **Guard tests:**
 `TestAnotherBuildContinuesAnOperationWhoseBlocksItFreezesTheSame`,
-`TestAnotherBuildRefusesToContinueABlockItWouldFreezeDifferently`,
+`TestAnotherBuildRefusesUnsupportedFrozenExecution`,
 `TestStatusOffersAnotherBuildTheContinuationItsBlocksAdmit`,
 `TestDifferingBlockIgnoresOnlyPresentationWords` and
 `TestAContinuationWithNoSameBlocksProofRefusesUnderAnotherBuild` in
@@ -4338,7 +4338,7 @@ under.
 `TestARecordWithOnlyACommitNamesDevelAndTheCommit`,
 TestAnEarlierVersionRecordNamesNoEarlierBuildOnceSetupKeepsRuns (X88 removed it with the version 1 operation record),
 `TestContinuationRefusesDriftedInputExecutableOrHost` and
-`TestARepairThatMovesABlockLeavesAFailedApplyDestroyable`, changed to move a
+`TestAPlannerDefaultChangeLeavesAFailedApplyContinuableAndDestroyable`, changed to move a
 block with the automation; and
 `TestAnOperationRecordsTheBuildTheVersionCommandReports` for the modified stamp.
 
@@ -4793,7 +4793,7 @@ classified as mirrored;
 `TestACephClusterLeftUnknownContinuesUnderARebuiltBinary`, which replays the
 live case through the real Ceph capabilities, in
 `internal/reconciliation/lifecycle`, with
-`TestAnotherBuildRefusesToContinueABlockItWouldFreezeDifferently` gaining two
+`TestAnotherBuildRefusesUnsupportedFrozenExecution` gaining two
 unknown-apply rows and
 `TestAnotherBuildContinuesAnOperationWhoseBlocksItFreezesTheSame` asserting the
 destroy resolution names the build; and `TestPlanNamesTheStepsAnotherBuildRuns`,

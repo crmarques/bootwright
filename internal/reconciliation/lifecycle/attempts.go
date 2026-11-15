@@ -52,7 +52,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	if err := s.claimProved(ctx, tx, plan, block, proved); err != nil {
 		return "", err
 	}
-	applyProved, preparations, err := ownedApplyRecords(ctx, store, operation, block.ID)
+	applyProved, preparations, err := s.ownedApplyRecords(ctx, store, operation, block.ID)
 	if err != nil {
 		return "", err
 	}
@@ -217,7 +217,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	if err != nil {
 		return "", err
 	}
-	applyProved, preparations, err := ownedApplyRecords(ctx, store, operation, block.ID)
+	applyProved, preparations, err := s.ownedApplyRecords(ctx, store, operation, block.ID)
 	if err != nil {
 		return "", err
 	}
@@ -597,6 +597,9 @@ func (s Service) locateIn(ctx context.Context, store recordReader, view prerequi
 	if err != nil {
 		return "", err
 	}
+	if err := s.proveOwnedContract(ctx, store, applied, stage); err != nil {
+		return "", err
+	}
 	proved, err := blockEvidence(ctx, store, applied, stage, reconciliation.Apply)
 	if err != nil {
 		return "", err
@@ -614,12 +617,12 @@ func controllerStages(plan reconciliation.Plan) []reconciliation.Block {
 	return stages
 }
 
-func ownedApplyRecords(ctx context.Context, store recordReader, operation operationstore.Operation, block string) ([]BlockEvidence, []json.RawMessage, error) {
+func (s Service) ownedApplyRecords(ctx context.Context, store recordReader, operation operationstore.Operation, block string) ([]BlockEvidence, []json.RawMessage, error) {
 	owner, err := ownerID(ctx, store, operation, block)
 	if err != nil {
 		return nil, nil, err
 	}
-	return applyRecords(ctx, store, owner, block)
+	return s.applyRecords(ctx, store, owner, block)
 }
 
 func (s Service) report(ctx context.Context, event ProgressEvent) {

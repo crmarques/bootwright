@@ -87,6 +87,9 @@ func (s Service) objectEvidenceAt(ctx context.Context, view View, kind, object s
 				if block.Kind != kind || block.Object != object {
 					continue
 				}
+				if err := s.proveContracts(reconciliation.Plan{Blocks: []reconciliation.Block{block}}, owner.operation.Contracts); err != nil {
+					return err
+				}
 				evidence, err := blockEvidence(ctx, store, owner.operation.ID, block, owner.operation.Verb)
 				if err != nil {
 					return err
@@ -155,7 +158,7 @@ func provedDependencies(ctx context.Context, store OperationStore, operation ope
 
 // applyDependencies uses the held transaction's store, never re-entering
 // Workspace: removal may hold its exclusive lock while needing apply facts.
-func applyDependencies(ctx context.Context, store recordReader, applyOperation, blockID string) ([]BlockEvidence, error) {
+func (s Service) applyDependencies(ctx context.Context, store recordReader, applyOperation, blockID string) ([]BlockEvidence, error) {
 	operation, err := store.ReadOperation(ctx, applyOperation)
 	if err != nil {
 		return nil, err
@@ -201,6 +204,9 @@ func applyDependencies(ctx context.Context, store recordReader, applyOperation, 
 			continue
 		}
 		owner, _ := held.ownerOf(dependency.ID)
+		if err := s.proveContracts(reconciliation.Plan{Blocks: []reconciliation.Block{dependency}}, owner.operation.Contracts); err != nil {
+			return nil, err
+		}
 		evidence, err := blockEvidence(ctx, store, owner.operation.ID, dependency, reconciliation.Apply)
 		if err != nil {
 			return nil, err
@@ -212,8 +218,8 @@ func applyDependencies(ctx context.Context, store recordReader, applyOperation, 
 	return proved, nil
 }
 
-func applyRecords(ctx context.Context, store recordReader, applyOperation, blockID string) ([]BlockEvidence, []json.RawMessage, error) {
-	proved, err := applyDependencies(ctx, store, applyOperation, blockID)
+func (s Service) applyRecords(ctx context.Context, store recordReader, applyOperation, blockID string) ([]BlockEvidence, []json.RawMessage, error) {
+	proved, err := s.applyDependencies(ctx, store, applyOperation, blockID)
 	if err != nil {
 		return nil, nil, err
 	}

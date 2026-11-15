@@ -55,6 +55,9 @@ func (s Service) provedClients(ctx context.Context, store recordReader, applied 
 	if err != nil || owner == "" {
 		return "", nil
 	}
+	if s.proveOwnedContract(ctx, store, owner, stage) != nil {
+		return "", nil
+	}
 	proved, err := blockEvidence(ctx, store, owner, stage, reconciliation.Apply)
 	if err != nil || proved.State != reconciliation.BlockDone {
 		return "", nil

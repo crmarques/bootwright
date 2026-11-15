@@ -53,6 +53,9 @@ func (s Service) explainIn(ctx context.Context, store recordReader, head operati
 // recorded as null, so the refusal after an observation and a later status
 // read the same thing.
 func (s Service) explain(owner operationstore.Operation, owned []OwnedBlock, verb reconciliation.Verb, block reconciliation.Block, evidence json.RawMessage) Unresolved {
+	if err := s.proveContracts(reconciliation.Plan{Blocks: []reconciliation.Block{block}}, owner.Contracts); err != nil {
+		return Unresolved{Reason: contractMessage(err), Remedy: removeWith(owner.Executable)}
+	}
 	if bytes.Equal(bytes.TrimSpace(evidence), []byte("null")) {
 		evidence = nil
 	}

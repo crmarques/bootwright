@@ -57,8 +57,13 @@ func testOperation(t *testing.T, plan reconciliation.Plan) Operation {
 	if err != nil {
 		t.Fatal(err)
 	}
+	contracts := map[string]string{}
+	for _, block := range plan.Blocks {
+		contracts[block.Implementation] = strings.Repeat("4", 64)
+	}
 	return Operation{
-		Version: OperationVersion, ID: "op-" + strings.Repeat("ab", 16), Verb: plan.Verb,
+		Contracts: contracts,
+		Version:   OperationVersion, ID: "op-" + strings.Repeat("ab", 16), Verb: plan.Verb,
 		Context: "example", Revision: "rev-" + strings.Repeat("ef", 16),
 		InputDigest: strings.Repeat("1", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("2", 64),
 		Executable: Executable{Version: "devel", Commit: "abcdef1"},
@@ -107,6 +112,29 @@ func TestRegisterPublishesThePlanBeforeTheIndexNamesIt(t *testing.T) {
 	}
 	if err := store.Register(ctx, operation, plan); err == nil {
 		t.Fatal("re-registering over a published plan succeeded")
+	}
+}
+
+func TestExecutionContractMetadataRefusesBeforePublication(t *testing.T) {
+	for name, contracts := range map[string]map[string]string{
+		"missing":                nil,
+		"missing implementation": {},
+		"another implementation": {"other-v1": strings.Repeat("4", 64)},
+		"malformed fingerprint":  {"artifact-server-nginx-v1": "not-a-digest"},
+		"extra implementation":   {"artifact-server-nginx-v1": strings.Repeat("4", 64), "other-v1": strings.Repeat("4", 64)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store, area := newStore(t)
+			plan := testPlan(t, "alpha")
+			operation := testOperation(t, plan)
+			operation.Contracts = contracts
+			if err := store.Register(context.Background(), operation, plan); err == nil {
+				t.Fatal("unsupported contract metadata registered")
+			}
+			if len(area.files) != 0 {
+				t.Fatal("invalid contract metadata wrote operation records")
+			}
+		})
 	}
 }
 

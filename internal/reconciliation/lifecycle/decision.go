@@ -194,7 +194,7 @@ func (s Service) decideBy(ctx context.Context, view View, store OperationStore, 
 		}
 		decided.release = released
 	}
-	decided.sameBlocks = s.proveSameBlocks(ctx, view, operation, frozen, states)
+	decided.executionProof = s.proveExecution(ctx, view, operation, frozen, states)
 	return plannedFrom(decided, operation, states, attempts), nil
 }
 
@@ -214,7 +214,7 @@ func (s Service) refuseOver(ctx context.Context, view View, operation operations
 	case next == string(reconciliation.Destroy):
 		proof = s.verifyRemovalHost(ctx, view)
 	case pendingRemains(frozen, states):
-		proof = s.verifyContinuation(ctx, view, operation, s.proveSameBlocks(ctx, view, operation, frozen, states), nil)
+		proof = s.verifyContinuation(ctx, view, operation, s.proveExecution(ctx, view, operation, frozen, states), nil)
 	}
 	refused := diagnostics.Of(proof)
 	if proof != nil && len(refused) == 0 {

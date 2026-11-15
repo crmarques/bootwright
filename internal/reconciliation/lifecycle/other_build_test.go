@@ -30,10 +30,8 @@ func otherBuilds() []struct {
 	}
 }
 
-// Another build continues an incomplete operation whose blocks it freezes the
-// same: the verb repeats under the same operation, runs this build's
-// automation, and the record keeps naming the build that registered it. The
-// proof plans, so it never runs inside the exclusive transaction.
+// Another build continues through current contract and strict request proofs;
+// the operation keeps its registering identity and exact saved plan.
 func TestAnotherBuildContinuesAnOperationWhoseBlocksItFreezesTheSame(t *testing.T) {
 	for _, build := range otherBuilds() {
 		for _, test := range []struct {
@@ -42,7 +40,7 @@ func TestAnotherBuildContinuesAnOperationWhoseBlocksItFreezesTheSame(t *testing.
 			continued func(*harness) []string
 			proving   func(*harness) *func()
 		}{
-			{reconciliation.Apply, failedApply, func(h *harness) []string { return h.capability.applies }, func(h *harness) *func() { return &h.capability.planned }},
+			{reconciliation.Apply, failedApply, func(h *harness) []string { return h.capability.applies }, func(h *harness) *func() { return &h.capability.removed }},
 			{reconciliation.Destroy, unknownRemoval, func(h *harness) []string { return h.capability.observes }, func(h *harness) *func() { return &h.capability.removed }},
 		} {
 			t.Run(build.name+" "+string(test.verb), func(t *testing.T) {
@@ -70,7 +68,7 @@ func TestAnotherBuildContinuesAnOperationWhoseBlocksItFreezesTheSame(t *testing.
 					t.Fatalf("the continuation under %s = %+v (%v)", build.name, result, err)
 				}
 				if proved == 0 {
-					t.Fatalf("the continuation under %s proved its blocks without planning them", build.name)
+					t.Fatalf("the continuation under %s did not validate its requests", build.name)
 				}
 				continued, _ := durableOperation(t, h)
 				if continued.Executable != registered.Executable || continued.AutomationDigest != registered.AutomationDigest {
@@ -87,14 +85,11 @@ func TestAnotherBuildContinuesAnOperationWhoseBlocksItFreezesTheSame(t *testing.
 	}
 }
 
-// Another build refuses a continuation whose blocks it would freeze
-// differently or cannot plan again, naming the block or the reason, with no
-// effect and no record changed.
-func TestAnotherBuildRefusesToContinueABlockItWouldFreezeDifferently(t *testing.T) {
-	const take = "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it"
+// Unsupported effects and unreadable requests still refuse without effects.
+func TestAnotherBuildRefusesUnsupportedFrozenExecution(t *testing.T) {
 	const install = "install bootwright devel (abcdef1), which registered this operation, and run bootwright controller install"
-	const differently = "this executable would freeze the block artifact-server-lab differently from the plan this operation froze"
-	const unplannable = "this executable cannot plan this operation again to prove it freezes the same blocks: "
+	const differently = "this executable does not support the execution contract of block artifact-server-lab"
+	const unreadable = "the request the block artifact-server-lab froze cannot be read by this executable: the frozen request has an unsupported version"
 	for _, test := range []struct {
 		name        string
 		verb        reconciliation.Verb
@@ -105,28 +100,10 @@ func TestAnotherBuildRefusesToContinueABlockItWouldFreezeDifferently(t *testing.
 	}{
 		{"moved content digest", reconciliation.Apply, failedApply, func(h *harness) {
 			h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
-		}, differently, take},
-		{"moved request", reconciliation.Apply, failedApply, func(h *harness) {
-			h.capability.definitions[0].Request = json.RawMessage(`{"name":"artifact-server-lab","tuned":true}`)
-		}, differently, take},
+		}, differently, install},
 		{"unknown apply under a moved content digest", reconciliation.Apply, applyLeftUnknown, func(h *harness) {
 			h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
-		}, differently, take},
-		{"unknown apply under a moved request", reconciliation.Apply, applyLeftUnknown, func(h *harness) {
-			h.capability.definitions[0].Request = json.RawMessage(`{"name":"artifact-server-lab","tuned":true}`)
-		}, differently, take},
-		{"added exclusive claim", reconciliation.Apply, failedApply, func(h *harness) {
-			h.capability.definitions[0].Exclusive = []string{"ceph/example"}
-		}, differently, take},
-		{"added throttle", reconciliation.Apply, failedApply, func(h *harness) {
-			h.capability.definitions[0].Throttle = "ceph/example"
-		}, differently, take},
-		{"added block", reconciliation.Apply, failedApply, func(h *harness) {
-			h.capability.definitions = append(h.capability.definitions, definition("extra"))
-		}, "this executable would freeze the block extra differently from the plan this operation froze", take},
-		{"plan fails", reconciliation.Apply, failedApply, func(h *harness) {
-			h.capability.planErr = failure("lifecycle.state", "the planner refused", "")
-		}, unplannable + "the planner refused", take},
+		}, differently, install},
 		{"moved content digest and a frozen request this build cannot read", reconciliation.Apply, failedApply, func(h *harness) {
 			h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
 			h.capability.removalErr = failure("lifecycle.state", "the frozen request has an unsupported version", "")
@@ -134,13 +111,13 @@ func TestAnotherBuildRefusesToContinueABlockItWouldFreezeDifferently(t *testing.
 		{"plan fails and a frozen request this build cannot read", reconciliation.Apply, failedApply, func(h *harness) {
 			h.capability.planErr = failure("lifecycle.state", "the planner refused", "")
 			h.capability.removalErr = failure("lifecycle.state", "the frozen request has an unsupported version", "")
-		}, unplannable + "the planner refused", install},
+		}, unreadable, "remove it with bootwright devel (abcdef1)"},
 		{"removal consumes more", reconciliation.Destroy, unknownRemoval, func(h *harness) {
 			h.capability.consumes = map[string][]string{"artifact-server-lab": {reconciliation.AuthorizationDataLoss}}
-		}, differently, install},
+		}, "this executable would remove block artifact-server-lab differently from its frozen removal", install},
 		{"unreadable request", reconciliation.Destroy, unknownRemoval, func(h *harness) {
 			h.capability.removalErr = failure("lifecycle.state", "the frozen request has an unsupported version", "")
-		}, unplannable + "the request the block artifact-server-lab froze cannot be read by this executable: the frozen request has an unsupported version", install},
+		}, unreadable, "remove it with bootwright devel (abcdef1)"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			h := newHarness(t, "artifact-server-lab")
@@ -173,7 +150,7 @@ func TestStatusOffersAnotherBuildTheContinuationItsBlocksAdmit(t *testing.T) {
 			}
 			h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
 			status, err = h.service.Status(ctx, StatusRequest{ContextName: testContextName})
-			if err != nil || !slices.Equal(status.NextSteps, []string{"bootwright destroy --context lab"}) {
+			if err != nil || len(status.NextSteps) != 0 {
 				t.Fatalf("status under %s with a moved content digest = %+v (%v)", build.name, status.NextSteps, err)
 			}
 		})
@@ -251,14 +228,14 @@ func TestDifferingBlockIgnoresOnlyPresentationWords(t *testing.T) {
 // A continuation under another build that carries no proof refuses, and one
 // under the build that registered the operation needs none.
 func TestAContinuationWithNoSameBlocksProofRefusesUnderAnotherBuild(t *testing.T) {
-	const message = "this executable has not proved it freezes the blocks this operation froze"
+	const message = "this executable has not proved the recorded execution contracts"
 	const take = "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it"
 	ctx := context.Background()
 	verify := func(t *testing.T, h *harness) error {
 		t.Helper()
 		operation, _ := durableOperation(t, h)
 		return h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
-			return h.service.verifyContinuation(ctx, view, operation, sameBlocksProof{}, nil)
+			return h.service.verifyContinuation(ctx, view, operation, executionProof{}, nil)
 		})
 	}
 	for _, build := range otherBuilds() {
@@ -275,8 +252,8 @@ func TestAContinuationWithNoSameBlocksProofRefusesUnderAnotherBuild(t *testing.T
 	t.Run("the registering build", func(t *testing.T) {
 		h := newHarness(t, "artifact-server-lab")
 		failedApply(t, h)
-		if err := verify(t, h); err != nil {
-			t.Fatalf("a continuation under the registering build refused: %v", err)
+		if err := verify(t, h); err == nil {
+			t.Fatal("the registering build skipped the execution proof")
 		}
 	})
 }
@@ -448,16 +425,17 @@ func differingBlock(frozen, fresh reconciliation.Plan) (string, bool) {
 // the blocks the apply started, so a pending block this build cannot read does
 // not withdraw it.
 func TestTheTakeBackIsOfferedWhenOnlyAnUnstartedBlockIsUnreadable(t *testing.T) {
-	const take = "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it"
-	const differently = "this executable would freeze the block first differently from the plan this operation froze"
+	const differently = "the request the block second froze cannot be read by this executable: the frozen request has an unsupported version"
 	second := definition("second")
 	second.Dependencies = []string{"first"}
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("first"), second})
 	failedApply(t, h)
 	h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
-	h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
 	h.capability.removalErrs = map[string]error{"second": failure("lifecycle.state", "the frozen request has an unsupported version", "")}
-	refusedUnchanged(t, h, reconciliation.Apply, differently, take)
+	refusedUnchanged(t, h, reconciliation.Apply, differently, "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it")
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
+		t.Fatalf("an unreadable unstarted block prevented removal of owned work: %v", err)
+	}
 }
 
 // canTakeBack mirrors supersede: an empty owned set is offered only to an apply
@@ -503,7 +481,11 @@ func TestTheTakeBackMirrorsTheSubsetDestroyWouldPlan(t *testing.T) {
 			if tc.verb == reconciliation.Destroy {
 				frozen = removal
 			}
-			operation := operationstore.Operation{Verb: tc.verb, State: tc.state}
+			contracts, err := h.service.executionContracts(frozen)
+			if err != nil {
+				t.Fatal(err)
+			}
+			operation := operationstore.Operation{Verb: tc.verb, State: tc.state, Contracts: contracts}
 			states := map[string]reconciliation.BlockState{"first": tc.block}
 			if got := h.service.canTakeBack(context.Background(), operation, frozen, states); got != tc.want {
 				t.Fatalf("canTakeBack = %t, want %t", got, tc.want)

@@ -365,7 +365,7 @@ func TestAnAuthoredAddonMakesTheAdapterCallsAndBlockEffectsOfABuiltInPackage(t *
 
 func TestAuthoredDescriptorEditChangesTheFrozenRequest(t *testing.T) {
 	authored := addonSubjects[1]
-	before, _, block := addonPlan(t, authored, "fixture.v1.0.0")
+	before, _, _ := addonPlan(t, authored, "fixture.v1.0.0")
 	after, _, _ := addonPlan(t, authored, "fixture.v1.0.1")
 	frozen, edited := before.Definitions[1], after.Definitions[1]
 	original, err := instance.DecodeRequest(frozen.Request)
@@ -387,12 +387,11 @@ func TestAuthoredDescriptorEditChangesTheFrozenRequest(t *testing.T) {
 	}
 	journey.Replan(lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{after.Definitions[0], edited}, Secrets: after.Secrets})
 	_, err = journey.Service.Apply(ctx, apply)
-	got := diagnostics.Of(err)
-	if len(got) != 1 || got[0].Code != "lifecycle.state" || !strings.Contains(got[0].Message, "would freeze the block "+block+" differently") {
-		t.Fatalf("diagnostics = %+v err = %v", got, err)
+	if err != nil {
+		t.Fatalf("a new descriptor prevented recovery of the saved program: %v", err)
 	}
-	if !slices.Equal(adapter.calls, []string{"apply"}) {
-		t.Fatal("a refused continuation contacted the cluster", adapter.calls)
+	if !slices.Equal(adapter.calls, []string{"apply", "observe"}) {
+		t.Fatal("recovery did not observe the saved program", adapter.calls)
 	}
 	same, _, _ := addonJourney(t, authored, true)
 	if _, err := same.Service.Apply(ctx, apply); err == nil {

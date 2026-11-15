@@ -217,7 +217,7 @@ func (s Service) inspection(ctx context.Context, view RunView, store recordReade
 	if err != nil {
 		return Execution{}, err
 	}
-	proved, err := applyDependencies(ctx, store, owner.ID, block.ID)
+	proved, err := s.applyDependencies(ctx, store, owner.ID, block.ID)
 	if err != nil {
 		return Execution{}, err
 	}

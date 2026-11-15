@@ -104,7 +104,8 @@ func failedApplyNaming(t *testing.T, repository *contextfs.Store, binding string
 	}
 	stamp := exitStamp().Format(time.RFC3339)
 	operation := operationstore.Operation{
-		Version: operationstore.OperationVersion, ID: id, Verb: reconciliation.Apply, Context: "alpha", Revision: "rev-1",
+		Contracts: fixtureContracts(t, plan),
+		Version:   operationstore.OperationVersion, ID: id, Verb: reconciliation.Apply, Context: "alpha", Revision: "rev-1",
 		InputDigest: strings.Repeat("a", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("b", 64),
 		Closure: exitClosure(), Bindings: []string{binding}, State: reconciliation.OperationRunning, Created: stamp, Updated: stamp,
 	}

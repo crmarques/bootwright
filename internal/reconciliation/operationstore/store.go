@@ -122,6 +122,9 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	if plan.Verb != operation.Verb {
 		return recordError("lifecycle plan and operation disagree about the verb")
 	}
+	if err := checkContracts(operation, plan); err != nil {
+		return err
+	}
 	if err := checkPredecessor(operation, plan); err != nil {
 		return err
 	}
@@ -723,6 +726,9 @@ func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, e
 	if operation.PlanDigest != stored || operation.Verb != plan.Verb {
 		return reconciliation.Plan{}, recordError("the frozen plan is not the plan its operation recorded")
 	}
+	if err := checkContracts(operation, plan); err != nil {
+		return reconciliation.Plan{}, err
+	}
 	if err := checkPredecessor(operation, plan); err != nil {
 		return reconciliation.Plan{}, err
 	}
@@ -1291,4 +1297,20 @@ func (s *Store) LastAttempt(ctx context.Context, id, block string) (int, error) 
 		return 0, recordError("the block has no durable attempt to resolve")
 	}
 	return record.Attempts, nil
+}
+
+func checkContracts(operation Operation, plan reconciliation.Plan) error {
+	used := map[string]bool{}
+	for _, block := range plan.Blocks {
+		used[block.Implementation] = true
+	}
+	if len(used) != len(operation.Contracts) {
+		return recordError("lifecycle operation execution contracts do not match its plan")
+	}
+	for implementation := range used {
+		if operation.Contracts[implementation] == "" {
+			return recordError("lifecycle operation execution contracts do not match its plan")
+		}
+	}
+	return nil
 }
