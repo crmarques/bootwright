@@ -321,6 +321,7 @@ Alias cell.
 | [B1349](#b1349) | new, 2026-11-11 (X418; audit 004 API-34) | product | Add-ons | Reserved authored steps gain an explicitly authorized lifecycle | D183 keeps the shapes admitted and inert; no concrete execution journey is promoted |
 | [B1354](#b1354) | new, 2026-11-11 (firewall review) | defect | E2E | Sample application teardown removes only a rule its setup created | Separate application fixture ownership, beyond controller listener preparation |
 | [B1409](#b1409) | new, 2026-11-15 (X475 audit) | product | Substrate | Managed addressless tagged networks for an isolated laboratory trunk | Needs an explicit L2 ownership and firewall design; current managed VLAN legs require host addresses |
+| [B1412](#b1412) | new, 2026-11-15 | defect | Architecture | Documentation checks detect milestone identifier collisions across active, parked and delivered records | Tooling hardening beyond the requested case; its identifiers are reconciled manually |
 
 ### B82
 
@@ -3656,6 +3657,20 @@ owned trunk/leg creation, collision refusal, restart, exact cleanup and
 isolation tests, followed by the laboratory rehearsal. Parked pending owner
 promotion and a routing/firewall boundary definition; this audit authorizes no
 new realization arm or arbitrary host command.
+
+### B1412
+
+**Owner:** Architecture. **Kind:** defect. **Requires:** none. **Definition:**
+Needs definition. The documentation checks can pass when an active milestone
+item reuses an item number already defined in a delivered record. Slice numbers
+can also collide between planned rows and unrelated delivered records.
+**Outcome:** the guard applies the global [identifier rule](../milestones.md#identifiers)
+across active, parked and delivered pages. Define which repeated slice
+references describe the same delivery before implementation. **Exit evidence:**
+fixtures with colliding item and unrelated slice definitions fail; legitimate
+references to one item or slice continue to pass. Parked because the current
+case reconciles its identifiers manually and does not require a broader
+documentation validator change.
 
 ## Audit remediation (2026-10-26)
 
