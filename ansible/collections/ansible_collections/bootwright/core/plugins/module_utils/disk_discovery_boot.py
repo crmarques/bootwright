@@ -69,7 +69,8 @@ while :; do sleep 60; done
 """
 
 
-DRIVERS = "#!/bin/sh\nset -eu\nexport PATH=/usr/bin:/usr/sbin:/bin:/sbin LC_ALL=C\n" + r"""# No modprobe configuration, install hook, udev daemon or storage generator.
+DRIVERS = ("#!/bin/sh\nset -eu\nexport PATH=/usr/bin:/usr/sbin:/bin:/sbin LC_ALL=C\n"
+           r"""# No modprobe configuration, install hook, udev daemon or storage generator.
 echo 'Bootwright discovery: probing hardware drivers (optional unmatched aliases are ignored)' >/dev/console
 for pass in 1 2 3; do
     count=0
@@ -90,7 +91,7 @@ for device in /sys/bus/pci/devices/*; do
     read -r class <"$device/class"
     case "$class" in 0x01*) [ -L "$device/driver" ] || exit 1;; esac
 done
-"""
+""")
 
 
 def newc(files):
@@ -135,6 +136,8 @@ def payload(binding, network, interfaces, token, certificate, receipt_url):
     """One exact source bundle is used by execution and offline qualification."""
     modules = (absolute_deadline, bounded_process, canonical_json, tls_trust, disk_inventory, physical_machine_identity, disk_discovery_worker)
     files = {module.__name__.rsplit(".", 1)[-1] + ".py": inspect.getsource(module).encode("utf-8") for module in modules}
-    files["request.json"] = canonical_json.canonical({"binding": binding, "interfaces": interfaces, "network": network, "reportToken": token, "receiptURL": receipt_url})
+    files["request.json"] = canonical_json.canonical({
+        "binding": binding, "interfaces": interfaces, "network": network, "reportToken": token, "receiptURL": receipt_url,
+    })
     files["artifact.pem"] = certificate
     return files

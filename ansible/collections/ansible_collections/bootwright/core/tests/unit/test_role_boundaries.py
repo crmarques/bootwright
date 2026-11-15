@@ -1001,10 +1001,17 @@ SCRATCH_ALLOWED = {
     "/run/nginx.pid": "the daemon's own pid file, named in the configuration it reads",
 }
 
+# This admission pattern checks the service-owned runtime directory, not scratch.
+RECEIPT_ROOT_ASSERTION = (
+    r"bootwright_artifact_server_request.receiptRoot is match('^/run/bootwright-receipts/[0-9a-f]{32}$(?!\n)')"
+)
+
 
 def fixed_scratch_problems(where, text):
     """Each literal path under /tmp, /var/tmp or /run the text names, other
     than an allowlisted host fact."""
+    if where == "infra_artifact_server_nginx/tasks/apply.yml":
+        text = text.replace(RECEIPT_ROOT_ASSERTION, "")
     found = []
     for match in SCRATCH_ROOTS.finditer(text):
         path = match.group(0)
@@ -1060,6 +1067,14 @@ def test_the_scratch_rule_passes(text):
 def test_the_scratch_rule_rejects(text, path):
     problems = fixed_scratch_problems("synthetic", text)
     assert problems == ["synthetic: names the fixed path %s; use the invocation scratch" % path], problems
+
+
+def test_receipt_root_exception_is_only_the_owning_roles_admission_pattern():
+    role = "infra_artifact_server_nginx/tasks/apply.yml"
+    assert not fixed_scratch_problems(role, RECEIPT_ROOT_ASSERTION)
+    assert fixed_scratch_problems("another/tasks/apply.yml", RECEIPT_ROOT_ASSERTION)
+    assert fixed_scratch_problems(role, "path: /run/bootwright-receipts/arbitrary")
+    assert fixed_scratch_problems(role, RECEIPT_ROOT_ASSERTION + "\npath: /tmp/scratch")
 
 
 # An exhausted wait for the host firewall refuses with its remedy, not with the

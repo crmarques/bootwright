@@ -175,6 +175,8 @@ def deliver_report(request, report):
 
 def phase(message):
     # Only fixed phase text enters the console: no identities or exception text.
+    # This standalone RAM worker has no AnsibleModule logging channel.
+    # pylint: disable-next=ansible-bad-function
     print("Bootwright discovery: " + message, flush=True)
 
 

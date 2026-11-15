@@ -1,8 +1,6 @@
 """Inventory boot/receipt boundaries never authorize data disk writes."""
 
 import errno
-import hashlib
-import io
 import os
 import signal
 import time

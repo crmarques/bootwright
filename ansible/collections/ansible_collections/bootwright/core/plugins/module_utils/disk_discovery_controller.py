@@ -196,7 +196,9 @@ class Controller:
         return state
 
     def receipt_label(self):
-        return media.native(["/usr/bin/podman", "inspect", "--type", "container", "--format", "{{.ProcessLabel}}", self.request["receipt"]["container"]], limit=1024).decode("ascii").strip()
+        return media.native([
+            "/usr/bin/podman", "inspect", "--type", "container", "--format", "{{.ProcessLabel}}", self.request["receipt"]["container"],
+        ], limit=1024).decode("ascii").strip()
 
     def label_receipt(self, path):
         if not Path("/sys/fs/selinux/enforce").exists():

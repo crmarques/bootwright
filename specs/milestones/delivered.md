@@ -15915,3 +15915,19 @@ shared refusal comment to restore the [comment contract](../architecture.md)
 without changing behavior, frozen contracts or the ceiling. No deferral or
 operator gate applies. The delivering commit records focused verification and
 the full integration gate.
+
+## X471 — Discovery verification repairs
+
+### B1405
+
+M1 repository defect discovered by X469's full gate in files unchanged from
+its main baseline. Repaired discovery line wrapping, test import layout and
+unused imports. The standalone RAM worker documents its existing fixed-text
+console print as outside AnsibleModule logging. The scratch scan exempts only
+the exact receipt-root admission expression in its owning task file; negative
+tests retain rejection at other sites and for arbitrary runtime paths.
+
+Runtime behavior and frozen contracts remain unchanged. The focused 190-test
+unit run, contract goldens and independent safety review passed. The delivering
+commit records the subsequent focus, sanity and full integration checks. No
+live operation or operator acceptance is claimed.

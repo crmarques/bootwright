@@ -1,7 +1,18 @@
 """Inventory travels out through the declared HTTPS artifact endpoint only."""
 
+import io
+import os
+from email.message import Message
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
+from ansible_collections.bootwright.core.plugins.module_utils import canonical_json
+from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_controller as controller
+from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_receipt as receipt
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_worker as worker
 
 
@@ -21,19 +32,6 @@ def test_worker_posts_to_declared_artifact_port_without_a_node_listener(monkeypa
     assert kwargs["body"] == report
     assert kwargs["headers"]["Authorization"] == "Bearer " + "b" * 64
     connection.close.assert_called_once_with()
-
-import io
-import os
-from email.message import Message
-from pathlib import Path
-from tempfile import TemporaryDirectory
-from types import SimpleNamespace
-
-import pytest
-
-from ansible_collections.bootwright.core.plugins.module_utils import canonical_json
-from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_controller as controller
-from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_receipt as receipt
 
 
 def report_fixture(tmp_path, monkeypatch):
@@ -119,7 +117,8 @@ def test_worker_does_not_send_bearer_when_tls_refuses(monkeypatch):
     connection.close.assert_called_once_with()
 
 
-@pytest.mark.parametrize("endpoint", ("http://192.0.2.1:8443/_bootwright/inventory/" + "a" * 32,
+@pytest.mark.parametrize("endpoint", (
+    "http://192.0.2.1:8443/_bootwright/inventory/" + "a" * 32,
     "https://user@192.0.2.1:8443/_bootwright/inventory/" + "a" * 32,
     "https://192.0.2.1:8443/elsewhere", "https://192.0.2.1:8443/_bootwright/inventory/../escape"))
 def test_worker_refuses_endpoint_before_reading_trust_or_connecting(endpoint):
@@ -133,6 +132,7 @@ def test_unix_receiver_rejects_live_and_foreign_sockets_and_reaps_only_its_stale
     from contextlib import nullcontext
     monkeypatch.setattr(receipt, "socket_context", lambda label: nullcontext())
     original = Path.lstat
+
     def root_socket(path, *args, **kwargs):
         fields = list(original(path, *args, **kwargs))
         fields[4], fields[5] = 0, 0
@@ -141,7 +141,10 @@ def test_unix_receiver_rejects_live_and_foreign_sockets_and_reaps_only_its_stale
     monkeypatch.setattr(receipt.records, "directory", lambda path, create, mode: None)
     with TemporaryDirectory(prefix="bw-receipt-") as directory:
         root = Path(directory)
-        owner = SimpleNamespace(request={"receipt": {"socketRoot": directory}}, load=lambda: {"token": "a" * 64, "reportToken": "b" * 64}, label_receipt=Mock(), receipt_label=lambda: "")
+        owner = SimpleNamespace(
+            request={"receipt": {"socketRoot": directory}}, load=lambda: {"token": "a" * 64, "reportToken": "b" * 64},
+            label_receipt=Mock(), receipt_label=lambda: "",
+        )
         receiver = receipt.Receiver(owner)
         with pytest.raises(ValueError, match="active"):
             receipt.Receiver(owner)
@@ -181,6 +184,7 @@ def test_retry_completes_failed_post_link_directory_sync(tmp_path, monkeypatch):
     owner, wire = report_fixture(tmp_path, monkeypatch)
     original = receipt.os.fsync
     calls = []
+
     def sync(fd):
         calls.append(fd)
         if len(calls) == 2:
@@ -240,6 +244,7 @@ def test_concurrent_attempts_share_no_socket_or_receipt(monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     from contextlib import ExitStack, nullcontext
     original = Path.lstat
+
     def root_socket(path, *args, **kwargs):
         fields = list(original(path, *args, **kwargs))
         fields[4], fields[5] = 0, 0
@@ -260,6 +265,7 @@ def test_concurrent_attempts_share_no_socket_or_receipt(monkeypatch):
             owner.label_receipt, owner.receipt_label = Mock(), lambda: ""
             receivers.append(stack.enter_context(receipt.Receiver(owner)))
             reports.append(canonical_json.canonical({"version": "machine-disk-inventory-v1", "binding": owner.binding, "disks": [{"fixture": index}]}))
+
         def send(server, data):
             connection = http.client.HTTPConnection("localhost", timeout=5)
             connection.sock = socket.socket(socket.AF_UNIX)
