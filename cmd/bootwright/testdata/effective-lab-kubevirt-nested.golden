@@ -277,6 +277,7 @@ spec:
     providerRef: lab-libvirt
     bridge: virbr-lab
     forward: nat
+    hostAddressing: static
     hostAddress: 198.51.100.1
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -293,6 +294,7 @@ spec:
     providerRef: lab-libvirt
     bridge: virbr-routed
     forward: none
+    hostAddressing: static
     hostAddress: 192.0.2.129
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -310,6 +312,7 @@ spec:
     providerRef: lab-libvirt
     bridge: virbr-secondary
     forward: nat
+    hostAddressing: static
     hostAddress: 203.0.113.1
 ---
 apiVersion: bootwright.io/v1alpha1

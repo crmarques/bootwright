@@ -61,14 +61,14 @@ security:
   tpm2: true
 
 # Two environments on one provider-managed VLAN trunk. Bootwright creates
-# the trunk and its addressed host VLAN legs from the two Network objects,
+# the trunk and its addressless host VLAN legs from the two Network objects,
 # without NAT or inter-VLAN routes. The staging segment carries both VLANs
 # to sno-01's second NIC. The case creates only its external app containers
 # and their Podman attachment networks after the substrate stage. On the node,
 # each VLAN interface is the bridge interface of its environment's Localnet
 # bridge, which carries the node's address there, so that environment's MetalLB
 # pool announces on it and its IngressController takes its address from it.
-# Pods draw from the environment's cidr less the host, node, app and pool
+# Pods draw from the environment's cidr less the node, app and pool
 # addresses. The workload manifests under workloads/ assume these defaults.
 environments:
   enabled: true
@@ -76,13 +76,13 @@ environments:
   trunk:
     bridge: br-e2e-trunk
     interface: enp2s0
+    hostAddressing: none
 
   staging:
     vlan: 10
     bridge: br-stg
     prefix: 24
     cidr: 192.0.2.0/24
-    hostAddress: 192.0.2.1
     nodeAddress: 192.0.2.31
     appAddress: 192.0.2.50
     egressAddress: 192.0.2.60
@@ -93,7 +93,6 @@ environments:
     bridge: br-prd
     prefix: 24
     cidr: 203.0.113.0/24
-    hostAddress: 203.0.113.1
     nodeAddress: 203.0.113.31
     appAddress: 203.0.113.50
     egressAddress: 203.0.113.60

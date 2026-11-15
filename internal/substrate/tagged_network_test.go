@@ -29,7 +29,7 @@ func TestATaggedManagedNetworkIsASegmentCarryingItselfTagged(t *testing.T) {
 		t.Fatalf("carriage = %q, %v", SegmentUntagged(segment), SegmentTagged(segment))
 	}
 	managed, isManaged := ManagedSegmentNetwork(segment)
-	want := ManagedNetwork{Prefix: "192.0.2.1/24", Bridge: "br-trunk", Forward: "nat", VLAN: 140}
+	want := ManagedNetwork{Prefix: "192.0.2.1/24", CIDR: "192.0.2.0/24", Bridge: "br-trunk", Forward: "nat", VLAN: 140}
 	if !isManaged || managed != want || managed.HostDevice() != "br-trunk.140" {
 		t.Fatalf("managed = %+v (%v), want %+v", managed, isManaged, want)
 	}

@@ -16,6 +16,9 @@ no-hosts
 domain-needed
 bogus-priv
 
+{% for zone in bootwright_managed_service_request.localZones | default([]) %}
+local=/{{ zone }}/
+{% endfor %}
 {% for record in bootwright_managed_service_request.records | default([]) %}
 {% if record.subtree | default(false) %}
 {% for address in record.addresses %}

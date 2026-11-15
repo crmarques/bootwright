@@ -12,7 +12,7 @@ successful installation on every host.
 | Setup | Declarative owner |
 | --- | --- |
 | Controller and SNO VMs, TPM2, encrypted root, FIPS, boot media and emulated BMCs | Machine, InfraProvider, MachineInstallProfile and OpenShiftCluster. |
-| Management network, trunk and environment VLAN legs | Managed Network objects. The trunk is unaddressed; host VLAN legs have reserved addresses, with NAT and inter-leg routing disabled. |
+| Management network, trunk and environment VLAN legs | Managed Network objects. The trunk and host VLAN legs are addressless with `hostAddressing: none`; NAT and host routing are refused. |
 | Resolver, cluster DNS, time, artifacts and listener firewall grants | NetworkConfig DNS references, DNSServer including suffix forwarding, NTPServer, ArtifactServer and managed Machine firewall policy. |
 | Node VLAN bridges and egress eligibility | OpenShiftCluster secondary networks and node labels. NMState realizes the node network; no manual label or resolver mutation. |
 | MetalLB operator, pools and interface advertisements | ClusterAddonBinding packages with exact OLM CSV pins and per-environment pool selection. |
@@ -40,8 +40,8 @@ misrepresent current support. Reusable ingress/egress policy belongs in a
 GitOps layer or a deliberately scoped future add-on, with ownership, readiness
 and removal contracts; it does not require a new core workload API.
 
-Fully addressless host VLAN legs remain an optional
-[candidate](../../specs/milestones/backlog.md#b1409). They are not required by
-this managed case. The resolver gap is covered by
+The case selects `hostAddressing: none` on its managed host VLAN legs,
+retaining CIDR reservations without host IP addresses, NAT or routing.
+The resolver gap is covered by
 [DNS suffix forwarding](../../specs/api/infrastructure-services.md#proxy-dns-ntp-and-registry-deployment),
 without adding general mutation of provided-host networking.

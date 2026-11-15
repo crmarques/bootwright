@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 )
 
@@ -38,6 +39,7 @@ func Definition(gateways GatewayRecords) managedservice.Definition {
 				return err
 			}
 			request.Records = records
+			request.LocalZones = infrastructureservices.LocalDNSZones(catalog)
 			request.Forwarders = spec.Get("forwarders").Strings()
 			for _, zone := range spec.Get("forwardZones").Items() {
 				request.ForwardZones = append(request.ForwardZones, managedservice.ForwardZone{Domain: zone.Get("domain").Text(), Forwarders: zone.Get("forwarders").Strings()})

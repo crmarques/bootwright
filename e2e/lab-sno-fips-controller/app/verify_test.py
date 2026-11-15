@@ -31,11 +31,23 @@ def configuration():
                       "bridge": bridge}
     return {"nodeName": "master-0", "nodeAddress": "198.51.100.31",
             "domain": "e2e.example.test", "environments": envs,
-            "trunk": {"bridge": "br-e2e-trunk", "interface": "enp2s0"},
+            "trunk": {"bridge": "br-e2e-trunk", "interface": "enp2s0", "hostAddressing": "static"},
             "image": "unused-by-checker"}
 
 
 class ResponseTests(unittest.TestCase):
+    def test_addressless_configuration_has_no_host_reservation(self):
+        config = configuration()
+        config["trunk"]["hostAddressing"] = "none"
+        with self.assertRaises(verify.Failure):
+            verify.validate_config(config)
+        for env in config["environments"].values():
+            env.pop("hostAddress")
+        verify.validate_config(config)
+        config["trunk"]["hostAddressing"] = "static"
+        with self.assertRaises(verify.Failure):
+            verify.validate_config(config)
+
     def test_http_error_proves_connectivity(self):
         for status in (200, 301, 403, 404, 503):
             with self.subTest(status=status), self.assertRaises(verify.Failure):

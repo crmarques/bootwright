@@ -38,3 +38,22 @@ func TestDNSForwardZonesNormalizeAddresses(t *testing.T) {
 		t.Fatalf("forwarder = %q", got)
 	}
 }
+
+func TestDNSLocalZonesRefuseForwardingBackOut(t *testing.T) {
+	env := obj(api.Environment, "lab", m("domains", m("containerClusters", "example.test")))
+	cluster := obj(api.OpenShiftCluster, "sno", m())
+	catalog := api.NewCatalog([]api.Object{cluster, env})
+	for _, domain := range []string{"sno.example.test", "child.sno.example.test"} {
+		value := m("forwardZones", list(m("domain", domain, "forwarders", api.StringList("192.0.2.1"))))
+		if issues := validateLocalDNSZones(value, catalog); len(issues) != 1 {
+			t.Fatalf("local forwarding %s accepted: %v", domain, issues)
+		}
+	}
+	value := m("forwardZones", list(m("domain", "example.test", "forwarders", api.StringList("192.0.2.1"))))
+	if issues := validateLocalDNSZones(value, catalog); len(issues) != 0 {
+		t.Fatalf("broader forwarding refused: %v", issues)
+	}
+	if zones := LocalDNSZones(api.NewCatalog([]api.Object{env})); len(zones) != 0 {
+		t.Fatalf("bootstrap DNS owns future cluster zones: %v", zones)
+	}
+}

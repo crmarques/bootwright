@@ -1066,7 +1066,7 @@ TAGGED = {
     "networks": [], "packages": [], "poolName": "p", "services": [], "uri": "qemu:///system",
     "trunks": [{"bridge": "br-lab", "mac": "52:54:00:aa:bb:01", "name": "bootwright-lab-host-trunk-br-lab",
                 "uuid": "0b1c2d3e-0000-8000-8000-000000000001"}],
-    "legs": [{"address": "198.51.100.1/26", "device": "br-lab.110", "forward": "nat", "name": "bootwright-lab-ceph-public",
+    "legs": [{"address": "198.51.100.1/26", "cidr": "198.51.100.0/26", "device": "br-lab.110", "forward": "nat", "name": "bootwright-lab-ceph-public",
               "network": "ceph-public", "trunk": "br-lab", "uuid": "0b1c2d3e-0000-8000-8000-000000000002", "vlan": 110}],
     "routing": {"forwarding": True, "keptPrefixes": ["198.51.100.0/26"], "managedDevices": ["br-lab", "br-lab.110"],
                 "natPrefixes": ["198.51.100.0/26"], "unit": "bootwright-lab-host-routing.service"},

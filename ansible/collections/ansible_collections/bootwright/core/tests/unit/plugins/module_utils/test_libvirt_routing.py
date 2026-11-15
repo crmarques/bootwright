@@ -6,6 +6,7 @@ import copy
 import ipaddress
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -20,9 +21,9 @@ REQUEST = {
     "trunks": [{"bridge": "br-lab", "mac": "52:54:00:aa:bb:01", "name": "bootwright-lab-host-trunk-br-lab",
                 "uuid": "0b1c2d3e-0000-8000-8000-000000000001"}],
     "legs": [
-        {"address": "198.51.100.1/26", "device": "br-lab.110", "forward": "nat", "name": "bootwright-lab-ceph-public",
+        {"address": "198.51.100.1/26", "cidr": "198.51.100.0/26", "device": "br-lab.110", "forward": "nat", "name": "bootwright-lab-ceph-public",
          "network": "ceph-public", "trunk": "br-lab", "uuid": "0b1c2d3e-0000-8000-8000-000000000002", "vlan": 110},
-        {"address": "198.51.100.65/26", "device": "br-lab.150", "forward": "nat", "name": "bootwright-lab-ceph-arbiter",
+        {"address": "198.51.100.65/26", "cidr": "198.51.100.64/26", "device": "br-lab.150", "forward": "nat", "name": "bootwright-lab-ceph-arbiter",
          "network": "ceph-arbiter", "trunk": "br-lab", "uuid": "0b1c2d3e-0000-8000-8000-000000000003", "vlan": 150},
     ],
     "routing": {
@@ -45,17 +46,21 @@ set trunks { type ifname; elements = { "br-lab" }; }
 set legs { type ifname; elements = { "br-lab.110", "br-lab.150" }; }
 set nat_legs { type ifname; elements = { "br-lab.110", "br-lab.150" }; }
 set managed { type ifname; elements = { "br-lab", "br-lab.110", "br-lab.150", "virbr-user" }; }
+set addressless { type ifname; }
 set routed { type ifname . ifname; elements = { "br-lab.110" . "br-lab.150", "br-lab.150" . "br-lab.110" }; }
 set nat_prefixes { type ipv4_addr; flags interval; auto-merge; elements = { 198.51.100.0/26, 198.51.100.64/26 }; }
 set kept_prefixes { type ipv4_addr; flags interval; auto-merge; elements = { 192.0.2.0/24, 198.51.100.0/26, 198.51.100.64/26, 203.0.113.0/26 }; }
 chain input {
 type filter hook input priority filter - 10; policy accept;
 iifname @trunks drop
+iifname @addressless drop
 }
 chain forward {
 type filter hook forward priority filter - 10; policy accept;
 iifname @trunks drop
 oifname @trunks drop
+iifname @addressless reject
+oifname @addressless reject
 meta nfproto ipv6 iifname @legs reject
 meta nfproto ipv6 oifname @legs reject
 ct state established,related accept
@@ -71,8 +76,8 @@ ip saddr @nat_prefixes ip daddr != @kept_prefixes oifname != @managed masquerade
 }
 """
 
-# `nft -j list table inet bootwright-lab-host-routing` after loading RULESET,
-# each rule's expressions left out.
+# Synthetic listing in nft 1.1.6 JSON form, with rule expressions omitted.
+# The addressless set and counts extend the original addressed-table fixture.
 CAPTURED = json.loads(
     '{"nftables":[{"metainfo":{"version":"1.1.6","release_name":"Commodore Bullmoose #7","json_schema_version":1}},'
     '{"table":{"family":"inet","name":"bootwright-lab-host-routing","handle":3,'
@@ -88,6 +93,7 @@ CAPTURED = json.loads(
     '{"set":{"family":"inet","name":"nat_legs","table":"bootwright-lab-host-routing","type":"ifname","handle":6,"elem":["br-lab.110","br-lab.150"]}},'
     '{"set":{"family":"inet","name":"managed","table":"bootwright-lab-host-routing","type":"ifname","handle":7,'
     '"elem":["br-lab","br-lab.110","br-lab.150","virbr-user"]}},'
+    '{"set":{"family":"inet","name":"addressless","table":"bootwright-lab-host-routing","type":"ifname","handle":15}},'
     '{"set":{"family":"inet","name":"routed","table":"bootwright-lab-host-routing","type":["ifname","ifname"],"handle":8,'
     '"elem":[{"concat":["br-lab.150","br-lab.110"]},{"concat":["br-lab.110","br-lab.150"]}]}},'
     '{"set":{"family":"inet","name":"nat_prefixes","table":"bootwright-lab-host-routing","type":"ipv4_addr","handle":9,"flags":["interval"],"auto-merge":true,'
@@ -96,7 +102,7 @@ CAPTURED = json.loads(
     '"flags":["interval"],"auto-merge":true,'
     '"elem":[{"prefix":{"addr":"192.0.2.0","len":24}},{"prefix":{"addr":"198.51.100.0","len":25}},{"prefix":{"addr":"203.0.113.0","len":26}}]}},'
     + ",".join('{"rule":{"family":"inet","table":"bootwright-lab-host-routing","chain":"%s","handle":%d,"expr":[]}}' % (chain, 11 + index)
-               for index, chain in enumerate(["input"] + ["forward"] * 9 + ["postrouting"]))
+               for index, chain in enumerate(["input"] * 2 + ["forward"] * 11 + ["postrouting"]))
     + "]}"
 )["nftables"]
 
@@ -107,6 +113,35 @@ def request(**routing_fields):
     return changed
 
 
+@pytest.mark.parametrize("drift", [None, "accept", "earlier accept", "order", "set"])
+def test_addressless_native_listing_proves_deny_expressions_and_order(drift):
+    fixture = Path(__file__).resolve().parents[2] / "goldens/libvirt_addressless_nft.json"
+    observed = json.loads(fixture.read_text())
+    table = routing.model(observed["request"])
+    items = observed["nftables"]
+    incoming = [item["rule"] for item in items if "rule" in item and item["rule"]["chain"] == "input"]
+    forward = [item["rule"] for item in items if "rule" in item and item["rule"]["chain"] == "forward"]
+    if drift == "accept":
+        incoming[1]["expr"][-1] = {"accept": None}
+    elif drift == "earlier accept":
+        forward[0]["expr"] = [{"accept": None}]
+    elif drift == "order":
+        forward[2]["expr"], forward[6]["expr"] = forward[6]["expr"], forward[2]["expr"]
+    elif drift == "set":
+        incoming[1]["expr"][0]["match"]["right"] = "@trunks"
+    assert routing.loaded(items, table) is (drift is None)
+
+
+def test_addressless_native_model_refuses_routing_in_either_direction():
+    fixture = Path(__file__).resolve().parents[2] / "goldens/libvirt_addressless_nft.json"
+    request = json.loads(fixture.read_text())["request"]
+    source, target = [leg["device"] for leg in request["legs"]]
+    request["routing"]["routed"] = [{"from": source, "to": target}, {"from": target, "to": source}]
+    request["routing"]["forwarding"] = True
+    with pytest.raises(ValueError, match="addressless leg cannot route"):
+        routing.model(request)
+
+
 def listing(table):
     """What nft lists for a loaded frozen table, in the shape of CAPTURED."""
     name = table["table"]
@@ -114,7 +149,7 @@ def listing(table):
              {"table": {"family": "inet", "name": name, "handle": 1, "comment": routing.TABLE_MARK + table["unit"]}}]
     for chain, (kind, hook, prio, _count) in routing.CHAINS.items():
         items.append({"chain": {"family": "inet", "table": name, "name": chain, "type": kind, "hook": hook, "prio": prio, "policy": "accept"}})
-    for set_name in ("trunks", "legs", "nat_legs", "managed"):
+    for set_name in ("trunks", "legs", "nat_legs", "managed", "addressless"):
         entry = {"family": "inet", "name": set_name, "table": name, "type": "ifname"}
         if table[set_name]:
             entry["elem"] = list(table[set_name])

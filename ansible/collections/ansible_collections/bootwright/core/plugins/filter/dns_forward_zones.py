@@ -50,23 +50,26 @@ def dns_forward_zones_valid(request):
         if not isinstance(request, dict):
             return False
         zones = request.get("forwardZones", [])
+        local = request.get("localZones", [])
         if not isinstance(zones, list) or len(zones) > 16:
             return False
-        if not zones:
+        if not isinstance(local, list) or len(local) > 8192 or not all(valid_domain(zone) for zone in local):
+            return False
+        if len(local) != len(set(local)):
+            return False
+        if not zones and not local:
             return True
         if request.get("kind") != "DNSServer":
             return False
-        bind = resolver_address(request["bindAddress"])
+        bind = resolver_address(request["bindAddress"]) if zones else None
         domains = set()
         for zone in zones:
             if not isinstance(zone, dict) or set(zone) != {"domain", "forwarders"}:
                 return False
             domain = zone["domain"]
-            if not isinstance(domain, str) or not 1 <= len(domain) <= 253:
+            if not valid_domain(domain) or domain in domains:
                 return False
-            labels = domain.split(".")
-            if any(not 1 <= len(label) <= 63 or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label)
-                   for label in labels) or domain in domains:
+            if any(domain == own or domain.endswith("." + own) for own in local):
                 return False
             domains.add(domain)
             targets = zone["forwarders"]
@@ -77,6 +80,13 @@ def dns_forward_zones_valid(request):
         return True
     except (ValueError, TypeError, KeyError):
         return False
+
+
+def valid_domain(domain):
+    return isinstance(domain, str) and 1 <= len(domain) <= 253 and all(
+        1 <= len(label) <= 63 and re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label)
+        for label in domain.split(".")
+    )
 
 
 class FilterModule:

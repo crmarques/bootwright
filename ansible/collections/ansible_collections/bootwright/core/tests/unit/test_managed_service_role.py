@@ -648,3 +648,36 @@ def test_dns_forward_zone_proof_accepts_valid_addresses_and_rejects_other_kinds(
     request = dict(MANAGED, bindAddress="192.0.2.1", forwardZones=zones)
     assert holds(task, variables("bootwright_managed_service", request))
     assert not holds(task, variables("bootwright_managed_service", dict(request, kind="Proxy")))
+
+
+def test_dns_cluster_zone_never_returns_missing_records_to_an_upstream():
+    request = dict(MANAGED, bindAddress="192.0.2.2", localZones=["sno.example.test"], forwarders=["192.0.2.1"])
+    rendered = squid_configuration(request, "dnsmasq.conf.j2")
+    assert "local=/sno.example.test/" in rendered.splitlines()
+
+
+@pytest.mark.parametrize("zones", [["sno.example.test\nserver=203.0.113.53"], ["*.example.test"], "example.test", [True]])
+def test_dns_local_zone_refuses_injection_before_effects(zones):
+    request = dict(MANAGED, localZones=zones)
+    assert not holds(validate_of(load_tasks("infra_managed_service", "apply.yml")),
+                     variables("bootwright_managed_service", request))
+
+
+def test_dns_local_zone_terminates_before_broader_forwarding():
+    task = validate_of(load_tasks("infra_managed_service", "apply.yml"))
+    request = dict(MANAGED, bindAddress="192.0.2.1", localZones=["sno.example.test"],
+                   forwardZones=[{"domain": "example.test", "forwarders": ["192.0.2.10"]}])
+    assert holds(task, variables("bootwright_managed_service", request))
+    request["forwardZones"][0]["domain"] = "child.sno.example.test"
+    assert not holds(task, variables("bootwright_managed_service", request))
+    request.pop("forwardZones")
+    request["kind"] = "Proxy"
+    assert not holds(task, variables("bootwright_managed_service", request))
+
+
+def test_derived_dns_local_zones_cover_the_input_document_bound():
+    task = validate_of(load_tasks("infra_managed_service", "apply.yml"))
+    request = dict(MANAGED, localZones=["cluster-%d.example.test" % i for i in range(8192)])
+    assert holds(task, variables("bootwright_managed_service", request))
+    request["localZones"].append("one-more.example.test")
+    assert not holds(task, variables("bootwright_managed_service", request))

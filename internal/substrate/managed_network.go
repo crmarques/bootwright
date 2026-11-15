@@ -12,7 +12,7 @@ import (
 
 func normalizeNetworkArm(o api.Object) api.Object {
 	arm := o.Spec().Get(ArmLibvirt)
-	if !arm.Present() {
+	if !arm.Present() || HostAddressingDisabled(o) {
 		return o
 	}
 	for _, family := range []string{"ipv4", "ipv6"} {
@@ -45,22 +45,7 @@ func validateNetworkArm(o api.Object, c api.Catalog) []api.Issue {
 				Remediation: fmt.Sprintf("widen spec.%s.cidr of %s to a subnet that holds guest addresses beside the host's", family, o.Identity())})
 		}
 	}
-	if !arm.Has("hostAddress") {
-		issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".hostAddress",
-			Message:     o.Identity() + " declares no gateway, so the libvirt host's own address on the bridge has nothing to default to",
-			Remediation: "set spec.libvirt.hostAddress on " + o.Identity() + " to the host's address inside the network, or declare the gateway it defaults to"})
-	} else if address, err := netip.ParseAddr(arm.Get("hostAddress").Text()); err == nil {
-		prefix, declared := network.Prefix(o, network.Family(address))
-		reason := "is of an address family " + o.Identity() + " declares no subnet for"
-		if declared {
-			reason = network.ReservedAddress(prefix, address)
-		}
-		if reason != "" {
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".hostAddress",
-				Message:     "host address " + address.String() + " of " + o.Identity() + " " + reason,
-				Remediation: "set spec.libvirt.hostAddress on " + o.Identity() + " to a host address inside the network's cidr"})
-		}
-	}
+	issues = add(issues, validateHostNetworkAddress(o)...)
 	issues = add(issues, validateSegmentName(o, c)...)
 	issues = add(issues, validateSharedHostNetworks(o, c)...)
 	_, leg := TaggedManagedNetwork(o)
@@ -124,6 +109,10 @@ func validateRoutedNetworks(o api.Object, c api.Catalog) []api.Issue {
 		peer, found := c.Find(api.Network, name)
 		_, tagged := TaggedManagedNetwork(peer)
 		switch {
+		case found && (HostAddressingDisabled(o) || HostAddressingDisabled(peer)):
+			issues = add(issues, api.Issue{Code: "api.invariant", Field: field,
+				Message:     o.Identity() + " cannot route to or from addressless " + peer.Identity(),
+				Remediation: "remove " + name + " from spec.libvirt.routedNetworkRefs of " + o.Identity()})
 		case name == o.Name():
 			issues = add(issues, api.Issue{Code: "api.invariant", Field: field, Message: o.Identity() + " cannot be routed to itself",
 				Remediation: "remove " + name + " from spec.libvirt.routedNetworkRefs of " + o.Identity()})
@@ -203,6 +192,9 @@ func ManagedNetworksOf(c api.Catalog, provider api.Object) []api.Object {
 }
 
 func HostAddress(o api.Object) (netip.Prefix, bool) {
+	if HostAddressingDisabled(o) {
+		return netip.Prefix{}, false
+	}
 	arm := o.Spec().Get(ArmLibvirt)
 	address, err := netip.ParseAddr(arm.Get("hostAddress").Text())
 	if !arm.Has("hostAddress") {
@@ -245,6 +237,12 @@ func NetworkSegment(o api.Object) api.Value {
 		segment = api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(o.Name())},
 			api.FieldValue{Name: "taggedNetworkRefs", Value: api.StringList(append([]string{o.Name()}, arm.Get("taggedNetworkRefs").Strings()...)...)})
 		managed = managed.With("vlan", api.IntegerValue(FormatPort(vlan)))
+		if prefix, ok := network.Prefix(o, "ipv4"); ok {
+			managed = managed.With("cidr", api.StringValue(prefix.String()))
+		}
+		if HostAddressingDisabled(o) {
+			managed = managed.With("hostAddressing", api.StringValue("none"))
+		}
 	}
 	return segment.With("mtu", mtu).With(ArmLibvirt, api.MapValue(api.FieldValue{Name: "bridge", Value: arm.Get("bridge")})).With("managed", managed)
 }
@@ -320,6 +318,8 @@ func segmentsOnHost(c api.Catalog, host string) (managed, external []hostSegment
 			}
 			if address, ok := HostAddress(o); ok {
 				segment.prefix = address.Masked()
+			} else if HostAddressingDisabled(o) {
+				segment.prefix, _ = network.Prefix(o, "ipv4")
 			}
 			managed = append(managed, segment)
 		}

@@ -1,0 +1,677 @@
+{
+  "request": {
+    "firewallReadyUnit": "bootwright-lab-lab-libvirt-firewalld-ready.service",
+    "identity": {
+      "block": "substrate-host-lab-libvirt",
+      "context": "lab",
+      "object": "lab-libvirt"
+    },
+    "legs": [
+      {
+        "cidr": "203.0.113.128/26",
+        "device": "br-trunk.150",
+        "forward": "none",
+        "name": "bootwright-lab-ceph-arbiter",
+        "network": "ceph-arbiter",
+        "trunk": "br-trunk",
+        "uuid": "90514379-d140-8cc3-8b87-5db788329ba5",
+        "vlan": 150
+      },
+      {
+        "cidr": "203.0.113.64/26",
+        "device": "br-trunk.140",
+        "forward": "none",
+        "name": "bootwright-lab-ceph-public",
+        "network": "ceph-public",
+        "trunk": "br-trunk",
+        "uuid": "586e682f-f33a-8239-b792-14ecedb4994f",
+        "vlan": 140
+      }
+    ],
+    "networks": [
+      {
+        "address": "198.51.100.1/24",
+        "bridge": "virbr-lab",
+        "forward": "nat",
+        "managed": true,
+        "name": "bootwright-lab-lab-guests"
+      }
+    ],
+    "packages": [
+      "podman",
+      "libvirt-client",
+      "libvirt-daemon",
+      "libvirt-daemon-driver-network",
+      "libvirt-daemon-driver-qemu",
+      "libvirt-daemon-driver-storage-core",
+      "qemu-img",
+      "qemu-kvm-core",
+      "swtpm",
+      "swtpm-tools"
+    ],
+    "placement": {
+      "connection": "local",
+      "machine": "controller"
+    },
+    "poolName": "bootwright-lab-lab-libvirt-vmedia",
+    "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia",
+    "provisioned": false,
+    "refusedPrefixes": [
+      "203.0.113.0/26"
+    ],
+    "routing": {
+      "forwarding": false,
+      "keptPrefixes": [
+        "198.51.100.0/24",
+        "203.0.113.0/26",
+        "203.0.113.64/26",
+        "203.0.113.128/26"
+      ],
+      "managedDevices": [
+        "br-trunk",
+        "br-trunk.140",
+        "br-trunk.150",
+        "virbr-lab"
+      ],
+      "natPrefixes": [],
+      "routed": [],
+      "unit": "bootwright-lab-lab-libvirt-routing.service"
+    },
+    "services": [
+      "virtqemud.service",
+      "virtnetworkd.service",
+      "virtstoraged.service"
+    ],
+    "trunks": [
+      {
+        "bridge": "br-trunk",
+        "mac": "52:54:00:95:a6:be",
+        "name": "bootwright-lab-lab-libvirt-trunk-br-trunk",
+        "uuid": "bf590047-15c5-88f5-8c0a-e8b911aac3c0"
+      }
+    ],
+    "uri": "qemu:///system",
+    "version": "substrate-host-libvirt-v1",
+    "vlanRefusalUnit": "bootwright-lab-lab-libvirt-vlan-refusal.service"
+  },
+  "nftables": [
+    {
+      "metainfo": {
+        "version": "1.1.6",
+        "release_name": "Commodore Bullmoose #7",
+        "json_schema_version": 1
+      }
+    },
+    {
+      "table": {
+        "family": "inet",
+        "name": "bootwright-lab-lab-libvirt-routing",
+        "handle": 2,
+        "comment": "Bootwright owned routing: bootwright-lab-lab-libvirt-routing.service"
+      }
+    },
+    {
+      "chain": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "name": "input",
+        "handle": 1,
+        "type": "filter",
+        "hook": "input",
+        "prio": -10,
+        "policy": "accept"
+      }
+    },
+    {
+      "chain": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "name": "forward",
+        "handle": 2,
+        "type": "filter",
+        "hook": "forward",
+        "prio": -10,
+        "policy": "accept"
+      }
+    },
+    {
+      "chain": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "name": "postrouting",
+        "handle": 3,
+        "type": "nat",
+        "hook": "postrouting",
+        "prio": 90,
+        "policy": "accept"
+      }
+    },
+    {
+      "set": {
+        "family": "inet",
+        "name": "trunks",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "type": "ifname",
+        "handle": 4,
+        "elem": [
+          "br-trunk"
+        ]
+      }
+    },
+    {
+      "set": {
+        "family": "inet",
+        "name": "legs",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "type": "ifname",
+        "handle": 5,
+        "elem": [
+          "br-trunk.140",
+          "br-trunk.150"
+        ]
+      }
+    },
+    {
+      "set": {
+        "family": "inet",
+        "name": "nat_legs",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "type": "ifname",
+        "handle": 6
+      }
+    },
+    {
+      "set": {
+        "family": "inet",
+        "name": "managed",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "type": "ifname",
+        "handle": 7,
+        "elem": [
+          "br-trunk",
+          "virbr-lab",
+          "br-trunk.140",
+          "br-trunk.150"
+        ]
+      }
+    },
+    {
+      "set": {
+        "family": "inet",
+        "name": "addressless",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "type": "ifname",
+        "handle": 8,
+        "elem": [
+          "br-trunk.140",
+          "br-trunk.150"
+        ]
+      }
+    },
+    {
+      "set": {
+        "family": "inet",
+        "name": "routed",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "type": [
+          "ifname",
+          "ifname"
+        ],
+        "handle": 9
+      }
+    },
+    {
+      "set": {
+        "family": "inet",
+        "name": "nat_prefixes",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "type": "ipv4_addr",
+        "handle": 10,
+        "flags": [
+          "interval"
+        ],
+        "auto-merge": true
+      }
+    },
+    {
+      "set": {
+        "family": "inet",
+        "name": "kept_prefixes",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "type": "ipv4_addr",
+        "handle": 11,
+        "flags": [
+          "interval"
+        ],
+        "auto-merge": true,
+        "elem": [
+          {
+            "prefix": {
+              "addr": "198.51.100.0",
+              "len": 24
+            }
+          },
+          {
+            "range": [
+              "203.0.113.0",
+              "203.0.113.191"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "input",
+        "handle": 12,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "meta": {
+                  "key": "iifname"
+                }
+              },
+              "right": "@trunks"
+            }
+          },
+          {
+            "drop": null
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "input",
+        "handle": 13,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "meta": {
+                  "key": "iifname"
+                }
+              },
+              "right": "@addressless"
+            }
+          },
+          {
+            "drop": null
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "forward",
+        "handle": 14,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "meta": {
+                  "key": "iifname"
+                }
+              },
+              "right": "@trunks"
+            }
+          },
+          {
+            "drop": null
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "forward",
+        "handle": 15,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "meta": {
+                  "key": "oifname"
+                }
+              },
+              "right": "@trunks"
+            }
+          },
+          {
+            "drop": null
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "forward",
+        "handle": 16,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "meta": {
+                  "key": "iifname"
+                }
+              },
+              "right": "@addressless"
+            }
+          },
+          {
+            "reject": {
+              "type": "icmpx",
+              "expr": "port-unreachable"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "forward",
+        "handle": 17,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "meta": {
+                  "key": "oifname"
+                }
+              },
+              "right": "@addressless"
+            }
+          },
+          {
+            "reject": {
+              "type": "icmpx",
+              "expr": "port-unreachable"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "forward",
+        "handle": 18,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "meta": {
+                  "key": "iifname"
+                }
+              },
+              "right": "@legs"
+            }
+          },
+          {
+            "reject": {
+              "type": "icmpv6",
+              "expr": "port-unreachable"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "forward",
+        "handle": 19,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "meta": {
+                  "key": "oifname"
+                }
+              },
+              "right": "@legs"
+            }
+          },
+          {
+            "reject": {
+              "type": "icmpv6",
+              "expr": "port-unreachable"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "forward",
+        "handle": 20,
+        "expr": [
+          {
+            "match": {
+              "op": "in",
+              "left": {
+                "ct": {
+                  "key": "state"
+                }
+              },
+              "right": [
+                "established",
+                "related"
+              ]
+            }
+          },
+          {
+            "accept": null
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "forward",
+        "handle": 21,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "concat": [
+                  {
+                    "meta": {
+                      "key": "iifname"
+                    }
+                  },
+                  {
+                    "meta": {
+                      "key": "oifname"
+                    }
+                  }
+                ]
+              },
+              "right": "@routed"
+            }
+          },
+          {
+            "accept": null
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "forward",
+        "handle": 22,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "meta": {
+                  "key": "oifname"
+                }
+              },
+              "right": "@legs"
+            }
+          },
+          {
+            "reject": {
+              "type": "icmpx",
+              "expr": "port-unreachable"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "forward",
+        "handle": 23,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "meta": {
+                  "key": "iifname"
+                }
+              },
+              "right": "@nat_legs"
+            }
+          },
+          {
+            "match": {
+              "op": "!=",
+              "left": {
+                "meta": {
+                  "key": "oifname"
+                }
+              },
+              "right": "@managed"
+            }
+          },
+          {
+            "match": {
+              "op": "!=",
+              "left": {
+                "payload": {
+                  "protocol": "ip",
+                  "field": "daddr"
+                }
+              },
+              "right": "@kept_prefixes"
+            }
+          },
+          {
+            "accept": null
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "forward",
+        "handle": 24,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "meta": {
+                  "key": "iifname"
+                }
+              },
+              "right": "@legs"
+            }
+          },
+          {
+            "reject": {
+              "type": "icmpx",
+              "expr": "port-unreachable"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule": {
+        "family": "inet",
+        "table": "bootwright-lab-lab-libvirt-routing",
+        "chain": "postrouting",
+        "handle": 25,
+        "expr": [
+          {
+            "match": {
+              "op": "==",
+              "left": {
+                "payload": {
+                  "protocol": "ip",
+                  "field": "saddr"
+                }
+              },
+              "right": "@nat_prefixes"
+            }
+          },
+          {
+            "match": {
+              "op": "!=",
+              "left": {
+                "payload": {
+                  "protocol": "ip",
+                  "field": "daddr"
+                }
+              },
+              "right": "@kept_prefixes"
+            }
+          },
+          {
+            "match": {
+              "op": "!=",
+              "left": {
+                "meta": {
+                  "key": "oifname"
+                }
+              },
+              "right": "@managed"
+            }
+          },
+          {
+            "masquerade": null
+          }
+        ]
+      }
+    }
+  ]
+}

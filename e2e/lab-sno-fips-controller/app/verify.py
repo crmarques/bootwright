@@ -81,14 +81,21 @@ def validate_config(config):
     if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", config["nodeName"]):
         raise Failure("nodeName must be a DNS name")
     trunk = config["trunk"]
+    mode = trunk["hostAddressing"]
+    if mode not in ("none", "static"):
+        raise Failure("hostAddressing must be none or static")
     names = [trunk["bridge"], trunk["interface"]]
     networks = []
     vlans = []
     for env in config["environments"].values():
         network = ipaddress.IPv4Network(env["cidr"])
-        addresses = [ipaddress.IPv4Address(env[key]) for key in
-                     ("nodeAddress", "appAddress", "egressAddress", "hostAddress")]
-        if len(set(addresses)) != 4 or any(
+        keys = ["nodeAddress", "appAddress", "egressAddress"]
+        if ("hostAddress" in env) != (mode == "static"):
+            raise Failure("only static host addressing requires a hostAddress")
+        if mode == "static":
+            keys.append("hostAddress")
+        addresses = [ipaddress.IPv4Address(env[key]) for key in keys]
+        if len(set(addresses)) != len(keys) or any(
                 address not in network or address in
                 (network.network_address, network.broadcast_address)
                 for address in addresses):

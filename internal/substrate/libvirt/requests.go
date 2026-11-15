@@ -42,7 +42,8 @@ type Trunk struct {
 }
 
 type Leg struct {
-	Address string `json:"address"`
+	Address string `json:"address,omitempty"`
+	CIDR    string `json:"cidr"`
 	Device  string `json:"device"`
 	Forward string `json:"forward"`
 	Name    string `json:"name"`
@@ -219,7 +220,7 @@ func (r HostRequest) ReservationKeys() []string {
 	}
 	for _, leg := range r.Legs {
 		keys = append(keys, "bridge:"+leg.Device, "nm-connection:"+leg.Name)
-		if prefix, err := netip.ParsePrefix(leg.Address); err == nil {
+		if prefix, err := netip.ParsePrefix(leg.CIDR); err == nil {
 			keys = append(keys, "prefix:"+prefix.Masked().String())
 		}
 	}

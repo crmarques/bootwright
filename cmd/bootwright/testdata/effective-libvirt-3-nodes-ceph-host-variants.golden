@@ -326,6 +326,7 @@ spec:
     providerRef: lab-libvirt
     bridge: virbr-lab
     forward: nat
+    hostAddressing: static
     hostAddress: 198.51.100.1
     taggedNetworkRefs:
       - ceph-cluster

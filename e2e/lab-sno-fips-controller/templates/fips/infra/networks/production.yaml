@@ -17,6 +17,9 @@ spec:
     providerRef: lab-libvirt
     bridge: {{ $.Values.environments.trunk.bridge }}
     forward: none
-    hostAddress: {{ .hostAddress }}
+    hostAddressing: {{ $.Values.environments.trunk.hostAddressing | quote }}
+{{- with .hostAddress }}
+    hostAddress: {{ . }}
+{{- end }}
 {{- end }}
 {{- end }}

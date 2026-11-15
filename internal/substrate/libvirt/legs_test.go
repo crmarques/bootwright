@@ -47,9 +47,9 @@ func TestATaggedManagedNetworkFreezesALegAndItsTrunk(t *testing.T) {
 		t.Fatalf("trunks = %+v", request.Trunks)
 	}
 	wantLegs := []Leg{
-		{Address: "203.0.113.129/26", Device: "br-trunk.150", Forward: "none", Name: "bootwright-lab-ceph-arbiter", Network: "ceph-arbiter", Trunk: "br-trunk",
+		{Address: "203.0.113.129/26", CIDR: "203.0.113.128/26", Device: "br-trunk.150", Forward: "none", Name: "bootwright-lab-ceph-arbiter", Network: "ceph-arbiter", Trunk: "br-trunk",
 			UUID: substrate.ConnectionUUID(testContext, "bootwright-lab-ceph-arbiter"), VLAN: 150},
-		{Address: "203.0.113.65/26", Device: "br-trunk.140", Forward: "nat", Name: "bootwright-lab-ceph-public", Network: "ceph-public", Trunk: "br-trunk",
+		{Address: "203.0.113.65/26", CIDR: "203.0.113.64/26", Device: "br-trunk.140", Forward: "nat", Name: "bootwright-lab-ceph-public", Network: "ceph-public", Trunk: "br-trunk",
 			UUID: substrate.ConnectionUUID(testContext, "bootwright-lab-ceph-public"), VLAN: 140},
 	}
 	if !slices.Equal(request.Legs, wantLegs) {
@@ -88,6 +88,23 @@ func TestAMachineNICOnALegSegmentAttachesToTheTrunkBridge(t *testing.T) {
 	}
 	if got := requests[0].Interfaces; len(got) != 1 || got[0].Bridge != "br-trunk" || got[0].Network != "" || got[0].MTU != 0 {
 		t.Fatalf("interfaces = %+v", got)
+	}
+}
+
+func TestAddresslessLegFreezesItsSubnetWithoutAHostAddress(t *testing.T) {
+	leg := api.NewObject(api.Network, "staging", api.Value{}, api.MapValue(
+		field("provided", api.BoolValue(false)), number("vlan", "10"), field("ipv4", api.MapValue(text("cidr", "192.0.2.0/24"))),
+		field("libvirt", api.MapValue(text("providerRef", "lab-libvirt"), text("bridge", "br-trunk"), text("forward", "none"), text("hostAddressing", "none"))),
+	))
+	r := taggedHostRequest(t, controller(), provider(), leg)
+	if len(r.Legs) != 1 || r.Legs[0].Address != "" || r.Routing.Forwarding || len(r.Routing.NATPrefixes) != 0 || len(r.Routing.Routed) != 0 {
+		t.Fatalf("addressless request acquired host L3 behavior: %+v", r)
+	}
+	if !slices.Contains(r.Routing.KeptPrefixes, "192.0.2.0/24") {
+		t.Fatal("the addressless subnet left the provider isolation model")
+	}
+	if !slices.Contains(r.ReservationKeys(), "prefix:192.0.2.0/24") {
+		t.Fatal("the addressless subnet lost its cross-context host reservation")
 	}
 }
 

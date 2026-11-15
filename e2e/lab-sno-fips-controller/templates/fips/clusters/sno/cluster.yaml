@@ -65,9 +65,11 @@ spec:
           subnets:
             - {{ $env.cidr }}
 
-          # Reserve the provider host, node, peer, egress identity and MetalLB pool.
+          # Reserve the node, peer, egress identity and MetalLB pool.
           excludeSubnets:
-            - {{ $env.hostAddress }}/32
+{{- with $env.hostAddress }}
+            - {{ . }}/32
+{{- end }}
             - {{ $env.nodeAddress }}/32
             - {{ $env.appAddress }}/32
             - {{ $env.egressAddress }}/32

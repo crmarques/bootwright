@@ -73,6 +73,7 @@ use the strict profile's rendered fixtures when overriding that topology.
 | --- | --- | --- |
 | `security.tpm2=false` | `true` | No TPM2-bound LUKS on `sno-01`'s installation disk |
 | `environments.enabled=false` | `true` | No trunk, secondary networks, add-ons or environment checks |
+| `environments.trunk.hostAddressing` | `none` | Addressless host VLAN legs; `static` requires a `hostAddress` in each environment |
 | `addons.subscriptions.nmstate.channel`, `.startingCSV` | empty | Required while environments are enabled; step 2 reads them |
 | `addons.subscriptions.metallb.channel`, `.startingCSV` | empty | Required while environments are enabled; step 2 reads them |
 
@@ -86,14 +87,14 @@ use the strict profile's rendered fixtures when overriding that topology.
 | Controller packages, host firewall grants, management NAT network, VMs, emulated BMCs, FIPS and TPM2 installation | Existing Bootwright Machine, Network, provider and install APIs; apply performs the setup. No manual firewall rules or libvirt definitions. |
 | DNS records, forwarding, NTP and artifacts | Existing managed infrastructure APIs; both contexts declare their services. No manual zone-file or artifact-server setup. |
 | Node NICs/VLANs, secondary bridges, egress eligibility and address pools | NetworkConfig, OpenShiftCluster secondary networks and node labels, and the NMState/MetalLB add-ons. No manual egress-node label. |
-| Host trunk, environment VLAN legs and test peers | Managed tagged Network objects create an unaddressed trunk and addressed host VLAN legs with NAT and inter-leg routing disabled. Only external peer containers and their Podman attachments remain test fixtures. |
+| Host trunk, environment VLAN legs and test peers | Managed tagged Network objects use `hostAddressing: none` to create an addressless trunk and VLAN legs, with host input, NAT and routing refused. Only external peer containers and their Podman attachments remain test fixtures. |
 | FIPS controller resolver handoff | NetworkConfig installs the bootstrap resolver. DNSServer.forwardZones routes the cluster suffix to the FIPS controller; unrelated names use declared upstreams without a forwarding loop. No manual nmstate or resolver-file update. |
 | Namespaces, ingress shards, EgressIP, policies and strict node filter | Native declarative OpenShift fixtures, applied explicitly for this test. Existing [GitOps bootstrap](../../specs/api/addons.md#package-gitops) can own them in an estate using an approved repository/revision/path and a suitable ClusterRole. No such repository or additional operator is assumed here. |
 | SSH authorization, credential import, negative tests and evidence | Operator trust establishment and test assertions. They are not infrastructure lifecycle configuration. |
 
 The `ClusterAddon.manifestSet` arm is currently refused by execution; it is
 not a way to apply these native fixtures. No arbitrary-command add-on is
-needed. The addressless-VLAN candidate is optional; this case uses managed addressed
+needed. The case uses managed addressless
 host legs. Its DNS forwarding is declared through the managed service API.
 The [API review](api-review.md) explains supported alternatives and proposed
 improvements without assigning workload policy to core.
@@ -104,10 +105,7 @@ improvements without assigning workload policy to core.
   9.8 media and `~/openshift-pull-secret`. No other case may run: this one
   uses `virbr-e2e`, `198.51.100.0/24` and the service ports.
 - This OpenShift case also installs a RHEL controller VM: complete the shared
-  RHEL media-import step. Require both case contexts absent before a fresh
-  replay. If an old context remains, finish its destroy, preserve evidence
-  and purge it first; use its registering executable if the new build refuses
-  its saved state. Do not overwrite a running context with fresh inputs.
+  RHEL media-import step.
 - Capacity: `CTX_BOOT` needs 5 CPUs, 6 GiB of `MemAvailable` and 70 GiB free
   under `/var/lib/libvirt/images`. With `fips-controller` running, `CTX_FIPS`
   needs 9 more CPUs not reserved by libvirt domains, 18 GiB of `MemAvailable`
@@ -379,14 +377,13 @@ sudo restorecon -R /root/.ssh
 
 The staging and production `Network` objects select `provided: false` and the
 libvirt provider, sharing `environments.trunk.bridge`. They declare their VLAN
-and host address, `forward: none`, and no `routedNetworkRefs`. The existing
+with `hostAddressing: none`, `forward: none`, and no `routedNetworkRefs`. The
 [managed VLAN API](../../specs/api/networks.md#tagged-managed-networks) creates
 persistent host links and refuses traffic between the host legs. The staging
 segment carries both VLANs to the node's second NIC. No manual bridge or VLAN
 creation is needed; step 7's substrate stage realizes them.
 
-The trunk itself is unaddressed; each host VLAN leg holds the `hostAddress`
-from [values.yaml](values.yaml), without advertising a default gateway. These
+The trunk and host VLAN legs have no IP addresses or routes. These
 host rules do not stop the SNO node routing between its own interfaces; use
 the strict profile for that boundary. The external app containers and their
 Podman attachment networks remain E2E fixtures, created after the substrate.
@@ -442,11 +439,13 @@ In the host terminal, verify them, then create the external peers. The strict
 profile replaces this fixture block and starts its peers only after the node
 filter is proved. Stop if either Podman network or app container already exists.
 Require `bridge-nf-call-iptables` absent or 0 before creating the peers.
+The address assertions below use the default `hostAddressing: none`; when
+selecting `static`, compare the addresses with the declared `hostAddress` values.
 
 ```sh
 ip -d link show br-e2e-trunk
-ip -4 address show br-e2e-trunk.10                       # hostAddress on staging
-ip -4 address show br-e2e-trunk.20                       # hostAddress on production
+ip -json address show br-e2e-trunk.10 | jq -e 'all(.[]; .addr_info | length == 0)'
+ip -json address show br-e2e-trunk.20 | jq -e 'all(.[]; .addr_info | length == 0)'
 sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null  # absent or 0
 sudo podman network create --internal -d macvlan -o parent=br-e2e-trunk.10 --subnet 192.0.2.0/24 e2e-staging
 sudo podman network create --internal -d macvlan -o parent=br-e2e-trunk.20 --subnet 203.0.113.0/24 e2e-production
@@ -734,15 +733,7 @@ oc get nncp bootwright-master-0 -o jsonpath='{.status.conditions[?(@.type=="Avai
 oc debug node/master-0 -- chroot /host sysctl -n net.ipv4.conf.br-stg.forwarding net.ipv4.conf.br-prd.forwarding               # 1 and 1
 ```
 
-Record each answer. Remove the environments before the destroy, so no
-LoadBalancer Service outlives its pool:
-
-```sh
-for env in staging production; do
-    oc delete -f ~/workloads/ingress/$env.yaml --wait=true
-    oc delete namespace "$env" --wait=true
-done
-```
+Record each answer, then complete the verified-fetch drill below.
 
 ### Verified-fetch drill (B743)
 
@@ -801,6 +792,18 @@ source ([emulated BMC facts](../../.agents/knowledge/sushy-tools-emulated-bmc.md
 Record the exact answers of the first run.
 
 ## 10. Destroy the FIPS context (FIPS controller)
+
+For the original environment fixtures, first remove their ingress controllers
+and namespaces in the **FIPS controller** session. Skip this block when
+environments are disabled; the strict profile uses its own final fixture
+cleanup. No LoadBalancer Service may outlive its pool.
+
+```sh
+for env in staging production; do
+    oc delete -f ~/workloads/ingress/$env.yaml --wait=true
+    oc delete namespace "$env" --wait=true
+done
+```
 
 First, with `environments.enabled`, remove the external peers and their
 Podman attachment networks in the **host terminal**. Bootwright must own the

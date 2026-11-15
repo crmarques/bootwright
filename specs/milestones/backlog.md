@@ -320,7 +320,6 @@ Alias cell.
 | [B1342](#b1342) | new, 2026-11-11 (B1338 review) | defect | Ceph | The Ansible records of managed Ceph hosts survive a reboot that renumbers a device | Fixing them moves the automation digest; the Ceph hosts that renumber devices are not yet qualified |
 | [B1349](#b1349) | new, 2026-11-11 (X418; audit 004 API-34) | product | Add-ons | Reserved authored steps gain an explicitly authorized lifecycle | D183 keeps the shapes admitted and inert; no concrete execution journey is promoted |
 | [B1354](#b1354) | new, 2026-11-11 (firewall review) | defect | E2E | Sample application teardown removes only a rule its setup created | Separate application fixture ownership, beyond controller listener preparation |
-| [B1409](#b1409) | new, 2026-11-15 (X475 audit) | product | Substrate | Managed addressless tagged networks for an isolated laboratory trunk | Needs an explicit L2 ownership and firewall design; current managed VLAN legs require host addresses |
 | [B1412](#b1412) | new, 2026-11-15 | defect | Architecture | Documentation checks detect milestone identifier collisions across active, parked and delivered records | Tooling hardening beyond the requested case; its identifiers are reconciled manually |
 
 ### B82
@@ -3643,20 +3642,6 @@ stay admitted, warn with this item, and refuse at plan when selected, as D183
 effect, evidence, continuation and removal contracts. **Definition:** Candidate.
 **Exit evidence:** a named slice qualifies each supported step's effect and
 recovery and removes its unrealized row; admission alone proves no execution.
-
-### B1409
-
-**Owner:** Substrate. **Kind:** product. **Definition:** Candidate.
-**Requires:** an explicit addressless L2 lifecycle design. **Outcome:** the
-[FIPS SNO case](../../e2e/lab-sno-fips-controller/runbook.md#declarative-setup-and-remaining-gaps)
-can declare its host trunk through Bootwright while retaining no host address
-on either environment VLAN. The current [libvirt Network arm](../api/networks.md#libvirt-arm)
-requires `hostAddress` or a gateway; `forward: none` does not remove that
-requirement. Do not substitute addressed legs silently. **Exit evidence:**
-owned trunk/leg creation, collision refusal, restart, exact cleanup and
-isolation tests, followed by the laboratory rehearsal. Parked pending owner
-promotion and a routing/firewall boundary definition; this audit authorizes no
-new realization arm or arbitrary host command.
 
 ### B1412
 
@@ -9129,3 +9114,12 @@ push is authorized.
 logic between physical and emulated BMCs. Authorizes X464 (M1, B1398), including
 removing the colocated emulated-media transport exception. Retain provider
 mechanics and ownership-specific safeguards behind the machine port.
+
+### D271
+
+**owner** (2026-11-15): implement the proposed addressless libvirt Network
+mode and managed DNS local-zone termination. Authorizes X483 (M1, B1409 and
+B1418), including API defaults/refusals, native observation and ownership,
+current execution contracts, and the SNO templates and runbooks. Static host
+addressing remains the API default; the case selects addressless legs. No
+real-host provisioning or push is authorized.

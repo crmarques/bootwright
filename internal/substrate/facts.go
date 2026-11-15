@@ -85,8 +85,9 @@ func HostCluster(provider api.Object) string {
 }
 
 type ManagedNetwork struct {
-	Prefix, Bridge, Forward string
-	VLAN                    int
+	Prefix, CIDR, Bridge, Forward string
+	Addressless                   bool
+	VLAN                          int
 }
 
 func (n ManagedNetwork) Tagged() bool { return n.VLAN != 0 }
@@ -104,7 +105,8 @@ func ManagedSegmentNetwork(segment api.Value) (ManagedNetwork, bool) {
 		return ManagedNetwork{}, false
 	}
 	vlan, _ := managed.Get("vlan").Int64()
-	return ManagedNetwork{Prefix: managed.Get("address").Text(), Bridge: segment.Get(ArmLibvirt, "bridge").Text(), Forward: managed.Get("forward").Text(), VLAN: int(vlan)}, true
+	return ManagedNetwork{Prefix: managed.Get("address").Text(), CIDR: managed.Get("cidr").Text(), Addressless: managed.Get("hostAddressing").Text() == "none",
+		Bridge: segment.Get(ArmLibvirt, "bridge").Text(), Forward: managed.Get("forward").Text(), VLAN: int(vlan)}, true
 }
 
 func SegmentMTU(segment api.Value) int64 {

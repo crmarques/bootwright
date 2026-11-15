@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -72,6 +73,13 @@ func TestSNOIsolationFixtures(t *testing.T) {
 				objects[key] = object
 			}
 			configMap := objects["ConfigMap/staging/e2e-isolation-config"]
+			configPath := filepath.Join(t.TempDir(), "config.json")
+			if err := os.WriteFile(configPath, []byte(configMap["data"].(map[string]any)["config.json"].(string)), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if out, err := exec.Command("python3", "-B", filepath.Join(root, "app", "verify.py"), "--config", configPath, "--mode", "config").CombinedOutput(); err != nil {
+				t.Fatalf("offline verifier refuses rendered input: %v %s", err, out)
+			}
 			var config struct {
 				Environments map[string]struct{ EgressAddress, CIDR, Pool string }
 				Domain       string
@@ -145,7 +153,12 @@ func TestSNOCaseOwnsIsolatedVLANNetworks(t *testing.T) {
 	for _, sets := range [][]string{
 		nil,
 		{"environments.trunk.bridge=br-fixture", "environments.staging.vlan=110", "environments.production.vlan=120"},
+		{"environments.trunk.hostAddressing=static", "environments.staging.hostAddress=192.0.2.1", "environments.production.hostAddress=203.0.113.1"},
 	} {
+		wantMode := "none"
+		if slices.Contains(sets, "environments.trunk.hostAddressing=static") {
+			wantMode = "static"
+		}
 		render := e2eRender{name: "managed VLANs", sets: append(fipsControllerSubscriptions(), sets...)}
 		for _, directory := range renderE2ECase(t, e2eRenderScript(t), "lab-sno-fips-controller", render) {
 			if filepath.Base(directory) != "fips" {
@@ -167,8 +180,8 @@ func TestSNOCaseOwnsIsolatedVLANNetworks(t *testing.T) {
 				if spec.Get("libvirt", "forward").Text() != "none" || spec.Get("libvirt", "routedNetworkRefs").Len() != 0 {
 					t.Fatalf("%s routes or translates environment traffic", network.Name())
 				}
-				if spec.Has("ipv4", "gateway") || spec.Get("libvirt", "hostAddress").Text() == "" {
-					t.Fatalf("%s needs an explicit host address without advertising a gateway", network.Name())
+				if spec.Has("ipv4", "gateway") || spec.Get("libvirt", "hostAddressing").Text() != wantMode || spec.Get("libvirt").Has("hostAddress") != (wantMode == "static") {
+					t.Fatalf("%s does not select %s host addressing", network.Name(), wantMode)
 				}
 			}
 			if staging.Spec().Get("libvirt", "bridge").Text() != production.Spec().Get("libvirt", "bridge").Text() {

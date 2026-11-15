@@ -105,7 +105,7 @@ facts belong in the chart or Git metadata. Now perform parent steps 2–5.
 
 ## Replace parent step 6: managed host networks and peer attachments
 
-Bootwright creates the persistent trunk and addressed VLAN legs from the
+Bootwright creates the persistent trunk and addressless VLAN legs from the
 existing managed `Network` API. Run parent step 7 through its
 `apply --stage infrastructure-services,substrates` on the FIPS controller
 first. Skip the parent's external-peer fixture block: this profile starts
@@ -114,8 +114,8 @@ links by hand.
 
 In the host terminal, verify the links Bootwright created, then create only
 the case's Podman macvlan attachment networks. Stop if a Podman network or
-container of the intended name already exists. The host's `hostAddress` on
-each leg is reserved outside the pod, peer, egress and MetalLB allocations.
+container of the intended name already exists. Neither the trunk nor its
+host VLAN legs has an IP address or route.
 Run this block in Bash with `set -euo pipefail`; require bridge filtering
 absent or 0 before creating the attachments.
 
@@ -350,7 +350,8 @@ filter counters before/after probes, boot IDs and the parent's operation logs
 in the private evidence directory. Record no live acceptance until the full
 sequence passes and the owner accepts it.
 
-Before parent step 10, remove the fixture ingress controllers and namespaces
+Complete the parent's verified-fetch drill, then finish with cleanup below
+and parent steps 10–12. Remove the fixture ingress controllers and namespaces
 so Services do not outlive MetalLB pools, and delete the two EgressIP objects:
 
 ```sh
@@ -366,8 +367,9 @@ oc patch ingresscontroller/default -n openshift-ingress-operator --type=merge \
 These are fresh-case fixtures; do not use their names to delete another
 operator's pre-existing objects. The
 filter remains installed until the disposable VM is destroyed; deleting it
-while apps are present would reopen transit. Continue the parent's
-verified-fetch drill, destroy and evidence preservation. Parent step 10 removes
+while apps are present would reopen transit. In parent step 10, skip the
+original workload cleanup and continue with context destroy and evidence
+preservation. Parent step 10 removes
 the external peer containers and attachment networks before Bootwright removes
 its managed trunk, VLAN legs and host routing rules. Never delete those links
 by hand. Preserve all evidence before either context is

@@ -142,6 +142,7 @@ spec:
     providerRef: lab-libvirt
     bridge: virbr-lab
     forward: none
+    hostAddressing: static
     hostAddress: 2001:db8:2::1
 ---
 apiVersion: bootwright.io/v1alpha1

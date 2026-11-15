@@ -75,6 +75,10 @@ argument_specs:
               - NTPServer
               - Proxy
               - Registry
+          localZones:
+            type: list
+            elements: str
+            required: false
           placement:
             type: dict
             required: true

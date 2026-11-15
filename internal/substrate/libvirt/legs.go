@@ -22,11 +22,18 @@ func legsFor(catalog api.Catalog, provider api.Object, contextName string) ([]Le
 		if !substrate.SafeSegment(name) || !api.ValidLexical("bridge", managed.Bridge) || len(device) > substrate.MaxInterfaceName {
 			return nil, nil, refusal("lifecycle.state", "the tagged managed Network/"+name+" names no safe leg device", "rename Network/"+name+" or shorten its spec.libvirt.bridge")
 		}
-		if prefix, err := netip.ParsePrefix(managed.Prefix); err != nil || !prefix.Addr().Is4() {
-			return nil, nil, refusal("api.value", "the tagged managed Network/"+name+" has no IPv4 host address inside its subnet", "set spec.libvirt.hostAddress or an IPv4 gateway on Network/"+name)
+		if prefix, err := netip.ParsePrefix(managed.CIDR); err != nil || !prefix.Addr().Is4() {
+			return nil, nil, refusal("api.value", "the tagged managed Network/"+name+" has no IPv4 subnet", "declare its spec.ipv4.cidr")
+		}
+		if !managed.Addressless {
+			if prefix, err := netip.ParsePrefix(managed.Prefix); err != nil || !prefix.Addr().Is4() {
+				return nil, nil, refusal("api.value", "the tagged managed Network/"+name+" has no IPv4 host address inside its subnet", "set spec.libvirt.hostAddress or an IPv4 gateway on Network/"+name)
+			}
+		} else if managed.Forward != "none" {
+			return nil, nil, refusal("api.invariant", "addressless Network/"+name+" cannot enable NAT", "set spec.libvirt.forward: none")
 		}
 		connection := substrate.LegConnectionName(contextName, name)
-		legs = append(legs, Leg{Address: managed.Prefix, Device: device, Forward: managed.Forward, Name: connection, Network: name,
+		legs = append(legs, Leg{Address: managed.Prefix, CIDR: managed.CIDR, Device: device, Forward: managed.Forward, Name: connection, Network: name,
 			Trunk: managed.Bridge, UUID: substrate.ConnectionUUID(contextName, connection), VLAN: managed.VLAN})
 		if !slices.ContainsFunc(trunks, func(trunk Trunk) bool { return trunk.Bridge == managed.Bridge }) {
 			trunk := substrate.TrunkConnectionName(contextName, provider.Name(), managed.Bridge)

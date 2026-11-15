@@ -134,6 +134,9 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		return issues
 	}
 	issues = add(issues, validateWildcardProbes(o.Kind(), value)...)
+	if o.Kind() == api.DNSServer {
+		issues = add(issues, validateLocalDNSZones(value, c)...)
+	}
 	machine, placed := c.Find(api.Machine, value.Get("machineRef").Text())
 	if placed {
 		issues = add(issues, validatePlacement(o.Kind(), value, machine)...)

@@ -62,3 +62,23 @@ func TestConditionalForwardersReachTheFrozenRequest(t *testing.T) {
 		t.Fatal("the DNS implementation ignored the declared forwarding zone")
 	}
 }
+
+func TestClusterDNSZoneTerminatesLocally(t *testing.T) {
+	env := api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(api.FieldValue{Name: "domains", Value: api.MapValue(api.FieldValue{Name: "containerClusters", Value: api.StringValue("clusters.example.test")})}))
+	cluster := api.NewObject(api.OpenShiftCluster, "sno", api.Value{}, api.MapValue())
+	var request managedservice.Request
+	if err := Definition(nil).Extend(api.NewCatalog([]api.Object{env, cluster}), api.MapValue(), &request); err != nil {
+		t.Fatal(err)
+	}
+	data, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got["localZones"], []any{"sno.clusters.example.test"}) {
+		t.Fatalf("cluster zone is not frozen as local: %s", data)
+	}
+}

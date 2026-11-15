@@ -48,7 +48,7 @@ func routingFor(catalog api.Catalog, provider api.Object, contextName string, ne
 	for _, leg := range legs {
 		devices[leg.Network] = leg.Device
 		routing.ManagedDevices = append(routing.ManagedDevices, leg.Device)
-		prefix := netip.MustParsePrefix(leg.Address).Masked()
+		prefix := netip.MustParsePrefix(leg.CIDR).Masked()
 		kept = append(kept, prefix)
 		if leg.Forward == "nat" {
 			nat = append(nat, prefix)

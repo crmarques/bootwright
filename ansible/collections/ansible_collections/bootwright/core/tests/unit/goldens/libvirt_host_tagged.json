@@ -126,6 +126,7 @@
     "legs": [
       {
         "address": "203.0.113.129/26",
+        "cidr": "203.0.113.128/26",
         "device": "br-trunk.150",
         "forward": "none",
         "name": "bootwright-lab-ceph-arbiter",
@@ -136,6 +137,7 @@
       },
       {
         "address": "203.0.113.65/26",
+        "cidr": "203.0.113.64/26",
         "device": "br-trunk.140",
         "forward": "nat",
         "name": "bootwright-lab-ceph-public",

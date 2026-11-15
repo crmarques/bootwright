@@ -79,7 +79,8 @@ network defined on a provider's host. Its fields, in emitted order:
 | `providerRef` | `InfraProvider` reference | required | An `InfraProvider` with a `libvirt` arm. |
 | `bridge` | bridge name | required | The bridge-name grammar of a provider's libvirt segment. With `spec.vlan`, the [trunk](#tagged-managed-networks) the leg rides on, short enough that `<bridge>.<vlan>` fits 15 bytes. |
 | `forward` | `nat` or `none` | `nat` | The libvirt forward mode; with `spec.vlan`, whether the leg's traffic is masqueraded to the uplink. |
-| `hostAddress` | IP | the IPv4 gateway, else the IPv6 gateway | The host's address on the bridge, or with `spec.vlan` on its leg: a host address inside the CIDR of its family, under the rules a gateway follows. Required when the Network declares no gateway. |
+| `hostAddressing` | `static` or `none` | `static`, materialized | `none` is admitted only on a tagged managed Network; the trunk and its leg carry no host IP or route. It requires `forward: none`, no `hostAddress` and no routing references involving the Network. |
+| `hostAddress` | IP | with static addressing, the IPv4 gateway, else the IPv6 gateway | The host's address on the bridge, or with `spec.vlan` on its leg: a host address inside the CIDR of its family, under the rules a gateway follows. Required with static addressing when the Network declares no gateway; forbidden with `hostAddressing: none`. |
 | `taggedNetworkRefs` | set of `Network` references | none | The VLAN networks guests may stack on this bridge. Each declares `vlan` and is not the Network itself. |
 | `routedNetworkRefs` | set of `Network` references | none | With `spec.vlan`, the [tagged managed Networks](#tagged-managed-networks) of the same provider the host routes this one to and from. |
 
@@ -113,7 +114,13 @@ Network's `cidr` is shorter than /32 or /128, leaving guests an address.
 A managed Network that declares `spec.vlan` is not a libvirt network. Its
 `bridge` names a trunk, a bridge the host block creates with no address of its
 own, and the Network is a host VLAN leg `<bridge>.<vlan>` on that trunk holding
-`hostAddress` with its CIDR's prefix
+`hostAddress` with its CIDR's prefix when `hostAddressing` is `static`.
+With `hostAddressing: none`, the leg has IPv4 and IPv6 addressing disabled;
+its CIDR remains the network's subnet and is never treated as a host address.
+A declared gateway describes an external router and never defaults onto this
+host. Host input and routed traffic through addressless legs are refused;
+tagged L2 carriage remains available. Runtime observation requires both the
+frozen profile and absence of live addresses and routes on addressless links
 ([trunks and VLAN legs](../substrates.md#provider-host-realization)). It is a
 [segment](machines.md#machine-profiles-and-segments) of its provider under its
 own name carrying itself and `taggedNetworkRefs` tagged and no Network

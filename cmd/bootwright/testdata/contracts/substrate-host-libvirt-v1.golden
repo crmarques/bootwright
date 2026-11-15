@@ -43,7 +43,8 @@ request-schema:
   identity.context string
   identity.object string
   legs []struct libvirt.Leg omitempty
-  legs[].address string
+  legs[].address string omitempty
+  legs[].cidr string
   legs[].device string
   legs[].forward string
   legs[].name string

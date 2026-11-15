@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
+import json
 import os
 import re
 import stat
@@ -51,7 +52,7 @@ UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 MAC = re.compile(r"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}\Z")
 FORWARDS = ("", "none", "nat")
 TRUNK_KEYS = frozenset(("bridge", "mac", "name", "uuid"))
-LEG_KEYS = frozenset(("address", "device", "forward", "name", "network", "trunk", "uuid", "vlan"))
+LEG_KEYS = frozenset(("address", "cidr", "device", "forward", "name", "network", "trunk", "uuid", "vlan"))
 ZONE = "trusted"
 SUFFIX = ".nmconnection"
 CONNECTION_DOMAIN = "bootwright.substrate.libvirt.connection-v1"
@@ -101,10 +102,10 @@ def legs_of(request, trunks=None):
         raise ValueError("invalid legs")
     found = []
     for value in values:
-        if not isinstance(value, dict) or set(value) | {"forward"} != LEG_KEYS:
+        if not isinstance(value, dict) or not set(value) <= LEG_KEYS or set(value) | {"address", "forward"} != LEG_KEYS:
             raise ValueError("invalid leg")
         forward = value.get("forward", "")
-        texts = [value[key] for key in ("address", "device", "name", "network", "trunk", "uuid")] + [forward]
+        texts = [value[key] for key in ("cidr", "device", "name", "network", "trunk", "uuid")] + [value.get("address", ""), forward]
         vlan = value["vlan"]
         if not all(isinstance(text, str) for text in texts) or isinstance(vlan, bool) or not isinstance(vlan, int) or not 1 <= vlan <= 4094:
             raise ValueError("invalid leg")
@@ -114,10 +115,16 @@ def legs_of(request, trunks=None):
             raise ValueError("the leg connection does not match the frozen provider")
         if value["device"] != "%s.%d" % (value["trunk"], value["vlan"]) or not DEVICE.match(value["device"]):
             raise ValueError("the leg device does not name its trunk and VLAN")
-        address = ipaddress.ip_interface(value["address"])
-        if address.version != 4 or str(address) != value["address"] or address.network.prefixlen == 0:
-            raise ValueError("invalid leg address")
-        found.append(dict(value, forward=forward))
+        network = ipaddress.ip_network(value["cidr"], strict=True)
+        if network.version != 4 or str(network) != value["cidr"] or network.prefixlen == 0:
+            raise ValueError("invalid leg subnet")
+        if "address" in value:
+            address = ipaddress.ip_interface(value["address"])
+            if address.version != 4 or str(address) != value["address"] or address.network != network:
+                raise ValueError("invalid leg address")
+        elif forward != "none":
+            raise ValueError("an addressless leg cannot enable NAT")
+        found.append(dict(value, address=value.get("address", ""), forward=forward))
     return found
 
 
@@ -183,9 +190,10 @@ def trunk_connection(context, provider, trunk):
 
 
 def leg_connection(context, provider, leg):
-    return {
+    address = leg["address"]
+    entry = {
         "name": leg["name"], "uuid": leg["uuid"], "role": "leg", "device": leg["device"], "type": "vlan", "bridge": leg["trunk"],
-        "network": leg["network"], "address": leg["address"], "forward": leg["forward"],
+        "network": leg["network"], "address": address, "cidr": leg["cidr"], "forward": leg["forward"],
         "sections": [
             ("connection", [("id", leg["name"]), ("uuid", leg["uuid"]), ("type", "vlan"), ("interface-name", leg["device"]),
                             ("autoconnect", "true"), ("zone", ZONE)]),
@@ -202,6 +210,12 @@ def leg_connection(context, provider, leg):
         },
         "fields": "connection,vlan,ipv4,ipv6",
     }
+    if not address:
+        entry["sections"][2] = ("ipv4", [("method", "disabled")])
+        for key in ("ipv4.addresses", "ipv4.never-default", "ipv4.gateway"):
+            entry["properties"].pop(key)
+        entry["properties"]["ipv4.method"] = "disabled"
+    return entry
 
 
 def keyfile(entry):
@@ -456,7 +470,39 @@ def judge(runner, entry, listing, root, owner):
     record["owned"] = True
     record["active"] = profile["active"] == "yes" and profile["device"] == entry["device"]
     record["definition"] = carries(groups, entry) and all(shown.get(key) == value for key, value in entry["properties"].items())
+    if record["active"] and not entry.get("address"):
+        empty = addressless_device(runner, entry["device"])
+        record["answered"] = empty is not None
+        record["definition"] = record["definition"] and empty is True
     return record
+
+
+def addressless_device(runner, device):
+    """No live address or route may contradict an owned addressless profile."""
+    try:
+        code, output, _error = command(runner, ["/usr/sbin/ip", "-json", "address", "show", "dev", device])
+        if code or len(output) >= MAX_OUTPUT:
+            return None
+        links = json.loads(output)
+        if not isinstance(links, list) or len(links) != 1 or links[0].get("ifname") != device:
+            return None
+        addresses = links[0].get("addr_info")
+        if not isinstance(addresses, list):
+            return None
+        if addresses:
+            return False
+        for family in ("-4", "-6"):
+            code, output, _error = command(runner, ["/usr/sbin/ip", family, "-json", "route", "show", "table", "all", "dev", device])
+            if code or len(output) >= MAX_OUTPUT:
+                return None
+            routes = json.loads(output)
+            if not isinstance(routes, list):
+                return None
+            if routes:
+                return False
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return None
 
 
 def judge_unfrozen(runner, entry, listing, root):
@@ -612,7 +658,7 @@ def host_networks(records):
     for record in records:
         entry = {"name": record["name"], "bridge": record["device"], "managed": True}
         if record["role"] == "leg":
-            entry.update(name=record["network"], address=record["address"])
+            entry.update(name=record["network"], address=record["address"] or record["cidr"])
         found.append(entry)
     return found
 

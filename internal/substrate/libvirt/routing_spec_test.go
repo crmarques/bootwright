@@ -54,12 +54,15 @@ func quotedDevices(devices []string) string {
 
 func specRuleset(template string, request HostRequest) string {
 	routing := *request.Routing
-	var trunks, legs, nat, routed []string
+	var trunks, legs, nat, routed, addressless []string
 	for _, trunk := range request.Trunks {
 		trunks = append(trunks, trunk.Bridge)
 	}
 	for _, leg := range request.Legs {
 		legs = append(legs, leg.Device)
+		if leg.Address == "" {
+			addressless = append(addressless, leg.Device)
+		}
 		if leg.Forward == "nat" {
 			nat = append(nat, leg.Device)
 		}
@@ -69,7 +72,7 @@ func specRuleset(template string, request HostRequest) string {
 	}
 	elements := map[string]string{
 		"<trunks>": quotedDevices(trunks), "<legs>": quotedDevices(legs), "<nat legs>": quotedDevices(nat),
-		"<managedDevices>": quotedDevices(routing.ManagedDevices), "<routed>": strings.Join(routed, ", "),
+		"<addressless>": quotedDevices(addressless), "<managedDevices>": quotedDevices(routing.ManagedDevices), "<routed>": strings.Join(routed, ", "),
 		"<natPrefixes>": strings.Join(routing.NATPrefixes, ", "), "<keptPrefixes>": strings.Join(routing.KeptPrefixes, ", "),
 	}
 	for placeholder, value := range elements {

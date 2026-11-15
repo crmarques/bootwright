@@ -16019,8 +16019,19 @@ before purge, bound waits and refuse stale MachineConfig readiness.
 
 The setup audit distinguishes existing Machine/Network/service and add-on
 ownership from native GitOps fixtures and external test peers. Addressless
-host trunks and the resolver handoff remain candidates [B1409](backlog.md#b1409)
+host trunks and the resolver handoff remain candidates [B1409](m1.md#b1409)
 and [B1410](m1.md#b1410). No core API, security topology or execution
 contract changes. The delivering commit records focused verification under
 the owner's shortened test-loop instruction; no full gate or native replay is
 claimed. [B1400](m3.md#b1400)'s live qualification remains open.
+
+## X484 — Cleanup at the end of the SNO runbook
+
+### B1419
+
+The owner's explicit request makes a clean starting lab an implicit
+prerequisite. The [runbook](../../e2e/lab-sno-fips-controller/runbook.md)
+omits pre-run recovery/cleanup instructions and groups original and strict
+fixture teardown after verification, before final context and host cleanup.
+The delivering commit records focused
+documentation and shell syntax checks; no native replay is claimed.

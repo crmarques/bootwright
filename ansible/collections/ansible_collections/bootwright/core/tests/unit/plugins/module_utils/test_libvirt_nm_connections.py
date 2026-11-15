@@ -21,9 +21,9 @@ REQUEST = {
     "uri": "qemu:///system",
     "trunks": [{"bridge": "br-lab", "mac": "52:54:00:aa:bb:01", "name": TRUNK, "uuid": UUIDS[TRUNK]}],
     "legs": [
-        {"address": "198.51.100.1/26", "device": "br-lab.110", "forward": "nat", "name": PUBLIC,
+        {"address": "198.51.100.1/26", "cidr": "198.51.100.0/26", "device": "br-lab.110", "forward": "nat", "name": PUBLIC,
          "network": "ceph-public", "trunk": "br-lab", "uuid": UUIDS[PUBLIC], "vlan": 110},
-        {"address": "198.51.100.65/26", "device": "br-lab.150", "name": ARBITER,
+        {"address": "198.51.100.65/26", "cidr": "198.51.100.64/26", "device": "br-lab.150", "name": ARBITER,
          "network": "ceph-arbiter", "trunk": "br-lab", "uuid": UUIDS[ARBITER], "vlan": 150},
     ],
 }
@@ -115,6 +115,7 @@ class NetworkManager:
         self.fail = ""
         self.sticky = set()
         self.routes = []
+        self.addresses = {}
 
     def profile(self, name, uuid, kind, device, filename="", active=False, properties=None):
         self.profiles[uuid] = {"name": name, "uuid": uuid, "type": kind, "interface": device, "filename": filename,
@@ -181,6 +182,11 @@ class NetworkManager:
         raise AssertionError(argv)
 
     def ip(self, argv):
+        if "address" in argv:
+            device = argv[-1]
+            return 0, json.dumps([{"ifname": device, "addr_info": self.addresses.get(device, [])}]), ""
+        if "dev" in argv:
+            return 0, json.dumps([route for route in self.routes if route.get("dev") == argv[-1]]), ""
         if argv[-2:] == ["link", "show"]:
             return 0, json.dumps([{"ifname": name} for name in sorted(os.listdir(self.net))]), ""
         family = 4 if "-4" in argv else 6
@@ -215,6 +221,47 @@ def manage(host, state, request=None, guests=None):
 
 def observe(host, request=None):
     return nm.observe(host.run, request or REQUEST, str(host.root), os.geteuid())
+
+
+def test_addressless_legs_have_no_ip_configuration_and_detect_live_address_drift(host):
+    request = copy.deepcopy(REQUEST)
+    for leg in request["legs"]:
+        leg.pop("address")
+        leg["forward"] = "none"
+    assert manage(host, "present", request)
+    assert all(item["definition"] for item in observe(host, request)["connections"])
+    for entry in nm.wanted(request):
+        assert entry["properties"]["ipv4.method"] == "disabled"
+        assert entry["properties"]["ipv6.method"] == "disabled"
+        assert "address1=" not in nm.keyfile(entry).decode()
+    assert not manage(host, "present", request)
+    host.addresses["br-lab.110"] = [{"local": "198.51.100.2", "family": "inet"}]
+    assert not next(item for item in observe(host, request)["connections"] if item["device"] == "br-lab.110")["definition"]
+    host.addresses.clear()
+    host.routes = [{"dst": "192.0.2.0/24", "dev": "br-lab.110"}]
+    assert not next(item for item in observe(host, request)["connections"] if item["device"] == "br-lab.110")["definition"]
+    host.routes.clear()
+    assert manage(host, "absent", request)
+    assert not host.profiles
+
+
+def test_addressless_legs_refuse_nat_and_mismatched_subnets_before_effects(host):
+    for change in ("NAT", "subnet"):
+        request = copy.deepcopy(REQUEST)
+        if change == "NAT":
+            request["legs"][0].pop("address")
+        else:
+            request["legs"][0]["cidr"] = "203.0.113.0/24"
+        with pytest.raises(ValueError):
+            manage(host, "present", request)
+        assert not host.effects()
+
+
+@pytest.mark.parametrize("output", ["{}", "[]", '[{"ifname":"other","addr_info":[]}]', 'not JSON'])
+def test_an_unanswered_addressless_read_proves_nothing(output):
+    def runner(_argv, **_kwargs):
+        return 0, output, ""
+    assert nm.addressless_device(runner, "br-lab") is None
 
 
 def held(name, role, device, **fields):

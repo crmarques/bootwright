@@ -526,14 +526,20 @@ disabled`, `ipv6.method disabled`, `connection.autoconnect yes` and
 bytes of the SHA-256 of `bootwright.substrate.libvirt.trunk-v1`, NUL, the
 context, NUL, the provider, NUL, the bridge, in lowercase hexadecimal pairs, so
 a tap that joins or leaves never changes the bridge's address. Each leg is a
-`legs[]` entry `{address, device, forward, name, network, trunk, uuid, vlan}` in
+`legs[]` entry `{cidr, device, forward, name, network, trunk, uuid, vlan}` with
+an optional `address`, in
 name order: the connection `bootwright-<context>-<network>` of type `vlan` with
 `connection.interface-name` `<device>`, which is `<trunk>.<vlan>`, `vlan.parent`
 `<trunk>`, `vlan.id` `<vlan>`, `ipv4.method manual`, `ipv4.addresses`
 `<address>` (the host address with its CIDR's prefix), `ipv4.never-default
 yes`, `ipv6.method disabled`, `connection.autoconnect yes` and `connection.zone
 trusted`, with no gateway, DNS or DHCP, so a managed `DNSServer` may bind the
-leg's address under the existing rules. Each connection's `connection.uuid` is
+leg's address under the existing rules. An addressless leg instead has
+`ipv4.method disabled` and `ipv6.method disabled`, no address, and no IP routes.
+Observation checks live addresses and routes as well as the profile; an
+unanswered read proves no postcondition. Its CIDR still owns the same prefix
+reservation and participates in host collision and isolation checks.
+Each connection's `connection.uuid` is
 `uuid`, derived as a domain's is: the version-8 UUID of the SHA-256 of
 `bootwright.substrate.libvirt.connection-v1`, NUL, the context, NUL, the
 connection name. `nmcli` can neither set nor show a profile's user data, so
@@ -702,6 +708,10 @@ ownership is foreign and stays unknown
 
 ### Routing table
 
+Addressless legs keep their CIDR for reservations and isolation, without host
+IPs, NAT or routed pairs. The derived `addressless` set drops host input and
+rejects forwarding before any allowance. Tagged L2 carriage is unchanged.
+
 A provider with a leg owns one nftables table `inet <table>` that routes the
 pairs its tagged managed Networks declare in
 [`routedNetworkRefs`](api/networks.md#tagged-managed-networks), masquerades the
@@ -787,17 +797,21 @@ set trunks { type ifname; elements = { <trunks> }; }
 set legs { type ifname; elements = { <legs> }; }
 set nat_legs { type ifname; elements = { <nat legs> }; }
 set managed { type ifname; elements = { <managedDevices> }; }
+set addressless { type ifname; elements = { <addressless> }; }
 set routed { type ifname . ifname; elements = { <routed> }; }
 set nat_prefixes { type ipv4_addr; flags interval; auto-merge; elements = { <natPrefixes> }; }
 set kept_prefixes { type ipv4_addr; flags interval; auto-merge; elements = { <keptPrefixes> }; }
 chain input {
 type filter hook input priority filter - 10; policy accept;
 iifname @trunks drop
+iifname @addressless drop
 }
 chain forward {
 type filter hook forward priority filter - 10; policy accept;
 iifname @trunks drop
 oifname @trunks drop
+iifname @addressless reject
+oifname @addressless reject
 meta nfproto ipv6 iifname @legs reject
 meta nfproto ipv6 oifname @legs reject
 ct state established,related accept
@@ -863,11 +877,14 @@ table's name when `nft` lists one of it, whether systemd and `nft` answered,
 the presence and ownership of the unit with its ruleset file, the unit's
 enablement and state, whether the live table carries
 exactly the frozen comment, chains, hooks, priorities, policies, set elements
-and each chain's rule count, and whether `net.ipv4.ip_forward` is 1.
+and each chain's rule count, and whether `net.ipv4.ip_forward` is 1. With
+addressless legs, it also compares the exact ordered input and forwarding deny
+prefixes before any routing allowance; replacing a deny with an accept or
+moving it later refuses readiness.
 
-Not yet met: `loaded` counts each chain's rules without comparing their expressions,
-so a rule replaced by another in the same chain still reads loaded and is
-never repaired; tracked as [B1302](milestones/backlog.md#b1302).
+Not yet met: outside the addressless deny prefixes, `loaded` counts rules
+without comparing their expressions, so a same-count replacement there is not
+repaired; tracked as [B1302](milestones/backlog.md#b1302).
 
 Presence
 requires the unit owned, enabled and active, the table loaded and, with

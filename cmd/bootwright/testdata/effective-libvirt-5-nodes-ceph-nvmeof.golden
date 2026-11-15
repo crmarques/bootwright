@@ -413,6 +413,7 @@ spec:
     providerRef: lab-libvirt
     bridge: virbr-lab
     forward: nat
+    hostAddressing: static
     hostAddress: 198.51.100.1
 ---
 apiVersion: bootwright.io/v1alpha1

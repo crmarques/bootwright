@@ -289,6 +289,7 @@ spec:
     providerRef: lab-libvirt
     bridge: virbr-nv
     forward: nat
+    hostAddressing: static
     hostAddress: 198.51.100.1
     taggedNetworkRefs:
       - nv-guest

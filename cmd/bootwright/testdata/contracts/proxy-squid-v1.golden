@@ -52,6 +52,7 @@ request-schema:
   implementation string
   ingressHosts []string omitempty
   kind string
+  localZones []string omitempty
   placement struct machine.Placement
   placement.address string omitempty
   placement.connection string

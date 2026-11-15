@@ -42,8 +42,8 @@ ROUTING_KEYS = frozenset(("forwarding", "keptPrefixes", "managedDevices", "natPr
 # Each base chain, its type, hook and numeric priority (filter is 0 and srcnat
 # 100), and how many rules it holds.
 CHAINS = {
-    "input": ("filter", "input", -10, 1),
-    "forward": ("filter", "forward", -10, 9),
+    "input": ("filter", "input", -10, 2),
+    "forward": ("filter", "forward", -10, 11),
     "postrouting": ("nat", "postrouting", 90, 1),
 }
 
@@ -127,19 +127,22 @@ def model(request):
     if managed != sorted({trunk["bridge"] for trunk in trunks} | set(devices) | managed_bridges(request)):
         raise ValueError("the managed devices are not exactly the provider's trunks, legs and managed bridges")
     routed = routed_pairs(routing.get("routed") or [], devices)
+    addressless = [leg["device"] for leg in legs if not leg["address"]]
+    if any(source in addressless or target in addressless for source, target in routed):
+        raise ValueError("an addressless leg cannot route")
     nat_legs = [leg["device"] for leg in legs if leg["forward"] == "nat"]
     nat = canonical_prefixes(routing.get("natPrefixes") or [], "NAT prefixes", 4, ordered=False)
     kept = canonical_prefixes(routing.get("keptPrefixes") or [], "kept prefixes", 4)
-    if set(nat) != {ipaddress.ip_interface(leg["address"]).network for leg in legs if leg["forward"] == "nat"}:
+    if set(nat) != {ipaddress.ip_network(leg["cidr"]) for leg in legs if leg["forward"] == "nat"}:
         raise ValueError("the NAT prefixes are not exactly those of the NAT legs")
-    if not {ipaddress.ip_interface(leg["address"]).network for leg in legs} <= set(kept):
+    if not {ipaddress.ip_network(leg["cidr"]) for leg in legs} <= set(kept):
         raise ValueError("the kept prefixes omit a leg")
     if forwarding != bool(nat_legs or routed):
         raise ValueError("forwarding is required exactly by a NAT leg or a routed pair")
     return {
         "unit": unit, "table": unit[:-len(".service")], "forwarding": forwarding,
         "trunks": [trunk["bridge"] for trunk in trunks], "legs": devices, "nat_legs": nat_legs,
-        "managed": list(managed), "routed": routed, "nat_prefixes": nat, "kept_prefixes": kept,
+        "managed": list(managed), "routed": routed, "nat_prefixes": nat, "kept_prefixes": kept, "addressless": addressless,
     }
 
 
@@ -184,7 +187,7 @@ def ruleset(table):
     lines = ["table inet %s" % name, "delete table inet %s" % name, "table inet %s {" % name,
              'comment "%s%s"' % (TABLE_MARK, table["unit"])]
     lines += [set_line(set_name, "ifname", ['"%s"' % device for device in table[set_name]])
-              for set_name in ("trunks", "legs", "nat_legs", "managed")]
+              for set_name in ("trunks", "legs", "nat_legs", "managed", "addressless")]
     lines.append(set_line("routed", "ifname . ifname", ['"%s" . "%s"' % pair for pair in table["routed"]]))
     lines += [set_line(set_name, "ipv4_addr", [str(network) for network in table[set_name]], True)
               for set_name in ("nat_prefixes", "kept_prefixes")]
@@ -192,11 +195,14 @@ def ruleset(table):
         "chain input {",
         "type filter hook input priority filter - 10; policy accept;",
         "iifname @trunks drop",
+        "iifname @addressless drop",
         "}",
         "chain forward {",
         "type filter hook forward priority filter - 10; policy accept;",
         "iifname @trunks drop",
         "oifname @trunks drop",
+        "iifname @addressless reject",
+        "oifname @addressless reject",
         "meta nfproto ipv6 iifname @legs reject",
         "meta nfproto ipv6 oifname @legs reject",
         "ct state established,related accept",
@@ -390,7 +396,7 @@ def element_value(item):
 
 def expected_sets(table):
     """Each set as nft lists it: its type, flags, auto-merge and elements, interfaces and pairs sorted."""
-    found = {name: ("ifname", (), False, sorted(table[name], key=str)) for name in ("trunks", "legs", "nat_legs", "managed")}
+    found = {name: ("ifname", (), False, sorted(table[name], key=str)) for name in ("trunks", "legs", "nat_legs", "managed", "addressless")}
     found["routed"] = (["ifname", "ifname"], (), False, sorted(table["routed"], key=str))
     for name in ("nat_prefixes", "kept_prefixes"):
         found[name] = ("ipv4_addr", ("interval",), True, intervals(table[name]))
@@ -415,11 +421,11 @@ def listed_set(entry):
 
 
 def loaded(items, table):
-    """Whether the listed table is exactly the frozen one: its mark, sets, chains, hooks, priorities and rule counts."""
+    """The frozen layout and, for addressless legs, its exact ordered deny prefix."""
     tables = [item["table"] for item in items if isinstance(item, dict) and isinstance(item.get("table"), dict)]
     if len(tables) != 1 or tables[0].get("comment") != TABLE_MARK + table["unit"]:
         return False
-    sets, chains, rules = {}, {}, {}
+    sets, chains, rules, expressions = {}, {}, {}, {}
     for item in items:
         if not isinstance(item, dict) or "metainfo" in item or "table" in item:
             continue
@@ -432,13 +438,34 @@ def loaded(items, table):
             chains[entry.get("name")] = (entry.get("type"), entry.get("hook"), entry.get("prio"), entry.get("policy"))
         elif kind == "rule":
             rules[entry.get("chain")] = rules.get(entry.get("chain"), 0) + 1
+            expressions.setdefault(entry.get("chain"), []).append(entry.get("expr"))
         else:
             return False
     if sets != expected_sets(table):
         return False
     if chains != {name: (kind, hook, prio, "accept") for name, (kind, hook, prio, _count) in CHAINS.items()}:
         return False
-    return rules == {name: count for name, (_kind, _hook, _prio, count) in CHAINS.items()}
+    return rules == {name: count for name, (_kind, _hook, _prio, count) in CHAINS.items()} and (
+        not table["addressless"] or addressless_rules_loaded(expressions)
+    )
+
+
+def interface_verdict(key, group, action):
+    verdict = {"reject": {"type": "icmpx", "expr": "port-unreachable"}} if action == "reject" else {"drop": None}
+    return [{"match": {"op": "==", "left": {"meta": {"key": key}}, "right": "@" + group}}, verdict]
+
+
+def addressless_rules_loaded(expressions):
+    """The exact deny prefix must precede every possible routing allowance."""
+    return expressions.get("input", [])[:2] == [
+        interface_verdict("iifname", "trunks", "drop"),
+        interface_verdict("iifname", "addressless", "drop"),
+    ] and expressions.get("forward", [])[:4] == [
+        interface_verdict("iifname", "trunks", "drop"),
+        interface_verdict("oifname", "trunks", "drop"),
+        interface_verdict("iifname", "addressless", "reject"),
+        interface_verdict("oifname", "addressless", "reject"),
+    ]
 
 
 def forwarding():
