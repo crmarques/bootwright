@@ -1,12 +1,12 @@
 implementation: os-disk-discovery-v1
-content-digest: fb6a880f3acae4f91a444462899a067cacc1931a835856bd44f3015b2fc9c26a
+content-digest: 0afccf1786a1f36e05534505062e6c439e5cbf90cf2b6fe12b020f68eddc79a7
 request-version: os-disk-discovery-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none
 fixed-places: none
 effect-pins:
-  private-custom-init-readonly-inventory-pinned-tls-receipt-cleanup-v1
+  private-custom-init-readonly-inventory-outbound-https-receipt-cleanup-v1
   verified-media-default
 request-identity:
   identity.context
@@ -43,6 +43,7 @@ request-schema:
   network.bondPorts []string omitempty
   network.gateway string omitempty
   network.interface string
+  network.nameservers []string omitempty
   network.prefix int
   network.type string
   network.vlanBase string omitempty
@@ -59,6 +60,10 @@ request-schema:
   private.certificateRef string omitempty
   private.path string
   private.url string
+  receipt struct installation.DiscoveryReceipt
+  receipt.container string
+  receipt.socketRoot string
+  receipt.url string
   version string
 evidence-schema:
   cleaned bool

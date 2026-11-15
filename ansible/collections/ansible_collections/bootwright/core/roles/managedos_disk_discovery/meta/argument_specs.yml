@@ -31,6 +31,9 @@ argument_specs:
           private:
             type: dict
             required: true
+          receipt:
+            type: dict
+            required: true
           deadlineSeconds:
             type: int
             required: true

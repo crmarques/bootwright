@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 import inspect
 
-from ansible_collections.bootwright.core.plugins.module_utils import absolute_deadline, bounded_process, canonical_json
+from ansible_collections.bootwright.core.plugins.module_utils import absolute_deadline, bounded_process, canonical_json, tls_trust
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_worker, disk_inventory, physical_machine_identity
 import stat
 
@@ -24,6 +24,7 @@ REQUIRED_INITRD = (
     "usr/bin/sleep",
     "usr/bin/mkdir",
     "usr/bin/cp",
+    "usr/bin/timeout",
 )
 ARGUMENTS = (
     "rdinit=/init",
@@ -57,32 +58,38 @@ mount -t devtmpfs -o nosuid devtmpfs /dev
 mount -t tmpfs -o mode=0700,nosuid,nodev tmpfs /run
 mkdir -p /run/discovery
 printf '%s\n' /bin/false >/proc/sys/kernel/modprobe
-# No modprobe configuration, install hook, udev daemon or storage generator.
+timeout -k 2 180 /bin/sh /bootwright-discovery/drivers.sh || inert
+cp -R /bootwright-discovery/. /run/discovery/
+python3 -I /run/discovery/disk_discovery_worker.py || inert
+# PID1 reaps the synchronous worker and its process-group-owned children.
+# The worker returns only after durable receipt acknowledgement.
+echo o >/proc/sysrq-trigger
+trap - EXIT HUP INT TERM
+while :; do sleep 60; done
+"""
+
+
+DRIVERS = "#!/bin/sh\nset -eu\nexport PATH=/usr/bin:/usr/sbin:/bin:/sbin LC_ALL=C\n" + r"""# No modprobe configuration, install hook, udev daemon or storage generator.
+echo 'Bootwright discovery: probing hardware drivers (optional unmatched aliases are ignored)' >/dev/console
 for pass in 1 2 3; do
     count=0
     for file in /sys/bus/pci/devices/*/modalias /sys/bus/virtio/devices/*/modalias /sys/bus/scsi/devices/*/modalias /sys/bus/usb/devices/*/modalias; do
         [ -f "$file" ] || continue
-        count=$((count + 1)); [ "$count" -le 4096 ] || inert
+        count=$((count + 1)); [ "$count" -le 4096 ] || exit 1
         [ ! -L "${file%/modalias}/driver" ] || continue
         read -r alias <"$file"
-        case "$alias" in ''|*[!a-zA-Z0-9_:.*-]*) inert;; esac
-        [ "${#alias}" -le 256 ] || inert
-        modprobe --config /dev/null --ignore-install "$alias" || :
+        case "$alias" in ''|*[!a-zA-Z0-9_:.*-]*) exit 1;; esac
+        [ "${#alias}" -le 256 ] || exit 1
+        timeout -k 2 20 modprobe --quiet --config /dev/null --ignore-install "$alias" || :
     done
     sleep 2
 done
+echo 'Bootwright discovery: proving storage-controller drivers' >/dev/console
 for device in /sys/bus/pci/devices/*; do
     [ -f "$device/class" ] || continue
     read -r class <"$device/class"
-    case "$class" in 0x01*) [ -L "$device/driver" ] || inert;; esac
+    case "$class" in 0x01*) [ -L "$device/driver" ] || exit 1;; esac
 done
-cp -R /bootwright-discovery/. /run/discovery/
-python3 -I /run/discovery/disk_discovery_worker.py || inert
-# PID1 reaps the synchronous worker and its process-group-owned children.
-# The worker returns only after receipt acknowledgement and TLS cleanup.
-echo o >/proc/sysrq-trigger
-trap - EXIT HUP INT TERM
-while :; do sleep 60; done
 """
 
 
@@ -119,15 +126,15 @@ def overlay(payload):
     """Only trusted collection code and the private attempt enter the RAM image."""
     if not payload or any(not re.fullmatch(r"[a-z][a-z0-9_.-]{0,63}", name) for name in payload):
         raise ValueError("discovery image payload")
-    files = [("init", INIT.encode("ascii"), 0o755)]
+    files = [("init", INIT.encode("ascii"), 0o755), ("bootwright-discovery/drivers.sh", DRIVERS.encode("ascii"), 0o700)]
     files.extend(("bootwright-discovery/" + name, data, 0o600) for name, data in sorted(payload.items()))
     return newc(files)
 
 
-def payload(binding, network, interfaces, token, certificate, private_key):
+def payload(binding, network, interfaces, token, certificate, receipt_url):
     """One exact source bundle is used by execution and offline qualification."""
-    modules = (absolute_deadline, bounded_process, canonical_json, disk_inventory, physical_machine_identity, disk_discovery_worker)
+    modules = (absolute_deadline, bounded_process, canonical_json, tls_trust, disk_inventory, physical_machine_identity, disk_discovery_worker)
     files = {module.__name__.rsplit(".", 1)[-1] + ".py": inspect.getsource(module).encode("utf-8") for module in modules}
-    files["request.json"] = canonical_json.canonical({"binding": binding, "interfaces": interfaces, "network": network, "reportToken": token})
-    files["server.pem"], files["server-key.pem"] = certificate, private_key
+    files["request.json"] = canonical_json.canonical({"binding": binding, "interfaces": interfaces, "network": network, "reportToken": token, "receiptURL": receipt_url})
+    files["artifact.pem"] = certificate
     return files

@@ -27,6 +27,7 @@
       media-insertion: verified virtual-media trust and insertion
       boot-selection: one-time virtual-media boot selection
       power-on: owned discovery power-on
+      receipt-listener: private controller receipt listener setup
       inventory: authenticated inventory transfer
       acknowledgement: inventory acknowledgement
       cleanup: owned media and power cleanup
@@ -70,7 +71,10 @@
       source-size: the source ISO exceeds the installer-media store bound
       initrd-tools: the RHEL initramfs lacks required discovery tools
       initrd-layout: the source ISO initramfs layout is unqualified
-      inventory-timeout: no authenticated disk inventory arrived before the deadline
+      inventory-timeout: no authenticated inventory arrived at the controller HTTPS endpoint; inspect boot phases and node-to-controller connectivity
+      receipt-endpoint: the frozen HTTPS receipt endpoint or local placement is invalid
+      receipt-ownership: a foreign Unix socket occupies the private receipt path
+      receipt-active: another receiver still holds the private receipt socket
       custody-directory: a private directory failed its ownership or mode proof
       custody-mode: a private custody directory has an unexpected mode
       custody-file: a private record failed its type, ownership, mode or size proof
@@ -98,6 +102,7 @@
       native-lsinitrd: lsinitrd did not complete initramfs inspection
       native-mkksiso: mkksiso did not complete boot-configuration remastering
       native-openssl: openssl did not complete inventory certificate preparation
+      native-podman: the declared artifact container could not be inspected for receipt socket isolation
       native-chcon: chcon did not complete the private publication SELinux labeling
       native-unknown: a fixed native command failed
       contract: a bounded discovery contract was refused

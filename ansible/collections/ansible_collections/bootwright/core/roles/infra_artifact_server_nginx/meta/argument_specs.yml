@@ -35,6 +35,9 @@ argument_specs:
           placement:
             type: dict
             required: true
+          receiptRoot:
+            type: str
+            required: false
           tls:
             type: dict
             required: false

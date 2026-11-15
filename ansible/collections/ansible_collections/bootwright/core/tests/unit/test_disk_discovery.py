@@ -41,8 +41,9 @@ def test_custom_init_calls_the_worker_in_the_actual_private_payload(monkeypatch)
     instance = controller.Controller.__new__(controller.Controller)
     instance.root = Path("/fixture")
     instance.binding = {"nonce": "a" * 64}
-    instance.request = {"interfaces": [], "network": {}}
-    instance.load = lambda: {"reportToken": "b" * 64}
+    instance.request = {"interfaces": [], "network": {}, "receipt": {"url": "https://example.test:8443/_bootwright/inventory/"}}
+    instance.material = {"artifactCertificate": "/fixture/certificate.pem"}
+    instance.load = lambda: {"reportToken": "b" * 64, "token": "c" * 64}
     monkeypatch.setattr(controller.records, "read", lambda path: b"synthetic TLS material")
     payload = instance.payload()
     archive = unpack(boot.overlay(payload))
@@ -56,7 +57,11 @@ def test_custom_init_calls_the_worker_in_the_actual_private_payload(monkeypatch)
     assert len(mounts) == 4
     assert all(" -t " + kind in line for line, kind in zip(mounts, ("proc", "sysfs", "devtmpfs", "tmpfs")))
     assert "/proc/sys/kernel/modprobe" in init
-    assert "/sys/bus/scsi/devices/*/modalias" in init
+    assert "/sys/bus/scsi/devices/*/modalias" in boot.DRIVERS
+    assert "timeout -k 2 180" in init
+    assert "--quiet" in boot.DRIVERS
+    assert "server-key.pem" not in payload
+    assert "tls_trust.py" in payload
 
 
 def test_overlay_is_deterministic_bounded_and_has_no_traversal_or_links():
@@ -145,40 +150,13 @@ def test_networking_is_fixed_argv_and_binds_only_the_proved_mac():
             worker.network_commands(dict(network, interface=bad), interfaces, {"02:00:00:00:00:01": "eth0"})
 
 
-def handler(report, token="a" * 64, data=b"", path="/ack", authorization=None):
-    result = worker.Handler.__new__(worker.Handler)
-    result.path = path
-    result.server = SimpleNamespace(report=report, token=token, acknowledged=False)
-    result.headers = {"Content-Length": str(len(data)), "Authorization": authorization or "Bearer " + token}
-    result.rfile = io.BytesIO(data)
-    result.answer = Mock()
-    return result
-
-
-def test_acknowledgement_requires_authentication_and_exact_report_digest():
-    report = b'{"fixture":true}'
-    digest = hashlib.sha256(report).hexdigest().encode()
-    for payload, authorization in ((b"bad", None), (b"f" * 64, None), (digest, "Bearer wrong")):
-        request = handler(report, data=payload, authorization=authorization)
-        request.do_POST()
-        assert not request.server.acknowledged
-        request.answer.assert_called_once_with(403)
-    request = handler(report, data=digest)
-    request.do_POST()
-    assert request.server.acknowledged
-    request.answer.assert_called_once_with(200)
-    request = handler(report, path="/report", authorization="Bearer wrong")
-    request.do_GET()
-    request.answer.assert_called_once_with(403)
-
-
 def fixture_custody(tmp_path, monkeypatch):
     instance = controller.Controller.__new__(controller.Controller)
     instance.root = tmp_path / "custody"
     instance.root.mkdir()
     instance.binding = {"nonce": "a" * 64}
     instance.digest = "b" * 64
-    instance.request = {"private": {"path": str(tmp_path / "served")}}
+    instance.request = {"private": {"path": str(tmp_path / "served")}, "receipt": {"socketRoot": str(tmp_path / "runtime")}}
     instance.client = Mock(return_value=Mock(inserted=Mock(return_value="")))
     instance.target = Mock(return_value="Off")
     monkeypatch.setattr(controller.records, "read", lambda path, limit=32768: path.read_bytes())
@@ -218,30 +196,26 @@ def test_lost_custody_never_mints_new_authority(tmp_path, monkeypatch, boundary)
     instance.client.return_value.power.assert_not_called()
 
 
-@pytest.mark.parametrize("missing", (None, "server.pem", "server-key.pem", "both"))
-def test_completed_cleanup_resumes_after_each_tls_deletion(tmp_path, monkeypatch, missing):
+@pytest.mark.parametrize("missing", (None, "initrd-0", "initrd-1", "both"))
+def test_completed_cleanup_resumes_after_each_private_image_deletion(tmp_path, monkeypatch, missing):
     instance = fixture_custody(tmp_path, monkeypatch)
     instance.remove_unprepared()
-    tls = instance.root / "tls"
-    tls.mkdir()
-    for name in ("server.pem", "server-key.pem"):
+    for name in ("initrd-0", "initrd-1"):
         if missing not in (name, "both"):
-            (tls / name).write_bytes(b"private fixture")
+            (instance.root / name).write_bytes(b"private fixture")
     instance.client = Mock(side_effect=AssertionError("revisited installed machine"))
     assert instance.destroy()["cleaned"]
-    assert not tls.exists()
+    assert not any(instance.root.glob("initrd-*"))
 
 
-def test_receipt_is_committed_before_acknowledgement(tmp_path, monkeypatch):
+def test_receive_reuses_the_immutable_report_without_requiring_another_boot(tmp_path, monkeypatch):
     instance = fixture_custody(tmp_path, monkeypatch)
     wire = controller.canonical_json.canonical({"version": "machine-disk-inventory-v1", "binding": instance.binding, "disks": [{}]})
     instance.request["deadlineSeconds"] = 1800
-    instance.session = Mock(return_value=wire)
-    assert instance.receive() == wire
-    assert (instance.root / "report.json").read_bytes() == wire
-    instance.session.assert_called_once_with("receipt")
-    instance.session = Mock(side_effect=AssertionError("refetched immutable receipt"))
-    assert instance.receive() == wire
+    (instance.root / "report.json").write_bytes(wire)
+    receiver = Mock()
+    assert instance.receive(receiver) == wire
+    receiver.poll.assert_not_called()
 
 
 def test_total_deadline_stops_continuous_activity_and_restores_handler():
@@ -267,29 +241,17 @@ def test_removed_discovery_never_recreates_private_keys(tmp_path, monkeypatch):
     assert not (instance.root / "tls").exists()
 
 
-def test_interrupted_tls_stages_are_reaped_without_touching_other_records(tmp_path, monkeypatch):
-    instance = fixture_custody(tmp_path, monkeypatch)
-    stage = instance.root / (".tls-stage-" + "a" * 32)
-    stage.mkdir()
-    (stage / "server-key.pem").write_bytes(b"private fixture")
-    (instance.root / "report.json").write_bytes(b"immutable fixture")
-    instance.reap_tls_stages()
-    assert not stage.exists()
-    assert (instance.root / "report.json").read_bytes() == b"immutable fixture"
-
-
 def test_observation_cannot_complete_before_local_cleanup_is_sealed(tmp_path, monkeypatch):
     instance = fixture_custody(tmp_path, monkeypatch)
     instance.remove_unprepared()
     (instance.root / "sealed.json").unlink()
-    tls = instance.root / "tls"
-    tls.mkdir()
-    (tls / "server-key.pem").write_bytes(b"interrupted private fixture")
+    image = instance.root / "discovery.iso"
+    image.write_bytes(b"interrupted private fixture")
     assert instance.evidence() == {"version": controller.VERSION, "request": instance.digest, "completed": False, "cleaned": False}
-    assert (tls / "server-key.pem").exists()
+    assert image.exists()
     instance.client = Mock(side_effect=AssertionError("revisited hardware after external cleanup"))
     assert instance.destroy()["cleaned"]
-    assert not tls.exists()
+    assert not image.exists()
     instance.reap = Mock(side_effect=AssertionError("observation performed local cleanup"))
     assert instance.evidence()["cleaned"]
 

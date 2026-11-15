@@ -23,7 +23,7 @@ def test_the_artifact_server_logs_each_request_without_its_uri():
     rendered = GOLDEN.read_text(encoding="utf-8")
     lines = [line.strip() for line in rendered.splitlines()]
     assert lines.count("access_log /dev/stdout fetch;") == 1
-    assert not [line for line in lines if line.startswith("access_log") and line != "access_log /dev/stdout fetch;"]
+    assert not [line for line in lines if line.startswith("access_log") and line not in ("access_log /dev/stdout fetch;", "access_log off;")]
     formats = re.findall(r"^\s*log_format\s+fetch\s+'([^']*)';\s*$", rendered, re.M)
     assert len(formats) == 1
     assert set(re.findall(r"\$[a-z_0-9]+", formats[0])) == FIELDS
@@ -32,7 +32,13 @@ def test_the_artifact_server_logs_each_request_without_its_uri():
     assert not logging.intersection(URI_VARIABLES)
     # $uri is what try_files serves from, and that is its one use.
     elsewhere = set(re.findall(r"\$[a-z_0-9]+", rendered)).intersection(URI_VARIABLES)
-    assert elsewhere <= {"$uri"}
+    assert elsewhere <= {"$uri", "$http_content_length", "$http_authorization", "$http_transfer_encoding"}
     assert [line for line in lines if "$uri" in line] == ["try_files $uri =404;"] * 2
     assert "error_log /dev/stderr warn;" in lines
-    assert "access_log off;" not in lines
+    assert lines.count("access_log off;") == 1
+    assert lines.count("error_log /dev/null crit;") == 2
+    callback = rendered.split('location ~ "^/_bootwright/inventory/', 1)[1].split("location /_bootwright/", 1)[0]
+    assert "access_log off;" in callback
+    assert "client_max_body_size 48k;" in callback
+    assert "client_body_buffer_size 64k;" in callback
+    assert "proxy_pass http://unix:" in callback

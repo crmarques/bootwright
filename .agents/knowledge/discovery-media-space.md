@@ -55,7 +55,10 @@ synthetic-disk writes and unchanged disk hashes. All ten menu entries retained
 the inventory-only arguments; vendor EFI executables and kernels matched the
 source byte-for-byte. A separate RAM-only probe confirmed SecureBoot enabled
 and SetupMode off under OVMF; that observation alone does not qualify the full
-inventory journey. The default Q35 SATA profile refused its missing source
-initrd driver safely. The focused
+inventory journey. A later isolated Q35 SATA probe with the actual RHEL 9.8 initramfs
+loaded AHCI and reached authenticated inventory despite unmatched optional PCI
+and SCSI aliases. A final alias warning alone therefore proves neither a driver
+failure nor a stopped worker; use the fixed bootstrap phases and receipt state.
+The focused
 [`test_disk_discovery_space.py`](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_disk_discovery_space.py)
 guards one-pass arguments, transfer/fallback, concurrent capacity and recovery.

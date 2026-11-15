@@ -15,11 +15,13 @@ import stat
 import time
 import urllib.request
 from itertools import islice
+from urllib.parse import urlsplit
 
 from ansible_collections.bootwright.core.plugins.module_utils import absolute_deadline
 from ansible_collections.bootwright.core.plugins.module_utils import canonical_json
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_media as media
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_boot as boot
+from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_receipt as receipt
 from ansible_collections.bootwright.core.plugins.module_utils import tls_trust
 from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
 from ansible_collections.bootwright.core.plugins.module_utils import private_records as records
@@ -32,7 +34,7 @@ ENV = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C"}
 
 
 def validate(request, digest, binding):
-    keys = {"version", "identity", "bootMedia", "controller", "interfaces", "network", "private", "deadlineSeconds", "placement"}
+    keys = {"version", "identity", "bootMedia", "controller", "interfaces", "network", "private", "deadlineSeconds", "placement", "receipt"}
     if set(request) != keys or request["version"] != VERSION or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
         raise ValueError("discovery request shape")
     if (
@@ -44,6 +46,21 @@ def validate(request, digest, binding):
     if (request["controller"]["virtualMedia"]["trust"] not in ("established", "importCertificate", "disableVerification")
             or not request["private"]["url"].startswith("https://")):
         raise ValueError("discovery private media TLS")
+    callback = request["receipt"]
+    endpoint, private = urlsplit(callback["url"]), urlsplit(request["private"]["url"])
+    if (set(callback) != {"url", "socketRoot", "container"} or endpoint.scheme != "https"
+            or endpoint.netloc != private.netloc or endpoint.username or endpoint.password
+            or endpoint.path != "/_bootwright/inventory/" or endpoint.query or endpoint.fragment
+            or re.fullmatch(r"/run/bootwright-receipts/[0-9a-f]{32}", callback["socketRoot"]) is None
+            or request["placement"]["connection"] != "local"):
+        raise ValueError("discovery receipt endpoint")
+    parts = Path(request["private"]["path"]).parts
+    if (len(parts) != 13 or parts[:7] != ("/", "var", "lib", "bootwright-hosted", binding["context"], "services", "artifact-server")
+            or re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", parts[7]) is None
+            or parts[8:] != ("public", "private", "os", binding["machine"], "discovery")
+            or callback["container"] != "bootwright-" + binding["context"] + "-artifacts-" + parts[7]
+            or callback["socketRoot"] != "/run/bootwright-receipts/" + hashlib.sha256((binding["context"] + "/" + parts[7]).encode("ascii")).hexdigest()[:32]):
+        raise ValueError("discovery receipt endpoint")
     if request["deadlineSeconds"] != 1800 or binding.get("requestDigest") != digest:
         raise ValueError("discovery binding")
     for key in ("context", "machine"):
@@ -149,83 +166,15 @@ class Controller:
                 canonical_json.canonical({"binding": self.binding, "token": secrets.token_hex(32), "reportToken": secrets.token_hex(32)}),
             )
         state = self.load()
-        if not (self.root / "tls").exists():
-            self.prepare_tls()
-        records.directory(self.root / "tls", False)
-        records.read(self.root / "tls/server-key.pem")
-        records.read(self.root / "tls/server.pem")
         return state
 
-    def prepare_tls(self):
-        self.phase = "tls"
-        self.reap_tls_stages()
-        stage = self.root / (".tls-stage-" + secrets.token_hex(16))
-        records.directory(stage, True)
-        try:
-            key, certificate = stage / "server-key.pem", stage / "server.pem"
-            media.native(
-                [
-                    "/usr/bin/openssl",
-                    "req",
-                    "-x509",
-                    "-newkey",
-                    "ec",
-                    "-pkeyopt",
-                    "ec_paramgen_curve:P-256",
-                    "-nodes",
-                    "-days",
-                    "2",
-                    "-subj",
-                    "/CN=Bootwright RAM inventory",
-                    "-addext",
-                    "basicConstraints=critical,CA:FALSE",
-                    "-addext",
-                    "extendedKeyUsage=serverAuth",
-                    "-keyout",
-                    str(key),
-                    "-out",
-                    str(certificate),
-                ]
-            )
-            for path in (key, certificate):
-                os.chmod(path, 0o600)
-                records.read(path)
-                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-                try:
-                    os.fsync(fd)
-                finally:
-                    os.close(fd)
-            held = os.open(stage, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-            try:
-                os.fsync(held)
-            finally:
-                os.close(held)
-            os.rename(stage, self.root / "tls")
-            os.fsync(self.lock)
-        finally:
-            if stage.exists():
-                for name in ("server-key.pem", "server.pem"):
-                    (stage / name).unlink(missing_ok=True)
-                stage.rmdir()
+    def receipt_label(self):
+        return media.native(["/usr/bin/podman", "inspect", "--type", "container", "--format", "{{.ProcessLabel}}", self.request["receipt"]["container"]], limit=1024).decode("ascii").strip()
 
-    def reap_tls_stages(self):
-        with os.scandir(self.root) as entries:
-            names = [entry.name for entry in islice(entries, 4097)]
-        if len(names) > 4096:
-            raise ValueError("discovery custody entry bound")
-        for name in names:
-            if re.fullmatch(r"\.tls-stage-[0-9a-f]{32}", name) is None:
-                continue
-            stage = self.root / name
-            records.directory(stage, False)
-            with os.scandir(stage) as entries:
-                children = [entry.name for entry in islice(entries, 3)]
-            if set(children) - {"server-key.pem", "server.pem"}:
-                raise ValueError("foreign discovery TLS stage")
-            for child in children:
-                records.read(stage / child)
-                (stage / child).unlink()
-            stage.rmdir()
+    def label_receipt(self, path):
+        if not Path("/sys/fs/selinux/enforce").exists():
+            return
+        media.native(["/usr/bin/chcon", "--reference", str(path.parent), str(path)])
 
     def payload(self):
         return boot.payload(
@@ -233,8 +182,8 @@ class Controller:
             self.request["network"],
             self.request["interfaces"],
             self.load()["reportToken"],
-            records.read(self.root / "tls/server.pem"),
-            records.read(self.root / "tls/server-key.pem"),
+            records.read(Path(self.material["artifactCertificate"])),
+            self.request["receipt"]["url"] + self.load()["token"][:32],
         )
 
     def publication(self):
@@ -316,45 +265,14 @@ class Controller:
             raise ValueError("discovery controller identity")
         return client.power_state()
 
-    def session(self, command, data=b""):
-        certificate = records.read(self.root / "tls/server.pem").decode("ascii")
-        context, leaf = tls_trust.context(certificate, "certificate")
-        connection = tls_trust.CertificateConnection(self.request["network"]["address"] + ":9443", leaf, context=context, timeout=30)
-        token = self.load()["reportToken"]
-        try:
-            with absolute_deadline.limited(30):
-                connection.connect()  # Pin the leaf before the token crosses TLS.
-                connection.request(
-                    "GET" if command == "receipt" else "POST",
-                    "/report" if command == "receipt" else "/ack",
-                    body=data,
-                    headers={"Authorization": "Bearer " + token},
-                )
-                response = connection.getresponse()
-                if response.status != 200:
-                    return None
-                content = response.read(MAX_REPORT + 1)
-                if len(content) > MAX_REPORT:
-                    raise ValueError("discovery response exceeds bound")
-                return content
-        except (OSError, ValueError):
-            return None
-        finally:
-            connection.close()
-
-    def receive(self):
+    def receive(self, receiver):
         self.phase = "inventory"
-        existing = self.report()
-        if existing is not None:
-            return existing
         deadline = time.monotonic() + self.request["deadlineSeconds"]
         while time.monotonic() < deadline:
-            answer = self.session("receipt")
-            if answer:
-                self.validate_report(answer)
-                records.write(self.root / "report.json", answer)
-                return answer
-            time.sleep(3)
+            existing = self.report()
+            if existing is not None:
+                return existing
+            receiver.poll(min(10, deadline - time.monotonic()))
         raise ValueError("discovery report deadline")
 
     def start(self):
@@ -387,7 +305,7 @@ class Controller:
         self.phase = "power-on"
         client.power("On", "On")
 
-    def cleanup(self, acknowledged):
+    def cleanup(self, acknowledged, receiver=None):
         deadline = time.monotonic() + 600
         client = self.client()
         unused, url = self.publication()
@@ -399,7 +317,10 @@ class Controller:
                 client.power("ForceOff", "Off")
             if time.monotonic() >= deadline:
                 raise ValueError("discovery poweroff deadline")
-            time.sleep(3)
+            if receiver is None:
+                time.sleep(3)
+            else:
+                receiver.poll()  # Replay a lost ACK until verified shutdown.
             client = self.client()
         if client.inserted() not in ("", url):
             raise ValueError("foreign virtual media during cleanup")
@@ -436,6 +357,7 @@ class Controller:
         proof = self.completion()
         if proof is None:
             raise ValueError("discovery external cleanup is unproved")
+        receipt.remove_stale(self)
         self.reap()
         if not (self.root / "sealed.json").exists():
             records.write(self.root / "sealed.json", canonical_json.canonical(self.seal(proof)))
@@ -443,14 +365,7 @@ class Controller:
 
     def reap(self):
         media.reap_intermediates(self.root)
-        self.reap_tls_stages()
-        tls = self.root / "tls"
-        if tls.exists():
-            records.directory(tls, False)
-            for name in ("server-key.pem", "server.pem"):
-                (tls / name).unlink(missing_ok=True)
-            tls.rmdir()
-        for name in ("server-key.pem", "server.pem", "discovery.iso", "patched.iso", "initrd-0", "initrd-1"):
+        for name in ("discovery.iso", "patched.iso", "initrd-0", "initrd-1"):
             (self.root / name).unlink(missing_ok=True)
 
     def apply(self):
@@ -465,13 +380,13 @@ class Controller:
             if not before["completed"]:
                 raise ValueError("discovery was removed")
             return before
-        if self.report() is None:
-            self.start()
-        report = self.receive()  # Immutable and fsynced before the ACK.
-        self.phase = "acknowledgement"
-        self.session("ack", hashlib.sha256(report).hexdigest().encode("ascii"))
-        self.phase = "cleanup"
-        self.cleanup(True)
+        self.phase = "receipt-listener"
+        with receipt.Receiver(self) as receiver:
+            if self.report() is None:
+                self.start()
+            self.receive(receiver)
+            self.phase = "cleanup"
+            self.cleanup(True, receiver)
         return self.finish(True)
 
     def destroy(self):

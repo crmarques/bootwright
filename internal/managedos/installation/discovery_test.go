@@ -290,3 +290,22 @@ func TestDiscoveryStorageRefinementCannotBypassInstallationOwnership(t *testing.
 		}
 	}
 }
+
+func TestDiscoveryReceiptUsesTheSelectedArtifactHTTPSPort(t *testing.T) {
+	catalog := discoveryCatalog()
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+	plan, err := NewDiscovery(nil).WithMedia(labMedia()).Plan(context.Background(), input)
+	if err != nil || len(plan.Definitions) != 1 {
+		t.Fatalf("discovery plan: %v (%v)", plan, err)
+	}
+	request, err := DecodeDiscoveryRequest(plan.Definitions[0].Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Receipt.URL != "https://192.0.2.1:8443/_bootwright/inventory/" {
+		t.Fatalf("receipt discarded the declared artifact HTTPS endpoint: %+v", request.Receipt)
+	}
+	if request.Receipt.SocketRoot == "" || len(request.Receipt.SocketRoot)+33 >= 104 || request.Receipt.Container == "" {
+		t.Fatalf("receipt has no bounded service-owned socket: %+v", request.Receipt)
+	}
+}

@@ -13,10 +13,13 @@ Exec=-g "daemon off;"
 Volume=/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/config/nginx.conf:/etc/nginx/nginx.conf:ro,Z
 Volume=/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls:/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls:ro,Z
 Volume=/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/public:/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/public:ro,Z
+Volume=/run/bootwright-receipts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:/run/bootwright-receipts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:ro,Z
 
 [Service]
 Restart=always
 TimeoutStartSec=180
+RuntimeDirectory=bootwright-receipts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+RuntimeDirectoryMode=0711
 
 [Install]
 WantedBy=multi-user.target

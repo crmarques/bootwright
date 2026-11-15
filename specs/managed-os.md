@@ -1490,10 +1490,31 @@ The inventory image runs a fixed PID1 entirely from the verified initramfs.
 It starts no systemd, udev, Anaconda or installer second stage and mounts only
 RAM and kernel pseudo-filesystems. Automatic RAID, LVM and swap activation is
 disabled. The worker configures the declared static IPv4 ethernet, bond or VLAN
-and serves only the inventory and its acknowledgement over TCP 9443. The
-controller must reach the target installation address on that port directly;
-enterprise network rules remain operator-managed. The fresh attempt certificate
-is pinned before the bearer token is sent. This procedure contains no installer
+and posts its bounded report to the selected controller-local ArtifactServer's
+existing HTTPS endpoint, retaining its declared port. No node listener or
+controller-to-node connection is required. The network must admit node and BMC
+connections to that endpoint; enterprise rules remain operator-managed. The
+worker validates the endpoint hostname and pins the bound serving leaf before
+sending its independent per-attempt bearer token. It inherits no proxy and
+follows no redirect. Declared DNS resolvers are configured in RAM when needed.
+The HTTPS service reserves `/_bootwright/` against static content, accepts only
+a bounded POST on the exact inventory route and proxies it to an attempt-owned
+Unix socket. The service's own systemd runtime directory, frozen in the request
+and scoped by its exclusive unit reservation, is outside served content and
+mounted read-only. Under SELinux the receiver socket uses the running artifact
+container's exact peer context and its directory's private file label, without
+changing process confinement, system policy or verification settings. There is
+no general upload directory or writable artifact mount. Request bodies, credentials and callback routes are not logged or spooled.
+The receiver validates canonical framing and binding and persists the immutable
+report before returning its SHA-256 acknowledgement. Identical retries replay
+the acknowledgement; conflicting reports refuse. The receiver remains available
+through verified power-off so a lost acknowledgement can be retried, including
+after a controller restart. The acknowledgement proves receipt only; target
+selection still requires the Go-side inventory validation and cleanup evidence.
+The bootstrap prints fixed phases without hardware or secret values. Optional
+unmatched module aliases are quiet; driver probing and worker preparation have
+total deadlines, and a missing storage driver still refuses safely.
+This procedure contains no installer
 storage or erase operation. It reads identities and exact sizes through bounded read-only
 interfaces. Its authenticated report is bound to the machine UUID/MAC set,
 context incarnation, operation/attempt, nonce, frozen request and media/tool

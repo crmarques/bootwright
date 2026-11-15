@@ -32,7 +32,7 @@ class CommandFailure(ValueError):
     """Only a fixed tool name and its exit status may leave this boundary."""
 
     def __init__(self, tool, code):
-        self.tool = tool if tool in ("xorriso", "lsinitrd", "mkksiso", "openssl", "chcon") else "unknown"
+        self.tool = tool if tool in ("xorriso", "lsinitrd", "mkksiso", "openssl", "chcon", "podman") else "unknown"
         self.code = code if type(code) is int and -128 <= code <= 255 else -1
         super().__init__("discovery native command refused")
 

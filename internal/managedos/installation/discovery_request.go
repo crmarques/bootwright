@@ -3,9 +3,11 @@ package installation
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"net/url"
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -27,6 +29,7 @@ type DiscoveryNetwork struct {
 	BondPorts   []string `json:"bondPorts,omitempty"`
 	Gateway     string   `json:"gateway,omitempty"`
 	Interface   string   `json:"interface"`
+	Nameservers []string `json:"nameservers,omitempty"`
 	Prefix      int      `json:"prefix"`
 	Type        string   `json:"type"`
 	VLANBase    string   `json:"vlanBase,omitempty"`
@@ -42,14 +45,21 @@ type DiscoveryRequest struct {
 	Network         DiscoveryNetwork     `json:"network"`
 	Placement       machineref.Placement `json:"placement"`
 	Private         Publication          `json:"private"`
+	Receipt         DiscoveryReceipt     `json:"receipt"`
 	Version         string               `json:"version"`
+}
+
+type DiscoveryReceipt struct {
+	Container  string `json:"container"`
+	SocketRoot string `json:"socketRoot"`
+	URL        string `json:"url"`
 }
 
 func DiscoveryBlockID(name string) string {
 	return reconciliation.BlockIdentity("os-disk-discovery-", name)
 }
 func DiscoveryContentDigest() string {
-	h := sha256.Sum256([]byte(DiscoveryImplementation + ":" + discoveryVersion + ":private-custom-init-readonly-inventory-pinned-tls-receipt-cleanup-v1" + ":" + substrate.RedfishMediaPolicy))
+	h := sha256.Sum256([]byte(DiscoveryImplementation + ":" + discoveryVersion + ":private-custom-init-readonly-inventory-outbound-https-receipt-cleanup-v1" + ":" + substrate.RedfishMediaPolicy))
 	return hex.EncodeToString(h[:])
 }
 func (r DiscoveryRequest) Canonical() ([]byte, error) {
@@ -81,12 +91,16 @@ func discoveryRequest(catalog api.Catalog, m api.Object, input lifecycle.PlanInp
 		return DiscoveryRequest{}, needs, err
 	}
 	profile, _ := catalog.Find(api.MachineInstallProfile, boot.Identity.Profile)
+	server, err := artifactserver.Selected(catalog, profile.Spec().Get("installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint"), profile.Identity())
+	if err != nil {
+		return DiscoveryRequest{}, needs, err
+	}
 	install, err := installationFor(catalog, m, profile, boot, &needs)
 	if err != nil {
 		return DiscoveryRequest{}, needs, err
 	}
 	r := DiscoveryRequest{Version: discoveryVersion, Placement: boot.Placement, Identity: boot.Identity, BootMedia: boot.BootMedia, Controller: boot.Target.Controller, Interfaces: boot.Target.Hardware.Interfaces, Private: *boot.Private, DeadlineSeconds: 1800,
-		Network: DiscoveryNetwork{Address: install.Address, Prefix: install.Prefix, Gateway: install.Gateway, Interface: install.Interface, Type: install.InterfaceType, VLANBase: install.VLANBase, VLANID: install.VLANID, BondPorts: install.BondPorts, BondOptions: install.BondOptions}}
+		Network: DiscoveryNetwork{Address: install.Address, Prefix: install.Prefix, Gateway: install.Gateway, Interface: install.Interface, Nameservers: install.Nameservers, Type: install.InterfaceType, VLANBase: install.VLANBase, VLANID: install.VLANID, BondPorts: install.BondPorts, BondOptions: install.BondOptions}}
 	r.Identity.Block = DiscoveryBlockID(m.Name())
 	r.Private.CertificateRef = boot.TLSCertificateRef
 	if _, err := networkLine(install); err != nil {
@@ -94,5 +108,14 @@ func discoveryRequest(catalog api.Catalog, m api.Object, input lifecycle.PlanInp
 	}
 	r.Private.Path += "/discovery"
 	r.Private.URL += "/discovery"
+	endpoint, err := url.Parse(r.Private.URL)
+	if err != nil || endpoint.Scheme != "https" || endpoint.Host == "" {
+		return DiscoveryRequest{}, needs, refusal("lifecycle.state", "disk discovery has no HTTPS receipt endpoint", "select a controller-local HTTPS artifact server")
+	}
+	r.Receipt = DiscoveryReceipt{
+		Container:  artifactserver.UnitName(input.Context.Name, server.Name()),
+		SocketRoot: artifactserver.ReceiptRoot(input.Context.Name, server.Name()),
+		URL:        "https://" + endpoint.Host + "/_bootwright/inventory/",
+	}
 	return r, needs, nil
 }

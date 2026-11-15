@@ -24,6 +24,7 @@ type Request struct {
 	ImageSource *managedservice.ImageSource `json:"imageSource,omitempty"`
 	Listeners   []Listener                  `json:"listeners"`
 	Placement   Placement                   `json:"placement"`
+	ReceiptRoot string                      `json:"receiptRoot,omitempty"`
 	TLS         *TLS                        `json:"tls,omitempty"`
 	Unit        string                      `json:"unit"`
 	Version     string                      `json:"version"`

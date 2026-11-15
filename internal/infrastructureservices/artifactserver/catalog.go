@@ -41,6 +41,7 @@ func ContentDigest() string {
 		HostedRoot,
 		servicesArea,
 		unitPrefix,
+		"outbound-inventory-unix-receipt",
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

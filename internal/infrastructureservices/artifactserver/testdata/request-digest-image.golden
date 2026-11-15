@@ -39,6 +39,7 @@
       "connection": "local",
       "machine": "controller"
     },
+    "receiptRoot": "/run/bootwright-receipts/f20994fff87e3e18cd401102f5021e0e",
     "tls": {
       "fingerprint": "",
       "minVersion": "TLSv1.2",

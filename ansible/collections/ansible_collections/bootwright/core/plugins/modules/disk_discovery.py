@@ -113,6 +113,9 @@ def diagnostic(error, controller):
         "RHEL initrd lacks discovery bootstrap tools": "initrd-tools",
         "unqualified discovery initrd layout": "initrd-layout",
         "discovery report deadline": "inventory-timeout",
+        "discovery receipt endpoint": "receipt-endpoint",
+        "foreign discovery receipt socket": "receipt-ownership",
+        "discovery receipt socket is active": "receipt-active",
         "private discovery listener unavailable": "media-response",
         "custody-directory": "custody-directory",
         "custody-mode": "custody-mode",
@@ -145,7 +148,7 @@ def diagnostic(error, controller):
     phase = getattr(controller, "phase", "custody")
     phases = (
         "custody", "controller", "media", "publication", "tls", "media-delivery", "boot",
-        "media-insertion", "boot-selection", "power-on", "inventory", "acknowledgement", "cleanup",
+        "media-insertion", "boot-selection", "power-on", "inventory", "acknowledgement", "cleanup", "receipt-listener",
     )
     if phase not in phases:
         phase = "custody"

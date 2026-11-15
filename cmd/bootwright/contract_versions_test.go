@@ -297,11 +297,17 @@ func automationIdentities() map[string]automationFormat {
 	eraseRuntime := transient("the erase environment's RAM-only runtime, which exists only while that boot runs")
 	scriptName := transient("the $0 word of a fixed shell probe")
 	identities := map[string]automationFormat{
+		"/_bootwright/":                           transient("reserved artifact callback namespace"),
+		"/_bootwright/inventory/":                 transient("private outbound inventory callback route"),
+		"/bootwright-discovery/drivers.sh":        transient("fixed RAM-only bounded driver bootstrap"),
+		"bootwright-discovery/drivers.sh":         transient("initramfs driver bootstrap archive member"),
+		"/etc/.bootwright-discovery-resolv":       transient("atomic RAM-only resolver configuration stage"),
+		"/run/bootwright-receipts/":               transient("unit-owned local Unix receipt runtime directory"),
+		"Bootwright discovery":                    transient("fixed secret-free console phase prefix"),
 		"/bootwright-discovery/.":                 transient("a RAM-only inventory bootstrap name, message or ephemeral certificate subject; no later removal reads it"),
 		"/bootwright-discovery/no-fallback":       transient("a RAM-only inventory bootstrap name, message or ephemeral certificate subject; no later removal reads it"),
 		"/dev/bootwright-discovery-no-root":       transient("a RAM-only inventory bootstrap name, message or ephemeral certificate subject; no later removal reads it"),
 		"Bootwright discovery refused":            transient("a RAM-only inventory bootstrap name, message or ephemeral certificate subject; no later removal reads it"),
-		"CN=Bootwright RAM inventory":             transient("a RAM-only inventory bootstrap name, message or ephemeral certificate subject; no later removal reads it"),
 		"bootwright-discovery/":                   transient("a RAM-only inventory bootstrap name, message or ephemeral certificate subject; no later removal reads it"),
 		"bootwright-no-filesystem":                transient("a RAM-only inventory bootstrap name, message or ephemeral certificate subject; no later removal reads it"),
 		".bootwright-carrier-":                    transient("the hidden stage of one atomic carrier policy publication, removed on failure"),
