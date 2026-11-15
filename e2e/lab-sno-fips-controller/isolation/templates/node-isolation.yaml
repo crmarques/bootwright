@@ -4,7 +4,8 @@
 {{- end -}}
 {{- $rules = printf "%s  chain external_ingress {\n    type filter hook prerouting priority -150; policy accept;\n" $rules -}}
 {{- range $name, $env := dict "staging" .Values.environments.staging "production" .Values.environments.production -}}
-{{- $rules = printf "%s    iifname { \"%s\", \"%s.%v\" } jump %s\n" $rules $env.bridge $.Values.environments.trunk.interface $env.vlan $name -}}
+{{- $interfaces := list $env.bridge (printf "%s.%v" $.Values.environments.trunk.interface $env.vlan) | uniq -}}
+{{- $rules = printf "%s    iifname { %s } jump %s\n" $rules (printf "\"%s\"" (join "\", \"" $interfaces)) $name -}}
 {{- end -}}
 {{- $rules = printf "%s  }\n}\n" $rules -}}
 # Case-owned host enforcement, applied before any environment workload or peer.

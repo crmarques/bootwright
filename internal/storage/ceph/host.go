@@ -52,6 +52,7 @@ type ClusterScope struct {
 	Release                  string                       `json:"release"`
 	Security                 *Security                    `json:"security,omitempty"`
 	Services                 []json.RawMessage            `json:"services"`
+	SingleHostDefaults       bool                         `json:"singleHostDefaults,omitempty"`
 	Stretch                  *Stretch                     `json:"stretch,omitempty"`
 	Version                  string                       `json:"version"`
 }

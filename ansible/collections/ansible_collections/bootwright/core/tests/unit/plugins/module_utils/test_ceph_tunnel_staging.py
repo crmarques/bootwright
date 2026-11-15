@@ -392,3 +392,9 @@ def test_output_without_its_private_stderr_is_not_the_license_call_refusal(stage
     assert staging.license_call_refusal(stage_request, code, bytes(output)) is False
     assert staging.license_call_refusal(stage_request, code, bytes(output) + output.stderr) is False
     assert staging.license_call_refusal(stage_request, code, ceph_native.NativeOutput(bytes(output), output.stderr.decode())) is False
+
+
+def test_explicit_single_host_bootstrap_passes_the_native_flag(stage_request):
+    stage_request["singleHostDefaults"] = True
+    stage_request["hosts"] = stage_request["hosts"][:1]
+    assert staging.bootstrap_argv(stage_request, scratch(stage_request), chosen()) == todays_argv(stage_request) + ["--single-host-defaults"]

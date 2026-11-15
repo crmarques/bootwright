@@ -166,6 +166,8 @@ def bootstrap_argv(request, scratch, selection):
             "--config", os.path.join(scratch, "ceph.conf")]
     if selection.variant("ceph.bootstrap.license-flag") == "pass":
         argv.append("--automatically-accept-license")
+    if request.get("singleHostDefaults"):
+        argv.append("--single-host-defaults")
     networks = request.get("clusterNetworks")
     require(networks is None or isinstance(networks, list) and len(networks) <= 8)
     for network in networks or []:

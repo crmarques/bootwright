@@ -305,6 +305,7 @@ type Request struct {
 	Service                  *ServiceUnit                 `json:"service,omitempty"`
 	Services                 []json.RawMessage            `json:"services"`
 	Settings                 *Settings                    `json:"settings,omitempty"`
+	SingleHostDefaults       bool                         `json:"singleHostDefaults,omitempty"`
 	Stretch                  *Stretch                     `json:"stretch,omitempty"`
 	Subvolume                *Subvolume                   `json:"subvolume,omitempty"`
 	Version                  string                       `json:"version"`
@@ -336,7 +337,7 @@ func DecodeRequest(data []byte) (Request, error) {
 func scopeOf(r Request) ClusterScope {
 	return ClusterScope{AnsiblePackageVersion: r.AnsiblePackageVersion, Auxiliary: r.Auxiliary, Bootstrap: r.Bootstrap, CallHome: r.CallHome, Cephadm: r.Cephadm, Cluster: r.Cluster,
 		ClusterKeyRef: r.ClusterKeyRef, ClusterNetworks: r.ClusterNetworks, ClusterSSHTransport: r.ClusterSSHTransport, ClusterSSHUser: r.ClusterSSHUser,
-		Security: r.Security, Config: r.Config, Controller: r.Controller, FSID: r.FSID, Hosts: r.Hosts, Image: r.Image, MonIP: r.MonIP,
+		Security: r.Security, SingleHostDefaults: r.SingleHostDefaults, Config: r.Config, Controller: r.Controller, FSID: r.FSID, Hosts: r.Hosts, Image: r.Image, MonIP: r.MonIP,
 		NFSGaneshaPackageVersion: r.NFSGaneshaPackageVersion, Owner: r.Owner, PackageRepository: r.PackageRepository, PackageRepositoryKey: r.PackageRepositoryKey, Packages: r.Packages,
 		PublicNetworks: r.PublicNetworks, Registry: r.Registry, RegistryRef: r.RegistryRef, RegistryTrustBundleRef: r.RegistryTrustBundleRef, Release: r.Release, Services: r.Services, Stretch: r.Stretch, Version: r.Version}
 }
@@ -419,9 +420,7 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 		return Request{}, failure(issue.Code, issue.Message, issue.Remediation)
 	}
 	r.Config = config
-	if spec.Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
-		return Request{}, failure("lifecycle.unsupported", "the core adapter does not yet realize additional cluster configuration", "use only the qualified core MON/MGR/OSD profile")
-	}
+	r.SingleHostDefaults = spec.Get("cephadm", "bootstrap", "singleHostDefaults").Bool()
 	for _, binding := range spec.Get("serviceBindings").Items() {
 		if ref := binding.Get("serviceRef").Text(); !gatewayExecuted(c, cluster, ref) && !unitBinding(cluster, binding) {
 			return Request{}, unrealizedBinding(ref)
@@ -448,10 +447,26 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	slices.SortStableFunc(r.Delegated, func(a, b DelegatedService) int { return strings.Compare(a.Name, b.Name) })
 
 	selectDevices(&r)
+	if err := singleHostProfile(r); err != nil {
+		return Request{}, err
+	}
 	if err := uniquePhysicalDevices(r.Hosts); err != nil {
 		return Request{}, err
 	}
 	return r, nil
+}
+
+func singleHostProfile(r Request) error {
+	if !r.SingleHostDefaults {
+		return nil
+	}
+	if len(r.Hosts) != 1 || r.Stretch != nil {
+		return failure("api.invariant", "single-host defaults require exactly one non-stretch node", "use exactly one topology node without stretch")
+	}
+	if len(r.Hosts[0].Devices) < 2 {
+		return failure("api.invariant", "single-host testing requires at least two explicitly selected OSD data disks", "declare at least two distinct data disks and select them in the OSD service")
+	}
+	return nil
 }
 
 func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string) error {
@@ -543,7 +558,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		return clusterBudgetFailure(r.Cluster, len(r.Hosts), r.Stretch != nil)
 	}
 	slices.SortFunc(r.Hosts, func(a, b Host) int { return strings.Compare(a.Name, b.Name) })
-	if len(r.Hosts) < 3 || r.Bootstrap == "" {
+	if (!r.SingleHostDefaults && len(r.Hosts) < 3) || r.Bootstrap == "" {
 		return failure("lifecycle.unsupported", "the core IBM profile requires at least three owned hosts and a bootstrap host", "declare a provider-supported topology with at least three hosts")
 	}
 	return nil

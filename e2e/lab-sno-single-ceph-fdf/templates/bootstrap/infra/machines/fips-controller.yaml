@@ -1,0 +1,47 @@
+# Installed here in FIPS mode and handed, with its RHEL, to
+# lab-sno-single-ceph-fdf as that context's controller Machine.
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: {{ .Values.controller.name }}
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: controller
+
+      nics:
+        - nicRef: enp1s0
+          segmentRef: openshift-infra
+
+        - nicRef: enp2s0
+          segmentRef: ceph-client
+
+  hardware:
+    nics:
+      - name: enp1s0
+      - name: enp2s0
+
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+    installProfileRef: rhel
+
+  network:
+    configRef: openshift-infra
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: {{ .Values.controller.name }}.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ .Values.controller.address }}
+        interface: enp1s0
+
+      - name: ceph-client
+        address: {{ .Values.storageNetworks.client.controllerAddress }}
+        interface: enp2s0

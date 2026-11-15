@@ -1,0 +1,19 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      commonName: controller.{{ .Values.host.domain }}
+
+      dnsNames:
+        - controller.{{ .Values.host.domain }}
+
+      ipAddresses:
+        - {{ include "address" . }}
+
+      validityDays: 3650

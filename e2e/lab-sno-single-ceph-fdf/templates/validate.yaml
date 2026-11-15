@@ -1,0 +1,9 @@
+{{- if not .Values.environments.enabled }}
+{{- fail "this five-network case requires environments.enabled=true" }}
+{{- end }}
+{{- if not .Values.security.tpm2 }}
+{{- fail "this case requires security.tpm2=true" }}
+{{- end }}
+{{- if .Values.fdf.multiCloudGateway }}
+{{- fail "this constrained case requires fdf.multiCloudGateway=false; RGW supplies object storage" }}
+{{- end }}

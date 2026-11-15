@@ -1,0 +1,22 @@
+{{- if .Values.environments.enabled }}
+{{- with .Values.environments.production }}
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: production
+
+spec:
+  provided: false
+  description: The production VLAN on the provider-managed trunk, without NAT or routing to staging.
+  vlan: {{ .vlan }}
+
+  ipv4:
+    cidr: {{ .cidr }}
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: {{ $.Values.environments.trunk.bridge }}
+    forward: none
+    hostAddressing: {{ $.Values.environments.trunk.hostAddressing | quote }}
+{{- end }}
+{{- end }}

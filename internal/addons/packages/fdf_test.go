@@ -4,12 +4,29 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
 )
+
+func TestFDFWithoutMultiCloudGatewayKeepsExternalRGW(t *testing.T) {
+	i := addons.Instance{Config: packageTestConfig("fdf").With("multiCloudGateway", api.BoolValue(false)), Facts: addons.ClusterFacts{Exports: []addons.ConsumerFacts{{Name: "export", Gateway: true}}}}
+	r, err := renderFDF(i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if r.After[0].Objects[0].Body.Get("spec", "multiCloudGateway", "reconcileStrategy").Text() != "ignore" || strings.Contains(text, "noobaa") || !strings.Contains(text, "ocs-external-storagecluster-ceph-rgw") {
+		t.Fatalf("FDF without MCG lost RGW or still requires NooBaa: %s", text)
+	}
+}
 
 func TestFDFTrustAndCatalogAdmission(t *testing.T) {
 	v := packageTestConfig("fdf")
@@ -42,13 +59,17 @@ func TestFDFTrustAndCatalogAdmission(t *testing.T) {
 }
 
 func TestFDFRenderGoldens(t *testing.T) {
-	for _, gateway := range []bool{false, true} {
+	for _, test := range []struct{ gateway, mcg bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
+		gateway := test.gateway
 		name := "fdf"
 		if gateway {
 			name += "-gateway"
 		}
+		if !test.mcg {
+			name += "-no-mcg"
+		}
 		t.Run(name, func(t *testing.T) {
-			i := addons.Instance{Config: packageTestConfig("fdf"), Facts: addons.ClusterFacts{Exports: []addons.ConsumerFacts{{Name: "export", Gateway: gateway}}}}
+			i := addons.Instance{Config: packageTestConfig("fdf").With("multiCloudGateway", api.BoolValue(test.mcg)), Facts: addons.ClusterFacts{Exports: []addons.ConsumerFacts{{Name: "export", Gateway: gateway}}}}
 			r, err := renderFDF(i)
 			if err != nil {
 				t.Fatal(err)
@@ -66,7 +87,7 @@ func TestFDFRenderGoldens(t *testing.T) {
 				t.Fatal(err)
 			}
 			matchesGolden(t, name, data, false)
-			if gateway {
+			if gateway && test.mcg {
 				fixture := filepath.Join("..", "..", "..", "ansible", "collections", "ansible_collections", "bootwright", "core", "tests", "unit", "goldens", "fdf-gateway.json")
 				got, err := os.ReadFile(fixture)
 				if err != nil {

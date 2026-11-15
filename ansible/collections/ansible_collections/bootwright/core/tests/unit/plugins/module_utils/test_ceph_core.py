@@ -2734,3 +2734,53 @@ def test_host_evidence_admits_an_alias_only_beside_a_serial_selection(core_reque
     record["devices"][0].pop("alias")
     with pytest.raises(ceph_native.Refusal):
         ceph_core.host_evidence(record, "d" * 64, request)
+
+
+def single_host_request(request):
+    request["hosts"] = request["hosts"][:1]
+    host = request["hosts"][0]
+    host["devices"].append({"path": "/dev/vdc", "serial": "disk2", "sizeBytes": 1024 ** 3})
+    request["singleHostDefaults"] = True
+    for service in request["services"]:
+        service["placement"] = {"hosts": [host["name"]]}
+        if service["service_type"] == "osd":
+            service["spec"]["data_devices"]["paths"].append("/dev/vdc")
+    return request
+
+
+def test_single_host_options_are_persisted_and_reproved(core_request):
+    single_host_request(core_request)
+    before = copy.deepcopy(core_request)
+    expected = ceph_native.cluster_config(core_request)
+    rendered = ceph_native.bootstrap_config(core_request)
+    assert b"osd_crush_chooseleaf_type = 0\n" in rendered
+    assert b"osd_pool_default_min_size = 2\n" in rendered
+    assert b"[mgr]\nmgr_standby_modules = false\n" in rendered
+    assert core_request == before
+    assert ceph_native.marker_identity(core_request)["singleHostDefaults"] is True
+    records = [{"section": section, "mask": "", "name": name, "value": value}
+               for section, options in expected.items() for name, value in options.items()]
+    native, calls = worker(core_request, {("config", "dump"): records})
+    native.config_database()
+    records[0]["value"] = "1"
+    with pytest.raises(ceph_native.Refusal, match="^config-drift$"):
+        native.config_database()
+    assert [argv[-2:] for argv in calls] == [["config", "dump"], ["config", "dump"]]
+
+
+@pytest.mark.parametrize("invalid", [False, 1, "true", None])
+def test_single_host_option_refuses_non_true_or_non_boolean(core_request, invalid):
+    single_host_request(core_request)["singleHostDefaults"] = invalid
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(core_request)
+
+
+def test_single_host_option_refuses_extra_hosts_or_a_single_disk(core_request):
+    original = copy.deepcopy(core_request)
+    core_request["singleHostDefaults"] = True
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(core_request)
+    single_host_request(original)
+    original["hosts"][0]["devices"].pop()
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(original)

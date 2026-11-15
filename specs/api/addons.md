@@ -469,6 +469,7 @@ openshift-marketplace` on a Red Hat catalog. It provides `dataFoundation`.
 | `subscription` | object | yes | — | The [shared block](#subscription); `source` is required, with no default, and names the owned `catalogSource` or a default catalog. |
 | `cephConsumerRef` | string | yes | — | A managed `CephConsumer` this package instance consumes; no other instance names it. |
 | `defaultStorageClass` | boolean | no | `false` | Makes the RBD storage class the cluster's default. |
+| `multiCloudGateway` | boolean | no | `true` | Whether FDF manages NooBaa. False renders `spec.multiCloudGateway.reconcileStrategy: ignore`; readiness then requires no NooBaa object or storage class. External Ceph RGW remains available when the consumer selects a gateway. |
 | `timeout` | string | no | `1h` | As every package's `timeout`. |
 
 Rules, each at its field under `$.spec.packages.fdf`:

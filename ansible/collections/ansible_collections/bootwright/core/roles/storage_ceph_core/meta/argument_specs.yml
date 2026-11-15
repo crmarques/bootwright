@@ -747,6 +747,9 @@ argument_specs:
               type:
                 type: str
                 required: true
+          singleHostDefaults:
+            type: bool
+
           security:
             type: dict
             options:

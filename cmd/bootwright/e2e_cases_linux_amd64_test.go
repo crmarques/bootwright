@@ -39,6 +39,10 @@ var e2eRenders = map[string][]e2eRender{
 		{name: "tpm2 off", sets: append(fipsControllerSubscriptions(), "security.tpm2=false")},
 		{name: "environments off", sets: []string{"environments.enabled=false"}},
 	},
+	"lab-sno-single-ceph-fdf": {
+		{name: "default", sets: fipsControllerSubscriptions()},
+		{name: "object off", sets: append(fipsControllerSubscriptions(), "ceph.object=false")},
+	},
 	"lab-sno-ceph-df": {
 		{name: "default", sets: dataFoundationSubscription()},
 		{name: "ibm catalog", sets: append(dataFoundationSubscription(),

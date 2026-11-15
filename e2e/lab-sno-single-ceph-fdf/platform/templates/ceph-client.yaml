@@ -1,0 +1,28 @@
+# Restricted forwarding stays enabled cluster-wide. This policy owns only
+# enp3s0; Bootwright's MetalLB forwarding policy owns the environment VLANs.
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: sno-ceph-client-forwarding
+
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: master-0
+
+  desiredState:
+    interfaces:
+      - name: enp3s0
+        type: ethernet
+        state: up
+
+        ipv4:
+          enabled: true
+          dhcp: false
+          forwarding: true
+
+          address:
+            - ip: {{ .Values.storageNetworks.client.snoAddress }}
+              prefix-length: {{ .Values.storageNetworks.client.prefix }}
+
+        ipv6:
+          enabled: false

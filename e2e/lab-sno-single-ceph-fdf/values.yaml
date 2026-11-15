@@ -1,0 +1,185 @@
+# Default input of the lab-sno-single-ceph-fdf case. Override keys with
+# e2e/render.sh --set or a --values file. The case renders two inputs:
+# <out>/bootstrap for context lab-sno-single-ceph-fdf-bootstrap, applied on
+# this host, and <out>/fips for context lab-sno-single-ceph-fdf, applied on
+# the FIPS-mode guest the bootstrap context installs.
+
+host:
+  # This host's address the bootstrap services bind and the guests reach;
+  # "auto" takes this host's default-route source address at render time.
+  address: auto
+  domain: e2e.example.test
+
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+  # The NAT network the bootstrap context creates; the fips context attaches.
+  # The fips context reaches this host over SSH at the gateway address, which
+  # its emulated BMC binds.
+  bridge: br-sno-infra
+  cidr: 198.51.100.0/24
+  gateway: 198.51.100.1
+  prefix: 24
+
+# Media names as added with `bootwright media add --name`.
+rhel:
+  version: "9.8"
+  bootMedia: rhel-9.8-x86_64-boot.iso
+  dvdMedia: rhel-9.8-x86_64-dvd.iso
+
+# The FIPS-mode RHEL guest that becomes the fips context's controller. It
+# builds the agent image and serves it and the cluster's DNS; libvirt and the
+# emulated BMC stay on this host, whose BMC verifies the image's server.
+controller:
+  name: fdf-controller
+  address: 198.51.100.10
+  cpu: 2
+  memoryMiB: 3072
+  diskGiB: 40
+
+# Each context's emulated BMC on this host: the bootstrap one on loopback, the
+# fips one on the gateway address the FIPS controller dials.
+ports:
+  bootstrapBMC: 8000
+  fipsBMC: 8010
+
+openshift:
+  version: 4.22.22
+
+guest:
+  address: 198.51.100.31
+  cpu: 8
+  memoryMiB: 16384
+  diskGiB: 100
+
+# The cluster is always FIPS; tpm2 also encrypts the node's installation
+# disk, unlocked by the guest TPM2.
+security:
+  tpm2: true
+
+# Isolated staging and production VLANs for primary OVN workloads.
+# No secondary pod attachments or host routes join these environments.
+environments:
+  enabled: true
+
+  trunk:
+    bridge: br-e2e-trunk
+    interface: enp2s0
+    hostAddressing: none
+
+  staging:
+    vlan: 10
+    bridge: enp2s0.10
+    prefix: 24
+    cidr: 192.0.2.0/24
+    nodeAddress: 192.0.2.31
+    appAddress: 192.0.2.50
+    egressAddress: 192.0.2.60
+    pool: 192.0.2.200/29
+
+  production:
+    vlan: 20
+    bridge: enp2s0.20
+    prefix: 24
+    cidr: 203.0.113.0/24
+    nodeAddress: 203.0.113.31
+    appAddress: 203.0.113.50
+    egressAddress: 203.0.113.60
+    pool: 203.0.113.200/29
+
+# The operators' OLM channel and exact CSV, read from the release's operator
+# catalog before rendering (runbook.md, step 2). The render fails until both
+# are set while environments are enabled.
+addons:
+  subscriptions:
+    nmstate:
+      channel: ""
+      startingCSV: ""
+
+    metallb:
+      channel: ""
+      startingCSV: ""
+
+# The stricter acceptance profile uses native OpenShift objects after provisioning.
+# Resolve an approved Python 3 UBI image to its digest before rendering it.
+isolation:
+  image: ""
+
+# Public Ceph clients and private OSD replication occupy separate L2 networks.
+# The bootstrap context owns the client network because its controller needs
+# direct access; the FIPS context owns the replication network.
+storageNetworks:
+  client:
+    bridge: br-ceph-client
+    cidr: 10.80.0.0/24
+    gateway: 10.80.0.1
+    prefix: 24
+    controllerAddress: 10.80.0.10
+    cephAddress: 10.80.0.11
+    snoAddress: 10.80.0.31
+
+  replication:
+    bridge: br-ceph-repl
+    cidr: 10.81.0.0/24
+    hostAddress: 10.81.0.1
+    prefix: 24
+    cephAddress: 10.81.0.11
+
+# Two OSDs keep two copies on separate disks of the same test VM.
+# This profile cannot survive loss of its Ceph host or either OSD.
+cephNode:
+  cpu: 3
+  memoryMiB: 6144
+  diskGiB: 20
+  osdDiskGiB: 10
+
+ceph:
+  object: true
+  release: 9.9.1.2
+  packageVersion: 20.2.1-405.el9cp
+  ansiblePackageVersion: 5.0.3-1.el9cp
+
+  # enabled for 20.2.x builds (9.9.1.2, 9.9.2.0); disabled for 20.1.0-221
+  # (9.9.0.3), whose Call Home is opt-in.
+  callHome: enabled
+
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
+    version: sha256:8dae4b5b8f07c7fa95bd1d68b22d4c1dd4c2d323d533d807dc1ceae4e329cb7f
+
+  # The guests' package repository for the release's RPMs.
+  repository:
+    id: ibm-storage-ceph-9
+    displayName: IBM Storage Ceph 9 packages
+    baseURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/
+    gpgKeyURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH
+
+  # Auxiliary images, authored as digests of the build above (D171): the
+  # prometheus digest that 9.9.1.2 run pulled. Only the prometheus service the
+  # CephConsumer admission requires is deployed here.
+  # Move it with ceph.image. The digest must identify the linux/amd64 platform
+  # manifest, not the image index; see e2e/lab-3-nodes-ceph/values.yaml.
+  images:
+    prometheus:
+      base: cp.icr.io/cp/ibm-ceph/prometheus
+      version: sha256:6483d0ca844408e25a0477bf8f0b2ba46105202a080fcf550ee9933189741bf2
+
+# Pins verified from the public stable-4.22 mirror and IBM catalog on
+# 2026-11-15. Resolve these again for a new qualification; never float at apply.
+fdf:
+  cephxKeyType: aes256k
+  multiCloudGateway: false
+  defaultStorageClass: false
+  timeout: 1h
+
+  subscription:
+    source: ibm
+    channel: stable-4.22
+    startingCSV: odf-operator.v4.22.8
+
+  catalog:
+    image: icr.io/cpopen/isf-data-foundation-catalog@sha256:2093b98971178a5859c38e50340c131420adeea3040b17d67ff17dda76e1bc4f
+    priority: 100

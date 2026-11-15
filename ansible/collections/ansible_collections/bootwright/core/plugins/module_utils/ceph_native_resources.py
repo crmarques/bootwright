@@ -90,7 +90,11 @@ def validate(request, hosts):
     require(request["action"] == "settings" or "settings" not in request)
     if request["action"] == "pool":
         require("client" not in request and "policy" not in request)
-        validate_pool(request.get("pool"), osd_hosts, stretch="stretch" in request)
+        single = request.get("singleHostDefaults", False)
+        if single:
+            require(request["pool"]["type"] == "replicated" and request["pool"]["crushRule"] == "replicated_rule")
+        capacity = len(hosts[0]["devices"]) if single else osd_hosts
+        validate_pool(request.get("pool"), capacity, stretch="stretch" in request or single)
     elif request["action"] == "policy":
         require("pool" not in request and "client" not in request)
         validate_policy(request.get("policy"), osd_hosts)

@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-replication
+
+spec:
+  provided: false
+  description: Private OSD replication; only the Ceph VM attaches.
+
+  ipv4:
+    cidr: {{ .Values.storageNetworks.replication.cidr }}
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: {{ .Values.storageNetworks.replication.bridge }}
+    forward: none
+    hostAddress: {{ .Values.storageNetworks.replication.hostAddress }}

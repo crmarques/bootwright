@@ -184,7 +184,7 @@ func replicatedDefaults(cluster api.Object) (*big.Int, *big.Int) {
 		return size, minimum
 	}
 	if cluster.Spec().Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
-		return big.NewInt(2), big.NewInt(1)
+		return big.NewInt(2), big.NewInt(2)
 	}
 	return big.NewInt(3), big.NewInt(2)
 }
@@ -237,6 +237,12 @@ func (a *admission) replication(cluster, policy api.Object) {
 	class := textOf(policy.Spec(), "crushDeviceClass")
 	if policy.Kind() == "" && a.object.Kind() == api.CephPlacementPolicy {
 		class = textOf(spec, "crushDeviceClass")
+	}
+	if cluster.Spec().Get("cephadm", "bootstrap", "singleHostDefaults").Bool() && policy.Kind() == "" && a.object.Kind() == api.CephPool {
+		if size.Cmp(big.NewInt(SingleHostOSDCount(cluster))) > 0 {
+			a.invalid("$.spec.replicated.size", "single-host replicas exceed explicitly selected OSD-disk capacity", "select more distinct OSD data disks, or lower replicated.size while keeping size and minSize at least two")
+		}
+		return
 	}
 	if domain == "host" && cluster.Spec().Get("topology", "nodes").Len() > 0 {
 		hosts := big.NewInt(osdHostCount(cluster))

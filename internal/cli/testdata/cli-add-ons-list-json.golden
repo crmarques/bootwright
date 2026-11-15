@@ -29,6 +29,7 @@
         "configuration": [
           "cephConsumerRef",
           "defaultStorageClass",
+          "multiCloudGateway",
           "subscription",
           "timeout"
         ]

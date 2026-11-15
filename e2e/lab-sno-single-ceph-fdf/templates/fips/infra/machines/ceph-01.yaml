@@ -1,0 +1,49 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-01
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+
+    libvirt:
+      profileRef: ceph
+
+      nics:
+        - nicRef: enp1s0
+          segmentRef: ceph-client
+
+        - nicRef: enp2s0
+          segmentRef: ceph-replication
+
+  hardware:
+    nics:
+      - name: enp1s0
+      - name: enp2s0
+
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+    installProfileRef: rhel
+
+    install:
+      hostKeyRef: ceph-host-key
+
+  network:
+    configRef: ceph
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: ceph-01.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ .Values.storageNetworks.client.cephAddress }}
+        interface: enp1s0
+
+      - name: replication
+        address: {{ .Values.storageNetworks.replication.cephAddress }}
+        interface: enp2s0

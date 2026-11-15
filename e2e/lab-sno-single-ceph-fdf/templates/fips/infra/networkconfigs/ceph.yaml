@@ -1,0 +1,33 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: ceph
+
+spec:
+  dns:
+    - serverRef: ceph-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+{{- range $nic := list "enp1s0" "enp2s0" }}
+      - name: {{ $nic }}
+        type: ethernet
+        state: up
+        mtu: 1500
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+{{- end }}
+
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: {{ .Values.storageNetworks.client.gateway }}
+          next-hop-interface: enp1s0
+          table-id: 254
+          metric: 100

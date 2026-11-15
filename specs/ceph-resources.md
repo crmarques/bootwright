@@ -280,13 +280,18 @@ a referenced placement policy, which owns those values for its pools.
 
 The cluster default pair is `4/2` under stretch; otherwise the
 `osd_pool_default_size` and `osd_pool_default_min_size` pair under
-`spec.config.global` when declared; otherwise `2/1` with bootstrap
+`spec.config.global` when declared; otherwise `2/2` with bootstrap
 `singleHostDefaults`; otherwise the ordinary managed-cluster `3/2`. Pool and
 policy admission and the gateway's derived pools read this one default. A
 referenced placement policy supplies its resolved pair to the pool. These
 values qualify validation but remain native or policy defaults unless an owning
 normalization rule explicitly materializes them; the pool and placement-policy
 requests the plan builds carry the same default for a size they leave unset.
+
+The [single-host test profile](api/ceph.md#single-host-testing) places a pool
+without a policy, and gateway-derived pools, across explicitly selected OSD
+disks instead of hosts. The selected disk count must be at least its replica
+size. Policies and erasure coding continue to use host-domain capacity.
 
 For ordinary (non-stretch) host-domain replication on every Ceph
 distribution, the declared OSD-bearing host count must exceed the effective

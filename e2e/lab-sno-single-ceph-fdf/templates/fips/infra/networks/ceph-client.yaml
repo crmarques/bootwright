@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-client
+
+spec:
+  provided: true
+  description: Ceph public client traffic, with no routes to the other lab networks.
+
+  ipv4:
+    cidr: {{ .Values.storageNetworks.client.cidr }}
+    gateway: {{ .Values.storageNetworks.client.gateway }}

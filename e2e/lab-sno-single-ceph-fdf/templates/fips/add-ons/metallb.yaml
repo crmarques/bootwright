@@ -1,0 +1,35 @@
+{{- if .Values.environments.enabled }}
+{{- $set := .Values.addons.subscriptions.metallb }}
+# One pool per environment, announced on that environment's bridge. Each pool
+# serves automatically only its environment's IngressController router
+# Service, which the ingress operator labels with the controller's name.
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: sno-metallb
+
+spec:
+  clusterRef: sno
+
+  packages:
+    metallb:
+      subscription:
+        channel: {{ required "set addons.subscriptions.metallb.channel" $set.channel | quote }}
+        startingCSV: {{ required "set addons.subscriptions.metallb.startingCSV" $set.startingCSV | quote }}
+
+      pools:
+{{- range $name, $env := dict "staging" .Values.environments.staging "production" .Values.environments.production }}
+        - name: {{ $name }}
+
+          addresses:
+            - {{ $env.pool }}
+
+          l2:
+            interface: {{ $env.bridge }}
+
+          serviceAllocation:
+            serviceSelectors:
+              - matchLabels:
+                  ingresscontroller.operator.openshift.io/owning-ingresscontroller: {{ $name }}
+{{- end }}
+{{- end }}

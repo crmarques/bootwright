@@ -88,7 +88,7 @@ func zonePoolReplicas(r Request) (size, minSize int) {
 	if r.Stretch != nil {
 		return 4, 2
 	}
-	if r.Config["global"]["osd_pool_default_size"] == "2" {
+	if r.SingleHostDefaults || r.Config["global"]["osd_pool_default_size"] == "2" {
 		return 2, 2
 	}
 	return 3, 2
@@ -339,7 +339,10 @@ func gatewayRequests(c api.Catalog, gateway api.Object, contextName string) ([]R
 			osdHosts++
 		}
 	}
-	if size > osdHosts || base.Stretch == nil && size == osdHosts {
+	if base.SingleHostDefaults {
+		osdHosts = len(base.Hosts[0].Devices)
+	}
+	if size > osdHosts || !base.SingleHostDefaults && base.Stretch == nil && size == osdHosts {
 		remedy := "add OSD-bearing hosts to CephCluster " + cluster.Name()
 		if base.Config["global"]["osd_pool_default_size"] != "2" {
 			remedy += ", or set osd_pool_default_size and osd_pool_default_min_size to \"2\" under its spec.config.global"

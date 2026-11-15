@@ -94,6 +94,7 @@ request-schema:
   cluster.security.cephxKeyType string
   cluster.security.fips bool
   cluster.services []opaque
+  cluster.singleHostDefaults bool omitempty
   cluster.stretch *struct ceph.Stretch omitempty
   cluster.stretch.dataSites []string
   cluster.stretch.failureDomain string

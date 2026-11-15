@@ -1,0 +1,113 @@
+{
+  "checks": [
+    {
+      "statusPhase": {
+        "apiVersion": "ocs.openshift.io/v1",
+        "kind": "StorageCluster",
+        "name": "ocs-external-storagecluster",
+        "namespace": "openshift-storage",
+        "namespaced": true,
+        "path": "",
+        "values": [
+          "Ready"
+        ]
+      }
+    },
+    {
+      "condition": {
+        "apiVersion": "ocs.openshift.io/v1",
+        "kind": "StorageCluster",
+        "name": "ocs-external-storagecluster",
+        "namespace": "openshift-storage",
+        "namespaced": true,
+        "status": "True",
+        "type": "ReconcileComplete"
+      }
+    },
+    {
+      "resourceExists": {
+        "apiVersion": "storage.k8s.io/v1",
+        "kind": "StorageClass",
+        "name": "ocs-external-storagecluster-ceph-rbd",
+        "namespace": "",
+        "namespaced": false
+      }
+    },
+    {
+      "resourceExists": {
+        "apiVersion": "storage.k8s.io/v1",
+        "kind": "StorageClass",
+        "name": "ocs-external-storagecluster-cephfs",
+        "namespace": "",
+        "namespaced": false
+      }
+    }
+  ],
+  "steps": [
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "storageclusters.ocs.openshift.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "place",
+      "place": {
+        "desiredDigest": "969cbb2e8d815781fb22cb9d271cf20bd6d233d8c4123bc14bc0a3c0fbab58b7",
+        "keys": null,
+        "name": "rook-ceph-external-cluster-details",
+        "namespace": "openshift-storage",
+        "produced": {
+          "kind": "CephConsumer",
+          "object": "export",
+          "output": "external-details"
+        },
+        "producedKey": "external_cluster_details",
+        "type": "Opaque"
+      }
+    },
+    {
+      "create": {
+        "apiVersion": "ocs.openshift.io/v1",
+        "body": {
+          "apiVersion": "ocs.openshift.io/v1",
+          "kind": "StorageCluster",
+          "metadata": {
+            "name": "ocs-external-storagecluster",
+            "namespace": "openshift-storage"
+          },
+          "spec": {
+            "externalStorage": {
+              "enable": true
+            },
+            "managedResources": {
+              "cephBlockPools": {
+                "defaultStorageClass": false
+              }
+            },
+            "multiCloudGateway": {
+              "reconcileStrategy": "ignore"
+            }
+          }
+        },
+        "desiredDigest": "ccacb4ad22ac8b93c99a05019029c1b22bc75c1937276a37d495533dbdbe65d4",
+        "kind": "StorageCluster",
+        "name": "ocs-external-storagecluster",
+        "namespace": "openshift-storage",
+        "namespaced": true
+      },
+      "kind": "create"
+    }
+  ],
+  "version": "cluster-objects-v1"
+}

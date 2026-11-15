@@ -66,7 +66,8 @@ const maximalPools = `
               interface: enp3s0
 `
 
-const maximalFDF = `        cephConsumerRef: compact-storage
+const maximalFDF = `        multiCloudGateway: false
+        cephConsumerRef: compact-storage
         defaultStorageClass: true
 `
 

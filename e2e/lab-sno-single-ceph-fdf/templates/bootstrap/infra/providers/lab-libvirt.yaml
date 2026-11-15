@@ -1,0 +1,28 @@
+# This context owns the guest network; lab-sno-single-ceph-fdf attaches to it.
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+
+spec:
+  libvirt:
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 2048
+      diskGiB: 10
+
+    machineRef: controller
+
+    bmcEmulation:
+      bindAddress: 127.0.0.1
+      port: {{ .Values.ports.bootstrapBMC }}
+      certificateRef: lab-bmc-tls
+
+      auth:
+        credentialsRef: lab-bmc-credentials
+
+    machineProfiles:
+      - name: controller
+        cpu: {{ .Values.controller.cpu }}
+        memoryMiB: {{ .Values.controller.memoryMiB }}
+        diskGiB: {{ .Values.controller.diskGiB }}

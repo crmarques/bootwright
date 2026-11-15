@@ -282,6 +282,23 @@ Omission or an empty map preserves provider defaults. This best-effort target
 is neither a process memory cap nor qualification of a reduced host budget;
 provider sizing and measured resource acceptance remain separate.
 
+### Single-host testing
+
+`cephadm.bootstrap.singleHostDefaults: true` selects an explicit test profile:
+exactly one non-stretch managed host and at least two explicitly selected OSD
+data disks. Bootstrap passes `--single-host-defaults`; its default CRUSH rule
+places replicas across OSDs on that host. The frozen profile sets and proves
+`global/osd_crush_chooseleaf_type=0`, `global/osd_pool_default_size=2`,
+`global/osd_pool_default_min_size=2` and `mgr/mgr_standby_modules=false`.
+The minimum remains two, including provider-created pools. Omitted or false
+retains the ordinary host-domain profile and its capacity checks.
+
+Replicated pools without a placement policy, including gateway-derived pools,
+use explicit disk capacity in this profile. Placement policies and erasure
+coding retain their host-domain rules. This profile offers no host redundancy;
+with two OSDs, losing either stops writes. The
+[Ceph bootstrap contract](../ceph.md#single-host-testing) owns its proofs.
+
 ### Normalization
 
 After [Environment defaults](../api.md#defaults-normalization-and-effective-state)

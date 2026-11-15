@@ -1,0 +1,5 @@
+apiVersion: v2
+name: sno-ceph-client-network
+description: Case-owned forwarding on the external Ceph client NIC
+type: application
+version: 0.1.0

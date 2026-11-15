@@ -1,0 +1,132 @@
+{{- $c := .Values.ceph -}}
+{{- $dom := .Values.host.domain -}}
+apiVersion: bootwright.io/v1alpha1
+kind: CephCluster
+metadata:
+  name: ceph-e2e
+
+spec:
+  management: managed
+
+  distribution:
+    ibm:
+      callHome: {{ $c.callHome }}
+
+      packages:
+        source: vendor
+
+  release: {{ $c.release }}
+  packageVersion: {{ $c.packageVersion }}
+
+  image:
+    base: {{ $c.image.base }}
+    version: {{ $c.image.version }}
+
+  entitlementRef: ibm-ceph
+
+  cephadm:
+    addressRef: ip
+
+    ansible:
+      packageVersion: {{ $c.ansiblePackageVersion }}
+
+    clusterSSH:
+      user: bootwright
+      keyRef: ceph-cluster-key
+      transport: verifiedTunnel
+
+    bootstrap:
+      nodeRef: ceph-01
+      addressRef: ip
+      singleHostDefaults: true
+
+  networks:
+    publicCIDRs:
+      - {{ .Values.storageNetworks.client.cidr }}
+
+    clusterCIDRs:
+      - {{ .Values.storageNetworks.replication.cidr }}
+
+  config:
+    global:
+      osd_pool_default_size: '2'
+      osd_pool_default_min_size: '2'
+
+    osd:
+      osd_memory_target_autotune: 'false'
+      osd_memory_target: '2147483648'
+
+  services:
+    - service_type: mon
+
+      placement:
+        count: 1
+        label: ceph-core
+
+    - service_type: mgr
+
+      placement:
+        count: 1
+        label: ceph-core
+
+    - service_type: osd
+      service_id: data
+
+      placement:
+        label: ceph-core
+
+      spec:
+        data_devices:
+          paths:
+            - /dev/sda
+            - /dev/sdb
+
+    - service_type: mds
+      service_id: files
+
+      placement:
+        count: 1
+        label: ceph-core
+
+    - service_type: prometheus
+
+      placement:
+        hosts:
+          - ceph-01.{{ $dom }}
+
+      spec:
+        retention_time: 1d
+        retention_size: 1GB
+        port: 9095
+
+{{- if .Values.ceph.object }}
+    - service_type: rgw
+      service_id: objects
+
+      placement:
+        count: 1
+        label: ceph-core
+
+      networks:
+        - {{ .Values.storageNetworks.client.cidr }}
+
+      spec:
+        rgw_realm: objects
+        rgw_zonegroup: objects
+        rgw_zone: objects
+        rgw_frontend_port: 8080
+        only_bind_port_on_networks: true
+{{- end }}
+
+  topology:
+    nodes:
+      - name: ceph-01
+        machineRef: ceph-01
+
+        labels:
+          - ceph-core
+
+  images:
+    prometheus:
+      base: {{ $c.images.prometheus.base }}
+      version: {{ $c.images.prometheus.version }}

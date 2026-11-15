@@ -130,6 +130,12 @@ func (a *admission) gatewayDerivedPools(cluster api.Object) {
 		remedy += ", or set osd_pool_default_size and osd_pool_default_min_size to \"2\" under its spec.config.global"
 	}
 	hosts := big.NewInt(osdHostCount(cluster))
+	if cluster.Spec().Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
+		if size.Cmp(big.NewInt(SingleHostOSDCount(cluster))) > 0 {
+			a.invalid("$.spec.zone", "single-host gateway replicas exceed explicitly selected OSD-disk capacity", "select at least two distinct OSD data disks")
+		}
+		return
+	}
 	if size.Cmp(hosts) > 0 || !cluster.Spec().Has("topology", "stretch") && size.Cmp(hosts) == 0 {
 		a.issue("api.invariant", "$.spec.zone", "the zone pools this gateway derives use the cluster's default replica size "+size.String()+", which its "+hosts.String()+" declared OSD-bearing hosts cannot hold under the replicated-pool host rule", remedy)
 	}

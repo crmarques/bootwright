@@ -561,13 +561,14 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	}
 	want := []string{"ansiblePackageVersion", "auxiliary", "bootstrap", "callHome", "cephadm", "cluster", "clusterKeyRef", "clusterNetworks", "clusterSSHTransport", "clusterSSHUser",
 		"config", "controller", "fsid", "hosts", "image", "monIP", "nfsGaneshaPackageVersion", "owner", "packageRepository", "packageRepositoryKey", "packages", "publicNetworks", "registry",
-		"registryRef", "registryTrustBundleRef", "release", "security", "services", "stretch", "version"}
+		"registryRef", "registryTrustBundleRef", "release", "security", "services", "singleHostDefaults", "stretch", "version"}
 	slices.Sort(want)
 	if got := jsonNames(reflect.TypeFor[ClusterScope]()); !slices.Equal(got, want) {
 		t.Fatalf("ClusterScope members %v, want %v", got, want)
 	}
 	r := packageRequest(t)
 	r.Owner, r.FSID = "apply-original", FSIDFor("apply-original", r.Cluster)
+	r.SingleHostDefaults = true
 	r.Config = map[string]map[string]string{"global": {"osd_pool_default_size": "2"}}
 	r.Cephadm = Tool{Path: "/usr/sbin/cephadm", PackageVersion: "synthetic-cephadm-1"}
 	r.Release, r.AnsiblePackageVersion = "synthetic-release", "synthetic-ansible-1"

@@ -1,0 +1,25 @@
+{{- if .Values.environments.enabled }}
+{{- with .Values.environments.staging }}
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: staging
+
+spec:
+  provided: false
+  description: The staging VLAN on the provider-managed trunk, without NAT or routing to production.
+  vlan: {{ .vlan }}
+
+  ipv4:
+    cidr: {{ .cidr }}
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: {{ $.Values.environments.trunk.bridge }}
+    forward: none
+    hostAddressing: {{ $.Values.environments.trunk.hostAddressing | quote }}
+
+    taggedNetworkRefs:
+      - production
+{{- end }}
+{{- end }}

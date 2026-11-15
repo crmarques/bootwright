@@ -68,7 +68,8 @@ WORKER_DEADLINE = None
 SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", "image", "cephadm", "bootstrap", "hosts", "services", "clusterSSHUser",
                            "clusterSSHTransport", "monIP", "publicNetworks", "clusterNetworks", "callHome", "release", "ansiblePackageVersion",
                            "packageRepository", "packageRepositoryKey", "clusterKeyRef", "registryRef", "registry"))
-SCOPE_OPTIONAL = frozenset(("security", "auxiliary", "config", "packages", "nfsGaneshaPackageVersion", "registryTrustBundleRef", "stretch"))
+SCOPE_OPTIONAL = frozenset(("security", "auxiliary", "config", "packages", "nfsGaneshaPackageVersion", "registryTrustBundleRef",
+                            "stretch", "singleHostDefaults"))
 # The members that name one block's own resource beside its action; everything else a request carries is its cluster's.
 RESOURCE_MEMBERS = frozenset(("pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfsExport", "objectUser",
                               "objectBucket", "nvmeof"))
@@ -768,6 +769,9 @@ def scope_checks(request):
     require(bool(request["publicNetworks"]))
     validate_config(request)
     hosts, seen = validate_hosts(request)
+    if "singleHostDefaults" in request:
+        require(type(request["singleHostDefaults"]) is bool and request["singleHostDefaults"] is True)
+        require(len(hosts) == 1 and "stretch" not in request and len(hosts[0]["devices"]) >= 2, "request")
     package = request.get("packages")
     if package is not None:
         require(isinstance(package, dict) and {"version", "licenseAccepted", "sources"} <= set(package)
@@ -811,14 +815,24 @@ def validate_config(request):
     require(2 * 1024 ** 3 <= int(target) <= 2 ** 64 - 1, "config-unqualified")
 
 
+def cluster_config(request):
+    """The frozen options, including the explicit single-host test profile."""
+    config = {section: dict(values) for section, values in request.get("config", {}).items()}
+    if request.get("singleHostDefaults"):
+        config.setdefault("global", {}).update(osd_crush_chooseleaf_type="0", osd_pool_default_size="2", osd_pool_default_min_size="2")
+        config["mgr"] = {"mgr_standby_modules": "false"}
+    return config
+
+
 def bootstrap_config(request):
     """Generate deterministic INI only after the closed request validates."""
     validate(request)
     content = ("[global]\npublic_network = " + ",".join(request["publicNetworks"]) +
                "\nauth_cluster_required = cephx\nauth_service_required = cephx\nauth_client_required = cephx\n")
-    for name, value in sorted(request.get("config", {}).get("global", {}).items()):
+    config = cluster_config(request)
+    for name, value in sorted(config.get("global", {}).items()):
         content += name + " = " + value + "\n"
-    for section, values in sorted(request.get("config", {}).items()):
+    for section, values in sorted(config.items()):
         if section == "global":
             continue
         content += "\n[" + section + "]\n"
@@ -1269,6 +1283,8 @@ def marker_identity(request):
     # Trust material can be populated after Machine installation; it is not an
     # authored replacement for the cluster's durable native identity.
     result["hosts"] = [{key: value for key, value in host.items() if key != "knownHosts"} for host in request["hosts"]]
+    if request.get("singleHostDefaults"):
+        result["singleHostDefaults"] = True
     if "config" in request:
         result["config"] = {section: dict(values) for section, values in request["config"].items()}
     return result
@@ -1813,8 +1829,8 @@ class Worker:
 
     def config_database(self):
         """Prove persisted native options and refuse competing scopes/masks."""
-        config = self.request.get("config")
-        if config is None:
+        config = cluster_config(self.request)
+        if not config:
             return
         values = {name: (section, value) for section, options in config.items() for name, value in options.items()}
         observed = self.ceph("config", "dump")
@@ -2938,6 +2954,8 @@ class Worker:
                     "--ssh-user", self.request["clusterSSHUser"], "--ssh-private-key", os.path.join(scratch, "clusterPrivateKey"), "--ssh-public-key",
                     os.path.join(scratch, "clusterPublicKey"), "--ssh-config", os.path.join(scratch, "ssh_config"), "--config",
                     os.path.join(scratch, "ceph.conf"), "--automatically-accept-license"]
+            if self.request.get("singleHostDefaults"):
+                argv.append("--single-host-defaults")
             if self.request["clusterNetworks"]:
                 argv.extend(["--cluster-network", ",".join(self.request["clusterNetworks"])])
             self.command(argv, timeout=600, json_result=False)

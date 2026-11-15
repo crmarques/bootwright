@@ -828,6 +828,7 @@ spec:
           securityContextConfig: restricted
       cephConsumerRef: compact-storage
       defaultStorageClass: false
+      multiCloudGateway: true
       timeout: 1h
 ---
 apiVersion: bootwright.io/v1alpha1

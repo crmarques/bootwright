@@ -68,6 +68,20 @@ and the combinations the release does not support refuse as the
 [unsupported combinations](ceph-coverage.md#unsupported-combinations) list.
 `TestEveryExampleObjectIsClaimedOncePerFamily` holds every example to the claim.
 
+## Single-host testing
+
+The [explicit single-host profile](api/ceph.md#single-host-testing) is a typed
+variant of the existing Ceph implementation. It freezes the opt-in with every
+cluster child, host preparation and durable native ownership record. The
+adapter validates the exact one-host, non-stretch scope and at least two
+selected data disks before effects, passes the native bootstrap flag and
+re-proves all four profile options in the configuration database. A conflicting
+scope, mask or value refuses `config-drift`; it is never silently repaired.
+Normal multi-host admission and disk identity/erase proofs remain unchanged.
+`TestSingleHostTestClusterFreezesIntentAndDiskReplication` and the native
+single-host tests cover the boundary. Live qualification belongs to
+[B1420](milestones/m4.md#b1420).
+
 ## Frozen release and trust
 
 A plan binds exact package, cephadm and tool coordinates, schema identity,

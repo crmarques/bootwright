@@ -157,7 +157,7 @@ Transfer the profile from the host to the FIPS controller using the parent's
 `CTX_BOOT` session:
 
 ```sh
-bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
+bootwright machine cp --context "$CTX_BOOT" --name "${CONTROLLER_NAME:-fips-controller}" \
     "local:$PROFILE" remote:isolation
 ```
 
@@ -304,7 +304,7 @@ written only after the pod checks pass. On the host, retrieve it and run the
 external assertions:
 
 ```sh
-bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
+bootwright machine cp --context "$CTX_BOOT" --name "${CONTROLLER_NAME:-fips-controller}" \
     remote:isolation/snapshot.json "local:$PROFILE/snapshot.json"
 sudo python3 "$PROFILE/app/verify.py" --config "$PROFILE/config.json" \
     --mode external --snapshot "$PROFILE/snapshot.json" | tee "$PROFILE/external-before-reboot.log"
@@ -333,7 +333,7 @@ python3 "$PROFILE/app/verify.py" --config "$PROFILE/config.json" \
 On the host:
 
 ```sh
-bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
+bootwright machine cp --context "$CTX_BOOT" --name "${CONTROLLER_NAME:-fips-controller}" \
     remote:isolation/snapshot-after-reboot.json "local:$PROFILE/snapshot-after-reboot.json"
 sudo python3 "$PROFILE/app/verify.py" --config "$PROFILE/config.json" \
     --mode external --snapshot "$PROFILE/snapshot-after-reboot.json" | tee "$PROFILE/external-after-reboot.log"

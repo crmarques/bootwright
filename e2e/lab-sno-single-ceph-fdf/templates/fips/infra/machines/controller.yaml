@@ -1,0 +1,30 @@
+# The FIPS-mode guest lab-sno-single-ceph-fdf-bootstrap installed; this
+# context runs on it.
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+
+spec:
+  firewall:
+    management: managed
+
+  os:
+    provided: true
+
+  proxy:
+    direct: {}
+
+  network:
+    addresses:
+      - name: fqdn
+        address: {{ .Values.controller.name }}.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ .Values.controller.address }}
+
+      - name: ceph-client
+        address: {{ .Values.storageNetworks.client.controllerAddress }}
+
+  access:
+    local: true

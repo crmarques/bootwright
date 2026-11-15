@@ -1,0 +1,268 @@
+{{- $image := required "set isolation.image to the approved digest-pinned Python image" .Values.isolation.image }}
+{{- if not (regexMatch "^[^[:space:]@]+@sha256:[a-f0-9]{64}$" $image) }}
+{{- fail "isolation.image must be pinned by digest" }}
+{{- end }}
+{{- $mode := default "write" .Values.storageCheckMode }}
+{{- if not (has $mode (list "write" "read")) }}
+{{- fail "storageCheckMode must be write or read" }}
+{{- end }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storage-check
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storage-check
+  namespace: storage-check
+
+data:
+  check.py: |
+{{ .Files.Get "check.py" | indent 4 }}
+
+{{ range $name, $class := dict "block" "ceph-rbd" "file" "cephfs" }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  namespace: storage-check
+
+spec:
+  storageClassName: ocs-external-storagecluster-{{ $class }}
+
+  accessModes:
+    - {{ if eq $name "file" }}ReadWriteMany{{ else }}ReadWriteOnce{{ end }}
+
+  resources:
+    requests:
+      storage: 1Gi
+{{ end }}
+{{ if .Values.ceph.object }}
+---
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: storage-object
+  namespace: storage-check
+
+spec:
+  generateBucketName: sno-fdf-check
+  storageClassName: ocs-external-storagecluster-ceph-rgw
+{{ end }}
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storage-writer
+  namespace: storage-check
+
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+
+  securityContext:
+    runAsNonRoot: true
+
+    seccompProfile:
+      type: RuntimeDefault
+
+  containers:
+    - name: check
+      image: {{ $image }}
+
+      command:
+        - python3
+        - /opt/check/check.py
+
+      env:
+        - name: CHECK_MODE
+          value: {{ $mode | quote }}
+
+        - name: CHECK_OBJECT
+          value: {{ .Values.ceph.object | quote }}
+{{ if .Values.ceph.object }}
+      envFrom:
+        - configMapRef:
+            name: storage-object
+
+        - secretRef:
+            name: storage-object
+{{ end }}
+
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+
+        capabilities:
+          drop:
+            - ALL
+
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+
+        limits:
+          memory: 128Mi
+
+      readinessProbe:
+        exec:
+          command:
+            - /usr/bin/test
+            - -f
+            - /tmp/passed
+
+        periodSeconds: 5
+
+      volumeMounts:
+        - name: check
+          mountPath: /opt/check
+          readOnly: true
+
+        - name: block
+          mountPath: /block
+
+        - name: file
+          mountPath: /file
+
+        - name: tmp
+          mountPath: /tmp
+
+  volumes:
+    - name: check
+
+      configMap:
+        name: storage-check
+
+    - name: block
+
+      persistentVolumeClaim:
+        claimName: block
+
+    - name: file
+
+      persistentVolumeClaim:
+        claimName: file
+
+    - name: tmp
+      emptyDir: {}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: storage-check
+  namespace: storage-check
+
+spec:
+  podSelector: {}
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress: []
+
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+
+      ports:
+        - protocol: UDP
+          port: 53
+
+        - protocol: TCP
+          port: 53
+
+        - protocol: UDP
+          port: 5353
+
+        - protocol: TCP
+          port: 5353
+
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-storage
+
+      ports:
+        - protocol: TCP
+          port: 8080
+
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.storageNetworks.client.cephAddress }}/32
+
+      ports:
+        - protocol: TCP
+          port: 8080
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storage-reader
+  namespace: storage-check
+
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+
+  securityContext:
+    runAsNonRoot: true
+
+    seccompProfile:
+      type: RuntimeDefault
+
+  containers:
+    - name: check
+      image: {{ $image }}
+
+      command:
+        - python3
+        - -c
+        - |
+          import pathlib
+          import time
+          marker = pathlib.Path('/file/fdf-check')
+          deadline = time.monotonic() + 900
+          while time.monotonic() < deadline:
+              if marker.exists() and marker.read_bytes() == b'persisted-file\n':
+                  break
+              time.sleep(2)
+          else:
+              raise RuntimeError('CephFS sharing did not converge')
+          print('CephFS sharing passed')
+
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+
+        capabilities:
+          drop:
+            - ALL
+
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+
+        limits:
+          memory: 128Mi
+
+      volumeMounts:
+        - name: file
+          mountPath: /file
+          readOnly: true
+
+  volumes:
+    - name: file
+
+      persistentVolumeClaim:
+        claimName: file

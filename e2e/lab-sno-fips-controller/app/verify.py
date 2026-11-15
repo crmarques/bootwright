@@ -114,7 +114,7 @@ def validate_config(config):
         if type(vlan) is not int or not 1 <= vlan <= 4094:
             raise Failure("VLAN must be an integer from 1 to 4094")
         vlans.append(vlan)
-        names.extend((env["bridge"], f"{trunk['interface']}.{vlan}"))
+        names.extend(dict.fromkeys((env["bridge"], f"{trunk['interface']}.{vlan}")))
         networks.append(network)
     if networks[0].overlaps(networks[1]):
         raise Failure("environment subnets overlap")

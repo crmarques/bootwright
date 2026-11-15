@@ -288,6 +288,7 @@ request-schema:
   services []opaque
   settings *struct ceph.Settings omitempty
   settings.modules []string
+  singleHostDefaults bool omitempty
   stretch *struct ceph.Stretch omitempty
   stretch.dataSites []string
   stretch.failureDomain string

@@ -1,0 +1,12 @@
+# One known_hosts line for libvirt-host's ECDSA host key at its guest-network
+# address, scanned from the FIPS controller (runbook.md, step 4).
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: libvirt-host-known-hosts
+
+spec:
+  type: opaque
+
+  source:
+    contextStore: {}

@@ -1,0 +1,102 @@
+{
+  "action": "cluster",
+  "ansiblePackageVersion": "5.0.3-1",
+  "bootstrap": "node-1",
+  "callHome": "enabled",
+  "cephadm": {
+    "packageVersion": "20.2.1-405.el9cp",
+    "path": "/usr/sbin/cephadm"
+  },
+  "cluster": "example",
+  "clusterKeyRef": "cluster-key",
+  "clusterNetworks": [],
+  "clusterSSHTransport": "verifiedTunnel",
+  "clusterSSHUser": "operator",
+  "controller": "",
+  "delegated": [
+    {
+      "hosts": [
+        "node-1"
+      ],
+      "name": "crash"
+    }
+  ],
+  "fsid": "dbd15e52-6727-55f4-8b83-171f89f03a8b",
+  "hosts": [
+    {
+      "address": "192.0.2.1",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "bwa177a3a03dc6186d98",
+          "sizeBytes": 53687091200
+        },
+        {
+          "path": "/dev/vdc",
+          "serial": "bwb3c143fdf8f6a77665",
+          "sizeBytes": 53687091200
+        }
+      ],
+      "labels": [
+        "mon",
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-1",
+      "name": "node-1",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    }
+  ],
+  "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
+  "monIP": "192.0.2.1",
+  "owner": "apply-synthetic",
+  "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
+  "packageRepositoryKey": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH",
+  "publicNetworks": [
+    "192.0.2.0/24"
+  ],
+  "registry": "cp.icr.io",
+  "registryRef": "registry",
+  "release": "9.9.1.2",
+  "services": [
+    {
+      "placement": {
+        "count": 1,
+        "hosts": [
+          "node-1"
+        ]
+      },
+      "service_type": "mon"
+    },
+    {
+      "placement": {
+        "count": 1,
+        "hosts": [
+          "node-1"
+        ]
+      },
+      "service_type": "mgr"
+    },
+    {
+      "placement": {
+        "hosts": [
+          "node-1"
+        ]
+      },
+      "service_id": "data",
+      "service_type": "osd",
+      "spec": {
+        "data_devices": {
+          "paths": [
+            "/dev/vdb",
+            "/dev/vdc"
+          ]
+        }
+      }
+    }
+  ],
+  "singleHostDefaults": true,
+  "version": "ceph-core-v1"
+}
