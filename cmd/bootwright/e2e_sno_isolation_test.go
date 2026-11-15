@@ -189,6 +189,11 @@ func TestSNOCaseOwnsIsolatedVLANNetworks(t *testing.T) {
 			if len(nics) != 2 || nics[1].Get("segmentRef").Text() != "staging" {
 				t.Fatal("node does not attach to the managed tagged segment")
 			}
+			cluster := requireObject(t, catalog, api.OpenShiftCluster, "sno")
+			labels := cluster.Spec().Get("nodes").Items()[0].Get("labels")
+			if !labels.Has("k8s.ovn.org/egress-assignable") || labels.Get("k8s.ovn.org/egress-assignable").Text() != "" {
+				t.Fatal("egress eligibility still needs a manual node label")
+			}
 		}
 	}
 }

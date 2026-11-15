@@ -36,6 +36,9 @@ spec:
       role: controlPlane
       machineRef: sno-01
 {{- if .Values.environments.enabled }}
+      labels:
+        k8s.ovn.org/egress-assignable: ""
+
 {{- $trunk := .Values.environments.trunk.interface }}
 
   # MetalLB announces each environment's pool on its bridge, which needs host

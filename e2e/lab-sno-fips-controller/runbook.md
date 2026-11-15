@@ -85,7 +85,7 @@ use the strict profile's rendered fixtures when overriding that topology.
 | --- | --- |
 | Controller packages, host firewall grants, management NAT network, VMs, emulated BMCs, FIPS and TPM2 installation | Existing Bootwright Machine, Network, provider and install APIs; apply performs the setup. No manual firewall rules or libvirt definitions. |
 | DNS records, forwarding, NTP and artifacts | Existing managed infrastructure APIs; both contexts declare their services. No manual zone-file or artifact-server setup. |
-| Node NICs/VLANs, secondary bridges and address pools | NetworkConfig, OpenShiftCluster secondary networks and the NMState/MetalLB add-ons. |
+| Node NICs/VLANs, secondary bridges, egress eligibility and address pools | NetworkConfig, OpenShiftCluster secondary networks and node labels, and the NMState/MetalLB add-ons. No manual egress-node label. |
 | Host trunk, environment VLAN legs and test peers | Managed tagged Network objects create an unaddressed trunk and addressed host VLAN legs with NAT and inter-leg routing disabled. Only external peer containers and their Podman attachments remain test fixtures. |
 | FIPS controller resolver handoff | NetworkConfig installs the bootstrap resolver. DNSServer.forwardZones routes the cluster suffix to the FIPS controller; unrelated names use declared upstreams without a forwarding loop. No manual nmstate or resolver-file update. |
 | Namespaces, ingress shards, EgressIP, policies and strict node filter | Native declarative OpenShift fixtures, applied explicitly for this test. Existing [GitOps bootstrap](../../specs/api/addons.md#package-gitops) can own them in an estate using an approved repository/revision/path and a suitable ClusterRole. No such repository or additional operator is assumed here. |
@@ -95,6 +95,8 @@ The `ClusterAddon.manifestSet` arm is currently refused by execution; it is
 not a way to apply these native fixtures. No arbitrary-command add-on is
 needed. The addressless-VLAN candidate is optional; this case uses managed addressed
 host legs. Its DNS forwarding is declared through the managed service API.
+The [API review](api-review.md) explains supported alternatives and proposed
+improvements without assigning workload policy to core.
 
 ## 1. Prepare (host)
 
@@ -1005,6 +1007,10 @@ In the controller session, restore its own variables before using `RUN_DIR`:
 ```sh
 source "$HOME/bootwright-sno-controller/controller-env.sh"
 sha256sum -c "$RUN_DIR/bootwright.sha256"
+if [ -x "$RUN_DIR/oc" ]; then
+    export KUBECONFIG="$RUN_DIR/kubeconfig"
+    oc() { "$RUN_DIR/oc" "$@"; }
+fi
 bootwright status --context "$CTX_FIPS"
 ```
 

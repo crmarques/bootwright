@@ -10,7 +10,7 @@ administrator; workloads have no host networking or privileged capabilities.
 
 | Owner | Configuration |
 | --- | --- |
-| Bootwright core | Machine, Network, NetworkConfig, DNSServer, provider and OpenShiftCluster fields: two VMs, installation, FIPS, TPM2, managed host trunk/VLAN legs, DNS suffix forwarding, node VLAN connectivity and addressed-bridge intent |
+| Bootwright core | Machine, Network, NetworkConfig, DNSServer, provider and OpenShiftCluster fields: two VMs, installation, FIPS, TPM2, managed host trunk/VLAN legs, DNS suffix forwarding, node VLAN connectivity, addressed bridges and egress-node eligibility |
 | Existing add-ons | NMState applies the bridge configuration; MetalLB provides per-environment address pools |
 | Native fixtures, later GitOps-owned in an estate | Namespaces, apps, ingress shards, EgressIP, policies and node filter |
 | External E2E harness | External peers, adversarial routes and traffic assertions |
@@ -229,7 +229,7 @@ Apply the fixture objects only after the filter is confirmed:
 oc get ingresscontroller default -n openshift-ingress-operator -o json > "$PROFILE/default-ingress.before.json"
 oc patch ingresscontroller/default -n openshift-ingress-operator --type=merge \
     -p '{"spec":{"namespaceSelector":{"matchExpressions":[{"key":"lab.example.test/environment","operator":"DoesNotExist"}]}}}'
-oc label node/master-0 k8s.ovn.org/egress-assignable= --overwrite
+oc get node master-0 -o json | jq -e '.metadata.labels | has("k8s.ovn.org/egress-assignable")'
 oc apply -f "$MANIFESTS/namespaces.yaml"
 for file in networking verification-config applications; do
     oc apply --dry-run=server -f "$MANIFESTS/$file.yaml"
@@ -333,7 +333,7 @@ python3 "$PROFILE/app/verify.py" --config "$PROFILE/config.json" \
 On the host:
 
 ```sh
-./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
+bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
     remote:isolation/snapshot-after-reboot.json "local:$PROFILE/snapshot-after-reboot.json"
 sudo python3 "$PROFILE/app/verify.py" --config "$PROFILE/config.json" \
     --mode external --snapshot "$PROFILE/snapshot-after-reboot.json" | tee "$PROFILE/external-after-reboot.log"
