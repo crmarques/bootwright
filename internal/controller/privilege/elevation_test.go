@@ -307,6 +307,7 @@ func TestElevationHandsTerminalsOnlyToAnInteractiveInvocation(t *testing.T) {
 		{name: "interactive", inputTerminal: true, interactive: true},
 		{name: "piped input", inputTerminal: false},
 		{name: "JSON on a terminal", json: true, inputTerminal: true},
+		{name: "JSON with piped input", json: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var commands []Command
@@ -330,8 +331,8 @@ func TestElevationHandsTerminalsOnlyToAnInteractiveInvocation(t *testing.T) {
 			if child.Input != io.Reader(input) {
 				t.Errorf("stdin reached the child as %T", child.Input)
 			}
-			if noninteractive := slices.Contains(child.Arguments, "-n"); noninteractive == test.interactive {
-				t.Errorf("arguments %q, want noninteractive %v", child.Arguments, !test.interactive)
+			if noninteractive := slices.Contains(child.Arguments, "-n"); noninteractive == test.inputTerminal {
+				t.Errorf("arguments %q, want noninteractive %v", child.Arguments, !test.inputTerminal)
 			}
 			if forwarded := slices.Contains(child.Environment, "TERM=xterm-256color"); forwarded != test.interactive {
 				t.Errorf("environment %q, want TERM forwarded %v", child.Environment, test.interactive)
@@ -737,5 +738,53 @@ func TestAStandardInputMediaURLIsRefusedUnderALoggingPolicy(t *testing.T) {
 			!strings.HasPrefix(d.Remediation, "repeat the command with --from-url-file <path>") || d.Object != nil {
 			t.Fatalf("refusal = %+v", d)
 		}
+	}
+}
+
+func TestStructuredElevationAuthenticatesWithoutCachedCredentials(t *testing.T) {
+	for _, test := range []struct {
+		format, result string
+	}{
+		{format: "json", result: "{\"ok\":true,\"exitCode\":0}\n"},
+		{format: "yaml", result: "ok: true\nexitCode: 0\n"},
+	} {
+		t.Run(test.format, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			input := unreadableInput{t}
+			args := []string{"status", "--output", test.format}
+			elevator := scriptedElevator(scriptedChild{}, nil)
+			elevator.Executor = executorFunc(func(_ context.Context, command Command) (int, error) {
+				if slices.Equal(command.Arguments, []string{"-n", "-ll"}) {
+					return 1, nil
+				}
+				if slices.Contains(command.Arguments, "-n") {
+					io.WriteString(command.Error, passwordNeeded)
+					return 1, nil
+				}
+				if !slices.Equal(command.Arguments, append([]string{"-u", "#0", "--", "/proc/4242/exe"}, args...)) || command.Input != io.Reader(input) {
+					t.Fatalf("child arguments %q or stdin %T changed", command.Arguments, command.Input)
+				}
+				io.WriteString(command.Error, startAnnouncement)
+				io.WriteString(command.Output, test.result)
+				return 0, nil
+			})
+			outcome := elevator.Run(context.Background(), Invocation{
+				JSON: true, InputTerminal: true, Arguments: args, Input: input, Output: &stdout, Error: &stderr,
+			})
+			if outcome != (Outcome{}) || stdout.String() != test.result || stderr.Len() != 0 {
+				t.Fatalf("outcome %+v, stdout %q, stderr %q", outcome, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func TestStructuredTerminalElevationKeepsItsFailureDiagnostics(t *testing.T) {
+	for _, test := range []elevationCase{
+		{name: "authorization refused", json: true, terminal: true, child: scriptedChild{stderr: []string{passwordNeeded}, code: 1},
+			exit: 1, code: "runtime.privilege", message: authorization + ": a password is required", remediation: reauthenticate},
+		{name: "child crashed", json: true, terminal: true, child: scriptedChild{stderr: []string{startAnnouncement}, code: 2},
+			exit: 1, code: "runtime.internal", message: "the elevated command exited with status 2 without a result"},
+	} {
+		t.Run(test.name, func(t *testing.T) { test.check(t, context.Background()) })
 	}
 }

@@ -44,6 +44,9 @@ are UTF-8 with LF line endings;
 default explicit sensitive results remain exact byte streams. Presentation may
 adapt human output to explicitly selected flags and injected terminal
 capabilities. JSON and YAML never contain streamed progress, color or cursor control.
+Sudo may prompt directly on the controlling terminal when standard input is a
+terminal, as [local privilege](../cli.md#local-privilege-and-user-identity)
+defines; its authentication never enters the structured output streams.
 Live SSH sessions are a stream exception: selecting either structured format
 refuses with `cli.usage` before service dispatch, privilege or session effects.
 Structured secret input from a terminal also refuses with `cli.usage` before

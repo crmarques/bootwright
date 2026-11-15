@@ -306,11 +306,12 @@ so a sudoers rule naming the installed binary matches it; only the invoking
 account's own build output re-executes through `/proc/<pid>/exe`, which a
 sudoers rule must then match, because sudo compares a command's base name
 before its path. Sudo policies that refuse the executable path fail closed.
-Sudo owns terminal password handling; Bootwright never captures the password. JSON, YAML or
-noninteractive invocation uses noninteractive sudo and fails without cached or
-passwordless authorization. Preserve argv, stdin payloads, outputs and status.
-An interactive invocation hands sudo the invoking terminal itself on every
-standard stream it occupies, so sudo's own terminal relay carries prompts and
+Sudo owns terminal password handling; Bootwright never captures it. Every output
+format permits authentication with terminal stdin; otherwise sudo is
+noninteractive and requires cached or passwordless authorization. Preserve argv,
+stdin payloads, outputs and status.
+A human invocation with terminal stdin hands sudo each terminal stream
+unchanged, so sudo's own terminal relay carries prompts and
 answers to the child. A confirmation read whose terminal belongs to another
 foreground process group requests the terminal through job control instead of
 waiting for input that cannot arrive.

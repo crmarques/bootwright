@@ -62,13 +62,14 @@ func (e Elevator) Run(ctx context.Context, invocation Invocation) Outcome {
 	if err != nil {
 		return Outcome{ExitCode: 1, Diagnostic: &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "sudo is unavailable; run Bootwright as root"}}
 	}
-	noninteractive := invocation.JSON || !invocation.InputTerminal
+	noninteractive := !invocation.InputTerminal
+	interactive := !invocation.JSON && !noninteractive
 	output := &countingWriter{writer: invocation.Output}
 	// Without a terminal sudo cannot prompt, so its refusal text carries no
 	// operator action until the child proves it started.
 	errorStream := newStartFilter(invocation.Error, invocation.JSON, noninteractive)
 	options := SudoOptions{Executable: executable, Sudo: sudo, Executor: e.Executor, Delay: e.Delay, NonInteractive: noninteractive, Quiet: invocation.JSON, Assignments: RouteAssignments(invocation.Route), SecretStdin: invocation.SecretStdin, Input: invocation.Input, Output: output, Error: errorStream}
-	if !noninteractive {
+	if interactive {
 		// Sudo relays the terminal only while the child inherits it on stdin
 		// and stdout; behind a pipe it parks the child in the background of a
 		// new pseudo-terminal until the child claims it through job control.
@@ -93,7 +94,7 @@ func (e Elevator) Run(ctx context.Context, invocation Invocation) Outcome {
 		return inputUnprovenRefusal(unproven)
 	}
 	outcome := conclude(elevationRun{
-		json: invocation.JSON, interactive: !noninteractive, failed: err != nil,
+		json: invocation.JSON, interactive: interactive, failed: err != nil,
 		interrupted: ExitCode(ctx, 0) != 0, code: code, wrote: output.bytes != 0,
 		session: invocation.Session,
 	}, errorStream)

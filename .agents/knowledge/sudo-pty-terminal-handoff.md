@@ -38,8 +38,11 @@ group differing from the pseudo-terminal's foreground group.
   [sudo.go](../../internal/controller/privilege/sudo.go) leaves `*os.File`
   streams unwrapped so they reach sudo as descriptors. Sudo then starts the
   child in the foreground with its normal raw-mode relay. The output counter
-  and the start filter remain for noninteractive and JSON invocations, where
-  sudo cannot prompt, and for a standard error that is not a terminal.
+  and the start filter remain for noninteractive and structured invocations,
+  and for a standard error that is not a terminal. Structured output does not
+  disable sudo authentication when standard input is a terminal: sudo opens
+  `/dev/tty` for the prompt and password independently of those captured streams
+  ([sudo's password reader](https://github.com/sudo-project/sudo/blob/main/src/tgetpass.c)).
 - [stdin_linux_amd64.go](../../cmd/bootwright/stdin_linux_amd64.go) performs
   one real nonblocking read before polling whenever standard input is the
   controlling terminal of another foreground process group. That read raises
@@ -61,6 +64,15 @@ foreground and the reader in a background process group, and
 supervisor. Real sudo remains operator-run. A background launch
 (`bootwright ... &`) now stops with `Stopped (tty input)` at the prompt like any
 interactive program, and `--yes` avoids the prompt entirely.
+
+`TestStructuredElevationAuthenticatesWithoutCachedCredentials` covers terminal
+JSON and YAML without a cached credential, preserving argv, stdin and one
+structured result. `TestStructuredTerminalElevationKeepsItsFailureDiagnostics`
+keeps denial and child-crash diagnostics structured; the signal suite covers
+interrupted terminal authentication.
+The terminal handoff matrix keeps non-terminal input noninteractive and hands
+terminal descriptors only to human output, so structured output retains its
+start detection and result accounting.
 
 ## Telling a refusal from a child that ran
 

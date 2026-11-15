@@ -22,6 +22,7 @@ func TestElevationOutcomesAfterAnInterrupt(t *testing.T) {
 		before bool
 	}{
 		{elevationCase: elevationCase{name: "a JSON SIGTERM before the start", json: true, child: scriptedChild{code: 128 + int(syscall.SIGTERM)}, exit: 130, code: "runtime.interrupted", message: "operation interrupted"}, signal: syscall.SIGTERM},
+		{elevationCase: elevationCase{name: "a terminal JSON authentication interrupted", json: true, terminal: true, child: scriptedChild{code: 130}, exit: 130, code: "runtime.interrupted", message: "operation interrupted"}, signal: syscall.SIGINT},
 		{elevationCase: elevationCase{name: "a SIGTERM before sudo runs", json: true, exit: 130, code: "runtime.interrupted", message: "operation interrupted"}, signal: syscall.SIGTERM, before: true},
 		{elevationCase: elevationCase{name: "a human interrupt before the start", child: scriptedChild{stderr: []string{hostWarning}, code: 128 + int(syscall.SIGINT)}, exit: 130, code: "runtime.interrupted", message: "operation interrupted"}, signal: syscall.SIGINT},
 		{elevationCase: elevationCase{name: "a child that reported its own interrupt", child: scriptedChild{stderr: []string{startAnnouncement, interrupted}, code: 130}, exit: 130, stderr: interrupted}, signal: syscall.SIGINT},
