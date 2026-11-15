@@ -680,8 +680,22 @@ graph, never from authored daemon syntax:
 | Kind | Derived from the graph | Authored |
 | --- | --- | --- |
 | `Proxy` | The client set below, as the only addresses it serves. Before it admits a client it refuses every request whose destination is a loopback or unspecified address (`127.0.0.0/8`, `0.0.0.0/32`, `::1/128`, `::/128`) or a link-local one (`169.254.0.0/16`, `fe80::/10`), and every request for its cache manager (`test_the_proxy_refuses_local_link_local_and_manager_destinations_before_it_admits_a_client`). Without `allowedDestinations` it admits a client to every other destination and port, `CONNECT` included, and keeps no access log. With it, the destination rule below admits a client only to those destinations and the mirror hosts, and refuses and logs every other request. Caching and authentication are disabled. | `bindAddress`, `port`, `allowedDestinations[]` |
-| `DNSServer` | One name per retained Machine, from its effective `fqdn` contact, answering the addresses of that Machine its clients can reach, by the rule below, each as its own record, with the reverse record on the first address only, and the records each selected container cluster answers at. | `bindAddress`, `port`, `forwarders[]` |
+| `DNSServer` | One name per retained Machine, from its effective `fqdn` contact, answering the addresses of that Machine its clients can reach, by the rule below, each as its own record, with the reverse record on the first address only, and the records each selected container cluster answers at. | `bindAddress`, `port`, `forwarders[]`, `forwardZones[]` |
 | `NTPServer` | The client set below, as the only addresses it answers. | `bindAddress`, `port`, `upstreamSources[]` |
+
+**DNS suffix forwarding.** The dnsmasq implementation freezes
+[`forwardZones`](api/infrastructure-services.md#proxy-dns-ntp-and-registry-deployment)
+in the request and renders one `server=/domain/address` directive per target,
+beside the explicitly declared general forwarders. It reads no ambient
+resolver file. Native suffix selection follows
+[dnsmasq's server rules](https://dnsmasq.org/docs/dnsmasq-man.html): longest
+matching domain on complete labels, with general forwarders used only outside
+the selected zone. Readiness proves the service's own retained records; it
+makes no claim that a future forwarding target is already reachable. Before
+publishing configuration, the adapter refuses malformed domain or address
+strings, configuration delimiters, duplicate domains and excess or empty target
+sets. The forwarding configuration persists with the managed service and is
+removed with it; it changes no operating-system resolver settings.
 
 The client set is loopback, the CIDR of each [`Network`](api/networks.md)
 holding a retained Machine's install address, in its family, and every

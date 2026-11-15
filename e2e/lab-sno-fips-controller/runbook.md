@@ -87,14 +87,14 @@ use the strict profile's rendered fixtures when overriding that topology.
 | DNS records, forwarding, NTP and artifacts | Existing managed infrastructure APIs; both contexts declare their services. No manual zone-file or artifact-server setup. |
 | Node NICs/VLANs, secondary bridges and address pools | NetworkConfig, OpenShiftCluster secondary networks and the NMState/MetalLB add-ons. |
 | Host trunk, environment VLAN legs and test peers | Managed tagged Network objects create an unaddressed trunk and addressed host VLAN legs with NAT and inter-leg routing disabled. Only external peer containers and their Podman attachments remain test fixtures. |
-| FIPS controller resolver handoff | Step 7 uses nmstate after its DNS service is ready. A provided Machine cannot declare OS network configuration, and DNSServer has no per-zone forwarding; the [candidate](../../specs/milestones/backlog.md#b1410) needs a design before this can be automated. |
+| FIPS controller resolver handoff | NetworkConfig installs the bootstrap resolver. DNSServer.forwardZones routes the cluster suffix to the FIPS controller; unrelated names use declared upstreams without a forwarding loop. No manual nmstate or resolver-file update. |
 | Namespaces, ingress shards, EgressIP, policies and strict node filter | Native declarative OpenShift fixtures, applied explicitly for this test. Existing [GitOps bootstrap](../../specs/api/addons.md#package-gitops) can own them in an estate using an approved repository/revision/path and a suitable ClusterRole. No such repository or additional operator is assumed here. |
 | SSH authorization, credential import, negative tests and evidence | Operator trust establishment and test assertions. They are not infrastructure lifecycle configuration. |
 
 The `ClusterAddon.manifestSet` arm is currently refused by execution; it is
 not a way to apply these native fixtures. No arbitrary-command add-on is
-needed. The two candidates above remain unimplemented; their absence is why
-the corresponding manual setup remains in this runbook.
+needed. The addressless-VLAN candidate is optional; this case uses managed addressed
+host legs. Its DNS forwarding is declared through the managed service API.
 
 ## 1. Prepare (host)
 
@@ -120,9 +120,10 @@ the corresponding manual setup remains in this runbook.
   ```sh
   set -euo pipefail
   umask 077
-  RUN_DIR=$(mktemp -d)
-  CASE_VALUES="$RUN_DIR/values.yaml"
-  printf '{}\n' > "$CASE_VALUES"
+  RUN_DIR=$(mktemp -d "$HOME/bootwright-sno.XXXXXX")
+  CASE="$PWD/e2e/lab-sno-fips-controller"
+  VALUES="$RUN_DIR/values.yaml"
+  printf '# Private case overrides\n' > "$VALUES"
   printf 'Run records: %s\n' "$RUN_DIR"
   systemctl is-active sshd > "$RUN_DIR/sshd-before" || true
   sudo sshd -T | grep -i '^permitrootlogin'     # yes or prohibit-password
@@ -130,12 +131,31 @@ the corresponding manual setup remains in this runbook.
   ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub
   ```
 
-Merge any private overrides into `CASE_VALUES` before rendering. For the
-strict profile, now complete its **Prepare and render on the host** section,
-then return here. Keep `RUN_DIR` and `CASE_VALUES` in this host session for
-the entire run; do not recreate them in the second terminal.
+Merge private overrides into `VALUES` before rendering. Complete step 2
+through `PIN_VALUES` before rendering the strict profile, then continue its
+instructions. Keep this host run directory through cleanup.
 
 ## 2. Render and build the bootstrap context (host)
+
+Use the release-matched RHEL 9 client in a private directory instead of
+relying on an unrelated `oc` on PATH. The same verified binary is transferred
+to the FIPS controller in step 3:
+
+```sh
+RELEASE=4.22.21
+ARCHIVE="openshift-client-linux-amd64-rhel9-$RELEASE.tar.gz"
+CLIENT_BASE="https://mirror.openshift.com/pub/openshift-v4/clients/ocp/$RELEASE"
+mkdir -p "$RUN_DIR/clients"
+curl -fL "$CLIENT_BASE/$ARCHIVE" -o "$RUN_DIR/clients/$ARCHIVE"
+curl -fL "$CLIENT_BASE/sha256sum.txt" -o "$RUN_DIR/clients/sha256sum.txt"
+(
+    cd "$RUN_DIR/clients"
+    sha256sum --ignore-missing -c sha256sum.txt
+    tar -xzf "$ARCHIVE" oc
+)
+export PATH="$RUN_DIR/clients:$PATH"
+oc version --client
+```
 
 Read the NMState and MetalLB operators' default channel and its head CSV from
 the release's Red Hat operator catalog, with this host's `oc` and pull secret:
@@ -159,25 +179,58 @@ NMSTATE_PIN=$(head_csv kubernetes-nmstate-operator)
 METALLB_PIN=$(head_csv metallb-operator)
 read -r NMSTATE_CHANNEL NMSTATE_CSV <<< "$NMSTATE_PIN"
 read -r METALLB_CHANNEL METALLB_CSV <<< "$METALLB_PIN"
+test -n "$NMSTATE_CHANNEL" && test -n "$NMSTATE_CSV"
+test -n "$METALLB_CHANNEL" && test -n "$METALLB_CSV"
 printf '%s %s\n%s %s\n' "$NMSTATE_CHANNEL" "$NMSTATE_CSV" "$METALLB_CHANNEL" "$METALLB_CSV"
 ```
 
 Each line must name a channel such as `stable` and one CSV of that package.
 If `jq` reports no `*.json` file, the catalog ships another format: stop and
 paste `ls` of `$RUN_DIR/catalog/<package>`.
-Then render:
+Pin the selected operator releases and the current host address in private
+values before rendering. Keep that address stable for the run; a DHCP
+reservation is preferable to changing frozen inputs after a network move.
+
+```sh
+HOST_ADDRESS=$(ip -4 route get 1.1.1.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')
+test -n "$HOST_ADDRESS"
+PIN_VALUES="$RUN_DIR/pins.yaml"
+cat > "$PIN_VALUES" <<EOF
+host:
+  address: "$HOST_ADDRESS"
+
+addons:
+  subscriptions:
+    nmstate:
+      channel: "$NMSTATE_CHANNEL"
+      startingCSV: "$NMSTATE_CSV"
+
+    metallb:
+      channel: "$METALLB_CHANNEL"
+      startingCSV: "$METALLB_CSV"
+EOF
+```
+
+### Render and provision
+
+For the strict profile, render its manifests now using both private values
+files, then continue below. Keep those files unchanged through provisioning.
 
 ```sh
 e2e/render.sh lab-sno-fips-controller \
-    --values "$CASE_VALUES" \
-    --set "addons.subscriptions.nmstate.channel=$NMSTATE_CHANNEL" \
-    --set "addons.subscriptions.nmstate.startingCSV=$NMSTATE_CSV" \
-    --set "addons.subscriptions.metallb.channel=$METALLB_CHANNEL" \
-    --set "addons.subscriptions.metallb.startingCSV=$METALLB_CSV"
+    --values "$VALUES" --values "$PIN_VALUES"
 CTX_BOOT="lab-sno-fips-controller-bootstrap"
 CTX_FIPS="lab-sno-fips-controller"
 INPUT_DIR="$HOME/bootwright-e2e/lab-sno-fips-controller"
-CONTROLLER_ADDRESS="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
+CONTROLLER_ADDRESS="$HOST_ADDRESS"
+PROFILE="${PROFILE:-$RUN_DIR/isolation}"
+declare -p RUN_DIR CASE VALUES PIN_VALUES INPUT_DIR CTX_BOOT CTX_FIPS HOST_ADDRESS PROFILE PATH > "$RUN_DIR/host-env.sh"
+if [ -n "${HOST_CHECKS:-}" ]; then
+    cp -a "$HOST_CHECKS" "$RUN_DIR/host-checks"
+    HOST_CHECKS="$RUN_DIR/host-checks"
+    declare -p HOST_CHECKS >> "$RUN_DIR/host-env.sh"
+fi
+printf 'Restore host variables with: source %s/host-env.sh\n' "$RUN_DIR"
 ./bin/bootwright validate -f "$INPUT_DIR/bootstrap"
 ./bin/bootwright validate -f "$INPUT_DIR/fips"
 ./bin/bootwright context init --name "$CTX_BOOT" --input-dir "$INPUT_DIR/bootstrap"
@@ -203,14 +256,19 @@ The two reads must print `1` and `FIPS`.
 
 ## 3. Hand the controller its inputs (host)
 
-Install this build, the rendered `fips` input and the pull secret on
+Refresh sudo authorization in this host terminal immediately before piped
+transfers; their standard input carries payloads and cannot answer a sudo
+password prompt. Install this build, the rendered `fips` input and the pull secret on
 `fips-controller`. Each travels on standard input, and the two checksums must
 match:
 
 ```sh
+sudo -v
 ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sudo -n install -m 0755 /dev/stdin /usr/local/bin/bootwright < bin/bootwright
 sha256sum bin/bootwright
 ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sha256sum /usr/local/bin/bootwright
+# Copy the independent diagnostic client verified in step 2:
+./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sudo -n install -m 0755 /dev/stdin /usr/local/bin/oc < "$RUN_DIR/clients/oc"
 ./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller "local:$INPUT_DIR/fips" remote:fips
 ./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller "local:$HOME/openshift-pull-secret" remote:openshift-pull-secret
 ```
@@ -239,10 +297,14 @@ Open the session and keep it for the FIPS controller steps, 4 to 10:
 On `fips-controller` (the version must name the same clean build as the host):
 
 ```sh
-CTX_FIPS="lab-sno-fips-controller"
 set -euo pipefail
+CTX_FIPS="lab-sno-fips-controller"
 umask 077
-RUN_DIR=$(mktemp -d)
+RUN_DIR="$HOME/bootwright-sno-controller"
+PROFILE="$HOME/isolation"
+MANIFESTS="$PROFILE/rendered/sno-environment-isolation/templates"
+mkdir -p -m 0700 "$RUN_DIR"
+declare -p CTX_FIPS RUN_DIR PROFILE MANIFESTS > "$RUN_DIR/controller-env.sh"
 bootwright version
 bootwright controller install --yes
 bootwright controller check                     # the FIPS mode check reports 1
@@ -270,12 +332,25 @@ from `fips-controller`'s address, keeping the previous file for cleanup:
 set -euo pipefail
 umask 077
 CTX_BOOT="lab-sno-fips-controller-bootstrap"
-RUN_DIR="<the run records directory step 1 printed>"
+read -r -p 'Private host run directory printed in step 1: ' RUN_DIR
+source "$RUN_DIR/host-env.sh"
+sudo -v
 ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- cat libvirt-host-key.pub > "$RUN_DIR/libvirt-host-key.pub"
-sudo test -d /root/.ssh || touch "$RUN_DIR/root-ssh-created"
-sudo install -d -m 0700 /root/.ssh
-sudo test -e /root/.ssh/authorized_keys && sudo cp -a /root/.ssh/authorized_keys "$RUN_DIR/root-authorized_keys.before"
-printf 'from="198.51.100.10" %s\n' "$(cat "$RUN_DIR/libvirt-host-key.pub")" | sudo tee -a /root/.ssh/authorized_keys
+AUTH_LINE="from=\"198.51.100.10\" $(cat "$RUN_DIR/libvirt-host-key.pub")"
+if ! test -e "$RUN_DIR/root-authorized_keys.before" && ! test -e "$RUN_DIR/root-authorized_keys.created"; then
+    if sudo test -e /root/.ssh/authorized_keys; then
+        sudo cp -a /root/.ssh/authorized_keys "$RUN_DIR/root-authorized_keys.before"
+    else
+        touch "$RUN_DIR/root-authorized_keys.created"
+    fi
+fi
+if sudo grep -Fxq "$AUTH_LINE" /root/.ssh/authorized_keys 2>/dev/null; then
+    printf 'Controller key already authorized\n'
+else
+    sudo test -d /root/.ssh || touch "$RUN_DIR/root-ssh-created"
+    sudo install -d -m 0700 /root/.ssh
+    printf '%s\n' "$AUTH_LINE" | sudo tee -a /root/.ssh/authorized_keys > /dev/null
+fi
 sudo restorecon -R /root/.ssh
 ```
 
@@ -313,20 +388,22 @@ substrate on `libvirt-host`:
 bootwright preflight --context "$CTX_FIPS" --stage controller
 bootwright apply --context "$CTX_FIPS" --stage infrastructure-services,substrates --yes
 dig @198.51.100.10 +short api.sno.e2e.example.test test.apps.sno.e2e.example.test   # both 198.51.100.31
-dig @198.51.100.10 +short mirror.openshift.com                                       # forwarded through CTX_BOOT
+dig @198.51.100.10 +short mirror.openshift.com                                       # declared upstreams
 ```
 
-Point this controller's resolver at its own DNS server, which forwards every
-other name to `CTX_BOOT`'s, then let preflight prove resolution. The
-installation configured the guest's DNS through nmstate, which stores it as
-NetworkManager's global DNS and so overrides any per-connection setting.
-Change it the same way:
+The controller uses the bootstrap resolver installed by its Machine's
+`NetworkConfig.dns`. The bootstrap DNSServer's `forwardZones` sends the SNO
+zone to this controller's managed DNS service. Both resolvers send unrelated
+queries to `host.upstreamDNS`; the controller resolver never forwards back to
+the bootstrap service. No manual NetworkManager or resolver-file change is
+needed, and the DNS target can start after bootstrap downloads are complete.
+
+Verify resolution through the controller's actual system resolver, then let
+preflight prove all installer names and capacity:
 
 ```sh
-printf 'dns-resolver:\n  config:\n    search:\n    - e2e.example.test\n    server:\n    - 198.51.100.10\n' > "$RUN_DIR/dns.yml"
-sudo nmstatectl apply "$RUN_DIR/dns.yml"
-grep nameserver /etc/resolv.conf                                    # 198.51.100.10
-getent hosts api.sno.e2e.example.test
+getent ahostsv4 api.sno.e2e.example.test
+getent ahostsv4 api-int.sno.e2e.example.test
 bootwright preflight --context "$CTX_FIPS" --stage clusters
 ```
 
@@ -401,6 +478,40 @@ sudo tail -n 60 /var/lib/bootwright-hosted/lab-sno-fips-controller/clusters/sno/
 Run no `CTX_BOOT` command on the host while a `CTX_FIPS` apply runs: both
 contexts drive the host through the same staging root, and a bootstrap run
 reclaims run directories it does not own ([B1095](../../specs/milestones/backlog.md#b1095)).
+
+### Diagnose an add-on failure after installation
+
+An add-on failure leaves the completed SNO installation in place. Read the
+failed block's log using the path the CLI prints. If an older build hides the
+reason at **Publish bounded cluster object evidence**, inspect OLM through
+the independent client. Keep the kubeconfig private:
+
+```sh
+umask 077
+KUBECONFIG="$RUN_DIR/kubeconfig"; export KUBECONFIG
+bootwright cluster kubeconfig --context "$CTX_FIPS" --name sno > "$KUBECONFIG"
+oc get subscriptions.operators.coreos.com -A -o json | jq '[.items[] |
+    {namespace:.metadata.namespace,name:.metadata.name,
+     pin:.spec.startingCSV,installed:.status.installedCSV,
+     installPlanRef:.status.installPlanRef,conditions:.status.conditions}]'
+oc get installplans.operators.coreos.com -A -o json | jq '[.items[] |
+    {namespace:.metadata.namespace,name:.metadata.name,
+     ownerReferences:.metadata.ownerReferences,spec:.spec,
+     phase:.status.phase,
+     bundles:((.status.bundleLookups // []) | map({identifier,catalogSourceRef}))}]'
+```
+
+`RequiresApproval` alone is not a request for manual approval. Bootwright
+checks the selected plan's ownership, exact CSV pin and declared catalog
+before approving it. After resolving the reported cause, continue the
+existing apply with its original input, secrets and build:
+
+```sh
+bootwright apply --context "$CTX_FIPS" --yes
+```
+
+This reuses the completed cluster and rechecks failed add-ons; it does not
+require regenerating inputs or restarting cluster installation.
 
 ## 9. Verify (FIPS controller)
 
@@ -752,8 +863,8 @@ Restore root's authorized keys and sshd:
 ```sh
 if [ -e "$RUN_DIR/root-authorized_keys.before" ]; then
     sudo cp -a "$RUN_DIR/root-authorized_keys.before" /root/.ssh/authorized_keys
-    sudo grep -c -F "$(cut -d' ' -f2 "$RUN_DIR/libvirt-host-key.pub")" /root/.ssh/authorized_keys || true   # 0
-else
+    sudo cmp "$RUN_DIR/root-authorized_keys.before" /root/.ssh/authorized_keys
+elif [ -e "$RUN_DIR/root-authorized_keys.created" ]; then
     sudo rm -- /root/.ssh/authorized_keys
 fi
 if [ -e "$RUN_DIR/root-ssh-created" ]; then sudo rmdir -- /root/.ssh || sudo ls -A /root/.ssh; fi   # list what root gained since
@@ -806,6 +917,50 @@ done
 cp -a -- "$INPUT_DIR" "$FIPS_COPY/rendered-inputs"
 rm -rf -- "${RUN_DIR:?}" "${INPUT_DIR:?}"
 ```
+
+## Resume after a shell closes or the laptop restarts
+
+Keep each terminal's variables distinct. In a new host terminal, enter the
+checkout and restore the private run directory printed in step 1:
+
+```sh
+read -r -p 'Private host run directory: ' RUN_DIR
+source "$RUN_DIR/host-env.sh"
+sudo -v
+./bin/bootwright controller check
+ip -4 route get 1.1.1.1
+./bin/bootwright machine list --context "$CTX_BOOT" --power-status
+```
+
+The host must still hold the pinned `HOST_ADDRESS`. If it moved to another
+network, restore the original address/network or destroy the old realization
+with its original build and input, preserve its evidence, then initialize a
+fresh context rendered for the new address. Never edit an operation's frozen
+input to resume it. Media and the verified client may be reused.
+
+With the original address restored, verify the case services are ready, start
+sshd, and start the existing controller VM if it is off. Managed VLAN links
+are persistent; do not recreate them with `ip link`.
+
+```sh
+sudo systemctl start sshd
+./bin/bootwright preflight --context "$CTX_BOOT" --stage controller
+./bin/bootwright machine start --context "$CTX_BOOT" --name fips-controller
+./bin/bootwright machine rsh --context "$CTX_BOOT" --name fips-controller
+```
+
+In the controller session, restore its own variables before using `RUN_DIR`:
+
+```sh
+source "$HOME/bootwright-sno-controller/controller-env.sh"
+bootwright status --context "$CTX_FIPS"
+```
+
+A resumed apply uses its existing context, inputs and secrets. Repeat only
+transfers that failed; a sudo refusal before a transfer requires `sudo -v` in
+the host terminal, not a new render, context or secret generation. Stop on
+unexpected readiness errors; a recorded completed apply does not repair
+arbitrary live changes merely by being repeated.
 
 ## 12. Record the result
 

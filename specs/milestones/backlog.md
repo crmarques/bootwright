@@ -321,7 +321,6 @@ Alias cell.
 | [B1349](#b1349) | new, 2026-11-11 (X418; audit 004 API-34) | product | Add-ons | Reserved authored steps gain an explicitly authorized lifecycle | D183 keeps the shapes admitted and inert; no concrete execution journey is promoted |
 | [B1354](#b1354) | new, 2026-11-11 (firewall review) | defect | E2E | Sample application teardown removes only a rule its setup created | Separate application fixture ownership, beyond controller listener preparation |
 | [B1409](#b1409) | new, 2026-11-15 (X475 audit) | product | Substrate | Managed addressless tagged networks for an isolated laboratory trunk | Needs an explicit L2 ownership and firewall design; current managed VLAN legs require host addresses |
-| [B1410](#b1410) | new, 2026-11-15 (X475 audit) | product | Infrastructure services and Managed OS | Declarative resolver handoff to a newly managed DNS service | Needs a choice between provided-host DNS convergence and conditional zone forwarding; neither exists today |
 
 ### B82
 
@@ -3657,23 +3656,6 @@ owned trunk/leg creation, collision refusal, restart, exact cleanup and
 isolation tests, followed by the laboratory rehearsal. Parked pending owner
 promotion and a routing/firewall boundary definition; this audit authorizes no
 new realization arm or arbitrary host command.
-
-### B1410
-
-**Owner:** Infrastructure services and Managed OS. **Kind:** product.
-**Definition:** Candidate. **Requires:** a resolver ownership and readiness
-design. **Outcome:** the FIPS controller resolves the cluster zone through
-its newly managed DNS without a manual nmstate call. A
-[provided Machine](../api/machines.md#os-lifecycle-and-substrate-invariants)
-cannot declare OS network configuration, while the
-[DNS API](../api/infrastructure-services.md) has global forwarders but no
-conditional zone forwarding or authored records. Prefer defining conditional
-zone forwarding on the bootstrap DNS before considering general provided-host
-network convergence; prove the two-controller readiness order and absence of
-forwarding loops. **Exit evidence:** schema/refusal, readiness, forwarding,
-restart and owned cleanup tests plus a two-controller rehearsal. Parked
-pending the owner's design choice; no fake Machine records or imperative
-add-on workaround is proposed.
 
 ## Audit remediation (2026-10-26)
 

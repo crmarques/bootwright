@@ -30,3 +30,8 @@ host-record={{ record.name }},{{ address }}
 {% for forwarder in bootwright_managed_service_request.forwarders | default([]) %}
 server={{ forwarder }}
 {% endfor %}
+{% for zone in bootwright_managed_service_request.forwardZones | default([]) %}
+{% for forwarder in zone.forwarders %}
+server=/{{ zone.domain }}/{{ forwarder }}
+{% endfor %}
+{% endfor %}

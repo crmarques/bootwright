@@ -614,3 +614,37 @@ def test_the_password_file_is_published_only_when_the_running_registry_refuses_t
     variables = dict(role_defaults(), bootwright_managed_service_request={"credentialsRef": "mirror-push"}, infra_managed_service_accepted=accepted)
     templar = Templar(loader=LOADER, variables=variables)
     assert all(templar.evaluate_conditional(condition) for condition in tasks[publish]["when"]) is published
+
+
+def test_dns_forward_zones_render_separately_from_general_forwarders():
+    request = dict(MANAGED, bindAddress="192.0.2.1", forwarders=["198.51.100.53"],
+                   forwardZones=[{"domain": "sno.example.test", "forwarders": ["192.0.2.10", "2001:db8::53"]}])
+    rendered = squid_configuration(request, "dnsmasq.conf.j2")
+    servers = [line for line in rendered.splitlines() if line.startswith("server=")]
+    assert servers == ["server=198.51.100.53", "server=/sno.example.test/192.0.2.10",
+                       "server=/sno.example.test/2001:db8::53"]
+    assert "no-resolv" in rendered.splitlines()
+
+
+@pytest.mark.parametrize("zone", [
+    {"domain": "sno.example.test\nserver=203.0.113.53", "forwarders": ["192.0.2.10"]},
+    {"domain": "*.example.test", "forwarders": ["192.0.2.10"]},
+    {"domain": "sno.example.test", "forwarders": ["192.0.2.10\nserver=203.0.113.53"]},
+    {"domain": "sno.example.test", "forwarders": ["192.0.2.10#5353"]},
+    {"domain": "sno.example.test", "forwarders": []},
+    {"domain": "sno.example.test", "forwarders": ["999.0.0.1"]},
+    {"domain": "sno.example.test", "forwarders": ["fe80::1%eth0"]},
+    {"domain": "sno.example.test", "forwarders": ["192.0.2.1"]},
+])
+def test_dns_forward_zones_refuse_configuration_injection_before_effects(zone):
+    request = dict(MANAGED, bindAddress="192.0.2.1", forwardZones=[zone])
+    assert not holds(validate_of(load_tasks("infra_managed_service", "apply.yml")),
+                     variables("bootwright_managed_service", request))
+
+
+def test_dns_forward_zone_proof_accepts_valid_addresses_and_rejects_other_kinds():
+    task = validate_of(load_tasks("infra_managed_service", "apply.yml"))
+    zones = [{"domain": "sno.example.test", "forwarders": ["192.0.2.10", "2001:db8::53"]}]
+    request = dict(MANAGED, bindAddress="192.0.2.1", forwardZones=zones)
+    assert holds(task, variables("bootwright_managed_service", request))
+    assert not holds(task, variables("bootwright_managed_service", dict(request, kind="Proxy")))

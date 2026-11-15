@@ -34,6 +34,18 @@ argument_specs:
             type: list
             elements: str
             required: false
+          forwardZones:
+            type: list
+            elements: dict
+            required: false
+            options:
+              domain:
+                type: str
+                required: true
+              forwarders:
+                type: list
+                elements: str
+                required: true
           identity:
             type: dict
             required: true

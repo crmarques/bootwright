@@ -20,6 +20,11 @@ type Record struct {
 	Subtree   bool     `json:"subtree,omitempty"`
 }
 
+type ForwardZone struct {
+	Domain     string   `json:"domain"`
+	Forwarders []string `json:"forwarders"`
+}
+
 // Request is the complete frozen intent for one managed network service. Its
 // fields are declared in the canonical key order the plan digest requires, and
 // it carries no secret value. The kind-specific arrays are omitted when the
@@ -32,6 +37,7 @@ type Request struct {
 	Destinations   []Destination     `json:"destinations,omitempty"`
 	Egress         Egress            `json:"egress"`
 	Endpoints      []Endpoint        `json:"endpoints"`
+	ForwardZones   []ForwardZone     `json:"forwardZones,omitempty"`
 	Forwarders     []string          `json:"forwarders,omitempty"`
 	Identity       Identity          `json:"identity"`
 	Image          string            `json:"image"`

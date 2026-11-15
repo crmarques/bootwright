@@ -16020,7 +16020,7 @@ before purge, bound waits and refuse stale MachineConfig readiness.
 The setup audit distinguishes existing Machine/Network/service and add-on
 ownership from native GitOps fixtures and external test peers. Addressless
 host trunks and the resolver handoff remain candidates [B1409](backlog.md#b1409)
-and [B1410](backlog.md#b1410). No core API, security topology or execution
+and [B1410](m1.md#b1410). No core API, security topology or execution
 contract changes. The delivering commit records focused verification under
 the owner's shortened test-loop instruction; no full gate or native replay is
 claimed. [B1400](m3.md#b1400)'s live qualification remains open.

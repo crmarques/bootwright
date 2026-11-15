@@ -1,5 +1,6 @@
-# The cluster's resolver on the FIPS controller. Other names go to the
-# resolver lab-sno-fips-controller-bootstrap manages on this host.
+# The cluster resolver answers its derived records locally. Other names go
+# directly upstream, so the bootstrap resolver can forward this zone here
+# without creating a DNS forwarding loop.
 apiVersion: bootwright.io/v1alpha1
 kind: DNSServer
 metadata:
@@ -16,4 +17,6 @@ spec:
       addressRef: ip
 
   forwarders:
-    - {{ include "address" . }}
+{{- range .Values.host.upstreamDNS }}
+    - {{ . }}
+{{- end }}

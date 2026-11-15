@@ -31,9 +31,9 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 		external = append(external, "connection")
 		managed = append(managed, "allowedDestinations")
 	case DNSServer:
-		fields = append(fields, field("address", ip()), field("additionalIngressHosts", set(dns())), field("forwarders", set(ip())))
+		fields = append(fields, field("address", ip()), field("additionalIngressHosts", set(dns())), field("forwarders", set(ip())), field("forwardZones", array(record(required("domain", dns()), required("forwarders", nonemptyArray(set(ip())))))))
 		external = append(external, "address")
-		managed = append(managed, "forwarders")
+		managed = append(managed, "forwarders", "forwardZones")
 	case NTPServer:
 		fields = append(fields, field("address", lexical("host")), field("upstreamSources", set(lexical("host"))))
 		external = append(external, "address")

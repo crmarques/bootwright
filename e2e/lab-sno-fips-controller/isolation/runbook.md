@@ -10,14 +10,16 @@ administrator; workloads have no host networking or privileged capabilities.
 
 | Owner | Configuration |
 | --- | --- |
-| Bootwright core | Existing Machine, Network, NetworkConfig, provider and OpenShiftCluster fields: two VMs, installation, FIPS, TPM2, managed host trunk/VLAN legs, node VLAN connectivity and addressed-bridge intent |
+| Bootwright core | Machine, Network, NetworkConfig, DNSServer, provider and OpenShiftCluster fields: two VMs, installation, FIPS, TPM2, managed host trunk/VLAN legs, DNS suffix forwarding, node VLAN connectivity and addressed-bridge intent |
 | Existing add-ons | NMState applies the bridge configuration; MetalLB provides per-environment address pools |
 | Native fixtures, later GitOps-owned in an estate | Namespaces, apps, ingress shards, EgressIP, policies and node filter |
 | External E2E harness | External peers, adversarial routes and traffic assertions |
 
-No new core API or add-on is required for the native isolation manifests.
-The parent runbook's [setup audit](../runbook.md#declarative-setup-and-remaining-gaps)
-names the current API owners and remaining setup gaps. The native schema follows the
+The networking uses existing core fields and add-ons. The case also uses the
+DNSServer `forwardZones` field to resolve the cluster zone without a manual
+controller resolver switch.
+The parent [setup audit](../runbook.md#declarative-setup-and-remaining-gaps)
+names the current API owners. The native schema follows the
 [product boundary](../../../specs/project.md#product-scope). The
 [IngressController API](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/operator_apis/ingresscontroller-operator-openshift-io-v1)
 provides namespace selection and source ranges.
@@ -44,32 +46,33 @@ shared infrastructure; applications cannot connect across environments.
 ## Prepare and render on the host
 
 Use a fresh disposable case. Do not apply the original `workloads/` tree.
-Keep the parent's fixed release, FIPS and TPM2 enabled. Follow parent step 1 for the local KVM/capacity checks, media and credentials.
-Render this profile below before parent step 2 applies either context, then
-continue parent steps 2–5 with the same private values, operator CSV pins and
-FIPS controller bootstrap. Keep all actual overrides and evidence outside
-tracked files.
+Keep the parent's fixed release, FIPS and TPM2 enabled. Complete parent step 1
+for the local KVM/capacity checks, media and credentials, then step 2 through
+writing `PIN_VALUES`. Pause before its **Render and provision** subsection.
+Render this profile below, then finish parent steps 2–5 with the same private
+values, operator CSV pins and FIPS controller bootstrap. Keep all actual
+overrides and evidence outside tracked files.
 The parent defaults reserve egress `.60` outside Localnet IPAM and MetalLB.
 
-Parent step 1 defines `RUN_DIR` and `CASE_VALUES`. Use that same host shell;
-do not create a second run directory. `CASE_VALUES` is the private overrides
-file parent step 2 passes to `e2e/render.sh`; merge any overrides into it
-before either render. Operator subscription pins are resolved in parent step 2.
-Resolve the tagged UBI Python image for Linux amd64 before rendering. Stop on
-a failed lookup or malformed digest; an unfiltered multi-architecture lookup
-does not select this case's platform:
+Parent step 2 installs the release-matched `oc` and writes operator pins and
+the stable host address to `PIN_VALUES`. Keep it alongside the private
+overrides in `VALUES`; both files must reach both renderers.
+Resolve the approved UBI Python image's Linux amd64 manifest by digest with
+the installed `oc`. The tag is multi-architecture, so select this case's
+platform explicitly. Stop on a failed lookup before writing the values file
+or rendering either input:
 
 ```sh
 CASE="$PWD/e2e/lab-sno-fips-controller"
 PROFILE="$RUN_DIR/isolation"
-VALUES="${CASE_VALUES:?Complete parent step 1 first}"
+VALUES="${VALUES:-$RUN_DIR/values.yaml}"
 mkdir -m 700 -p "$PROFILE"
-test ! -e "$PROFILE/config.json"
+test -f "$VALUES" || printf '# Private case overrides\n' > "$VALUES"
 IMAGE=registry.access.redhat.com/ubi9/python-312:latest
 DIGEST=$(oc image info "$IMAGE" --filter-by-os=linux/amd64 -o json | jq -er '.digest | select(test("^sha256:[a-f0-9]{64}$"))')
-printf '%s@%s\n' "$IMAGE" "$DIGEST" > "$PROFILE/image.txt"
-helm template isolation "$CASE/isolation" -f "$CASE/values.yaml" -f "$VALUES" \
-    --set-string "isolation.image=$IMAGE@$DIGEST" \
+printf '\nisolation:\n  image: %s@%s\n' "$IMAGE" "$DIGEST" >> "$VALUES"
+helm template isolation "$CASE/isolation" \
+    -f "$CASE/values.yaml" -f "$VALUES" -f "$PIN_VALUES" \
     --output-dir "$PROFILE/rendered"
 MANIFESTS="$PROFILE/rendered/sno-environment-isolation/templates"
 python3 - "$MANIFESTS/verification-config.yaml" "$PROFILE/config.json" <<'PY'
@@ -81,13 +84,19 @@ lines = pathlib.Path(sys.argv[1]).read_text().splitlines()
 value = next(json.loads(line.strip()) for line in lines if line.lstrip().startswith('{'))
 pathlib.Path(sys.argv[2]).write_text(json.dumps(value) + '\n')
 PY
-cp -a "$CASE/app" "$PROFILE/app"
+mkdir -p "$PROFILE/app"
+cp -a "$CASE/app/." "$PROFILE/app/"
 python3 "$PROFILE/app/verify.py" --config "$PROFILE/config.json" --mode config
 ```
 
-For an approved alternative image, change `IMAGE` before resolving its digest.
-Both renders use identical topology overrides. The image pin is recorded
-separately because it is used only by this profile's fixtures. The
+The API-managed DNS chain is described in parent step 7; the controller keeps
+its installed bootstrap resolver, and no manual `nmstatectl` step belongs in
+a fresh run. Source the saved host or controller environment file from the
+parent's resume section when reopening a terminal.
+
+If overriding addresses, VLANs, bridges, image or domain, merge those values
+into this private file before rendering, and pass this same file to the parent
+Bootwright renderer. Both renders must use identical effective values. The
 verification configuration travels with the manifests. No environment-specific
 facts belong in the chart or Git metadata. Now perform parent steps 2–5.
 
@@ -126,7 +135,8 @@ done < <(jq -r '.environments | to_entries[] | [.key,.value.vlan,.value.cidr] | 
 ```
 
 The trunk itself has no host address. Neither peer receives a management NIC
-or an Internet route. Complete parent step 7's DNS and preflight checks, then
+or an Internet route. Complete parent step 7's system-resolver and preflight
+checks, then
 steps 8–9 through the initial FIPS and LUKS checks, skipping the original
 **Environments** subsection. Both VMs remain on the separate management
 network for installation and administration.
@@ -154,6 +164,7 @@ On the FIPS controller, keep the parent's `RUN_DIR`, private client wrapper and
 ```sh
 PROFILE="$HOME/isolation"
 MANIFESTS="$PROFILE/rendered/sno-environment-isolation/templates"
+oc get node master-0 -o jsonpath='{.status.nodeInfo.bootID}{"\n"}' > "$PROFILE/boot-before-filter"
 oc apply --dry-run=server -f "$MANIFESTS/node-isolation.yaml"
 oc apply -f "$MANIFESTS/node-isolation.yaml"
 ```
@@ -176,7 +187,8 @@ while :; do
        jq -e '.spec.configuration.name as $wanted |
            ($wanted | type == "string" and length > 0) and
            .status.configuration.name == $wanted and
-           any(.status.conditions[]?; .type == "Updated" and .status == "True")' "$PROFILE/mcp.json" >/dev/null; then
+           any(.status.conditions[]?; .type == "Updated" and .status == "True") and
+           any(.status.conditions[]?; .type == "Degraded" and .status == "False")' "$PROFILE/mcp.json" >/dev/null; then
         wanted=$(jq -er '.spec.configuration.name' "$PROFILE/mcp.json")
         if jq -e --arg wanted "$wanted" '.metadata.annotations |
             .["machineconfiguration.openshift.io/currentConfig"] == $wanted and
@@ -192,6 +204,11 @@ while :; do
 done
 oc wait mcp/master --for=condition=Updated --timeout=30m
 oc wait node/master-0 --for=condition=Ready --timeout=10m
+oc get node master-0 -o json | jq -e '
+    .metadata.annotations as $a
+    | ($a["machineconfiguration.openshift.io/currentConfig"] != null)
+      and ($a["machineconfiguration.openshift.io/currentConfig"] == $a["machineconfiguration.openshift.io/desiredConfig"])
+'
 oc debug node/master-0 -- chroot /host systemctl is-active sno-e2e-isolation.service
 oc debug node/master-0 -- chroot /host nft list table inet sno_e2e_isolation
 ```

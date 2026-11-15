@@ -29,7 +29,7 @@
   },
   "dns-server-dnsmasq-v1": {
     "contentDigest": "544a52237167283339c48158b98dc4639c72040c96fb129f3ba84675bde743df",
-    "fingerprint": "7db5dad751e35e05d2a721851b55fbe9c58aa1e5cf45ab867edbec3641596308"
+    "fingerprint": "303077f0a28a843fb51fc10ca5f13ab8d18ae3534cdee460b4410505704d8dbe"
   },
   "machine-baremetal-v1": {
     "contentDigest": "6e57381a45700b2ebe2c119278761057eea0347af980ff6f84c5b759b3e43ed8",
@@ -61,7 +61,7 @@
   },
   "ntp-server-chrony-v1": {
     "contentDigest": "ec5e1a6ce989dff7c9cb987f5f0f6c97f8dc6f166f8ad2572f2394727e3ef029",
-    "fingerprint": "a5233f7c86bc92785fe3d9f26d877ee3226af80fea9587b8cbbb185dc2f638cc"
+    "fingerprint": "e58d84665a1256242505c74a41d7c858db0c7effec8d62086b6ab406d3678c04"
   },
   "os-disk-discovery-v1": {
     "contentDigest": "0afccf1786a1f36e05534505062e6c439e5cbf90cf2b6fe12b020f68eddc79a7",
@@ -85,11 +85,11 @@
   },
   "proxy-squid-v1": {
     "contentDigest": "f6f3786ce9c60b6b307aa8169bc8e87ab296769ab62d47fcfc5e536479147c16",
-    "fingerprint": "879264f00c76e2b2a054e997b6bf020ac26d27fe654b5ecae8372c1cc1a48995"
+    "fingerprint": "acde5d9e557bf42f4fb0d6966cc8e997d305c7919920a02420e5279679f03251"
   },
   "registry-distribution-v1": {
     "contentDigest": "ab7691f481d99811bee30ccdff566e66b40cd54ecb12e76346b31808b59d9241",
-    "fingerprint": "e4ba9d68bff71b695eb7c6ebf33485ecbf53ea496762c32c5703b65c76581982"
+    "fingerprint": "1d117628ad291b2ff369d47a1f85dca9b822734a38b90ec859569aaf04225098"
   },
   "storage-ceph-core-v1": {
     "contentDigest": "36df5d9340708fbe7420c946057dfc09548e3e870f8431a06157718186c137c3",

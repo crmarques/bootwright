@@ -10,11 +10,14 @@ import (
 	"io"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -186,6 +189,56 @@ func TestSNOCaseOwnsIsolatedVLANNetworks(t *testing.T) {
 			if len(nics) != 2 || nics[1].Get("segmentRef").Text() != "staging" {
 				t.Fatal("node does not attach to the managed tagged segment")
 			}
+		}
+	}
+}
+
+// The resolver installed on the future controller remains usable for generic
+// bootstrap downloads, then forwards cluster names to the second context.
+func TestSNOCaseRoutesControllerDNSWithoutAResolverSwitch(t *testing.T) {
+	for _, sets := range [][]string{nil, {"host.domain=other.example.test", "controller.address=198.51.100.12", "host.upstreamDNS[0]=9.9.9.9"}} {
+		catalogs := map[string]api.Catalog{}
+		for _, directory := range renderE2ECase(t, e2eRenderScript(t), "lab-sno-fips-controller", e2eRender{name: "DNS chain", sets: append(fipsControllerSubscriptions(), sets...)}) {
+			sources, err := (inputfs.Reader{}).Read(context.Background(), []string{directory})
+			if err != nil {
+				t.Fatal(err)
+			}
+			state, _ := compileAcceptance(t, sources)
+			catalogs[filepath.Base(directory)] = state.Effective()
+		}
+		bootstrap, fips := catalogs["bootstrap"], catalogs["fips"]
+		installed := requireObject(t, bootstrap, api.Machine, "fips-controller")
+		network := requireObject(t, bootstrap, api.NetworkConfig, installed.Spec().Get("network", "configRef").Text())
+		if network.Spec().Get("dns").Items()[0].Get("serverRef").Text() != "lab-dns" {
+			t.Fatal("controller no longer uses bootstrap DNS")
+		}
+		dns := requireObject(t, bootstrap, api.DNSServer, "lab-dns")
+		environment := requireObject(t, fips, api.Environment, "lab-sno-fips-controller")
+		controller := requireObject(t, fips, api.Machine, "controller")
+		target := ""
+		for _, address := range controller.Spec().Get("network", "addresses").Items() {
+			if address.Get("name").Text() == "ip" {
+				target = address.Get("address").Text()
+			}
+		}
+		var frozen managedservice.Request
+		if err := dnsserver.Definition(nil).Extend(bootstrap, dns.Spec(), &frozen); err != nil {
+			t.Fatal(err)
+		}
+		if len(frozen.ForwardZones) != 1 {
+			t.Fatal("bootstrap DNS has no single cluster forwarding zone")
+		}
+		zone := frozen.ForwardZones[0]
+		if zone.Domain != "sno."+environment.Spec().Get("domains", "base").Text() || len(zone.Forwarders) != 1 || zone.Forwarders[0] != target {
+			t.Fatalf("wrong cluster DNS route: %+v", zone)
+		}
+		localDNS := requireObject(t, fips, api.DNSServer, "lab-dns")
+		upstreams := localDNS.Spec().Get("forwarders").Strings()
+		if !slices.Equal(upstreams, dns.Spec().Get("forwarders").Strings()) {
+			t.Fatal("the two resolvers do not use the same declared upstreams")
+		}
+		if slices.Contains(upstreams, dns.Spec().Get("bindAddress").Text()) || slices.Contains(upstreams, target) {
+			t.Fatal("cluster DNS forwards back into the bootstrap chain")
 		}
 	}
 }

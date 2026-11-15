@@ -39,6 +39,9 @@ func Definition(gateways GatewayRecords) managedservice.Definition {
 			}
 			request.Records = records
 			request.Forwarders = spec.Get("forwarders").Strings()
+			for _, zone := range spec.Get("forwardZones").Items() {
+				request.ForwardZones = append(request.ForwardZones, managedservice.ForwardZone{Domain: zone.Get("domain").Text(), Forwarders: zone.Get("forwarders").Strings()})
+			}
 			request.IngressHosts = spec.Get("additionalIngressHosts").Strings()
 			return nil
 		},

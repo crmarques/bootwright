@@ -38,6 +38,7 @@
       - >-
         bootwright_managed_service_request.destinations | default([]) | selectattr('port', 'defined') | map(attribute='port')
         | select('integer') | reject('le', 65535) | list | length == 0
+      - bootwright_managed_service_request | bootwright.core.dns_forward_zones_valid
       - bootwright_managed_service_digest is match('^[0-9a-f]{64}$(?!\n)')
       - >-
         bootwright_managed_service_request.tls is not defined

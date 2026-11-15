@@ -69,7 +69,7 @@ Effective service fields emit in this order, omitting inapplicable fields:
 | Kinds | Field order |
 | --- | --- |
 | Proxy | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `connection`, `allowedDestinations`. |
-| DNSServer | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `address`, `additionalIngressHosts`, `forwarders`. |
+| DNSServer | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `address`, `additionalIngressHosts`, `forwarders`, `forwardZones`. |
 | NTPServer | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `address`, `upstreamSources`. |
 | ArtifactServer | `management`, `machineRef`, `image`, `bindAddress`, `retention`, `tls`, `listeners`, `endpoints`. |
 | Registry | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `tls`, `url`, `credentialsRef`, `trustBundleRef`, `tlsVerification`. |
@@ -132,8 +132,24 @@ outside the grammar. Validate refuses another entry at
 an entry naming a loopback, unspecified or link-local address, which the proxy
 refuses before it reads any entry, and the field on an external Proxy.
 
-Managed DNSServer additionally accepts optional `additionalIngressHosts[]`
-and `forwarders[]`; forwarders are IP resolver addresses. Managed NTPServer
+Managed DNSServer additionally accepts optional `additionalIngressHosts[]`,
+`forwarders[]` and `forwardZones[]`. General forwarders are IP resolver
+addresses. Each forwarding zone is a closed `{domain, forwarders}` record:
+`domain` is a lowercase DNS suffix without a wildcard or trailing dot, and
+`forwarders` is a non-empty set of resolver IP addresses using port 53.
+There are at most 16 zones with distinct domains and 16 addresses per zone.
+Addresses normalize to canonical IP text. A target equal to the service's
+explicit listener refuses. Omitting the zones or authoring `[]` adds none;
+there is no implicit upstream or change to a client's operating-system DNS.
+
+The [managed DNS implementation](../infrastructure-services.md#managed-network-services)
+realizes the suffix routes. A zone selects its domain and subdomains on label
+boundaries; a more specific zone wins over a broader one. Its queries use
+only that zone's forwarders, without falling back to general forwarders if
+those targets are unavailable. Forwarding does not require the target to be
+ready while the service is installed, so an explicit route can precede a
+resolver provisioned by another context. Operators must avoid forwarding
+cycles across those contexts. Managed NTPServer
 accepts optional `upstreamSources[]` containing IP or DNS NTP sources. With
 none declared or none reachable it answers from its host's clock at a fixed
 local stratum, so its [readiness](../infrastructure-services.md#managed-network-services)

@@ -78,6 +78,17 @@ func normalizeServiceIPs(value api.Value) api.Value {
 		}
 		value = value.With(field, api.ListValue(items...))
 	}
+	if value.Has("forwardZones") {
+		zones := value.Get("forwardZones").Items()
+		for i, zone := range zones {
+			forwarders := zone.Get("forwarders").Items()
+			for j, address := range forwarders {
+				forwarders[j] = canonicalIP(address)
+			}
+			zones[i] = zone.With("forwarders", api.ListValue(forwarders...))
+		}
+		value = value.With("forwardZones", api.ListValue(zones...))
+	}
 	if value.Has("bindAddresses") {
 		items := value.Get("bindAddresses").Items()
 		for i, item := range items {
@@ -352,7 +363,7 @@ func validateIntrinsic(o api.Object, partial bool) []api.Issue {
 		}
 		forbid("connection", "address", "url")
 	case "external":
-		forbid("machineRef", "implementation", "image", "bindAddress", "port", "listeners", "retention", "tls", "forwarders", "upstreamSources", "allowedDestinations")
+		forbid("machineRef", "implementation", "image", "bindAddress", "port", "listeners", "retention", "tls", "forwarders", "forwardZones", "upstreamSources", "allowedDestinations")
 		if o.Kind() != api.ArtifactServer {
 			forbid("endpoints")
 		}
@@ -378,6 +389,9 @@ func validateIntrinsic(o api.Object, partial bool) []api.Issue {
 				issues = add(issues, issue("$.spec.endpoints", "external ArtifactServer requires at least one endpoint", "add a spec.endpoints entry with a url"))
 			}
 		}
+	}
+	if o.Kind() == api.DNSServer && mode != "external" {
+		issues = add(issues, validateForwardZones(value)...)
 	}
 	issues = add(issues, validateImagePins(value, mode, partial)...)
 	issues = add(issues, validatePort(o.Kind(), value)...)
@@ -575,4 +589,36 @@ func reference(field, message, remediation string) api.Issue {
 
 func add(issues []api.Issue, more ...api.Issue) []api.Issue {
 	return append(issues, more[:min(len(more), 999-len(issues))]...)
+}
+
+func validateForwardZones(value api.Value) []api.Issue {
+	var issues []api.Issue
+	zones := value.Get("forwardZones").Items()
+	if len(zones) > 16 {
+		issues = append(issues, issue("$.spec.forwardZones", "a DNSServer declares at most 16 forwarding zones", "reduce forwardZones to at most 16 domains"))
+	}
+	domains := map[string]bool{}
+	for i, zone := range zones {
+		field := fmt.Sprintf("$.spec.forwardZones[%d]", i)
+		domain := zone.Get("domain").Text()
+		if domains[domain] {
+			issues = append(issues, issue(field+".domain", "forwarding domains must be unique", "combine the forwarders of each domain in one entry"))
+		}
+		domains[domain] = true
+		if count := zone.Get("forwarders").Len(); count < 1 || count > 16 {
+			issues = append(issues, issue(field+".forwarders", "a forwarding zone requires 1 to 16 resolver addresses", "list from 1 to 16 forwarders"))
+		}
+		bind, bindErr := netip.ParseAddr(value.Get("bindAddress").Text())
+		for j, address := range zone.Get("forwarders").Items() {
+			parsed, err := netip.ParseAddr(address.Text())
+			if err != nil || parsed.Zone() != "" {
+				issues = append(issues, issue(fmt.Sprintf("%s.forwarders[%d]", field, j), "a forwarding target must be an IP address", "set a resolver IP address"))
+				continue
+			}
+			if bindErr == nil && parsed.Unmap() == bind.Unmap() {
+				issues = append(issues, issue(fmt.Sprintf("%s.forwarders[%d]", field, j), "a DNS forwarding zone cannot forward to its own listener", "select another resolver address"))
+			}
+		}
+	}
+	return issues
 }

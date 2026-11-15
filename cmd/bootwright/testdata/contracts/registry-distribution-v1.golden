@@ -35,6 +35,9 @@ request-schema:
   endpoints []struct managedservice.Endpoint
   endpoints[].address string
   endpoints[].name string
+  forwardZones []struct managedservice.ForwardZone omitempty
+  forwardZones[].domain string
+  forwardZones[].forwarders []string
   forwarders []string omitempty
   identity struct managedservice.Identity
   identity.block string
