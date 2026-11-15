@@ -23,7 +23,8 @@ type Service struct {
 	clients   ClientAccess
 	members   func(api.Object) (environment.Membership, bool)
 
-	administrator func(api.Object) string
+	administrator    func(api.Object) string
+	containerDetails func(api.Catalog, api.Object) ContainerDetails
 }
 
 func New(graph Graph, storage StorageEvidence, installs InstallEvidence, keys HostKeys, selection CurrentSelection, custody Custody) Service {
@@ -284,7 +285,7 @@ func (s Service) containerEntry(ctx context.Context, selected string, catalog ap
 			}
 		}
 	}
-	return ContainerEntry{Name: cluster.Name(), Kind: string(cluster.Kind()), AccessCommands: []AccessCommand{
+	return ContainerEntry{Name: cluster.Name(), Kind: string(cluster.Kind()), Details: s.describeContainer(catalog, cluster, selected, installed), AccessCommands: []AccessCommand{
 		exec,
 		{Command: CommandKeyring, Status: StatusNotApplicable, Reason: storageOnly()},
 		kubeconfig,

@@ -40,6 +40,7 @@ type containerPresentation struct {
 	Name           string                      `json:"name"`
 	Kind           string                      `json:"kind"`
 	AccessCommands []accessCommandPresentation `json:"accessCommands"`
+	*containerDetailsPresentation
 }
 
 type storagePresentation struct {
@@ -352,6 +353,7 @@ func displayClusterInfo(result *inspection.InfoResult) clusterInfoPresentation {
 	for _, cluster := range result.Clusters {
 		shown.Clusters = append(shown.Clusters, containerPresentation{
 			Name: escapeDisplayLine(cluster.Name), Kind: escapeDisplayLine(cluster.Kind), AccessCommands: displayAccessCommands(cluster.AccessCommands),
+			containerDetailsPresentation: displayContainerDetails(cluster.Details),
 		})
 	}
 	for _, cluster := range result.Storage {
@@ -428,10 +430,7 @@ func writeClusterInfo(out, errOut io.Writer, command string, result *inspection.
 			text.separate()
 		}
 		records++
-		text.resourceHeading("cluster", cluster.Name, "")
-		text.emphasizedSubsection("Topology")
-		text.mutedFields(field{Label: "Type", Value: cluster.Kind})
-		writeAccessCommands(&text, result.Context, cluster.Name, cluster.AccessCommands, full)
+		writeContainerInfo(&text, result.Context, cluster, full)
 	}
 	for _, cluster := range result.Storage {
 		status := ""
@@ -602,6 +601,10 @@ func colonHex(digest string) string {
 
 func writeAccessCommands(text *display, contextName, cluster string, commands []inspection.AccessCommand, full bool) {
 	text.emphasizedSubsection("Access")
+	writeAccessCommandRows(text, contextName, cluster, commands, full)
+}
+
+func writeAccessCommandRows(text *display, contextName, cluster string, commands []inspection.AccessCommand, full bool) {
 	for _, command := range commands {
 		tone := "state"
 		if command.Status == inspection.StatusNotApplicable || command.Status == inspection.StatusNotImplemented {

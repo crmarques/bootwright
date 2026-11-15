@@ -56,6 +56,7 @@ type ContainerEntry struct {
 	Name           string
 	Kind           string
 	AccessCommands []AccessCommand
+	Details        *ContainerDetails
 }
 
 type Image struct {

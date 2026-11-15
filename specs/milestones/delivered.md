@@ -15952,3 +15952,21 @@ Runtime behavior and frozen contracts remain unchanged. The focused 190-test
 unit run, contract goldens and independent safety review passed. The delivering
 commit records the subsequent focus, sanity and full integration checks. No
 live operation or operator acceptance is claimed.
+
+## X472 — OpenShift cluster inspection
+
+The owner's explicit request for richer OpenShift cluster information delivers
+the URL and topology view portion of [B101](backlog.md#b101). The
+[cluster discovery contract](../cli/output.md#cluster-discovery) owns its human,
+JSON and YAML presentation. B101 retains other additional views and dashboards.
+
+The container-cluster domain projects native endpoints, installation settings,
+node membership and networking from validated desired state. Inspection pairs
+these facts with existing local completion evidence. Default output includes
+the URLs and topology even when installation evidence or SSH trust is missing;
+it reads no credential bytes and makes no live probe.
+
+The delivering commit records focused domain, inspection and presentation
+tests, production command composition, golden updates and the full integration
+gate. Fixtures cover OpenShift and OKD, single and multiple nodes, IPv4 and
+IPv6, and absent completion evidence. No live operator acceptance is claimed.

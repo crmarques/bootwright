@@ -37,7 +37,60 @@
             "status": "ready",
             "node": "node-01"
           }
-        ]
+        ],
+        "distribution": "openshift",
+        "release": "4.21.15",
+        "releaseImage": "quay.io/example/release@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "platform": "none",
+        "installMode": "connected",
+        "baseDomain": "example.test",
+        "fips": true,
+        "ingressDomain": "apps.edge.example.test",
+        "nodes": [
+          {
+            "name": "node-01",
+            "role": "controlPlane",
+            "machine": "host-0",
+            "fqdn": "node-01.edge.example.test",
+            "address": "192.0.2.10"
+          }
+        ],
+        "networking": {
+          "type": "OVNKubernetes",
+          "machineNetworks": [
+            "192.0.2.0/24"
+          ],
+          "clusterNetworks": [
+            {
+              "cidr": "10.128.0.0/14",
+              "hostPrefix": 23
+            }
+          ],
+          "serviceNetworks": [
+            "172.30.0.0/16"
+          ]
+        },
+        "endpoints": [
+          {
+            "service": "api",
+            "url": "https://api.edge.example.test:6443",
+            "address": "192.0.2.10",
+            "source": "node"
+          },
+          {
+            "service": "api-int",
+            "url": "https://api-int.edge.example.test:6443",
+            "address": "192.0.2.10",
+            "source": "node"
+          },
+          {
+            "service": "console",
+            "url": "https://console-openshift-console.apps.edge.example.test",
+            "address": "192.0.2.10",
+            "source": "node"
+          }
+        ],
+        "status": "ready"
       },
       {
         "name": "okd-lab",
@@ -73,7 +126,62 @@
             "status": "ready",
             "node": "node-01"
           }
-        ]
+        ],
+        "distribution": "okd",
+        "release": "4.21.15",
+        "releaseImage": "quay.io/example/release@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "platform": "none",
+        "installMode": "connected",
+        "baseDomain": "example.test",
+        "fips": false,
+        "ingressDomain": "apps.okd-lab.example.test",
+        "nodes": [
+          {
+            "name": "node-01",
+            "role": "controlPlane",
+            "machine": "host-0",
+            "fqdn": "node-01.okd-lab.example.test",
+            "address": "192.0.2.10"
+          }
+        ],
+        "networking": {
+          "type": "OVNKubernetes",
+          "machineNetworks": [
+            "192.0.2.0/24"
+          ],
+          "clusterNetworks": [
+            {
+              "cidr": "10.128.0.0/14",
+              "hostPrefix": 23
+            }
+          ],
+          "serviceNetworks": [
+            "172.30.0.0/16"
+          ]
+        },
+        "endpoints": [
+          {
+            "service": "api",
+            "url": "https://api.okd-lab.example.test:6443",
+            "address": "192.0.2.10",
+            "source": "node"
+          },
+          {
+            "service": "api-int",
+            "url": "https://api-int.okd-lab.example.test:6443",
+            "address": "192.0.2.10",
+            "source": "node"
+          },
+          {
+            "service": "console",
+            "url": "https://console-openshift-console.apps.okd-lab.example.test",
+            "address": "192.0.2.10",
+            "source": "node"
+          }
+        ],
+        "status": "unavailable",
+        "reason": "no completed installation is recorded in this context",
+        "remedy": "bootwright apply --context lab --stage clusters"
       }
     ],
     "storage": [

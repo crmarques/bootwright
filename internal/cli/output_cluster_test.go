@@ -150,8 +150,8 @@ func clusterInfoResult(ceph *inspection.ManagedCeph, session inspection.AccessCo
 	return &inspection.InfoResult{
 		Context: "lab",
 		Clusters: []inspection.ContainerEntry{
-			{Name: "edge", Kind: string(api.OpenShiftCluster), AccessCommands: containerAccess(readyKubeconfig())},
-			{Name: "okd-lab", Kind: string(api.OpenShiftCluster), AccessCommands: containerAccess(kubeconfig)},
+			{Name: "edge", Kind: string(api.OpenShiftCluster), AccessCommands: containerAccess(readyKubeconfig()), Details: containerDetailsFixture("edge", "openshift", inspection.StatusReady)},
+			{Name: "okd-lab", Kind: string(api.OpenShiftCluster), AccessCommands: containerAccess(kubeconfig), Details: containerDetailsFixture("okd-lab", "okd", kubeconfig.Status)},
 		},
 		Storage: []inspection.StorageEntry{
 			{Name: "archive", Kind: string(api.CephCluster), AccessCommands: externalAccess()},

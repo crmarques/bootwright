@@ -1,7 +1,21 @@
-  ○ cluster | edge
+  ○ cluster | edge · ready
     Topology
-      Type  OpenShiftCluster
+      Type          OpenShiftCluster
+      Distribution  openshift
+      Release       4.21.15
+      Platform      none
+      Install mode  connected
+      Base domain   example.test
+      FIPS          enabled
+      Nodes         1
     Access
+      API                   https://api.edge.example.test:6443
+      API address           192.0.2.10  (node)
+      Internal API          https://api-int.edge.example.test:6443
+      Internal API address  192.0.2.10  (node)
+      Console               https://console-openshift-console.apps.edge.example.test
+      Console address       192.0.2.10  (node)
+      Ingress domain        *.apps.edge.example.test
       cluster exec  ready
       bootwright cluster exec --context lab --name edge --node node-01 -- <command>...
       cluster keyring  not-applicable
@@ -13,11 +27,36 @@
       bootwright cluster oc --context lab --name edge -- <command>...
       cluster rsh  ready
       bootwright cluster rsh --context lab --name edge --node node-01
+    Nodes
+      node-01  controlPlane  (Machine host-0)
+      FQDN     node-01.edge.example.test
+      Address  192.0.2.10
+    Networking
+      Network type      OVNKubernetes
+      Machine networks  192.0.2.0/24
+      Pod networks      10.128.0.0/14 (host prefix /23)
+      Service networks  172.30.0.0/16
+    Evidence
+      Installation  ready  (recorded locally)
 
-  ○ cluster | okd-lab
+  ○ cluster | okd-lab · unavailable
     Topology
-      Type  OpenShiftCluster
+      Type          OpenShiftCluster
+      Distribution  okd
+      Release       4.21.15
+      Platform      none
+      Install mode  connected
+      Base domain   example.test
+      FIPS          disabled
+      Nodes         1
     Access
+      API                   https://api.okd-lab.example.test:6443
+      API address           192.0.2.10  (node)
+      Internal API          https://api-int.okd-lab.example.test:6443
+      Internal API address  192.0.2.10  (node)
+      Console               https://console-openshift-console.apps.okd-lab.example.test
+      Console address       192.0.2.10  (node)
+      Ingress domain        *.apps.okd-lab.example.test
       cluster exec  ready
       bootwright cluster exec --context lab --name okd-lab --node node-01 -- <command>...
       cluster keyring  not-applicable
@@ -32,6 +71,19 @@
       installation complete; run bootwright apply --context lab
       cluster rsh  ready
       bootwright cluster rsh --context lab --name okd-lab --node node-01
+    Nodes
+      node-01  controlPlane  (Machine host-0)
+      FQDN     node-01.okd-lab.example.test
+      Address  192.0.2.10
+    Networking
+      Network type      OVNKubernetes
+      Machine networks  192.0.2.0/24
+      Pod networks      10.128.0.0/14 (host prefix /23)
+      Service networks  172.30.0.0/16
+    Evidence
+      Installation  unavailable  (recorded locally)
+      Reason  no completed installation is recorded in this context
+      Next    bootwright apply --context lab --stage clusters
 
   ○ cluster | archive
     Topology

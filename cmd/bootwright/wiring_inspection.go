@@ -39,7 +39,7 @@ type trustRecords interface {
 
 func wireInspection(state inventory.EffectiveState, reconciler lifecycle.Service, binder *custody.Service, selection contexts.SelectionStore, records trustRecords) inspection.Service {
 	return inspection.New(effectiveGraph{state: nodeAccessState{state: state}}, cephInspection{reconciler: reconciler}, installProofs{reconciler: reconciler},
-		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}, records: records}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}}).WithMembers(clusterMembers()).WithAdministrator(clusterAdministrator).WithClients(clusterClientMetadata{reconciler: reconciler, custody: binder})
+		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}, records: records}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}}).WithMembers(clusterMembers()).WithAdministrator(clusterAdministrator).WithClients(clusterClientMetadata{reconciler: reconciler, custody: binder}).WithContainerDetails(containerDetails)
 }
 
 type producedEntries interface {

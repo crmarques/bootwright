@@ -404,7 +404,9 @@ managed-Ceph `cluster rsh` and `cluster exec` (B517,
 [X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply)) move to M2.
 The OpenShiftCluster sessions, `oc` and `kubectl` handoffs and their access
 matrix were subsequently requested explicitly and are delivered by
-[X469](delivered.md#x469--openshift-cluster-access). This item keeps other
+[X469](delivered.md#x469--openshift-cluster-access). The subsequently requested
+OpenShift URLs, topology and network inspection view is delivered by
+[X472](delivered.md#x472--openshift-cluster-inspection). This item keeps other
 additional evidence views, dashboards and completion extensions.
 
 ### B102

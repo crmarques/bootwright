@@ -708,6 +708,33 @@ selected unknown or excluded cluster fails `access.target` with exit `1` under
 the selected human, JSON or YAML failure mode; it never yields a successful empty
 selection. Without `--name`, the catalog's default-all selection applies.
 
+An OpenShiftCluster entry adds these fields after `accessCommands`, for both
+OpenShift and OKD. They describe validated desired state; the installation
+status describes locally recorded completion, not current cluster health or
+endpoint reachability. Missing installation evidence or SSH trust does not
+hide configured URLs, nodes or networks.
+
+| Field | Contract |
+| --- | --- |
+| `distribution`, `release` | The distribution type and requested release version. |
+| `releaseImage` | The declared release image reference, omitted when absent. |
+| `platform`, `installMode`, `baseDomain` | The effective install platform, connected or disconnected mode, and the Environment's container-cluster domain. |
+| `fips` | Whether FIPS is enabled in the cluster declaration. |
+| `ingressDomain` | The native `apps.<cluster>.<baseDomain>` domain, without its wildcard prefix. |
+| `nodes` | `[{name, role, machine, fqdn, address}]`, sorted by node name. Roles retain `controlPlane`, `worker` and `infra`; `machine` is the Machine reference and `address` is its selected installation address. |
+| `networking` | `{type, machineNetworks, clusterNetworks, serviceNetworks}`. `type` is the declared network type, empty when left to the installer default. Machine and service networks are CIDR arrays; cluster networks are `[{cidr, hostPrefix}]`. Network order follows the effective installation configuration. |
+| `endpoints` | `[{service, url, address, source}]`, ordered by service: `api`, `api-int`, `console`. The API URLs use the native `api` and `api-int` names at HTTPS port 6443; the console URL is `https://console-openshift-console.apps.<cluster>.<baseDomain>`. The address and source come from the effective endpoint slot; the console uses ingress. Authored alternative endpoint DNS names do not replace these native installer names. |
+| `status`, `reason`, `remedy` | `ready` when local installation evidence records completion; otherwise `unavailable`, with a reason and `bootwright apply --context <context> --stage clusters` remedy. Reason and remedy are omitted for a ready entry. |
+
+Default human output shows release, platform, install mode, base domain, FIPS
+and node count in Topology. Access shows API, internal API and console URLs,
+their addresses and sources, the wildcard ingress domain and command access.
+Nodes shows each node's role, Machine, FQDN and installation address. Networking
+shows machine, pod and service CIDRs and pod host prefixes; an absent network
+type reads `installer default`. Evidence labels installation status as recorded
+locally. Full detail also shows the release image when declared. JSON and YAML
+retain all these fields regardless of detail, with empty collections as arrays.
+
 A managed CephCluster entry adds these fields, in this order, after its
 `name`, `kind` and `accessCommands`:
 
@@ -832,9 +859,8 @@ These inspection statuses do not alter invocation precedence: invoking an
 unavailable command still follows the no-context-read
 [unavailable-command gate](../cli.md#recognized-but-unavailable-commands).
 
-The `oc` and `kubectl` handoffs are
-[deferred](../deferred/cli-access-and-rendering.md) to the parked item
-[B101](../milestones/backlog.md#b101).
+The `oc` and `kubectl` commands follow the
+[client handoff contract](../cli.md#cluster-client-handoffs).
 
 ## Lifecycle and status results
 
