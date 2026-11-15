@@ -15971,6 +15971,25 @@ tests, production command composition, golden updates and the full integration
 gate. Fixtures cover OpenShift and OKD, single and multiple nodes, IPv4 and
 IPv6, and absent completion evidence. No live operator acceptance is claimed.
 
+## X473 — Cluster administrator credentials
+
+The owner's explicit request delivers console credential disclosure and an
+administrator password update command for OpenShift, OKD and managed Ceph,
+extending [B101](backlog.md#b101). The
+[credential contract](../cli/cluster-admin-credentials.md) owns selection,
+disclosure, native identity proofs and interruption recovery. This request
+permits explicit dashboard rotation, amending D143 clause 7's earlier exclusion;
+ordinary lifecycle execution continues refusing unexplained credential drift.
+
+Installation retains its proved console password in protected custody. Updates
+retain a generated candidate before the remote effect, preserve original account
+and cluster identity, publish active custody after proof, and reuse a pending
+candidate on repetition. Explicit disclosure refuses an unfinished update.
+
+The delivering commit records the targeted recovery and disclosure tests,
+command goldens, native synthetic tests, independent safety review, full gate
+and race checks. No live credential change or operator acceptance is claimed.
+
 ## X474 — Operation fixture execution contracts
 
 ### B1407

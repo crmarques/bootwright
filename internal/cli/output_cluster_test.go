@@ -9,6 +9,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -161,6 +162,14 @@ func clusterInfoResult(ceph *inspection.ManagedCeph, session inspection.AccessCo
 }
 
 func clusterGoldens() []cliGolden {
+	console := func(r *dispatchRecord) {
+		result := clusterInfoResult(readyCeph(), inspection.AccessCommand{Status: inspection.StatusReady}, readyKubeconfig())
+		result.Clusters = result.Clusters[:1]
+		result.Storage = nil
+		result.Clusters[0].Details.Console = &inspection.ConsoleAccess{User: "kubeadmin", Revealed: true, Password: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("synthetic-console-password-12345")})}
+		r.result.clusterInfo = result
+	}
+
 	ready := func(r *dispatchRecord) {
 		r.result.clusterInfo = clusterInfoResult(readyCeph(), inspection.AccessCommand{Status: inspection.StatusReady, Node: "rhel-01"}, readyKubeconfig())
 	}
@@ -176,6 +185,15 @@ func clusterGoldens() []cliGolden {
 		"    the dashboard administrator password of CephCluster storage was kept from an apply that\n" +
 		"    never proved the dashboard reachable, so the access it grants was not proved\n"
 	return []cliGolden{
+		{golden: "cli-cluster-admin-update", args: "cluster update-admin-credentials --name edge --yes", record: func(r *dispatchRecord) {
+			r.result.adminCredentials = &lifecycle.UpdateAdminCredentialsResult{Context: "lab", Cluster: "edge", User: "kubeadmin"}
+		}},
+		{golden: "cli-cluster-admin-update-json", args: "cluster update-admin-credentials --name storage --yes --output json", record: func(r *dispatchRecord) {
+			r.result.adminCredentials = &lifecycle.UpdateAdminCredentialsResult{Context: "lab", Cluster: "storage", User: "admin"}
+		}},
+		{golden: "cli-cluster-info-console-secrets", args: "cluster info --name edge --secrets", record: console},
+		{golden: "cli-cluster-info-console-secrets-json", args: "cluster info --name edge --secrets --output json", record: console},
+
 		{golden: "cli-cluster-list", args: "cluster list", record: list},
 		{golden: "cli-cluster-list-json", args: "cluster list --output json", record: list},
 		{golden: "cli-cluster-info", args: "cluster info", record: ready},

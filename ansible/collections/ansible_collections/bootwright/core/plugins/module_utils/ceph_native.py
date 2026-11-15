@@ -4764,7 +4764,9 @@ def dispatch(envelope):
         orphans = None
     require(isinstance(envelope, dict) and set(envelope) == {"request", "host", "phase", "private"})
     require(isinstance(envelope["private"], dict))
-    from ansible_collections.bootwright.core.plugins.module_utils import ceph_export_native
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_admin_credentials_native, ceph_export_native
+    if phase in ceph_admin_credentials_native.PHASES:
+        return ceph_admin_credentials_native.dispatch(envelope)
     if phase in ceph_export_native.PHASES:
         return ceph_export_native.dispatch(envelope)
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_smb_native

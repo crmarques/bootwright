@@ -31,6 +31,7 @@ type ExecutionContract struct {
 }
 
 type Options struct {
+	PasswordMatches   func([]byte, []byte) bool
 	Contracts         func(reconciliation.Block) (ExecutionContract, bool)
 	Preparations      []PreparationDefinition
 	BeginInvocation   BeginInvocation

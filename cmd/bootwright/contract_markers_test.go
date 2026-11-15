@@ -22,21 +22,23 @@ func cephMarkerSources() map[string][]string {
 	core, host := ceph.Implementation, ceph.HostImplementation
 	export, smb, replication := ceph.ConsumerImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation
 	return map[string][]string{
-		"ceph_native.py":               {core, export, smb, replication},
-		"ceph_native_resources.py":     {core, export, smb, replication},
-		"ceph_native_nfs.py":           {core, smb},
-		"ceph_native_nvmeof.py":        {core},
-		"ceph_native_object.py":        {core},
-		"ceph_native_observability.py": {core},
-		"ceph_monitoring_template.py":  {core},
-		"ceph_native_stretch.py":       {core},
-		"ceph_native_units.py":         {core},
-		"ceph_tunnel_custody.py":       {core},
-		"ceph_host_runtime.py":         {host, core},
-		"ceph_packages.py":             {host},
-		"ceph_export_native.py":        {export},
-		"ceph_smb_native.py":           {smb},
-		"ceph_replication_native.py":   {replication},
+		// Explicit credential updates are bounded commands; no lifecycle block consumes their journal.
+		"ceph_admin_credentials_native.py": nil,
+		"ceph_native.py":                   {core, export, smb, replication},
+		"ceph_native_resources.py":         {core, export, smb, replication},
+		"ceph_native_nfs.py":               {core, smb},
+		"ceph_native_nvmeof.py":            {core},
+		"ceph_native_object.py":            {core},
+		"ceph_native_observability.py":     {core},
+		"ceph_monitoring_template.py":      {core},
+		"ceph_native_stretch.py":           {core},
+		"ceph_native_units.py":             {core},
+		"ceph_tunnel_custody.py":           {core},
+		"ceph_host_runtime.py":             {host, core},
+		"ceph_packages.py":                 {host},
+		"ceph_export_native.py":            {export},
+		"ceph_smb_native.py":               {smb},
+		"ceph_replication_native.py":       {replication},
 	}
 }
 
@@ -52,7 +54,7 @@ func cephMarkerNames() []string {
 		"bootstrap-output-source.json", "bootstrap-prepared.json", "bootstrap-protocol.json", "bootstrap-scope.json",
 		"cache-directory-intent.json", "cache-directory.json", "cache-pending.json", "cache-ready.json",
 		"call-home-accepted.json", "client-", "client-applied-", "client-attempt-", "client-generator.json",
-		"complete-call_home_initialize.json", "complete.json", "dashboard-port-", "dashboard-port-repair.json",
+		"complete-call_home_initialize.json", "complete.json", "dashboard-credential-update.json", "dashboard-port-", "dashboard-port-repair.json",
 		"dashboard-redeploy.json", "dashboard-redeployed.json", "decision.json", "device-identities.json",
 		"filesystem-", "filesystem-attempt.", "filesystem-id.", "gateway-", "group-attempt.", "group.", "image-",
 		"initial-mgr-original-ready.json", "manifest.json", "monitoring-haproxy-attempt.json", "monitoring-haproxy-complete.json",

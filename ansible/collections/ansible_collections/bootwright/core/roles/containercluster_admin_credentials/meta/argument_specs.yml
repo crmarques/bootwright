@@ -1,0 +1,40 @@
+argument_specs:
+  prepare:
+    short_description: Prepare the existing administrator credential.
+    options:
+      bootwright_cluster_admin_request:
+        type: dict
+        required: true
+        options:
+          version:
+            type: str
+            required: true
+            choices:
+              - cluster-install-agent-v1
+      bootwright_cluster_admin_material:
+        type: dict
+        required: true
+      bootwright_cluster_admin_digest:
+        type: str
+        required: true
+      bootwright_cluster_admin_output:
+        type: dict
+        required: true
+  update:
+    short_description: Update the existing administrator credential.
+    options:
+      bootwright_cluster_admin_request:
+        type: dict
+        required: true
+        options:
+          version:
+            type: str
+            required: true
+            choices:
+              - cluster-install-agent-v1
+      bootwright_cluster_admin_material:
+        type: dict
+        required: true
+      bootwright_cluster_admin_digest:
+        type: str
+        required: true

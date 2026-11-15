@@ -2114,7 +2114,8 @@ custody, reaches the native tool on standard input only and never appears in
 arguments, logs, evidence or plans. A lost response recaptures from retained
 custody and never regenerates. A user with no attempt marker, or a password
 changed outside Bootwright, refuses as drift naming the custodied password and
-is never reset. The proof is a controller-side TLS connect to the active MGR
+is never reset by apply. Explicit [administrator credential updates](cli/cluster-admin-credentials.md)
+are a separate operation. The proof is a controller-side TLS connect to the active MGR
 URL, comparing the certificate SHA-256 with the stored certificate; an
 unreachable port reports the dashboard unproved. The dashboard's direct
 certificate and roles remain [B479](milestones/m2.md#b479); its OAuth2 single

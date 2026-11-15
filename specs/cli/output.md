@@ -266,6 +266,7 @@ and their output goldens:
 | `cluster keyring`, `cluster kubeconfig`, `completion bash`, `completion fish`, `completion powershell`, `completion zsh`, `secret show` | `export` |
 | `cluster kubectl`, `cluster oc` | `context`, `cluster`, `client`, `arguments`, `kubeconfigCommand`, `instructions` |
 | `cluster list` | `context`, `clusters` |
+| `cluster update-admin-credentials` | `context`, `cluster`, `user` |
 | `context current`, `context use` | `context` |
 | `context delete` | `name`, `outcome`, `currentCleared`, `orphansAbandoned`, `releasedReservations` |
 | `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged` |
@@ -724,6 +725,7 @@ hide configured URLs, nodes or networks.
 | `nodes` | `[{name, role, machine, fqdn, address}]`, sorted by node name. Roles retain `controlPlane`, `worker` and `infra`; `machine` is the Machine reference and `address` is its selected installation address. |
 | `networking` | `{type, machineNetworks, clusterNetworks, serviceNetworks}`. `type` is the declared network type, empty when left to the installer default. Machine and service networks are CIDR arrays; cluster networks are `[{cidr, hostPrefix}]`. Network order follows the effective installation configuration. |
 | `endpoints` | `[{service, url, address, source}]`, ordered by service: `api`, `api-int`, `console`. The API URLs use the native `api` and `api-int` names at HTTPS port 6443; the console URL is `https://console-openshift-console.apps.<cluster>.<baseDomain>`. The address and source come from the effective endpoint slot; the console uses ingress. Authored alternative endpoint DNS names do not replace these native installer names. |
+| `console` | `{user, passwordValue}`. The user is `kubeadmin`; `passwordValue` is present only for explicit `--secrets`, under the [credential disclosure contract](cluster-admin-credentials.md#console-credentials). |
 | `status`, `reason`, `remedy` | `ready` when local installation evidence records completion; otherwise `unavailable`, with a reason and `bootwright apply --context <context> --stage clusters` remedy. Reason and remedy are omitted for a ready entry. |
 
 Default human output shows release, platform, install mode, base domain, FIPS

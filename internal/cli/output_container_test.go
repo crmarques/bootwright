@@ -12,6 +12,7 @@ import (
 func containerDetailsFixture(name, distribution, status string) *inspection.ContainerDetails {
 	domain := name + ".example.test"
 	result := &inspection.ContainerDetails{
+		Console:      &inspection.ConsoleAccess{User: "kubeadmin"},
 		Distribution: distribution, Release: "4.21.15", ReleaseImage: "quay.io/example/release@sha256:" + strings.Repeat("a", 64),
 		Platform: "none", InstallMode: "connected", BaseDomain: "example.test", FIPS: distribution == "openshift",
 		IngressDomain: "apps." + domain, NetworkType: "OVNKubernetes", Status: status,

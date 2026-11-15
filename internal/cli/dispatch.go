@@ -75,8 +75,9 @@ type commandResult struct {
 	kubeconfig *containeraccess.KubeconfigResult
 	keyring    *inspection.KeyringResult
 
-	clusterList *inspection.ListResult
-	clusterInfo *inspection.InfoResult
+	clusterList      *inspection.ListResult
+	clusterInfo      *inspection.InfoResult
+	adminCredentials *lifecycle.UpdateAdminCredentialsResult
 }
 
 func (r commandResult) clearSensitive() {
@@ -121,6 +122,8 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 		return s.invokeController(ctx, path, &values, args)
 	case "preflight":
 		return s.invokeEnvironmentPreflight(ctx, &values)
+	case "cluster update-admin-credentials":
+		return s.invokeAdminCredentials(ctx, &values)
 	case "cluster list", "cluster info", "cluster keyring":
 		return s.invokeEnvironmentInspection(ctx, path, &values, args)
 	case "cluster rsh", "cluster exec":

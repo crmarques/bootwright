@@ -1463,67 +1463,9 @@ owns comma-separated selection and concurrent execution.
 
 ### Storage dashboard access
 
-A managed Ceph cluster's apply enables the Ceph dashboard and leaves its
-administrator password in the context's
-[custody](ceph.md#secret-custody) as the produced output `dashboard` of the
-cluster's block. `cluster info` reports the dashboard's access information in
-the [managed Ceph entry](cli/output.md#cluster-discovery) without any secret:
-its status, user, URLs and certificate SHA-256 fingerprint.
-
-`cluster info --name` takes a comma-separated list under the
-[list rules](#parsing-and-input-conventions) and selects exactly the listed
-clusters, in canonical order; unknown members fail `access.target` in one
-diagnostic naming each of them. `--secrets` reveals one cluster's values, so it
-requires `--name` to name exactly one cluster after normalization: a list of
-several is `cli.usage` with exit `2`, before any evidence is read.
-
-`cluster info --secrets --name <cluster>` additionally reveals the password as
-`passwordValue` in that entry's `dashboard`, on standard output only. Its checks
-run in this order, each before the next:
-
-| Condition | Diagnostic, exit `1` | Next action |
-| --- | --- | --- |
-| No selected OpenShiftCluster or CephCluster has the name | `access.target`, naming the context and the name | `bootwright cluster info --context <context>` lists the clusters the context selects |
-| The name is an external CephCluster | `cluster.not-applicable`, naming the cluster, its kind and the applicable target, a managed CephCluster | as above |
-| The name is an OpenShiftCluster | `cluster.not-applicable`, naming `bootwright cluster kubeconfig` | as above |
-| The context's custody holds no dashboard password for the cluster | `access.unavailable`, naming the cluster | `bootwright apply --context <context> --stage clusters` |
-
-The target and its applicability are settled from the compiled graph before
-any custody read, so a refusal of the first three kinds reads no credential
-bytes. A copy custody marks unproved, kept by a removal that never proved its
-effect, is revealed with exactly one `access.unproved` warning naming the
-cluster, and its `dashboard.status` is `unproved`. A dashboard whose
-evidence alone does not prove it reachable, its copy unmarked, is revealed with
-`dashboard.status` `unproved` and its reason and no warning (D183, Q101). The value occurs only in
-the `passwordValue` field, and is never copied to a diagnostic, log, evidence
-record, plan or second stream.
-
-`cluster info --object-user <name> --name <cluster>` reveals the S3 keys of
-that one declared CephObjectUser of the cluster, and nothing else: no
-dashboard password and no other user's keys (D183, Q116). The result's
-`objectUsers` holds its one entry, with `name`, `gateway`, `accessKey` and
-`secretKey`; `--secrets` and ordinary inspection omit this member and read no
-object-user custody. A name the cluster does not declare fails `access.target`
-before any custody read. The reader checks the original produced block/output,
-completed original cluster/gateway/realm/zone scope, exact canonical credential
-shape and matching user ID before export. A missing, corrupt or unproved copy
-refuses without any partial output, and all borrowed material is cleared on
-failure and after rendering. Credentials of a different cluster or gateway, or
-of another user, are never read. These fields occur only in
-the explicitly sensitive standard output; no native credential retrieval runs.
-
-For a private S3 client handoff, redirect the result into a protected local
-file and transfer it over an operator-verified channel. Keep this file outside
-logs and acceptance captures:
-
-```sh
-umask 077
-private_access=$(mktemp)
-bootwright cluster info --name ceph-lab --object-user documents --output json > "$private_access"
-```
-
-The S3 client uses the declared gateway endpoint and its verified TLS trust.
-Use a protected client credential file; never put key values in arguments.
+The [administrator credential contract](cli/cluster-admin-credentials.md) owns
+console and dashboard disclosure, object-user disclosure and explicit password
+updates for OpenShift, OKD and managed Ceph.
 
 ### Client keyring export
 

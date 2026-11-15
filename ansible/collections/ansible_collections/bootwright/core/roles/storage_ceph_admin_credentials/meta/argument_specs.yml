@@ -1,0 +1,40 @@
+argument_specs:
+  prepare:
+    short_description: Prepare the existing administrator credential.
+    options:
+      bootwright_ceph_material:
+        type: dict
+        required: true
+      bootwright_ceph_digest:
+        type: str
+        required: true
+      bootwright_ceph_request:
+        type: dict
+        required: true
+        options:
+          version:
+            type: str
+            required: true
+            choices:
+              - ceph-core-v1
+      bootwright_ceph_output:
+        type: dict
+        required: true
+  update:
+    short_description: Update the existing administrator credential.
+    options:
+      bootwright_ceph_material:
+        type: dict
+        required: true
+      bootwright_ceph_digest:
+        type: str
+        required: true
+      bootwright_ceph_request:
+        type: dict
+        required: true
+        options:
+          version:
+            type: str
+            required: true
+            choices:
+              - ceph-core-v1

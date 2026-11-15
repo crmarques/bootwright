@@ -399,8 +399,6 @@ func TestSecretsRefusalsSettleTheTargetBeforeAnyEvidenceRead(t *testing.T) {
 		name, code string
 		contains   []string
 	}{
-		{"edge", "cluster.not-applicable", []string{"bootwright cluster kubeconfig", "OpenShiftCluster"}},
-		{"okd-lab", "cluster.not-applicable", []string{"bootwright cluster kubeconfig"}},
 		{"archive", "cluster.not-applicable", []string{"external CephCluster", "managed CephClusters"}},
 		{"missing", "access.target", []string{"selects no OpenShiftCluster or CephCluster named missing"}},
 		{"", "access.target", []string{"requires one cluster name"}},

@@ -19,6 +19,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 )
 
@@ -99,7 +100,7 @@ func TestClusterInfoRefusesAnUnselectedNameAndNonApplicableSecretsWithoutReading
 		}
 		singleDiagnostic(t, stderr, code)
 	}
-	for name, mention := range map[string]string{"sno": "bootwright cluster kubeconfig", "ceph": "external CephCluster"} {
+	for name, mention := range map[string]string{"ceph": "external CephCluster"} {
 		out, stderr := contextRun(t, services, 1, "cluster", "info", "--secrets", "--name", name)
 		singleDiagnostic(t, stderr, "cluster.not-applicable")
 		if out != "" || !strings.Contains(stderr, mention) || strings.Contains(stderr, "apiVersion") || strings.Contains(stderr, "api.sno.lab.example.test") {
@@ -279,13 +280,13 @@ func TestObjectUserCustodyChecksUIDAndExactProtectedEntry(t *testing.T) {
 
 func TestDashboardCustodyReadsTheClusterBlocksDashboardEntry(t *testing.T) {
 	reader := &producedFake{material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_")}), unproved: true, found: true}
-	got, found, err := (inspectionCustody{reader: reader}).DashboardPassword(context.Background(), "lab", "storage")
+	got, found, err := (inspectionCustody{administrator: adminPasswordReaderFake{reader: reader}}).DashboardPassword(context.Background(), "lab", "storage")
 	value, _ := got.Material.Part(secrets.ValuePart)
 	if err != nil || !found || !got.Unproved || string(value) != "Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_" || !slices.Equal(reader.reads, []string{"lab/ceph-cluster-storage/dashboard"}) {
 		t.Fatalf("custody = %+v %t (%v) after %v", got, found, err, reader.reads)
 	}
 	failure := errors.New("the custody store is unreadable")
-	if _, _, err := (inspectionCustody{reader: &producedFake{failed: failure}}).DashboardPassword(context.Background(), "lab", "storage"); !errors.Is(err, failure) {
+	if _, _, err := (inspectionCustody{administrator: adminPasswordReaderFake{reader: &producedFake{failed: failure}}}).DashboardPassword(context.Background(), "lab", "storage"); !errors.Is(err, failure) {
 		t.Fatalf("custody failure = %v", err)
 	}
 }
@@ -412,4 +413,11 @@ func inspectedResourceRows(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(rows, want) || !slices.Equal(reader.reads, []string{"resources/lab"}) {
 		t.Fatalf("resources = %+v (%v) after reads %v, want %+v", rows, err, reader.reads, want)
 	}
+}
+
+type adminPasswordReaderFake struct{ reader *producedFake }
+
+func (f adminPasswordReaderFake) AdministratorPassword(ctx context.Context, selected, _ string, block, seed string) (secretstore.ProducedMaterial, bool, error) {
+	read, found, err := f.reader.ReadProduced(ctx, selected, block, seed)
+	return secretstore.ProducedMaterial{Material: read.Material, Unproved: read.Unproved}, found, err
 }

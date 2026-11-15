@@ -4,9 +4,10 @@
       OpenShiftClusters and CephClusters, including external storage clusters. A managed
       CephCluster also reports its release, FSID, frozen image, monitors and administrator
       command. --name takes a comma-separated list. --secrets and --object-user each require
-      --name naming exactly one cluster and apply to managed CephClusters only: --secrets
-      reveals the dashboard administrator password, and --object-user <name> reveals that
-      CephObjectUser's S3 keys alone.
+      --name naming exactly one cluster. --secrets reveals the console administrator user and
+      password for OpenShift or OKD, or the dashboard administrator password for managed Ceph.
+      --object-user <name> applies to managed Ceph only and reveals that CephObjectUser's S3
+      keys alone.
 
   Usage
     bootwright cluster info [flags]
@@ -14,7 +15,7 @@
   Command flags
       --name         Select comma-separated cluster names (default: all)
       --object-user  Reveal the S3 keys of this one CephObjectUser
-      --secrets      Reveal the dashboard administrator password
+      --secrets      Reveal the console or dashboard administrator credentials
 
   Common flags
       --ascii       Use ASCII status markers

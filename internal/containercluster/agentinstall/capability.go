@@ -277,7 +277,7 @@ func (c MediaCapability) Keep(ctx context.Context, execution lifecycle.Execution
 	if err != nil {
 		return nil, err
 	}
-	result, err := c.runWithOutputs(ctx, execution, "observe", request, kubeconfigOutputs())
+	result, err := c.runWithOutputs(ctx, execution, "observe", request, []lifecycle.OutputFile{{Name: KubeconfigOutput, Variable: KubeconfigOutput}})
 	if err != nil {
 		lifecycle.ClearProduced(result.Produced)
 		return nil, err

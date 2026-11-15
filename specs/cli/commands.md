@@ -174,6 +174,7 @@ Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and a
 | `bootwright controller uninstall` | `--keep-packages` false; `--discard-unreadable` false; `--yes` false | what it removed and kept or `Nothing to do.` | host packages, then the store, staging, log and hosted roots and an empty libvirt image prefix, whole, by the [uninstall flow](../controller.md#the-uninstall-flow); a discard removes no package |
 | `bootwright cluster list` | none | container and storage cluster names and kinds in canonical order | read local state |
 | `bootwright cluster info` | `--name <list>` default all unless `--secrets` or `--object-user`, which require exactly one cluster; `--secrets` false; `--object-user <name>` none | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
+| `bootwright cluster update-admin-credentials` | required `--name <cluster>`; `--yes` false | generate and update the existing console or dashboard administrator password with a retained candidate and repeatable recovery | credential update on one managed cluster and protected custody |
 | `bootwright cluster rsh` | required `--name <cluster>` (one cluster); `--node <node>` default the cluster's administrator node (at most one) | an interactive SSH session on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the client's exit status is the result | same as `machine rsh` |
 | `bootwright cluster exec` | required `--name <list>`; `--node <list>` default each cluster's administrator node; required `<command>...` | the exact argument vector runs on the resolved node's Machine, or on every resolved Machine concurrently, at most the lifecycle bound at a time, with [each line prefixed by its Machine](../cli.md#several-clusters-and-nodes), under the [cluster session contract](../cli.md#cluster-sessions); the remote command's exit status is the result, the highest of them for several | same as `machine exec` |
 | `bootwright cluster oc` | required `--name <cluster>` and non-empty `<command>...` | bounded `oc` handoff descriptor | read context-owned access metadata only |
@@ -210,6 +211,7 @@ those of `cluster rsh` and `cluster exec` in the
 | `cluster rsh`, `cluster exec` | OpenShiftClusters and managed CephClusters with declared nodes. External CephClusters have no declared node roster and are inapplicable. |
 | `cluster oc`, `cluster kubectl`, `cluster kubeconfig` | OpenShiftClusters only. |
 | `cluster keyring` | Managed CephClusters only. |
+| `cluster update-admin-credentials` | OpenShiftClusters (OpenShift and OKD) and managed CephClusters after completed apply; external Ceph is inapplicable. |
 
 Applicability does not establish implementation availability, access readiness,
 identity, or ownership. Missing access material on an applicable target is an

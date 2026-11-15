@@ -9,6 +9,12 @@ import (
 
 func validateClusterNames(flags *pflag.FlagSet, path string) string {
 	rawName, rawNode := stringValue(flags, "name"), stringValue(flags, "node")
+	if path == "cluster update-admin-credentials" {
+		if !api.ValidLexical("name", rawName) {
+			return "--name must name exactly one cluster"
+		}
+		return ""
+	}
 	if path == "cluster rsh" {
 		if strings.Contains(rawName, ",") || strings.Contains(rawNode, ",") {
 			return "cluster rsh opens one interactive session; name one cluster and at most one node"

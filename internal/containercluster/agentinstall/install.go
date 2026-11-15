@@ -22,9 +22,10 @@ import (
 // and absence mean for the installation and nothing else: the image belongs to
 // the media block, and each node's hardware to its own Machine block.
 type InstallCapability struct {
-	runner     Runner
-	identities Identities
-	access     HostAccess
+	runner       Runner
+	identities   Identities
+	access       HostAccess
+	hashPassword func([]byte) ([]byte, error)
 }
 
 func NewInstall(runner Runner) InstallCapability { return InstallCapability{runner: runner} }
@@ -256,7 +257,7 @@ func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execu
 }
 
 func kubeconfigOutputs() []lifecycle.OutputFile {
-	return []lifecycle.OutputFile{{Name: KubeconfigOutput, Variable: KubeconfigOutput}}
+	return []lifecycle.OutputFile{{Name: KubeconfigOutput, Variable: KubeconfigOutput}, {Name: ConsolePasswordOutput, Variable: ConsolePasswordOutput}}
 }
 
 // offered keeps the administrator access when the run proved completion and
@@ -264,7 +265,7 @@ func kubeconfigOutputs() []lifecycle.OutputFile {
 func offered(produced []lifecycle.Produced, proved bool) []lifecycle.Produced {
 	var kept []lifecycle.Produced
 	for _, output := range produced {
-		if proved && output.Name == KubeconfigOutput && len(kept) == 0 {
+		if proved && (output.Name == KubeconfigOutput || output.Name == ConsolePasswordOutput) && !slices.ContainsFunc(kept, func(held lifecycle.Produced) bool { return held.Name == output.Name }) {
 			kept = append(kept, output)
 			continue
 		}
@@ -617,7 +618,7 @@ func (c InstallCapability) ProducedOutputs(block reconciliation.Block) ([]string
 	if _, err := DecodeInstallRequest(block.Request); err != nil {
 		return nil, err
 	}
-	return []string{KubeconfigOutput}, nil
+	return []string{KubeconfigOutput, ConsolePasswordOutput}, nil
 }
 
 func (c InstallCapability) ProducedIdentity(_ reconciliation.Block, name string, material secrets.Material) (string, error) {

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 )
 
 func TestClusterInfoIncludesOpenShiftURLsAndTopologyBeforeInstallation(t *testing.T) {
@@ -52,6 +54,28 @@ func TestClusterInfoIncludesOpenShiftURLsAndTopologyBeforeInstallation(t *testin
 	for _, want := range []string{cluster.Endpoints[0].URL, cluster.Endpoints[2].URL, cluster.Nodes[0].FQDN, "Installation", "recorded locally", "installer default"} {
 		if stderr != "" || !strings.Contains(out, want) {
 			t.Fatalf("default text lacks %q: %s, stderr %q", want, out, stderr)
+		}
+	}
+}
+
+func TestClusterInfoConsolePasswordIsExplicitAndPrefersUpdatedCustody(t *testing.T) {
+	services, repository, _ := snoContext(t)
+	const initial = "synthetic-initial-console-password"
+	const rotated = "synthetic-rotated-console-password"
+	for _, copy := range []struct{ name, password string }{{agentinstall.ConsolePasswordOutput, initial}, {agentinstall.AdminPasswordOutput, rotated}} {
+		produceThroughLentArea(t, services, repository, "lab-sno", agentinstall.InstallBlockID("sno"), copy.name, copy.password)
+		ordinary, stderr := contextRun(t, services, 0, "cluster", "info", "--name", "sno", "--output", "json")
+		if stderr != "" || strings.Contains(ordinary, initial) || strings.Contains(ordinary, rotated) {
+			t.Fatalf("ordinary info disclosed material: %s %s", ordinary, stderr)
+		}
+		for _, format := range []string{"text", "json", "yaml"} {
+			out, stderr := contextRun(t, services, 0, "cluster", "info", "--name", "sno", "--secrets", "--output", format)
+			if stderr != "" || !strings.Contains(out, "kubeadmin") || !strings.Contains(out, copy.password) {
+				t.Fatalf("%s credential output = %s, stderr %s", format, out, stderr)
+			}
+			if copy.password == rotated && strings.Contains(out, initial) {
+				t.Fatal("rotated custody was replaced by the installer's original password")
+			}
 		}
 	}
 }

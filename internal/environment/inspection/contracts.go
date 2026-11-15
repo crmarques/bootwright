@@ -63,3 +63,7 @@ type HostKeys interface {
 type ClientAccess interface {
 	ClientReason(context.Context, string, string, string) (string, error)
 }
+
+type ConsoleCustody interface {
+	ConsolePassword(context.Context, string, string) (Custodied, bool, error)
+}

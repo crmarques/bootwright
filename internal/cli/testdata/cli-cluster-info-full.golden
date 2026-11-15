@@ -17,6 +17,8 @@
       Console               https://console-openshift-console.apps.edge.example.test
       Console address       192.0.2.10  (node)
       Ingress domain        *.apps.edge.example.test
+      Console user      kubeadmin
+      Console password  hidden; rerun with --secrets --name edge
       cluster exec  ready
       bootwright cluster exec --context lab --name edge --node node-01 -- <command>...
       cluster keyring  not-applicable
@@ -60,6 +62,8 @@
       Console               https://console-openshift-console.apps.okd-lab.example.test
       Console address       192.0.2.10  (node)
       Ingress domain        *.apps.okd-lab.example.test
+      Console user      kubeadmin
+      Console password  hidden; rerun with --secrets --name okd-lab
       cluster exec  ready
       bootwright cluster exec --context lab --name okd-lab --node node-01 -- <command>...
       cluster keyring  not-applicable

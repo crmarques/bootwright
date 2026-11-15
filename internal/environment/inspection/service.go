@@ -25,6 +25,7 @@ type Service struct {
 
 	administrator    func(api.Object) string
 	containerDetails func(api.Catalog, api.Object) ContainerDetails
+	consoleCustody   ConsoleCustody
 }
 
 func New(graph Graph, storage StorageEvidence, installs InstallEvidence, keys HostKeys, selection CurrentSelection, custody Custody) Service {
@@ -89,7 +90,7 @@ func (s Service) ClusterInfo(ctx context.Context, request ClusterInfoRequest) (*
 		return nil, err
 	}
 	if request.Secrets || request.ObjectUser != "" {
-		if err := secretsTarget(selected, names, containers, storages); err != nil {
+		if err := secretsTarget(selected, names, containers, storages, request.ObjectUser != ""); err != nil {
 			return nil, err
 		}
 		if s.custody == nil {
@@ -116,7 +117,14 @@ func (s Service) ClusterInfo(ctx context.Context, request ClusterInfoRequest) (*
 		result.Storage = append(result.Storage, entry)
 	}
 	if request.Secrets {
-		if err := s.revealDashboard(ctx, selected, result.Storage[0]); err != nil {
+		var err error
+		if len(result.Clusters) != 0 {
+			err = s.revealConsole(ctx, selected, &result.Clusters[0])
+		} else {
+			err = s.revealDashboard(ctx, selected, result.Storage[0])
+		}
+		if err != nil {
+			ClearSecrets(result)
 			return nil, err
 		}
 	}
@@ -225,7 +233,7 @@ func external(cluster api.Object) bool {
 	return management != "" && management != ManagementManaged
 }
 
-func secretsTarget(selected string, names []string, containers, storages []api.Object) error {
+func secretsTarget(selected string, names []string, containers, storages []api.Object, objectUser bool) error {
 	discovery := "bootwright cluster info --context " + selected
 	if len(names) > 1 {
 		return failure("cli.usage", "--secrets reveals one cluster's values; name one cluster", "name one cluster with --name <cluster>; "+discovery+" lists the clusters this context selects")
@@ -237,10 +245,12 @@ func secretsTarget(selected string, names []string, containers, storages []api.O
 	switch {
 	case name == "":
 		return failure("access.target", "bootwright cluster info --secrets requires one cluster name", discovery+" lists the clusters this context selects")
+	case len(containers) != 0 && !objectUser:
+		return nil
 	case len(containers) != 0:
 		return failure("cluster.not-applicable",
-			"bootwright cluster info --secrets does not apply to "+name+", "+api.Article(containers[0].Kind())+" "+string(containers[0].Kind())+"; its administrator kubeconfig is exported by bootwright cluster kubeconfig",
-			"bootwright cluster kubeconfig --context "+selected+" --name "+name+" exports it; "+discovery+" lists the clusters this context selects and their kinds")
+			"object-user disclosure does not apply to "+name+", "+api.Article(containers[0].Kind())+" "+string(containers[0].Kind())+"; it "+storageOnly(),
+			discovery+" lists the clusters this context selects and their kinds")
 	case len(storages) != 0 && external(storages[0]):
 		return failure("cluster.not-applicable",
 			"bootwright cluster info --secrets does not apply to "+name+", an external "+string(storages[0].Kind())+"; it applies to managed "+string(storages[0].Kind())+"s",

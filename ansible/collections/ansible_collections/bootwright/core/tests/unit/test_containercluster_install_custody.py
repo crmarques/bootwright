@@ -35,7 +35,7 @@ def position(entries, predicate):
 
 
 def custody_copy(entries):
-    return position(entries, lambda task: OUTPUT in yaml.safe_dump(task))
+    return position(entries, lambda task: OUTPUT + ".kubeconfig" in yaml.safe_dump(task))
 
 
 def test_apply_and_observe_copy_the_kubeconfig_privately_once_completion_is_proved():
@@ -67,3 +67,12 @@ def test_the_role_declares_the_output_as_an_optional_dict_for_every_entry_point(
     specs = yaml.safe_load((ROLE / "meta" / "argument_specs.yml").read_text())["argument_specs"]
     for entry in ("apply", "observe", "destroy"):
         assert specs[entry]["options"][OUTPUT] == {"type": "dict", "required": False}, entry
+
+
+def test_console_password_is_offered_only_after_proved_completion():
+    for name in ("finish.yml", "observe.yml"):
+        entries = tasks(name)
+        password = next(task for task in entries if "console-password" in yaml.safe_dump(task))
+        assert password["when"] == GATE and password["no_log"] is True
+        assert password["ansible.builtin.copy"]["mode"] == "0600"
+        assert password["ansible.builtin.copy"]["src"].endswith("/auth/kubeadmin-password")

@@ -366,6 +366,9 @@ func displayClusterInfo(result *inspection.InfoResult) clusterInfoPresentation {
 }
 
 func writeClusterResult(out, errOut io.Writer, command string, result commandResult, jsonMode bool) (bool, error) {
+	if command == "cluster update-admin-credentials" && result.adminCredentials != nil {
+		return true, writeAdminCredentials(out, command, result.adminCredentials, jsonMode)
+	}
 	if (command == "cluster oc" || command == "cluster kubectl") && result.handoff != nil {
 		return true, writeHandoff(out, result.handoff)
 	}

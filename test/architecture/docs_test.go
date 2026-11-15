@@ -889,6 +889,7 @@ func notYetMetParagraph(pages map[string]markdownFile, from string, line int, te
 // carries the flag, because the command reveals the secret by that flag alone.
 var askRuleMarkers = []struct{ phrase, flag string }{
 	{phrase: "planned mutation"},
+	{phrase: "credential update"},
 	{phrase: "planned removal"},
 	{phrase: "host packages"},
 	{phrase: "download"},

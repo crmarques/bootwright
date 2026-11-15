@@ -745,3 +745,12 @@ type OfflineRetirement interface{ RetiresOffline() bool }
 type PlanInspection func(context.Context, string, api.Catalog, reconciliation.Plan, []reconciliation.Block) ([]PlanCheck, error)
 
 type ListenerAdmission func(context.Context, string, api.Catalog, reconciliation.Plan, []reconciliation.Block) error
+
+type AdminCredentialUpdater interface {
+	AdminCredentialIdentity(context.Context, Execution) (string, error)
+	AdminCredentialSeed(reconciliation.Block) string
+	AdminCredentialMayBeMissing() bool
+	AdminCredential(reconciliation.Block) (output, user string, applicable bool, err error)
+	PrepareAdminCredential(context.Context, Execution) (secrets.Material, error)
+	UpdateAdminCredential(context.Context, Execution, secrets.Material) error
+}

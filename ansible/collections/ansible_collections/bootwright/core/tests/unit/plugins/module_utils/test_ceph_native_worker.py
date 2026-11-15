@@ -36,6 +36,7 @@ def source_bundle():
             "ceph_host_route_probe": '"""Fixed fixture."""\n', "physical_machine_identity": '"""Fixed fixture."""\n',
             "physical_erase_process": '"""Fixed fixture."""\n', "physical_erase_worker": '"""Fixed fixture."""\n',
             "ceph_host_runtime": '"""Fixed fixture."""\n',
+            "ceph_admin_credentials_native": '"""Fixed fixture."""\n',
             "ceph_native": ('class Refusal(ValueError): pass\nCOMMAND_SESSION = True\ndef dispatch(value):\n'
                             '    return {"session": COMMAND_SESSION, "source": bool(_BOOTWRIGHT_SOURCE)}\n')}
 

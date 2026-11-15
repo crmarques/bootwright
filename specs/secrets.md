@@ -483,15 +483,20 @@ capture carries the mark, and only the mark makes a reveal warn
 `access.unproved`. A store never initialized refuses a capture with
 `secret.store.uninitialized` and holds nothing to withdraw. No secret command
 lists, checks, reveals, sets, generates, deletes or matches it to a declaration
-of the same name. Four outputs are revealed, each by its one command only:
+of the same name. Only these outputs are revealed, each through its named command:
 
 | Output (block kind) | Only command | Output field | Unproved copy |
 | --- | --- | --- | --- |
 | `kubeconfig` (an installation) | `cluster kubeconfig` under the [explicit sensitive-output boundary](cli.md#administrator-access-export) | the custodied bytes | revealed with one `access.unproved` warning |
 | `client` (a CephClient) | `cluster keyring` under the [client keyring export](cli.md#client-keyring-export) | the native keyring form | revealed with one `access.unproved` warning |
 | `dashboard` (a managed CephCluster) | `cluster info --secrets` under the [storage dashboard access](cli.md#storage-dashboard-access) boundary | `passwordValue` of `dashboard` | revealed with one `access.unproved` warning |
+| `console-password` (an OpenShiftCluster) | `cluster info --secrets` under the [console disclosure](cli/cluster-admin-credentials.md#console-credentials) boundary | `passwordValue` of `console`, beside user `kubeadmin` | refused `access.unavailable` |
+| `admin-password` (an OpenShiftCluster or managed CephCluster) | `cluster info --secrets`, under the same disclosure boundaries | `passwordValue` of `console` or `dashboard` | console refused; dashboard revealed with one `access.unproved` warning |
 | `object-user` (a CephObjectUser) | `cluster info --object-user <name>`, same boundary | `accessKey` and `secretKey` of the one entry of `objectUsers` | refused `access.unavailable`, with no partial output |
 
+The protected `admin-password-update` candidate is never revealed. An
+[unfinished update](cli/cluster-admin-credentials.md#administrator-credential-updates)
+refuses administrator password disclosure until repetition proves completion.
 No other output is revealed: a Ceph consumer's `external-details` reach only
 the consuming cluster's [placed Secret](#material-placed-in-a-cluster). The
 `object-user` reveal is authorized (D183, Q100). A dashboard whose evidence

@@ -12,6 +12,7 @@ type Services struct {
 	Controller            ControllerService
 	EnvironmentPreflight  EnvironmentPreflightService
 	EnvironmentInspection EnvironmentInspectionService
+	AdminCredentials      AdminCredentialsService
 	EnvironmentAccess     EnvironmentAccessService
 	Lifecycle             LifecycleService
 	Artifacts             ArtifactService

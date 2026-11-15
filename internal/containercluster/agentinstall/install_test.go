@@ -700,7 +700,7 @@ func TestTheInstallOffersItsKubeconfigOnlyOnProvedCompletion(t *testing.T) {
 			}
 			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: test.outcome, Evidence: installEvidence(t, testDigest, test.mutate), Produced: handed}}
 			produced, _ := test.invoke(NewInstall(runner), execution)
-			declared := slices.Equal(runner.requests[0].Outputs, []lifecycle.OutputFile{{Name: KubeconfigOutput, Variable: KubeconfigOutput}})
+			declared := slices.Equal(runner.requests[0].Outputs, kubeconfigOutputs())
 			if declared != test.declares || !test.declares && len(runner.requests[0].Outputs) != 0 {
 				t.Fatalf("the run declared %v", runner.requests[0].Outputs)
 			}

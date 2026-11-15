@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "cluster update-admin-credentials",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "cluster": "storage",
+    "user": "admin"
+  },
+  "diagnostics": [],
+  "logs": []
+}

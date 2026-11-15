@@ -341,6 +341,7 @@ func dispatchSpies(record *dispatchRecord) Services {
 		Controller:            controllerSpy{record},
 		EnvironmentPreflight:  environmentSpy{record},
 		EnvironmentInspection: environmentSpy{record},
+		AdminCredentials:      environmentSpy{record},
 		EnvironmentAccess:     environmentSpy{record},
 		Lifecycle:             lifecycleSpy{record},
 		Artifacts:             artifactsSpy{record},
@@ -398,4 +399,8 @@ func (s machineDiscoverySpy) Discover(ctx context.Context, r osinstallation.Disc
 }
 func (s machineDiscoverySpy) PlanDiscovery(ctx context.Context, r osinstallation.DiscoverRequest) (*lifecycle.PlanResult, error) {
 	return s.record.result.lifecyclePlan, s.record.called(ctx, "machine discover", r)
+}
+
+func (s environmentSpy) UpdateAdminCredentials(ctx context.Context, request lifecycle.UpdateAdminCredentialsRequest) (*lifecycle.UpdateAdminCredentialsResult, error) {
+	return s.record.result.adminCredentials, s.record.called(ctx, "cluster update-admin-credentials", request)
 }

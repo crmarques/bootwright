@@ -68,6 +68,11 @@ func validObjectCredentials(material secrets.Material) bool {
 }
 
 func ClearSecrets(result *InfoResult) {
+	for _, cluster := range result.Clusters {
+		if cluster.Details != nil && cluster.Details.Console != nil {
+			cluster.Details.Console.Password.Clear()
+		}
+	}
 	for _, cluster := range result.Storage {
 		if cluster.Ceph == nil {
 			continue

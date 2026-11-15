@@ -35,6 +35,9 @@
                identity; confirm or refuse an unproved host key and return the client's exit
                status
 
+  ○ Command | update-admin-credentials
+      PURPOSE  Generate and update the console or dashboard administrator password
+
   Common flags
       --ascii       Use ASCII status markers
       --color       Select terminal colors (values: auto, always, never) · default auto

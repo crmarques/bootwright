@@ -1,6 +1,9 @@
 package inspection
 
-import api "github.com/crmarques/bootwright/api/v1alpha1"
+import (
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/secrets"
+)
 
 type ContainerDetails struct {
 	Distribution, Release, ReleaseImage, Platform, InstallMode, BaseDomain, IngressDomain string
@@ -11,6 +14,7 @@ type ContainerDetails struct {
 	Nodes                                                                                 []ContainerNode
 	Endpoints                                                                             []ContainerEndpoint
 	Status, Reason, Remedy                                                                string
+	Console                                                                               *ConsoleAccess
 }
 
 type ContainerNetwork struct {
@@ -43,4 +47,10 @@ func (s Service) describeContainer(catalog api.Catalog, cluster api.Object, sele
 		details.Remedy = "bootwright apply --context " + selected + " --stage clusters"
 	}
 	return &details
+}
+
+type ConsoleAccess struct {
+	User     string
+	Password secrets.Material
+	Revealed bool
 }

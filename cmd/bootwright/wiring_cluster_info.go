@@ -11,7 +11,8 @@ func containerDetails(catalog api.Catalog, cluster api.Object) inspection.Contai
 	details := inspection.ContainerDetails{
 		Distribution: facts.Distribution, Release: facts.Release, ReleaseImage: facts.ReleaseImage,
 		Platform: facts.Platform, InstallMode: facts.InstallMode, BaseDomain: facts.BaseDomain, IngressDomain: facts.IngressDomain,
-		FIPS: facts.FIPS, NetworkType: facts.NetworkType, MachineNetworks: facts.MachineNetworks, ServiceNetworks: facts.ServiceNetworks,
+		Console: &inspection.ConsoleAccess{User: "kubeadmin"},
+		FIPS:    facts.FIPS, NetworkType: facts.NetworkType, MachineNetworks: facts.MachineNetworks, ServiceNetworks: facts.ServiceNetworks,
 	}
 	for _, network := range facts.ClusterNetworks {
 		details.ClusterNetworks = append(details.ClusterNetworks, inspection.ContainerNetwork{CIDR: network.CIDR, HostPrefix: network.HostPrefix})

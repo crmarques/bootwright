@@ -33,8 +33,10 @@ func environmentClusterCommands() []commandSpec {
 			" Applicable to all selected OpenShiftClusters and CephClusters, including external storage clusters." +
 			" A managed CephCluster also reports its release, FSID, frozen image, monitors and administrator command." +
 			" --name takes a comma-separated list." +
-			" --secrets and --object-user each require --name naming exactly one cluster and apply to managed CephClusters only:" +
-			" --secrets reveals the dashboard administrator password, and --object-user <name> reveals that CephObjectUser's S3 keys alone.", flags: []flagSpec{stringFlag("name", "Select comma-separated cluster names (default: all)"), boolFlag("secrets", "Reveal the dashboard administrator password"), stringFlag("object-user", "Reveal the S3 keys of this one CephObjectUser")}}),
+			" --secrets and --object-user each require --name naming exactly one cluster." +
+			" --secrets reveals the console administrator user and password for OpenShift or OKD, or the dashboard administrator password for managed Ceph." +
+			" --object-user <name> applies to managed Ceph only and reveals that CephObjectUser's S3 keys alone.", flags: []flagSpec{stringFlag("name", "Select comma-separated cluster names (default: all)"), boolFlag("secrets", "Reveal the console or dashboard administrator credentials"), stringFlag("object-user", "Reveal the S3 keys of this one CephObjectUser")}}),
+		available(commandSpec{path: "cluster update-admin-credentials", short: "Generate and update the console or dashboard administrator password", long: "Generate a fresh password for the existing console administrator of OpenShift or OKD, or the dashboard administrator of a managed Ceph cluster. Requires a completed apply and the original administrator access. Retains the candidate before updating the cluster; repeat an interrupted command to finish the same update. Refuses removed accounts and external Ceph. Retrieve the updated credential with cluster info --secrets --name <cluster>. --yes skips ordinary confirmation.", flags: []flagSpec{nameFlag(), confirmationFlag()}}),
 		available(clusterSessionCommand(commandSpec{path: "cluster rsh", short: "Open an SSH session on a cluster node's Machine"})),
 		available(clusterExecCommand()),
 	}

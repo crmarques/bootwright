@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/containercluster"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
@@ -15,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/trust"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -39,14 +41,17 @@ type trustRecords interface {
 
 func wireInspection(state inventory.EffectiveState, reconciler lifecycle.Service, binder *custody.Service, selection contexts.SelectionStore, records trustRecords) inspection.Service {
 	return inspection.New(effectiveGraph{state: nodeAccessState{state: state}}, cephInspection{reconciler: reconciler}, installProofs{reconciler: reconciler},
-		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}, records: records}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}}).WithMembers(clusterMembers()).WithAdministrator(clusterAdministrator).WithClients(clusterClientMetadata{reconciler: reconciler, custody: binder}).WithContainerDetails(containerDetails)
+		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}, records: records}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}, administrator: &reconciler}).WithMembers(clusterMembers()).WithAdministrator(clusterAdministrator).WithClients(clusterClientMetadata{reconciler: reconciler, custody: binder}).WithContainerDetails(containerDetails).WithConsoleCustody(inspectionCustody{reader: producedReader{binder: binder}, administrator: &reconciler})
 }
 
 type producedEntries interface {
 	ReadProduced(ctx context.Context, contextName, block, name string) (containeraccess.Custodied, bool, error)
 }
 
-type inspectionCustody struct{ reader producedEntries }
+type inspectionCustody struct {
+	reader        producedEntries
+	administrator administratorPasswordReader
+}
 
 func (d inspectionCustody) ObjectUserCredentials(ctx context.Context, contextName, user string) (inspection.Custodied, bool, error) {
 	read, found, err := d.reader.ReadProduced(ctx, contextName, ceph.ObjectUserBlockID(user), ceph.ObjectUserOutput)
@@ -67,7 +72,10 @@ func (d inspectionCustody) ObjectUserCredentials(ctx context.Context, contextNam
 }
 
 func (d inspectionCustody) DashboardPassword(ctx context.Context, contextName, cluster string) (inspection.Custodied, bool, error) {
-	read, found, err := d.reader.ReadProduced(ctx, contextName, ceph.DashboardBlock(cluster), ceph.DashboardOutput)
+	if d.administrator == nil {
+		return inspection.Custodied{}, false, availability.ErrNotImplemented
+	}
+	read, found, err := d.administrator.AdministratorPassword(ctx, contextName, cluster, ceph.DashboardBlock(cluster), ceph.DashboardOutput)
 	return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
 }
 
@@ -247,4 +255,16 @@ func (h hostKeyProofs) HostKeyProved(ctx context.Context, contextName, name stri
 	}
 	record, found := store.Find(name)
 	return found && record.Address == target.Address && record.Port == target.Port, nil
+}
+
+func (d inspectionCustody) ConsolePassword(ctx context.Context, contextName, cluster string) (inspection.Custodied, bool, error) {
+	if d.administrator == nil {
+		return inspection.Custodied{}, false, availability.ErrNotImplemented
+	}
+	read, found, err := d.administrator.AdministratorPassword(ctx, contextName, cluster, agentinstall.InstallBlockID(cluster), agentinstall.ConsolePasswordOutput)
+	return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
+}
+
+type administratorPasswordReader interface {
+	AdministratorPassword(context.Context, string, string, string, string) (secretstore.ProducedMaterial, bool, error)
 }

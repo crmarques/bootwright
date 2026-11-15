@@ -26,7 +26,7 @@ func (r Runner) playbookFor(request lifecycle.RunRequest) (string, bool) {
 	return playbook, ok
 }
 
-// AdmitReadOnly admits read-only each revoke composition keys as playbooks are.
+// AdmitReadOnly admits exactly the read-only entrypoints composition names.
 func (r Runner) AdmitReadOnly(operations ...string) Runner {
 	r.readOnly = make(map[string]bool, len(operations))
 	for _, operation := range operations {
@@ -37,7 +37,7 @@ func (r Runner) AdmitReadOnly(operations ...string) Runner {
 
 func (r Runner) checkReadOnly(request lifecycle.RunRequest) error {
 	lend := request.Operation == lifecycle.LendOperation
-	revoke := request.Operation == lifecycle.RevokeOperation && r.readOnly[request.Implementation+"/"+request.Operation]
+	revoke := (request.Operation == lifecycle.RevokeOperation || request.Operation == "prepare_credentials") && r.readOnly[request.Implementation+"/"+request.Operation]
 	if request.ReadOnly && request.Operation != lifecycle.ObserveOperation && !lend && !revoke {
 		return failure("lifecycle.state", "a read-only invocation may run only its capability's observation", "")
 	}

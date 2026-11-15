@@ -74,6 +74,21 @@
     - containercluster_install_agent_state.completed is sameas true
   no_log: true
 
+- name: Offer the console administrator password of the proved installation for custody
+  ansible.builtin.copy:
+    src: '{{ containercluster_install_agent_work }}/auth/kubeadmin-password'
+    dest: "{{ bootwright_cluster_install_output['console-password'] }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - bootwright_cluster_install_output is defined
+    - (containercluster_install_agent_before.observation.identity | default('')) | length > 0
+    - containercluster_install_agent_state.cluster == containercluster_install_agent_before.observation.identity
+    - containercluster_install_agent_state.completed is sameas true
+  no_log: true
+
 - name: Publish bounded installation completion evidence
   bootwright.core.containercluster_install_protocol:
     phase: completed

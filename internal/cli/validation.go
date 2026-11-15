@@ -180,7 +180,7 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 		if message := validateMachineNames(flags, path); message != "" {
 			return message
 		}
-	case "cluster rsh", "cluster exec", "cluster info":
+	case "cluster rsh", "cluster exec", "cluster info", "cluster update-admin-credentials":
 		if message := validateClusterNames(flags, path); message != "" {
 			return message
 		}

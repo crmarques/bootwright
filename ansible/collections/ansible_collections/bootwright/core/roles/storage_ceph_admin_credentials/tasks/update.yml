@@ -1,0 +1,29 @@
+---
+- name: Validate the original credential target request
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_request.version == 'ceph-core-v1'
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.storage_ceph_admin_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Prove the dashboard administrator credential
+  bootwright.core.ceph_admin_credentials:
+    operation: update
+    request: '{{ bootwright_ceph_request }}'
+    material: '{{ bootwright_ceph_material }}'
+  register: storage_ceph_admin_credentials_result
+  no_log: true
+  diff: false
+
+- name: Publish bounded credential proof
+  bootwright.core.storage_ceph_admin_protocol:
+    phase: completed
+    digest: '{{ bootwright_ceph_digest }}'
+    outcome: unchanged
+    proved: '{{ storage_ceph_admin_credentials_result.proved }}'
+  no_log: true

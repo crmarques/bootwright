@@ -54,6 +54,7 @@
       "Bash(*bootwright *secret *delete*)",
       "Bash(*bootwright *secret *encryption *rotate*)",
       "Bash(*bootwright *media *delete*)",
+      "Bash(*bootwright *cluster update-admin-credentials*)",
       "Bash(*bootwright *cluster info*--secrets*)",
       "Bash(*bootwright *cluster info*--object-user*)",
       "Bash(*bootwright *render *effective*--sensitive*)",

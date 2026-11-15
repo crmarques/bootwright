@@ -613,7 +613,8 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
         assert envelope["payload"]["private"] == {"registryJSON": "REGISTRY-SECRET-SENTINEL"}
         assert set(envelope["sources"]) == {"ceph_native", "ceph_native_observe", "ceph_native_resources", "ceph_native_stretch", "ceph_tunnel",
                                             "ceph_tunnel_staging",
-                                            "ceph_tunnel_custody", "ceph_host_route_probe", "ceph_host_runtime", "native_diagnostics",
+                                            "ceph_tunnel_custody", "ceph_host_route_probe", "ceph_host_runtime", "ceph_admin_credentials_native",
+                                            "native_diagnostics",
                                             "canonical_json", "bounded_process", "tls_trust", "ceph_monitoring_template",
                                             "native_specializations", "ceph_pull_broker", "ceph_native_nfs", "ceph_native_nvmeof", "ceph_native_observability",
                                             "ceph_native_units", "ceph_native_object", "ceph_smb_native", "ceph_replication_native",

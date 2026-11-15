@@ -724,7 +724,9 @@ states counts only beside a completion.
 
 Material a block's proved effect leaves, such as an installation's
 administrator kubeconfig or a Ceph cluster's dashboard credential (the entry
-`ceph-cluster-<name>`, `dashboard`, recaptured without rotation), enters the
+`ceph-cluster-<name>`, `dashboard`, recaptured without rotation; explicit
+[password updates](cli/cluster-admin-credentials.md#administrator-credential-updates)
+are a separate bounded operation), enters the
 context's [custody](secrets.md#produced-material) before its apply block is
 recorded
 `done`, whether an attempt or a resolution proves it, including a fresh

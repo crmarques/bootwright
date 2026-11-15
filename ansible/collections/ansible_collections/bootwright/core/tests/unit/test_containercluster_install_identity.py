@@ -407,7 +407,7 @@ def test_the_rewrite_the_waits_leave_is_kept_before_the_final_read_and_the_custo
     wait = only(entries, lambda task: task.get("ansible.builtin.include_tasks") == "wait.yml"
                 and "install-complete" in str(task.get("vars")))
     last_read = max(i for i, task in enumerate(entries) if task.get("ansible.builtin.import_tasks") in ("cluster_state.yml", "collect_state.yml"))
-    custody = only(entries, lambda task: "bootwright_cluster_install_output" in str(task.get("ansible.builtin.copy", "")))
+    custody = only(entries, lambda task: "bootwright_cluster_install_output.kubeconfig" in str(task.get("ansible.builtin.copy", "")))
     assert len(keeps) == 2
     assert wait < keeps[1] < last_read < custody
     assert "when" not in entries[keeps[1]]

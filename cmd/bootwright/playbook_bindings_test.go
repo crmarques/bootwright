@@ -144,15 +144,16 @@ func TestPlaybookNamePatternRefusesAnOffPatternBinding(t *testing.T) {
 	}
 }
 
-// Composition admits exactly one operation besides observe and lend in a
-// read-only or unrecorded invocation: the revoke of a lent KubeVirt host
-// token, which a playbook binds.
-func TestOnlyTheLentAccessRevokeRunsReadOnly(t *testing.T) {
+// Composition admits only the credential preparation reads and access revoke.
+func TestReadOnlyEntrypointsAreExplicit(t *testing.T) {
 	admitted := readOnlyOperations()
-	if !slices.Equal(admitted, []string{"substrate-host-kubevirt-v1/revoke"}) {
+	want := []string{"cluster-install-agent-v1/prepare_credentials", "storage-ceph-core-v1/prepare_credentials", "substrate-host-kubevirt-v1/revoke"}
+	if !slices.Equal(admitted, want) {
 		t.Fatalf("read-only operations %v", admitted)
 	}
-	if _, bound := operationPlaybook()[admitted[0]]; !bound {
-		t.Fatalf("%s binds no playbook", admitted[0])
+	for _, key := range admitted {
+		if _, bound := operationPlaybook()[key]; !bound {
+			t.Fatalf("%s binds no playbook", key)
+		}
 	}
 }

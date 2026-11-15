@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/environment/inspection"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 type containerDetailsPresentation struct {
@@ -19,6 +20,7 @@ type containerDetailsPresentation struct {
 	Nodes         []containerNodePresentation     `json:"nodes"`
 	Networking    containerNetworkPresentation    `json:"networking"`
 	Endpoints     []containerEndpointPresentation `json:"endpoints"`
+	Console       *consolePresentation            `json:"console,omitempty"`
 	Status        string                          `json:"status"`
 	Reason        string                          `json:"reason,omitempty"`
 	Remedy        string                          `json:"remedy,omitempty"`
@@ -51,6 +53,11 @@ type containerEndpointPresentation struct {
 	Source  string `json:"source"`
 }
 
+type consolePresentation struct {
+	User          string `json:"user"`
+	PasswordValue string `json:"passwordValue,omitempty"`
+}
+
 func displayContainerDetails(details *inspection.ContainerDetails) *containerDetailsPresentation {
 	if details == nil {
 		return nil
@@ -74,6 +81,14 @@ func displayContainerDetails(details *inspection.ContainerDetails) *containerDet
 	for _, endpoint := range details.Endpoints {
 		result.Endpoints = append(result.Endpoints, containerEndpointPresentation{Service: escapeDisplayLine(endpoint.Service), URL: escapeDisplayLine(endpoint.URL),
 			Address: escapeDisplayLine(endpoint.Address), Source: escapeDisplayLine(endpoint.Source)})
+	}
+	if details.Console != nil {
+		result.Console = &consolePresentation{User: escapeDisplayLine(details.Console.User)}
+		if details.Console.Revealed {
+			password, _ := details.Console.Password.Part(secrets.ValuePart)
+			result.Console.PasswordValue = escapeDisplayLine(string(password))
+			clear(password)
+		}
 	}
 	return result
 }
@@ -103,6 +118,7 @@ func writeContainerInfo(text *display, contextName string, cluster inspection.Co
 	}
 	text.emphasizedSubsection("Access")
 	writeContainerEndpoints(text, details)
+	writeConsoleCredentials(text, cluster.Name, details.Console)
 	writeAccessCommandRows(text, contextName, cluster.Name, cluster.AccessCommands, full)
 	writeContainerTopology(text, details)
 	text.emphasizedSubsection("Evidence")
@@ -146,4 +162,17 @@ func writeContainerTopology(text *display, details *inspection.ContainerDetails)
 		field{Label: "Machine networks", Value: displayValue(strings.Join(details.MachineNetworks, ", "))},
 		field{Label: "Pod networks", Value: displayValue(strings.Join(pods, ", "))},
 		field{Label: "Service networks", Value: displayValue(strings.Join(details.ServiceNetworks, ", "))})
+}
+
+func writeConsoleCredentials(text *display, name string, console *inspection.ConsoleAccess) {
+	if console == nil {
+		return
+	}
+	password := "hidden; rerun with --secrets --name " + name
+	if console.Revealed {
+		value, _ := console.Password.Part(secrets.ValuePart)
+		password = string(value)
+		clear(value)
+	}
+	text.mutedVerbatimFields(field{Label: "Console user", Value: console.User, Tone: "identity"}, field{Label: "Console password", Value: password, Tone: "identity"})
 }

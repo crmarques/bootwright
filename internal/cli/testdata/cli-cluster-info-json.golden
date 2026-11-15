@@ -90,6 +90,9 @@
             "source": "node"
           }
         ],
+        "console": {
+          "user": "kubeadmin"
+        },
         "status": "ready"
       },
       {
@@ -176,6 +179,9 @@
             "source": "node"
           }
         ],
+        "console": {
+          "user": "kubeadmin"
+        },
         "status": "ready"
       }
     ],

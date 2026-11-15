@@ -1214,3 +1214,91 @@ def test_gateway_certificate_accepts_native_rsa_and_pkcs8_envelopes(dashboard, m
     monkeypatch.setitem(TLS_PAIR, "key", key)
     gateway_dashboard(dashboard)
     assert dashboard.state.tls["key"] == key.encode()
+
+
+@pytest.mark.parametrize("checkpoint", ["reply", "id", "complete"])
+def test_admin_password_update_recovers_retained_material_and_can_rotate_again(dashboard, monkeypatch, checkpoint):
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_admin_credentials_native as credentials
+    world = dashboard
+    world.native.dashboard()
+    scope = world.native.dashboard_scope()
+    store = world.native.dashboard_store()
+    state = {"updates": 0, "failed": False}
+
+    def replace(unused_store, name, expected, replacement):
+        assert world.markers.read(name) == expected
+        if checkpoint == "id" and name == store.name("id") and not state["failed"]:
+            state["failed"] = True
+            raise ceph_native.Refusal("native-timeout")
+        world.markers.records[name] = copy.deepcopy(replacement)
+
+    def set_password(*args, data=b""):
+        assert args == ("dashboard", "ac-user-set-password", "admin", "-i", "-")
+        state["updates"] += 1
+        world.state.users["admin"]["password"] = hashed(data.decode())
+        if checkpoint == "reply" and not state["failed"]:
+            state["failed"] = True
+            raise ceph_native.Refusal("native-timeout")
+        return 0
+
+    monkeypatch.setattr(credentials, "replace_record", replace)
+    monkeypatch.setattr(world.native, "ceph_status", set_password)
+
+    def candidate():
+        unused, record = store.records(scope)
+        return {"guard": {"scope": scope, "record": record, "hash": world.state.users["admin"]["password"]},
+                "password": ceph_native.dashboard_password()}
+
+    first = candidate()
+    if checkpoint != "complete":
+        with pytest.raises(ceph_native.Refusal):
+            credentials.update(world.native, first)
+    credentials.update(world.native, first)
+    assert state["updates"] == 1
+    assert world.native.dashboard_retained() == first["password"]
+    second = candidate()
+    credentials.update(world.native, second)
+    assert state["updates"] == 2 and world.native.dashboard_retained() == second["password"]
+
+
+def test_admin_password_update_refuses_changed_account_without_mutating(dashboard, monkeypatch):
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_admin_credentials_native as credentials
+    world = dashboard
+    world.native.dashboard()
+    store, scope = world.native.dashboard_store(), world.native.dashboard_scope()
+    unused, record = store.records(scope)
+    candidate = {"guard": {"scope": scope, "record": record, "hash": world.state.users["admin"]["password"]},
+                 "password": ceph_native.dashboard_password()}
+    world.state.users["admin"]["password"] = hashed("foreign-password")
+    monkeypatch.setattr(world.native, "ceph_status", lambda *args, **kwargs: pytest.fail("refusal mutated the account"))
+    with pytest.raises(ceph_native.Refusal):
+        credentials.update(world.native, candidate)
+
+
+def test_admin_password_prepare_is_private_and_uses_the_native_policy(dashboard, monkeypatch):
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_admin_credentials_native as credentials
+    world = dashboard
+    world.native.dashboard()
+    before = retained(world)
+
+    class Crypt:
+        METHOD_BLOWFISH = "bcrypt"
+
+        @staticmethod
+        def mksalt(method, rounds):
+            assert method == "bcrypt" and rounds == 1 << 10
+            return "$2b$10$synthetic-salt"
+
+        @staticmethod
+        def crypt(password, salt):
+            assert salt.startswith("$2b$")
+            return hashed(password)
+
+    monkeypatch.setattr(credentials.importlib, "import_module", lambda name: Crypt if name == "crypt" else pytest.fail("unexpected import"))
+    prepared = credentials.prepare(world.native)
+    assert set(prepared) == {"private"}
+    candidate = json.loads(prepared["private"])
+    assert ceph_native.dashboard_policy(candidate["password"]) and candidate["password"] != before
+    assert candidate["guard"]["scope"] == world.native.dashboard_scope()
+    assert candidate["guard"]["hash"] == world.state.users["admin"]["password"]
+    assert world.native.dashboard_retained() == before and world.state.creates == 1

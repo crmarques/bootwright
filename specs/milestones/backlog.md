@@ -406,7 +406,9 @@ The OpenShiftCluster sessions, `oc` and `kubectl` handoffs and their access
 matrix were subsequently requested explicitly and are delivered by
 [X469](delivered.md#x469--openshift-cluster-access). The subsequently requested
 OpenShift URLs, topology and network inspection view is delivered by
-[X472](delivered.md#x472--openshift-cluster-inspection). This item keeps other
+[X472](delivered.md#x472--openshift-cluster-inspection). Console credential
+disclosure and the explicitly requested administrator credential update are
+delivered by [X473](delivered.md#x473--cluster-administrator-credentials). This item keeps other
 additional evidence views, dashboards and completion extensions.
 
 ### B102
