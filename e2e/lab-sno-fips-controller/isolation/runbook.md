@@ -10,14 +10,14 @@ administrator; workloads have no host networking or privileged capabilities.
 
 | Owner | Configuration |
 | --- | --- |
-| Bootwright core | Existing Machine, Network, NetworkConfig, provider and OpenShiftCluster fields: two VMs, installation, FIPS, TPM2, node VLAN connectivity and addressed-bridge intent |
+| Bootwright core | Existing Machine, Network, NetworkConfig, provider and OpenShiftCluster fields: two VMs, installation, FIPS, TPM2, managed host trunk/VLAN legs, node VLAN connectivity and addressed-bridge intent |
 | Existing add-ons | NMState applies the bridge configuration; MetalLB provides per-environment address pools |
 | Native fixtures, later GitOps-owned in an estate | Namespaces, apps, ingress shards, EgressIP, policies and node filter |
-| External E2E harness | Addressless host trunk, external peers, adversarial routes and traffic assertions |
+| External E2E harness | External peers, adversarial routes and traffic assertions |
 
 No new core API or add-on is required for the native isolation manifests.
 The parent runbook's [setup audit](../runbook.md#declarative-setup-and-remaining-gaps)
-names the remaining trunk and resolver setup gaps. The native schema follows the
+names the current API owners and remaining setup gaps. The native schema follows the
 [product boundary](../../../specs/project.md#product-scope). The
 [IngressController API](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/operator_apis/ingresscontroller-operator-openshift-io-v1)
 provides namespace selection and source ranges.
@@ -28,8 +28,9 @@ seen by each external server. An unassigned address or fallback node source
 is a failure, never permission to disable the assertion. This profile is not
 a Red Hat support certification or a claim of FIPS certification for Bootwright.
 
-The staging and production VLANs have no router between them. The SNO node
-has interfaces on both, so the fixture also installs a dedicated nftables
+The provider host refuses routing between its staging and production VLAN
+legs; both managed Networks declare `forward: none` and no `routedNetworkRefs`.
+The SNO node has interfaces on both, so the fixture also installs a dedicated nftables
 filter before exposing workloads: it admits ingress HTTP/HTTPS only on the
 matching environment pool and admits replies to connections initiated by the
 cluster. Other new connections entering either environment interface are
@@ -90,18 +91,26 @@ separately because it is used only by this profile's fixtures. The
 verification configuration travels with the manifests. No environment-specific
 facts belong in the chart or Git metadata. Now perform parent steps 2–5.
 
-## Replace parent step 6: isolated host networks
+## Replace parent step 6: managed host networks and peer attachments
 
-Create only the trunk and macvlan networks before provisioning SNO. External
-peers start after the node filter is proved. Commands below require `jq`,
-`ip`, `nsenter` and Podman on the host. Stop if any intended link, network or
-container name already exists; never adopt or delete a pre-existing resource.
-Run this block in Bash with `set -euo pipefail`.
+Bootwright creates the persistent trunk and addressed VLAN legs from the
+existing managed `Network` API. Run parent step 7 through its
+`apply --stage infrastructure-services,substrates` on the FIPS controller
+first. Skip the parent's external-peer fixture block: this profile starts
+peers only after the node filter is proved. Do not create or delete the host
+links by hand.
+
+In the host terminal, verify the links Bootwright created, then create only
+the case's Podman macvlan attachment networks. Stop if a Podman network or
+container of the intended name already exists. The host's `hostAddress` on
+each leg is reserved outside the pod, peer, egress and MetalLB allocations.
+Run this block in Bash with `set -euo pipefail`; require bridge filtering
+absent or 0 before creating the attachments.
 
 ```sh
 PROFILE="$RUN_DIR/isolation"
 TRUNK=$(jq -er '.trunk.bridge' "$PROFILE/config.json")
-if ip link show "$TRUNK" >/dev/null 2>&1; then echo 'trunk already exists'; exit 1; fi
+ip -d link show "$TRUNK"
 BRIDGE_FILTER=$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null || true)
 [[ -z "$BRIDGE_FILTER" || "$BRIDGE_FILTER" == 0 ]]
 for env in staging production; do
@@ -109,20 +118,25 @@ for env in staging production; do
         echo 'test peer resource already exists'; exit 1
     fi
 done
-sudo ip link add "$TRUNK" type bridge
-sudo ip link set "$TRUNK" up
 while IFS=$'\t' read -r env vlan cidr; do
-    sudo ip link add link "$TRUNK" name "$TRUNK.$vlan" type vlan id "$vlan"
-    sudo ip link set "$TRUNK.$vlan" up
+    ip -4 address show "$TRUNK.$vlan"
     sudo podman network create --internal -d macvlan -o "parent=$TRUNK.$vlan" \
         --subnet "$cidr" "e2e-$env"
 done < <(jq -r '.environments | to_entries[] | [.key,.value.vlan,.value.cidr] | @tsv' "$PROFILE/config.json")
 ```
 
-The trunk has no host address. Neither peer receives a management NIC or
-an Internet route. Continue parent steps 7–9 through the initial FIPS and
-LUKS checks, skipping the original **Environments** subsection. Both VMs
-remain on the separate management network for installation and administration.
+The trunk itself has no host address. Neither peer receives a management NIC
+or an Internet route. Complete parent step 7's DNS and preflight checks, then
+steps 8–9 through the initial FIPS and LUKS checks, skipping the original
+**Environments** subsection. Both VMs remain on the separate management
+network for installation and administration.
+
+If the FIPS context was initialized from the earlier provided-network input
+but has not started an apply, transfer the regenerated `fips` directory and
+run `bootwright context update --name "$CTX_FIPS" --input-dir "$HOME/fips" --yes`
+on the FIPS controller before its first plan. If an apply has registered,
+keep its frozen input and complete its destroy before importing the changed
+network ownership. A pre-existing fixture bridge is never silently adopted.
 
 ## Apply the node filter before workloads
 
@@ -333,8 +347,8 @@ These are fresh-case fixtures; do not use their names to delete another
 operator's pre-existing objects. The
 filter remains installed until the disposable VM is destroyed; deleting it
 while apps are present would reopen transit. Continue the parent's
-verified-fetch drill, destroy and evidence preservation. Parent step 11 removes
-the external containers and networks, then their VLAN interfaces and trunk,
-only after the node is gone. Its cleanup reads custom trunk/VLAN values from
-this profile's configuration. Preserve all evidence before either context is
+verified-fetch drill, destroy and evidence preservation. Parent step 10 removes
+the external peer containers and attachment networks before Bootwright removes
+its managed trunk, VLAN legs and host routing rules. Never delete those links
+by hand. Preserve all evidence before either context is
 purged or the controller VM is removed.

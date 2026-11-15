@@ -62,9 +62,9 @@ spec:
           subnets:
             - {{ $env.cidr }}
 
-          # .1 is the host containers' unused gateway; the pool is MetalLB's.
+          # Reserve the provider host, node, peer, egress identity and MetalLB pool.
           excludeSubnets:
-            - {{ $env.gatewayAddress }}/32
+            - {{ $env.hostAddress }}/32
             - {{ $env.nodeAddress }}/32
             - {{ $env.appAddress }}/32
             - {{ $env.egressAddress }}/32

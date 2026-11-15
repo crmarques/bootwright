@@ -15,7 +15,7 @@ spec:
           segmentRef: lab-guests
 
         - nicRef: {{ .Values.environments.trunk.interface }}
-          segmentRef: trunk
+          segmentRef: staging
 {{- end }}
 
   hardware:

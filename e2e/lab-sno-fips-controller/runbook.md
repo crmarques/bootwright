@@ -12,7 +12,7 @@ not the libvirt host. Two contexts run on two controllers:
 | --- | --- | --- |
 | Controller | this host | `fips-controller`, the RHEL 9.8 FIPS guest `CTX_BOOT` installs (`198.51.100.10`) |
 | Guests on this host | `fips-controller` (4 vCPU, 4 GiB, 60 GiB) | `sno-01` (8 vCPU, 16 GiB, 120 GiB, emulated TPM) at `198.51.100.31`, with a second NIC on the VLAN trunk |
-| Network | creates NAT `virbr-e2e` (`198.51.100.0/24`) | attaches to it, and to the trunk bridge `br-e2e-trunk` the runbook builds (step 6) |
+| Network | creates NAT `virbr-e2e` (`198.51.100.0/24`) | attaches to it, and to the provider-managed VLAN trunk `br-e2e-trunk` |
 | Services | DNS 53 and NTP 123 on this host's address, artifacts 8443/8080, BMC `127.0.0.1:8000` | DNS 53 and artifacts 8443/8080 on `fips-controller`; NTP is `CTX_BOOT`'s |
 | libvirt host | this host, local | this host as `libvirt-host`, reached as root over SSH at `198.51.100.1`; its emulated BMC listens on `198.51.100.1:8010` |
 
@@ -45,8 +45,9 @@ whose `serviceAllocation` ties each pool to its IngressController
 [B729](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node),
 [B889](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node),
 [B755](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node),
-[B757](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node)). The runbook itself builds the
-trunk and the app containers on this host, and applies with `oc` the
+[B757](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node)). Bootwright creates the host trunk and VLAN legs through managed `Network`
+objects. The runbook creates only the external app containers and their Podman
+attachment networks on this host, and applies with `oc` the
 namespaces, workloads, IngressControllers, EgressFirewalls and NetworkPolicies under
 `workloads/`, which are outside Bootwright's
 [scope](../../specs/project.md#product-scope). One ledger row per item run.
@@ -85,7 +86,7 @@ use the strict profile's rendered fixtures when overriding that topology.
 | Controller packages, host firewall grants, management NAT network, VMs, emulated BMCs, FIPS and TPM2 installation | Existing Bootwright Machine, Network, provider and install APIs; apply performs the setup. No manual firewall rules or libvirt definitions. |
 | DNS records, forwarding, NTP and artifacts | Existing managed infrastructure APIs; both contexts declare their services. No manual zone-file or artifact-server setup. |
 | Node NICs/VLANs, secondary bridges and address pools | NetworkConfig, OpenShiftCluster secondary networks and the NMState/MetalLB add-ons. |
-| Addressless host trunk and test peers | External laboratory fixtures in step 6. Managed tagged Networks currently require a host address on each VLAN leg; substituting them changes this test's isolation topology. Addressless ownership is a [candidate](../../specs/milestones/backlog.md#b1409), not an existing values switch. |
+| Host trunk, environment VLAN legs and test peers | Managed tagged Network objects create an unaddressed trunk and addressed host VLAN legs with NAT and inter-leg routing disabled. Only external peer containers and their Podman attachments remain test fixtures. |
 | FIPS controller resolver handoff | Step 7 uses nmstate after its DNS service is ready. A provided Machine cannot declare OS network configuration, and DNSServer has no per-zone forwarding; the [candidate](../../specs/milestones/backlog.md#b1410) needs a design before this can be automated. |
 | Namespaces, ingress shards, EgressIP, policies and strict node filter | Native declarative OpenShift fixtures, applied explicitly for this test. Existing [GitOps bootstrap](../../specs/api/addons.md#package-gitops) can own them in an estate using an approved repository/revision/path and a suitable ClusterRole. No such repository or additional operator is assumed here. |
 | SSH authorization, credential import, negative tests and evidence | Operator trust establishment and test assertions. They are not infrastructure lifecycle configuration. |
@@ -278,43 +279,21 @@ printf 'from="198.51.100.10" %s\n' "$(cat "$RUN_DIR/libvirt-host-key.pub")" | su
 sudo restorecon -R /root/.ssh
 ```
 
-## 6. Build the VLAN trunk and the environment apps (host)
+## 6. Managed environment networks
 
-In the second host terminal, as root, build the trunk bridge `sno-01`'s
-second NIC joins, one VLAN interface per environment, and one app
-container per environment on its VLAN. These are runtime links, gone at the
-next boot; nothing here is Bootwright's:
+The staging and production `Network` objects select `provided: false` and the
+libvirt provider, sharing `environments.trunk.bridge`. They declare their VLAN
+and host address, `forward: none`, and no `routedNetworkRefs`. The existing
+[managed VLAN API](../../specs/api/networks.md#tagged-managed-networks) creates
+persistent host links and refuses traffic between the host legs. The staging
+segment carries both VLANs to the node's second NIC. No manual bridge or VLAN
+creation is needed; step 7's substrate stage realizes them.
 
-```sh
-if ip link show br-e2e-trunk >/dev/null 2>&1; then echo 'trunk already exists'; exit 1; fi
-BRIDGE_FILTER=$(sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null || true)
-[[ -z "$BRIDGE_FILTER" || "$BRIDGE_FILTER" == 0 ]]
-for env in staging production; do
-    if sudo podman network exists "e2e-$env" || sudo podman container exists "e2e-$env-app"; then
-        echo 'test peer resource already exists'; exit 1
-    fi
-done
-sudo ip link add br-e2e-trunk type bridge
-sudo ip link set br-e2e-trunk up
-for vlan in 10 20; do
-    sudo ip link add link br-e2e-trunk name "br-e2e-trunk.$vlan" type vlan id "$vlan"
-    sudo ip link set "br-e2e-trunk.$vlan" up
-done
-sudo podman network create -d macvlan -o parent=br-e2e-trunk.10 --subnet 192.0.2.0/24 e2e-staging
-sudo podman network create -d macvlan -o parent=br-e2e-trunk.20 --subnet 203.0.113.0/24 e2e-production
-for env in staging production; do
-    case "$env" in staging) ip=192.0.2.50 ;; production) ip=203.0.113.50 ;; esac
-    sudo podman run -d --name "e2e-$env-app" --network "e2e-$env" --ip "$ip" \
-        registry.access.redhat.com/ubi9/python-312 \
-        /bin/sh -c "mkdir -p /tmp/www && echo $env-host > /tmp/www/index.html && exec python3 -m http.server 8080 --directory /tmp/www"
-done
-sudo podman ps --filter name=e2e- --format '{{.Names}} {{.Status}}'
-```
-
-The bridge has no address and the host routes nothing between the VLANs; a
-macvlan container is unreachable from this host itself, which is expected. If
-`bridge-nf-call-iptables` reads 1, stop: the host firewall would filter the
-trunk's bridged frames.
+The trunk itself is unaddressed; each host VLAN leg holds the `hostAddress`
+from [values.yaml](values.yaml), without advertising a default gateway. These
+host rules do not stop the SNO node routing between its own interfaces; use
+the strict profile for that boundary. The external app containers and their
+Podman attachment networks remain E2E fixtures, created after the substrate.
 
 ## 7. Build the FIPS context's services (FIPS controller)
 
@@ -359,6 +338,31 @@ network the node joins:
 ```sh
 sudo firewall-cmd --get-zone-of-interface=virbr-e2e                 # trusted
 ```
+
+With `environments.enabled`, the provider now owns the trunk and VLAN legs.
+In the host terminal, verify them, then create the external peers. The strict
+profile replaces this fixture block and starts its peers only after the node
+filter is proved. Stop if either Podman network or app container already exists.
+Require `bridge-nf-call-iptables` absent or 0 before creating the peers.
+
+```sh
+ip -d link show br-e2e-trunk
+ip -4 address show br-e2e-trunk.10                       # hostAddress on staging
+ip -4 address show br-e2e-trunk.20                       # hostAddress on production
+sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null  # absent or 0
+sudo podman network create --internal -d macvlan -o parent=br-e2e-trunk.10 --subnet 192.0.2.0/24 e2e-staging
+sudo podman network create --internal -d macvlan -o parent=br-e2e-trunk.20 --subnet 203.0.113.0/24 e2e-production
+for env in staging production; do
+    case "$env" in staging) ip=192.0.2.50 ;; production) ip=203.0.113.50 ;; esac
+    sudo podman run -d --name "e2e-$env-app" --network "e2e-$env" --ip "$ip" \
+        registry.access.redhat.com/ubi9/python-312 \
+        /bin/sh -c "mkdir -p /tmp/www && echo $env-host > /tmp/www/index.html && exec python3 -m http.server 8080 --directory /tmp/www"
+done
+sudo podman ps --filter name=e2e- --format '{{.Names}} {{.Status}}'
+```
+
+A macvlan peer is unreachable from this host itself; use `podman exec` for
+its traffic checks. Remove the peers before destroying the provider's links.
 
 ## 8. Install and interrupt (FIPS controller)
 
@@ -658,6 +662,19 @@ Record the exact answers of the first run.
 
 ## 10. Destroy the FIPS context (FIPS controller)
 
+First, with `environments.enabled`, remove the external peers and their
+Podman attachment networks in the **host terminal**. Bootwright must own the
+remaining trunk and VLAN cleanup; never delete those links by hand.
+
+```sh
+for env in staging production; do
+    sudo podman rm -f "e2e-$env-app"
+    sudo podman network rm "e2e-$env"
+done
+```
+
+Then, in the **FIPS controller** session:
+
 ```sh
 bootwright plan --context "$CTX_FIPS" --output json > "$RUN_DIR/destroy-plan.json"
 AUTH=$(jq -er '.result | select(.verb == "destroy") | .authorizations | select(length == 1) | .[0] | select(startswith("data-loss="))' "$RUN_DIR/destroy-plan.json")
@@ -743,26 +760,14 @@ if [ -e "$RUN_DIR/root-ssh-created" ]; then sudo rmdir -- /root/.ssh || sudo ls 
 grep -qx active "$RUN_DIR/sshd-before" || sudo systemctl stop sshd
 ```
 
-Remove the trunk and the app containers (with `environments.enabled`):
-use the strict profile's configuration to select the trunk and VLAN IDs when
-that profile was used. Run this only for resources this attempt created, after
-SNO has been destroyed; a failed partial setup is not permission to remove an
-existing network or container.
+The FIPS context's destroy removed its provider-owned VLAN legs and trunk.
+Confirm their absence (with `environments.enabled`); no manual link deletion
+belongs in cleanup:
 
 ```sh
-for env in staging production; do
-    sudo podman rm -f "e2e-$env-app"
-    sudo podman network rm "e2e-$env"
-done
-TRUNK=br-e2e-trunk
-VLANS=(10 20)
-if [[ -f "$RUN_DIR/isolation/config.json" ]]; then
-    TRUNK=$(jq -er '.trunk.bridge' "$RUN_DIR/isolation/config.json")
-    mapfile -t VLANS < <(jq -r '.environments[].vlan' "$RUN_DIR/isolation/config.json")
-fi
-for vlan in "${VLANS[@]}"; do sudo ip link del "$TRUNK.$vlan"; done
-sudo ip link del "$TRUNK"
-if ip link show "$TRUNK" >/dev/null 2>&1; then echo 'trunk still exists'; exit 1; fi
+ip link show br-e2e-trunk 2>&1 | tail -1                  # does not exist
+ip link show br-e2e-trunk.10 2>&1 | tail -1               # does not exist
+ip link show br-e2e-trunk.20 2>&1 | tail -1               # does not exist
 ```
 
 Remove the controller guest and the bootstrap context:

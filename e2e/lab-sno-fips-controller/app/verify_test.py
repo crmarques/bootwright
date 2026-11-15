@@ -23,7 +23,7 @@ def configuration():
             ("staging", "192.0.2", 10, "br-stg"),
             ("production", "203.0.113", 20, "br-prd")):
         envs[name] = {"cidr": subnet + ".0/24", "prefix": 24,
-                      "gatewayAddress": subnet + ".1",
+                      "hostAddress": subnet + ".1",
                       "nodeAddress": subnet + ".31",
                       "appAddress": subnet + ".50",
                       "egressAddress": subnet + ".60",

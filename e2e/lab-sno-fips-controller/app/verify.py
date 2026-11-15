@@ -87,7 +87,7 @@ def validate_config(config):
     for env in config["environments"].values():
         network = ipaddress.IPv4Network(env["cidr"])
         addresses = [ipaddress.IPv4Address(env[key]) for key in
-                     ("nodeAddress", "appAddress", "egressAddress", "gatewayAddress")]
+                     ("nodeAddress", "appAddress", "egressAddress", "hostAddress")]
         if len(set(addresses)) != 4 or any(
                 address not in network or address in
                 (network.network_address, network.broadcast_address)

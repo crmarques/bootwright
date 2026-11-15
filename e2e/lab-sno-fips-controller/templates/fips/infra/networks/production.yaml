@@ -6,11 +6,17 @@ metadata:
   name: production
 
 spec:
-  provided: true
-  description: The production environment, a VLAN on the trunk bridge the case builds, with no gateway because the host routes nothing between the VLANs.
+  provided: false
+  description: The production VLAN on the provider-managed trunk, without NAT or routing to staging.
   vlan: {{ .vlan }}
 
   ipv4:
     cidr: {{ .cidr }}
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: {{ $.Values.environments.trunk.bridge }}
+    forward: none
+    hostAddress: {{ .hostAddress }}
 {{- end }}
 {{- end }}

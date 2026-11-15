@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -11,6 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -129,5 +133,59 @@ func TestSNOIsolationVerifierFailures(t *testing.T) {
 	cmd := exec.Command("python3", "-B", "-m", "unittest", "discover", "-s", root, "-p", "verify_test.py")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("verifier failure-path tests: %v\n%s", err, output)
+	}
+}
+
+// Both networks must be realized by the provider, rather than requiring a
+// manually created bridge; only their common NIC carriage is shared.
+func TestSNOCaseOwnsIsolatedVLANNetworks(t *testing.T) {
+	for _, sets := range [][]string{
+		nil,
+		{"environments.trunk.bridge=br-fixture", "environments.staging.vlan=110", "environments.production.vlan=120"},
+	} {
+		render := e2eRender{name: "managed VLANs", sets: append(fipsControllerSubscriptions(), sets...)}
+		for _, directory := range renderE2ECase(t, e2eRenderScript(t), "lab-sno-fips-controller", render) {
+			if filepath.Base(directory) != "fips" {
+				continue
+			}
+			sources, err := (inputfs.Reader{}).Read(context.Background(), []string{directory})
+			if err != nil {
+				t.Fatal(err)
+			}
+			state, _ := compileAcceptance(t, sources)
+			catalog := state.Effective()
+			staging := requireObject(t, catalog, api.Network, "staging")
+			production := requireObject(t, catalog, api.Network, "production")
+			for _, network := range []api.Object{staging, production} {
+				spec := network.Spec()
+				if spec.Get("provided").Bool() || spec.Get("libvirt", "providerRef").Text() != "lab-libvirt" {
+					t.Fatalf("%s is not provider-managed", network.Name())
+				}
+				if spec.Get("libvirt", "forward").Text() != "none" || spec.Get("libvirt", "routedNetworkRefs").Len() != 0 {
+					t.Fatalf("%s routes or translates environment traffic", network.Name())
+				}
+				if spec.Has("ipv4", "gateway") || spec.Get("libvirt", "hostAddress").Text() == "" {
+					t.Fatalf("%s needs an explicit host address without advertising a gateway", network.Name())
+				}
+			}
+			if staging.Spec().Get("libvirt", "bridge").Text() != production.Spec().Get("libvirt", "bridge").Text() {
+				t.Fatal("environment networks do not share a managed trunk")
+			}
+			refs := staging.Spec().Get("libvirt", "taggedNetworkRefs").Strings()
+			if len(refs) != 1 || refs[0] != "production" {
+				t.Fatalf("staging segment carriage = %v", refs)
+			}
+			provider := requireObject(t, catalog, api.InfraProvider, "lab-libvirt")
+			for _, segment := range provider.Spec().Get("segments").Items() {
+				if segment.Get("libvirt", "bridge").Text() == staging.Spec().Get("libvirt", "bridge").Text() {
+					t.Fatal("an external segment still claims the managed trunk")
+				}
+			}
+			machine := requireObject(t, catalog, api.Machine, "sno-01")
+			nics := machine.Spec().Get("substrate", "libvirt", "nics").Items()
+			if len(nics) != 2 || nics[1].Get("segmentRef").Text() != "staging" {
+				t.Fatal("node does not attach to the managed tagged segment")
+			}
+		}
 	}
 }
