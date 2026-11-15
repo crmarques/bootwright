@@ -138,7 +138,7 @@ func registerOperation(t *testing.T, store *Store, id string) {
 		}
 		operation := operationstore.Operation{
 			Version: operationstore.OperationVersion, ID: id, Verb: plan.Verb, Context: "example", Revision: "rev-" + strings.Repeat("ef", 16),
-			InputDigest: strings.Repeat("1", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("2", 64),
+			InputDigest: strings.Repeat("1", 64), PlanDigest: digest, Contracts: fixtureOperationContracts(plan), AutomationDigest: strings.Repeat("2", 64),
 			Executable: operationstore.Executable{Version: "devel", Commit: "abcdef1"},
 			Closure:    &operationstore.Closure{Digest: strings.Repeat("3", 64), Python: "3.14", Ansible: "2.21.4"},
 			Bindings:   []string{}, State: reconciliation.OperationRunning,

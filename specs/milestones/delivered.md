@@ -15970,3 +15970,18 @@ The delivering commit records focused domain, inspection and presentation
 tests, production command composition, golden updates and the full integration
 gate. Fixtures cover OpenShift and OKD, single and multiple nodes, IPv4 and
 IPv6, and absent completion evidence. No live operator acceptance is claimed.
+
+## X474 — Operation fixture execution contracts
+
+### B1407
+
+M1 defect found while X473 ran the full gate against the saved-plan execution
+contract change. Log-view and context-store fixtures omitted the now-required
+per-implementation contract digests. Both failures reproduced on unchanged
+main, blocking unrelated command delivery.
+
+The fixtures now carry synthetic contract metadata for every plan block. The
+[saved operation contract](../state-reconciliation.md) and runtime behavior
+remain unchanged. Focused context-store and log-view tests passed; the
+delivering commits record the combined full gate and safety checks. This
+repository-only defect needs no live operator acceptance.

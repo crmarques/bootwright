@@ -96,7 +96,7 @@ func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
 		}
 		operation := operationstore.Operation{
 			Version: operationstore.OperationVersion, ID: id, Verb: plan.Verb, Source: source, Context: record.Name, Revision: "rev-" + strings.Repeat("ef", 16),
-			InputDigest: strings.Repeat("1", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("2", 64),
+			InputDigest: strings.Repeat("1", 64), PlanDigest: digest, Contracts: fixtureOperationContracts(plan), AutomationDigest: strings.Repeat("2", 64),
 			Executable: operationstore.Executable{Version: "devel", Commit: "abcdef1"},
 			Closure:    &operationstore.Closure{Digest: strings.Repeat("3", 64), Python: "3.14", Ansible: "2.21.4"},
 			Bindings:   []string{}, State: reconciliation.OperationRunning,
@@ -282,7 +282,7 @@ func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
 		}
 		operation := operationstore.Operation{
 			Version: operationstore.OperationVersion, ID: id, Verb: plan.Verb, Source: source, Context: record.Name, Revision: "rev-" + strings.Repeat("ef", 16),
-			InputDigest: strings.Repeat("1", 64), PlanDigest: digest, AutomationDigest: strings.Repeat("2", 64),
+			InputDigest: strings.Repeat("1", 64), PlanDigest: digest, Contracts: fixtureOperationContracts(plan), AutomationDigest: strings.Repeat("2", 64),
 			Executable: operationstore.Executable{Version: "devel", Commit: "abcdef1"},
 			Closure:    &operationstore.Closure{Digest: strings.Repeat("3", 64), Python: "3.14", Ansible: "2.21.4"},
 			Bindings:   []string{}, State: reconciliation.OperationRunning,
@@ -419,4 +419,12 @@ func TestOperationPlanUsesItsOwnRecordBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func fixtureOperationContracts(plan reconciliation.Plan) map[string]string {
+	contracts := map[string]string{}
+	for _, block := range plan.Blocks {
+		contracts[block.Implementation] = strings.Repeat("c", 64)
+	}
+	return contracts
 }
