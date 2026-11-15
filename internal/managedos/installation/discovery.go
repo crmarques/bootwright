@@ -412,7 +412,12 @@ func (c DiscoveryCapability) ObserveRemoval(ctx context.Context, e lifecycle.Exe
 	if err == nil && proof.Cleaned {
 		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: r.Evidence}, nil
 	}
-	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: r.Evidence}, err
+	if err != nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+	}
+	// A valid unfinished observation proves owned custody or a pristine
+	// external boundary. Cleanup must be allowed before inventory completes.
+	return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: r.Evidence}, nil
 }
 
 func (c DiscoveryCapability) Removal(ctx context.Context, b reconciliation.Block) (lifecycle.Removal, error) {

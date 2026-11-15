@@ -1520,6 +1520,14 @@ interfaces. Its authenticated report is bound to the machine UUID/MAC set,
 context incarnation, operation/attempt, nonce, frozen request and media/tool
 identities. The controller persists a complete immutable report before
 acknowledging shutdown, then proves power-off and owned-media cleanup.
+An unfinished discovery is removable after a read-only observation proves its
+custody, exact machine identity and owned media/power state; a completed disk
+report is not a cleanup prerequisite. Missing custody requires a positive
+pristine boundary: the exact machine off, no inserted media and no private
+publication. A failed or foreign observation stays unknown. A committed
+external-cleanup record is recovered locally without revisiting a later OS,
+even when local sealing was interrupted. The removing attempt independently
+repeats ownership proofs before acting.
 Interrupted custody remains attributable and resumable; an incomplete report
 never becomes an installation target. Discovery never creates RAID volumes.
 The private ISO publication limit derives from the pinned source size, both

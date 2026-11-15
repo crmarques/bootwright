@@ -89,16 +89,19 @@ class Controller:
         self.binding = json.loads(base64.b64decode(encoded, validate=True))
         validate(request, digest, self.binding)
         parts = ["machines", self.binding["machine"], "discovery", self.binding["operation"]]
+        self.lock = None
         if create:
             hosted_area.ensure(self.binding["context"], parts, root=str(ROOT))
-        elif not hosted_area.prove(self.binding["context"], parts, root=str(ROOT)):
-            raise FileNotFoundError("discovery custody")
+        present = create or hosted_area.prove(self.binding["context"], parts, root=str(ROOT))
         self.root = Path(hosted_area.target(self.binding["context"], parts, root=str(ROOT)))
+        if not present:
+            return  # Observation proves the pristine boundary without mkdir.
         self.lock = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
         fcntl.flock(self.lock, fcntl.LOCK_EX)
 
     def close(self):
-        os.close(self.lock)
+        if self.lock is not None:
+            os.close(self.lock)
 
     def load(self):
         state = json.loads(records.read(self.root / "custody.json"))
@@ -129,14 +132,38 @@ class Controller:
         return report
 
     def evidence(self):
-        self.load()
+        try:
+            self.load()
+        except FileNotFoundError:
+            # Missing local custody alone says nothing about external effects.
+            self.prove_unprepared()
+            return self.unfinished()
         proof = self.completion()
-        if proof is not None and (self.root / "sealed.json").exists():
-            seal = json.loads(records.read(self.root / "sealed.json", 4096))
-            if seal != self.seal(proof):
-                raise ValueError("discovery local cleanup seal")
-            return proof
+        if proof is not None:
+            if (self.root / "sealed.json").exists():
+                seal = json.loads(records.read(self.root / "sealed.json", 4096))
+                if seal != self.seal(proof):
+                    raise ValueError("discovery local cleanup seal")
+                return proof
+            # External cleanup was durably committed. Only local sealing is
+            # unfinished; never inspect an OS that may have started later.
+            return self.unfinished()
+        self.prove_owned_boot()
+        return self.unfinished()
+
+    def unfinished(self):
         return {"version": VERSION, "request": self.digest, "completed": False, "cleaned": False}
+
+    def prove_owned_boot(self):
+        self.phase = "controller"
+        client = self.client()
+        power = self.target(client)
+        if power not in ("On", "Off"):
+            raise ValueError("discovery target power is unknown")
+        _directory, url = self.publication()
+        inserted = client.inserted()
+        if inserted not in ("", url) or (power == "On" and inserted != url):
+            raise ValueError("foreign virtual media")
 
     def completion(self):
         try:
@@ -417,7 +444,7 @@ class Controller:
     def prove_unprepared(self):
         self.phase = "controller"
         client = self.client()
-        if self.target(client) != "Off" or client.inserted():
+        if self.target(client) != "Off" or client.inserted() != "":
             raise ValueError("missing discovery custody has unresolved external ownership")
         parent = Path(self.request["private"]["path"])
         if parent.exists():

@@ -17,12 +17,13 @@ import (
 )
 
 type inventoryRunner struct {
-	t        *testing.T
-	calls    int
-	prepared *[]json.RawMessage
-	disks    []diskselection.Disk
-	mutate   func(*diskselection.Report)
-	evidence json.RawMessage
+	unfinished bool
+	t          *testing.T
+	calls      int
+	prepared   *[]json.RawMessage
+	disks      []diskselection.Disk
+	mutate     func(*diskselection.Report)
+	evidence   json.RawMessage
 }
 
 func (r *inventoryRunner) Run(_ context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
@@ -46,7 +47,7 @@ func (r *inventoryRunner) Run(_ context.Context, request lifecycle.RunRequest) (
 	if err != nil {
 		r.t.Fatal(err)
 	}
-	r.evidence, err = json.Marshal(DiscoveryEvidence{Version: discoveryVersion, Request: request.Digest, Completed: true, Cleaned: true, Report: wire})
+	r.evidence, err = json.Marshal(DiscoveryEvidence{Version: discoveryVersion, Request: request.Digest, Completed: !r.unfinished, Cleaned: !r.unfinished, Report: wire})
 	if err != nil {
 		r.t.Fatal(err)
 	}
@@ -104,6 +105,7 @@ func TestDiscoveryInventoryBecomesAnExactInstallerTarget(t *testing.T) {
 	if result.Outcome != reconciliation.OutcomeChanged || runner.calls != 1 {
 		t.Fatal("inventory did not run once")
 	}
+
 	input.AppliedEvidence = func(context.Context, string, string) ([]lifecycle.BlockEvidence, error) {
 		return []lifecycle.BlockEvidence{{Operation: op, Block: block, Kind: Kind, Object: block.Object, Implementation: DiscoveryImplementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: runner.evidence}}, nil
 	}
@@ -200,6 +202,18 @@ func TestDiscoveryInventoryBecomesAnExactInstallerTarget(t *testing.T) {
 	if _, err := DecodeRequest(wire); err == nil {
 		t.Fatal("a different root crossed the frozen discovery boundary")
 	}
+	t.Run("owned unfinished discovery can be removed", func(t *testing.T) {
+		before := runner.evidence
+		runner.unfinished = true
+		defer func() { runner.unfinished, runner.evidence = false, before }()
+		pending := execution
+		pending.Incarnation = input.Context.Incarnation
+		pending.ApplyPreparations = prepared
+		observation, err := owner.ObserveRemoval(ctx, pending)
+		if err != nil || observation.Effect != reconciliation.EffectPartial {
+			t.Fatalf("owned unfinished removal is %v (%v), want partial", observation.Effect, err)
+		}
+	})
 }
 
 func TestDiscoveryRefinementChangesOnlyUninstalledSelectionPolicy(t *testing.T) {

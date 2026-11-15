@@ -247,6 +247,7 @@ def test_observation_cannot_complete_before_local_cleanup_is_sealed(tmp_path, mo
     (instance.root / "sealed.json").unlink()
     image = instance.root / "discovery.iso"
     image.write_bytes(b"interrupted private fixture")
+    instance.client = Mock(side_effect=AssertionError("observation revisited hardware after committed cleanup"))
     assert instance.evidence() == {"version": controller.VERSION, "request": instance.digest, "completed": False, "cleaned": False}
     assert image.exists()
     instance.client = Mock(side_effect=AssertionError("revisited hardware after external cleanup"))
@@ -547,3 +548,78 @@ def test_publication_refuses_nonregular_and_symlink_sources(tmp_path):
     with pytest.raises(OSError):
         controller.publish_image(link, target, 1 << 20)
     assert not target.exists() and not list(tmp_path.glob(".stage-*"))
+
+
+@pytest.mark.parametrize("power,media,allowed", [
+    ("On", "owned", True), ("Off", "owned", True), ("Off", "", True),
+    ("On", "", False), ("On", "foreign", False), ("Off", "foreign", False), ("Unknown", "owned", False), ("Off", None, False),
+])
+def test_unfinished_observation_proves_live_ownership_without_mutation(tmp_path, monkeypatch, power, media, allowed):
+    instance = fixture_custody(tmp_path, monkeypatch)
+    state = {"binding": instance.binding, "token": "a" * 64, "reportToken": "b" * 64}
+    (instance.root / "custody.json").write_bytes(controller.canonical_json.canonical(state))
+    instance.publication = Mock(return_value=(tmp_path / "private", "owned"))
+    instance.target.return_value = power
+    instance.client.return_value.inserted.return_value = media
+    monkeypatch.setattr(controller.records, "write", Mock(side_effect=AssertionError("observation wrote custody")))
+    before = sorted(path.name for path in instance.root.iterdir())
+    if allowed:
+        assert instance.evidence() == {"version": controller.VERSION, "request": instance.digest, "completed": False, "cleaned": False}
+    else:
+        with pytest.raises(ValueError):
+            instance.evidence()
+    assert sorted(path.name for path in instance.root.iterdir()) == before
+    instance.target.assert_called_once_with(instance.client.return_value)
+    instance.client.return_value.power.assert_not_called()
+    instance.client.return_value.insert.assert_not_called()
+    instance.client.return_value.eject.assert_not_called()
+
+
+def test_unfinished_observation_cannot_hide_unreachable_or_foreign_identity(tmp_path, monkeypatch):
+    instance = fixture_custody(tmp_path, monkeypatch)
+    instance.load = Mock(return_value={"token": "a" * 64})
+    instance.target.side_effect = ValueError("discovery controller identity")
+    with pytest.raises(ValueError, match="identity"):
+        instance.evidence()
+    instance.client.return_value.power.assert_not_called()
+
+
+@pytest.mark.parametrize("power,media,publication,allowed", [
+    ("Off", "", False, True), ("On", "", False, False),
+    ("Off", "foreign", False, False), ("Off", "", True, False),
+])
+def test_missing_custody_observation_requires_a_pristine_external_boundary(tmp_path, monkeypatch, power, media, publication, allowed):
+    instance = fixture_custody(tmp_path, monkeypatch)
+    instance.target.return_value = power
+    instance.client.return_value.inserted.return_value = media
+    if publication:
+        parent = Path(instance.request["private"]["path"])
+        parent.mkdir()
+        (parent / "unknown").mkdir()
+    monkeypatch.setattr(controller.records, "write", Mock(side_effect=AssertionError("observation created custody")))
+    if allowed:
+        assert not instance.evidence()["cleaned"]
+    else:
+        with pytest.raises(ValueError, match="unresolved"):
+            instance.evidence()
+    assert not (instance.root / "custody.json").exists()
+    instance.client.return_value.power.assert_not_called()
+    instance.client.return_value.eject.assert_not_called()
+
+
+def test_observation_before_directory_creation_is_read_only(tmp_path, monkeypatch):
+    import base64
+    binding = {"context": "lab", "machine": "node", "operation": "op-" + "a" * 32}
+    monkeypatch.setattr(controller, "ROOT", tmp_path / "hosted")
+    monkeypatch.setattr(controller, "validate", Mock())
+    monkeypatch.setattr(controller.hosted_area, "prove", Mock(return_value=False))
+    monkeypatch.setattr(controller.hosted_area, "ensure", Mock(side_effect=AssertionError("observation created a directory")))
+    material = {"bindingBase64": base64.b64encode(controller.canonical_json.canonical(binding)).decode()}
+    instance = controller.Controller({"private": {"path": str(tmp_path / "served")}}, "b" * 64, material)
+    instance.client = Mock(return_value=Mock(inserted=Mock(return_value="")))
+    instance.target = Mock(return_value="Off")
+    assert not instance.evidence()["completed"]
+    assert instance.lock is None and not instance.root.exists()
+    assert not (tmp_path / "hosted").exists()
+    instance.close()
+    instance.client.return_value.power.assert_not_called()

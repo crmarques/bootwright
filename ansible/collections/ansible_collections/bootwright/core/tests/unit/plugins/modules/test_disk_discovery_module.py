@@ -111,3 +111,17 @@ def test_disabled_authoritative_bmc_verification_is_actionable_without_a_trust_w
         "discovery_failure": "bmc-media-verification", "discovery_phase": "media-insertion"
     }
     client.fetch.assert_not_called()
+
+
+def test_missing_dependency_during_observation_never_fabricates_removable_evidence(monkeypatch):
+    class Refused(Exception):
+        pass
+    invocation = Mock(params={"operation": "observe", "request": {}, "digest": "a" * 64, "material": {}})
+    invocation.fail_json.side_effect = Refused
+    monkeypatch.setattr(module, "AnsibleModule", Mock(return_value=invocation))
+    monkeypatch.setattr(module.custody, "Controller", Mock(side_effect=FileNotFoundError("SECRET unavailable")))
+    with pytest.raises(Refused):
+        module.main()
+    invocation.exit_json.assert_not_called()
+    invocation.fail_json.assert_called_once()
+    assert "SECRET" not in repr(invocation.fail_json.call_args)

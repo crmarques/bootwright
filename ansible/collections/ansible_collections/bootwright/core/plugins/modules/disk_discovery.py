@@ -172,8 +172,6 @@ def main():
         evidence = {"apply": controller.apply, "observe": controller.evidence, "destroy": controller.destroy}[operation]()
         module.exit_json(changed=operation != "observe", evidence=evidence)
     except FileNotFoundError as error:
-        if module.params["operation"] == "observe":
-            module.exit_json(changed=False, evidence={"version": custody.VERSION, "request": module.params["digest"], "completed": False, "cleaned": False})
         module.fail_json(msg="disk discovery custody is incomplete; continue the original operation", **diagnostic(error, controller))
     except (OSError, ValueError, KeyError, TypeError, custody.redfish_control.ControllerError, bounded_process.Failure) as error:
         module.fail_json(
