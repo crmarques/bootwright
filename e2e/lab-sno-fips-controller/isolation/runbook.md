@@ -54,7 +54,9 @@ Parent step 1 defines `RUN_DIR` and `CASE_VALUES`. Use that same host shell;
 do not create a second run directory. `CASE_VALUES` is the private overrides
 file parent step 2 passes to `e2e/render.sh`; merge any overrides into it
 before either render. Operator subscription pins are resolved in parent step 2.
-Resolve the approved UBI Python image by digest with the installed `oc`:
+Resolve the tagged UBI Python image for Linux amd64 before rendering. Stop on
+a failed lookup or malformed digest; an unfiltered multi-architecture lookup
+does not select this case's platform:
 
 ```sh
 CASE="$PWD/e2e/lab-sno-fips-controller"
@@ -62,8 +64,8 @@ PROFILE="$RUN_DIR/isolation"
 VALUES="${CASE_VALUES:?Complete parent step 1 first}"
 mkdir -m 700 -p "$PROFILE"
 test ! -e "$PROFILE/config.json"
-IMAGE=registry.access.redhat.com/ubi9/python-312
-DIGEST=$(oc image info "$IMAGE" -o json | jq -er '.digest')
+IMAGE=registry.access.redhat.com/ubi9/python-312:latest
+DIGEST=$(oc image info "$IMAGE" --filter-by-os=linux/amd64 -o json | jq -er '.digest | select(test("^sha256:[a-f0-9]{64}$"))')
 printf '%s@%s\n' "$IMAGE" "$DIGEST" > "$PROFILE/image.txt"
 helm template isolation "$CASE/isolation" -f "$CASE/values.yaml" -f "$VALUES" \
     --set-string "isolation.image=$IMAGE@$DIGEST" \
