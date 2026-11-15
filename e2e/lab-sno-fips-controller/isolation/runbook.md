@@ -93,6 +93,9 @@ The API-managed DNS chain is described in parent step 7; the controller keeps
 its installed bootstrap resolver, and no manual `nmstatectl` step belongs in
 a fresh run. Source the saved host or controller environment file from the
 parent's resume section when reopening a terminal.
+Use the parent's pinned executable through the saved `PATH` for host and
+controller commands, including snapshot transfers and cleanup. A newer build
+in the checkout does not replace this run's executable.
 
 If overriding addresses, VLANs, bridges, image or domain, merge those values
 into this private file before rendering, and pass this same file to the parent
@@ -154,7 +157,7 @@ Transfer the profile from the host to the FIPS controller using the parent's
 `CTX_BOOT` session:
 
 ```sh
-./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
+bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
     "local:$PROFILE" remote:isolation
 ```
 
@@ -301,7 +304,7 @@ written only after the pod checks pass. On the host, retrieve it and run the
 external assertions:
 
 ```sh
-./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
+bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
     remote:isolation/snapshot.json "local:$PROFILE/snapshot.json"
 sudo python3 "$PROFILE/app/verify.py" --config "$PROFILE/config.json" \
     --mode external --snapshot "$PROFILE/snapshot.json" | tee "$PROFILE/external-before-reboot.log"

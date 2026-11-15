@@ -121,6 +121,14 @@ host legs. Its DNS forwarding is declared through the managed service API.
   set -euo pipefail
   umask 077
   RUN_DIR=$(mktemp -d "$HOME/bootwright-sno.XXXXXX")
+  mkdir -m 0700 "$RUN_DIR/bin"
+  BOOTWRIGHT_BIN="$RUN_DIR/bin/bootwright"
+  install -m 0755 bin/bootwright "$BOOTWRIGHT_BIN"
+  sha256sum "$BOOTWRIGHT_BIN" > "$RUN_DIR/bootwright.sha256"
+  PATH_BEFORE_CASE="$PATH"
+  export PATH="$RUN_DIR/bin:$PATH"
+  hash -r
+  bootwright version
   CASE="$PWD/e2e/lab-sno-fips-controller"
   VALUES="$RUN_DIR/values.yaml"
   printf '# Private case overrides\n' > "$VALUES"
@@ -134,6 +142,12 @@ host legs. Its DNS forwarding is declared through the managed service API.
 Merge private overrides into `VALUES` before rendering. Complete step 2
 through `PIN_VALUES` before rendering the strict profile, then continue its
 instructions. Keep this host run directory through cleanup.
+
+The private executable is this run's CLI through cleanup. Keep it and its
+checksum even when rebuilding the checkout for another task. Both contexts
+must retain an executable that reads their operation records; development
+builds can deliberately change that format. Shared evidence preservation uses
+`BOOTWRIGHT_BIN` when this case sets it.
 
 ## 2. Render and build the bootstrap context (host)
 
@@ -224,20 +238,20 @@ CTX_FIPS="lab-sno-fips-controller"
 INPUT_DIR="$HOME/bootwright-e2e/lab-sno-fips-controller"
 CONTROLLER_ADDRESS="$HOST_ADDRESS"
 PROFILE="${PROFILE:-$RUN_DIR/isolation}"
-declare -p RUN_DIR CASE VALUES PIN_VALUES INPUT_DIR CTX_BOOT CTX_FIPS HOST_ADDRESS PROFILE PATH > "$RUN_DIR/host-env.sh"
+declare -p RUN_DIR CASE VALUES PIN_VALUES INPUT_DIR CTX_BOOT CTX_FIPS HOST_ADDRESS PROFILE BOOTWRIGHT_BIN PATH_BEFORE_CASE PATH > "$RUN_DIR/host-env.sh"
 if [ -n "${HOST_CHECKS:-}" ]; then
     cp -a "$HOST_CHECKS" "$RUN_DIR/host-checks"
     HOST_CHECKS="$RUN_DIR/host-checks"
     declare -p HOST_CHECKS >> "$RUN_DIR/host-env.sh"
 fi
 printf 'Restore host variables with: source %s/host-env.sh\n' "$RUN_DIR"
-./bin/bootwright validate -f "$INPUT_DIR/bootstrap"
-./bin/bootwright validate -f "$INPUT_DIR/fips"
-./bin/bootwright context init --name "$CTX_BOOT" --input-dir "$INPUT_DIR/bootstrap"
-./bin/bootwright secret generate --context "$CTX_BOOT"
-./bin/bootwright secret check --context "$CTX_BOOT"
-./bin/bootwright plan --context "$CTX_BOOT"
-./bin/bootwright apply --context "$CTX_BOOT" --stage controller --yes
+bootwright validate -f "$INPUT_DIR/bootstrap"
+bootwright validate -f "$INPUT_DIR/fips"
+bootwright context init --name "$CTX_BOOT" --input-dir "$INPUT_DIR/bootstrap"
+bootwright secret generate --context "$CTX_BOOT"
+bootwright secret check --context "$CTX_BOOT"
+bootwright plan --context "$CTX_BOOT"
+bootwright apply --context "$CTX_BOOT" --stage controller --yes
 CONTEXT="$CTX_BOOT"
 ```
 
@@ -245,11 +259,11 @@ Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)
 in this shell, then:
 
 ```sh
-./bin/bootwright preflight --context "$CTX_BOOT" --stage controller
-./bin/bootwright apply --context "$CTX_BOOT" --stage infrastructure-services --yes
-./bin/bootwright apply --context "$CTX_BOOT" --yes
-./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- cat /proc/sys/crypto/fips_enabled
-./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- update-crypto-policies --show
+bootwright preflight --context "$CTX_BOOT" --stage controller
+bootwright apply --context "$CTX_BOOT" --stage infrastructure-services --yes
+bootwright apply --context "$CTX_BOOT" --yes
+bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- cat /proc/sys/crypto/fips_enabled
+bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- update-crypto-policies --show
 ```
 
 The two reads must print `1` and `FIPS`.
@@ -264,13 +278,13 @@ match:
 
 ```sh
 sudo -v
-./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sudo -n install -m 0755 /dev/stdin /usr/local/bin/bootwright < bin/bootwright
-sha256sum bin/bootwright
-./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sha256sum /usr/local/bin/bootwright
+bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sudo -n install -m 0755 /dev/stdin /usr/local/bin/bootwright < "$BOOTWRIGHT_BIN"
+sha256sum "$BOOTWRIGHT_BIN"
+bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sha256sum /usr/local/bin/bootwright
 # Copy the independent diagnostic client verified in step 2:
-./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sudo -n install -m 0755 /dev/stdin /usr/local/bin/oc < "$RUN_DIR/clients/oc"
-./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller "local:$INPUT_DIR/fips" remote:fips
-./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller "local:$HOME/openshift-pull-secret" remote:openshift-pull-secret
+bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sudo -n install -m 0755 /dev/stdin /usr/local/bin/oc < "$RUN_DIR/clients/oc"
+bootwright machine cp --context "$CTX_BOOT" --name fips-controller "local:$INPUT_DIR/fips" remote:fips
+bootwright machine cp --context "$CTX_BOOT" --name fips-controller "local:$HOME/openshift-pull-secret" remote:openshift-pull-secret
 ```
 
 Hand over `libvirt-host`'s ECDSA host key as one known-hosts line for its
@@ -280,8 +294,8 @@ build refuses (`unsupported KEX method mlkem768x25519-sha256`):
 
 ```sh
 printf '198.51.100.1 %s\n' "$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ecdsa_key.pub)" | \
-    ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sh -c 'umask 077; cat > libvirt-host.known_hosts'
-./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- dnf repolist
+    bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- sh -c 'umask 077; cat > libvirt-host.known_hosts'
+bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- dnf repolist
 ```
 
 `dnf repolist` must list `bootwright-dvd-baseos` and `bootwright-dvd-appstream`.
@@ -291,7 +305,7 @@ printf '198.51.100.1 %s\n' "$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ecdsa_key.pub)" 
 Open the session and keep it for the FIPS controller steps, 4 to 10:
 
 ```sh
-./bin/bootwright machine rsh --context "$CTX_BOOT" --name fips-controller
+bootwright machine rsh --context "$CTX_BOOT" --name fips-controller
 ```
 
 On `fips-controller` (the version must name the same clean build as the host):
@@ -303,8 +317,13 @@ umask 077
 RUN_DIR="$HOME/bootwright-sno-controller"
 PROFILE="$HOME/isolation"
 MANIFESTS="$PROFILE/rendered/sno-environment-isolation/templates"
-mkdir -p -m 0700 "$RUN_DIR"
-declare -p CTX_FIPS RUN_DIR PROFILE MANIFESTS > "$RUN_DIR/controller-env.sh"
+mkdir -p -m 0700 "$RUN_DIR/bin"
+BOOTWRIGHT_BIN="$RUN_DIR/bin/bootwright"
+install -m 0755 /usr/local/bin/bootwright "$BOOTWRIGHT_BIN"
+sha256sum "$BOOTWRIGHT_BIN" > "$RUN_DIR/bootwright.sha256"
+export PATH="$RUN_DIR/bin:$PATH"
+hash -r
+declare -p CTX_FIPS RUN_DIR PROFILE MANIFESTS BOOTWRIGHT_BIN PATH > "$RUN_DIR/controller-env.sh"
 bootwright version
 bootwright controller install --yes
 bootwright controller check                     # the FIPS mode check reports 1
@@ -335,7 +354,7 @@ CTX_BOOT="lab-sno-fips-controller-bootstrap"
 read -r -p 'Private host run directory printed in step 1: ' RUN_DIR
 source "$RUN_DIR/host-env.sh"
 sudo -v
-./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- cat libvirt-host-key.pub > "$RUN_DIR/libvirt-host-key.pub"
+bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- cat libvirt-host-key.pub > "$RUN_DIR/libvirt-host-key.pub"
 AUTH_LINE="from=\"198.51.100.10\" $(cat "$RUN_DIR/libvirt-host-key.pub")"
 if ! test -e "$RUN_DIR/root-authorized_keys.before" && ! test -e "$RUN_DIR/root-authorized_keys.created"; then
     if sudo test -e /root/.ssh/authorized_keys; then
@@ -523,7 +542,7 @@ a local wrapper with its own working directory, cache and clean environment:
 ```sh
 bootwright status --context "$CTX_FIPS"
 bootwright cluster info --context "$CTX_FIPS" --name sno
-bootwright diff --context "$CTX_FIPS" --observe        # clean
+bootwright diff --context "$CTX_FIPS" --observe        # inspect field and observation coverage below
 bootwright apply --context "$CTX_FIPS" --yes           # settles: boots nothing
 KUBECONFIG="$RUN_DIR/kubeconfig"; export KUBECONFIG
 bootwright cluster kubeconfig --context "$CTX_FIPS" --name sno > "$KUBECONFIG"
@@ -546,6 +565,14 @@ oc get nodes; oc get clusterversion; oc get co
 oc debug node/master-0 -- chroot /host cat /proc/sys/crypto/fips_enabled   # 1
 oc debug node/master-0 -- chroot /host lsblk -f                            # with tpm2: a crypto_LUKS root
 ```
+
+Require unchanged input, the same plan, no changed fields and no unknown native
+block observations. Add-on bindings and secondary network configuration have
+no live field projection in the current view: a proved-present observation can
+therefore leave their field comparisons unknown. Record this coverage limit
+and verify those families through their CSV and NNCP conditions and the
+environment traffic checks. An unknown comparison is not a clean field
+comparison; a missing or unproved native object stops the run.
 
 ### Disk encryption (with `security.tpm2`)
 
@@ -577,7 +604,7 @@ here. In the second host terminal:
 
 ```sh
 tar -C e2e/lab-sno-fips-controller -cf - workloads | \
-    ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- tar -xf -
+    bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- tar -xf -
 ```
 
 On the FIPS controller, keep the default ingress off both environments, then
@@ -764,7 +791,7 @@ bmc -X DELETE "https://198.51.100.1:8010$CERT"
 bmc "$CD" | jq '{Inserted, VerifyCertificate}'                       # false, true: as the eject left it
 bmc "$CD/Certificates" | jq '."Members@odata.count"'                 # 0
 rm -f -- "$RUN_DIR/bmc.password" "$RUN_DIR/bmc.curlrc"
-bootwright diff --context "$CTX_FIPS" --observe                       # clean
+bootwright diff --context "$CTX_FIPS" --observe                       # no changed fields; retain projection limits
 ```
 
 The expected answers are this runbook's reading of the upstream sushy-tools
@@ -788,13 +815,16 @@ Then, in the **FIPS controller** session:
 
 ```sh
 bootwright plan --context "$CTX_FIPS" --output json > "$RUN_DIR/destroy-plan.json"
+jq '.result | {verb,steps,authorizations,stops}' "$RUN_DIR/destroy-plan.json"
 AUTH=$(jq -er '.result | select(.verb == "destroy") | .authorizations | select(length == 1) | .[0] | select(startswith("data-loss="))' "$RUN_DIR/destroy-plan.json")
 if bootwright destroy --context "$CTX_FIPS" --authorize "$AUTH" --yes \
     --output json > "$RUN_DIR/destroy-while-running.json"; then
-    echo 'unexpected success: expected powered-on refusal'; exit 1
+    printf 'Expected a powered-on destroy refusal\n' >&2
+    exit 1
 fi
+cat "$RUN_DIR/destroy-while-running.json"
 jq -e '.diagnostics | any(.code == "lifecycle.live" and (.message | contains("sno-01")) and (.message | contains("its domain is running")))' \
-    "$RUN_DIR/destroy-while-running.json"
+    "$RUN_DIR/destroy-while-running.json" >/dev/null
 bootwright machine stop --context "$CTX_FIPS" --name sno-01 --yes
 bootwright plan --context "$CTX_FIPS" --output json > "$RUN_DIR/destroy-plan-stopped.json"
 AUTH=$(jq -er '.result | select(.verb == "destroy") | .authorizations | select(length == 1) | .[0] | select(startswith("data-loss="))' "$RUN_DIR/destroy-plan-stopped.json")
@@ -803,34 +833,76 @@ bootwright status --context "$CTX_FIPS"
 ```
 
 Require `sno-01`, its disks, its BMC and pool on `libvirt-host`, the media, the
-work area and the services to be removed. A final destroy reports `done`;
-desired cluster/service rows return to `PENDING` and the handoff is not ready
-because the latest operation is a destroy. Those are expected.
+work area and the services to be removed. A completed destroy can leave
+desired rows pending and the handoff unavailable; its latest operation must
+report destroy done. `--yes` requires the digest-bound
+authorization from the reviewed plan; a bare `data-loss` token is for attended
+confirmation and is insufficient for unattended execution. The first refusal
+must be the live-machine safeguard, rather than an authorization or transport
+failure. Retain the controller session and context until evidence is archived.
 
-Preserve evidence before purging. On this controller set:
+### Preserve the FIPS controller's evidence (host)
 
-```sh
-EVIDENCE_CONTEXT="$CTX_FIPS"
-EVIDENCE_BW=/usr/local/bin/bootwright
-EVIDENCE_ROOT=$(mktemp -d "$HOME/fips-evidence.XXXXXXXX")
-printf '%s\n' "$EVIDENCE_ROOT" > "$HOME/fips-evidence-path"
+After its destroy completes, copy only the final status, operation/power logs
+and strict fixture evidence onto the host. The controller guest has no source
+checkout, so collect through its bootstrap Machine session. Do this before
+purging the FIPS context or deleting the controller VM:
+
+```bash
+(
+    set -euo pipefail
+    umask 077
+    sudo -v
+    EVIDENCE_CACHE=$(./scripts/cache-dir)
+    EVIDENCE_ROOT="$EVIDENCE_CACHE/e2e-evidence"
+    git -C "$(dirname -- "$EVIDENCE_CACHE")" check-ignore -q -- "$EVIDENCE_ROOT/.ignore-check"
+    test ! -L "$EVIDENCE_ROOT"
+    mkdir -p -m 0700 -- "$EVIDENCE_ROOT"
+    chmod 0700 -- "$EVIDENCE_ROOT"
+    EVIDENCE_DIR=$(mktemp -d "$EVIDENCE_ROOT/${CTX_FIPS}.XXXXXXXX")
+    bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- \
+        sh -c 'exec "$HOME/bootwright-sno-controller/bin/bootwright" status --context "$1" --output json' _ "$CTX_FIPS" \
+        > "$EVIDENCE_DIR/status.json"
+    LOG_DIR="/var/log/bootwright/contexts/$CTX_FIPS"
+    bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- \
+        sudo -n bash -euo pipefail -c '
+            find "$1/operations" -mindepth 1 -maxdepth 1 -type d -print0 |
+                sort -z | while IFS= read -r -d "" LOGS; do
+                    OPERATION_ID=$(basename -- "$LOGS")
+                    DIGEST=$(find "$LOGS" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum)
+                    printf "%s\t%s\t%s\n" "$OPERATION_ID" "$LOGS" "$DIGEST"
+                done
+        ' _ "$LOG_DIR" > "$EVIDENCE_DIR/operation-log-digests.tsv"
+    test -s "$EVIDENCE_DIR/operation-log-digests.tsv"
+    bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- \
+        sudo -n bash -euo pipefail -c '
+            cd -- "$1"
+            find operations runs -type f -print0 | sort -z | tar -cf - --null --no-recursion -T -
+        ' _ "$LOG_DIR" | gzip > "$EVIDENCE_DIR/logs.tar.gz"
+    if test -d "$PROFILE"; then
+        bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- \
+            tar -C isolation -cf - . | gzip > "$EVIDENCE_DIR/isolation-controller.tar.gz"
+        tar -C "$PROFILE" -czf "$EVIDENCE_DIR/isolation-host.tar.gz" .
+    fi
+    cd -- "$EVIDENCE_DIR"
+    for archive in *.tar.gz; do
+        gzip -t "$archive"
+        tar -tzf "$archive" > "$archive.files.txt"
+    done
+    sha256sum status.json operation-log-digests.tsv *.tar.gz *.files.txt > SHA256SUMS
+    sha256sum -c SHA256SUMS
+    printf 'Evidence verified and retained: %s\n' "$EVIDENCE_DIR"
+)
 ```
 
-Run [Preserve evidence before context purge](../README.md#preserve-evidence-before-context-purge)
-in this session with those variables. Add the selected run records and, for
-the strict profile, its verifier results to this evidence root. Leave the
-exported kubeconfig and temporary BMC credential out of the archive:
+Keep the printed ignored directory through cleanup and owner acceptance. It
+excludes context input revisions, keyrings, frozen plans and credential stores.
+After every archive verifies, purge the FIPS context in the controller session:
 
 ```sh
-mkdir -m 700 "$EVIDENCE_ROOT/run-records"
-for record in oc-handoff.json destroy-plan.json destroy-plan-stopped.json destroy-while-running.json dns.yml; do
-    cp -- "$RUN_DIR/$record" "$EVIDENCE_ROOT/run-records/"
-done
-if [[ -d "$HOME/isolation" ]]; then cp -a -- "$HOME/isolation" "$EVIDENCE_ROOT/isolation"; fi
 bootwright context delete --name "$CTX_FIPS" --purge --yes
 ```
 
-Keep this controller VM until the host retrieves the evidence in step 11.
 Then leave the session.
 
 ## 11. Destroy the bootstrap context and clean up (host)
@@ -839,24 +911,6 @@ Return to the original host shell used for steps 1–4, after leaving the FIPS
 controller session. Keep that host's `CTX_BOOT`, `CTX_FIPS`, `RUN_DIR`,
 `INPUT_DIR` and `HOST_CHECKS`; the second terminal and the controller session
 do not carry all of them.
-
-Before removing the controller VM, copy its evidence to the host's ignored
-cache and verify the archived logs again:
-
-```sh
-FIPS_EVIDENCE=$(./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- cat fips-evidence-path)
-EVIDENCE_CACHE=$(./scripts/cache-dir)
-HOST_EVIDENCE="$EVIDENCE_CACHE/e2e-evidence"
-git -C "$(dirname -- "$EVIDENCE_CACHE")" check-ignore -q -- "$HOST_EVIDENCE/.ignore-check"
-mkdir -m 700 -p "$HOST_EVIDENCE"
-FIPS_COPY=$(mktemp -d "$HOST_EVIDENCE/fips-controller.XXXXXXXX")
-./bin/bootwright machine cp --context "$CTX_BOOT" --name fips-controller \
-    "remote:$FIPS_EVIDENCE" "local:$FIPS_COPY/evidence"
-for archive in "$FIPS_COPY"/evidence/"$CTX_FIPS".*; do
-    (cd -- "$archive"; sha256sum -c SHA256SUMS)
-done
-printf 'FIPS evidence retained: %s\n' "$FIPS_COPY"
-```
 
 Restore root's authorized keys and sshd:
 
@@ -884,37 +938,33 @@ ip link show br-e2e-trunk.20 2>&1 | tail -1               # does not exist
 Remove the controller guest and the bootstrap context:
 
 ```sh
-./bin/bootwright machine stop --context "$CTX_BOOT" --name fips-controller --yes
-./bin/bootwright plan --context "$CTX_BOOT" --output json > "$RUN_DIR/bootstrap-destroy-plan.json"
-AUTH=$(jq -er '.result | select(.verb == "destroy") | .authorizations | select(length == 1) | .[0] | select(startswith("data-loss="))' "$RUN_DIR/bootstrap-destroy-plan.json")
-./bin/bootwright destroy --context "$CTX_BOOT" --authorize "$AUTH" --yes
-./bin/bootwright status --context "$CTX_BOOT"
+bootwright machine stop --context "$CTX_BOOT" --name fips-controller --yes
+bootwright plan --context "$CTX_BOOT" --output json > "$RUN_DIR/destroy-bootstrap-plan.json"
+jq '.result | {verb,steps,authorizations,stops}' "$RUN_DIR/destroy-bootstrap-plan.json"
+AUTH=$(jq -er '.result | select(.verb == "destroy") | .authorizations | select(length == 1) | .[0] | select(startswith("data-loss="))' "$RUN_DIR/destroy-bootstrap-plan.json")
+bootwright destroy --context "$CTX_BOOT" --authorize "$AUTH" --yes
+bootwright status --context "$CTX_BOOT"
+EVIDENCE_CONTEXT="$CTX_BOOT"
 ```
 
-Set `EVIDENCE_CONTEXT="$CTX_BOOT"`, run `unset EVIDENCE_ROOT EVIDENCE_BW`, and complete
-[Preserve evidence before context purge](../README.md#preserve-evidence-before-context-purge)
-on this host, using its default cache location. Then purge:
+Complete [Preserve evidence before context purge](../README.md#preserve-evidence-before-context-purge)
+in this host shell; its optional `BOOTWRIGHT_BIN` selects the pinned executable.
+Then:
 
 ```sh
-./bin/bootwright context delete --name "$CTX_BOOT" --purge --yes
-if virsh --connect qemu:///system list --all --name | grep bootwright-; then
-    echo 'case domains remain'; exit 1
+bootwright context delete --name "$CTX_BOOT" --purge --yes
+if virsh --connect qemu:///system list --all --name | grep "bootwright-$CTX_BOOT-"; then
+    printf 'Case domains remain\n' >&2; exit 1
 fi
 ```
 
 Complete [Restore listener firewall](../README.md#restore-listener-firewall)
-and [Remove diagnostic tools](../README.md#remove-diagnostic-tools). Retain
-the selected host records before deleting temporary inputs. Do not copy the
-root authorized-keys backup or credential files into the archive:
+and [Remove diagnostic tools](../README.md#remove-diagnostic-tools), then:
 
 ```sh
-mkdir -m 700 "$FIPS_COPY/host-run-records"
-for record in values.yaml bootstrap-destroy-plan.json isolation; do
-    if [[ -e "$RUN_DIR/$record" ]]; then
-        cp -a -- "$RUN_DIR/$record" "$FIPS_COPY/host-run-records/"
-    fi
-done
-cp -a -- "$INPUT_DIR" "$FIPS_COPY/rendered-inputs"
+export PATH="$PATH_BEFORE_CASE"
+unset BOOTWRIGHT_BIN
+hash -r
 rm -rf -- "${RUN_DIR:?}" "${INPUT_DIR:?}"
 ```
 
@@ -927,9 +977,10 @@ checkout and restore the private run directory printed in step 1:
 read -r -p 'Private host run directory: ' RUN_DIR
 source "$RUN_DIR/host-env.sh"
 sudo -v
-./bin/bootwright controller check
+sha256sum -c "$RUN_DIR/bootwright.sha256"
+bootwright controller check
 ip -4 route get 1.1.1.1
-./bin/bootwright machine list --context "$CTX_BOOT" --power-status
+bootwright machine list --context "$CTX_BOOT" --power-status
 ```
 
 The host must still hold the pinned `HOST_ADDRESS`. If it moved to another
@@ -944,15 +995,16 @@ are persistent; do not recreate them with `ip link`.
 
 ```sh
 sudo systemctl start sshd
-./bin/bootwright preflight --context "$CTX_BOOT" --stage controller
-./bin/bootwright machine start --context "$CTX_BOOT" --name fips-controller
-./bin/bootwright machine rsh --context "$CTX_BOOT" --name fips-controller
+bootwright preflight --context "$CTX_BOOT" --stage controller
+bootwright machine start --context "$CTX_BOOT" --name fips-controller
+bootwright machine rsh --context "$CTX_BOOT" --name fips-controller
 ```
 
 In the controller session, restore its own variables before using `RUN_DIR`:
 
 ```sh
 source "$HOME/bootwright-sno-controller/controller-env.sh"
+sha256sum -c "$RUN_DIR/bootwright.sha256"
 bootwright status --context "$CTX_FIPS"
 ```
 
@@ -961,6 +1013,14 @@ transfers that failed; a sudo refusal before a transfer requires `sudo -v` in
 the host terminal, not a new render, context or secret generation. Stop on
 unexpected readiness errors; a recorded completed apply does not repair
 arbitrary live changes merely by being repeated.
+
+If a newer executable refuses an earlier operation after a documented record
+format change, use the preserved executable to finish or destroy that context.
+When that copy is unavailable, rebuild the operation's registering commit in
+a separate checkout and keep the newer Git source in place. A record-format
+change requires fresh contexts for the newer build. Rebuild the current source
+after both old contexts are destroyed, their evidence retained and their stores
+purged; changing stored JSON is not a recovery step.
 
 ## 12. Record the result
 

@@ -78,6 +78,7 @@ Use these names consistently:
 | `RUN_DIR` | Private temporary directory for case files and evidence |
 | `EVIDENCE_CONTEXT` | Context whose completed run is being preserved before purge |
 | `HOST_CHECKS` | Private record of diagnostic packages installed for this run |
+| `BOOTWRIGHT_BIN` | Optional pinned executable for evidence preservation; defaults to the checkout's binary |
 
 Keep the same shell and private directories through cleanup. Configure inputs
 where the runbook introduces them; prompts ask for values discovered on the
@@ -107,7 +108,7 @@ checkpoints separately when the case needs them.
     set -euo pipefail
     umask 077
     : "${EVIDENCE_CONTEXT:?Set the context to preserve}"
-    EVIDENCE_BW=${EVIDENCE_BW:-./bin/bootwright}
+    EVIDENCE_BW=${EVIDENCE_BW:-${BOOTWRIGHT_BIN:-./bin/bootwright}}
     sudo -v
     if [[ -z ${EVIDENCE_ROOT:-} ]]; then
         EVIDENCE_CACHE=$(./scripts/cache-dir)
