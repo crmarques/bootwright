@@ -79,7 +79,7 @@ func (a *Adapter) qualify(ctx context.Context, path, abi string) (prerequisites.
 		Environment: cleanEnvironment(""), Directory: "/",
 	})
 	if err != nil {
-		return prerequisites.PythonInterpreter{}, failure(path + " did not answer the interpreter probe")
+		return prerequisites.PythonInterpreter{}, failure(path + " did not answer the interpreter probe: " + err.Error())
 	}
 	var report interpreterReport
 	if canonicaljson.DecodeClosed(output, &report) != nil {

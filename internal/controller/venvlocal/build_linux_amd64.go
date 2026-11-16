@@ -14,13 +14,19 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
 )
 
-const commandTimeout = 10 * time.Minute
+const (
+	commandTimeout   = 10 * time.Minute
+	commandWaitDelay = 2 * time.Second
+	stderrTail       = 2 << 10
+)
 
 const venvProbe = `import importlib.metadata, json, sys
 import ansible.release, ansible.cli.playbook, jinja2, yaml, urllib3, ssl, ctypes, zlib, bz2
@@ -104,7 +110,7 @@ func (a *Adapter) populate(ctx context.Context, stage, final string, runtime pre
 		Path: interpreter.Path, Arguments: []string{"-I", "-m", "venv", "--without-pip", stage},
 		Environment: cleanEnvironment(stage), Directory: stage,
 	}); err != nil {
-		return failure("python" + interpreter.ABI + " -m venv failed")
+		return failure("python" + interpreter.ABI + " -m venv failed: " + err.Error())
 	}
 	if err := a.install(ctx, stage, files); err != nil {
 		return err
@@ -115,7 +121,7 @@ func (a *Adapter) populate(ctx context.Context, stage, final string, runtime pre
 		Arguments:   []string{"-I", "-m", "compileall", "-q", "-j0", "--invalidation-mode", "unchecked-hash", sitePackages},
 		Environment: cleanEnvironment(stage), Directory: stage,
 	}); err != nil {
-		return failure("compiling the runtime's bytecode failed")
+		return failure("compiling the runtime's bytecode failed: " + err.Error())
 	}
 	if err := verifyVenv(stage, sitePackages); err != nil {
 		return err
@@ -163,7 +169,7 @@ func (a *Adapter) install(ctx context.Context, stage string, files []runtimelock
 		Environment: append(cleanEnvironment(home), "PIP_CONFIG_FILE=/dev/null"), Directory: stage,
 	})
 	if err != nil {
-		return failure("pip could not install the locked wheels from the cache")
+		return failure("pip could not install the locked wheels from the cache: " + err.Error())
 	}
 	return nil
 }
@@ -242,7 +248,7 @@ func (a *Adapter) probeVenv(ctx context.Context, directory string, runtime prere
 		Environment: cleanEnvironment(directory), Directory: directory,
 	})
 	if err != nil {
-		return failure("the controller runtime failed its import probe")
+		return failure("the controller runtime failed its import probe: " + err.Error())
 	}
 	var report venvReport
 	if canonicaljson.DecodeClosed(output, &report) != nil || !report.Venv || !strings.HasPrefix(report.Python, runtime.Interpreter.ABI+".") || report.Ansible != runtime.AnsibleCore {
@@ -279,18 +285,62 @@ func runCommand(ctx context.Context, request command) ([]byte, error) {
 	defer cancel()
 	process := exec.CommandContext(ctx, request.Path, request.Arguments...)
 	process.Env, process.Dir = request.Environment, request.Directory
-	var stdout, stderr bounded
+	process.WaitDelay = commandWaitDelay
+	var stdout bounded
+	var stderr tail
 	process.Stdout, process.Stderr = &stdout, &stderr
 	if err := process.Run(); err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			err = ctx.Err()
 		}
-		return nil, err
+		return nil, &commandError{cause: err, stderr: stderr.text()}
 	}
 	if stdout.overflow {
 		return nil, errors.New("the command printed more than its output bound")
 	}
 	return stdout.Bytes(), nil
+}
+
+// commandError reads as one printable line: the reason, then the end of the
+// command's stderr, where a Python tool prints its error last.
+type commandError struct {
+	cause  error
+	stderr string
+}
+
+func (e *commandError) Error() string {
+	if e.stderr == "" {
+		return e.cause.Error()
+	}
+	return e.cause.Error() + ": " + e.stderr
+}
+
+func (e *commandError) Unwrap() error { return e.cause }
+
+// tail keeps the last stderrTail bytes written, so a long pip log costs
+// bounded memory and the failing line survives.
+type tail struct{ data []byte }
+
+func (t *tail) Write(data []byte) (int, error) {
+	written := len(data)
+	if len(data) > stderrTail {
+		data = data[len(data)-stderrTail:]
+	}
+	if excess := len(t.data) + len(data) - stderrTail; excess > 0 {
+		t.data = append(t.data[:0], t.data[excess:]...)
+	}
+	t.data = append(t.data, data...)
+	return written, nil
+}
+
+func (t *tail) text() string {
+	printable := strings.Map(func(r rune) rune {
+		if r == utf8.RuneError || unicode.IsControl(r) || unicode.IsSpace(r) {
+			return ' '
+		}
+		return r
+	}, string(t.data))
+	return strings.Join(strings.Fields(printable), " ")
 }
 
 type bounded struct {
