@@ -72,7 +72,7 @@ func (s Service) Copy(ctx context.Context, request CopyRequest) (*CopyResult, er
 			var identity machine.Identity
 			var ref string
 			identity, ref, err = s.identity(ctx, effective.Effective, resolved, request.SSH)
-			members = []member{{target: resolved, identity: identity, privateKeyRef: ref}}
+			members = []member{{target: resolved, identity: identity, privateKeyRef: ref, privateKeyPart: privateKeyPart(effective.Effective, ref)}}
 		}
 	}
 	if err != nil {

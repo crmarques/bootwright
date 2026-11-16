@@ -116,6 +116,25 @@ func TestCopyConcurrentFailuresKeepEveryMachineOutcome(t *testing.T) {
 	}
 }
 
+func TestCopyToOneKeyAuthenticatedMachineCarriesItsKey(t *testing.T) {
+	h := newHarness(t, nil)
+	var keys []string
+	c := &copyFake{prepare: func(s machine.Session, _ bool) error {
+		keys = append(keys, string(s.PrivateKey))
+		return nil
+	}, run: func(context.Context, string) (CopyProgress, error) {
+		return CopyProgress{Files: 1, Bytes: 3}, nil
+	}}
+	h.service.options.Copier = c
+	result, err := h.service.Copy(context.Background(), downloadRequest("guest"))
+	if err != nil {
+		t.Fatalf("%+v", diagnostics.Of(err))
+	}
+	if len(keys) != 1 || keys[0] != "FLEET KEY" || len(result.Machines) != 1 || result.Machines[0].Status != "copied" {
+		t.Fatalf("keys %q result %+v", keys, result)
+	}
+}
+
 func TestCopyUnknownSelectionStartsNoWorker(t *testing.T) {
 	h := newHarness(t, nil)
 	c := &copyFake{}
