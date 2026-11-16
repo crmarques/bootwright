@@ -16293,3 +16293,21 @@ branches now run in tests; the invokerfs helper now leads its own process
 group. An independent review found no path admitted that was refused before
 and no blocking defect.
 
+## X511 — One owner for five repeated rules
+
+### B1481
+
+Split from B1464 under [D274](backlog.md#d274) (part of audit 005 W3.3).
+`diskselection` owns the disk identity grammar (serial, WWN, size) for erase,
+clear, root, agent and installation admission and Ceph physical retirement;
+`api.Value.Named` owns the unique-match lookup of a named entry; `api` owns
+the 999-issue cap and its helpers; `reconciliation.ContentDigestOf` computes
+every capability's content digest with no digest moving; the adapter's run
+outcome is the typed `reconciliation.Outcome` at the port. One behaviour
+change: erase admission and Ceph physical retirement now refuse a disk serial
+outside the grammar the [machine API](../api/machines.md) states for root and
+clear targets, so a Machine whose erase target has such a serial no longer
+admits, and an earlier build's retirement with one cannot continue. An
+independent review found every digest byte-identical and no reachable change
+from the unique-match lookup.
+
