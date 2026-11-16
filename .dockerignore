@@ -1,24 +1,24 @@
-AGENTS.override.md
-CLAUDE.local.md
-.env
-.env.*
-.ansible
-bin
-build
-dist
-out
-rendered
-.cache
-.claude/settings.local.json
-.claude/worktrees
-site
-.state
-tmp
-.vscode
-examples/wip
+# The build context is an allowlist: everything is left out, and only the
+# inputs the Dockerfile's make build reads come back, so local worktrees,
+# evidence, caches and credential files never reach the engine.
+# TestTheContainerBuildContextIsAnAllowlistOfTheBuildInputs holds this list to
+# those inputs. The build takes its identity from build arguments, not .git,
+# and places the runtime wheels from its own cache mount.
+*
+!Makefile
+!go.mod
+!go.sum
+!api
+!ansible
+!cmd
+!internal
+!scripts
+**/.env
+**/.env.*
 **/__pycache__
 **/*.pyc
 **/*.cover
 **/*.log
 **/*.tmp
 **/*.test
+internal/controller/runtimelock/wheels/*.whl

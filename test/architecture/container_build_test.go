@@ -201,6 +201,109 @@ func TestContainerBuildRefusesATargetItCannotReplace(t *testing.T) {
 	}
 }
 
+// containerBuildInputs are the root entries the container build reads: the
+// Makefile and module files, the scripts it runs and the packages it compiles.
+var containerBuildInputs = []string{"Makefile", "go.mod", "go.sum", "api", "ansible", "cmd", "internal", "scripts"}
+
+// buildContextProblems reads a .dockerignore and reports what makes it other
+// than an allowlist of containerBuildInputs: a first pattern other than *, or a
+// re-included entry that is no build input or not at the root.
+func buildContextProblems(ignore string) []string {
+	var patterns []string
+	for _, line := range strings.Split(ignore, "\n") {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+			patterns = append(patterns, line)
+		}
+	}
+	var problems []string
+	if len(patterns) == 0 || patterns[0] != "*" {
+		problems = append(problems, "the first pattern is not *, so every entry the list does not name reaches the build context")
+	}
+	var included []string
+	for _, pattern := range patterns {
+		entry, found := strings.CutPrefix(pattern, "!")
+		if !found {
+			continue
+		}
+		if !slices.Contains(containerBuildInputs, entry) {
+			problems = append(problems, "it re-includes "+pattern+", which is no root entry the build reads")
+		}
+		included = append(included, entry)
+	}
+	for _, input := range containerBuildInputs {
+		if !slices.Contains(included, input) {
+			problems = append(problems, "it does not re-include "+input+", which the build reads")
+		}
+	}
+	return problems
+}
+
+func TestTheContainerBuildContextIsAnAllowlistOfTheBuildInputs(t *testing.T) {
+	root := filepath.Join("..", "..")
+	ignore, err := os.ReadFile(filepath.Join(root, ".dockerignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, problem := range buildContextProblems(string(ignore)) {
+		t.Errorf(".dockerignore is no allowlist: %s", problem)
+	}
+	for ignore, want := range map[string]string{
+		".git\nbin\nexamples/wip\n": "the first pattern is not *",
+		"*\n!Makefile\n!go.mod\n!go.sum\n!api\n!ansible\n!cmd\n!internal\n!scripts\n!.git\n": "it re-includes !.git",
+		"*\n!Makefile\n!go.mod\n!api\n!ansible\n!cmd\n!internal\n!scripts\n":                 "it does not re-include go.sum",
+	} {
+		if problems := buildContextProblems(ignore); !strings.Contains(strings.Join(problems, "\n"), want) {
+			t.Errorf("the planted context %q was not reported as %q: %v", ignore, want, problems)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".containerignore")); err == nil {
+		t.Error("a .containerignore beside .dockerignore would replace it for Podman")
+	}
+	dockerfile, err := os.ReadFile(filepath.Join(root, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, match := range regexp.MustCompile(`(?m)^COPY (.*)$`).FindAllStringSubmatch(string(dockerfile), -1) {
+		if !strings.HasPrefix(match[1], "--from=") && match[1] != ". ." {
+			t.Errorf("the Dockerfile copies %q from the context; name its source in containerBuildInputs and .dockerignore", match[1])
+		}
+	}
+	module := regexp.MustCompile(`(?m)^module (\S+)$`).FindStringSubmatch(func() string {
+		data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}())
+	if module == nil {
+		t.Fatal("go.mod names no module")
+	}
+	imported := regexp.MustCompile(`"` + regexp.QuoteMeta(module[1]) + `/([^/"]+)`)
+	for _, input := range containerBuildInputs {
+		err := filepath.WalkDir(filepath.Join(root, input), func(path string, entry os.DirEntry, err error) error {
+			if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, string(filepath.Separator)+"testdata"+string(filepath.Separator)) {
+				return err
+			}
+			if strings.HasPrefix(path, filepath.Join(root, "scripts", "tools")+string(filepath.Separator)) {
+				return nil
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, match := range imported.FindAllStringSubmatch(string(data), -1) {
+				if !slices.Contains(containerBuildInputs, match[1]) {
+					t.Errorf("%s imports %s/%s, which the build context leaves out", path, module[1], match[1])
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func containerBuildRecipe(t *testing.T, makefile string) string {
 	t.Helper()
 	_, recipe, found := strings.Cut(makefile, "\ncontainer-build:\n")

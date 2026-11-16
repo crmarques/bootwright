@@ -97,9 +97,14 @@ would try to read or replace, works as well; a `bootwright`, bill of materials
 or notices file there that is a directory or another user's file is refused
 before the build starts, and an export that lacks the notices fails the recipe. The result is the same static executable a host
 build makes, for the building host's architecture, stamped with the identity
-`make build` would give the checkout. A host without `make` passes the version
-itself: `docker build --output type=local,dest=bin .`;
-from a checkout whose `.git` is a directory it then stamps itself in the build.
+`make build` would give the checkout. A host without `make` passes the identity
+itself: `docker build --build-arg VERSION=<version> --build-arg COMMIT=<commit>
+--build-arg SOURCE=clean --output type=local,dest=bin .`; without them the
+executable reports an unidentified build. [.dockerignore](../.dockerignore) is
+an allowlist: it leaves out every entry and re-includes only the Makefile, the
+module files, `scripts` and the packages the build compiles, so `.git`, local
+worktrees, evidence and caches never reach the engine
+(`TestTheContainerBuildContextIsAnAllowlistOfTheBuildInputs`).
 
 The build runs `make wheels` while the proxy settings below are set, into a
 cache mount of its own, so a warm cache fetches no wheel, and its vulnerability
