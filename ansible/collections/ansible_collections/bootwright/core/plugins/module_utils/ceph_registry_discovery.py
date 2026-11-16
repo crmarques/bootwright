@@ -1,7 +1,7 @@
 """Session-free resolution of the authored IBM Ceph image and its auxiliary image set.
 
-The approved Python runtime talks only to the selected HTTPS registry authority.
-No ambient proxy is followed. Only the config blob read follows one delivery
+The approved Python runtime talks only to the selected HTTPS registry authority,
+through the frozen controller route; no ambient proxy is followed. Only the config blob read follows one delivery
 redirect, to a public HTTPS endpoint and without credentials; manifest and token
 redirects refuse. Tags and direct digests select their own manifest; a
 manifest's config proves the platform where no index does.
@@ -26,7 +26,8 @@ import types
 import urllib.parse
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_native_worker, ceph_package_sources, ceph_pull_broker, native_diagnostics, transport_faults, tls_trust,
+    ceph_native_worker, ceph_package_sources, ceph_pull_broker, ceph_registry_proxy, controller_files,
+    native_diagnostics, transport_faults, tls_trust,
 )
 
 PLATFORM = "linux/amd64"
@@ -441,6 +442,20 @@ class Registry:
         self.deadline = now() + TOTAL_SECONDS
         self.resolver, self.delivery = delivery_answers, ceph_pull_broker.RegistryConnection
         self.anchor = ceph_pull_broker.anchor(request)
+        self.egress = {"httpProxy": "", "httpsProxy": "", "noProxy": []}
+
+    def connection(self, host, remaining, addresses=None):
+        try:
+            proxy = controller_files.proxy_for(self.egress, urllib.parse.urlsplit("https://" + host))
+        except (ValueError, TypeError):
+            raise DiscoveryRefusal("request") from None
+        timeout = min(remaining, 30)
+        if proxy:
+            return ceph_registry_proxy.ProxyConnection(proxy, host, self.context, timeout, tls_proof, addresses)
+        if addresses is not None:
+            return self.delivery(host, addresses=addresses, deadline=time.monotonic() + remaining, port=443,
+                                 context=self.context, timeout=timeout)
+        return http.client.HTTPSConnection(host, timeout=timeout, context=self.context)
 
     def untrusted(self, error, cause):
         if getattr(error, "untrusted", False):
@@ -476,7 +491,7 @@ class Registry:
         def attempt():
             remaining = self.deadline - self.now()
             require(remaining > 0, "timeout")
-            connection = http.client.HTTPSConnection(self.registry, timeout=min(remaining, 30), context=self.context)
+            connection = self.connection(self.registry, remaining)
             try:
                 return self.exchange(connection, path, headers, maximum)
             except DiscoveryRefusal as error:
@@ -501,8 +516,7 @@ class Registry:
                 addresses = ceph_pull_broker.delivery_addresses(self.resolver(host))
             except (ValueError, TypeError, OSError) as cause:
                 raise lost(cause) from None
-            connection = self.delivery(host, addresses=addresses, deadline=time.monotonic() + remaining, port=443,
-                                       context=self.context, timeout=min(remaining, 30))
+            connection = self.connection(host, remaining, addresses)
             try:
                 status, unused_values, raw = self.exchange(connection, path, headers, MAX_BODY)
             except DiscoveryRefusal as error:
@@ -557,6 +571,13 @@ class Registry:
         except ssl.SSLCertVerificationError:
             error = DiscoveryRefusal("discovery")
             error.untrusted = True
+            raise error from None
+        except ceph_registry_proxy.ProxyFailure as cause:
+            error = DiscoveryRefusal("discovery")
+            message = "the declared proxy request was refused"
+            if cause.args == ("proxy-tls",):
+                message = "the declared HTTPS proxy certificate did not verify against controller system trust"
+            error.native_error = native_diagnostics.error_detail(self.request["image"], message)
             raise error from None
         except (OSError, http.client.HTTPException) as cause:
             raise lost(cause) from None
@@ -738,10 +759,12 @@ def resolve(basic, client, request):
     return selected["digest"]
 
 
-def resolve_artifact(basic, context, request):
+def resolve_artifact(basic, context, request, egress):
     """Name the selected public image and the fixed failure site, never exception values."""
     try:
-        return resolve(basic, Registry(context, request), request)
+        client = Registry(context, request)
+        client.egress = egress
+        return resolve(basic, client, request)
     except DiscoveryRefusal as error:
         if not native_diagnostics.valid(getattr(error, "native_error", None)):
             cause = getattr(error, "transport_cause", None) or ceph_native_worker.cause(error)
@@ -772,23 +795,29 @@ def execute(operation, request, digest_value, material):
     require(operation in OPERATIONS)
     original = validate_request(request)
     require(isinstance(digest_value, str) and digest(digest_value))
-    expected = {"registryJSON"} | ({"registryCA"} if "registryTrustBundleRef" in request else set())
+    expected = {"registryJSON", "egress"} | ({"registryCA"} if "registryTrustBundleRef" in request else set())
     require(isinstance(material, dict) and (set(material) == expected if operation == "apply" else not material), "material")
     if operation != "apply":
         return {"changed": False, "evidence": evidence({"request": digest_value, "postcondition": True, "absent": True}, digest_value)}
+    require(isinstance(material["egress"], str) and 0 < len(material["egress"]) <= 144 << 10, "request")
+    egress = decode(material["egress"], "request")
+    try:
+        controller_files.proxy_for(egress, urllib.parse.urlsplit("https://" + request["registry"]))
+    except (ValueError, TypeError):
+        raise DiscoveryRefusal("request") from None
     trust = bundle_proof(material["registryCA"]) if "registryCA" in material else tls_proof()
     with bounded_lifetime(), trust as (context, prove_tls):
         with protected_file(material["registryJSON"], MAX_REGISTRY, private=True) as (loan, prove):
             basic = basic_material(loan.read(MAX_REGISTRY + 1), request["registry"])
             prove()
             prove_tls()
-            child = resolve_artifact(basic, context, request)
+            child = resolve_artifact(basic, context, request, egress)
             prove()
             prove_tls()
             auxiliary = []
             for entry in request.get("auxiliary", []):
                 sub = auxiliary_request(request, entry)
-                auxiliary.append(resolve_artifact(basic, context, sub))
+                auxiliary.append(resolve_artifact(basic, context, sub, egress))
                 prove()
                 prove_tls()
     return {"changed": False, "evidence": resolution(original, digest_value, child, auxiliary)}

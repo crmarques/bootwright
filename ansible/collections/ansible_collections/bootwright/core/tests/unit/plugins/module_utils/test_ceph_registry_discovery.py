@@ -31,6 +31,7 @@ NAMESPACE = REPOSITORY.split("/", 1)[1]
 TAG_NAME = GOLDEN["request"]["tag"]
 REGISTRY = GOLDEN["request"]["registry"]
 RELEASE = GOLDEN["request"]["release"]
+DIRECT_ROUTE = json.dumps({"httpProxy": "", "httpsProxy": "", "noProxy": []})
 SCOPE = "repository:" + NAMESPACE + ":pull"
 AUTH = 'Bearer realm="https://cp.icr.io/oauth/token",service="registry",scope="' + SCOPE + '"'
 
@@ -497,7 +498,7 @@ def test_unfrozen_or_open_request_refuses_before_tls_or_private_loan(monkeypatch
     original[name] = value
     monkeypatch.setattr(discovery, "tls_proof", lambda: pytest.fail("TLS before admission"))
     with pytest.raises(discovery.DiscoveryRefusal, match="^request$"):
-        discovery.execute("apply", original, GOLDEN["digest"], {"registryJSON": "/owned/loan"})
+        discovery.execute("apply", original, GOLDEN["digest"], dict({"registryJSON": "/owned/loan"}, egress=DIRECT_ROUTE))
 
 
 def fake_tls(monkeypatch, checks=None):
@@ -511,6 +512,27 @@ def fake_tls(monkeypatch, checks=None):
         check()
 
     monkeypatch.setattr(discovery, "tls_proof", proof)
+
+
+def test_execute_uses_the_frozen_controller_route_for_the_selected_image(tmp_path, monkeypatch):
+    registry, _bundle = private_loans(tmp_path)
+    fake_tls(monkeypatch)
+    client = Client()
+    monkeypatch.setattr(discovery, "Registry", lambda *_args: client)
+    route = {"httpProxy": "http://proxy.example.test:3128", "httpsProxy": "http://proxy.example.test:3128", "noProxy": [".internal.test"]}
+    result = discovery.execute("apply", GOLDEN["request"], GOLDEN["digest"], {"registryJSON": registry, "egress": json.dumps(route)})
+    assert result["evidence"]["digest"] == sha(raw(client.manifest)) and client.egress == route
+
+
+@pytest.mark.parametrize("route", [None, "{}", "null", "not-json", json.dumps({"httpProxy": "", "httpsProxy": "http://user:password@proxy.example.test:3128", "noProxy": []})])
+def test_missing_or_invalid_frozen_route_refuses_before_tls_or_private_material(monkeypatch, route):
+    monkeypatch.setattr(discovery, "tls_proof", lambda: pytest.fail("TLS before route admission"))
+    monkeypatch.setattr(discovery, "protected_file", lambda *args, **kwargs: pytest.fail("material before route admission"))
+    material = {"registryJSON": "/private/registry"}
+    if route is not None:
+        material["egress"] = route
+    with pytest.raises(discovery.DiscoveryRefusal):
+        discovery.execute("apply", GOLDEN["request"], GOLDEN["digest"], material)
 
 
 @pytest.mark.parametrize("operation", ["observe", "destroy"])
@@ -533,7 +555,7 @@ def test_tls_refusal_precedes_private_read(monkeypatch):
     monkeypatch.setattr(discovery, "tls_proof", refused)
     monkeypatch.setattr(discovery, "protected_file", lambda *args, **kwargs: pytest.fail("private read"))
     with pytest.raises(discovery.DiscoveryRefusal, match="^artifact$"):
-        discovery.execute("apply", GOLDEN["request"], GOLDEN["digest"], {"registryJSON": "/owned/loan"})
+        discovery.execute("apply", GOLDEN["request"], GOLDEN["digest"], dict({"registryJSON": "/owned/loan"}, egress=DIRECT_ROUTE))
 
 
 @pytest.mark.parametrize("change", ["symlink", "fifo", "hardlink", "mode", "parent-mode", "replaced-file", "replaced-parent"])
@@ -580,7 +602,7 @@ def test_private_loan_is_retained_and_no_file_or_cache_is_created(tmp_path, monk
     fake_tls(monkeypatch, checks)
     client = Client()
     monkeypatch.setattr(discovery, "Registry", lambda *args: client)
-    result = discovery.execute("apply", GOLDEN["request"], GOLDEN["digest"], {"registryJSON": str(path)})
+    result = discovery.execute("apply", GOLDEN["request"], GOLDEN["digest"], dict({"registryJSON": str(path)}, egress=DIRECT_ROUTE))
     assert result == {"changed": False, "evidence": {
         "request": GOLDEN["digest"], "postcondition": True, "release": RELEASE, "base": REPOSITORY,
         "tag": TAG_NAME, "digest": sha(raw(client.manifest)), "platform": "linux/amd64",
@@ -672,7 +694,7 @@ def test_authored_index_digest_refuses_after_resolution_without_evidence(tmp_pat
     monkeypatch.setattr(discovery, "Registry", lambda *args: client)
     index = dict(GOLDEN["request"], tag="", image=REPOSITORY + "@" + sha(raw(client.index)))
     with pytest.raises(discovery.DiscoveryRefusal, match="^image-digest-mismatch$"):
-        discovery.execute("apply", index, GOLDEN["digest"], {"registryJSON": str(path)})
+        discovery.execute("apply", index, GOLDEN["digest"], dict({"registryJSON": str(path)}, egress=DIRECT_ROUTE))
     assert client.rows == [] and discovery.refusal(discovery.DiscoveryRefusal("image-digest-mismatch")) == ("image-digest-mismatch", None)
 
 
@@ -735,7 +757,7 @@ def test_transport_refusal_names_its_type_and_image_without_exception_values(mon
     monkeypatch.setattr(discovery.http.client, "HTTPSConnection", lambda *_args, **_kwargs: Broken())
     monkeypatch.setattr(discovery.Registry, "retried", lambda self, attempt: attempt())
     with pytest.raises(discovery.DiscoveryRefusal) as caught:
-        discovery.resolve_artifact("Basic private credential", object(), GOLDEN["request"])
+        discovery.resolve_artifact("Basic private credential", object(), GOLDEN["request"], json.loads(DIRECT_ROUTE))
     native = caught.value.native_error
     assert native_diagnostics.valid(native) and native["coordinate"] == GOLDEN["request"]["image"]
     assert expected in native["cause"] and "private" not in json.dumps(native)
@@ -749,7 +771,7 @@ def test_manifest_refusal_names_the_validation_site_and_selected_auxiliary(monke
     client.rows[0] = (200, {"content-type": "text/plain"}, b"private malformed manifest")
     monkeypatch.setattr(discovery, "Registry", lambda *_args: client)
     with pytest.raises(discovery.DiscoveryRefusal) as caught:
-        discovery.resolve_artifact("Basic private credential", object(), request)
+        discovery.resolve_artifact("Basic private credential", object(), request, json.loads(DIRECT_ROUTE))
     native = caught.value.native_error
     assert native["coordinate"] == request["image"]
     assert "discovery@ceph_registry_discovery." in native["cause"] and "private" not in json.dumps(native)
@@ -921,7 +943,7 @@ def test_auxiliary_reference_resolves_its_own_linux_amd64_digest(tmp_path, monke
 
     monkeypatch.setattr(discovery, "Registry", registry)
     request = dict(GOLDEN["request"], auxiliary=[AUX_ENTRY])
-    result = discovery.execute("apply", request, GOLDEN["digest"], {"registryJSON": str(path)})
+    result = discovery.execute("apply", request, GOLDEN["digest"], dict({"registryJSON": str(path)}, egress=DIRECT_ROUTE))
     child = sha(raw(clients[AUX_BASE].manifest))
     assert child != sha(raw(clients[REPOSITORY].manifest)) and child != clients[AUX_BASE].arm["digest"]
     assert result["evidence"]["digest"] == sha(raw(clients[REPOSITORY].manifest))
@@ -973,7 +995,7 @@ def test_each_authored_auxiliary_reference_resolves_its_linux_amd64_digest(tmp_p
     monkeypatch.setattr(discovery, "Registry", registry)
     keepalived = {"name": "keepalived", "base": DIGEST_BASE, "tag": "", "image": DIGEST_BASE + "@" + digested_client.digest}
     request = dict(GOLDEN["request"], auxiliary=[AUX_ENTRY, keepalived])
-    result = discovery.execute("apply", request, GOLDEN["digest"], {"registryJSON": str(path)})
+    result = discovery.execute("apply", request, GOLDEN["digest"], dict({"registryJSON": str(path)}, egress=DIRECT_ROUTE))
     haproxy_child = sha(raw(clients[AUX_BASE].manifest))
     children = [haproxy_child, digested_client.digest]
     assert len({haproxy_child, digested_client.digest, sha(raw(clients[REPOSITORY].manifest))}) == 3
@@ -1010,7 +1032,7 @@ def test_each_authored_auxiliary_reference_resolves_its_linux_amd64_digest(tmp_p
 def test_auxiliary_request_is_closed(monkeypatch, auxiliary):
     monkeypatch.setattr(discovery, "tls_proof", lambda: pytest.fail("TLS before admission"))
     with pytest.raises(discovery.DiscoveryRefusal, match="^request$"):
-        discovery.execute("apply", dict(GOLDEN["request"], auxiliary=auxiliary), GOLDEN["digest"], {"registryJSON": "/owned/loan"})
+        discovery.execute("apply", dict(GOLDEN["request"], auxiliary=auxiliary), GOLDEN["digest"], dict({"registryJSON": "/owned/loan"}, egress=DIRECT_ROUTE))
 
 
 @pytest.mark.parametrize("change", [
@@ -1084,7 +1106,7 @@ def test_resolution_trusts_only_the_bound_bundle_when_declared(tmp_path, monkeyp
     monkeypatch.setattr(discovery, "tls_proof", lambda *args: pytest.fail("host trust store with a bound bundle"))
     contexts, client = [], Client()
     monkeypatch.setattr(discovery, "Registry", lambda context, request: contexts.append(context) or client)
-    result = discovery.execute("apply", BOUND_REQUEST, GOLDEN["digest"], {"registryJSON": registry, "registryCA": bundle})
+    result = discovery.execute("apply", BOUND_REQUEST, GOLDEN["digest"], dict({"registryJSON": registry, "registryCA": bundle}, egress=DIRECT_ROUTE))
     assert result["evidence"]["digest"] == sha(raw(client.manifest)) and client.rows == []
     assert len(contexts) == 1 and isinstance(contexts[0], ssl.SSLContext) and contexts[0].get_ca_certs() == synthetic_ca_certs()
 
@@ -1096,13 +1118,13 @@ def test_resolution_without_a_bundle_keeps_the_host_trust_store(tmp_path, monkey
     monkeypatch.setattr(discovery, "bundle_proof", lambda *args: pytest.fail("bundle without a binding"))
     client = Client()
     monkeypatch.setattr(discovery, "Registry", lambda *args: client)
-    result = discovery.execute("apply", GOLDEN["request"], GOLDEN["digest"], {"registryJSON": registry})
+    result = discovery.execute("apply", GOLDEN["request"], GOLDEN["digest"], dict({"registryJSON": registry}, egress=DIRECT_ROUTE))
     assert result["evidence"]["digest"] == sha(raw(client.manifest)) and checks == ["tls"] * 3
     monkeypatch.setattr(discovery, "tls_proof", lambda: pytest.fail("TLS before material"))
     monkeypatch.setattr(discovery, "protected_file", lambda *args, **kwargs: pytest.fail("loan before material"))
     for request, material in ((GOLDEN["request"], {"registryJSON": registry, "registryCA": bundle}), (BOUND_REQUEST, {"registryJSON": registry})):
         with pytest.raises(discovery.DiscoveryRefusal, match="^material$"):
-            discovery.execute("apply", request, GOLDEN["digest"], material)
+            discovery.execute("apply", request, GOLDEN["digest"], dict(material, egress=DIRECT_ROUTE))
 
 
 class Unverified:
@@ -1186,12 +1208,14 @@ def test_every_frozen_auxiliary_reference_resolves_through_the_bound_bundle(tmp_
     monkeypatch.setattr(discovery, "Registry", registry)
     keepalived = {"name": "keepalived", "base": DIGEST_BASE, "tag": "", "image": DIGEST_BASE + "@" + digested_client.digest}
     request = dict(BOUND_REQUEST, auxiliary=[AUX_ENTRY, keepalived])
-    result = discovery.execute("apply", request, GOLDEN["digest"], {"registryJSON": registry_path, "registryCA": bundle})
+    route = {"httpProxy": "", "httpsProxy": "http://proxy.example.test:3128", "noProxy": [".internal.test"]}
+    result = discovery.execute("apply", request, GOLDEN["digest"], dict({"registryJSON": registry_path, "registryCA": bundle}, egress=json.dumps(route)))
     assert [entry["digest"] for entry in result["evidence"]["auxiliary"]] == [sha(raw(clients[AUX_BASE].manifest)), digested_client.digest]
     assert [base for unused_context, unused_anchor, base in seen] == [REPOSITORY, AUX_BASE, DIGEST_BASE]
     assert [anchor for unused_context, anchor, unused_base in seen] == ["trust bundle Secret registry-ca"] * 3
     assert len({id(context) for context, unused_anchor, unused_base in seen}) == 1
     assert isinstance(seen[0][0], ssl.SSLContext) and seen[0][0].get_ca_certs() == synthetic_ca_certs()
+    assert all(client.egress == route for client in clients.values())
 
 
 @pytest.mark.parametrize(
@@ -1213,7 +1237,7 @@ def test_bound_bundle_that_cannot_be_projected_refuses_material(tmp_path, monkey
     monkeypatch.setattr(discovery, "tls_proof", lambda *args: pytest.fail("host trust store with a bound bundle"))
     monkeypatch.setattr(discovery, "Registry", lambda *args: pytest.fail("registry before the bundle is proven"))
     with pytest.raises(discovery.DiscoveryRefusal, match="^material$"):
-        discovery.execute("apply", BOUND_REQUEST, GOLDEN["digest"], {"registryJSON": registry, "registryCA": bundle})
+        discovery.execute("apply", BOUND_REQUEST, GOLDEN["digest"], dict({"registryJSON": registry, "registryCA": bundle}, egress=DIRECT_ROUTE))
 
 
 @pytest.mark.parametrize("value", ["", "Bad Name", "a\nb", 5, "-leading"])
@@ -1222,4 +1246,4 @@ def test_bound_bundle_reference_must_be_a_name(monkeypatch, value):
     monkeypatch.setattr(discovery, "bundle_proof", lambda *args: pytest.fail("bundle before admission"))
     with pytest.raises(discovery.DiscoveryRefusal, match="^request$"):
         discovery.execute("apply", dict(BOUND_REQUEST, registryTrustBundleRef=value), GOLDEN["digest"],
-                          {"registryJSON": "/owned/loan", "registryCA": "/owned/bundle"})
+                          dict({"registryJSON": "/owned/loan", "registryCA": "/owned/bundle"}, egress=DIRECT_ROUTE))

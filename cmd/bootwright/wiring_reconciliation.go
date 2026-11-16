@@ -315,7 +315,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	for _, kind := range []api.Kind{api.CephCluster, api.CephPlacementPolicy, api.CephPool, api.CephRBDImage, api.CephFilesystem, api.CephSubvolume, api.CephClient, api.CephObjectGateway, api.CephObjectUser, api.CephObjectBucket, api.CephNFSExport, api.CephNVMeoFSubsystem} {
 		resolver = append(resolver, boundCapability{kind: string(kind), implementation: ceph.Implementation, family: "storage-core", capability: ceph.New(kind, runner).WithProofs(cephDependencyProofs{})})
 	}
-	resolver = append(resolver, boundCapability{kind: string(api.CephCluster), implementation: ceph.ImageImplementation, family: "storage-image", capability: ceph.NewImage(runner)})
+	resolver = append(resolver, boundCapability{kind: string(api.CephCluster), implementation: ceph.ImageImplementation, family: "storage-image", capability: ceph.NewImage(runner).WithRoute(clients.ProvedEgress)})
 	resolver = append(resolver, boundCapability{kind: string(api.CephConsumer), implementation: ceph.ConsumerImplementation, family: "storage-consumer", capability: ceph.NewConsumer(runner).WithProofs(cephDependencyProofs{})})
 	resolver = append(resolver, boundCapability{kind: string(api.CephCluster), implementation: ceph.HostImplementation, family: "storage-host", capability: ceph.NewHost(runner).WithProofs(cephDependencyProofs{})})
 	resolver = append(resolver, boundCapability{kind: string(api.CephCluster), implementation: ceph.PhysicalRetirementImplementation, family: ceph.PhysicalRetirementFamily,

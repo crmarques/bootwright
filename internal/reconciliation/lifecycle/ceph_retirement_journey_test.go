@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -282,7 +283,7 @@ func fleetEngine(t *testing.T, machines *fleetMachines, runner ceph.Runner, gate
 	slices.Sort(secretNames)
 	journey := lifecycle.NewBoundJourney(t, []lifecycle.BoundCapability{
 		{Binding: lifecycle.CapabilityBinding{Kind: string(api.Machine), Implementation: fleetMachineImplementation}, Capability: machines},
-		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephCluster), Implementation: ceph.ImageImplementation}, Capability: ceph.NewImage(runner)},
+		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephCluster), Implementation: ceph.ImageImplementation}, Capability: ceph.NewImage(runner).WithRoute(directImageRoute)},
 		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephCluster), Implementation: ceph.Implementation}, Capability: ceph.New(api.CephCluster, runner).WithProofs(fleetProofs{})},
 		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephPool), Implementation: ceph.Implementation}, Capability: ceph.New(api.CephPool, runner).WithProofs(fleetProofs{})},
 		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephClient), Implementation: ceph.Implementation}, Capability: ceph.New(api.CephClient, runner).WithProofs(fleetProofs{})},
@@ -373,4 +374,8 @@ func TestACephClusterWhoseHostsSurviveNamesItsOwnRemedy(t *testing.T) {
 
 func (fleetProofs) PhysicalMachine(reconciliation.Block, []byte) (ceph.PhysicalIdentity, bool, error) {
 	return ceph.PhysicalIdentity{}, false, errors.New("synthetic fleet has no physical hardware proof")
+}
+
+func directImageRoute(string, []lifecycle.BlockEvidence) (prerequisites.SetupEgress, error) {
+	return prerequisites.SetupEgress{NoProxy: []string{}}, nil
 }

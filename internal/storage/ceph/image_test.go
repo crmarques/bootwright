@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -63,7 +64,7 @@ func TestPlanEmitsTheImageBlockEveryCephBlockDependsOn(t *testing.T) {
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
 	var definitions []reconciliation.BlockDefinition
 	runner := &recordingRunner{}
-	image, err := NewImage(runner).Plan(context.Background(), input)
+	image, err := imageCapability(runner).Plan(context.Background(), input)
 	if err != nil || len(image.Definitions) != 1 || !slices.Equal(image.Secrets, []string{"registry"}) {
 		t.Fatalf("image plan=%+v err=%v", image, diagnostics.Of(err))
 	}
@@ -193,7 +194,7 @@ func TestAuthoredDigestMustEqualTheResolvedChildManifest(t *testing.T) {
 	block := imageBlock(t, "example", PinnedRepository+"@"+index)
 	evidence := bytes.Replace(resolvedEvidence(t, block.RequestDigest, resolvedDigest), []byte(`,"tag":"`+PinnedTag+`"`), nil, 1)
 	runner := &recordingRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: evidence}}
-	result, err := NewImage(runner).Apply(context.Background(), imageExecution(block))
+	result, err := imageCapability(runner).Apply(context.Background(), imageExecution(block))
 	if d := diagnostics.Of(err); result.Outcome != reconciliation.OutcomeFailed || len(d) != 1 || !strings.Contains(d[0].Message, "image-digest-mismatch") || runner.calls != 1 {
 		t.Fatalf("resolution of another digest accepted: %+v %v", result, err)
 	}
@@ -211,7 +212,7 @@ func TestImageResolutionRunsOnTheControllerWithOnlyTheRegistryLoan(t *testing.T)
 	block := imageBlock(t, "example", PinnedRepository+":"+PinnedTag)
 	runner := &recordingRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: resolvedEvidence(t, block.RequestDigest, resolvedDigest)}}
 	e := imageExecution(block)
-	result, err := NewImage(runner).Apply(context.Background(), e)
+	result, err := imageCapability(runner).Apply(context.Background(), e)
 	if err != nil || result.Outcome != reconciliation.OutcomeUnchanged || runner.calls != 1 {
 		t.Fatalf("resolution refused: %+v %v", result, err)
 	}
@@ -237,12 +238,12 @@ func TestImageResolutionRunsOnTheControllerWithOnlyTheRegistryLoan(t *testing.T)
 		runner.result = lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":true,"postcondition":true,"request":"` + block.RequestDigest + `"}`)}
 		var effect reconciliation.EffectState
 		if operation == "observe" {
-			observation, err := NewImage(runner).Observe(context.Background(), e)
+			observation, err := imageCapability(runner).Observe(context.Background(), e)
 			if err != nil {
 				t.Fatal(err)
 			}
 			effect = observation.Effect
-		} else if result, err := NewImage(runner).Destroy(context.Background(), e); err != nil || result.Outcome != reconciliation.OutcomeUnchanged {
+		} else if result, err := imageCapability(runner).Destroy(context.Background(), e); err != nil || result.Outcome != reconciliation.OutcomeUnchanged {
 			t.Fatalf("destroy %+v %v", result, err)
 		}
 		if runner.request.Operation != operation || len(runner.request.Materials) != 0 {
@@ -253,7 +254,7 @@ func TestImageResolutionRunsOnTheControllerWithOnlyTheRegistryLoan(t *testing.T)
 		}
 	}
 	calls := runner.calls
-	if observation, err := NewImage(runner).ObserveRemoval(context.Background(), e); err != nil || observation.Effect != reconciliation.EffectCompleted || runner.calls != calls {
+	if observation, err := imageCapability(runner).ObserveRemoval(context.Background(), e); err != nil || observation.Effect != reconciliation.EffectCompleted || runner.calls != calls {
 		t.Fatalf("removal resolution ran or refused: %+v %v", observation, err)
 	}
 }
@@ -270,7 +271,7 @@ func TestImageApplyRefusesUnprovedResolution(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			runner := &recordingRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: evidence}}
-			if result, err := NewImage(runner).Apply(context.Background(), imageExecution(block)); err == nil || result.Outcome == reconciliation.OutcomeChanged {
+			if result, err := imageCapability(runner).Apply(context.Background(), imageExecution(block)); err == nil || result.Outcome == reconciliation.OutcomeChanged {
 				t.Fatalf("unproved resolution accepted: %+v", result)
 			}
 		})
@@ -320,7 +321,7 @@ func TestAFailedResolutionKeepsItsAdapterOutputInTheAttempt(t *testing.T) {
 	e.Output = output
 	refused := imageRefusals()["discovery"]
 	runner := &failingRunner{err: refused}
-	result, err := NewImage(runner).Apply(context.Background(), e)
+	result, err := imageCapability(runner).Apply(context.Background(), e)
 	if err != refused || result.Outcome != reconciliation.OutcomeUnknown || runner.request.Output != output ||
 		!strings.Contains(runner.request.OutputRemediation, "attempt-000002.output") || runner.request.Refusals["discovery"] == nil {
 		t.Fatalf("a failed resolution lost its adapter output: %+v %v %q", result, err, runner.request.OutputRemediation)
@@ -396,11 +397,11 @@ func TestImageRequestBindsTheEntitlementTrustBundle(t *testing.T) {
 	matchesGolden(t, "request-image-trust-bundle", block.Request, false)
 	runner := &recordingRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: resolvedEvidence(t, block.RequestDigest, resolvedDigest)}}
 	e := imageExecution(block)
-	if _, err := NewImage(runner).Apply(context.Background(), e); err == nil || runner.calls != 0 {
+	if _, err := imageCapability(runner).Apply(context.Background(), e); err == nil || runner.calls != 0 {
 		t.Fatalf("resolution ran without its bound trust bundle: %v", err)
 	}
 	e.Material["registry-ca"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: []byte(gatewayCertificatePEM)})
-	if result, err := NewImage(runner).Apply(context.Background(), e); err != nil || result.Outcome != reconciliation.OutcomeUnchanged || runner.calls != 1 {
+	if result, err := imageCapability(runner).Apply(context.Background(), e); err != nil || result.Outcome != reconciliation.OutcomeUnchanged || runner.calls != 1 {
 		t.Fatalf("resolution refused: %+v %v", result, diagnostics.Of(err))
 	}
 	want := []lifecycle.MaterialFile{{Name: "registry", Secret: registryMaterial, Part: secrets.ValuePart, Variable: "registryJSON"},
@@ -409,7 +410,13 @@ func TestImageRequestBindsTheEntitlementTrustBundle(t *testing.T) {
 		t.Fatalf("resolution material %+v", runner.request.Materials)
 	}
 	runner.result = lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":true,"postcondition":true,"request":"` + block.RequestDigest + `"}`)}
-	if _, err := NewImage(runner).Observe(context.Background(), e); err != nil || len(runner.request.Materials) != 0 {
+	if _, err := imageCapability(runner).Observe(context.Background(), e); err != nil || len(runner.request.Materials) != 0 {
 		t.Fatalf("observe lent %+v %v", runner.request.Materials, err)
 	}
+}
+
+func imageCapability(runner Runner) ImageCapability {
+	return NewImage(runner).WithRoute(func(string, []lifecycle.BlockEvidence) (prerequisites.SetupEgress, error) {
+		return prerequisites.SetupEgress{NoProxy: []string{}}, nil
+	})
 }

@@ -223,7 +223,7 @@ func tiebreakerConsumerJourney(t *testing.T, replication bool, keep string) (*li
 	machines := &fleetMachines{}
 	journey := lifecycle.NewBoundJourney(t, []lifecycle.BoundCapability{
 		{Binding: lifecycle.CapabilityBinding{Kind: string(api.Machine), Implementation: fleetMachineImplementation}, Capability: keepingMachines{fleetMachines: machines, keep: keep}},
-		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephCluster), Implementation: ceph.ImageImplementation}, Capability: ceph.NewImage(runner)},
+		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephCluster), Implementation: ceph.ImageImplementation}, Capability: ceph.NewImage(runner).WithRoute(directImageRoute)},
 		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephCluster), Implementation: ceph.Implementation}, Capability: appliedCluster{ceph.New(api.CephCluster, runner).WithProofs(fleetProofs{})}},
 		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephConsumer), Implementation: ceph.ConsumerImplementation}, Capability: appliedConsumer{ceph.NewConsumer(runner)}},
 		{Binding: lifecycle.CapabilityBinding{Kind: string(api.CephReplication), Implementation: ceph.ReplicationImplementation}, Capability: appliedReplication{ceph.NewReplication(runner)}},

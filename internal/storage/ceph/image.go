@@ -11,6 +11,7 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -173,9 +174,19 @@ func imageEffect(e ImageEvidence, r ImageRequest, removal bool) reconciliation.E
 	return reconciliation.EffectCompleted
 }
 
-type ImageCapability struct{ runner Runner }
+type ImageRoute func(string, []lifecycle.BlockEvidence) (prerequisites.SetupEgress, error)
+
+type ImageCapability struct {
+	runner Runner
+	route  ImageRoute
+}
 
 func NewImage(runner Runner) ImageCapability { return ImageCapability{runner: runner} }
+
+func (c ImageCapability) WithRoute(route ImageRoute) ImageCapability {
+	c.route = route
+	return c
+}
 
 var _ lifecycle.NothingLive = ImageCapability{}
 
@@ -283,7 +294,20 @@ func (c ImageCapability) run(ctx context.Context, e lifecycle.Execution, operati
 		return lifecycle.RunResult{}, r, err
 	}
 	var files []lifecycle.MaterialFile
+	var values map[string]string
 	if operation == "apply" {
+		if c.route == nil {
+			return lifecycle.RunResult{}, r, failure("lifecycle.state", "the Ceph image acquisition route proof is not configured", "use the composed controller capability")
+		}
+		route, err := c.route(r.Controller, e.ApplyProved)
+		if err != nil {
+			return lifecycle.RunResult{}, r, err
+		}
+		routeJSON, err := json.Marshal(route)
+		if err != nil {
+			return lifecycle.RunResult{}, r, err
+		}
+		values = map[string]string{"egress": string(routeJSON)}
 		registry, err := imageRegistryMaterial(e, r.RegistryRef, r.Registry)
 		if err != nil {
 			return lifecycle.RunResult{}, r, err
@@ -298,7 +322,7 @@ func (c ImageCapability) run(ctx context.Context, e lifecycle.Execution, operati
 		files = append([]lifecycle.MaterialFile{{Name: "registry", Secret: registryMaterial, Part: secrets.ValuePart, Variable: "registryJSON"}}, trust...)
 	}
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(e, lifecycle.Invocation{Implementation: ImageImplementation, Operation: operation, Variable: "bootwright_ceph_image", Canonical: canonical,
-		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Controller}, Materials: files, Refusals: imageRefusals(), NativeErrors: true, Deadline: imageDeadline}))
+		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Controller}, Materials: files, Values: values, Refusals: imageRefusals(), NativeErrors: true, Deadline: imageDeadline}))
 	return result, r, err
 }
 

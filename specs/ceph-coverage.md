@@ -49,7 +49,15 @@ an admission requirement.
 
 Apply resolves the authored tag or digest in a controller-local image block,
 using the declared licensed Entitlement and its protected registry Secret, before any
-native effect. Resolution authenticates the selected manifest and platform
+native effect. Acquisition uses only the controller Machine's route already
+frozen in its completed controller prerequisite, including its proxy bypass
+rules; missing or inconsistent proof refuses before acquisition. Ambient proxy
+variables and newly edited input never replace that recorded route. HTTP and
+HTTPS proxies use CONNECT; an HTTPS proxy verifies against controller system
+trust separately from the unchanged registry TLS anchor. A configuration-blob
+delivery CONNECT targets only an already-qualified public IP, retaining the
+original hostname for TLS verification, SNI and HTTP Host, without registry or
+proxy credentials. Resolution authenticates the selected manifest and platform
 from the declared registry origin. Its TLS verifies that origin against the
 Entitlement's `registry.trustBundleRef` alone when it is set, and against the
 host trust store otherwise, for the Ceph image and each auxiliary image; an

@@ -469,7 +469,7 @@ func TestAuxiliaryResolutionMustProveEachChild(t *testing.T) {
 	block := auxiliaryBlock(t, r)
 	apply := func(children []AuxiliaryEvidence) (lifecycle.Result, error) {
 		runner := &recordingRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: auxiliaryEvidence(t, block, r, children)}}
-		return NewImage(runner).Apply(context.Background(), imageExecution(block))
+		return imageCapability(runner).Apply(context.Background(), imageExecution(block))
 	}
 	if result, err := apply(resolvedChildren(images, haproxyChild, keepalivedChild)); err != nil || result.Outcome != reconciliation.OutcomeUnchanged {
 		t.Fatalf("a proved auxiliary set refused: %+v %v", result, diagnostics.Of(err))

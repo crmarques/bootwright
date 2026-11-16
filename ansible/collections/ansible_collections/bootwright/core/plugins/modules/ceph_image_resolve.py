@@ -34,6 +34,7 @@ options:
     description:
       - Protected registry JSON file loan, for apply only.
       - Also carries the registry trust bundle file loan when the request names one.
+      - Apply also carries the non-secret JSON egress route proved by the completed frozen controller stage.
     type: dict
     default: {}
 author:

@@ -696,6 +696,19 @@ func contractEffects(t *testing.T, row contractRow, example contractExample, cap
 				return "/var/lib/bootwright/tools/" + tool.Kind + "/" + tool.Version + "/" + tool.Executable, nil
 			},
 		}
+		if row.implementation == ceph.ImageImplementation {
+			for _, stage := range example.frozen(lifecycle.CapabilityBinding{Kind: clients.Kind, Implementation: clients.Implementation}) {
+				evidence, err := json.Marshal(clients.Evidence{Request: stage.RequestDigest, Packages: []clients.PackageRecord{}, Tools: []clients.ToolRecord{}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				execution.ApplyProved = append(execution.ApplyProved, lifecycle.BlockEvidence{Block: stage, Kind: stage.Kind, Object: stage.Object,
+					Implementation: stage.Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: evidence})
+			}
+			if len(execution.ApplyProved) == 0 {
+				t.Fatal("image contract fixture has no frozen controller route")
+			}
+		}
 		contractRequests(row, block, capability, execution, runner, findings)
 		contractRunnerFailures(row, block, capability, execution, runner, findings)
 		contractEvidence(t, row, example, block, capability, execution, runner, findings)
