@@ -21,6 +21,8 @@ const addonSecret = "addon-secret"
 type planningCapability struct {
 	*lendingCapability
 	reserves string
+	// admitFault fails the admission of an add-on block with a plain error.
+	admitFault error
 }
 
 func (c *planningCapability) Plan(ctx context.Context, input PlanInput) (CapabilityPlan, error) {
@@ -70,6 +72,9 @@ func (c *planningCapability) SecretReferences(block reconciliation.Block) ([]str
 type addonCapability struct{ *planningCapability }
 
 func (c *addonCapability) AdmitAdded(lineage reconciliation.Plan, added reconciliation.Block) error {
+	if c.admitFault != nil {
+		return c.admitFault
+	}
 	if !strings.HasPrefix(added.ID, "addon-") {
 		return failure("lifecycle.state", "the test capability admits only add-on instances", "")
 	}

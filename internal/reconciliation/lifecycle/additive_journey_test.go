@@ -461,6 +461,18 @@ func TestADiffWithoutObserveDoesNotProveTheCustodyOfAnAddition(t *testing.T) {
 	f.refusedWith(t, "addon-nmstate cannot be added", "missing")
 }
 
+func TestADiffReportsAnObservationFailureOfAnAdditionRatherThanNoAddition(t *testing.T) {
+	f := newAdditiveFixture(t)
+	f.root(t)
+	f.publish("rev-2", addonBinding("cluster", "nmstate"))
+	fault := errors.New("the record store failed")
+	f.capability.admitFault = fault
+	result, err := f.service.Diff(context.Background(), DiffRequest{ContextName: testContextName})
+	if !errors.Is(err, fault) {
+		t.Fatalf("diff = %+v (%v), want the failed observation returned rather than an input that adds nothing", result, err)
+	}
+}
+
 func secretObject(name, source string) api.Object {
 	return api.NewObject(api.Secret, name, api.Value{}, api.MapValue(api.FieldValue{Name: "source", Value: api.StringValue(source)}))
 }
