@@ -27,13 +27,11 @@ type capabilityBinding struct {
 	reservations []prerequisites.HostReservation
 	hostKeyed    []hostKeyedClaim
 	secrets      []string
-	// controller is the Machine this Environment selects. A first apply binds
-	// the context to the host it runs on under that name.
+	// controller is the Machine this Environment selects: on a first apply, the host it runs on.
 	controller string
 }
 
-// compile reads the frozen input once, so a decision never compiles the same
-// revision twice to answer two questions about it.
+// compile reads the frozen input once, so no decision compiles one revision twice.
 func (s Service) compile(ctx context.Context, view View) (*compilation.State, error) {
 	return s.compileSources(ctx, view.Inputs())
 }
@@ -206,8 +204,6 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		}
 	}
 	binding.reservations = append(binding.reservations, published...)
-	// Validate the composed identities now, but keep the original positions:
-	// hostKeyedReservations still needs them to attach every pinned host key.
 	if _, err := canonicalReservations(binding.reservations); err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
@@ -241,12 +237,11 @@ func (s Service) planInput(view View, state *compilation.State, controller strin
 
 // refuseOwnSocketConflicts compares the sockets this context's own blocks claim
 // on one host as another context's are compared on the controller, so two of
-// them that could never both listen refuse before the plan exists rather than
-// when the second one starts. A claim is qualified by the host its block is
-// placed on: the controller, or the host its SSH placement reaches, named by
-// address and port rather than by Machine, so two Machines reaching one host
-// share it and one reaching the controller shares the controller's. Claims on
-// two hosts never conflict. The controller is compared first, then each SSH
+// them that could never both listen refuse before the plan exists. A claim is
+// qualified by the host its block is placed on: the controller, or the host its
+// SSH placement reaches, named by address and port rather than by Machine, so
+// two Machines reaching one host share it and one reaching the controller
+// shares the controller's. The controller is compared first, then each SSH
 // host in the name order of the first Machine reaching it.
 func refuseOwnSocketConflicts(catalog api.Catalog, controller string, reservations []prerequisites.HostReservation, placed []SSHReservation) error {
 	own, _ := catalog.Find(api.Machine, controller)

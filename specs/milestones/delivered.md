@@ -16069,3 +16069,30 @@ dropped; the `lab-compact-df` plan golden lists the installer-media host
 packages that [controller prerequisites](../controller.md) now install. No
 behavior, request or contract digest changes. The delivering commit records
 the three tests failing before and passing after.
+
+## X503 — Lifecycle comment ceiling
+
+### B1473
+
+A pre-existing defect that blocked every gate selecting the architecture
+suite, taken at the owner's other session's request: X501's shared
+reservation composition added six comment lines to
+`internal/reconciliation/lifecycle`, above its production comment ceiling, and
+a `reservations.go` the lifecycle file partition did not classify, and
+lines to `planFrom` that took it above the production function line limit, so
+`TestProductionCommentLinesOnlyShrink`, `TestLifecycleFilesAreClassified` and
+`TestProductionFunctionsStayWithinTheLineLimit` failed on main. The planning
+validation note folds into the `canonicalReservations` comment, which returns
+`planFrom` under the limit, and three older comments of the package say the
+same in fewer lines, the ceiling keeping its value; the new file is a planner
+file, as its callers are. No code, behavior or contract changes. The
+delivering commit records the three tests failing before and passing after.
+
+### B1475
+
+A pre-existing defect that blocked `make check` on main for every session:
+e0940ce15's discovery unit tests carried pep8 continuation, line-length and
+blank-line issues and one unnecessary lambda, so the collection's sanity suite
+failed. The tests are reformatted and the lambda replaced by the bound method;
+no assertion changes. The delivering commit records the narrowed sanity and
+units suites over the four files and the full gate.

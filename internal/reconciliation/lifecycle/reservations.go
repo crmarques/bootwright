@@ -7,10 +7,9 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-// canonicalReservations combines contributions to one shared claim without
-// weakening an exclusive claim or choosing between inconsistent metadata.
-// Callers retain positional SSH claims until their host keys are qualified;
-// only then may this result replace the binding's reservation list.
+// canonicalReservations combines contributions to one shared claim and refuses
+// an exclusive or inconsistent one; planFrom validates in place and keeps the
+// sorted result only once hostKeyedReservations has attached every host key.
 func canonicalReservations(claims []prerequisites.HostReservation) ([]prerequisites.HostReservation, error) {
 	ordered := slices.Clone(claims)
 	for i := range ordered {
