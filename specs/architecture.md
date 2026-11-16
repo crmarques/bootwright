@@ -1287,6 +1287,9 @@ owning spec, which names the check.
   locks, with no ambient or silently substituted dependencies.
 - Build and vet the module on one platform besides linux/amd64, where each
   off-platform refusal satisfies the ports its Linux adapter is bound to.
+- Run one static analyzer, pinned in the tools module, over the module and its
+  tests, unused code and ineffective assignments included (`make
+  staticcheck`); a finding fails unless its exact exclusion list names it.
 - Verify implementation registry entries against actual adapter content,
   contract IDs, playbooks/roles, and immutable identities. Review support claims.
 - Test pure decisions, ordering, diagnostics, cancellation, and deterministic

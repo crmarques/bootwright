@@ -1,0 +1,26 @@
+# Reviewed staticcheck findings the gate tolerates: check, file, count and
+# message start, separated by tabs. The list only shrinks; see main.go.
+S1007	test/architecture/version_specializations_test.go	1	should use raw string (`...`) with regexp.MustCompile to avoid having to escape twice
+S1011	internal/infrastructureservices/managedservice/selection.go	1	should replace loop with egress.NoProxy = append(egress.NoProxy, choice.Get("noProxy").Strings()...)
+S1016	internal/managedos/installation/firewall_request.go	1	should convert port (type HostPort) to FirewallPort instead of using struct literal
+S1016	internal/storage/ceph/smb.go	1	should convert a (type AuxiliaryReference) to SMBImage instead of using struct literal
+SA1019	internal/secrets/material/generation.go	6	(crypto/ecdsa.PrivateKey).D has been deprecated
+SA1019	internal/secrets/material/generation.go	2	(crypto/ecdsa.PublicKey).X has been deprecated
+SA1019	internal/secrets/material/generation.go	2	(crypto/ecdsa.PublicKey).Y has been deprecated
+SA1019	internal/secrets/material/generation.go	2	(crypto/elliptic.Curve).IsOnCurve has been deprecated
+SA1019	internal/secrets/material/generation.go	1	(crypto/elliptic.Curve).ScalarBaseMult has been deprecated
+SA1019	internal/secrets/material/generation.go	5	(crypto/rsa.PrecomputedValues).CRTValues has been deprecated
+SA1019	internal/secrets/material/generation_test.go	2	(crypto/ecdsa.PrivateKey).D has been deprecated
+SA1019	internal/secrets/material/generation_test.go	2	(crypto/rsa.PrecomputedValues).CRTValues has been deprecated
+SA1019	internal/secrets/material/validation.go	4	(crypto/ecdsa.PrivateKey).D has been deprecated
+SA1019	internal/secrets/material/validation.go	1	crypto/dsa has been deprecated
+SA1019	test/architecture/diagnostics_test.go	4	go/ast.Object has been deprecated
+SA4004	internal/managedos/installation/discovery.go	1	the surrounding loop is unconditionally terminated
+SA5001	internal/controller/venvlocal/guard_linux_amd64_test.go	2	should check error returned from exclusive() before deferring retire.Close()
+SA6006	internal/controller/privilege/sudo_test.go	2	use io.Writer.Write instead of converting from []byte to string to use io.WriteString
+ST1005	internal/addons/clusterobjects/validation.go	2	error strings should not be capitalized
+ST1005	internal/storage/cephcluster/disk_protections.go	2	error strings should not be capitalized
+ST1008	internal/workspace/contextfs/store_failures_linux_amd64_test.go	1	error should be returned as the last argument
+ST1012	internal/infrastructureservices/artifactserver/evidence.go	1	error var certificateMismatch should have name of the form errFoo
+ST1012	internal/infrastructureservices/managedservice/evidence.go	1	error var certificateMismatch should have name of the form errFoo
+ST1012	internal/reconciliation/lifecycle/kill_harness_test.go	1	error var killError should have name of the form errFoo

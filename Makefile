@@ -1,4 +1,4 @@
-.PHONY: build release wheels vulngate licenses licenses-check tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check execution-contracts-check focus quick race check-offline check check-go
+.PHONY: build release wheels vulngate licenses licenses-check tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check execution-contracts-check focus quick race check-offline check check-go staticcheck
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -242,16 +242,27 @@ test: wheels
 	# The timeout bounds a whole package, including the CLI's executable builds
 	# while the full Ansible gate competes for CPU on cold CI runners.
 	$(GO) test -timeout=20m ./...
-	$(GO) -C scripts/tools test ./clientassets/... ./licenses/... ./runtimewheels/... ./tooltable/... ./vulngate/...
+	$(GO) -C scripts/tools test ./...
 
 vet: wheels
 	$(GO) vet ./...
 	GOOS=darwin GOARCH=arm64 $(GO) vet ./...
+	$(GO) -C scripts/tools vet ./...
+
+# staticcheck's default checks over the module and its tests. A finding fails
+# unless scripts/tools/staticgate/exclusions.txt names it, and an exclusion
+# that covers fewer findings than it counts fails too, so the list only shrinks.
+staticcheck:
+	@set -eu; mkdir -p bin; status=0; \
+	./scripts/staticcheck -f json ./... >bin/staticcheck.json || status=$$?; \
+	test "$$status" -le 1 || { echo "staticcheck: the analyzer failed with status $$status" >&2; exit 1; }; \
+	$(GO) -C scripts/tools run ./staticgate -findings "$(CURDIR)/bin/staticcheck.json" \
+		-exclusions "$(CURDIR)/scripts/tools/staticgate/exclusions.txt" -root "$(CURDIR)"
 
 fmt-check:
 	@set -eu; \
 	formatter="$$($(GO) env GOROOT)/bin/gofmt"; \
-	directories="$$($(GO) list -buildvcs=false -tags=completion -f '{{.Dir}}' ./...)"; \
+	directories="$$($(GO) list -buildvcs=false -tags=completion -f '{{.Dir}}' ./...; $(GO) -C scripts/tools list -buildvcs=false -f '{{.Dir}}' ./...)"; \
 	unformatted="$$(printf '%s\n' "$$directories" | while IFS= read -r directory; do "$$formatter" -l "$$directory" || exit $$?; done)"; \
 	if test -n "$$unformatted"; then printf 'Go files require formatting:\n%s\n' "$$unformatted" >&2; exit 1; fi
 
@@ -338,4 +349,4 @@ check:
 	$(MAKE) -k --no-print-directory --output-sync=target -j2 ansible-check check-go
 	git diff --check
 
-check-go: wheels fmt-check modules-check tidy-check licenses-check test vet completion-test vulncheck vulngate
+check-go: wheels fmt-check modules-check tidy-check licenses-check test vet staticcheck completion-test vulncheck vulngate

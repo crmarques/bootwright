@@ -46,10 +46,12 @@ Build and verification tools are development dependencies; running the
 Bootwright executable never installs them. Dependency acquisition during a
 build may need network access. See [build knowledge](../.agents/knowledge/build-toolchain.md)
 for the exact toolchain selection and release metadata injection points.
-`scripts/tools` separately locks `govulncheck` v1.8.0, `goimports` from
-`golang.org/x/tools` v0.51.0, and their dependencies, keeping check tooling out
-of the application module graph. Run import formatting through
-`./scripts/goimports`; the architecture suite also rejects duplicate imports
+`scripts/tools` separately locks `govulncheck` from `golang.org/x/vuln`
+v1.9.0, `goimports` from `golang.org/x/tools` v0.52.0, `staticcheck` from
+`honnef.co/go/tools` v0.8.2 (release 2026.2.2), and their dependencies,
+keeping check tooling out of the application module graph. Run import
+formatting through `./scripts/goimports` and the static analyzer through
+`make staticcheck`; the architecture suite also rejects duplicate imports
 and mixed or misordered standard-library and module groups.
 Development checks keep their own pinned tool versions for reproducible
 verification: the [Ansible check tool lock and setup](../scripts/tools/ansible-check.md)
