@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -24,6 +25,7 @@ for argument in "$@"; do
 	esac
 done
 printf '%s\n' "$vulncheck" >>"$(dirname "$0")/vulncheck"
+printf 'RELEASE_STRAY=%s HTTPS_PROXY=%s ARGUMENTS=%s\n' "${RELEASE_STRAY-unset}" "${HTTPS_PROXY-unset}" "$*" >>"$(dirname "$0")/environment"
 @IDENTITY@
 cat >"$dest/bootwright" <<EOF
 #!/bin/sh
@@ -71,7 +73,7 @@ func goodRelease() releaseBuild {
 // settings of its environment and does what each step of make build needs.
 const nativeGo = `#!/bin/sh
 set -eu
-printf 'GOFLAGS=%s GOEXPERIMENT=%s GOOS=%s GOARCH=%s\n' "${GOFLAGS-unset}" "${GOEXPERIMENT-unset}" "${GOOS-unset}" "${GOARCH-unset}" >>"$(dirname "$0")/../go.log"
+printf 'GOFLAGS=%s GOEXPERIMENT=%s GOOS=%s GOARCH=%s GOAMD64=%s GOFIPS140=%s GOENV=%s RELEASE_STRAY=%s HTTPS_PROXY=%s\n' "${GOFLAGS-unset}" "${GOEXPERIMENT-unset}" "${GOOS-unset}" "${GOARCH-unset}" "${GOAMD64-unset}" "${GOFIPS140-unset}" "${GOENV-unset}" "${RELEASE_STRAY-unset}" "${HTTPS_PROXY-unset}" >>"$(dirname "$0")/../go.log"
 previous=
 for argument in "$@"; do
 	case "$previous" in
@@ -294,30 +296,41 @@ func TestReleaseRefusesWhatItMustNotShip(t *testing.T) {
 		}
 	}
 	for name, test := range map[string]struct {
-		build     releaseBuild
-		arguments []string
-		prepare   func(t *testing.T, checkout releaseCheckout)
-		want      string
-		built     bool
-		kept      map[string]string
+		build       releaseBuild
+		arguments   []string
+		environment []string
+		prepare     func(t *testing.T, checkout releaseCheckout)
+		want        string
+		built       bool
+		kept        map[string]string
 	}{
-		"an executable stamped unchecked":          {build: variant(func(b *releaseBuild) { b.check = "unchecked" }), built: true, want: "not a pass"},
-		"an executable stamped with no pass":       {build: variant(func(b *releaseBuild) { b.check = "failed" }), built: true, want: "not a pass"},
-		"a bill of materials another build wrote":  {build: variant(func(b *releaseBuild) { b.sbom = `{"bom":"two"}` }), built: true, want: "is not the bill of materials of this executable"},
-		"notices of another bill of materials":     {build: variant(func(b *releaseBuild) { b.digest = strings.Repeat("0", 64) }), built: true, want: "was not composed from this bill of materials"},
-		"an executable built from a modified tree": {build: variant(func(b *releaseBuild) { b.source = "modified" }), built: true, want: "reports source 'modified'"},
-		"an executable reporting another version":  {build: variant(func(b *releaseBuild) { b.version = "v9.9.9" }), built: true, want: "reports version 'v9.9.9'"},
-		"an executable reporting another commit":   {build: variant(func(b *releaseBuild) { b.commit = strings.Repeat("b", 40) }), built: true, want: "reports commit"},
-		"an export that omits the notices":         {build: variant(func(b *releaseBuild) { b.omitNotices = true }), built: true, want: "exported no bootwright.notices.txt"},
-		"an export that omits the executable":      {build: variant(func(b *releaseBuild) { b.post = `rm -f "$dest/bootwright"` }), built: true, want: "exported no bootwright"},
-		"an empty executable":                      {build: variant(func(b *releaseBuild) { b.post = `: >"$dest/bootwright"` }), built: true, want: "bootwright is missing or empty"},
-		"an executable that cannot run":            {build: variant(func(b *releaseBuild) { b.post = `chmod -x "$dest/bootwright"` }), built: true, want: "bootwright is not executable"},
-		"an empty bill of materials":               {build: variant(func(b *releaseBuild) { b.post = `: >"$dest/bootwright.cdx.json"` }), built: true, want: "bootwright.cdx.json is missing or empty"},
-		"VULNCHECK=skip":                           {build: good, arguments: []string{"VULNCHECK=skip"}, want: "VULNCHECK=skip is refused"},
-		"a VULNDB that is not the Makefile's":      {build: good, arguments: []string{"VULNDB=file:///nowhere"}, want: "VULNDB comes from the command line"},
-		"a GO that is not the Makefile's":          {build: good, arguments: []string{"GO=true"}, want: "GO comes from the command line"},
-		"a STAMP that is not the Makefile's":       {build: good, arguments: []string{"STAMP=-X main.vulnerabilityCheck=passed:2026-11-10"}, want: "STAMP comes from the command line"},
-		"a verdict that is not the Makefile's":     {build: good, arguments: []string{"VULNERABILITY_CHECK=passed:2026-11-10"}, want: "VULNERABILITY_CHECK comes from the command line"},
+		"an executable stamped unchecked":            {build: variant(func(b *releaseBuild) { b.check = "unchecked" }), built: true, want: "not a pass"},
+		"an executable stamped with no pass":         {build: variant(func(b *releaseBuild) { b.check = "failed" }), built: true, want: "not a pass"},
+		"a bill of materials another build wrote":    {build: variant(func(b *releaseBuild) { b.sbom = `{"bom":"two"}` }), built: true, want: "is not the bill of materials of this executable"},
+		"notices of another bill of materials":       {build: variant(func(b *releaseBuild) { b.digest = strings.Repeat("0", 64) }), built: true, want: "was not composed from this bill of materials"},
+		"an executable built from a modified tree":   {build: variant(func(b *releaseBuild) { b.source = "modified" }), built: true, want: "reports source 'modified'"},
+		"an executable reporting another version":    {build: variant(func(b *releaseBuild) { b.version = "v9.9.9" }), built: true, want: "reports version 'v9.9.9'"},
+		"an executable reporting another commit":     {build: variant(func(b *releaseBuild) { b.commit = strings.Repeat("b", 40) }), built: true, want: "reports commit"},
+		"an export that omits the notices":           {build: variant(func(b *releaseBuild) { b.omitNotices = true }), built: true, want: "exported no bootwright.notices.txt"},
+		"an export that omits the executable":        {build: variant(func(b *releaseBuild) { b.post = `rm -f "$dest/bootwright"` }), built: true, want: "exported no bootwright"},
+		"an empty executable":                        {build: variant(func(b *releaseBuild) { b.post = `: >"$dest/bootwright"` }), built: true, want: "bootwright is missing or empty"},
+		"an executable that cannot run":              {build: variant(func(b *releaseBuild) { b.post = `chmod -x "$dest/bootwright"` }), built: true, want: "bootwright is not executable"},
+		"an empty bill of materials":                 {build: variant(func(b *releaseBuild) { b.post = `: >"$dest/bootwright.cdx.json"` }), built: true, want: "bootwright.cdx.json is missing or empty"},
+		"VULNCHECK=skip":                             {build: good, arguments: []string{"VULNCHECK=skip"}, want: "VULNCHECK=skip is refused"},
+		"a VULNDB that is not the Makefile's":        {build: good, arguments: []string{"VULNDB=file:///nowhere"}, want: "VULNDB comes from the command line"},
+		"a GO that is not the Makefile's":            {build: good, arguments: []string{"GO=true"}, want: "GO comes from the command line"},
+		"a STAMP that is not the Makefile's":         {build: good, arguments: []string{"STAMP=-X main.vulnerabilityCheck=passed:2026-11-10"}, want: "STAMP comes from the command line"},
+		"a verdict that is not the Makefile's":       {build: good, arguments: []string{"VULNERABILITY_CHECK=passed:2026-11-10"}, want: "VULNERABILITY_CHECK comes from the command line"},
+		"a license table that is not the Makefile's": {build: good, arguments: []string{"GO_LICENSES=/nowhere.json"}, want: "GO_LICENSES comes from the command line"},
+		"a tool table that is not the Makefile's":    {build: good, arguments: []string{"TOOL_TABLE=/nowhere.json"}, want: "TOOL_TABLE comes from the command line"},
+		"proxy settings that are not the Makefile's": {build: good, arguments: []string{"CONTAINER_SETTINGS=HOME"}, want: "CONTAINER_SETTINGS comes from the command line"},
+		"a variable the Makefile does not name":      {build: good, arguments: []string{"GOFLAGS=-overlay=/nowhere.json"}, want: "GOFLAGS comes from the command line"},
+		"a wheel cache from the environment":         {build: good, environment: []string{"WHEELS_CACHE=/nowhere"}, want: "WHEELS_CACHE comes from the environment"},
+		"an environment that overrides the Makefile": {build: good, arguments: []string{"-e"}, environment: []string{"STAMP=-X main.vulnerabilityCheck=passed:2026-11-10"}, want: "STAMP comes from the environment override"},
+		"another makefile read first":                {build: good, environment: []string{"MAKEFILES=/dev/null"}, want: "reads more than the Makefile"},
+		"a makefile line evaluated first":            {build: good, arguments: []string{"--eval=GO_LICENSES=/nowhere.json"}, want: "reads more than the Makefile"},
+		"a Go image named by a tag alone":            {build: good, arguments: []string{"GO_IMAGE=docker.io/library/golang:1.26.11-trixie"}, want: "is not pinned by @sha256:"},
+		"a Go image from the environment by a tag":   {build: good, environment: []string{"GO_IMAGE=mirror.example/golang:1.26.11-trixie@sha256:short"}, want: "is not pinned by @sha256:"},
 		"no version":                               {build: good, arguments: []string{"VERSION="}, want: "name the release with VERSION"},
 		"a dirty version":                          {build: good, arguments: []string{"VERSION=v1.2.3-dirty"}, want: "names a dirty tree"},
 		"a commit that is not the checkout's":      {build: good, arguments: []string{"COMMIT=" + strings.Repeat("a", 40)}, want: "is not the checkout's commit"},
@@ -345,7 +358,7 @@ func TestReleaseRefusesWhatItMustNotShip(t *testing.T) {
 			if test.kept != nil {
 				want = test.kept
 			}
-			output, err := checkout.release(t, append([]string{"VERSION=v1.2.3"}, test.arguments...)...)
+			output, err := checkout.make(t, nil, test.environment, append([]string{"RELEASE_BUILD=container", "VERSION=v1.2.3"}, test.arguments...)...)
 			if err == nil {
 				t.Fatalf("release finished:\n%s", output)
 			}
@@ -396,10 +409,10 @@ func TestReleaseRefusesAMakeThatWouldRunOnlyPartOfIt(t *testing.T) {
 
 func TestReleaseRefusesATreeThatChangesDuringTheBuild(t *testing.T) {
 	growing := goodRelease()
-	growing.post = `touch "$RELEASE_TEST_TREE/extra.go"`
+	growing.post = `touch extra.go`
 	checkout := newReleaseCheckout(t, growing)
 	previous := checkout.previousRelease(t)
-	output, err := checkout.make(t, nil, []string{"RELEASE_TEST_TREE=" + checkout.dir}, "RELEASE_BUILD=container", "VERSION=v1.2.3")
+	output, err := checkout.make(t, nil, nil, "RELEASE_BUILD=container", "VERSION=v1.2.3")
 	if err == nil || !strings.Contains(output, "extra.go") {
 		t.Fatalf("a file added during the build was shipped (%v):\n%s", err, output)
 	}
@@ -410,7 +423,11 @@ func TestReleaseRefusesATreeThatChangesDuringTheBuild(t *testing.T) {
 
 func TestReleaseOnTheHostRunsTheBuildWithAnEnvironmentThatCannotChangeTheCompile(t *testing.T) {
 	checkout := newReleaseCheckout(t, goodRelease())
-	output, err := checkout.make(t, nil, []string{"GOFLAGS=-overlay=/nowhere.json", "GOEXPERIMENT=boringcrypto", "GOOS=windows", "GOARCH=arm64"}, "RELEASE_BUILD=native", "VERSION=v1.2.3")
+	goenv := filepath.Join(t.TempDir(), "env")
+	if err := os.WriteFile(goenv, []byte("GOEXPERIMENT=boringcrypto\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	output, err := checkout.make(t, nil, []string{"GOFLAGS=-overlay=/nowhere.json", "GOEXPERIMENT=boringcrypto", "GOOS=windows", "GOARCH=arm64", "GOAMD64=v4", "GOFIPS140=latest", "GOENV=" + goenv, "RELEASE_STRAY=inherited", "HTTPS_PROXY=http://proxy.example:3128"}, "RELEASE_BUILD=native", "VERSION=v1.2.3")
 	if err != nil {
 		t.Fatalf("release on the host failed: %v\n%s", err, output)
 	}
@@ -423,13 +440,54 @@ func TestReleaseOnTheHostRunsTheBuildWithAnEnvironmentThatCannotChangeTheCompile
 		t.Fatalf("the host build ran no Go step (%v)", err)
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(log)), "\n") {
-		if line != "GOFLAGS=-mod=readonly GOEXPERIMENT=unset GOOS=unset GOARCH=unset" {
-			t.Errorf("a Go step ran with %q, want the module graph read-only and no experiment, OS or architecture", line)
+		if line != "GOFLAGS=-mod=readonly GOEXPERIMENT=unset GOOS=unset GOARCH=unset GOAMD64=unset GOFIPS140=unset GOENV=off RELEASE_STRAY=unset HTTPS_PROXY=http://proxy.example:3128" {
+			t.Errorf("a Go step ran with %q, want the module graph read-only, no go env file, no inherited Go setting and the proxy alone passed on", line)
 		}
 	}
 	environment, err := checkout.make(t, nil, []string{"VULNDB=file:///nowhere"}, "RELEASE_BUILD=native", "VERSION=v1.2.3")
 	if err == nil || !strings.Contains(environment, "VULNDB comes from the environment") {
 		t.Errorf("a VULNDB in the environment was not refused (%v):\n%s", err, environment)
+	}
+}
+
+func TestReleaseInAContainerPassesOnlyTheAllowedEnvironmentAndADigestPinnedImage(t *testing.T) {
+	checkout := newReleaseCheckout(t, goodRelease())
+	image := "mirror.example/golang:1.26.11-trixie@sha256:" + strings.Repeat("a", 64)
+	output, err := checkout.make(t, nil, []string{"RELEASE_STRAY=inherited", "HTTPS_PROXY=http://proxy.example:3128"}, "RELEASE_BUILD=container", "VERSION=v1.2.3", "GO_IMAGE="+image)
+	if err != nil {
+		t.Fatalf("a container release with a digest-pinned image failed: %v\n%s", err, output)
+	}
+	data, err := os.ReadFile(filepath.Join(checkout.tmp, "environment"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if line := strings.TrimSpace(string(data)); !strings.HasPrefix(line, "RELEASE_STRAY=unset HTTPS_PROXY=http://proxy.example:3128 ") || !strings.Contains(line, "--build-arg GO_IMAGE="+image+" ") {
+		t.Errorf("the engine ran with %q, want no inherited variable, the proxy passed on and the pinned image", line)
+	}
+}
+
+func TestEveryVariableTheEnvironmentCanSetIsAReleaseInputOrRefused(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	makefile := string(data)
+	list := func(name string) []string {
+		match := regexp.MustCompile(`(?m)^` + name + ` = (.*)$`).FindStringSubmatch(makefile)
+		if match == nil {
+			t.Fatalf("the Makefile does not list %s", name)
+		}
+		return strings.Fields(match[1])
+	}
+	var defaulted []string
+	for _, match := range regexp.MustCompile(`(?m)^([A-Za-z_][A-Za-z0-9_]*) \?=`).FindAllStringSubmatch(makefile, -1) {
+		defaulted = append(defaulted, match[1])
+	}
+	listed := append(list("RELEASE_INPUTS"), list("RELEASE_DEFAULTED")...)
+	slices.Sort(defaulted)
+	slices.Sort(listed)
+	if !slices.Equal(defaulted, listed) {
+		t.Errorf("the Makefile's ?= variables are %v, but RELEASE_INPUTS and RELEASE_DEFAULTED list %v; a release must take each from the caller on purpose or refuse it from the environment", defaulted, listed)
 	}
 }
 
@@ -462,7 +520,7 @@ func TestTheReleaseRecipeIsOneRecipeThatRunsTheBuildWithTheVulnerabilityGateOn(t
 		t.Fatal("the Makefile has no release target without prerequisites, so a check could be skipped as one")
 	}
 	recipe, _, _ = strings.Cut(recipe, "\n\n")
-	for _, want := range []string{"$(MAKE) --no-print-directory build VULNCHECK=on", "$(MAKE) --no-print-directory container-build VULNCHECK=on", "env -u GOFLAGS -u GOEXPERIMENT -u GOOS -u GOARCH GOFLAGS=-mod=readonly"} {
+	for _, want := range []string{"$(MAKE) --no-print-directory build VULNCHECK=on", "$(MAKE) --no-print-directory container-build VULNCHECK=on", `env -i "$$@" GOENV=off GOFLAGS=-mod=readonly $(MAKE)`, `env -i "$$@" GOENV=off $(MAKE)`} {
 		if !strings.Contains(recipe, want) {
 			t.Errorf("the release recipe does not run %q:\n%s", want, recipe)
 		}

@@ -866,13 +866,14 @@ build stamps the verdict `version` prints. `VULNCHECK=skip` builds without the
 databases and stamps the executable `unchecked`.
 
 `make release` is the only recipe that ships a build, and it refuses what the
-gate did not pass. It refuses `VULNCHECK=skip`, a `VULNDB`, `GO`, `STAMP` or
-verdict that does not come from the Makefile, `make -n`, `-i`, `-t` and `-q`, a
+gate did not pass. It refuses `VULNCHECK=skip`, any variable that does not come
+from the Makefile other than its named release inputs, a `GO_IMAGE` not pinned
+by digest, `make -n`, `-i`, `-t` and `-q`, a
 tree with any modified or untracked file (again after the build), a missing
 `VERSION` and a `COMMIT` that is not `HEAD` before it builds, with the gate
-forced on, in either the host build (the default, with the Go settings that
-change a compile removed from its environment) or the container build
-(`RELEASE_BUILD=container`). It then runs the executable and
+forced on, in either the host build (the default) or the container build
+(`RELEASE_BUILD=container`), each run with an allowlisted environment and no
+go env file. It then runs the executable and
 refuses unless `version` reports a passed vulnerability check, the requested
 version, `HEAD` and a clean source, unless `bootwright.cdx.json` is what that
 executable's `sbom` writes, and unless `bootwright.notices.txt` names the

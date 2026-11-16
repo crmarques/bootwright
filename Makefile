@@ -130,21 +130,33 @@ container-build:
 # notices and the SHA-256 of the three. It is one recipe, run by one shell, so
 # no check is a prerequisite or a sub-make that a flag could turn into a
 # no-op: it refuses under -n, -i, -t and -q, which would otherwise run only
-# the lines that name $(MAKE) or ignore a refusal; refuses a VULNDB, GO, STAMP
-# or VULNERABILITY_CHECK that does not come from this file, VULNCHECK other
-# than on, a missing VERSION, a COMMIT or SOURCE that is not the checkout's
-# and any modified or untracked file, before and after the build; builds into a
+# the lines that name $(MAKE) or ignore a refusal; refuses another makefile
+# read before this one, any variable the command line or an override sets
+# other than RELEASE_INPUTS, and any RELEASE_DEFAULTED variable the environment
+# sets; refuses a GO_IMAGE not pinned by digest, VULNCHECK other than on, a
+# missing VERSION, a COMMIT or SOURCE that is not the checkout's and any
+# modified or untracked file, before and after the build; builds into a
 # private directory of RELEASE_DIR; refuses the build unless its executable
 # reports a passed vulnerability verdict, the version and commit it was asked
 # for and a clean source, and unless the bill of materials is the one the
 # executable composes and the notices name that bill's digest; and only then
-# replaces the shipped files. RELEASE_BUILD selects the host build (native),
-# which runs with the Go settings that change what is compiled removed from its
-# environment, or the container build (container); either runs the gate.
+# replaces the shipped files. RELEASE_BUILD selects the host build (native) or
+# the container build (container); either runs the gate, as a make that
+# inherits only RELEASE_ENVIRONMENT and the release inputs, with no go env file.
 RELEASE_DIR ?= dist
 RELEASE_BUILD ?= native
 RELEASE_FILES = bootwright bootwright.cdx.json bootwright.notices.txt
 RELEASE_FLAGS = $(findstring n,$(firstword -$(MAKEFLAGS)))$(findstring i,$(firstword -$(MAKEFLAGS)))$(findstring t,$(firstword -$(MAKEFLAGS)))$(findstring q,$(firstword -$(MAKEFLAGS)))
+RELEASE_INPUTS = VERSION COMMIT SOURCE VULNCHECK RELEASE_DIR RELEASE_BUILD CONTAINER_ENGINE GO_IMAGE PROXY_CA
+RELEASE_DEFAULTED = VULNDB CLIENTS_CACHE CONTAINER_OUT WHEELS_CACHE
+RELEASE_ENVIRONMENT = PATH HOME TMPDIR GOTMPDIR GOCACHE GOMODCACHE GOPATH BOOTWRIGHT_CACHE_DIR SSL_CERT_FILE SSL_CERT_DIR \
+	XDG_RUNTIME_DIR XDG_CONFIG_HOME XDG_DATA_HOME DBUS_SESSION_BUS_ADDRESS DOCKER_HOST DOCKER_CONFIG DOCKER_CONTEXT \
+	CONTAINER_HOST CONTAINER_CONNECTION REGISTRY_AUTH_FILE $(CONTAINER_SETTINGS)
+empty :=
+space := $(empty) $(empty)
+release_origin = $(subst $(space),_,$(origin $(1)))
+RELEASE_FOREIGN = $(foreach variable,$(filter-out $(RELEASE_INPUTS) GNUMAKEFLAGS MAKEFLAGS MFLAGS MAKELEVEL,$(.VARIABLES)),$(if $(filter command_line override environment_override,$(call release_origin,$(variable))),$(variable))) \
+	$(foreach variable,$(RELEASE_DEFAULTED),$(if $(filter environment,$(origin $(variable))),$(variable)))
 
 # -i would turn a refusal into a successful make, so the flags are refused while
 # the Makefile is read, which no flag ignores; the recipe checks them again.
@@ -158,7 +170,9 @@ release:
 	@set -eu; \
 	refuse() { echo "release: $$*" >&2; exit 1; }; \
 	test -z '$(RELEASE_FLAGS)' || refuse "make was run with -$(RELEASE_FLAGS), which would run only part of the recipe or ignore a refusal; run it without -n, -i, -t and -q"; \
-	$(foreach variable,VULNDB GO STAMP VULNERABILITY_CHECK,test '$(origin $(variable))' = file || refuse "$(variable) comes from the $(origin $(variable)), which could change what the gate checks or what is stamped; a release takes it from the Makefile"; ) \
+	test '$(words $(MAKEFILE_LIST))' = 1 && test -z '$(findstring --eval,$(MAKEFLAGS))' || refuse "make reads more than the Makefile ($(MAKEFILE_LIST)$(if $(findstring --eval,$(MAKEFLAGS)), and --eval)), which could set any variable; a release reads the Makefile alone"; \
+	test -z '$(strip $(RELEASE_FOREIGN))' || refuse "$(foreach variable,$(RELEASE_FOREIGN),$(variable) comes from the $(origin $(variable));) each could change what is built, checked or stamped; a release takes it from the Makefile and only $(RELEASE_INPUTS) from you"; \
+	test -z '$(GO_IMAGE)' || printf '%s\n' '$(GO_IMAGE)' | grep -Eqx '[^@[:space:]]+@sha256:[0-9a-f]{64}' || refuse "GO_IMAGE=$(GO_IMAGE) is not pinned by @sha256:<digest>, so the release would compile with whatever its tag names today"; \
 	test '$(VULNCHECK)' = on || refuse "VULNCHECK=$(VULNCHECK) is refused; a release is built with the vulnerability gate on"; \
 	case '$(RELEASE_BUILD)' in native|container) ;; *) refuse "RELEASE_BUILD=$(RELEASE_BUILD) is neither native nor container" ;; esac; \
 	case '$(VERSION)' in ''|*dirty*) refuse "name the release with VERSION=<version>; '$(VERSION)' is none or names a dirty tree" ;; esac; \
@@ -184,12 +198,18 @@ release:
 	stage="$$(mktemp -d "$$out/.build.XXXXXX")"; \
 	trap 'rm -rf -- "$$stage"' EXIT; \
 	trap 'exit 130' INT TERM; \
+	set --; \
+	for name in $(RELEASE_ENVIRONMENT); do \
+		eval "isset=\$${$$name+x} value=\$${$$name-}"; \
+		test -z "$$isset" || set -- "$$@" "$$name=$$value"; \
+	done; \
 	case '$(RELEASE_BUILD)' in \
 	native) \
 		rm -f -- $(addprefix bin/,$(RELEASE_FILES)); \
-		env -u GOFLAGS -u GOEXPERIMENT -u GOOS -u GOARCH GOFLAGS=-mod=readonly $(MAKE) --no-print-directory build VULNCHECK=on; \
+		env -i "$$@" GOENV=off GOFLAGS=-mod=readonly $(MAKE) --no-print-directory build VULNCHECK=on VERSION='$(VERSION)' COMMIT='$(COMMIT)' SOURCE='$(SOURCE)'; \
 		for name in $(RELEASE_FILES); do cp -- "bin/$$name" "$$stage/$$name"; done ;; \
-	container) $(MAKE) --no-print-directory container-build VULNCHECK=on CONTAINER_OUT="$$stage" ;; \
+	container) env -i "$$@" GOENV=off $(MAKE) --no-print-directory container-build VULNCHECK=on VERSION='$(VERSION)' COMMIT='$(COMMIT)' SOURCE='$(SOURCE)' \
+		CONTAINER_OUT="$$stage" CONTAINER_ENGINE='$(CONTAINER_ENGINE)' GO_IMAGE='$(GO_IMAGE)' PROXY_CA='$(PROXY_CA)' ;; \
 	esac; \
 	tree_clean; \
 	for name in $(RELEASE_FILES); do \

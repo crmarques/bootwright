@@ -182,7 +182,9 @@ The recipe refuses, and writes nothing into `dist`, when:
 
 | Refused | Because |
 | --- | --- |
-| `VULNCHECK=skip`, or any value but `on`; a `VULNDB`, `GO`, `STAMP` or `VULNERABILITY_CHECK` that the command line or environment sets | A release is built with the gate on, against the database and verdict the Makefile names. |
+| `VULNCHECK=skip`, or any value but `on` | A release is built with the gate on. |
+| A variable that the command line, `make -e` or an `override` sets, other than the release inputs `VERSION`, `COMMIT`, `SOURCE`, `VULNCHECK`, `RELEASE_DIR`, `RELEASE_BUILD`, `CONTAINER_ENGINE`, `GO_IMAGE` and `PROXY_CA`; a `VULNDB`, `CLIENTS_CACHE`, `CONTAINER_OUT` or `WHEELS_CACHE` that the environment sets; a makefile read through `MAKEFILES`, a second `-f` or `--eval` | Every other variable, such as `GO_LICENSES`, `GO`, `STAMP` or `GOFLAGS`, could change what is built, checked or stamped, so a release takes it from the Makefile (`RELEASE_INPUTS` and `RELEASE_DEFAULTED`, which `TestEveryVariableTheEnvironmentCanSetIsAReleaseInputOrRefused` holds to every `?=` variable). |
+| A `GO_IMAGE` not pinned by `@sha256:<digest>` | The release would compile with whatever the tag names that day. |
 | `make -n`, `-i`, `-t` or `-q` | They would run only the lines that name `$(MAKE)`, or ignore a refusal; the Makefile refuses them while it is read. |
 | A modified or untracked file, before or after the build, or a `COMMIT` or `SOURCE` that is not the checkout's; on the host build, an ignored file under `ansible/collections` | The build would not be the commit it names, or would embed a file the commit does not hold. |
 | No `VERSION`, or one containing `dirty` | The release has no name. |
@@ -190,10 +192,15 @@ The recipe refuses, and writes nothing into `dist`, when:
 | A `bootwright.cdx.json` that is not what the executable's `sbom` writes | The document describes another build. |
 | A `bootwright.notices.txt` missing, empty or naming another bill of materials | The notices were not composed from this build's document. |
 
-The host build runs with `GOFLAGS`, `GOEXPERIMENT`, `GOOS` and `GOARCH` removed
-from its environment and `GOFLAGS=-mod=readonly`, as the container build does,
-so nothing inherited changes what is compiled. All checks are one recipe run
-by one shell, not prerequisites or sub-makes, so no flag can skip one.
+Either build runs as a make with an emptied environment that carries only the
+release inputs, `GOENV=off`, so no `go env -w` setting applies, and the
+variables `RELEASE_ENVIRONMENT` names: the paths, caches and temporary
+directories, the CA files, the container engine's connection and the proxy and
+module-mirror settings above. The host build adds `GOFLAGS=-mod=readonly`, as
+the container build does, so no `GOFLAGS`, `GOEXPERIMENT`, `GOOS`, `GOARCH`,
+`GOAMD64` or `GOFIPS140` inherited changes what is compiled. All checks are one
+recipe run by one shell, not prerequisites or sub-makes, so no flag can skip
+one.
 
 It builds into a private `dist/.build.XXXXXX`, so two releases cannot clobber
 each other, runs the checks there, verifies the staged `SHA256SUMS`, and
