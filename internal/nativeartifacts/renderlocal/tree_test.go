@@ -103,14 +103,16 @@ func TestPublishTreeRemovesWhatItMadeWhenAFileFails(t *testing.T) {
 }
 
 func TestPublishTreeRefusesADirectoryOthersCanWrite(t *testing.T) {
-	directory := t.TempDir()
-	if err := os.Chmod(directory, 0o777); err != nil {
-		t.Fatal(err)
-	}
-	_, err := (Files{}).PublishTree(context.Background(), directory, tree("notes.txt"))
-	refusal(t, err)
-	if names := entries(t, directory); len(names) != 0 {
-		t.Fatalf("entries %q", names)
+	for _, mode := range []os.FileMode{0o777, 0o777 | os.ModeSticky} {
+		directory := t.TempDir()
+		if err := os.Chmod(directory, mode); err != nil {
+			t.Fatal(err)
+		}
+		_, err := (Files{}).PublishTree(context.Background(), directory, tree("notes.txt"))
+		refusal(t, err)
+		if names := entries(t, directory); len(names) != 0 {
+			t.Fatalf("%v: entries %q", mode, names)
+		}
 	}
 }
 

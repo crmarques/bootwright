@@ -49,12 +49,14 @@ func TestAnInterpreterBelowAWritableDirectoryIsSkipped(t *testing.T) {
 	older := host.interpreter("3.13", "3.13.9")
 	adapter := host.adapter(testLock(t, "3.14", "3.13"))
 	writable := filepath.Join(host.root, "usr", "bin")
-	if err := os.Chmod(writable, 0o777); err != nil {
-		t.Fatal(err)
-	}
-	_, err := adapter.Select(context.Background(), "")
-	if !errors.Is(err, prerequisites.ErrNoPythonInterpreter) {
-		t.Fatalf("both interpreters share a writable directory, yet Select returned %v", err)
+	for _, mode := range []os.FileMode{0o777, 0o777 | os.ModeSticky} {
+		if err := os.Chmod(writable, mode); err != nil {
+			t.Fatal(err)
+		}
+		_, err := adapter.Select(context.Background(), "")
+		if !errors.Is(err, prerequisites.ErrNoPythonInterpreter) {
+			t.Fatalf("both interpreters share a writable directory of mode %v, yet Select returned %v", mode, err)
+		}
 	}
 	if err := os.Chmod(writable, 0o755); err != nil {
 		t.Fatal(err)

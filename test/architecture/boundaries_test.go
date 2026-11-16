@@ -624,7 +624,7 @@ func effectGrants() map[string][]string {
 			"golang.org/x/sys/unix.SchedGetaffinity", "golang.org/x/sys/unix.S_IFLNK", "golang.org/x/sys/unix.S_IFMT", "golang.org/x/sys/unix.S_IFREG",
 			"golang.org/x/sys/unix.Statfs_t", "golang.org/x/sys/unix.Stat_t", "io", "os.File", "os.IsNotExist",
 		},
-		"internal/controller/bundlelocal":  {"io", "net.Dialer", "net/http", "os", "syscall"},
+		"internal/controller/bundlelocal":  {"io", "net.Dialer", "net/http", "os"},
 		"internal/controller/ansiblelocal": {"io", "os", "os/exec", "syscall"},
 		"internal/controller/hostdnf":      {"io", "syscall"},
 		"internal/controller/hostowned":    {"io", "os"},
@@ -656,7 +656,7 @@ func effectGrants() map[string][]string {
 		// temporary file beside it, and replaces only a regular file. It
 		// writes a comparison tree through directory descriptors opened
 		// without following a link, and removes only the entries it made.
-		"internal/nativeartifacts/renderlocal":     {"golang.org/x/sys/unix", "os", "syscall"},
+		"internal/nativeartifacts/renderlocal":     {"golang.org/x/sys/unix", "os"},
 		"internal/nativeartifacts/comparisonlocal": {"io", "os", "os/exec", "syscall"},
 		"cmd/bootwright":                           {"crypto/rand.Read", "io", modulePath + "internal/cli", "net/http.Request", "os", "syscall", "unsafe"},
 	}

@@ -19,6 +19,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/nativefs"
 )
 
 type ProcessExecutor struct{}
@@ -88,26 +89,22 @@ func verifiedExecutable(path string) (string, error) {
 
 // A root-owned sticky directory such as /tmp lets no account replace another's entry.
 func exclusivelyWritable(path string, uid int) error {
-	for current, culprit := path, "it"; ; current, culprit = filepath.Dir(current), "its directory "+filepath.Dir(current) {
-		info, err := os.Lstat(current)
-		if err != nil {
-			return errors.New("invocation executable is unavailable")
-		}
-		status, ok := info.Sys().(*syscall.Stat_t)
-		if !ok {
-			return errors.New("invocation executable is unavailable")
-		}
-		sticky := info.IsDir() && info.Mode()&fs.ModeSticky != 0 && status.Uid == 0
-		switch {
-		case status.Uid != 0 && int(status.Uid) != uid:
-			return replaceableExecutable(path, culprit+" is owned by uid "+strconv.FormatUint(uint64(status.Uid), 10))
-		case info.Mode().Perm()&0o022 != 0 && !sticky:
-			return replaceableExecutable(path, culprit+" is writable by group or others")
-		}
-		if current == "/" {
-			return nil
-		}
+	_, err := nativefs.Ownership{Owners: nativefs.RootOrAccountOwner(uint32(uid)), Sticky: nativefs.StickyRootOwned}.Walk(path)
+	fault, ok := err.(*nativefs.OwnershipFault)
+	if err == nil || !ok {
+		return err
 	}
+	culprit := "it"
+	if fault.Path != path {
+		culprit = "its directory " + fault.Path
+	}
+	switch fault.Verdict {
+	case nativefs.ForeignOwner:
+		return replaceableExecutable(path, culprit+" is owned by uid "+strconv.FormatUint(uint64(fault.UID), 10))
+	case nativefs.Writable:
+		return replaceableExecutable(path, culprit+" is writable by group or others")
+	}
+	return errors.New("invocation executable is unavailable")
 }
 
 func replaceableExecutable(path, reason string) error {
@@ -140,19 +137,8 @@ func reexecution(resolved string, pid int) string {
 }
 
 func rootOwned(path string) bool {
-	for current := path; ; current = filepath.Dir(current) {
-		info, err := os.Lstat(current)
-		if err != nil {
-			return false
-		}
-		status, ok := info.Sys().(*syscall.Stat_t)
-		if !ok || status.Uid != 0 || info.Mode().Perm()&0o022 != 0 && !(info.IsDir() && info.Mode()&fs.ModeSticky != 0) {
-			return false
-		}
-		if current == "/" {
-			return true
-		}
-	}
+	_, err := nativefs.Ownership{Owners: nativefs.RootOwner, Sticky: nativefs.StickyRootOwned}.Walk(path)
+	return err == nil
 }
 
 // ConfirmElevatedChild refuses a foreign variable and a file sudo was not named.

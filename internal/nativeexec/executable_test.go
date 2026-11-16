@@ -33,6 +33,7 @@ func TestQualificationProvesFileAndEveryResolvedAncestor(t *testing.T) {
 		{"writable ancestor", "/usr", fs.ModeDir | 0o775, 0},
 		{"foreign ancestor", "/usr/bin", fs.ModeDir | 0o755, 1000},
 		{"writable root", "/", fs.ModeDir | 0o777, 0},
+		{"sticky root-owned ancestor", "/usr", fs.ModeDir | fs.ModeSticky | 0o777, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stat := func(path string) (fs.FileInfo, error) {

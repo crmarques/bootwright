@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/nativefs"
@@ -92,17 +91,26 @@ func (f Files) Publish(ctx context.Context, directory, name string, data []byte,
 }
 
 func (f Files) unsafe(info fs.FileInfo) string {
+	return ownershipRefusal(f.ownership(nativefs.StickyTrustedOwner).AdmitsInfo(info))
+}
+
+func (f Files) ownership(sticky nativefs.Sticky) nativefs.Ownership {
 	uid := os.Geteuid
 	if f.UID != nil {
 		uid = f.UID
 	}
-	if stat, ok := info.Sys().(*syscall.Stat_t); !ok || int(stat.Uid) != uid() {
-		return "is not owned by this account"
-	}
-	if info.Mode().Perm()&0o022 != 0 && info.Mode()&os.ModeSticky == 0 {
+	owner := uid()
+	return nativefs.Ownership{Owners: func(candidate uint32) bool { return int(candidate) == owner }, Sticky: sticky}
+}
+
+func ownershipRefusal(reason nativefs.Verdict) string {
+	switch reason {
+	case nativefs.Admitted:
+		return ""
+	case nativefs.Writable:
 		return "is writable by its group or by others"
 	}
-	return ""
+	return "is not owned by this account"
 }
 
 func splitExisting(path string) (string, []string, error) {

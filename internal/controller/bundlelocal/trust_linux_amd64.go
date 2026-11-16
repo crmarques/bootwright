@@ -7,7 +7,8 @@ import (
 	"crypto/x509"
 	"io"
 	"os"
-	"syscall"
+
+	"github.com/crmarques/bootwright/internal/nativefs"
 )
 
 const maxTrustBytes = 8 << 20
@@ -80,6 +81,5 @@ func trustedInfo(info os.FileInfo, directory bool) bool {
 	if info == nil || info.IsDir() != directory || !directory && !info.Mode().IsRegular() {
 		return false
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	return ok && stat.Uid == 0 && stat.Mode&0022 == 0
+	return nativefs.Ownership{Owners: nativefs.RootOwner, Sticky: nativefs.StickyRefused}.AdmitsInfo(info) == nativefs.Admitted
 }

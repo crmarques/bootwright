@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
+	"github.com/crmarques/bootwright/internal/nativefs"
 )
 
 const (
@@ -128,17 +129,7 @@ func (w *treeWriter) adopt(parent int, name string) error {
 }
 
 func (f Files) foreign(stat unix.Stat_t) string {
-	uid := os.Geteuid
-	if f.UID != nil {
-		uid = f.UID
-	}
-	if int(stat.Uid) != uid() {
-		return "is not owned by this account"
-	}
-	if uint32(stat.Mode)&0o022 != 0 {
-		return "is writable by its group or by others"
-	}
-	return ""
+	return ownershipRefusal(f.ownership(nativefs.StickyRefused).Admits(stat.Uid, nativefs.RawMode(stat.Mode)))
 }
 
 func emptyDirectory(handle int) (bool, error) {
