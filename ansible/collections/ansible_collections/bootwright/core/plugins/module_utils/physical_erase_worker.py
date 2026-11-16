@@ -544,13 +544,21 @@ def atomic(path, value):
     temporary = str(path) + ".new"
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     try:
-        data = canonical(value)
-        if os.write(fd, data) != len(data):
-            raise Refusal("receipt-write")
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    os.replace(temporary, path)
+        try:
+            data = canonical(value)
+            if os.write(fd, data) != len(data):
+                raise Refusal("receipt-write")
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.replace(temporary, path)
+    except BaseException:
+        # A leftover stage makes every later O_EXCL write of this path fail in this boot.
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        raise
     parent = os.open(str(Path(path).parent), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         os.fsync(parent)

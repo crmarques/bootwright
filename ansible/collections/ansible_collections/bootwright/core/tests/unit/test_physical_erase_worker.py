@@ -260,6 +260,26 @@ class WorkerLivenessTests(unittest.TestCase):
                     self.assertEqual(namespace["command"].call_args.args[0][-1], "bootwright-erase.service")
 
 
+class AtomicWriteTests(unittest.TestCase):
+    def test_a_failed_write_removes_its_stage_so_a_later_acknowledgement_succeeds(self):
+        import json
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "ack.json"
+            for failure in (OSError("no space"), worker.Refusal("receipt-write")):
+                with self.subTest(failure=type(failure).__name__):
+                    with patch.object(worker.os, "fsync", side_effect=failure), self.assertRaises(type(failure)):
+                        worker.atomic(target, {"acknowledged": True})
+                    self.assertEqual(sorted(path.name for path in Path(temporary).iterdir()), [])
+            with patch.object(worker.os, "replace", side_effect=OSError("busy")), self.assertRaises(OSError):
+                worker.atomic(target, {"acknowledged": True})
+            self.assertEqual(sorted(path.name for path in Path(temporary).iterdir()), [])
+            worker.atomic(target, {"acknowledged": True})
+            self.assertEqual(json.loads(target.read_bytes()), {"acknowledged": True})
+            self.assertEqual(sorted(path.name for path in Path(temporary).iterdir()), ["ack.json"])
+
+
 class WorkerSourceAuthorityTests(unittest.TestCase):
     def test_standalone_worker_uses_frozen_sibling_when_an_ambient_collection_exists(self):
         import inspect
