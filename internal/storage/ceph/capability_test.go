@@ -30,7 +30,7 @@ func (r *recordingRunner) Run(_ context.Context, request lifecycle.RunRequest) (
 func coreRequest() Request {
 	r := Request{Version: Version, ClusterSSHTransport: "native", Controller: "controller", Action: "cluster", Cluster: "example", Image: PinnedRepository + ":" + PinnedTag, Bootstrap: "node-1", ClusterKeyRef: "cluster-key", RegistryRef: "registry", Registry: PinnedRegistry}
 	for i, name := range []string{"node-1", "node-2", "node-3"} {
-		r.Hosts = append(r.Hosts, Host{Name: name, Machine: name, Address: fmt.Sprintf("192.0.2.%d", i+1), User: "operator", Port: 22, SSHKeyRef: "fleet-key", HostKeyRef: name + "-host-key", Devices: []Device{{Path: "/dev/vdb", Serial: name, SizeBytes: 1 << 30}}})
+		r.Hosts = append(r.Hosts, Host{Name: name, Machine: name, Address: fmt.Sprintf("192.0.2.%d", i+1), User: "operator", Port: 22, SSHKeyRef: "fleet-key", HostKeyRef: name + "-host-key", Labels: []string{}, Location: map[string]string{}, Devices: []Device{{Path: "/dev/vdb", Serial: name, SizeBytes: 1 << 30}}})
 	}
 	r.Services = []json.RawMessage{json.RawMessage(`{"placement":{"hosts":["node-1","node-2","node-3"]},"service_id":"data","service_type":"osd","spec":{"data_devices":{"paths":["/dev/vdb"]}}}`), json.RawMessage(`{"placement":{"hosts":["node-1","node-2","node-3"]},"service_type":"mon"}`), json.RawMessage(`{"placement":{"count":2,"hosts":["node-1","node-2","node-3"]},"service_type":"mgr"}`)}
 	return r

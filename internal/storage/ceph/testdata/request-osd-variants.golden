@@ -35,8 +35,8 @@
         }
       ],
       "hostKeyRef": "node-1-host-key",
-      "labels": null,
-      "location": null,
+      "labels": [],
+      "location": {},
       "machine": "node-1",
       "name": "node-1",
       "port": 22,
@@ -64,8 +64,8 @@
         }
       ],
       "hostKeyRef": "node-2-host-key",
-      "labels": null,
-      "location": null,
+      "labels": [],
+      "location": {},
       "machine": "node-2",
       "name": "node-2",
       "port": 22,
@@ -93,8 +93,8 @@
         }
       ],
       "hostKeyRef": "node-3-host-key",
-      "labels": null,
-      "location": null,
+      "labels": [],
+      "location": {},
       "machine": "node-3",
       "name": "node-3",
       "port": 22,

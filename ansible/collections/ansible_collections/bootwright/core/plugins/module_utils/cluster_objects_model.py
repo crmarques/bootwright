@@ -34,6 +34,10 @@ def mark(operation, block, value=None):
     return hashlib.sha256("\0".join(parts).encode()).hexdigest()
 
 
+def field_manager(operation, block):
+    return "bootwright-" + mark(operation, block)[:32]
+
+
 def timestamp(value):
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:

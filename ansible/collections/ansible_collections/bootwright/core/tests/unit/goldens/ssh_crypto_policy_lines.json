@@ -1,0 +1,464 @@
+{
+ "cases": [
+  {
+   "case": "cryptographic directive Ciphers",
+   "policy": "Ciphers aes256-gcm@openssh.com,aes128-ctr\n",
+   "verdict": "accept",
+   "config": "Ciphers aes256-gcm@openssh.com,aes128-ctr\n"
+  },
+  {
+   "case": "cryptographic directive MACs",
+   "policy": "MACs hmac-sha2-512,hmac-sha2-256\n",
+   "verdict": "accept",
+   "config": "MACs hmac-sha2-512,hmac-sha2-256\n"
+  },
+  {
+   "case": "cryptographic directive KexAlgorithms",
+   "policy": "KexAlgorithms curve25519-sha256,ecdh-sha2-nistp256\n",
+   "verdict": "accept",
+   "config": "KexAlgorithms curve25519-sha256,ecdh-sha2-nistp256\n"
+  },
+  {
+   "case": "cryptographic directive GSSAPIKexAlgorithms",
+   "policy": "GSSAPIKexAlgorithms gss-curve25519-sha256-,gss-group14-sha256-\n",
+   "verdict": "accept",
+   "config": "GSSAPIKexAlgorithms gss-curve25519-sha256-,gss-group14-sha256-\n"
+  },
+  {
+   "case": "cryptographic directive HostKeyAlgorithms",
+   "policy": "HostKeyAlgorithms ssh-ed25519,rsa-sha2-512\n",
+   "verdict": "accept",
+   "config": "HostKeyAlgorithms ssh-ed25519,rsa-sha2-512\n"
+  },
+  {
+   "case": "cryptographic directive PubkeyAcceptedAlgorithms",
+   "policy": "PubkeyAcceptedAlgorithms ecdsa-sha2-nistp256,ssh-ed25519-cert-v01@openssh.com\n",
+   "verdict": "accept",
+   "config": "PubkeyAcceptedAlgorithms ecdsa-sha2-nistp256,ssh-ed25519-cert-v01@openssh.com\n"
+  },
+  {
+   "case": "cryptographic directive PubkeyAcceptedKeyTypes",
+   "policy": "PubkeyAcceptedKeyTypes ssh-ed25519\n",
+   "verdict": "accept",
+   "config": "PubkeyAcceptedKeyTypes ssh-ed25519\n"
+  },
+  {
+   "case": "cryptographic directive HostbasedAcceptedAlgorithms",
+   "policy": "HostbasedAcceptedAlgorithms rsa-sha2-256\n",
+   "verdict": "accept",
+   "config": "HostbasedAcceptedAlgorithms rsa-sha2-256\n"
+  },
+  {
+   "case": "cryptographic directive HostbasedKeyTypes",
+   "policy": "HostbasedKeyTypes rsa-sha2-256\n",
+   "verdict": "accept",
+   "config": "HostbasedKeyTypes rsa-sha2-256\n"
+  },
+  {
+   "case": "cryptographic directive CASignatureAlgorithms",
+   "policy": "CASignatureAlgorithms ssh-ed25519,sk-ssh-ed25519@openssh.com\n",
+   "verdict": "accept",
+   "config": "CASignatureAlgorithms ssh-ed25519,sk-ssh-ed25519@openssh.com\n"
+  },
+  {
+   "case": "cryptographic directive RequiredRSASize",
+   "policy": "RequiredRSASize 2048\n",
+   "verdict": "accept",
+   "config": "RequiredRSASize 2048\n"
+  },
+  {
+   "case": "cryptographic directive RSAMinSize",
+   "policy": "RSAMinSize 3072\n",
+   "verdict": "accept",
+   "config": "RSAMinSize 3072\n"
+  },
+  {
+   "case": "cryptographic directive RekeyLimit",
+   "policy": "RekeyLimit 1G 1h\n",
+   "verdict": "accept",
+   "config": "RekeyLimit 1G 1h\n"
+  },
+  {
+   "case": "every cryptographic directive together",
+   "policy": "Ciphers aes256-gcm@openssh.com,aes128-ctr\nMACs hmac-sha2-512,hmac-sha2-256\nKexAlgorithms curve25519-sha256,ecdh-sha2-nistp256\nGSSAPIKexAlgorithms gss-curve25519-sha256-,gss-group14-sha256-\nHostKeyAlgorithms ssh-ed25519,rsa-sha2-512\nPubkeyAcceptedAlgorithms ecdsa-sha2-nistp256,ssh-ed25519-cert-v01@openssh.com\nPubkeyAcceptedKeyTypes ssh-ed25519\nHostbasedAcceptedAlgorithms rsa-sha2-256\nHostbasedKeyTypes rsa-sha2-256\nCASignatureAlgorithms ssh-ed25519,sk-ssh-ed25519@openssh.com\nRequiredRSASize 2048\nRSAMinSize 3072\nRekeyLimit 1G 1h\n",
+   "verdict": "accept",
+   "config": "Ciphers aes256-gcm@openssh.com,aes128-ctr\nMACs hmac-sha2-512,hmac-sha2-256\nKexAlgorithms curve25519-sha256,ecdh-sha2-nistp256\nGSSAPIKexAlgorithms gss-curve25519-sha256-,gss-group14-sha256-\nHostKeyAlgorithms ssh-ed25519,rsa-sha2-512\nPubkeyAcceptedAlgorithms ecdsa-sha2-nistp256,ssh-ed25519-cert-v01@openssh.com\nPubkeyAcceptedKeyTypes ssh-ed25519\nHostbasedAcceptedAlgorithms rsa-sha2-256\nHostbasedKeyTypes rsa-sha2-256\nCASignatureAlgorithms ssh-ed25519,sk-ssh-ed25519@openssh.com\nRequiredRSASize 2048\nRSAMinSize 3072\nRekeyLimit 1G 1h\n"
+  },
+  {
+   "case": "equals separator",
+   "policy": "Ciphers=aes256-gcm@openssh.com\n",
+   "verdict": "accept",
+   "config": "Ciphers=aes256-gcm@openssh.com\n"
+  },
+  {
+   "case": "equals separator with spaces",
+   "policy": "Ciphers = aes256-gcm@openssh.com\n",
+   "verdict": "accept",
+   "config": "Ciphers = aes256-gcm@openssh.com\n"
+  },
+  {
+   "case": "keyword in lower case",
+   "policy": "ciphers aes256-ctr\n",
+   "verdict": "accept",
+   "config": "ciphers aes256-ctr\n"
+  },
+  {
+   "case": "tab separator",
+   "policy": "Ciphers\taes256-ctr\n",
+   "verdict": "accept",
+   "config": "Ciphers\taes256-ctr\n"
+  },
+  {
+   "case": "indented line",
+   "policy": "   Ciphers aes256-ctr\n",
+   "verdict": "accept",
+   "config": "Ciphers aes256-ctr\n"
+  },
+  {
+   "case": "comments and blank lines",
+   "policy": "# crypto policy\n\nCiphers aes256-ctr\n   # indented comment\n\n",
+   "verdict": "accept",
+   "config": "Ciphers aes256-ctr\n"
+  },
+  {
+   "case": "inline comment",
+   "policy": "Ciphers aes256-ctr # site policy\n",
+   "verdict": "accept",
+   "config": "Ciphers aes256-ctr\n"
+  },
+  {
+   "case": "no final newline",
+   "policy": "Ciphers aes256-ctr",
+   "verdict": "accept",
+   "config": "Ciphers aes256-ctr\n"
+  },
+  {
+   "case": "CRLF line endings",
+   "policy": "Ciphers aes256-ctr\r\nMACs hmac-sha2-512\r\n",
+   "verdict": "accept",
+   "config": "Ciphers aes256-ctr\nMACs hmac-sha2-512\n"
+  },
+  {
+   "case": "list modifiers",
+   "policy": "Ciphers +aes128-ctr,-aes256-ctr\nKexAlgorithms ^curve25519-sha256\nHostKeyAlgorithms ssh-ed25519*\n",
+   "verdict": "accept",
+   "config": "Ciphers +aes128-ctr,-aes256-ctr\nKexAlgorithms ^curve25519-sha256\nHostKeyAlgorithms ssh-ed25519*\n"
+  },
+  {
+   "case": "GSSAPI key exchange disabled",
+   "policy": "GSSAPIKeyExchange no\n",
+   "verdict": "accept",
+   "config": "GSSAPIKeyExchange no\n"
+  },
+  {
+   "case": "GSSAPI key exchange disabled in capitals with equals",
+   "policy": "gssapikeyexchange=NO\n",
+   "verdict": "accept",
+   "config": "gssapikeyexchange=NO\n"
+  },
+  {
+   "case": "GSSAPI key exchange disabled with a comment",
+   "policy": "GSSAPIKeyExchange No # disabled\n",
+   "verdict": "accept",
+   "config": "GSSAPIKeyExchange No\n"
+  },
+  {
+   "case": "empty policy",
+   "policy": "",
+   "verdict": "accept",
+   "config": ""
+  },
+  {
+   "case": "only comments",
+   "policy": "# nothing but a comment\n\n",
+   "verdict": "accept",
+   "config": ""
+  },
+  {
+   "case": "policy of exactly 65536 bytes",
+   "policy": {
+    "head": "Ciphers ",
+    "fill": "a",
+    "total": 65536,
+    "tail": "\n"
+   },
+   "verdict": "accept",
+   "config": null
+  },
+  {
+   "case": "policy of 65537 bytes",
+   "policy": {
+    "head": "Ciphers ",
+    "fill": "a",
+    "total": 65537,
+    "tail": "\n"
+   },
+   "verdict": "refuse"
+  },
+  {
+   "case": "GSSAPI key exchange form 'GSSAPIKeyExchange yes'",
+   "policy": "GSSAPIKeyExchange yes\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "GSSAPI key exchange form 'GSSAPIKeyExchange no yes'",
+   "policy": "GSSAPIKeyExchange no yes\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "GSSAPI key exchange form 'GSSAPIKeyExchange sometimes'",
+   "policy": "GSSAPIKeyExchange sometimes\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "GSSAPI key exchange form 'GSSAPIKeyExchange'",
+   "policy": "GSSAPIKeyExchange\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "GSSAPI key exchange form 'GSSAPIKeyExchange='",
+   "policy": "GSSAPIKeyExchange=\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "GSSAPI key exchange form 'GSSAPIKeyExchange nope'",
+   "policy": "GSSAPIKeyExchange nope\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive IdentityFile",
+   "policy": "Ciphers aes256-ctr\nIdentityFile /root/.ssh/id_rsa\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive CertificateFile",
+   "policy": "Ciphers aes256-ctr\nCertificateFile /x\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive IdentityAgent",
+   "policy": "Ciphers aes256-ctr\nIdentityAgent /run/agent\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive PKCS11Provider",
+   "policy": "Ciphers aes256-ctr\nPKCS11Provider /lib/p.so\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive SecurityKeyProvider",
+   "policy": "Ciphers aes256-ctr\nSecurityKeyProvider internal\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive AddKeysToAgent",
+   "policy": "Ciphers aes256-ctr\nAddKeysToAgent yes\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive Hostname",
+   "policy": "Ciphers aes256-ctr\nHostname elsewhere\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive Port",
+   "policy": "Ciphers aes256-ctr\nPort 2222\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive User",
+   "policy": "Ciphers aes256-ctr\nUser root\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive ProxyCommand",
+   "policy": "Ciphers aes256-ctr\nProxyCommand nc %h %p\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive ProxyJump",
+   "policy": "Ciphers aes256-ctr\nProxyJump bastion\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive LocalCommand",
+   "policy": "Ciphers aes256-ctr\nLocalCommand /bin/true\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive PermitLocalCommand",
+   "policy": "Ciphers aes256-ctr\nPermitLocalCommand yes\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive KnownHostsCommand",
+   "policy": "Ciphers aes256-ctr\nKnownHostsCommand /usr/bin/false\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive LocalForward",
+   "policy": "Ciphers aes256-ctr\nLocalForward 8080 localhost:80\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive RemoteForward",
+   "policy": "Ciphers aes256-ctr\nRemoteForward 8080 localhost:80\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive DynamicForward",
+   "policy": "Ciphers aes256-ctr\nDynamicForward 1080\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive Include",
+   "policy": "Ciphers aes256-ctr\nInclude /etc/ssh/other\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive Match",
+   "policy": "Ciphers aes256-ctr\nMatch host *\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive Match",
+   "policy": "Ciphers aes256-ctr\nMatch exec /bin/true\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive Host",
+   "policy": "Ciphers aes256-ctr\nHost *\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive with equals",
+   "policy": "ProxyCommand=nc %h %p\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "unsafe directive in capitals",
+   "policy": "PROXYCOMMAND nc %h %p\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: Compression",
+   "policy": "Ciphers aes256-ctr\nCompression no\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: ServerAliveInterval",
+   "policy": "Ciphers aes256-ctr\nServerAliveInterval 30\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: StrictHostKeyChecking",
+   "policy": "Ciphers aes256-ctr\nStrictHostKeyChecking no\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: UserKnownHostsFile",
+   "policy": "Ciphers aes256-ctr\nUserKnownHostsFile /dev/null\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: SendEnv",
+   "policy": "Ciphers aes256-ctr\nSendEnv LANG\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: ForwardAgent",
+   "policy": "Ciphers aes256-ctr\nForwardAgent yes\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: HostKeyAlias",
+   "policy": "Ciphers aes256-ctr\nHostKeyAlias example\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: CanonicalizeHostname",
+   "policy": "Ciphers aes256-ctr\nCanonicalizeHostname yes\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: ControlMaster",
+   "policy": "Ciphers aes256-ctr\nControlMaster auto\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: GlobalKnownHostsFile",
+   "policy": "Ciphers aes256-ctr\nGlobalKnownHostsFile /dev/null\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: UnknownDirective",
+   "policy": "Ciphers aes256-ctr\nUnknownDirective value\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: VerifyHostKeyDNS",
+   "policy": "Ciphers aes256-ctr\nVerifyHostKeyDNS yes\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "directive that is neither cryptographic nor unsafe: TCPKeepAlive",
+   "policy": "Ciphers aes256-ctr\nTCPKeepAlive yes\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "cryptographic directive with no value",
+   "policy": "Ciphers\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "cryptographic directive with only an equals sign",
+   "policy": "Ciphers=\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "value with a quote",
+   "policy": "Ciphers \"aes256-ctr\"\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "value with a semicolon",
+   "policy": "Ciphers aes256-ctr;x\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "value with a command substitution",
+   "policy": "Ciphers $(id)\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "value with a percent token",
+   "policy": "Ciphers %h\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "value with an equals sign",
+   "policy": "Ciphers a=b\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "value with a NUL byte",
+   "policy": "Ciphers aes\u0000\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "keyword with a digit",
+   "policy": "Ciphers2 aes256-ctr\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "line with a bare word",
+   "policy": "Ciphers aes256-ctr\nnonsense\n",
+   "verdict": "refuse"
+  },
+  {
+   "case": "a second directive hidden after a carriage return",
+   "policy": "Ciphers aes256-ctr\rMatch exec /bin/true\n",
+   "verdict": "refuse"
+  }
+ ]
+}

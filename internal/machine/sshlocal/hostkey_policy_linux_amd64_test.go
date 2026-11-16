@@ -144,7 +144,7 @@ func TestSessionAcceptsAnECDSAKeyUnderFIPSPolicy(t *testing.T) {
 func TestSessionWithoutPolicyKeepsPinnedAlgorithms(t *testing.T) {
 	for _, test := range []struct{ name, policy string }{
 		{name: "absent backend"},
-		{name: "no crypto directive", policy: "# generated\n\nServerAliveInterval 30\n"},
+		{name: "no directive", policy: "# generated\n\n"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			rig := policyClient(t, "", 1, test.policy)
@@ -194,11 +194,11 @@ func TestSessionPolicyEvaluationFailureRefuses(t *testing.T) {
 }
 
 func TestThePolicyEvaluationReadsTheSessionsReducedConfiguration(t *testing.T) {
-	rig := policyClient(t, "hostkeyalgorithms "+fipsStyleList+"\n", 0, fipsStylePolicy+"ServerAliveInterval 30\n")
+	rig := policyClient(t, "hostkeyalgorithms "+fipsStyleList+"\n", 0, fipsStylePolicy+"Ciphers aes256-ctr # site\n")
 	if _, err := rig.launcher.Run(context.Background(), keyedSession("ecdsa-sha2-nistp256"), nil, os.Stderr, os.Stderr); err != nil {
 		t.Fatal(err)
 	}
-	reduced, err := cryptographicPolicy([]byte(fipsStylePolicy+"ServerAliveInterval 30\n"), true)
+	reduced, err := cryptographicPolicy([]byte(fipsStylePolicy+"Ciphers aes256-ctr # site\n"), true)
 	if err != nil {
 		t.Fatal(err)
 	}

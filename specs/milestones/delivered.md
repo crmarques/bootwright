@@ -16211,3 +16211,20 @@ interactive SSH session stay in the terminal's foreground so they can read it.
 An independent review found no blocking defect; its follow-ups (the group
 kill after a failed exit, foreground assertions, the race list) are applied.
 
+## X509 — Rules Go and Python share, held to one fixture
+
+### B1479
+
+Split from B1464 under [D274](backlog.md#d274) (audit 005 W3.1). One fixture,
+read by a Go test and a Python test, now holds each rule both languages
+carry: a sysfs corpus of disk identities (the kickstart `%pre`, the erase
+worker, discovery and the Go admissions), a table of OpenSSH crypto-policy
+lines and verdicts (the Go reducer and both Python reducers), the cluster
+objects' owner mark and field manager, and every Go Ceph request golden and
+the cluster-object vocabulary fed to their Python validators. The corpus
+brought discovery's identity reading to what the
+[managed-OS spec](../managed-os.md) names, and the Go reducer to refusing a
+non-cryptographic directive, D274 (10). An independent review found no
+blocking defect; its follow-ups (the `local.d` remedy, real empty host labels
+in the Ceph fixture and a Python test that no longer masks a null) are in.
+

@@ -709,7 +709,11 @@ and the client never reopens the operator's file. The configuration is
 Bootwright's own: it carries only allowlisted cryptographic directives from the
 host crypto-policy backend where that exists, so site and FIPS policy is
 retained, and it admits no identity, certificate, agent, command, forwarding
-or host rule from system or personal configuration.
+or host rule from system or personal configuration. A line of the backend that
+is not one allowlisted directive, or `GSSAPIKeyExchange no`, with a value of
+letters, digits and `@.,_+^*?!/ -` refuses `access.unavailable` rather than
+being skipped; the Go session reducer and the Python placement and Ceph tunnel
+reducers all give the verdicts of one shared table of policy lines.
 The pinned host key's algorithms are intersected with that policy as the
 pinned client itself evaluates it (`ssh -G` over the reduced configuration,
 contacting no endpoint), and the session pins only the intersection, so

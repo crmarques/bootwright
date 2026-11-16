@@ -125,7 +125,7 @@ class Engine:
                 raise Refused(model.label(obj) + " ownership " + own)
             result = self.write("create", obj, {
                 "owner": model.mark(self.request["operation"], self.request["block"], obj),
-                "manager": "bootwright-" + model.mark(self.request["operation"], self.request["block"])[:32],
+                "manager": model.field_manager(self.request["operation"], self.request["block"]),
                 "fields": fields(obj)})
             if result.get("accepted") and result.get("object", {}).get("metadata", {}).get("uid"):
                 created = result["object"]
@@ -171,7 +171,7 @@ class Engine:
             result = self.write("place", obj, {
                 "placement": placement, "materials": self.request.get("materials", {}),
                 "owner": model.mark(self.request["operation"], self.request["block"], obj),
-                "manager": "bootwright-" + model.mark(self.request["operation"], self.request["block"])[:32],
+                "manager": model.field_manager(self.request["operation"], self.request["block"]),
                 "context": {key: self.request[key] for key in ("operation", "block", "registered", "receipts")}})
             if result.get("accepted"):
                 break

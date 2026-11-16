@@ -29,6 +29,7 @@ BLKGETSIZE64 = 0x80081272
 BLKGETDISKSEQ = 0x80081280
 BLKFLSBUF = 0x1261
 VERSION = "physical-erase-v1"
+WHITESPACE = " \t\n\v\f\r"
 METHODS = ("logicalOverwrite", "metadataClear")
 # BlueStore keeps its replica bdev labels at these offsets of the OSD's LV;
 # the window also covers the few MiB a ceph-volume LV starts into the disk.
@@ -149,7 +150,7 @@ def text(path, code="identity"):
     with open(path, "rb") as stream:
         data = stream.read(258)
     try:
-        value = data.decode("ascii").strip()
+        value = data.decode("ascii").strip(WHITESPACE)
     except UnicodeDecodeError:
         raise Refusal(code) from None
     if not value or len(value) > 256 or not value.isprintable():
@@ -248,7 +249,7 @@ def disk_serial(node):
     if not 5 <= len(data) <= 260 or data[1] != 0x80 or int.from_bytes(data[2:4], "big") != len(data) - 4:
         raise Refusal("disk-serial")
     try:
-        value = data[4:].decode("ascii").strip()
+        value = data[4:].decode("ascii").strip(WHITESPACE)
     except UnicodeDecodeError:
         raise Refusal("disk-serial") from None
     if not value or not value.isprintable():

@@ -1,0 +1,729 @@
+{
+ "nodes": [
+  {
+   "case": "native text",
+   "files": {
+    "device/serial": {
+     "text": "ZC1A2B3C\n"
+    }
+   },
+   "serial": "ZC1A2B3C",
+   "admissible": true,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native with spaces tab and CRLF around it",
+   "files": {
+    "device/serial": {
+     "text": "  ZC1A2B3C \t\r\n"
+    }
+   },
+   "serial": "ZC1A2B3C",
+   "admissible": true,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native with vertical tab and form feed around it",
+   "files": {
+    "device/serial": {
+     "text": "\u000bZC1A2B3C\f\n"
+    }
+   },
+   "serial": "ZC1A2B3C",
+   "admissible": true,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native with a file separator byte around it",
+   "files": {
+    "device/serial": {
+     "text": "\u001cZC1A2B3C\n"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native with grammar punctuation",
+   "files": {
+    "device/serial": {
+     "text": "WD-WX12:34/5+6=7._\n"
+    }
+   },
+   "serial": "WD-WX12:34/5+6=7._",
+   "admissible": true,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native with an internal space",
+   "files": {
+    "device/serial": {
+     "text": "ZC 1A2B\n"
+    }
+   },
+   "serial": "ZC 1A2B",
+   "admissible": false,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native with markup characters",
+   "files": {
+    "device/serial": {
+     "text": "AB<C>&\n"
+    }
+   },
+   "serial": "AB<C>&",
+   "admissible": false,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native with a NUL byte",
+   "files": {
+    "device/serial": {
+     "hex": "5a433141000a"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native NUL padded",
+   "files": {
+    "device/serial": {
+     "hex": "5a433141324233430000000000000000"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native non-ASCII",
+   "files": {
+    "device/serial": {
+     "hex": "5a433141c3a90a"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native with a control byte",
+   "files": {
+    "device/serial": {
+     "hex": "5a43314101420a"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native empty",
+   "files": {
+    "device/serial": {
+     "text": ""
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native blank",
+   "files": {
+    "device/serial": {
+     "text": "   \n"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native empty beside a complete VPD page",
+   "files": {
+    "device/serial": {
+     "text": "\n"
+    },
+    "device/vpd_pg80": {
+     "hex": "008000085a43314132423343"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native text beside a different VPD page",
+   "files": {
+    "device/serial": {
+     "text": "ZC1A2B3C\n"
+    },
+    "device/vpd_pg80": {
+     "hex": "008000084f54484552313233"
+    }
+   },
+   "serial": "ZC1A2B3C",
+   "admissible": true,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native of 256 characters",
+   "files": {
+    "device/serial": {
+     "text": "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n"
+    }
+   },
+   "serial": "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
+   "admissible": true,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native of 257 characters",
+   "files": {
+    "device/serial": {
+     "text": "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\n"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native of 258 bytes",
+   "files": {
+    "device/serial": {
+     "text": "Z                                                                                                                                                                                                                                                                 "
+    }
+   },
+   "serial": "Z",
+   "admissible": true,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "native longer than 258 bytes",
+   "files": {
+    "device/serial": {
+     "text": "Z                                                                                                                                                                                                                                                                  "
+    }
+   },
+   "serial": "Z",
+   "admissible": true,
+   "wwid": null,
+   "wwn": "",
+   "stricter": {
+    "bash": "the %pre refuses an attribute longer than 258 bytes, where the worker reads its first 258",
+    "inventory": "discovery refuses an attribute longer than 258 bytes"
+   }
+  },
+  {
+   "case": "VPD page",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "008000085a43314132423343"
+    }
+   },
+   "serial": "ZC1A2B3C",
+   "admissible": true,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page with leading spaces",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "0080000a20205a43314132423343"
+    }
+   },
+   "serial": "ZC1A2B3C",
+   "admissible": true,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page with trailing spaces",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "0080000b5a43314132423343202020"
+    }
+   },
+   "serial": "ZC1A2B3C",
+   "admissible": true,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page with an internal space",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "008000075a432031413242"
+    }
+   },
+   "serial": "ZC 1A2B",
+   "admissible": false,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page NUL padded",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "0080000c5a4331413242334300000000"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page with a control byte",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "008000065a4331410142"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page non-ASCII",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "008000055a433141ff"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page of another code",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "008300085a43314132423343"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page whose length field is too long",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "008000095a43314132423343"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page whose length field is too short",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "008000075a43314132423343"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page truncated",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "008000"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page with no payload",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "00800000"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page of blank payload",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "0080000420202020"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page of 256 characters",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "008001005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+    }
+   },
+   "serial": "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
+   "admissible": true,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "VPD page of 257 characters",
+   "files": {
+    "device/vpd_pg80": {
+     "hex": "008001015a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "serial beside the device directory only",
+   "files": {
+    "serial": {
+     "text": "ZC1A2B3C\n"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "no serial source",
+   "files": {
+    "size": {
+     "text": "1\n"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "WWN naa of 8 bytes",
+   "files": {
+    "device/wwid": {
+     "text": "naa.5000c500a1b2c3d4\n"
+    }
+   },
+   "serial": null,
+   "wwid": "naa.5000c500a1b2c3d4",
+   "wwn": "0x5000c500a1b2c3d4"
+  },
+  {
+   "case": "WWN naa of 16 bytes",
+   "files": {
+    "device/wwid": {
+     "text": "naa.5000c500a1b2c3d45000c500a1b2c3d4\n"
+    }
+   },
+   "serial": null,
+   "wwid": "naa.5000c500a1b2c3d45000c500a1b2c3d4",
+   "wwn": "0x5000c500a1b2c3d45000c500a1b2c3d4"
+  },
+  {
+   "case": "WWN on the disk itself",
+   "files": {
+    "wwid": {
+     "text": "naa.5000c500a1b2c3d4\n"
+    }
+   },
+   "serial": null,
+   "wwid": "naa.5000c500a1b2c3d4",
+   "wwn": "0x5000c500a1b2c3d4"
+  },
+  {
+   "case": "WWN on the disk beside a different device WWN",
+   "files": {
+    "wwid": {
+     "text": "naa.5000c500a1b2c3d4\n"
+    },
+    "device/wwid": {
+     "text": "naa.5000c500ffffffff\n"
+    }
+   },
+   "serial": null,
+   "wwid": "naa.5000c500a1b2c3d4",
+   "wwn": "0x5000c500a1b2c3d4"
+  },
+  {
+   "case": "blank WWN on the disk beside a device WWN",
+   "files": {
+    "wwid": {
+     "text": "\n"
+    },
+    "device/wwid": {
+     "text": "naa.5000c500a1b2c3d4\n"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "WWN with surrounding whitespace",
+   "files": {
+    "device/wwid": {
+     "text": " naa.5000c500a1b2c3d4 \t\n"
+    }
+   },
+   "serial": null,
+   "wwid": "naa.5000c500a1b2c3d4",
+   "wwn": "0x5000c500a1b2c3d4"
+  },
+  {
+   "case": "WWN in the eui form",
+   "files": {
+    "device/wwid": {
+     "text": "eui.002538b471234567\n"
+    }
+   },
+   "serial": null,
+   "wwid": "eui.002538b471234567",
+   "wwn": ""
+  },
+  {
+   "case": "WWN naa of all zeros",
+   "files": {
+    "device/wwid": {
+     "text": "naa.0000000000000000\n"
+    }
+   },
+   "serial": null,
+   "wwid": "naa.0000000000000000",
+   "wwn": ""
+  },
+  {
+   "case": "WWN naa of 12 bytes",
+   "files": {
+    "device/wwid": {
+     "text": "naa.5000c500a1b2c3d45000c500\n"
+    }
+   },
+   "serial": null,
+   "wwid": "naa.5000c500a1b2c3d45000c500",
+   "wwn": ""
+  },
+  {
+   "case": "WWN naa in capitals",
+   "files": {
+    "device/wwid": {
+     "text": "naa.5000C500A1B2C3D4\n"
+    }
+   },
+   "serial": null,
+   "wwid": "naa.5000C500A1B2C3D4",
+   "wwn": ""
+  },
+  {
+   "case": "WWN with a NUL byte",
+   "files": {
+    "device/wwid": {
+     "hex": "6e61612e35303030633530300061316232633364340a"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "WWN empty",
+   "files": {
+    "device/wwid": {
+     "text": ""
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "WWN beyond its bound",
+   "files": {
+    "device/wwid": {
+     "text": "naa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  },
+  {
+   "case": "no WWN attribute",
+   "files": {
+    "size": {
+     "text": "1\n"
+    }
+   },
+   "serial": null,
+   "wwid": null,
+   "wwn": ""
+  }
+ ],
+ "grammar": {
+  "serials": [
+   {
+    "value": "ZC1A2B3C",
+    "valid": true
+   },
+   {
+    "value": "a",
+    "valid": true
+   },
+   {
+    "value": "WD-WX12:34/5+6=7._",
+    "valid": true
+   },
+   {
+    "value": "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
+    "valid": true
+   },
+   {
+    "value": "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
+    "valid": false
+   },
+   {
+    "value": "",
+    "valid": false
+   },
+   {
+    "value": "ZC 1A",
+    "valid": false
+   },
+   {
+    "value": " ZC1A",
+    "valid": false
+   },
+   {
+    "value": "ZC1A\n",
+    "valid": false
+   },
+   {
+    "value": "AB<C>&",
+    "valid": false
+   },
+   {
+    "value": "AB'C",
+    "valid": false
+   },
+   {
+    "value": "AB\"C",
+    "valid": false
+   },
+   {
+    "value": "AB;C",
+    "valid": false
+   },
+   {
+    "value": "AB\u00e9C",
+    "valid": false
+   }
+  ],
+  "sizes": [
+   {
+    "bytes": 4096,
+    "valid": true
+   },
+   {
+    "bytes": 8192,
+    "valid": true
+   },
+   {
+    "bytes": 2000398934016,
+    "valid": true
+   },
+   {
+    "bytes": 70368744177664,
+    "valid": true
+   },
+   {
+    "bytes": 70368744181760,
+    "valid": false
+   },
+   {
+    "bytes": 4095,
+    "valid": false
+   },
+   {
+    "bytes": 4097,
+    "valid": false
+   },
+   {
+    "bytes": 0,
+    "valid": false
+   },
+   {
+    "bytes": -4096,
+    "valid": false
+   },
+   {
+    "bytes": 4611686018427387904,
+    "valid": false
+   }
+  ],
+  "wwns": [
+   {
+    "wwn": "0x5000c500a1b2c3d4",
+    "valid": true
+   },
+   {
+    "wwn": "0x5000c500a1b2c3d45000c500a1b2c3d4",
+    "valid": true
+   },
+   {
+    "wwn": "0x0000000000000000",
+    "valid": false
+   },
+   {
+    "wwn": "0x00000000000000000000000000000000",
+    "valid": false
+   },
+   {
+    "wwn": "0x5000C500A1B2C3D4",
+    "valid": false
+   },
+   {
+    "wwn": "naa.5000c500a1b2c3d4",
+    "valid": false
+   },
+   {
+    "wwn": "0x5000c500a1b2c3d",
+    "valid": false
+   },
+   {
+    "wwn": "0x5000c500a1b2c3d400",
+    "valid": false
+   },
+   {
+    "wwn": "5000c500a1b2c3d4",
+    "valid": false
+   },
+   {
+    "wwn": "",
+    "valid": false
+   }
+  ]
+ }
+}

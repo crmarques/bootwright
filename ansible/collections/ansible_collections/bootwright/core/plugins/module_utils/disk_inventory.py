@@ -13,6 +13,7 @@ import stat
 MAX_DISKS = 256
 MAX_SIZE = 64 << 40
 MAX_TEXT = 256
+WHITESPACE = " \t\n\v\f\r"
 BLKGETSIZE64 = 0x80081272
 NAME = re.compile(r"(?:sd[a-z]+|nvme[0-9]+n[0-9]+)\Z")
 PCI = re.compile(r"[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]\Z")
@@ -38,7 +39,7 @@ def attribute(path, optional=False):
     if len(data) > MAX_TEXT + 2:
         raise Refused("disk attribute exceeds its bound")
     try:
-        value = data.decode("ascii").strip(" \t\r\n")
+        value = data.decode("ascii").strip(WHITESPACE)
     except UnicodeDecodeError:
         raise Refused("disk attribute is not qualified ASCII") from None
     if len(value) > MAX_TEXT or any(ord(c) < 32 or ord(c) > 126 or c in "<>&" for c in value):
@@ -47,25 +48,38 @@ def attribute(path, optional=False):
 
 
 def serial_number(device):
-    value = attribute(device / "device/serial", optional=True)
-    if not value:
-        value = attribute(device / "serial", optional=True)
-    if not value:
-        path = device / "device/vpd_pg80"
-        try:
-            with path.open("rb") as stream:
-                data = stream.read(MAX_TEXT + 5)
-        except FileNotFoundError:
-            return ""
-        if len(data) < 4 or data[1] != 0x80 or int.from_bytes(data[2:4], "big") != len(data) - 4 or len(data) > MAX_TEXT + 4:
-            raise Refused("disk VPD serial is malformed")
-        try:
-            value = data[4:].decode("ascii").strip()
-        except UnicodeDecodeError:
-            raise Refused("disk VPD serial is not ASCII") from None
+    native = device / "device/serial"
+    if native.exists():
+        value = attribute(native, optional=True)
+    else:
+        value = vpd_serial(device / "device/vpd_pg80")
     if value and SERIAL.fullmatch(value) is None:
         raise Refused("disk serial is outside its qualified grammar")
     return value
+
+
+def vpd_serial(path):
+    try:
+        with path.open("rb") as stream:
+            data = stream.read(MAX_TEXT + 5)
+    except FileNotFoundError:
+        return ""
+    if len(data) < 4 or data[1] != 0x80 or int.from_bytes(data[2:4], "big") != len(data) - 4 or len(data) > MAX_TEXT + 4:
+        raise Refused("disk VPD serial is malformed")
+    try:
+        return data[4:].decode("ascii").strip(WHITESPACE)
+    except UnicodeDecodeError:
+        raise Refused("disk VPD serial is not ASCII") from None
+
+
+def wwid(device):
+    disk = device / "wwid"
+    return attribute(disk if disk.exists() else device / "device/wwid", optional=True)
+
+
+def canonical_wwn(reported):
+    match = NAA.fullmatch(reported)
+    return "0x" + match.group(1) if match and int(match.group(1), 16) else ""
 
 
 def size_ioctl(descriptor):
@@ -117,9 +131,8 @@ def read_disk(device, devroot):
     removable, readonly = attribute(device / "removable"), attribute(device / "ro")
     if removable not in ("0", "1") or readonly not in ("0", "1"):
         raise Refused("disk eligibility attributes are unknown")
-    wwid = attribute(device / "wwid", optional=True) or attribute(device / "device/wwid", optional=True)
-    match = NAA.fullmatch(wwid.lower())
-    wwn = "0x" + match.group(1) if match and int(match.group(1), 16) else ""
+    reported = wwid(device)
+    wwn = canonical_wwn(reported)
     serial = serial_number(device)
     controller, transport = topology(device)
     disk = {
@@ -139,7 +152,7 @@ def read_disk(device, devroot):
     # Read the identity twice around the descriptor proof; hotplug is unknown.
     if major_minor != attribute(device / "dev") or serial != serial_number(device):
         raise Refused("disk inventory changed during its read")
-    if wwid != (attribute(device / "wwid", optional=True) or attribute(device / "device/wwid", optional=True)):
+    if reported != wwid(device):
         raise Refused("disk WWN changed during its read")
     return disk
 

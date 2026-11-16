@@ -1,6 +1,7 @@
 package sshlocal
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -30,37 +31,11 @@ var cryptographicDirectives = map[string]bool{
 	"rsaminsize":                  true,
 	"rekeylimit":                  true,
 }
+var policyLine = regexp.MustCompile(`^([A-Za-z]+)\s*(?:=\s*|\s+)([A-Za-z0-9@.,_+^*?!/ -]+)$`)
 
-// unsafeDirectives would change what a session connects to, what it offers, or
-// what it runs. Their presence in the policy backend is not something to skip
-// quietly: a host whose policy carries one is not a host this product can honor
-// while still bounding the session, so the session refuses instead.
-var unsafeDirectives = map[string]bool{
-	"identityfile":        true,
-	"certificatefile":     true,
-	"identityagent":       true,
-	"pkcs11provider":      true,
-	"securitykeyprovider": true,
-	"addkeystoagent":      true,
-	"hostname":            true,
-	"port":                true,
-	"user":                true,
-	"proxycommand":        true,
-	"proxyjump":           true,
-	"localcommand":        true,
-	"permitlocalcommand":  true,
-	"knownhostscommand":   true,
-	"localforward":        true,
-	"remoteforward":       true,
-	"dynamicforward":      true,
-	"include":             true,
-	"match":               true,
-	"host":                true,
-}
-
-// cryptographicPolicy reduces the host policy backend to the directives a
-// session may carry. A host with no policy backend keeps the client's own
-// compiled defaults, which is what a platform without one already uses.
+// cryptographicPolicy reduces the host policy backend to the allowlisted
+// directives a session may carry, and refuses any other line, so a policy it
+// cannot read in full is never half honored. No backend keeps client defaults.
 func cryptographicPolicy(data []byte, present bool) ([]byte, error) {
 	if !present {
 		return nil, nil
@@ -70,39 +45,32 @@ func cryptographicPolicy(data []byte, present bool) ([]byte, error) {
 	}
 	var lines []string
 	for _, raw := range strings.Split(string(data), "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") {
+		line, _, _ := strings.Cut(raw, "#")
+		line = strings.TrimSpace(line)
+		if line == "" {
 			continue
 		}
-		keyword := strings.ToLower(directive(line))
-		switch {
-		case keyword == "gssapikeyexchange":
-			setting := strings.TrimSpace(strings.TrimPrefix(line, directive(line)))
-			setting = strings.TrimSpace(strings.TrimPrefix(setting, "="))
-			setting, _, _ = strings.Cut(setting, "#")
-			if !strings.EqualFold(strings.TrimSpace(setting), "no") {
-				return nil, failure("the host SSH crypto policy enables unsupported GSSAPI key exchange", "retain only GSSAPIKeyExchange no in "+PolicyPath)
-			}
-			lines = append(lines, line)
-		case cryptographicDirectives[keyword]:
-			lines = append(lines, line)
-		case unsafeDirectives[keyword]:
-			return nil, failure("the host SSH crypto policy carries the unsupported directive "+directive(line),
+		match := policyLine.FindStringSubmatch(line)
+		if match == nil {
+			return nil, failure("the host SSH crypto policy has a line with unsupported syntax",
 				"remove it from "+PolicyPath+" or report the platform that ships it")
 		}
+		keyword := strings.ToLower(match[1])
+		switch {
+		case keyword == "gssapikeyexchange":
+			if !strings.EqualFold(strings.TrimSpace(match[2]), "no") {
+				return nil, failure("the host SSH crypto policy enables unsupported GSSAPI key exchange", "retain only GSSAPIKeyExchange no in "+PolicyPath)
+			}
+		case !cryptographicDirectives[keyword]:
+			return nil, failure("the host SSH crypto policy carries the unsupported directive "+match[1],
+				"remove it from /etc/crypto-policies/local.d/openssh-*.config and run update-crypto-policies, or report the platform that ships it")
+		}
+		lines = append(lines, line)
 	}
 	if len(lines) == 0 {
 		return nil, nil
 	}
 	return []byte(strings.Join(lines, "\n") + "\n"), nil
-}
-
-func directive(line string) string {
-	keyword := strings.Fields(line)[0]
-	if index := strings.IndexByte(keyword, '='); index >= 0 {
-		keyword = keyword[:index]
-	}
-	return keyword
 }
 
 func failure(message, remediation string) error {

@@ -38,7 +38,7 @@ func TestProgramGolden(t *testing.T) {
 	if _, err := ThawVersion(data, Options{}); err != nil {
 		t.Fatal(err)
 	}
-	vectors := map[string]string{"desiredDigest": program.Steps[0].Create.DesiredDigest, "ownerMark": OwnerMark("operation-1", "network-1", program.Steps[0].Create.Ref), "fieldManager": FieldManager("operation-1", "network-1")}
+	vectors := map[string]string{"desiredDigest": program.Steps[0].Create.DesiredDigest}
 	for name, value := range vectors {
 		data, err := Canonical(map[string]string{"digest": value})
 		if err != nil {

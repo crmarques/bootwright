@@ -1320,7 +1320,11 @@ once surrounding whitespace is removed. A missing, unreadable, empty or longer
 than 256 characters attribute, one that is not printable ASCII, and a malformed
 VPD page are unknown and stop the installation exactly as a mismatch does; the
 `%pre` additionally refuses an attribute longer than 258 bytes, where the
-worker reads its first 258, and strips only spaces, tabs and line breaks. This
+worker reads its first 258. The `%pre`, the worker and the discovery inventory
+strip the same six ASCII whitespace characters (space, tab, line feed,
+vertical tab, form feed and carriage return), read only these sources, and
+yield the same value for each node of one corpus of synthetic sysfs trees that
+the Go, bash and Python tests all read. This
 fails closed on hardware it does not fit: an NVMe root disk has no `wwn-0x`
 link, so it is named by serial number and size, and a controller with several
 namespaces, which share one serial, cannot be named; a SCSI disk whose kernel `wwid` prefers an

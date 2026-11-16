@@ -4073,7 +4073,7 @@ holding such a clause, the clauses pending and the work they enable.
   Bootwright-owned NetworkManager trunk and one owned nftables routing table
   per provider (X395); (7), turning on `net.ipv4.ip_forward`, is outside the
   approved boundary.
-- [D274](#d274): clauses (1) to (9), the code quality audit 005 program
+- [D274](#d274): clauses (1) to (10), the code quality audit 005 program
   (X497 to X500).
 
 ### D1
@@ -9227,6 +9227,10 @@ the owner's review:
 8. The unreachable native Ceph SSH transport is deleted with its test
    patches (B1456).
 9. End-to-end cases share a base; examples stay self-contained (B1470).
+10. Every reader of a host's OpenSSH crypto-policy back-end refuses a
+    directive that is not cryptographic, as the Python readers already did;
+    a site's client directive in `local.d` must move to the client
+    configuration (B1479, added 2026-11-16).
 
 The owner's focused-check instruction of [D273](#d273) remains in force:
 until E2E acceptance, each slice lands on its focused checks, the changed
