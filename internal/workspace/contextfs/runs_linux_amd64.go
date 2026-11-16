@@ -31,6 +31,9 @@ const (
 
 func outputNumber(name, prefix string) (int, bool) {
 	digits, found := strings.CutPrefix(name, prefix)
+	if !found {
+		return 0, false
+	}
 	if digits, found = strings.CutSuffix(digits, outputSuffix); !found {
 		return 0, false
 	}

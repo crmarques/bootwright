@@ -64,6 +64,15 @@ func heldNamesOf(t *testing.T, root string) []string {
 	return names
 }
 
+func TestARunOutputNumberNeedsItsPrefix(t *testing.T) {
+	if number, valid := outputNumber("000007.output", runPrefix); valid {
+		t.Fatalf("an output without the run prefix read as run %d", number)
+	}
+	if number, valid := outputNumber(boundedRunName(7), runPrefix); !valid || number != 7 {
+		t.Fatalf("outputNumber(%s) = %d, %t", boundedRunName(7), number, valid)
+	}
+}
+
 // Before a run opens, the lowest-numbered runs make room, the new run takes
 // the number past the highest, and an entry that is no run is neither counted
 // nor removed.
