@@ -447,19 +447,3 @@ func displayWidths(rows [][]string) []int {
 	}
 	return widths
 }
-
-func displayRow(row []string, widths []int) string {
-	var text strings.Builder
-	last := len(row) - 1
-	for last >= 0 && row[last] == "" {
-		last--
-	}
-	for index := 0; index <= last; index++ {
-		cell := escapeDisplayLine(row[index])
-		text.WriteString(cell)
-		if index != last {
-			text.WriteString(strings.Repeat(" ", widths[index]-displayCellWidth(cell)+displayGap))
-		}
-	}
-	return text.String()
-}

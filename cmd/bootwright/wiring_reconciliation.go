@@ -50,7 +50,6 @@ import (
 // field leaves the lifecycle unavailable rather than substituting one.
 type lifecycleDependencies struct {
 	Workspace  lifecycle.Workspace
-	Inputs     lifecycle.Inputs
 	Host       lifecycle.HostIdentity
 	HostKeys   lifecycle.ControllerHostKeys
 	Guard      lifecycle.ExecutionGuard
@@ -381,7 +380,7 @@ func lifecycleMedia(deps lifecycleDependencies) installation.MediaRecords {
 }
 
 func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies, compiler compilation.Compiler, binder *custody.Service) lifecycle.Service {
-	if deps.Workspace == nil || deps.Inputs == nil || deps.Host == nil || deps.Guard == nil {
+	if deps.Workspace == nil || deps.Host == nil || deps.Guard == nil {
 		return lifecycle.Service{}
 	}
 	clock := systemClock{}
@@ -406,7 +405,7 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 			options.Rebuild = prerequisites.NewRuntimeRebuilder(controller.Setup, controller.Python, *controller.Lock)
 		}
 	}
-	return lifecycle.New(deps.Workspace, deps.Inputs, compiler, binder, deps.Host, automationDigest{}, deps.Guard, capabilities, options)
+	return lifecycle.New(deps.Workspace, compiler, binder, deps.Host, automationDigest{}, deps.Guard, capabilities, options)
 }
 
 func runtimeGuard(python prerequisites.PythonRuntime) lifecycle.ExecutionGuard {

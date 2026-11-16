@@ -22,7 +22,7 @@ func commentLineCeilings() map[string]int {
 		"internal/controller/stagelocal": 74, "internal/controller/venvlocal": 45,
 		"internal/desiredstate": 0, "internal/desiredstate/compilation": 52,
 		"internal/desiredstate/customplaybooks": 5, "internal/desiredstate/encoding": 2,
-		"internal/desiredstate/inputfs": 38, "internal/desiredstate/yamlstream": 3,
+		"internal/desiredstate/inputfs": 38, "internal/desiredstate/yamlstream": 1,
 		"internal/diagnostics": 2, "internal/environment": 6, "internal/environment/access": 0, "internal/environment/clusterpreflight": 0,
 		"internal/environment/inspection": 0, "internal/environment/preflight": 0,
 		"internal/infrastructureservices": 44, "internal/infrastructureservices/artifactserver": 182,

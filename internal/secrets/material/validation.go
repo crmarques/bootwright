@@ -22,7 +22,7 @@ import (
 // have. A CA bundle's roots are trusted as given.
 const minimumServingRSABits = 2048
 
-func validateCA(certificate, privateKey []byte, now time.Time) error {
+func validateCA(certificate []byte, now time.Time) error {
 	certificates, err := parseCertificates(certificate)
 	if err != nil {
 		return err
@@ -31,17 +31,6 @@ func validateCA(certificate, privateKey []byte, now time.Time) error {
 		if !validAt(cert, now) || len(cert.UnhandledCriticalExtensions) != 0 || !cert.BasicConstraintsValid || !cert.IsCA || cert.KeyUsage&x509.KeyUsageCertSign == 0 {
 			return failure("input", "CA bundle must contain currently valid CA signing certificates", "")
 		}
-	}
-	if privateKey == nil {
-		return nil
-	}
-	key, err := parseCertificatePrivateKey(privateKey)
-	if err != nil {
-		return err
-	}
-	defer clearPrivateKey(key)
-	if !matchingPublicKey(certificates[0].PublicKey, publicKey(key)) {
-		return failure("input", "CA certificate and private key do not agree", "")
 	}
 	return nil
 }

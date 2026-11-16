@@ -46,7 +46,7 @@ func Render(selected addons.SelectedInstance, facts addons.ClusterFacts, control
 		return Request{}, nil, err
 	}
 	if p.OLM != nil {
-		if err := subscribe(&program, *p.OLM, instance.Config, rendered.SubscriptionConfig); err != nil {
+		if err := subscribe(&program, *p.OLM, instance.Config); err != nil {
 			return Request{}, nil, err
 		}
 	}
@@ -182,29 +182,9 @@ func operatorPrelude(program *co.Program, olm addons.OLM, config api.Value) erro
 	program.Checks = append(program.Checks, co.Check{StatusPhase: &co.PhaseCheck{Ref: object.Ref, Path: "status.connectionState.lastObservedState", Values: []string{"READY"}}})
 	return nil
 }
-func subscribe(program *co.Program, olm addons.OLM, config api.Value, settings *co.SubscriptionConfig) error {
+func subscribe(program *co.Program, olm addons.OLM, config api.Value) error {
 	sub := config.Get("subscription")
 	spec := api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(olm.Package)}, api.FieldValue{Name: "channel", Value: sub.Get("channel")}, api.FieldValue{Name: "source", Value: sub.Get("source")}, api.FieldValue{Name: "sourceNamespace", Value: sub.Get("sourceNamespace")}, api.FieldValue{Name: "startingCSV", Value: sub.Get("startingCSV")}, api.FieldValue{Name: "installPlanApproval", Value: api.StringValue("Manual")})
-	if settings != nil {
-		value := api.MapValue()
-		if len(settings.Env) > 0 {
-			env := []api.Value{}
-			for _, v := range settings.Env {
-				env = append(env, api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(v.Name)}, api.FieldValue{Name: "value", Value: api.StringValue(v.Value)}))
-			}
-			value = value.With("env", api.ListValue(env...))
-		}
-		if len(settings.NodeSelector) > 0 {
-			value = value.With("nodeSelector", stringMap(settings.NodeSelector))
-		}
-		if settings.Tolerations != nil {
-			value = value.With("tolerations", api.ListValue(settings.Tolerations...))
-		}
-		if settings.Resources.Present() {
-			value = value.With("resources", settings.Resources)
-		}
-		spec = spec.With("config", value)
-	}
 	object, err := co.NewObjectEntry(nativeObject("operators.coreos.com/v1alpha1", "Subscription", olm.Namespace, olm.Subscription, spec))
 	if err != nil {
 		return err

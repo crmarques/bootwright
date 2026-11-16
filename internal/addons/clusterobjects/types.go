@@ -107,15 +107,6 @@ type CSVCheck struct {
 	CSV          string `json:"csv"`
 }
 
-type SubscriptionConfig struct {
-	Env          []EnvVar
-	NodeSelector map[string]string
-	Tolerations  []api.Value
-	Resources    api.Value
-}
-
-type EnvVar struct{ Name, Value string }
-
 type Approval string
 
 const (

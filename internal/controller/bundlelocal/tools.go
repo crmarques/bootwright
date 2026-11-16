@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -62,7 +61,7 @@ func (c *ToolCatalog) Select(requests []controller.ToolRequest, retained []prere
 				return nil, false, bundleFailure("retained tool release has conflicting publisher identities")
 			}
 			identities[source.ID] = source
-			if selected == nil || compareStableVersions(definition.Version, selected.Version) > 0 {
+			if selected == nil {
 				value := definition
 				selected = &value
 			}
@@ -193,44 +192,6 @@ func toolVersion(version string) bool {
 	return version[0] >= '0' && version[0] <= '9' || version[0] == 'v'
 }
 
-func stableVersion(version string) bool {
-	parts := strings.Split(strings.TrimPrefix(version, "v"), ".")
-	if len(parts) != 3 {
-		return false
-	}
-	for _, part := range parts {
-		if part == "" || len(part) > 9 || len(part) > 1 && part[0] == '0' {
-			return false
-		}
-		for _, c := range part {
-			if c < '0' || c > '9' {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func compareStableVersions(a, b string) int {
-	if stableVersion(a) && stableVersion(b) {
-		left, right := strings.Split(strings.TrimPrefix(a, "v"), "."), strings.Split(strings.TrimPrefix(b, "v"), ".")
-		for i := range left {
-			av, _ := strconv.Atoi(left[i])
-			bv, _ := strconv.Atoi(right[i])
-			if av < bv {
-				return -1
-			}
-			if av > bv {
-				return 1
-			}
-		}
-		// Both spellings are accepted at the boundary. Keep selection stable even
-		// when retained sources contain both 1.2.3 and v1.2.3 identities.
-		return strings.Compare(a, b)
-	}
-	return strings.Compare(a, b)
-}
-
 func toolSourcePrefix(request controller.ToolRequest) string {
 	data, _ := json.Marshal(request)
 	digest := sha256.Sum256(data)
@@ -322,10 +283,9 @@ func toolDefinition(request controller.ToolRequest, version string, source prere
 }
 
 type githubToolRelease struct {
-	Tag        string `json:"tag_name"`
-	Draft      bool   `json:"draft"`
-	Prerelease bool   `json:"prerelease"`
-	Assets     []struct {
+	Tag    string `json:"tag_name"`
+	Draft  bool   `json:"draft"`
+	Assets []struct {
 		Name   string `json:"name"`
 		URL    string `json:"browser_download_url"`
 		Size   int64  `json:"size"`
@@ -341,7 +301,7 @@ func (c *ToolCatalog) release(ctx context.Context, repository, version string, e
 		return release, err
 	}
 	if json.Unmarshal(data.data, &release) != nil || release.Draft || !toolVersion(release.Tag) || len(release.Assets) > 256 || release.Tag != version {
-		return release, bundleFailure("publisher release metadata is missing, unstable, or inconsistent")
+		return release, bundleFailure("publisher release metadata is missing, a draft, or inconsistent")
 	}
 	return release, nil
 }

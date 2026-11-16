@@ -1775,7 +1775,7 @@ func TestAnApplyKeepsTheResolutionsARemovalMakesBeforeItRegisters(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	held, size, err := store.held(ctx, "", "")
+	held, _, err := store.held(ctx, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1796,7 +1796,8 @@ func TestAnApplyKeepsTheResolutionsARemovalMakesBeforeItRegisters(t *testing.T) 
 	}
 	delete(area.files, "filled/last")
 	delete(area.files, "filled/record-0")
-	if _, size, err = store.held(ctx, "", ""); err != nil {
+	_, size, err := store.held(ctx, "", "")
+	if err != nil {
 		t.Fatal(err)
 	}
 	_, reserved, err := store.removalReserve(ctx, operation, plan)

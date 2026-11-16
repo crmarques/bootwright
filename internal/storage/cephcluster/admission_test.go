@@ -428,12 +428,12 @@ func TestStorageIssueBoundAndSafeDiagnosticText(t *testing.T) {
 	if issues[0].Message != "value does not match the storage field's lexical grammar" {
 		t.Fatal("input bytes escaped into diagnostic")
 	}
-	nodes := []api.Value{}
+	groups := []api.Value{}
 	for range 1100 {
-		nodes = append(nodes, m("osd", m("blockDBSize", "invalid-size")))
+		groups = append(groups, m("mode", "invalid-mode"))
 	}
-	cluster := object(api.CephCluster, "bounded", m("topology", m("nodes", nodes)))
-	if len(ValidateAuthored(cluster, api.Catalog{})) != 999 {
+	filesystem := object(api.CephFilesystem, "bounded", m("subvolumeGroups", groups))
+	if len(ValidateAuthored(filesystem, api.Catalog{})) != 999 {
 		t.Fatal("storage diagnostics exceeded the admission cap")
 	}
 }

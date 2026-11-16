@@ -257,10 +257,6 @@ func (a *admission) storageSite(site, field string) {
 	a.invalid(field, "storage site must resolve to a declared Environment site", "set this site reference to a name in Environment.spec.sites")
 }
 
-func declaredDataDevices(osd api.Value) int {
-	return osd.Get("dataDevices", "paths").Len() + osd.Get("dataDevices", "pathSpecs").Len()
-}
-
 var stretchDomains = []string{"chassis", "rack", "row", "pdu", "pod", "room", "datacenter", "zone", "region"}
 
 func (a *admission) stretch(ceph api.Value) {

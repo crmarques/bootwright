@@ -39,7 +39,7 @@ func appliedWithRunning(t *testing.T, running ...string) (*harness, string) {
 // root, a block whose attempt retained nothing yet naming the file it will
 // write, and a block that is not running or an attempt it is not on never.
 func TestStatusListsEachRunningBlocksNewestOutputFromRecords(t *testing.T) {
-	h, operation := appliedWithRunning(t)
+	h, _ := appliedWithRunning(t)
 	idle, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +47,7 @@ func TestStatusListsEachRunningBlocksNewestOutputFromRecords(t *testing.T) {
 	if idle.Lifecycle.Live == nil || len(idle.Lifecycle.Live) != 0 {
 		t.Fatalf("a context with nothing running reports %#v, want an empty list", idle.Lifecycle.Live)
 	}
-	h, operation = appliedWithRunning(t, "charlie", "alpha")
+	h, operation := appliedWithRunning(t, "charlie", "alpha")
 	retainOutput(t, h, operation, "alpha", "attempt-000001.output", "first")
 	retainOutput(t, h, operation, "alpha", "attempt-000001-resolution-000001.output", "second")
 	retainOutput(t, h, operation, "alpha", "attempt-000001-resolution-000002.output", "the newest")

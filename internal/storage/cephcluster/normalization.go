@@ -94,9 +94,6 @@ func normalizeCluster(object api.Object, catalog api.Catalog) api.Value {
 		} else if placed {
 			node = node.Without("site")
 		}
-		if node.Has("osd", "serviceOverrides", "networks") {
-			node = node.WithPath(normalizeCIDRs(node.Get("osd", "serviceOverrides", "networks")), "osd", "serviceOverrides", "networks")
-		}
 		nodes[i] = node
 	}
 	if ceph.Has("topology", "nodes") {

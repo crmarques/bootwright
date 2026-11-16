@@ -55,7 +55,7 @@ func TestAuthoredSynthesizesAPackageFromTheDefinition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rendered.Before) != 0 || len(rendered.After) != 1 || rendered.SubscriptionConfig != nil || len(rendered.Requires) != 0 {
+	if len(rendered.Before) != 0 || len(rendered.After) != 1 || len(rendered.Requires) != 0 {
 		t.Fatalf("%+v", rendered)
 	}
 	phase := rendered.After[0]

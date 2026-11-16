@@ -122,8 +122,6 @@ func (p *parseSession) parseFile(file desiredstate.SourceFile) error {
 
 func (p *parseSession) addSyntax(path string, document, line, column int, message, remediation string) error {
 	// At most one syntax failure is retained per byte-bounded source file.
-	// The compiler applies the returned-diagnostic ceiling after resource
-	// selection, so excluded files cannot consume its diagnostic allowance.
 	p.diagnostics = append(p.diagnostics, diagnostics.Diagnostic{
 		Severity: "error", Code: "yaml.syntax", Message: message, Remediation: remediation,
 		Source: &diagnostics.SourceLocation{Path: path, Document: document, Line: line, Column: column},

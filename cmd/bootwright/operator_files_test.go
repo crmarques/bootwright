@@ -137,7 +137,6 @@ func operatorFileServices(t *testing.T, files *virtualOperatorFiles) cli.Service
 	deps.Repository, deps.Workspace, deps.Trust = repository, repository, repository
 	deps.Lifecycle = lifecycleDependencies{
 		Workspace: repository,
-		Inputs:    contexts.Inputs{Repository: repository, Selection: deps.Selection},
 		Host:      testLifecycleHost{}, Guard: testLifecycleGuard{}, Selection: deps.Selection,
 		Presenter: testLifecyclePresenter{}, Confirmer: deps.Confirmer,
 		Capabilities: testLifecycleCapabilities{},

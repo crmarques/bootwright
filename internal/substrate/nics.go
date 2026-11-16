@@ -42,15 +42,6 @@ func InterfaceNIC(machine api.Object, iface string) string {
 	return iface
 }
 
-func NICInterface(machine api.Object, nic string) string {
-	for _, match := range machine.Spec().Get("network", "interfaceMatches").Items() {
-		if match.Get("nicRef").Text() == nic {
-			return match.Get("interface").Text()
-		}
-	}
-	return nic
-}
-
 func VirtualInterfaces(contextName string, machine api.Object) ([]Interface, error) {
 	names := MachineNICs(machine)
 	if len(names) == 0 {

@@ -13,7 +13,6 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
-	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 // sessionNode is an OS-ready Machine reached over SSH under the operator's
@@ -40,7 +39,6 @@ func sessionFileServices(t *testing.T, files *virtualOperatorFiles) cli.Services
 	deps.Repository, deps.Workspace, deps.Trust = repository, repository, repository
 	deps.Lifecycle = lifecycleDependencies{
 		Workspace: repository,
-		Inputs:    contexts.Inputs{Repository: repository, Selection: deps.Selection},
 		Host:      testLifecycleHost{}, Guard: testLifecycleGuard{}, Selection: deps.Selection,
 		Presenter: testLifecyclePresenter{}, Confirmer: deps.Confirmer,
 		Capabilities: testLifecycleCapabilities{},

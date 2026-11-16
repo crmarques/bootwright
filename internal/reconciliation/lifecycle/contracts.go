@@ -103,10 +103,6 @@ type Workspace interface {
 	MutateLifecycle(context.Context, string, func(Transaction) error) error
 }
 
-type Inputs interface {
-	ReadInputs(context.Context, string) (desiredstate.Sources, error)
-}
-
 type Compiler interface {
 	Compile(context.Context, desiredstate.Sources) (*compilation.State, *compilation.Report, error)
 }

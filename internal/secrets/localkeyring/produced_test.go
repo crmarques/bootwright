@@ -175,8 +175,3 @@ func TestMetadataRejectsReaderNegotiation(t *testing.T) {
 		}
 	}
 }
-
-func withHeader(index indexRecord, selector secretstore.Selector) indexRecord {
-	index.FormatVersion, index.Algorithm, index.Selector = formatVersion, algorithm, selector
-	return index
-}

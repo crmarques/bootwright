@@ -11,14 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/environment"
 )
 
-func selectResources(sources desiredstate.Sources, env *objectRecord) map[string]bool {
-	selected := map[string]bool{env.path: true}
-	for _, file := range sources.Files {
-		selected[file.Path()] = true
-	}
-	return selected
-}
-
 func pathWithin(path, base string) bool {
 	rel, err := filepath.Rel(base, path)
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)

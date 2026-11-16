@@ -116,7 +116,7 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 		},
 	}
 	for _, phase := range []func() bool{
-		r.selectEnvironment, r.decodeSelected, r.inheritDefaults, r.validateAuthored,
+		r.selectEnvironment, r.decodeDocuments, r.inheritDefaults, r.validateAuthored,
 	} {
 		if !phase() {
 			return compilationFailure(ctx, ds)

@@ -137,8 +137,7 @@ func TestSSHPlacementRequiresKeyAndHostKeyAndClaimsOnItsHostAlone(t *testing.T) 
 			field("auth", api.MapValue(text("privateKeyRef", "services-key"))),
 		)))),
 	))
-	placed := service(api.Proxy, "lab-proxy")
-	placed = api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(
+	placed := api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(
 		text("management", "managed"), text("machineRef", "services"), text("implementation", "squid"),
 		text("bindAddress", "192.0.2.9"), field("port", api.IntegerValue("3128")),
 		field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))),

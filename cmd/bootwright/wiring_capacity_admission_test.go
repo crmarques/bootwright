@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
-	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 func TestComposedApplyRefusesAtTheLibvirtCapacityGateBeforeRegistration(t *testing.T) {
@@ -20,7 +19,6 @@ func TestComposedApplyRefusesAtTheLibvirtCapacityGateBeforeRegistration(t *testi
 	asked := 0
 	deps.Lifecycle = lifecycleDependencies{
 		Workspace: repository,
-		Inputs:    contexts.Inputs{Repository: repository, Selection: deps.Selection},
 		Host:      testLifecycleHost{}, Guard: testLifecycleGuard{}, Selection: deps.Selection,
 		Presenter: testLifecyclePresenter{}, Confirmer: deps.Confirmer,
 		Capabilities: buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{}),

@@ -17,7 +17,6 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
-	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 const (
@@ -44,7 +43,6 @@ func productionSourcesContext(t *testing.T, name, example string, sources desire
 	deps.Repository, deps.Workspace, deps.Trust = repository, repository, repository
 	deps.Lifecycle = lifecycleDependencies{
 		Workspace: repository,
-		Inputs:    contexts.Inputs{Repository: repository, Selection: deps.Selection},
 		Host:      testLifecycleHost{}, Guard: testLifecycleGuard{}, Selection: deps.Selection,
 		Presenter: testLifecyclePresenter{}, Confirmer: deps.Confirmer,
 		Capabilities: buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{}),

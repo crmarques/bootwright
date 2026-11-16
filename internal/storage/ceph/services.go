@@ -42,9 +42,6 @@ func projectServices(r *Request, cluster api.Object) error {
 				return failure("lifecycle.unsupported", "a native service option has not been qualified for core execution", "use only service_type, service_id, placement and the supported spec")
 			}
 		}
-		if svc.Has("extra_container_args") || svc.Has("extra_entrypoint_args") || svc.Has("custom_configs") || svc.Has("config") || svc.Get("unmanaged").Bool() {
-			return failure("lifecycle.unsupported", "core services cannot carry unqualified additional effects", "remove the unqualified service options")
-		}
 		names, _ := cephcluster.ResolveServicePlacement(cluster, svc)
 		hosts, err := serviceHosts(cluster, svc)
 		if err != nil {

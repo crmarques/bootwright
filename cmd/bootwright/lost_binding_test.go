@@ -21,7 +21,6 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
-	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 // removableCapabilities offers the removal of the exit plan's block, which is
@@ -183,8 +182,8 @@ func TestALostFrozenBindingLeavesOnlyTheOrphanAcknowledgedDelete(t *testing.T) {
 			deps := testContextWiring(t, root)
 			deps.Repository, deps.Workspace, deps.Trust = repository, repository, repository
 			deps.Lifecycle = lifecycleDependencies{
-				Workspace: repository, Inputs: contexts.Inputs{Repository: repository, Selection: deps.Selection},
-				Host: testLifecycleHost{}, Guard: testLifecycleGuard{}, Selection: deps.Selection,
+				Workspace: repository,
+				Host:      testLifecycleHost{}, Guard: testLifecycleGuard{}, Selection: deps.Selection,
 				Presenter: testLifecyclePresenter{}, Confirmer: deps.Confirmer, Capabilities: removableCapabilities{},
 			}
 			services := assembleServices(deps)

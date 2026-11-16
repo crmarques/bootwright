@@ -509,15 +509,6 @@ func (i inspection) routeSummary() string {
 	return route.Summary()
 }
 
-func (i inspection) route() SetupEgress {
-	route := i.selection.Route()
-	bypass := route.NoProxy()
-	if bypass == nil {
-		bypass = []string{}
-	}
-	return SetupEgress{HTTPProxy: route.HTTPProxy(), HTTPSProxy: route.HTTPSProxy(), NoProxy: bypass}
-}
-
 func (i inspection) toolSummary() string {
 	versions := make([]string, 0, len(i.tools))
 	for _, tool := range i.tools {

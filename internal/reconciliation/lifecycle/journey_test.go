@@ -1833,7 +1833,7 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 	clock := &testClock{moment: time.Date(2026, 9, 12, 10, 0, 0, 0, time.UTC)}
 	h := &harness{workspace: workspace, capability: capability, binder: binder, confirmer: confirmer, presenter: presenter, guard: guard, setup: setup}
 	h.entropy = []byte{1}
-	h.service = New(workspace, nil, testCompiler{state: compilation.NewState(catalog, catalog, nil)}, binder,
+	h.service = New(workspace, testCompiler{state: compilation.NewState(catalog, catalog, nil)}, binder,
 		testHost{identity: host}, testAutomation{digest: testAutomaton}, guard, testResolver{capability: capability},
 		Options{
 			Contracts: func(block reconciliation.Block) (ExecutionContract, bool) {

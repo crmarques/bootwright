@@ -204,13 +204,13 @@ func TestAddressedBridgeRequestGolden(t *testing.T) {
 }
 
 func TestHostAddressesNoneRendersTheAddresslessBridge(t *testing.T) {
-	cluster, catalog := addressedFixture("")
+	cluster, _ := addressedFixture("")
 	want, err := renderRequest(cluster, api.NewCatalog(nil), "controller", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, placement := range []string{"", "none"} {
-		cluster, catalog = addressedFixture(placement)
+		cluster, catalog := addressedFixture(placement)
 		got, err := renderRequest(cluster, catalog, "controller", nil)
 		if err != nil {
 			t.Fatal(err)

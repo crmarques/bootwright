@@ -20,41 +20,8 @@ func init() {
 	register(CephClient, storageClientSchema)
 }
 
-func storagePlacement() *Shape {
-	return record(field("hosts", set(nonempty())), field("sites", set(name())), field("countPerHost", integer("0", "")))
-}
-
 func storageReplicated() *Shape {
 	return record(field("size", integer("0", "")), field("minSize", integer("0", "")))
-}
-
-func storageDeviceSelector() *Shape {
-	return record(field("paths", set(lexical("device-path"))), field("pathSpecs", array(record(required("path", lexical("device-path")), field("crushDeviceClass", nonempty())))), field("all", boolean()), field("model", nonempty()), field("vendor", nonempty()), field("rotational", boolean()), field("size", nonempty()), field("limit", integer("0", "")))
-}
-
-func storageServiceSpec(custom bool) *Shape {
-	s := record(field("unmanaged", boolean()), field("extraContainerArgs", array(text())), field("extraEntrypointArgs", array(text())), field("networks", set(cidr())))
-	if custom {
-		s.Fields = s.Fields[1:]
-		s.Fields = append(s.Fields, field("customConfigs", array(record(required("mountPath", lexical("absolute-path")), required("content", nonempty())))))
-	}
-	return s
-}
-
-func storageOSD() *Shape {
-	return record(required("dataDevices", storageDeviceSelector()), field("dbDevices", storageDeviceSelector()), field("walDevices", storageDeviceSelector()), field("encrypted", boolean()), field("osdsPerDevice", integer("0", "")), field("crushDeviceClass", nonempty()), field("filterLogic", enumeration("AND", "OR")), field("blockDBSize", nonempty()), field("blockWALSize", nonempty()), field("dbSlots", integer("0", "")), field("walSlots", integer("0", "")), field("dataAllocateFraction", number("0", "1")), field("tpm2", boolean()), field("unmanaged", boolean()), field("serviceOverrides", storageServiceSpec(true)))
-}
-
-func storageMonitoringService(kind string) *Shape {
-	s := record(field("placement", storagePlacement()), field("port", integer("0", "65535")))
-	if kind == "prometheus" {
-		s.Fields = append(s.Fields, field("retentionTime", nonempty()), field("retentionSize", nonempty()))
-	}
-	s.Fields = append(s.Fields, field("networks", set(cidr())))
-	if kind == "grafana" {
-		s.Fields = append(s.Fields, field("initialAdminPasswordRef", secret("opaque", "token")))
-	}
-	return s
 }
 
 var cephAuxiliaryImageNames = []string{"alertmanager", "alloy", "grafana", "haproxy", "keepalived", "loki", "nginx", "node_exporter", "nvmeof",

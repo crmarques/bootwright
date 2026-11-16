@@ -13,8 +13,6 @@ import (
 var (
 	exactOSS        = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 	checksum        = regexp.MustCompile(`(?i)^(?:sha256:)?[0-9a-f]{64}$`)
-	retentionTime   = regexp.MustCompile(`^([0-9]+)(y|w|d|h|m|s)$`)
-	retentionSize   = regexp.MustCompile(`^([0-9]+)(B|KB|MB|GB|TB|PB|EB)$`)
 	storageSize     = regexp.MustCompile(`^([0-9]+)(B|K|M|G|T|P|E|KB|MB|GB|TB|PB|EB)?$`)
 	deviceSize      = regexp.MustCompile(`^([0-9]+)(M|G|T|MB|GB|TB)$`)
 	fileMode        = regexp.MustCompile(`^0?[0-7]{3}$`)
@@ -95,14 +93,6 @@ func (a *admission) lexicalValues() {
 			value := entry.Value.Get("version")
 			a.lexical(value, "$.spec.images."+entry.Name+".version", NativeVersion(value.Text()))
 		}
-		a.size(ceph.Get("monitoring", "prometheus", "retentionTime"), "$.spec.monitoring.prometheus.retentionTime", retentionTime)
-		a.size(ceph.Get("monitoring", "prometheus", "retentionSize"), "$.spec.monitoring.prometheus.retentionSize", retentionSize)
-		for i, node := range ceph.Get("topology", "nodes").Items() {
-			a.osdLexical(node.Get("osd"), indexed("$.spec.topology.nodes", i)+".osd")
-		}
-		for i, group := range ceph.Get("topology", "osdDrivegroups").Items() {
-			a.osdLexical(group.Get("osd"), indexed("$.spec.topology.osdDrivegroups", i)+".osd")
-		}
 	}
 	if a.object.Kind() == api.CephPool {
 		a.size(spec.Get("autoscale", "targetSizeBytes"), "$.spec.autoscale.targetSizeBytes", storageSize)
@@ -116,16 +106,6 @@ func (a *admission) lexicalValues() {
 		a.lexical(spec.Get("mode"), "$.spec.mode", fileMode.MatchString(textOf(spec, "mode")))
 	}
 }
-func (a *admission) osdLexical(osd api.Value, field string) {
-	for _, key := range []string{"blockDBSize", "blockWALSize"} {
-		a.size(osd.Get(key), field+"."+key, storageSize)
-	}
-	for _, key := range []string{"dataDevices", "dbDevices", "walDevices"} {
-		value := osd.Get(key, "size")
-		a.lexical(value, field+"."+key+".size", validDeviceRange(value.Text()))
-	}
-}
-
 func validSMBLoginName(name string) bool {
 	return !strings.ContainsAny(name, " \t\n") && utf8.RuneCountInString(name) <= 128
 }

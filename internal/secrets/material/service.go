@@ -165,7 +165,7 @@ func (s *Service) Validate(ctx context.Context, declaration secrets.Declaration,
 		if declaration.Source == "generated" {
 			err = s.validateGeneratedCertificate(declaration, parts[secrets.CertificatePart], parts[secrets.PrivateKeyPart])
 		} else {
-			err = validateCA(parts[secrets.CertificatePart], parts[secrets.PrivateKeyPart], s.now())
+			err = validateCA(parts[secrets.CertificatePart], s.now())
 		}
 	case "tlsCertificate":
 		if declaration.Source == "generated" {

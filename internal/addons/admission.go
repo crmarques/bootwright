@@ -219,22 +219,6 @@ func SortedNamed(value api.Value, key string) api.Value {
 	return api.ListValue(items...)
 }
 
-func uniqueNamedValues(values api.Value, key string) map[string]api.Value {
-	unique := map[string]api.Value{}
-	duplicates := map[string]bool{}
-	for _, value := range values.Items() {
-		name := value.Get(key).Text()
-		if _, exists := unique[name]; exists {
-			duplicates[name] = true
-		}
-		unique[name] = value
-	}
-	for name := range duplicates {
-		delete(unique, name)
-	}
-	return unique
-}
-
 func indexed(field string, index int) string { return field + "[" + strconv.Itoa(index) + "]" }
 
 func addonIssue(code, field, message, remediation string) api.Issue {

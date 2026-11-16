@@ -64,7 +64,6 @@ type Options struct {
 type Service struct {
 	preparation  *reconciliation.PreparationScope
 	workspace    Workspace
-	inputs       Inputs
 	compiler     Compiler
 	binder       SecretBinder
 	host         HostIdentity
@@ -74,8 +73,8 @@ type Service struct {
 	options      Options
 }
 
-func New(workspace Workspace, inputs Inputs, compiler Compiler, binder SecretBinder, host HostIdentity, automation AutomationIdentity, guard ExecutionGuard, capabilities CapabilityResolver, options Options) Service {
-	return Service{workspace: workspace, inputs: inputs, compiler: compiler, binder: binder, host: host, automation: automation, guard: guard, capabilities: capabilities, options: options}
+func New(workspace Workspace, compiler Compiler, binder SecretBinder, host HostIdentity, automation AutomationIdentity, guard ExecutionGuard, capabilities CapabilityResolver, options Options) Service {
+	return Service{workspace: workspace, compiler: compiler, binder: binder, host: host, automation: automation, guard: guard, capabilities: capabilities, options: options}
 }
 
 func (s Service) available(ctx context.Context) error {

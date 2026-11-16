@@ -39,9 +39,6 @@ func validNQN(nqn string) bool {
 	return nvmeofNamedNQN.MatchString(nqn)
 }
 
-func (a *admission) nvmeofClusterIntrinsic(ceph api.Value) {
-}
-
 func (a *admission) nvmeofRecord(service api.Value, field string, placed []api.Value, partial bool) {
 	spec := service.Get("spec")
 

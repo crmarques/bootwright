@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/big"
 	"slices"
-	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -258,13 +257,4 @@ func (a *admission) uniqueValues(values []string, field, message string) {
 		}
 		seen[value] = true
 	}
-}
-
-func nonemptyStrings(value api.Value) bool {
-	for _, item := range value.Items() {
-		if strings.TrimSpace(item.Text()) != "" {
-			return true
-		}
-	}
-	return false
 }

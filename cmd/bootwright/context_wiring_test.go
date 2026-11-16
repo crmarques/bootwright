@@ -13,7 +13,6 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	secretmaterial "github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
-	"github.com/crmarques/bootwright/internal/workspace/contexts"
 	"github.com/crmarques/bootwright/internal/workspace/selectionfs"
 )
 
@@ -55,7 +54,6 @@ func testServices(t *testing.T, repository *contextfs.Store, root string) cli.Se
 	deps.Repository, deps.Workspace, deps.Trust = repository, repository, repository
 	deps.Lifecycle = lifecycleDependencies{
 		Workspace: repository,
-		Inputs:    contexts.Inputs{Repository: repository, Selection: deps.Selection},
 		Host:      testLifecycleHost{}, Guard: testLifecycleGuard{}, Selection: deps.Selection,
 		Presenter: testLifecyclePresenter{}, Confirmer: deps.Confirmer,
 		Capabilities: testLifecycleCapabilities{},

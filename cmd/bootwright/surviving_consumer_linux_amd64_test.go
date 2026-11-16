@@ -15,7 +15,6 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
-	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 const metalCompactNode = `apiVersion: bootwright.io/v1alpha1
@@ -124,8 +123,8 @@ func TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives(t *testing.T) {
 	deps.Repository, deps.Workspace, deps.Trust = repository, repository, repository
 	deps.Controller.Lock = testRuntimeLock
 	deps.Lifecycle = lifecycleDependencies{
-		Workspace: repository, Inputs: contexts.Inputs{Repository: repository, Selection: deps.Selection},
-		Host: testLifecycleHost{}, Guard: testLifecycleGuard{}, Selection: deps.Selection, Setup: repository,
+		Workspace: repository,
+		Host:      testLifecycleHost{}, Guard: testLifecycleGuard{}, Selection: deps.Selection, Setup: repository,
 		Presenter: testLifecyclePresenter{}, Confirmer: deps.Confirmer,
 		Capabilities: buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{}),
 	}

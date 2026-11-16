@@ -22,7 +22,6 @@ type run struct {
 	report      *Report
 	environment *objectRecord
 	defaults    api.Value
-	selected    map[string]bool
 	records     []*objectRecord
 }
 
@@ -62,23 +61,16 @@ func (r *run) selectEnvironment() bool {
 	return withinExpansionBudget([]*objectRecord{r.environment}, r.ds)
 }
 
-// decodeSelected reads every document the selected Environment admits, so a
-// diagnostic from a file outside the selection never reaches the report.
-func (r *run) decodeSelected() bool {
-	selected := selectResources(r.sources, r.environment)
-	r.selected = selected
+// decodeDocuments reads every discovered document; the Environment selects
+// every file of its input.
+func (r *run) decodeDocuments() bool {
 	for _, d := range r.parsed {
-		if d.Source == nil || selected[d.Source.Path] {
-			r.ds.add(d)
-		}
+		r.ds.add(d)
 	}
 	r.records = []*objectRecord{}
 	for _, document := range r.documents {
 		if r.ds.stopped() {
 			break
-		}
-		if !selected[document.Path] {
-			continue
 		}
 		record := r.environment
 		if document.Path != r.environment.path || document.Index != r.environment.document {

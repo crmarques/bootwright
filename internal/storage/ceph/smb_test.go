@@ -506,7 +506,6 @@ func TestSMBWithoutItsSambaImagesRefusesNamingTheField(t *testing.T) {
 		}
 	}
 	catalog := api.NewCatalog(append(plain.Objects(), smbJoin(), smbUsers()))
-	state = compilation.NewState(catalog, catalog, nil)
 	cluster, _ := catalog.Find(api.CephCluster, "example")
 	author := func(names ...string) *compilation.State {
 		spec := cluster.Spec()

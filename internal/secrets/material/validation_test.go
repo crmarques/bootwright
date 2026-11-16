@@ -104,10 +104,10 @@ func TestCertificateValidationRejectsMismatchExpiryUsageAndFalseChain(t *testing
 	defer clear(falseChain)
 	assertFailureCode(t, validateTLS(falseChain, firstKey, generationTime.UTC()), "secret.input")
 
-	assertFailureCode(t, validateCA(firstCertificate, nil, generationTime.UTC()), "secret.input")
+	assertFailureCode(t, validateCA(firstCertificate, generationTime.UTC()), "secret.input")
 	validBundle := append(append([]byte{}, caCertificate...), caCertificate...)
 	defer clear(validBundle)
-	if err := validateCA(validBundle, nil, generationTime.UTC()); err != nil {
+	if err := validateCA(validBundle, generationTime.UTC()); err != nil {
 		t.Fatalf("multiple CA bundle: %v", err)
 	}
 }

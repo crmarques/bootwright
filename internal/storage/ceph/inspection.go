@@ -674,10 +674,6 @@ func subvolumeScopeText(r Request) string {
 	return "subvolume " + r.Subvolume.Filesystem + "/" + group + "/" + r.Subvolume.Name
 }
 
-func nvmeofSubsystemScopeText(spec api.Value) string {
-	return "subsystem on " + spec.Get("serviceRef").Text()
-}
-
 func exportScopeText(spec api.Value) string {
 	foundation := spec.Get("dataFoundation")
 	if !foundation.Present() {

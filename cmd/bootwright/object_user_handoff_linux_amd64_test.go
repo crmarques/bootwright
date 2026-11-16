@@ -70,7 +70,6 @@ func TestCompiledObjectUserHandoffUsesPublicGatewayReference(t *testing.T) {
 	evidence := objectHandoffEvidence(t, block, request)
 	for _, scenario := range []string{"proved", "missing-frozen", "moved-zone", "moved-gateway", "moved-cluster"} {
 		t.Run(scenario, func(t *testing.T) {
-			current := catalog
 			selectedCluster := request.Cluster
 			if scenario == "moved-cluster" {
 				selectedCluster = "moved-cluster"
@@ -98,7 +97,7 @@ func TestCompiledObjectUserHandoffUsesPublicGatewayReference(t *testing.T) {
 				}
 				objects[i] = api.NewObject(object.Kind(), name, api.Value{}, api.MapValue(fields...))
 			}
-			current = api.NewCatalog(objects)
+			current := api.NewCatalog(objects)
 			frozen := []reconciliation.Block{block}
 			if scenario == "missing-frozen" {
 				frozen = nil

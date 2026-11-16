@@ -1040,15 +1040,6 @@ func TestCrashHelper(t *testing.T) {
 	t.Fatal("crash checkpoint was not reached")
 }
 
-type constantRandom byte
-
-func (r constantRandom) Read(data []byte) (int, error) {
-	for i := range data {
-		data[i] = byte(r)
-	}
-	return len(data), nil
-}
-
 func FuzzPersistedRecords(f *testing.F) {
 	valid, _ := encodeRecord(emptyRegistry(), maxRegistry)
 	f.Add(valid, false)

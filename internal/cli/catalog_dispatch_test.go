@@ -42,14 +42,14 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"cluster oc": true, "cluster kubectl": true, "cluster kubeconfig": true, "cluster keyring": true,
 	}
 	for _, spec := range commandCatalog() {
-		if implementedOperation(spec.path) != (want[spec.path] || spec.path == "add-ons list" || spec.path == "add-ons info") {
-			t.Errorf("%s: implemented = %t, want %t", spec.path, implementedOperation(spec.path), want[spec.path])
+		if specFor(spec.path).implemented != (want[spec.path] || spec.path == "add-ons list" || spec.path == "add-ons info") {
+			t.Errorf("%s: implemented = %t, want %t", spec.path, specFor(spec.path).implemented, want[spec.path])
 		}
 		if privilegedOperation(spec.path) != want[spec.path] {
 			t.Errorf("%s: privileged = %t, want %t", spec.path, privilegedOperation(spec.path), want[spec.path])
 		}
 	}
-	if implementedOperation("controller") || privilegedOperation("render installer") {
+	if specFor("controller").implemented || privilegedOperation("render installer") {
 		t.Fatal("an incomplete path or unavailable command claimed a mode")
 	}
 }

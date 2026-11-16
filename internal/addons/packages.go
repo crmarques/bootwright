@@ -148,10 +148,9 @@ func (n SecondaryNetwork) Interfaces() []string {
 }
 
 type Rendered struct {
-	SubscriptionConfig *clusterobjects.SubscriptionConfig
-	Before, After      []clusterobjects.Phase
-	Checks             []clusterobjects.Check
-	Requires           []reconciliation.ObjectRef
+	Before, After []clusterobjects.Phase
+	Checks        []clusterobjects.Check
+	Requires      []reconciliation.ObjectRef
 }
 
 func Decode[T any](v api.Value) (T, error) {

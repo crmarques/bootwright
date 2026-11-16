@@ -44,9 +44,9 @@ func (s Service) CheckCapacity(ctx context.Context, catalog api.Catalog, context
 	if err != nil {
 		return nil, err
 	}
-	owned := map[string]machine.OwnershipState{}
 	if s.Ownership != nil {
-		if owned, err = s.Ownership.Ownership(ctx, contextName); err != nil {
+		owned, err := s.Ownership.Ownership(ctx, contextName)
+		if err != nil {
 			return nil, err
 		}
 		for i := range allocations {

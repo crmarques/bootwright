@@ -24,7 +24,7 @@ func TestTrustBundleAcceptsPublicLeavesAndUnorderedMixedAnchors(t *testing.T) {
 		}
 		material.Clear()
 	}
-	assertFailureCode(t, validateCA(leaf, nil, generationTime), "secret.input")
+	assertFailureCode(t, validateCA(leaf, generationTime), "secret.input")
 	weak := rsaCertificate(t, 1024, false)
 	defer weak.Clear()
 	weakCertificate := requiredPart(t, weak, secrets.CertificatePart)

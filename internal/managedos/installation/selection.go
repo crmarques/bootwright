@@ -198,10 +198,6 @@ func requestsFor(catalog api.Catalog, controllerMachine, contextName string, pro
 	return requests, requirements, nil
 }
 
-func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, contextName string) (Request, Requirements, error) {
-	return deriveRequest(catalog, machine, controllerMachine, contextName, nil, true)
-}
-
 func deriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, contextName string, proof *diskselection.Proof, complete bool) (Request, Requirements, error) {
 	name := machine.Name()
 	if !substrate.SafeSegment(name) {
