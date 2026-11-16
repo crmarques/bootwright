@@ -55,9 +55,11 @@ def diagnostic(error, controller):
         "RHEL initrd lacks discovery bootstrap tools": "initrd-tools",
         "unqualified discovery initrd layout": "initrd-layout",
         "discovery report deadline": "inventory-timeout",
-        "discovery receipt endpoint": "receipt-endpoint",
-        "foreign discovery receipt socket": "receipt-ownership",
-        "discovery receipt socket is active": "receipt-active",
+        "discovery RAM inventory refused": "inventory-refused",
+        "a foreign service answers the discovery address": "foreign-answer",
+        "discovery target stopped before its inventory": "target-stopped",
+        "discovery lost ownership of the running boot": "lost-ownership",
+        "discovery poweroff deadline": "poweroff-timeout",
         "private discovery listener unavailable": "media-response",
         "custody-directory": "custody-directory",
         "custody-mode": "custody-mode",
@@ -89,8 +91,8 @@ def diagnostic(error, controller):
         code = refusals.get(str(error), "contract")
     phase = getattr(controller, "phase", "custody")
     phases = (
-        "custody", "controller", "media", "publication", "tls", "media-delivery", "boot",
-        "media-insertion", "boot-selection", "power-on", "inventory", "acknowledgement", "cleanup", "receipt-listener",
+        "custody", "controller", "bmc-inventory", "media", "publication", "tls", "media-delivery",
+        "media-insertion", "boot-selection", "power-on", "inventory", "cleanup",
     )
     if phase not in phases:
         phase = "custody"

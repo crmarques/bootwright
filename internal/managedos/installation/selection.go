@@ -298,6 +298,7 @@ func deriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, c
 	}
 	if proof != nil {
 		request.DiscoveryProof = proof
+		install.InventoriedSerials = slices.Clone(proof.Inventoried)
 	}
 	return finishInstallationRequest(request, needs, install)
 }

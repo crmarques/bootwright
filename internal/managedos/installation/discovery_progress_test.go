@@ -19,7 +19,7 @@ func TestDiscoveryFreezesProgressForItsRealWork(t *testing.T) {
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("discovery plan: %v %v", plan, err)
 	}
-	want := []string{"inspect-target", "prepare-receipt", "build-media", "publish-media", "verify-delivery", "insert-media", "select-boot", "power-on", "receive-inventory", "power-off", "eject-media", "seal-cleanup"}
+	want := []string{"inspect-target", "read-bmc-inventory", "build-media", "publish-media", "verify-delivery", "insert-media", "select-boot", "power-on", "await-answer", "receive-inventory", "power-off", "eject-media", "seal-cleanup"}
 	block := plan.Definitions[0]
 	if got := groupIDs(block.Groups); !slices.Equal(got, want) {
 		t.Fatalf("discovery progress = %v, want %v", got, want)

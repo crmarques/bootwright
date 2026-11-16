@@ -1,4 +1,4 @@
-"""Inventory boot/receipt boundaries never authorize data disk writes."""
+"""Inventory boot and pull boundaries never authorize data disk writes."""
 
 import errno
 import os
@@ -39,10 +39,9 @@ def test_custom_init_calls_the_worker_in_the_actual_private_payload(monkeypatch)
     instance = controller.Controller.__new__(controller.Controller)
     instance.root = Path("/fixture")
     instance.binding = {"nonce": "a" * 64}
-    instance.request = {"interfaces": [], "network": {}, "receipt": {"url": "https://example.test:8443/_bootwright/inventory/"}}
-    instance.material = {"artifactCertificate": "/fixture/certificate.pem"}
+    instance.request = {"interfaces": [], "network": {}}
     instance.load = lambda: {"reportToken": "b" * 64, "token": "c" * 64}
-    monkeypatch.setattr(controller.records, "read", lambda path: b"synthetic TLS material")
+    monkeypatch.setattr(controller.records, "read", lambda path: b"synthetic " + path.name.encode())
     payload = instance.payload()
     archive = unpack(boot.overlay(payload))
     init = archive["init"].decode()
@@ -58,8 +57,10 @@ def test_custom_init_calls_the_worker_in_the_actual_private_payload(monkeypatch)
     assert "/sys/bus/scsi/devices/*/modalias" in boot.DRIVERS
     assert "timeout -k 2 180" in init
     assert "--quiet" in boot.DRIVERS
-    assert "server-key.pem" not in payload
-    assert "tls_trust.py" in payload
+    assert payload["server-key.pem"] == b"synthetic server-key.pem"
+    assert payload["server.pem"] == b"synthetic server.pem"
+    assert "tls_trust.py" not in payload and "artifact.pem" not in payload
+    assert "sysrq" not in init and "poweroff" not in init
 
 
 def test_overlay_is_deterministic_bounded_and_has_no_traversal_or_links():
@@ -92,10 +93,15 @@ def test_controller_refuses_to_boot_or_stop_an_unowned_running_machine():
     instance.target = lambda unused: "On"
     instance.publication = lambda: (Path("/fixture"), "https://example.test/owned.iso")
     instance.publish = Mock(side_effect=AssertionError("rebuilt while running"))
+    instance.booted = lambda: True
     with pytest.raises(ValueError, match="already running"):
         instance.start()
     with pytest.raises(ValueError, match="lost ownership"):
-        instance.cleanup(False)
+        instance.cleanup()
+    client.inserted.return_value = "https://example.test/owned.iso"
+    instance.booted = lambda: False
+    with pytest.raises(ValueError, match="already running"):
+        instance.start()
     client.power.assert_not_called()
     client.insert.assert_not_called()
 
@@ -111,6 +117,9 @@ def test_discovery_reports_the_exact_refused_boot_step_without_starting_later_st
     instance.target = Mock(return_value="Off")
     instance.publication = lambda: (Path("/fixture"), "https://example.test/owned.iso")
     instance.publish = Mock()
+    instance.booted = Mock(return_value=False)
+    instance.mark_boot = Mock()
+    instance.prepare_tls = Mock()
     instance.request = {"controller": {"virtualMedia": {"trust": "importCertificate", "enableVerification": False}}}
     instance.material = {"artifactCertificate": "/fixture/certificate.pem"}
     monkeypatch.setattr(controller.records, "read", lambda path: b"synthetic certificate")
@@ -129,10 +138,11 @@ def test_discovery_reports_the_exact_refused_boot_step_without_starting_later_st
 def test_foreign_or_noncanonical_report_never_reaches_a_durable_receipt():
     instance = controller.Controller.__new__(controller.Controller)
     instance.binding = {"nonce": "a" * 64}
-    value = {"version": "machine-disk-inventory-v1", "binding": instance.binding, "disks": [{}]}
+    value = {"version": "machine-disk-inventory-v1", "source": "linux", "binding": instance.binding, "disks": [{}]}
     wire = controller.canonical_json.canonical(value)
     assert instance.validate_report(wire) == value
-    for data in (wire + b"\n", wire.replace(b"a" * 64, b"b" * 64), b"x" * (controller.MAX_REPORT + 1)):
+    unknown = controller.canonical_json.canonical(dict(value, source="redfish"))
+    for data in (wire + b"\n", wire.replace(b"a" * 64, b"b" * 64), b"x" * (controller.MAX_REPORT + 1), unknown):
         with pytest.raises(ValueError):
             instance.validate_report(data)
 
@@ -154,7 +164,7 @@ def fixture_custody(tmp_path, monkeypatch):
     instance.root.mkdir()
     instance.binding = {"nonce": "a" * 64}
     instance.digest = "b" * 64
-    instance.request = {"private": {"path": str(tmp_path / "served")}, "receipt": {"socketRoot": str(tmp_path / "runtime")}}
+    instance.request = {"private": {"path": str(tmp_path / "served")}, "inventory": "automatic"}
     instance.client = Mock(return_value=Mock(inserted=Mock(return_value="")))
     instance.target = Mock(return_value="Off")
     monkeypatch.setattr(controller.records, "read", lambda path, limit=32768: path.read_bytes())
@@ -208,12 +218,11 @@ def test_completed_cleanup_resumes_after_each_private_image_deletion(tmp_path, m
 
 def test_receive_reuses_the_immutable_report_without_requiring_another_boot(tmp_path, monkeypatch):
     instance = fixture_custody(tmp_path, monkeypatch)
-    wire = controller.canonical_json.canonical({"version": "machine-disk-inventory-v1", "binding": instance.binding, "disks": [{}]})
+    wire = controller.canonical_json.canonical({"version": "machine-disk-inventory-v1", "source": "linux", "binding": instance.binding, "disks": [{}]})
     instance.request["deadlineSeconds"] = 1800
     (instance.root / "report.json").write_bytes(wire)
-    receiver = Mock()
-    assert instance.receive(receiver) == wire
-    receiver.poll.assert_not_called()
+    instance.pull = Mock(side_effect=AssertionError("pulled again after a durable report"))
+    assert instance.receive() == wire
 
 
 def test_total_deadline_stops_continuous_activity_and_restores_handler():
@@ -283,7 +292,7 @@ def test_publication_deletion_is_durable_before_completion(tmp_path, monkeypatch
 
     monkeypatch.setattr(controller.os, "fsync", synced)
     monkeypatch.setattr(controller.records, "write", written)
-    instance.cleanup(True)
+    instance.cleanup()
     instance.finish(False)
     assert not directory.exists()
     assert events.index(("fsync", str(parent))) < events.index(("write", "completed.json"))

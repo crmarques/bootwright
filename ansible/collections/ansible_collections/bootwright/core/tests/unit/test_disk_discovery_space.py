@@ -16,9 +16,11 @@ from ansible_collections.bootwright.core.plugins.module_utils import disk_discov
 
 
 @pytest.mark.parametrize("failure", (False, True))
-def test_lorax_adds_only_the_patched_initrds_in_one_remaster(tmp_path, monkeypatch, failure):
+def test_lorax_adds_only_the_patched_initrds_to_the_boot_tree(tmp_path, monkeypatch, failure):
     paths = sorted(media.SUPPORTED_INITRDS)
-    monkeypatch.setattr(media, "initrd_paths", lambda held: paths)
+    boot_tree = str(tmp_path / "media-work" / "boot-tree.iso")
+    monkeypatch.setattr(media, "initrd_paths", lambda held: paths if held == boot_tree else pytest.fail("read the installer ISO"))
+    monkeypatch.setattr(media, "outside_boot_tree", lambda held: ["/images/install.img", "/BaseOS"])
     monkeypatch.setattr(media, "extract", lambda held, path, target: target.write_bytes(b"verified initrd"))
     qualified = Mock()
     monkeypatch.setattr(media, "qualified_initrd", qualified)
@@ -27,8 +29,13 @@ def test_lorax_adds_only_the_patched_initrds_in_one_remaster(tmp_path, monkeypat
 
     def native(argv, **kwargs):
         commands.append(argv)
+        if argv[0] == "/usr/bin/xorriso":
+            assert argv == ["/usr/bin/xorriso", "-indev", "/held/source.iso", "-outdev", boot_tree, "-boot_image", "any", "replay",
+                            "-rm_r", "/images/install.img", "/BaseOS", "--"]
+            Path(boot_tree).write_bytes(b"boot tree only")
+            return b""
         assert argv[0] == "/usr/bin/mkksiso"
-        assert argv[-2] == "/held/source.iso"
+        assert argv[-2] == boot_tree
         added = [Path(argv[index + 1]) for index, arg in enumerate(argv) if arg == "--add"]
         assert {path.name for path in added} == {"images", "isolinux"}
         assert {str(path.relative_to(tmp_path / "media-work")) for top in added for path in top.rglob("*") if path.is_file()} == {
@@ -52,7 +59,7 @@ def test_lorax_adds_only_the_patched_initrds_in_one_remaster(tmp_path, monkeypat
     else:
         assert media.remaster("/held/source.iso", tmp_path, {"request.json": b"private fixture"}).read_bytes() == b"private finished ISO"
     assert qualified.call_count == 2
-    assert len(commands) == 1
+    assert len(commands) == 2
     assert not (tmp_path / "patched.iso").exists()
     assert not (tmp_path / "media-work").exists()
 
@@ -142,7 +149,7 @@ def test_capacity_combines_paths_on_one_filesystem_before_building(tmp_path, mon
 def test_concurrent_capacity_checks_include_previously_published_images(tmp_path, monkeypatch):
     monkeypatch.setattr(media.private_records, "directory", lambda *args: None)
     maximum = media.publication_bound(64 << 20)
-    scratch = len(media.SUPPORTED_INITRDS) * (media.MAX_INITRD + media.boot.MAX_OVERLAY) + media.MAX_BOOT_GROWTH
+    scratch = (64 << 20) + len(media.SUPPORTED_INITRDS) * (media.MAX_INITRD + media.boot.MAX_OVERLAY) + media.MAX_BOOT_GROWTH
     available = 2 * maximum + scratch
     active, peak = 0, 0
     barrier = threading.Barrier(3)

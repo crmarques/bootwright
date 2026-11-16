@@ -71,7 +71,6 @@ ARTIFACT_SERVER = {
     "image": "registry.example.test/nginx-124@sha256:" + DIGEST,
     "listeners": [{"name": "http", "port": 8080, "protocol": "http"}, {"name": "https", "port": 8443, "protocol": "https"}],
     "placement": LOCAL,
-    "receiptRoot": "/run/bootwright-receipts/" + "a" * 32,
     "tls": {"fingerprint": DIGEST, "minVersion": "TLSv1.2", "secret": "media-serving"},
     "unit": "bootwright-%s-artifact-server-media" % CONTEXT,
     "version": "artifact-server-nginx-v1",

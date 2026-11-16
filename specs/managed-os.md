@@ -1497,7 +1497,8 @@ check cover selection; live acceptance belongs to
 ## Automatic root-disk discovery
 
 The [automatic selector](api/machines.md#automatic-root-disk-discovery) obtains
-Linux-visible disk identities through a confirmed inventory boot. `apply`
+disk identities from the BMC's drive inventory, or from Linux through a
+confirmed inventory boot when the BMC cannot answer. `apply`
 automatically prepares missing inventory before it plans installation; the
 explicit `machine discover` command runs the same preparation independently.
 Both entry points use the same request derivation, runner and native procedure.
@@ -1505,6 +1506,31 @@ The controller-local procedure streams fixed progress phases through the
 adapter channel before and after native work, including inventory waiting and
 temporary-boot cleanup. Progress carries no private values and is never
 inventory, ownership or completion evidence.
+
+Under the declared `automatic` inventory the procedure first proves the
+machine's identity and reads its BMC Storage inventory without a boot. That
+inventory stands in for a Linux one only when it is complete and plain: at
+least one Storage resource, no paged collection, no logical volume in any
+Storage and no drive backing one, and every present drive a Drive with a known
+protocol, a qualified serial number and an exact 4096-aligned capacity. An
+absent bay is skipped. Anything else, including an unreadable resource, boots
+instead, as does the declared `boot` inventory. A BMC report names its source
+and carries the serial number, exact capacity, protocol and model of each
+drive, never a WWN or controller PCI address, because a BMC identifier need
+not be the name Linux derives. Selection refuses a BMC report when an
+exclusion or protected storage claim is named without a serial number or with
+a WWN, or a match names a controller PCI address, since such a selector would
+match nothing there; its remedy names the `boot` inventory. The root it
+selects is therefore a serial-number root, which the installer
+[re-proves](#physical-installation) before its first storage write. A BMC
+inventory need not list every disk Linux sees, so its proof also freezes the
+serial numbers of every drive it listed, and before any storage write the
+installer refuses when Linux shows a fixed, writable whole `sd` or `nvme` disk,
+not hidden and not on USB, whose serial is outside that set or unreadable. A BMC
+inventory changes no power, media or firmware state; it is durable before
+completion, and no boot effect precedes it. Once a boot has begun, which a
+durable custody marker records before publication, a later attempt never
+falls back to the BMC inventory.
 Private media delivery verifies the bound serving leaf through the shared full
 TLS verifier on every supported Python runtime. Delivery refusals distinguish
 HTTP, certificate and connection causes without exposing the private URL.
@@ -1520,40 +1546,36 @@ changes are explicit effects; the disk inventory makes no storage writes.
 The inventory image runs a fixed PID1 entirely from the verified initramfs.
 It starts no systemd, udev, Anaconda or installer second stage and mounts only
 RAM and kernel pseudo-filesystems. Automatic RAID, LVM and swap activation is
-disabled. The worker configures the declared static IPv4 ethernet, bond or VLAN
-and posts its bounded report to the selected controller-local ArtifactServer's
-existing HTTPS endpoint, retaining its declared port. No node listener or
-controller-to-node connection is required. The network must admit node and BMC
-connections to that endpoint; enterprise rules remain operator-managed. The
-worker validates the endpoint hostname and pins the bound serving leaf before
-sending its independent per-attempt bearer token. It inherits no proxy and
-follows no redirect. Declared DNS resolvers are configured in RAM when needed.
-The HTTPS service reserves `/_bootwright/` against static content, accepts only
-a bounded POST on the exact inventory route and proxies it to an attempt-owned
-Unix socket. The service's own systemd runtime directory, frozen in the request
-and scoped by its exclusive unit reservation, is outside served content and
-mounted read-only. Under SELinux the receiver socket uses the running artifact
-container's exact peer context and its directory's private file label, without
-changing process confinement, system policy or verification settings. There is
-no general upload directory or writable artifact mount. Request bodies, credentials and callback routes are not logged or spooled.
-The receiver validates canonical framing and binding and persists the immutable
-report before returning its SHA-256 acknowledgement. Identical retries replay
-the acknowledgement; conflicting reports refuse. The receiver remains available
-through verified power-off so a lost acknowledgement can be retried, including
-after a controller restart. The acknowledgement proves receipt only; target
-selection still requires the Go-side inventory validation and cleanup evidence.
-The bootstrap prints fixed phases without hardware or secret values. Optional
-unmatched module aliases are quiet; driver probing and worker preparation have
-total deadlines, and a missing storage driver still refuses safely.
-This procedure contains no installer
-storage or erase operation. It reads identities and exact sizes through bounded read-only
-interfaces. Its authenticated report is bound to the machine UUID/MAC set,
-context incarnation, operation/attempt, nonce, frozen request and media/tool
-identities. The controller persists a complete immutable report before
-acknowledging shutdown, then proves power-off and owned-media cleanup.
+disabled. The worker configures the declared static IPv4 ethernet, bond or VLAN,
+reads the inventory and serves one answer on the declared install address and
+TCP port 9443 until the machine is powered off: the report, or a fixed refusal
+when it could not read its disks. Declared DNS resolvers are configured in RAM
+when needed. The controller polls that address, which the network must route
+from the controller; enterprise rules remain operator-managed. Each pull
+connects over TLS, pins the per-attempt server certificate the controller
+generated into custody and the private image, and only then sends the
+independent per-attempt bearer token. The controller's own clock judges that
+certificate; the worker verifies nothing that depends on the machine's clock.
+A different certificate, an unauthenticated answer or the fixed refusal ends
+the wait with its cause; silence keeps waiting up to the request deadline,
+while the controller rechecks every minute that the machine still runs with
+this discovery's media attached. The controller validates the canonical
+framing, the `linux` source and the binding, and persists the immutable report
+before cleanup. The bootstrap prints fixed phases without hardware or secret
+values. Optional unmatched module aliases are quiet; driver probing and worker
+preparation have total deadlines, and a missing storage driver still refuses
+safely. This procedure contains no installer storage or erase operation. It
+reads identities and exact sizes through bounded read-only interfaces. Its
+authenticated report is bound to the machine UUID/MAC set, context
+incarnation, operation/attempt, nonce, frozen request and media/tool
+identities. With the report durable, the controller forces the machine off
+through the BMC, which is safe because the RAM boot mounts no disk, then proves
+power-off and owned-media cleanup. It forces off only a running machine that
+still holds this discovery's media.
 An unfinished discovery is removable after a read-only observation proves its
 custody, exact machine identity and owned media/power state; a completed disk
-report is not a cleanup prerequisite. Missing custody requires a positive
+report is not a cleanup prerequisite. Removal of one that began no boot stops,
+ejects and unpublishes nothing. Missing custody requires a positive
 pristine boundary: the exact machine off, no inserted media and no private
 publication. A failed or foreign observation stays unknown. A committed
 external-cleanup record is recovered locally without revisiting a later OS,
@@ -1570,16 +1592,20 @@ only the frozen private machine subtree. Retry repairs restrictive directory
 creation residue there without changing unrelated ancestors or other safe modes.
 Published ISO permissions are set explicitly before atomic publication,
 independently of the caller's umask.
-Discovery builds one private image directly from the held source through
-Lorax's documented `mkksiso --add` directory merge. Only the qualified patched
-initramfs members enter those directories; the existing BIOS and EFI boot
-configuration updates and signed boot components are retained. The package
-tree and installer second stage are not extracted per node. No private
+Discovery first copies only the held source's boot tree into private scratch,
+replaying both El Torito boot records: the top-level `.discinfo`, `.treeinfo`,
+`EFI`, `images` and `isolinux` entries, and within `images` only `efiboot.img`
+and `pxeboot`. The installer second stage `images/install.img` must be present
+and is removed, with every package repository and other entry. It then builds
+one private image from that copy through Lorax's documented `mkksiso --add`
+directory merge. Only the qualified patched initramfs members enter those
+directories; the existing BIOS and EFI boot configuration updates and signed
+boot components are retained. No private
 payload or mutable patched component is shared between machines or operations.
 Construction and publication hold one controller-wide kernel lock, released
 before network boot and inventory collection. Under it, capacity checks include
-the bounded image, initramfs and native-tool scratch on the work filesystem,
-and a publication copy when it uses another filesystem. Earlier published
+the bounded image, the boot-tree copy, initramfs and native-tool scratch on the
+work filesystem, and a publication copy when it uses another filesystem. Earlier published
 images remain allocated and count against the next builder's available space.
 The checks reserve no space against unrelated writers or quotas.
 Publication transfers the completed single-link image by atomic rename when

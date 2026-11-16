@@ -536,3 +536,46 @@ printf() {
 		t.Fatalf("complete split-write MAC inventory was refused: %v\n%s", err, output)
 	}
 }
+
+func TestABMCProvedRootRefusesALinuxDiskTheBMCDidNotList(t *testing.T) {
+	const serial, size = "ZC1A2B3C", "480103981056"
+	input := physicalInstallation()
+	input.RootDevice, input.RootSerial, input.RootSizeBytes = "", serial, 480103981056
+	input.InventoriedSerials = []string{"DATA-01", serial}
+	fixed := func(name, reported string) serialDisk { return serialDisk{name, reported, "0", "0", false, ""} }
+	const unlisted = "Linux shows a whole disk the BMC drive inventory did not list, so the root selection is not proved unique; refusing before any disk is touched."
+	for name, test := range map[string]struct {
+		disks   []serialDisk
+		refused bool
+	}{
+		"every disk listed":             {[]serialDisk{fixed("sda", serial), fixed("nvme0n1", "DATA-01")}, false},
+		"an unlisted removable disk":    {[]serialDisk{fixed("sda", serial), {"sdb", "STICK-01", "1", "0", false, ""}}, false},
+		"an unlisted read-only disk":    {[]serialDisk{fixed("sda", serial), {"sdb", "RO-01", "0", "1", false, ""}}, false},
+		"an unlisted hidden path node":  {[]serialDisk{fixed("sda", serial), {"nvme0c0n1", "PATH-01", "0", "0", false, "1"}}, false},
+		"a partition of a listed disk":  {[]serialDisk{fixed("sda", serial), {"sda1", "PART-01", "0", "0", true, ""}}, false},
+		"an unlisted fixed disk":        {[]serialDisk{fixed("sda", serial), fixed("nvme0n1", "M2-BOOT-01")}, true},
+		"a fixed disk with no serial":   {[]serialDisk{fixed("sda", serial), fixed("sdb", "")}, true},
+		"a listed serial's prefix only": {[]serialDisk{fixed("sda", serial), fixed("sdb", "DATA")}, true},
+		"two listed serials joined":     {[]serialDisk{fixed("sda", serial), fixed("sdb", "DATA-01 "+serial)}, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var include string
+			host := serialHost(t, test.disks, size)
+			host.include = &include
+			output, err := runTargetProof(t, input, host)
+			if !test.refused {
+				if err != nil || include != "ignoredisk --only-use=sda\nclearpart --all --initlabel --drives=sda\n" {
+					t.Fatalf("a fully listed inventory was refused: %v, include %q\n%s", err, include, output)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(output, "Bootwright: "+unlisted) || strings.Contains(output, "reached storage") {
+				t.Fatalf("an unlisted Linux disk reached storage: %v\n%s", err, output)
+			}
+		})
+	}
+	input.InventoriedSerials = []string{"DATA-01"}
+	if _, err := RenderKickstart(input); err == nil {
+		t.Fatal("a BMC serial set that omits the root rendered")
+	}
+}

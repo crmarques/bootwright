@@ -1,5 +1,5 @@
 implementation: artifact-server-nginx-v1
-content-digest: bf86e520d3598c08a123833594b0c684e4dca36593794207fdbd3a7727c7003d
+content-digest: 2f2f45093fa223e22af8ec602c85eb355793c1fc91528dc93bd2e68c2a79e283
 request-version: artifact-server-nginx-v1
 automation-formats: none
 mark-formats: none
@@ -10,7 +10,6 @@ effect-pins:
   /var/lib/bootwright-hosted
   services
   bootwright
-  outbound-inventory-unix-receipt
 request-identity:
   identity.context
   identity.service
@@ -53,7 +52,6 @@ request-schema:
   placement.port int omitempty
   placement.privateKeyRef string omitempty
   placement.user string omitempty
-  receiptRoot string omitempty
   tls *struct artifactserver.TLS omitempty
   tls.fingerprint string
   tls.minVersion string

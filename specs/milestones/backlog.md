@@ -322,6 +322,7 @@ Alias cell.
 | [B1354](#b1354) | new, 2026-11-11 (firewall review) | defect | E2E | Sample application teardown removes only a rule its setup created | Separate application fixture ownership, beyond controller listener preparation |
 | [B1412](#b1412) | new, 2026-11-15 | defect | Architecture | Documentation checks detect milestone identifier collisions across active, parked and delivered records | Tooling hardening beyond the requested case; its identifiers are reconciled manually |
 | [B1424](#b1424) | new, 2026-11-16 (owner request) | defect | CLI, with State reconciliation | Resolution failures are readable through a precise supported logs command without opening private files manually | Owner requested backlog recording; explicit resolution selection and diagnostic handoff remain unpromoted |
+| [B1428](#b1428) | new, 2026-11-16 (D272) | enabling | Managed OS | The inventory boot starts its entry without the installer's 60-second boot-menu timeout | Found while rehearsing X490; mkksiso offers no timeout option, so a change means owning boot-configuration edits beyond its documented ones |
 
 ### B82
 
@@ -3657,6 +3658,21 @@ fixtures with colliding item and unrelated slice definitions fail; legitimate
 references to one item or slice continue to pass. Parked because the current
 case reconciles its identifiers manually and does not require a broader
 documentation validator change.
+
+### B1428
+
+**Owner:** Managed OS. **Kind:** enabling. **Requires:** B1427.
+**Definition:** Candidate. **Outcome:** the
+[inventory boot](../managed-os.md#automatic-root-disk-discovery) starts its
+inventory entry at once instead of waiting out the RHEL boot ISO's BIOS
+`isolinux` and GRUB menu timeouts. In X490's QEMU rehearsal of the actual RHEL
+9.8 boot ISO the RAM boot answered 80 seconds after power-on under both BIOS
+and UEFI, most of it that menu wait. Lorax `mkksiso` has no timeout option and
+applies `--add` files after its own configuration edits, so this needs owned,
+qualified edits of every boot configuration, including the embedded EFI
+image's. **Exit evidence:** an exact-argument golden for each edited
+configuration, unchanged signed boot components, and BIOS and UEFI rehearsals
+showing the shorter time to answer.
 
 ### B1424
 
@@ -9143,3 +9159,23 @@ B1418), including API defaults/refusals, native observation and ownership,
 current execution contracts, and the SNO templates and runbooks. Static host
 addressing remains the API default; the case selects addressless legs. No
 real-host provisioning or push is authorized.
+
+### D272
+
+**owner** (2026-11-16): asks for an audit of discovery, which "is taking too
+long" and "seems that machine is trying to communicate with bootwright
+controller", and, if a temporary boot stays needed, to "use the minimal iso,
+just start the machine, controller will keep checking if machine is up, then
+connect to it, gather any needed info and then cleanup and power off
+machine/bmc (eject iso, for instance)". After the audit's plan, the owner
+answered "proceed implementatino". This authorizes X490 (M1, B1426 and
+B1427). The session took the audit's recommended options pending the owner's
+review: the BMC drive inventory is tried first under a new `automatic`
+default, with an explicit `boot` choice; the fallback boot uses boot-tree-only
+media, and the controller pulls from it over TLS on port 9443 and powers it off
+through the BMC, superseding the outbound HTTPS receipt of
+[B1401](m1.md#b1401) and removing its artifact-server relay; the separate
+discovery and installation boots are kept, so installation authorization still
+names an exact disk. An outbound-only network now needs `inventory: automatic`
+answered by the BMC, or a route from the controller to the machine. No
+real-host operation or push is authorized.

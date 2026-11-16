@@ -10,6 +10,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -39,7 +40,7 @@ func (r *inventoryRunner) Run(_ context.Context, request lifecycle.RunRequest) (
 	if err := json.Unmarshal(raw, &binding); err != nil {
 		r.t.Fatal(err)
 	}
-	report := diskselection.Report{Version: diskselection.Version, Binding: binding, Disks: r.disks}
+	report := diskselection.Report{Version: diskselection.Version, Source: diskselection.SourceLinux, Binding: binding, Disks: r.disks}
 	if r.mutate != nil {
 		r.mutate(&report)
 	}
@@ -173,6 +174,9 @@ func TestDiscoveryInventoryBecomesAnExactInstallerTarget(t *testing.T) {
 	if r.DiscoveryProof == nil || r.Target.Hardware.WWN != root.WWN || r.Target.Hardware.SizeBytes != root.SizeBytes || !strings.Contains(r.Kickstart, root.WWN) {
 		t.Fatal("installer lost exact discovered identity")
 	}
+	if r.DiscoveryProof.Inventoried != nil || strings.Contains(r.Kickstart, "bootwright_inventoried") {
+		t.Fatal("a Linux inventory froze a BMC serial bound")
+	}
 	if !slices.Contains(installation.Definitions[0].Requires, reconciliation.ObjectRef{Kind: Kind, Object: block.Object, Family: DiscoveryFamily}) {
 		t.Fatal("installation does not depend on its inventory proof")
 	}
@@ -305,21 +309,114 @@ func TestDiscoveryStorageRefinementCannotBypassInstallationOwnership(t *testing.
 	}
 }
 
-func TestDiscoveryReceiptUsesTheSelectedArtifactHTTPSPort(t *testing.T) {
-	catalog := discoveryCatalog()
-	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := NewDiscovery(nil).WithMedia(labMedia()).Plan(context.Background(), input)
-	if err != nil || len(plan.Definitions) != 1 {
-		t.Fatalf("discovery plan: %v (%v)", plan, err)
+func TestDiscoveryFreezesOnlyTheDeclaredInventoryChoice(t *testing.T) {
+	withPolicy := func(policy api.Value) api.Catalog {
+		m := metalOn("eno1", hardwareNIC("eno1", "52:54:00:9a:1b:01"))
+		m = m.WithSpec(m.Spec().WithPath(api.MapValue(field("discover", policy)), "substrate", "baremetal", "rootDevice"))
+		return metalCatalog(m, metalNetwork(declaredInterface("eno1", "ethernet")))
 	}
-	request, err := DecodeDiscoveryRequest(plan.Definitions[0].Request)
+	plan := func(policy api.Value, claims []diskselection.DiskIdentity) DiscoveryRequest {
+		catalog := withPolicy(policy)
+		input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+		plan, err := NewDiscovery(nil).WithMedia(labMedia()).WithProtections(func(api.Catalog, api.Object) ([]diskselection.DiskIdentity, error) { return claims, nil }).Plan(context.Background(), input)
+		if err != nil || len(plan.Definitions) != 1 {
+			t.Fatalf("discovery plan: %v (%v)", plan, err)
+		}
+		request, err := DecodeDiscoveryRequest(plan.Definitions[0].Request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(request.Private.URL, "https://192.0.2.1:8443/") {
+			t.Fatalf("private media left the selected HTTPS listener: %s", request.Private.URL)
+		}
+		return request
+	}
+	automatic := plan(api.MapValue(), nil)
+	if automatic.Inventory != InventoryAutomatic {
+		t.Fatalf("an undeclared choice is %q", automatic.Inventory)
+	}
+	if boot := plan(api.MapValue(field("inventory", api.StringValue(InventoryBoot))), nil); boot.Inventory != InventoryBoot {
+		t.Fatalf("a declared boot inventory is %q", boot.Inventory)
+	}
+	refined := plan(api.MapValue(field("match", api.MapValue(field("model", api.StringValue("EXAMPLE"))))), []diskselection.DiskIdentity{{WWN: "0x5000000000000002"}})
+	first, _ := automatic.Canonical()
+	second, _ := refined.Canonical()
+	if string(first) != string(second) {
+		t.Fatal("a selection refinement changed the frozen inventory request and would boot again")
+	}
+}
+
+func TestABMCInventoryFreezesASerialRootTheInstallerReproves(t *testing.T) {
+	ctx := context.Background()
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext, Incarnation: "example-incarnation"}, State: compilation.NewState(discoveryCatalog(), discoveryCatalog(), nil), Controller: "controller"}
+	var prepared []json.RawMessage
+	bmcDisk := func(serial string, size int64) diskselection.Disk {
+		return diskselection.Disk{DiskIdentity: diskselection.DiskIdentity{SerialNumber: serial, SizeBytes: size}, Model: "EXAMPLE SSD", Transport: "sata", Fixed: true, Writable: true, Whole: true}
+	}
+	root, data := bmcDisk("EXAMPLE-OS", 1<<30), bmcDisk("EXAMPLE-DATA", 2<<30)
+	runner := &inventoryRunner{t: t, prepared: &prepared, disks: []diskselection.Disk{root, data}, mutate: func(r *diskselection.Report) { r.Source = diskselection.SourceBMC }}
+	identities := volumePins{machine.HardwareIdentity{UUID: "11111111-2222-3333-4444-555555555555"}}
+	owner := NewDiscovery(runner).WithNonces(func() (string, error) { return strings.Repeat("a", 64), nil }).WithMedia(labMedia()).WithIdentities(identities).WithProtections(func(api.Catalog, api.Object) ([]diskselection.DiskIdentity, error) {
+		return []diskselection.DiskIdentity{{SerialNumber: data.SerialNumber, SizeBytes: data.SizeBytes}}, nil
+	})
+	plan, err := owner.Plan(ctx, input)
+	if err != nil || len(plan.Definitions) != 1 {
+		t.Fatalf("discovery plan: %v", err)
+	}
+	definitions := slices.Clone(plan.Definitions)
+	definitions[0].Requires = nil
+	frozen, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if request.Receipt.URL != "https://192.0.2.1:8443/_bootwright/inventory/" {
-		t.Fatalf("receipt discarded the declared artifact HTTPS endpoint: %+v", request.Receipt)
+	block := frozen.Blocks[0]
+	op := "op-" + strings.Repeat("a", 32)
+	execution := lifecycle.Execution{Context: testContext, Incarnation: input.Context.Incarnation, Operation: op, ApplyOperation: op, Attempt: 1, Block: block, Prepare: func(_ context.Context, raw json.RawMessage) error {
+		prepared = append(prepared, slices.Clone(raw))
+		return nil
+	}}
+	if _, err := owner.Apply(ctx, execution); err != nil {
+		t.Fatal(err)
 	}
-	if request.Receipt.SocketRoot == "" || len(request.Receipt.SocketRoot)+33 >= 104 || request.Receipt.Container == "" {
-		t.Fatalf("receipt has no bounded service-owned socket: %+v", request.Receipt)
+	input.AppliedEvidence = func(context.Context, string, string) ([]lifecycle.BlockEvidence, error) {
+		return []lifecycle.BlockEvidence{{Operation: op, Block: block, Kind: Kind, Object: block.Object, Implementation: DiscoveryImplementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: runner.evidence}}, nil
+	}
+	installation, err := New(nil).WithMedia(labMedia()).WithDiscoveredRoots(owner.Roots).Plan(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := DecodeRequest(installation.Definitions[0].Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hardware := r.Target.Hardware
+	if r.DiscoveryProof == nil || hardware.WWN != "" || hardware.RootDevice != "" || hardware.SerialNumber != root.SerialNumber || hardware.SizeBytes != root.SizeBytes {
+		t.Fatalf("a BMC-selected root is not a serial-number root: %+v", hardware)
+	}
+	if !slices.Equal(r.DiscoveryProof.Inventoried, []string{data.SerialNumber, root.SerialNumber}) || !strings.Contains(r.Kickstart, "bootwright_inventoried=' EXAMPLE-DATA EXAMPLE-OS '") {
+		t.Fatalf("the installer cannot refuse a disk the BMC omitted: %v", r.DiscoveryProof.Inventoried)
+	}
+	if !strings.Contains(r.Kickstart, "bootwright_resolve '"+root.SerialNumber+"'") {
+		t.Fatal("the installer does not re-prove the BMC-selected serial before its first write")
+	}
+	records, _ := input.AppliedEvidence(ctx, Kind, block.Object)
+	execution.ApplyProved = records
+	installer := New(nil).WithIdentities(identities)
+	if err := installer.proveDiscoveredRoot(execution, r); err != nil {
+		t.Fatalf("the BMC inventory refused at installation: %v", err)
+	}
+	unbounded := r
+	stripped := *r.DiscoveryProof
+	stripped.Inventoried = nil
+	unbounded.DiscoveryProof = &stripped
+	if err := installer.proveDiscoveredRoot(execution, unbounded); err == nil {
+		t.Fatal("a BMC root installed without the serial bound of its inventory")
+	}
+	wwnClaim := owner.WithProtections(func(api.Catalog, api.Object) ([]diskselection.DiskIdentity, error) {
+		return []diskselection.DiskIdentity{{WWN: "0x5000000000000002"}}, nil
+	})
+	_, err = wwnClaim.Roots(ctx, input)
+	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "inventory to boot") || !strings.Contains(found[0].Remediation, "rootDevice.discover.inventory to boot") {
+		t.Fatalf("a WWN-named claim was decided against a BMC inventory: %v", found)
 	}
 }

@@ -1,9 +1,10 @@
   bootwright / machine discover
-      Boot inventory-only RHEL media on the selected powered-off physical machines, record
-      authenticated Linux disk identities and power off. --name takes a comma-separated list.
-      --dry-run previews without effects. --prepare-prerequisites also plans controller and
-      infrastructure setup; review the complete plan before confirmation. Discovery never
-      installs an OS or creates RAID volumes.
+      Record the disk identities of the selected powered-off physical machines: from the BMC
+      drive inventory when it is complete, otherwise by booting inventory-only RHEL media and
+      powering off. --name takes a comma-separated list. --dry-run previews without effects.
+      --prepare-prerequisites also plans controller and infrastructure setup; review the
+      complete plan before confirmation. Discovery never installs an OS or creates RAID
+      volumes.
 
   Usage
     bootwright machine discover [flags]

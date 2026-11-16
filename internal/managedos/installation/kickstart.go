@@ -99,32 +99,33 @@ type Installation struct {
 	HostKeyPath      string
 	// HostKeyType is the keyType of the delivered or guest-generated key, which
 	// decides the path it is installed at and the type it is proved to be.
-	HostKeyType   string
-	Hostname      string
-	HomePartition string
-	Interface     string
-	InterfaceType string
-	Keyboard      string
-	Language      string
-	MarkerPath    string
-	Nameservers   []string
-	NTPServers    []string
-	Packages      []string
-	PackageSource string
-	Prefix        int
-	Release       string
-	Repositories  []Repository
-	RootVolume    bool
-	RootDevice    string
-	RootSerial    string
-	RootSizeBytes int64
-	RootWWN       string
-	SELinux       string
-	Timezone      string
-	User          string
-	VLANBase      string
-	VLANID        int
-	WeakDeps      string
+	HostKeyType        string
+	Hostname           string
+	HomePartition      string
+	Interface          string
+	InterfaceType      string
+	Keyboard           string
+	Language           string
+	MarkerPath         string
+	Nameservers        []string
+	NTPServers         []string
+	Packages           []string
+	PackageSource      string
+	Prefix             int
+	Release            string
+	Repositories       []Repository
+	RootVolume         bool
+	RootDevice         string
+	RootSerial         string
+	RootSizeBytes      int64
+	RootWWN            string
+	InventoriedSerials []string
+	SELinux            string
+	Timezone           string
+	User               string
+	VLANBase           string
+	VLANID             int
+	WeakDeps           string
 }
 
 // RenderKickstart derives the complete unattended installation. The machine
@@ -149,6 +150,10 @@ func RenderKickstart(input Installation) (string, error) {
 		input.RootSerial != "" && !rootSerial.MatchString(input.RootSerial) {
 		return "", refusal("lifecycle.state", "the root disk WWN, serial number or size this installation freezes is not one its %pre can compare with the disk its deviceName names",
 			"plan the installation again with this release")
+	}
+	if len(input.InventoriedSerials) != 0 && (!serialRootInstallation(input) || !slices.Contains(input.InventoriedSerials, input.RootSerial) ||
+		slices.ContainsFunc(input.InventoriedSerials, func(s string) bool { return !rootSerial.MatchString(s) })) {
+		return "", refusal("lifecycle.state", "the BMC inventory serial set this installation freezes does not bound its serial-number root", "plan the installation again with this release")
 	}
 	if input.RootVolume && (!input.Physical || input.RootDevice != "" || input.RootSerial != "" || input.RootWWN != "" || input.RootSizeBytes != 0) {
 		return "", refusal("lifecycle.state", "a logical-volume root selects the physical installation target alone", "plan the installation again")
@@ -263,6 +268,7 @@ var kickstartFields = []struct {
 	{"the root device", "spec.hardware.rootDevice.deviceName of a virtual Machine, or the /dev/disk/by-id path of spec.substrate.baremetal.rootDevice.wwn of a physical one", kickstartToken, func(i Installation) []string { return []string{i.RootDevice} }},
 	{"the root disk serial number", "spec.substrate.baremetal.rootDevice.serialNumber of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootSerial} }},
 	{"the root disk WWN", "spec.substrate.baremetal.rootDevice.wwn of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootWWN} }},
+	{"an inventoried disk serial number", "the BMC drive inventory of the Machine's root-disk discovery", kickstartToken, func(i Installation) []string { return i.InventoriedSerials }},
 	{"the SELinux mode", "spec.customizations.security.selinux.mode of the install profile", kickstartToken, func(i Installation) []string { return []string{i.SELinux} }},
 	{"the time zone", "spec.customizations.localization.timezone of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Timezone} }},
 	{"the install account", "the product-owned install account", kickstartToken, func(i Installation) []string { return []string{i.User} }},
@@ -794,6 +800,13 @@ func targetProofLines(input Installation) []string {
 	if bySerial {
 		lines = append(lines, rootWWNRecordLines(subject)...)
 	}
+	if len(input.InventoriedSerials) != 0 {
+		if !identity {
+			lines = append(lines, identityFunctionLines()...)
+			identity = true
+		}
+		lines = append(lines, inventoriedLines(input.InventoriedSerials)...)
+	}
 	if !identity && len(input.ClearTargets) != 0 {
 		lines = append(lines, identityFunctionLines()...)
 	}
@@ -805,6 +818,24 @@ func targetProofLines(input Installation) []string {
 		lines = append(lines, `printf '%s\n' "ignoredisk --only-use=${bootwright_root_name}" "clearpart --all --initlabel --drives=${bootwright_root_name}" > `+diskInclude)
 	}
 	return append(lines, "%end", "")
+}
+
+func inventoriedLines(serials []string) []string {
+	return []string{
+		`bootwright_inventoried=' ` + strings.Join(serials, " ") + ` '`,
+		`for bootwright_entry in /sys/class/block/*; do`,
+		`bootwright_name=$(basename -- "${bootwright_entry}")`,
+		`if [[ ! "${bootwright_name}" =~ ^(sd[a-z]+|nvme[0-9]+n[0-9]+)$ ]] || [ -e "${bootwright_entry}/partition" ] || [ "$(cat -- "${bootwright_entry}/hidden" 2>/dev/null)" = 1 ]; then continue; fi`,
+		`if [ "$(cat -- "${bootwright_entry}/removable" 2>/dev/null)" = 1 ] || [ "$(cat -- "${bootwright_entry}/ro" 2>/dev/null)" = 1 ]; then continue; fi`,
+		`case "$(readlink -f -- "${bootwright_entry}")" in */usb[0-9]*) continue;; esac`,
+		`bootwright_value="${bootwright_entry}/device/vpd_pg80" bootwright_form=vpd`,
+		`if [ -e "${bootwright_entry}/device/serial" ]; then bootwright_value="${bootwright_entry}/device/serial" bootwright_form=text; fi`,
+		`if ! bootwright_serial=$(bootwright_identity "${bootwright_value}" "${bootwright_form}" 2>/dev/null) || [[ ! "${bootwright_serial}" =~ ^[A-Za-z0-9._:+/=-]+$ ]] || [[ "${bootwright_inventoried}" != *" ${bootwright_serial} "* ]]; then`,
+		`echo 'Bootwright: Linux shows a whole disk the BMC drive inventory did not list, so the root selection is not proved unique; refusing before any disk is touched. Set rootDevice.discover.inventory to boot.' >&2`,
+		"exit 1",
+		"fi",
+		"done",
+	}
 }
 
 func serialResolverLines() []string {

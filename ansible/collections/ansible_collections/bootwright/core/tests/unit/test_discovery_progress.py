@@ -19,6 +19,9 @@ def boot_fixture(monkeypatch, failed=None):
     instance.target = Mock(return_value="Off")
     instance.publication = lambda: (Path("/fixture"), "https://example.test/private/SECRET.iso")
     instance.publish = Mock()
+    instance.booted = Mock(return_value=False)
+    instance.mark_boot = Mock()
+    instance.prepare_tls = Mock()
     instance.request = {"controller": {"virtualMedia": {
         "trust": "established", "enableVerification": False,
         "restoreVerification": False, "removeCertificate": False,
@@ -58,6 +61,7 @@ def test_boot_progress_is_live_and_never_reports_later_work_after_failure(monkey
 def test_resuming_owned_running_boot_reports_skips_without_rebooting(monkeypatch):
     instance, client, events = boot_fixture(monkeypatch)
     instance.target.return_value = "On"
+    instance.booted.return_value = True
     client.inserted.return_value = instance.publication()[1]
     instance.start()
     assert events == [(group, "skipped") for group in
@@ -101,7 +105,7 @@ def test_media_build_and_publication_report_before_blocking_work(tmp_path, monke
     assert events == [("build-media", "running"), ("build-media", "ok"), ("publish-media", "running"), ("publish-media", "ok")]
 
 
-def test_apply_waiting_and_final_proof_have_their_own_live_phases(tmp_path, monkeypatch):
+def apply_fixture(tmp_path, inventory, bmc_report):
     instance = controller.Controller.__new__(controller.Controller)
     instance.root = tmp_path
     events = []
@@ -112,34 +116,56 @@ def test_apply_waiting_and_final_proof_have_their_own_live_phases(tmp_path, monk
 
     instance.prepare = prepare
     instance.evidence = Mock(return_value={"cleaned": False})
+    instance.request = {"inventory": inventory}
     instance.report = lambda: None
-    instance.start = Mock()
+    instance.booted = Mock(return_value=False)
 
-    class Receiver:
-        def __init__(self, ignored):
-            pass
-
-        def __enter__(self):
-            assert events[-1] == ("prepare-receipt", "running")
-            return self
-
-        def __exit__(self, *args):
-            pass
-
-    def receive(receiver):
-        assert events[-1] == ("receive-inventory", "running")
+    def read_bmc():
+        assert events[-1] == ("read-bmc-inventory", "running")
+        return bmc_report
 
     def finish(complete):
         assert complete and events[-1] == ("seal-cleanup", "running")
         return {"completed": True, "cleaned": True}
 
-    instance.receive = receive
+    instance.read_bmc = read_bmc
+    instance.start = Mock()
+    instance.receive = Mock()
     instance.cleanup = Mock()
     instance.finish = finish
-    monkeypatch.setattr(controller.receipt, "Receiver", Receiver)
+    return instance, events
+
+
+@pytest.mark.parametrize("inventory,bmc_report", [("automatic", None), ("boot", b"never read")])
+def test_apply_boot_path_reports_each_phase(tmp_path, inventory, bmc_report):
+    instance, events = apply_fixture(tmp_path, inventory, bmc_report)
     assert instance.apply() == {"completed": True, "cleaned": True}
-    assert events == [(group, status) for group in ("inspect-target", "prepare-receipt", "receive-inventory", "seal-cleanup")
-                      for status in ("running", "ok")]
+    bmc = [("read-bmc-inventory", "running"), ("read-bmc-inventory", "ok")] if inventory == "automatic" else [("read-bmc-inventory", "skipped")]
+    assert events == [("inspect-target", "running"), ("inspect-target", "ok"), *bmc, ("seal-cleanup", "running"), ("seal-cleanup", "ok")]
+    instance.start.assert_called_once_with()
+    instance.receive.assert_called_once_with()
+    instance.cleanup.assert_called_once_with()
+
+
+def test_apply_bmc_inventory_skips_every_boot_phase(tmp_path):
+    instance, events = apply_fixture(tmp_path, "automatic", b"qualified BMC report")
+    assert instance.apply() == {"completed": True, "cleaned": True}
+    skipped = [(group, "skipped") for group in controller.BOOT_GROUPS + ("await-answer", "receive-inventory", "power-off", "eject-media")]
+    assert events == [("inspect-target", "running"), ("inspect-target", "ok"), ("read-bmc-inventory", "running"),
+                      ("read-bmc-inventory", "ok"), *skipped, ("seal-cleanup", "running"), ("seal-cleanup", "ok")]
+    instance.start.assert_not_called()
+    instance.receive.assert_not_called()
+    instance.cleanup.assert_not_called()
+
+
+def test_a_started_boot_never_falls_back_to_the_bmc_inventory(tmp_path):
+    instance, events = apply_fixture(tmp_path, "automatic", b"inventory that appeared after the boot started")
+    instance.booted.return_value = True
+    instance.read_bmc = Mock(side_effect=AssertionError("read BMC drives while our boot may be running"))
+    assert instance.apply()["completed"]
+    assert ("read-bmc-inventory", "skipped") in events
+    instance.start.assert_called_once_with()
+    instance.cleanup.assert_called_once_with()
 
 
 def test_cleanup_brackets_verified_poweroff_and_ejection(tmp_path, monkeypatch):
@@ -151,6 +177,6 @@ def test_cleanup_brackets_verified_poweroff_and_ejection(tmp_path, monkeypatch):
 
     client.eject.side_effect = eject
     monkeypatch.setattr(controller.records, "directory", lambda *args: None)
-    instance.cleanup(False)
+    instance.cleanup()
     assert events == [("power-off", "running"), ("power-off", "ok"), ("eject-media", "running"), ("eject-media", "ok")]
     client.power.assert_not_called()

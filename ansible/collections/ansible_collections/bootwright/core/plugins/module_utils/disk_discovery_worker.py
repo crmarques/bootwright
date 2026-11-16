@@ -1,12 +1,12 @@
-"""The dedicated RAM worker: bounded inventory, static networking and receipt.
+"""The dedicated RAM worker: bounded inventory, static networking and a pull.
 
 This source is bundled with its pure helpers into the private discovery image.
-It never starts the installer, invokes storage utilities or mounts a disk.
+It never starts the installer, invokes storage utilities or mounts a disk. It
+serves its one answer until the controller powers the machine off.
 """
 
 from __future__ import annotations
 
-import hashlib
 import ipaddress
 import json
 import os
@@ -14,14 +14,13 @@ from pathlib import Path
 import re
 import sys
 import hmac
-import http.client
-from urllib.parse import urlsplit
-import time
+import http.server
+import ssl
 
 if __package__:
     from ansible_collections.bootwright.core.plugins.module_utils import absolute_deadline
     from ansible_collections.bootwright.core.plugins.module_utils import bounded_process as process
-    from ansible_collections.bootwright.core.plugins.module_utils import canonical_json, tls_trust
+    from ansible_collections.bootwright.core.plugins.module_utils import canonical_json
     from ansible_collections.bootwright.core.plugins.module_utils import disk_inventory
     from ansible_collections.bootwright.core.plugins.module_utils import physical_machine_identity as identity
 else:
@@ -29,13 +28,14 @@ else:
     import absolute_deadline
     import bounded_process as process
     import canonical_json
-    import tls_trust
     import disk_inventory
     import physical_machine_identity as identity
 
 ROOT = Path("/run/discovery")
 ENV = {"PATH": "/usr/bin:/usr/sbin:/bin:/sbin", "LC_ALL": "C", "PYTHONDONTWRITEBYTECODE": "1"}
 MAX_REPORT = 48 << 10
+PORT = 9443
+REFUSED = b"inventory-refused"
 NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,14}\Z")
 
 
@@ -129,48 +129,54 @@ def write(path, data):
         os.close(fd)
 
 
-def receipt_connection(request):
-    endpoint = urlsplit(request["receiptURL"])
-    if (endpoint.scheme != "https" or not endpoint.hostname or endpoint.username or endpoint.password
-            or endpoint.query or endpoint.fragment
-            or re.fullmatch(r"/_bootwright/inventory/[0-9a-f]{32}", endpoint.path) is None):
-        raise ValueError("discovery receipt endpoint")
-    certificate = (ROOT / "artifact.pem").read_text(encoding="ascii")
-    context, _unused = tls_trust.context(certificate)
-    # Both endpoint hostname validation and an exact bound serving leaf apply.
-    leaf = tls_trust.anchors(certificate)[0][0]
-    connection = tls_trust.CertificateConnection(
-        endpoint.hostname, tls_trust.ssl.PEM_cert_to_DER_cert(leaf),
-        port=endpoint.port or 443, context=context, timeout=10,
-    )
-    return connection, endpoint.path
+class Server(http.server.HTTPServer):
+    """One bounded TLS connection at a time; no request is logged."""
+
+    allow_reuse_address = False
+
+    def get_request(self):
+        connection, address = self.socket.accept()
+        connection.settimeout(10)
+        try:
+            return self.tls.wrap_socket(connection, server_side=True), address
+        except BaseException:
+            connection.close()
+            raise
+
+    def handle_error(self, request, client_address):
+        pass
 
 
-def send_report(request, report):
-    connection, path = receipt_connection(request)
-    try:
-        with absolute_deadline.limited(10):
-            connection.connect()  # Authenticate TLS before the bearer crosses.
-            connection.request("POST", path, body=report, headers={
-                "Authorization": "Bearer " + request["reportToken"],
-                "Content-Type": "application/json", "Content-Length": str(len(report)),
-            })
-            response = connection.getresponse()
-            return (response.status == 200 and response.getheader("Content-Length") == "64"
-                    and hmac.compare_digest(response.read(65), hashlib.sha256(report).hexdigest().encode("ascii")))
-    except (OSError, ValueError, http.client.HTTPException):
-        return False
-    finally:
-        connection.close()
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        pass
+
+    def answer(self, code, body=b""):
+        self.send_response(code)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        authorization = self.headers.get_all("Authorization", [])
+        if self.path != "/report" or len(authorization) != 1 or not hmac.compare_digest(authorization[0], "Bearer " + self.server.token):
+            return self.answer(403)
+        self.answer(*self.server.result)
 
 
-def deliver_report(request, report):
-    deadline = time.monotonic() + 1800
-    while time.monotonic() < deadline:
-        if send_report(request, report):
-            return
-        time.sleep(3)
-    raise ValueError("discovery receipt not acknowledged")
+def serve(request, result):
+    """Answer authenticated pulls until power-off; nothing here ends the boot."""
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.minimum_version = ssl.TLSVersion.TLSv1_2
+    tls.load_cert_chain(str(ROOT / "server.pem"), str(ROOT / "server-key.pem"))
+    with Server((request["network"]["address"], PORT), Handler) as server:
+        server.tls, server.result, server.token, server.timeout = tls, result, request["reportToken"], 10
+        while True:
+            try:
+                with absolute_deadline.limited(30):
+                    server.handle_request()
+            except TimeoutError:
+                continue
 
 
 def phase(message):
@@ -211,7 +217,7 @@ def configure_resolvers(network):
     os.replace(path, "/etc/resolv.conf")
 
 
-def prepare_report():
+def prepare_network():
     phase("checking RAM isolation and machine identity")
     ram_boundary()
     request = read_json(ROOT / "request.json", 32768)
@@ -229,21 +235,32 @@ def prepare_report():
         command(argv)
     configure_resolvers(request["network"])
     identity.prove(binding["uuid"], binding["macs"])
+    return request
+
+
+def collect(request):
     phase("reading Linux-visible disk identities")
-    report = canonical_json.canonical({"version": "machine-disk-inventory-v1", "binding": binding, "disks": disk_inventory.collect()})
+    binding = request["binding"]
+    report = canonical_json.canonical({"version": "machine-disk-inventory-v1", "source": "linux", "binding": binding, "disks": disk_inventory.collect()})
     if len(report) > MAX_REPORT:
         raise ValueError("discovery inventory exceeds bound")
     write(ROOT / "report.json", report)
-    return request, report
+    identity.prove(binding["uuid"], binding["macs"])
+    return report
 
 
 def run():
     with absolute_deadline.limited(300):
-        request, report = prepare_report()
-    phase("sending inventory to the controller HTTPS endpoint")
-    deliver_report(request, report)
-    phase("durable receipt acknowledged; powering off")
-    identity.prove(request["binding"]["uuid"], request["binding"]["macs"])
+        request = prepare_network()
+    try:
+        with absolute_deadline.limited(300):
+            result = (200, collect(request))
+        phase("serving the inventory on port 9443 until the controller powers this machine off")
+    except Exception:  # pylint: disable=broad-exception-caught
+        # The fixed refusal lets the controller stop waiting; no cause text leaves.
+        result = (409, REFUSED)
+        phase("inventory refused; serving that refusal on port 9443 until the controller powers this machine off")
+    serve(request, result)
 
 
 if __name__ == "__main__":

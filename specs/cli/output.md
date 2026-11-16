@@ -144,9 +144,9 @@ verification. A step starts before its work and settles only after its own
 failure checks; completion evidence remains the authority for block success.
 
 RAM disk discovery streams fixed presentation phases from its controller-local
-procedure while each native call runs. Phases distinguish private media work,
-delivery, management-controller boot, authenticated inventory waiting and
-cleanup. Reused work is skipped rather than reported as newly performed.
+procedure while each native call runs. Phases distinguish the BMC drive
+inventory, private media work, delivery, management-controller boot, waiting
+for the RAM boot to answer, reading its authenticated inventory and cleanup. Reused work is skipped rather than reported as newly performed.
 These updates contain no request values or private transport material and
 never prove discovery success. When a long block description would hide its
 active sub-step on a narrow terminal, the row prioritizes that phase and its

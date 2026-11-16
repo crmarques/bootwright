@@ -4,8 +4,8 @@
     "fingerprint": "34f85969cff6f2e380b7ba97cae54cbe8c76a00c56306efd76d5bded79a994a6"
   },
   "artifact-server-nginx-v1": {
-    "contentDigest": "bf86e520d3598c08a123833594b0c684e4dca36593794207fdbd3a7727c7003d",
-    "fingerprint": "d4249f7d7da97ec7940a020e1403b330e8d1cfd7d8a2527ba954d9c52e2b5c36"
+    "contentDigest": "2f2f45093fa223e22af8ec602c85eb355793c1fc91528dc93bd2e68c2a79e283",
+    "fingerprint": "2c68291574f858f89fe46c945bec00cb0964704c7a87039037a4c6f21648a9fd"
   },
   "ceph-export-v1": {
     "contentDigest": "65d626bbba8a32a2a1fe2b5168467dbf4c48aff8ded24688ac55a52b7ea5fc66",
@@ -64,8 +64,8 @@
     "fingerprint": "0cd63f73b7d107fee4f4ab3890704298d9de28ac05707a2c31dc88619e891844"
   },
   "os-disk-discovery-v1": {
-    "contentDigest": "0afccf1786a1f36e05534505062e6c439e5cbf90cf2b6fe12b020f68eddc79a7",
-    "fingerprint": "21b7d83aabf1b7c1f1a4b7428981b5714a87029d0ef704b88b7987814ab66090"
+    "contentDigest": "85db9076a6a21c450f79783ddbd616c7f0378dffd32d8257fcd5c22b6c35e0b6",
+    "fingerprint": "2281a73bffa81a8dd0a4b21e6eca0b0d36b5635acb3b2a4a9db3c51d0d072026"
   },
   "os-host-firewall-v1": {
     "contentDigest": "ef74fbe8098b01389b0dcef264da682b89702c0bc590db7d5a40412626a3c9cd",
@@ -73,7 +73,7 @@
   },
   "os-install-anaconda-v1": {
     "contentDigest": "1bb65ca142b94a27f5118520140a23df15a4a38508ed5cf33b4682bbf7d14f99",
-    "fingerprint": "586fffe8c0ffb168ebe498ebd4bef8f092d0ae3661b9c2b181c5bfd65e47920e"
+    "fingerprint": "d1f9f6dfb037430eceaa8a76417d7197544ce02adb54bbaa08eb21d27736924e"
   },
   "os-package-tree-v1": {
     "contentDigest": "62218223d7cca3604594c231a1265d351e6c12e0e9d6d8b31f2f51086a839445",
@@ -81,7 +81,7 @@
   },
   "physical-erase-v1": {
     "contentDigest": "6c1c49685138b533ada39706c004909f33a27c52b3694793cb4e121e09f6643e",
-    "fingerprint": "1bf7ed745f43ff51a380dc75271c178b84643b03ee511f0884d75c710683f839"
+    "fingerprint": "17a6546147221128a7652067b99e8a73a9b922232301bb1ac7d23558c0e898f6"
   },
   "proxy-squid-v1": {
     "contentDigest": "f6f3786ce9c60b6b307aa8169bc8e87ab296769ab62d47fcfc5e536479147c16",

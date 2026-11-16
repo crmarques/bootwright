@@ -1,4 +1,8 @@
-"""Remaster only a qualified x86 RHEL installer into inventory-only media."""
+"""Remaster only a qualified x86 RHEL installer into inventory-only media.
+
+The inventory boot never starts the installer, so its image keeps only the
+boot tree: no second stage, package repositories or other installer content.
+"""
 
 from __future__ import annotations
 
@@ -26,13 +30,15 @@ MAX_INITRD = 256 << 20
 MAX_SOURCE = 32 << 30
 MAX_BOOT_GROWTH = 64 << 20
 SUPPORTED_INITRDS = frozenset(("/images/pxeboot/initrd.img", "/isolinux/initrd.img"))
+BOOT_TREE = {"/": frozenset((".discinfo", ".treeinfo", "EFI", "images", "isolinux")), "/images": frozenset(("efiboot.img", "pxeboot"))}
+MAX_REMOVED = 64
 
 
 class CommandFailure(ValueError):
     """Only a fixed tool name and its exit status may leave this boundary."""
 
     def __init__(self, tool, code):
-        self.tool = tool if tool in ("xorriso", "lsinitrd", "mkksiso", "openssl", "chcon", "podman") else "unknown"
+        self.tool = tool if tool in ("xorriso", "lsinitrd", "mkksiso", "openssl", "chcon") else "unknown"
         self.code = code if type(code) is int and -128 <= code <= 255 else -1
         super().__init__("discovery native command refused")
 
@@ -70,6 +76,27 @@ def initrd_paths(held):
     if not paths or len(paths) != len(set(paths)) or set(paths) - SUPPORTED_INITRDS:
         raise ValueError("unqualified discovery initrd layout")
     return sorted(paths)
+
+
+def outside_boot_tree(held):
+    """Every top-level or /images entry the inventory boot never reads."""
+    removed = []
+    for directory, kept in sorted(BOOT_TREE.items()):
+        output = native(["/usr/bin/xorriso", "-indev", held, "-find", directory, "-maxdepth", "1", "-exec", "echo"])
+        for entry in shlex.split(output.decode("ascii")):
+            if entry != directory and posixpath.dirname(entry) == directory and posixpath.basename(entry) not in kept:
+                removed.append(entry)
+    if len(removed) > MAX_REMOVED or "/images/install.img" not in removed:
+        raise ValueError("unqualified discovery initrd layout")
+    return removed
+
+
+def boot_tree(held, scratch):
+    """Copy only the boot tree, replaying both El Torito boot records."""
+    image = scratch / "boot-tree.iso"
+    native(["/usr/bin/xorriso", "-indev", held, "-outdev", str(image), "-boot_image", "any", "replay", "-rm_r", *outside_boot_tree(held), "--"],
+           timeout=900, temporary=scratch)
+    return str(image)
 
 
 def extract(held, source, destination):
@@ -139,6 +166,7 @@ def remaster(held, root, payload):
     image = root / "discovery.iso"
     complete = False
     try:
+        held = boot_tree(held, scratch)
         additions = patched_initrds(held, scratch, payload)
         # Lorax merges these directories and updates BIOS, GRUB and embedded
         # EFI configuration in one supported --add operation. No intermediate ISO.
@@ -203,7 +231,8 @@ def construction(lock_root, work, destination, source_size):
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
         maximum = publication_bound(source_size)
-        intermediates = len(SUPPORTED_INITRDS) * (MAX_INITRD + boot.MAX_OVERLAY) + MAX_BOOT_GROWTH
+        # The boot-tree copy is never larger than its source.
+        intermediates = source_size + len(SUPPORTED_INITRDS) * (MAX_INITRD + boot.MAX_OVERLAY) + MAX_BOOT_GROWTH
         budgets = {work.stat().st_dev: (work, maximum + intermediates)}
         if destination.stat().st_dev not in budgets:
             budgets[destination.stat().st_dev] = (destination, maximum)

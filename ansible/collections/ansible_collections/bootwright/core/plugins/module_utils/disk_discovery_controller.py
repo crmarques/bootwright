@@ -1,4 +1,4 @@
-"""Private custody and bounded Redfish/TLS transport for RAM disk inventory."""
+"""Private custody, BMC inventory and bounded RAM-boot pull for disk discovery."""
 
 from __future__ import annotations
 
@@ -6,22 +6,23 @@ import base64
 import errno
 import fcntl
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
 import re
 import secrets
+import ssl
 import stat
 import time
 import urllib.request
 from itertools import islice
-from urllib.parse import urlsplit
 
 from ansible_collections.bootwright.core.plugins.module_utils import absolute_deadline
 from ansible_collections.bootwright.core.plugins.module_utils import canonical_json
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_media as media
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_boot as boot
-from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_receipt as receipt
+from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_bmc as bmc
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_progress as progress
 from ansible_collections.bootwright.core.plugins.module_utils import tls_trust
 from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
@@ -32,11 +33,18 @@ ROOT = Path(hosted_area.ROOT)
 VERSION = "os-disk-discovery-v1"
 MAX_REPORT = 48 << 10
 ENV = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C"}
+PORT = 9443
+REFUSED = b"inventory-refused"
+POLL_SECONDS = 5
+OWNERSHIP_SECONDS = 60
+BOOT_GROUPS = ("build-media", "publish-media", "verify-delivery", "insert-media", "select-boot", "power-on")
 
 
 def validate(request, digest, binding):
-    keys = {"version", "identity", "bootMedia", "controller", "interfaces", "network", "private", "deadlineSeconds", "placement", "receipt"}
+    keys = {"version", "identity", "bootMedia", "controller", "interfaces", "inventory", "network", "private", "deadlineSeconds", "placement"}
     if set(request) != keys or request["version"] != VERSION or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        raise ValueError("discovery request shape")
+    if request["inventory"] not in ("automatic", "boot"):
         raise ValueError("discovery request shape")
     if (
         request["controller"].get("tlsVerify") is not True
@@ -47,21 +55,12 @@ def validate(request, digest, binding):
     if (request["controller"]["virtualMedia"]["trust"] not in ("established", "importCertificate", "disableVerification")
             or not request["private"]["url"].startswith("https://")):
         raise ValueError("discovery private media TLS")
-    callback = request["receipt"]
-    endpoint, private = urlsplit(callback["url"]), urlsplit(request["private"]["url"])
-    if (set(callback) != {"url", "socketRoot", "container"} or endpoint.scheme != "https"
-            or endpoint.netloc != private.netloc or endpoint.username or endpoint.password
-            or endpoint.path != "/_bootwright/inventory/" or endpoint.query or endpoint.fragment
-            or re.fullmatch(r"/run/bootwright-receipts/[0-9a-f]{32}", callback["socketRoot"]) is None
-            or request["placement"]["connection"] != "local"):
-        raise ValueError("discovery receipt endpoint")
     parts = Path(request["private"]["path"]).parts
     if (len(parts) != 13 or parts[:7] != ("/", "var", "lib", "bootwright-hosted", binding["context"], "services", "artifact-server")
             or re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", parts[7]) is None
             or parts[8:] != ("public", "private", "os", binding["machine"], "discovery")
-            or callback["container"] != "bootwright-" + binding["context"] + "-artifacts-" + parts[7]
-            or callback["socketRoot"] != "/run/bootwright-receipts/" + hashlib.sha256((binding["context"] + "/" + parts[7]).encode("ascii")).hexdigest()[:32]):
-        raise ValueError("discovery receipt endpoint")
+            or request["placement"]["connection"] != "local"):
+        raise ValueError("discovery publication path")
     if request["deadlineSeconds"] != 1800 or binding.get("requestDigest") != digest:
         raise ValueError("discovery binding")
     for key in ("context", "machine"):
@@ -133,7 +132,8 @@ class Controller:
         if not 0 < len(data) <= MAX_REPORT:
             raise ValueError("discovery report size")
         report = json.loads(data)
-        if set(report) != {"version", "binding", "disks"} or report["version"] != "machine-disk-inventory-v1" or report["binding"] != self.binding:
+        if (set(report) != {"version", "source", "binding", "disks"} or report["version"] != "machine-disk-inventory-v1"
+                or report["source"] not in ("linux", "bmc") or report["binding"] != self.binding):
             raise ValueError("foreign discovery report")
         if not isinstance(report["disks"], list) or not 1 <= len(report["disks"]) <= 256 or canonical_json.canonical(report) != data:
             raise ValueError("discovery report wire")
@@ -203,15 +203,69 @@ class Controller:
         state = self.load()
         return state
 
-    def receipt_label(self):
-        return media.native([
-            "/usr/bin/podman", "inspect", "--type", "container", "--format", "{{.ProcessLabel}}", self.request["receipt"]["container"],
-        ], limit=1024).decode("ascii").strip()
+    def booted(self):
+        """A boot effect may exist only after this durable marker."""
+        return (self.root / "boot.json").exists()
 
-    def label_receipt(self, path):
-        if not Path("/sys/fs/selinux/enforce").exists():
+    def mark_boot(self):
+        if not self.booted():
+            records.write(self.root / "boot.json", canonical_json.canonical({"request": self.digest, "version": VERSION}))
+            os.fsync(self.lock)
+
+    def prepare_tls(self):
+        if (self.root / "tls").exists():
+            records.directory(self.root / "tls", False)
             return
-        media.native(["/usr/bin/chcon", "--reference", str(path.parent), str(path)])
+        self.reap_tls_stages()
+        self.phase = "tls"
+        stage = self.root / (".tls-stage-" + secrets.token_hex(16))
+        records.directory(stage, True)
+        try:
+            key, certificate = stage / "server-key.pem", stage / "server.pem"
+            media.native([
+                "/usr/bin/openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "30",
+                "-subj", "/CN=Bootwright RAM inventory", "-addext", "basicConstraints=critical,CA:FALSE",
+                "-addext", "extendedKeyUsage=serverAuth", "-keyout", str(key), "-out", str(certificate),
+            ])
+            for path in (key, certificate):
+                os.chmod(path, 0o600)
+                records.read(path)
+                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+                try:
+                    os.fsync(fd)
+                finally:
+                    os.close(fd)
+            held = os.open(stage, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(held)
+            finally:
+                os.close(held)
+            os.rename(stage, self.root / "tls")
+            os.fsync(self.lock)
+        finally:
+            if stage.exists():
+                for name in ("server-key.pem", "server.pem"):
+                    (stage / name).unlink(missing_ok=True)
+                stage.rmdir()
+
+    def reap_tls_stages(self):
+        with os.scandir(self.root) as entries:
+            names = [entry.name for entry in islice(entries, 4097)]
+        if len(names) > 4096:
+            raise ValueError("discovery custody entry bound")
+        for name in names:
+            if re.fullmatch(r"\.tls-stage-[0-9a-f]{32}", name) is None:
+                continue
+            stage = self.root / name
+            records.directory(stage, False)
+            with os.scandir(stage) as entries:
+                children = [entry.name for entry in islice(entries, 3)]
+            if set(children) - {"server-key.pem", "server.pem"}:
+                raise ValueError("foreign discovery TLS stage")
+            for child in children:
+                records.read(stage / child)
+                (stage / child).unlink()
+            stage.rmdir()
 
     def payload(self):
         return boot.payload(
@@ -219,9 +273,25 @@ class Controller:
             self.request["network"],
             self.request["interfaces"],
             self.load()["reportToken"],
-            records.read(Path(self.material["artifactCertificate"])),
-            self.request["receipt"]["url"] + self.load()["token"][:32],
+            records.read(self.root / "tls/server.pem"),
+            records.read(self.root / "tls/server-key.pem"),
         )
+
+    def read_bmc(self):
+        """A qualified BMC drive inventory, durable before use, or None."""
+        self.phase = "bmc-inventory"
+        client = self.client()
+        self.target(client)
+        disks = bmc.inventory(client)
+        if disks is None or len(disks) > 256:
+            return None
+        data = canonical_json.canonical({"version": "machine-disk-inventory-v1", "source": "bmc", "binding": self.binding, "disks": disks})
+        if len(data) > MAX_REPORT:
+            return None
+        self.validate_report(data)
+        records.write(self.root / "report.json", data)
+        os.fsync(self.lock)
+        return data
 
     def publication(self):
         state = self.load()
@@ -305,15 +375,66 @@ class Controller:
             raise ValueError("discovery controller identity")
         return client.power_state()
 
-    def receive(self, receiver):
-        self.phase = "inventory"
+    def pull(self):
+        """One authenticated GET, or None while nothing answers at the address."""
+        certificate = records.read(self.root / "tls/server.pem").decode("ascii")
+        context, leaf = tls_trust.context(certificate, "certificate")
+        connection = tls_trust.CertificateConnection(self.request["network"]["address"], leaf, port=PORT, context=context, timeout=10)
+        try:
+            with absolute_deadline.limited(30):
+                connection.connect()  # Pin the per-attempt leaf before the token crosses TLS.
+                connection.request("GET", "/report", headers={"Authorization": "Bearer " + self.load()["reportToken"]})
+                response = connection.getresponse()
+                status, content = response.status, response.read(MAX_REPORT + 1)
+        except ssl.SSLCertVerificationError:
+            raise ValueError("a foreign service answers the discovery address") from None
+        except (OSError, http.client.HTTPException):
+            return None
+        finally:
+            connection.close()
+        if len(content) > MAX_REPORT:
+            raise ValueError("discovery report size")
+        if status == 409 and content == REFUSED:
+            raise ValueError("discovery RAM inventory refused")
+        if status != 200:
+            raise ValueError("a foreign service answers the discovery address")
+        return content
+
+    def owned_running(self, url):
+        client = self.client()
+        power = self.target(client)
+        if power == "Off":
+            raise ValueError("discovery target stopped before its inventory")
+        if client.inserted() != url:
+            raise ValueError("discovery lost ownership of the running boot")
+
+    def receive(self):
+        existing = self.report()
+        if existing is not None:
+            self.skip("await-answer", "receive-inventory")
+            return existing
+        unused, url = self.publication()
+        del unused
         deadline = time.monotonic() + self.request["deadlineSeconds"]
-        while time.monotonic() < deadline:
-            existing = self.report()
-            if existing is not None:
-                return existing
-            receiver.poll(min(10, deadline - time.monotonic()))
-        raise ValueError("discovery report deadline")
+        checked = time.monotonic()
+        self.phase = "inventory"
+        with self.progress("await-answer"):
+            while True:
+                answer = self.pull()
+                if answer is not None:
+                    break
+                if time.monotonic() >= deadline:
+                    raise ValueError("discovery report deadline")
+                if time.monotonic() - checked >= OWNERSHIP_SECONDS:
+                    self.owned_running(url)
+                    checked = time.monotonic()
+                time.sleep(POLL_SECONDS)
+        with self.progress("receive-inventory"):
+            if self.validate_report(answer)["source"] != "linux":
+                raise ValueError("foreign discovery report")
+            records.write(self.root / "report.json", answer)
+            os.fsync(self.lock)
+        return answer
 
     def start(self):
         self.phase = "controller"
@@ -322,12 +443,14 @@ class Controller:
         destination, url = self.publication()
         del destination
         if power == "On":
-            if client.inserted() != url:
+            if not self.booted() or client.inserted() != url:
                 raise ValueError("discovery target is already running")
-            self.skip("build-media", "publish-media", "verify-delivery", "insert-media", "select-boot", "power-on")
+            self.skip(*BOOT_GROUPS)
             return  # The original RAM worker is still booting or serving.
         if power != "Off":
             raise ValueError("discovery target power is unknown")
+        self.mark_boot()
+        self.prepare_tls()
         self.publish()
         self.phase = "controller"
         client = self.client()
@@ -350,7 +473,9 @@ class Controller:
         with self.progress("power-on"):
             client.power("On", "On")
 
-    def cleanup(self, acknowledged, receiver=None):
+    def cleanup(self):
+        """Stop only our RAM-only boot through the BMC, then eject its media."""
+        self.phase = "cleanup"
         deadline = time.monotonic() + 600
         client = self.client()
         unused, url = self.publication()
@@ -359,14 +484,10 @@ class Controller:
             while self.target(client) != "Off":
                 if client.inserted() != url:
                     raise ValueError("discovery lost ownership of the running boot")
-                if not acknowledged:
-                    client.power("ForceOff", "Off")
+                client.power("ForceOff", "Off")
                 if time.monotonic() >= deadline:
                     raise ValueError("discovery poweroff deadline")
-                if receiver is None:
-                    time.sleep(3)
-                else:
-                    receiver.poll()  # Replay a lost ACK until verified shutdown.
+                time.sleep(3)
                 client = self.client()
         with self.progress("eject-media"):
             if client.inserted() not in ("", url):
@@ -404,7 +525,6 @@ class Controller:
         proof = self.completion()
         if proof is None:
             raise ValueError("discovery external cleanup is unproved")
-        receipt.remove_stale(self)
         self.reap()
         if not (self.root / "sealed.json").exists():
             records.write(self.root / "sealed.json", canonical_json.canonical(self.seal(proof)))
@@ -412,6 +532,13 @@ class Controller:
 
     def reap(self):
         media.reap_intermediates(self.root)
+        self.reap_tls_stages()
+        tls = self.root / "tls"
+        if tls.exists():
+            records.directory(tls, False)
+            for name in ("server-key.pem", "server.pem"):
+                (tls / name).unlink(missing_ok=True)
+            tls.rmdir()
         for name in ("discovery.iso", "patched.iso", "initrd-0", "initrd-1"):
             (self.root / name).unlink(missing_ok=True)
 
@@ -430,18 +557,23 @@ class Controller:
             if not before["completed"]:
                 raise ValueError("discovery was removed")
             return before
-        self.phase = "receipt-listener"
-        with self.progress("prepare-receipt") as prepared:
-            with receipt.Receiver(self) as receiver:
-                prepared()
-                if self.report() is None:
-                    self.start()
-                else:
-                    self.skip("build-media", "publish-media", "verify-delivery", "insert-media", "select-boot", "power-on")
-                with self.progress("receive-inventory"):
-                    self.receive(receiver)
-                self.phase = "cleanup"
-                self.cleanup(True, receiver)
+        report = self.report()
+        if report is None and not self.booted() and self.request["inventory"] == "automatic":
+            with self.progress("read-bmc-inventory"):
+                report = self.read_bmc()
+        else:
+            self.skip("read-bmc-inventory")
+        if report is not None and not self.booted():
+            # No boot effect exists: nothing to stop, eject or unpublish.
+            self.skip(*BOOT_GROUPS, "await-answer", "receive-inventory", "power-off", "eject-media")
+            with self.progress("seal-cleanup"):
+                return self.finish(True)
+        if report is None:
+            self.start()
+        else:
+            self.skip(*BOOT_GROUPS)
+        self.receive()
+        self.cleanup()
         with self.progress("seal-cleanup"):
             return self.finish(True)
 
@@ -459,8 +591,10 @@ class Controller:
             self.reap()
             self.skip("power-off", "eject-media", "seal-cleanup")
             return before
-        self.phase = "cleanup"
-        self.cleanup(False)
+        if self.booted():
+            self.cleanup()
+        else:
+            self.skip("power-off", "eject-media")  # No boot effect was ever started.
         with self.progress("seal-cleanup"):
             return self.finish(False)
 

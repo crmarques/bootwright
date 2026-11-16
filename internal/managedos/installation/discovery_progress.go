@@ -9,15 +9,16 @@ import (
 func discoveryGroups(name string, removing bool) []reconciliation.Group {
 	steps := []struct{ id, description string }{
 		{"inspect-target", "verify machine identity, power and discovery custody"},
-		{"prepare-receipt", "prepare the private HTTPS inventory receiver"},
-		{"build-media", "verify the source ISO and build private RAM inventory media"},
+		{"read-bmc-inventory", "read the drive inventory the BMC reports, when automatic inventory may use it"},
+		{"build-media", "verify the source ISO and build installer-free private RAM inventory media"},
 		{"publish-media", "publish the private discovery ISO"},
 		{"verify-delivery", "verify HTTPS delivery of the discovery ISO"},
 		{"insert-media", "configure declared media trust and attach the discovery ISO"},
 		{"select-boot", "select the discovery ISO for the next boot"},
 		{"power-on", "power on the machine and confirm its power state"},
-		{"receive-inventory", "wait for RAM boot and authenticated disk inventory"},
-		{"power-off", "wait for and verify discovery power-off"},
+		{"await-answer", "wait until the RAM boot answers the controller on its declared address"},
+		{"receive-inventory", "read and verify the authenticated disk inventory"},
+		{"power-off", "power off through the BMC and verify it"},
 		{"eject-media", "eject the discovery ISO"},
 		{"seal-cleanup", "record and seal discovery cleanup evidence"},
 	}

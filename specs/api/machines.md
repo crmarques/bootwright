@@ -765,21 +765,26 @@ owns its remaining controller-to-installer race and capacity limitation.
 ### Automatic root-disk discovery
 
 A physical RHEL installation may opt in with
-`substrate.baremetal.rootDevice.discover`. This arm selects alone. Its optional
+`substrate.baremetal.rootDevice.discover`. This arm selects alone. Its
+`inventory` is `automatic`, the default, which reads the BMC's drive inventory
+and boots only when that inventory cannot stand in for Linux, or `boot`, which
+always inventories through a RAM boot. Its optional
 `match` record limits exact model, controller PCI address and minimum/maximum
-byte capacity; optional exclusions name stable disk identities. An empty match
+byte capacity; optional exclusions name stable disk identities. A model
+compares with the text the inventory's source reports. An empty match
 accepts any otherwise eligible disk. Selection requires exactly one fixed,
 writable whole disk with a unique qualified WWN or serial and exact capacity.
 Protected storage claims are excluded before selection; an unresolvable claim
 or ambiguous inventory refuses rather than treating an unknown disk as spare.
 
-An apply preparation phase, or the explicit discovery command, boots
-inventory-only media and stores an immutable authenticated report. An
+An apply preparation phase, or the explicit discovery command, reads that
+inventory or boots inventory-only media and stores an immutable authenticated
+report that names its source. An
 installation plan reads a specific matching report and
 freezes the selected disk identity; it performs no discovery effect. A changed
 policy or protected-disk claim invalidates the selection proof; planning may
-re-evaluate the same immutable inventory. Changed media, tool or machine bindings
-require matching inventory before an installation can be planned.
+re-evaluate the same immutable inventory. A changed `inventory`, media, tool or
+machine binding requires matching inventory before an installation can be planned.
 The installer repeats the exact target checks before storage writes and never
 chooses a replacement when that target changes. The execution boundary is
 [managed OS discovery](../managed-os.md#automatic-root-disk-discovery).

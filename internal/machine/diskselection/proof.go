@@ -39,15 +39,20 @@ type Binding struct {
 	UUID          string   `json:"uuid"`
 }
 
+const SourceLinux = "linux"
+const SourceBMC = "bmc"
+
 type Report struct {
 	Binding Binding `json:"binding"`
 	Disks   []Disk  `json:"disks"`
+	Source  string  `json:"source"`
 	Version string  `json:"version"`
 }
 
 // Proof is derived from validated inventory; it grants no installation effect.
 // A later plan freezes this proof and the Selected identity independently.
 type Proof struct {
+	Inventoried          []string     `json:"inventoried,omitempty"`
 	ReportDigest         string       `json:"reportDigest"`
 	Selected             DiskIdentity `json:"selected"`
 	SelectionFingerprint string       `json:"selectionFingerprint"`
@@ -57,7 +62,17 @@ func (p Proof) Validate() error {
 	if !digestText.MatchString(p.ReportDigest) || !digestText.MatchString(p.SelectionFingerprint) {
 		return fmt.Errorf("inventory selection proof digest is invalid")
 	}
-	return p.Selected.Validate()
+	if err := p.Selected.Validate(); err != nil {
+		return err
+	}
+	if p.Inventoried == nil {
+		return nil
+	}
+	if len(p.Inventoried) > MaxDisks || !slices.IsSorted(p.Inventoried) || len(slices.Compact(slices.Clone(p.Inventoried))) != len(p.Inventoried) ||
+		slices.ContainsFunc(p.Inventoried, func(s string) bool { return !serial.MatchString(s) }) || !slices.Contains(p.Inventoried, p.Selected.SerialNumber) {
+		return fmt.Errorf("inventory selection proof names an invalid BMC serial set")
+	}
+	return nil
 }
 
 func (b Binding) Validate() error {
@@ -109,6 +124,9 @@ func (r Report) Validate() error {
 	if r.Version != Version {
 		return fmt.Errorf("inventory report version is unsupported")
 	}
+	if r.Source != SourceLinux && r.Source != SourceBMC {
+		return fmt.Errorf("inventory report source is unsupported")
+	}
 	if err := r.Binding.Validate(); err != nil {
 		return err
 	}
@@ -133,6 +151,11 @@ func Prove(report Report, expected Binding, policy Policy, protected []DiskIdent
 	if !reflect.DeepEqual(report.Binding, expected) {
 		return Proof{}, fmt.Errorf("inventory report does not match this machine, context and execution attempt")
 	}
+	if report.Source == SourceBMC {
+		if err := bmcAnswers(policy, protected); err != nil {
+			return Proof{}, err
+		}
+	}
 	selected, err := Select(policy, report.Disks, protected)
 	if err != nil {
 		return Proof{}, err
@@ -146,7 +169,23 @@ func Prove(report Report, expected Binding, policy Policy, protected []DiskIdent
 		return Proof{}, fmt.Errorf("inventory report cannot be frozen within its byte bound")
 	}
 	hash := sha256.Sum256(data)
-	return Proof{ReportDigest: hex.EncodeToString(hash[:]), SelectionFingerprint: fingerprint, Selected: selected}, nil
+	proof := Proof{ReportDigest: hex.EncodeToString(hash[:]), SelectionFingerprint: fingerprint, Selected: selected}
+	if report.Source == SourceBMC {
+		for _, d := range report.Disks {
+			proof.Inventoried = append(proof.Inventoried, d.SerialNumber)
+		}
+		slices.Sort(proof.Inventoried)
+		proof.Inventoried = slices.Compact(proof.Inventoried)
+	}
+	return proof, proof.Validate()
+}
+
+func bmcAnswers(p Policy, protected []DiskIdentity) error {
+	unanswerable := func(d DiskIdentity) bool { return d.SerialNumber == "" || d.WWN != "" }
+	if p.Match.ControllerPCIAddress != "" || slices.ContainsFunc(p.Exclude, func(d DiskIdentity) bool { return d.SerialNumber == "" }) || slices.ContainsFunc(protected, unanswerable) {
+		return fmt.Errorf("the BMC drive inventory reports no WWN or controller PCI address; name exclusions and storage claims by serial number only, or set rootDevice.discover.inventory to boot")
+	}
+	return nil
 }
 
 // reportWire uses sorted object keys like the native canonical_json transport.

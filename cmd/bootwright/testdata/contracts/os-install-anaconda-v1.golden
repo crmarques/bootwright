@@ -62,6 +62,7 @@ request-schema:
   budgets.reboot.attempts int
   budgets.reboot.delaySeconds int
   discoveryProof *struct diskselection.Proof omitempty
+  discoveryProof.inventoried []string omitempty
   discoveryProof.reportDigest string
   discoveryProof.selected struct diskselection.DiskIdentity
   discoveryProof.selected.serialNumber string omitempty

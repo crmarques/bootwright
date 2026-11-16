@@ -5,8 +5,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 GROUPS = (
-    "inspect-target", "prepare-receipt", "build-media", "publish-media", "verify-delivery", "insert-media",
-    "select-boot", "power-on", "receive-inventory", "power-off", "eject-media", "seal-cleanup",
+    "inspect-target", "read-bmc-inventory", "build-media", "publish-media", "verify-delivery", "insert-media",
+    "select-boot", "power-on", "await-answer", "receive-inventory", "power-off", "eject-media", "seal-cleanup",
 )
 
 

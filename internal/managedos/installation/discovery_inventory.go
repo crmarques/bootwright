@@ -79,6 +79,18 @@ func (c Capability) proveDiscoveredRoot(e lifecycle.Execution, r Request) error 
 		if !evidence.Completed || !evidence.Cleaned || report.Validate() != nil {
 			return refused()
 		}
+		if report.Source == diskselection.SourceBMC {
+			var listed []string
+			for _, disk := range report.Disks {
+				listed = append(listed, disk.SerialNumber)
+			}
+			slices.Sort(listed)
+			if !slices.Equal(slices.Compact(listed), r.DiscoveryProof.Inventoried) {
+				return refused()
+			}
+		} else if r.DiscoveryProof.Inventoried != nil {
+			return refused()
+		}
 		b := report.Binding
 		if b.Incarnation != e.Incarnation || b.Context != e.Context || b.Context != r.Identity.Context || b.Context != source.Identity.Context || b.Machine != r.Identity.Object || b.Operation != record.Operation || b.RequestDigest != record.Block.RequestDigest || b.MediaSHA256 != source.BootMedia.SHA256 || b.ToolDigest != record.Block.ContentDigest || !slices.Equal(b.MACs, discoveryMACs(source)) {
 			return refused()

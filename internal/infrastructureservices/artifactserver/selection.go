@@ -1,8 +1,6 @@
 package artifactserver
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"net/netip"
 	"slices"
 	"strings"
@@ -95,7 +93,7 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 		ImageSource: source,
 		Listeners:   listeners,
 		Placement:   placement,
-		Unit:        UnitName(contextName, name),
+		Unit:        unitPrefix + "-" + contextName + "-artifacts-" + name,
 		Version:     requestVersion,
 	}
 	if request.BindAddress == "" {
@@ -114,23 +112,8 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 			minimum = "TLSv1.2"
 		}
 		request.TLS = &TLS{MinVersion: minimum, Secret: reference}
-		if placement.Local() {
-			request.ReceiptRoot = ReceiptRoot(contextName, name)
-		}
 	}
 	return request, nil
-}
-
-// UnitName names the service whose runtime directory owns callback sockets.
-func UnitName(contextName, service string) string {
-	return unitPrefix + "-" + contextName + "-artifacts-" + service
-}
-
-// ReceiptRoot is the short, unit-owned runtime directory for private inventory
-// callbacks. It stays outside every served subtree and below the Unix path bound.
-func ReceiptRoot(contextName, service string) string {
-	digest := sha256.Sum256([]byte(contextName + "/" + service))
-	return "/run/bootwright-receipts/" + hex.EncodeToString(digest[:16])
 }
 
 func BlockID(service string) string { return reconciliation.BlockIdentity("artifact-server-", service) }

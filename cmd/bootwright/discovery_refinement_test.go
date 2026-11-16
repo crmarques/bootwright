@@ -149,7 +149,7 @@ func refinementInventories(t *testing.T, catalog api.Catalog, plan reconciliatio
 		}
 		slices.Sort(macs)
 		operation := "op-" + strings.Repeat("a", 32)
-		report := diskselection.Report{Version: diskselection.Version, Disks: disks, Binding: diskselection.Binding{Context: contextID.Name, Incarnation: contextID.Incarnation, Machine: block.Object, Operation: operation, Attempt: "attempt-000001", Nonce: strings.Repeat("b", 64), RequestDigest: block.RequestDigest, MediaSHA256: request.BootMedia.SHA256, ToolDigest: block.ContentDigest, UUID: identity.UUID, MACs: macs}}
+		report := diskselection.Report{Version: diskselection.Version, Source: diskselection.SourceLinux, Disks: disks, Binding: diskselection.Binding{Context: contextID.Name, Incarnation: contextID.Incarnation, Machine: block.Object, Operation: operation, Attempt: "attempt-000001", Nonce: strings.Repeat("b", 64), RequestDigest: block.RequestDigest, MediaSHA256: request.BootMedia.SHA256, ToolDigest: block.ContentDigest, UUID: identity.UUID, MACs: macs}}
 		wire, err := report.Canonical()
 		if err != nil {
 			t.Fatal(err)

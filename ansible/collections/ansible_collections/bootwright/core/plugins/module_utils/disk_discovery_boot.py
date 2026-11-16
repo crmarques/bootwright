@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 import inspect
 
-from ansible_collections.bootwright.core.plugins.module_utils import absolute_deadline, bounded_process, canonical_json, tls_trust
+from ansible_collections.bootwright.core.plugins.module_utils import absolute_deadline, bounded_process, canonical_json
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_worker, disk_inventory, physical_machine_identity
 import stat
 
@@ -60,12 +60,10 @@ mkdir -p /run/discovery
 printf '%s\n' /bin/false >/proc/sys/kernel/modprobe
 timeout -k 2 180 /bin/sh /bootwright-discovery/drivers.sh || inert
 cp -R /bootwright-discovery/. /run/discovery/
-python3 -I /run/discovery/disk_discovery_worker.py || inert
-# PID1 reaps the synchronous worker and its process-group-owned children.
-# The worker returns only after durable receipt acknowledgement.
-echo o >/proc/sysrq-trigger
-trap - EXIT HUP INT TERM
-while :; do sleep 60; done
+# The worker serves its answer until the controller powers the machine off
+# through the BMC; it never returns on success and nothing here powers off.
+python3 -I /run/discovery/disk_discovery_worker.py
+inert
 """
 
 
@@ -132,12 +130,17 @@ def overlay(payload):
     return newc(files)
 
 
-def payload(binding, network, interfaces, token, certificate, receipt_url):
-    """One exact source bundle is used by execution and offline qualification."""
-    modules = (absolute_deadline, bounded_process, canonical_json, tls_trust, disk_inventory, physical_machine_identity, disk_discovery_worker)
+def payload(binding, network, interfaces, token, certificate, key):
+    """One exact source bundle is used by execution and offline qualification.
+
+    The per-attempt server key lives only in this private image and in custody,
+    and the controller pins its certificate before the bearer token crosses.
+    """
+    modules = (absolute_deadline, bounded_process, canonical_json, disk_inventory, physical_machine_identity, disk_discovery_worker)
     files = {module.__name__.rsplit(".", 1)[-1] + ".py": inspect.getsource(module).encode("utf-8") for module in modules}
     files["request.json"] = canonical_json.canonical({
-        "binding": binding, "interfaces": interfaces, "network": network, "reportToken": token, "receiptURL": receipt_url,
+        "binding": binding, "interfaces": interfaces, "network": network, "reportToken": token,
     })
-    files["artifact.pem"] = certificate
+    files["server.pem"] = certificate
+    files["server-key.pem"] = key
     return files

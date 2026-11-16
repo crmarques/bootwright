@@ -97,8 +97,8 @@ def test_bmc_refusals_publish_only_the_allowlisted_cause_and_step(cause, phase):
 def test_untrusted_bmc_cause_metadata_is_never_published(cause):
     error = module.custody.redfish_control.ControllerError("SECRET")
     error.cause = cause
-    result = module.diagnostic(error, SimpleNamespace(phase="boot"))
-    assert result == {"discovery_failure": "bmc-request", "discovery_phase": "boot"}
+    result = module.diagnostic(error, SimpleNamespace(phase="power-on"))
+    assert result == {"discovery_failure": "bmc-request", "discovery_phase": "power-on"}
 
 
 def test_disabled_authoritative_bmc_verification_is_actionable_without_a_trust_write():

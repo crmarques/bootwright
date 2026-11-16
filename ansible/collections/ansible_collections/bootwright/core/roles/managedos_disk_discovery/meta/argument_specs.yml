@@ -31,9 +31,12 @@ argument_specs:
           private:
             type: dict
             required: true
-          receipt:
-            type: dict
+          inventory:
+            type: str
             required: true
+            choices:
+              - automatic
+              - boot
           deadlineSeconds:
             type: int
             required: true

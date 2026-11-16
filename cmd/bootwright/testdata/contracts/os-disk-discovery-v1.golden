@@ -1,12 +1,12 @@
 implementation: os-disk-discovery-v1
-content-digest: 0afccf1786a1f36e05534505062e6c439e5cbf90cf2b6fe12b020f68eddc79a7
+content-digest: 85db9076a6a21c450f79783ddbd616c7f0378dffd32d8257fcd5c22b6c35e0b6
 request-version: os-disk-discovery-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none
 fixed-places: none
 effect-pins:
-  private-custom-init-readonly-inventory-outbound-https-receipt-cleanup-v1
+  bmc-drive-inventory-or-minimal-ram-boot-controller-pull-bmc-poweroff-v1
   verified-media-default
 request-identity:
   identity.context
@@ -37,6 +37,7 @@ request-schema:
   interfaces []struct installation.Interface
   interfaces[].macAddress string
   interfaces[].name string
+  inventory string
   network struct installation.DiscoveryNetwork
   network.address string
   network.bondOptions []string omitempty
@@ -60,10 +61,6 @@ request-schema:
   private.certificateRef string omitempty
   private.path string
   private.url string
-  receipt struct installation.DiscoveryReceipt
-  receipt.container string
-  receipt.socketRoot string
-  receipt.url string
   version string
 evidence-schema:
   cleaned bool

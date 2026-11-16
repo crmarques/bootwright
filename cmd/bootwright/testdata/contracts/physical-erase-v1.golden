@@ -45,6 +45,7 @@ request-schema:
   install.budgets.reboot.attempts int
   install.budgets.reboot.delaySeconds int
   install.discoveryProof *struct diskselection.Proof omitempty
+  install.discoveryProof.inventoried []string omitempty
   install.discoveryProof.reportDigest string
   install.discoveryProof.selected struct diskselection.DiskIdentity
   install.discoveryProof.selected.serialNumber string omitempty

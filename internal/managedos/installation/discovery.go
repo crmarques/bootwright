@@ -108,9 +108,9 @@ func (c DiscoveryCapability) Plan(ctx context.Context, input lifecycle.PlanInput
 		dependencies := requires(requirements[index])
 		dependencies[0].Family = substrate.MachineFamily
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: r.Identity.Block, Kind: Kind, Object: r.Identity.Object, Family: DiscoveryFamily, Implementation: DiscoveryImplementation, ContentDigest: DiscoveryContentDigest(), Stage: reconciliation.StageMachines, Request: wire,
-			Description: "inventory Linux-visible disks of " + r.Identity.Object + " in RAM, then power off",
+			Description: discoveryDescription(r),
 			Groups:      discoveryGroups(r.Identity.Object, input.Verb == reconciliation.Destroy),
-			Impacts:     []string{"boot-readonly-disk-inventory " + r.Identity.Object, "power-off " + r.Identity.Object},
+			Impacts:     discoveryImpacts(r),
 			Requires:    dependencies, Exclusive: []string{substrate.ControllerMediaReservationKey(r.Controller.Endpoint), substrate.ControllerReservationKey(r.Controller.Endpoint)}})
 		if r.Controller.VirtualMedia.EnableVerification {
 			plan.Definitions[len(plan.Definitions)-1].Impacts = append(plan.Definitions[len(plan.Definitions)-1].Impacts,
@@ -145,6 +145,21 @@ func (c DiscoveryCapability) Plan(ctx context.Context, input lifecycle.PlanInput
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
 	return plan, nil
+}
+
+func discoveryDescription(r DiscoveryRequest) string {
+	if r.Inventory == InventoryAutomatic {
+		return "read the BMC drive inventory of " + r.Identity.Object + ", or inventory its Linux-visible disks in RAM when the BMC cannot answer, then power off"
+	}
+	return "inventory Linux-visible disks of " + r.Identity.Object + " in RAM, then power off"
+}
+
+func discoveryImpacts(r DiscoveryRequest) []string {
+	impacts := []string{"boot-readonly-disk-inventory " + r.Identity.Object, "power-off " + r.Identity.Object}
+	if r.Inventory == InventoryAutomatic {
+		impacts = []string{"read-bmc-drive-inventory " + r.Identity.Object, "boot-readonly-disk-inventory " + r.Identity.Object + " (only when the BMC inventory is incomplete)", "power-off " + r.Identity.Object + " (only after that boot)"}
+	}
+	return impacts
 }
 
 func (c DiscoveryCapability) Claimed(catalog api.Catalog) []string {
@@ -187,7 +202,7 @@ func (c DiscoveryCapability) Roots(ctx context.Context, input lifecycle.PlanInpu
 		}
 		proof, err := diskselection.Prove(report, report.Binding, policy, protected)
 		if err != nil {
-			return nil, refusal("lifecycle.state", "Machine/"+r.Identity.Object+": "+err.Error(), "inspect the recorded inventory, refine rootDevice.discover.match and update the context before planning again")
+			return nil, refusal("lifecycle.state", "Machine/"+r.Identity.Object+": "+err.Error(), "inspect the recorded inventory, refine rootDevice.discover.match, or set rootDevice.discover.inventory to boot when the BMC inventory cannot answer it, and update the context before planning again")
 		}
 		proofs[r.Identity.Object] = proof
 	}
@@ -222,6 +237,9 @@ func (c DiscoveryCapability) completedInventory(ctx context.Context, input lifec
 		}
 		if !e.Completed || !e.Cleaned || c.identities == nil {
 			return inventory, false, nil
+		}
+		if r.Inventory == InventoryBoot && report.Source != diskselection.SourceLinux {
+			return inventory, false, refusal("lifecycle.state", "a BMC disk inventory answers a discovery that declares a boot inventory", "retain the recorded inventory and resolve its ownership before preparing another")
 		}
 		expected := report.Binding
 		expected.Context, expected.Incarnation, expected.Machine = input.Context.Name, input.Context.Incarnation, r.Identity.Object

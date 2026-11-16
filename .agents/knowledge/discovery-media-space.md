@@ -27,8 +27,20 @@ on the [RHEL local filesystems](https://docs.redhat.com/en/documentation/red_hat
 Hard links would make permission or content changes visible to another
 consumer, so publication refuses a source with multiple links. A shared cache
 of patched initrds would also hold private attempt material. Neither is used.
-Compact stage-2-free media was not selected: it adds boot-layout qualification
-and another transformation beyond the required one-pass reduction.
+
+The inventory boot never reads the installer second stage, which is 1,252,827,136
+of the RHEL 9.8 boot ISO's 1,509,949,440 bytes. Since 2026-11-16 the builder
+first copies only the boot tree with `xorriso -boot_image any replay -rm_r`
+(the [xorriso manual](https://www.gnu.org/software/xorriso/man_1_xorriso.html)
+documents both), then runs the same one-pass `mkksiso --add`. On the actual
+RHEL 9.8 boot ISO, with Lorax 44.7, xorriso 1.5.8 and `--skip-mkefiboot`, the
+copy was 256,835,584 bytes and kept the BIOS (`/isolinux/isolinux.bin`) and
+UEFI (`/images/efiboot.img`) El Torito entries; the finished image was
+482,738,176 bytes, against 1,735,589,888 before, because the two patched
+initrds no longer share one extent and nothing else remains. Its GRUB entries
+kept the inventory arguments with `inst.stage2` removed. This measurement does
+not qualify embedded EFI rebuilding, which production keeps, nor a BMC's
+transfer time, which depends on whether it streams or copies the image.
 
 Three synthetic concurrent nodes using the actual RHEL 9.8 boot ISO were
 measured by sampling newly written files' and directories' `st_blocks * 512`
