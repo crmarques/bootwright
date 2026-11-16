@@ -201,59 +201,135 @@ func TestContainerBuildRefusesATargetItCannotReplace(t *testing.T) {
 	}
 }
 
-// containerBuildInputs are the root entries the container build reads: the
-// Makefile and module files, the scripts it runs and the packages it compiles.
-var containerBuildInputs = []string{"Makefile", "go.mod", "go.sum", "api", "ansible", "cmd", "internal", "scripts"}
+type contextRule struct {
+	pattern *regexp.Regexp
+	include bool
+}
 
-// buildContextProblems reads a .dockerignore and reports what makes it other
-// than an allowlist of containerBuildInputs: a first pattern other than *, or a
-// re-included entry that is no build input or not at the root.
-func buildContextProblems(ignore string) []string {
-	var patterns []string
+// contextRules reads a .dockerignore as an engine does: each pattern in order,
+// a leading ! re-including what it matches, the last match deciding.
+func contextRules(ignore string) (string, []contextRule) {
+	first, rules := "", []contextRule(nil)
 	for _, line := range strings.Split(ignore, "\n") {
-		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
-			patterns = append(patterns, line)
-		}
-	}
-	var problems []string
-	if len(patterns) == 0 || patterns[0] != "*" {
-		problems = append(problems, "the first pattern is not *, so every entry the list does not name reaches the build context")
-	}
-	var included []string
-	for _, pattern := range patterns {
-		entry, found := strings.CutPrefix(pattern, "!")
-		if !found {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if !slices.Contains(containerBuildInputs, entry) {
-			problems = append(problems, "it re-includes "+pattern+", which is no root entry the build reads")
+		if first == "" {
+			first = line
 		}
-		included = append(included, entry)
+		pattern, include := strings.CutPrefix(line, "!")
+		var expression strings.Builder
+		for index := 0; index < len(pattern); index++ {
+			switch {
+			case strings.HasPrefix(pattern[index:], "**/"):
+				expression.WriteString("(.*/)?")
+				index += 2
+			case strings.HasPrefix(pattern[index:], "**"):
+				expression.WriteString(".*")
+				index++
+			case pattern[index] == '*':
+				expression.WriteString("[^/]*")
+			case pattern[index] == '?':
+				expression.WriteString("[^/]")
+			default:
+				expression.WriteString(regexp.QuoteMeta(pattern[index : index+1]))
+			}
+		}
+		rules = append(rules, contextRule{pattern: regexp.MustCompile("^" + expression.String() + "$"), include: include})
 	}
-	for _, input := range containerBuildInputs {
-		if !slices.Contains(included, input) {
-			problems = append(problems, "it does not re-include "+input+", which the build reads")
+	return first, rules
+}
+
+// leftOut reports whether the context leaves path out: a pattern that matches
+// the path or one of its parent directories decides, the last one winning.
+func leftOut(rules []contextRule, path string) bool {
+	parts := strings.Split(path, "/")
+	out := false
+	for _, rule := range rules {
+		for end := 1; end <= len(parts); end++ {
+			if rule.pattern.MatchString(strings.Join(parts[:end], "/")) {
+				out = !rule.include
+				break
+			}
+		}
+	}
+	return out
+}
+
+// buildContextProblems reports what makes a .dockerignore other than an
+// allowlist of .git and the tracked files: a first pattern other than *, .git
+// or a tracked file left out, or a path Git does not track let in.
+func buildContextProblems(ignore string, tracked, untracked []string) []string {
+	first, rules := contextRules(ignore)
+	var problems []string
+	if first != "*" {
+		problems = append(problems, "the first pattern is not *, so every entry the list does not name reaches the build context")
+	}
+	if leftOut(rules, ".git/HEAD") {
+		problems = append(problems, ".git is left out, so a build without make cannot stamp the checkout's identity")
+	}
+	for _, path := range tracked {
+		if leftOut(rules, path) {
+			problems = append(problems, "the tracked "+path+" is left out, so git status in the build would call a clean checkout modified")
+		}
+	}
+	for _, path := range untracked {
+		if !leftOut(rules, path) {
+			problems = append(problems, path+", which Git does not track, reaches the build context")
 		}
 	}
 	return problems
 }
 
-func TestTheContainerBuildContextIsAnAllowlistOfTheBuildInputs(t *testing.T) {
+func TestTheContainerBuildContextHoldsGitAndEveryTrackedFileAlone(t *testing.T) {
 	root := filepath.Join("..", "..")
 	ignore, err := os.ReadFile(filepath.Join(root, ".dockerignore"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, problem := range buildContextProblems(string(ignore)) {
-		t.Errorf(".dockerignore is no allowlist: %s", problem)
+	listed := func(arguments ...string) []string {
+		output := gitIn(t, root, append([]string{"ls-files", "-z"}, arguments...)...)
+		var paths []string
+		for _, path := range strings.Split(output, "\x00") {
+			if path = strings.TrimSuffix(path, "/"); path != "" {
+				paths = append(paths, path)
+			}
+		}
+		return paths
 	}
-	for ignore, want := range map[string]string{
-		".git\nbin\nexamples/wip\n": "the first pattern is not *",
-		"*\n!Makefile\n!go.mod\n!go.sum\n!api\n!ansible\n!cmd\n!internal\n!scripts\n!.git\n": "it re-includes !.git",
-		"*\n!Makefile\n!go.mod\n!api\n!ansible\n!cmd\n!internal\n!scripts\n":                 "it does not re-include go.sum",
+	tracked := listed()
+	topLevel := map[string]bool{".git": true}
+	for _, path := range tracked {
+		topLevel[strings.Split(path, "/")[0]] = true
+	}
+	untracked := listed("--others", "--ignored", "--exclude-standard", "--directory")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if !topLevel[entry.Name()] {
+			untracked = append(untracked, entry.Name())
+		}
+	}
+	problems := buildContextProblems(string(ignore), tracked, untracked)
+	if len(problems) > 10 {
+		problems = append(problems[:10], "and more")
+	}
+	for _, problem := range problems {
+		t.Errorf(".dockerignore is no allowlist of .git and the tracked files: %s", problem)
+	}
+	for _, planted := range []struct{ ignore, want string }{
+		{".git\nbin\n", "the first pattern is not *"},
+		{"*\n!Makefile\n!go.mod\n", ".git is left out"},
+		{"*\n!.git\n!Makefile\n", "the tracked go.mod is left out"},
+		{"*\n!.git\n!Makefile\n!go.mod\n!.claude\n", ".claude/worktrees, which Git does not track, reaches the build context"},
+		{"*\n!.git\n!Makefile\n!go.mod\n!.claude\n.claude/worktrees\n**/*.log\n", "the tracked .claude/build.log is left out"},
 	} {
-		if problems := buildContextProblems(ignore); !strings.Contains(strings.Join(problems, "\n"), want) {
-			t.Errorf("the planted context %q was not reported as %q: %v", ignore, want, problems)
+		got := buildContextProblems(planted.ignore, []string{"Makefile", "go.mod", ".claude/build.log"}, []string{"bin", ".claude/worktrees"})
+		if !strings.Contains(strings.Join(got, "\n"), planted.want) {
+			t.Errorf("the planted context %q was not reported as %q: %v", planted.ignore, planted.want, got)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(root, ".containerignore")); err == nil {
@@ -265,41 +341,7 @@ func TestTheContainerBuildContextIsAnAllowlistOfTheBuildInputs(t *testing.T) {
 	}
 	for _, match := range regexp.MustCompile(`(?m)^COPY (.*)$`).FindAllStringSubmatch(string(dockerfile), -1) {
 		if !strings.HasPrefix(match[1], "--from=") && match[1] != ". ." {
-			t.Errorf("the Dockerfile copies %q from the context; name its source in containerBuildInputs and .dockerignore", match[1])
-		}
-	}
-	module := regexp.MustCompile(`(?m)^module (\S+)$`).FindStringSubmatch(func() string {
-		data, err := os.ReadFile(filepath.Join(root, "go.mod"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(data)
-	}())
-	if module == nil {
-		t.Fatal("go.mod names no module")
-	}
-	imported := regexp.MustCompile(`"` + regexp.QuoteMeta(module[1]) + `/([^/"]+)`)
-	for _, input := range containerBuildInputs {
-		err := filepath.WalkDir(filepath.Join(root, input), func(path string, entry os.DirEntry, err error) error {
-			if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, string(filepath.Separator)+"testdata"+string(filepath.Separator)) {
-				return err
-			}
-			if strings.HasPrefix(path, filepath.Join(root, "scripts", "tools")+string(filepath.Separator)) {
-				return nil
-			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			for _, match := range imported.FindAllStringSubmatch(string(data), -1) {
-				if !slices.Contains(containerBuildInputs, match[1]) {
-					t.Errorf("%s imports %s/%s, which the build context leaves out", path, module[1], match[1])
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatal(err)
+			t.Errorf("the Dockerfile copies %q from the context, not the whole checkout", match[1])
 		}
 	}
 }
