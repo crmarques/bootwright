@@ -321,6 +321,7 @@ Alias cell.
 | [B1349](#b1349) | new, 2026-11-11 (X418; audit 004 API-34) | product | Add-ons | Reserved authored steps gain an explicitly authorized lifecycle | D183 keeps the shapes admitted and inert; no concrete execution journey is promoted |
 | [B1354](#b1354) | new, 2026-11-11 (firewall review) | defect | E2E | Sample application teardown removes only a rule its setup created | Separate application fixture ownership, beyond controller listener preparation |
 | [B1412](#b1412) | new, 2026-11-15 | defect | Architecture | Documentation checks detect milestone identifier collisions across active, parked and delivered records | Tooling hardening beyond the requested case; its identifiers are reconciled manually |
+| [B1424](#b1424) | new, 2026-11-16 (owner request) | defect | CLI, with State reconciliation | Resolution failures are readable through a precise supported logs command without opening private files manually | Owner requested backlog recording; explicit resolution selection and diagnostic handoff remain unpromoted |
 
 ### B82
 
@@ -3656,6 +3657,25 @@ fixtures with colliding item and unrelated slice definitions fail; legitimate
 references to one item or slice continue to pass. Parked because the current
 case reconciles its identifiers manually and does not require a broader
 documentation validator change.
+
+### B1424
+
+**Owner:** CLI, with State reconciliation. **Kind:** defect. **Requires:**
+existing retained operation logs. **Definition:** Candidate.
+**Outcome:** recovery diagnostics name a supported `bootwright logs` command
+that reads the failing resolution's retained adapter output, without requiring
+manual `sudo cat` of a private file. The current
+[logs reader](../cli/output.md#reading-and-following-logs) already selects the
+newest retained output, including resolutions, when `--raw --block` omits
+`--attempt`; selecting an attempt explicitly reads its effect output and
+offers no resolution selector. Add an unambiguous way to select a particular
+resolution and make the remediation use it, retaining the existing newest
+selection and read-only privilege, path, byte-bound and masking guarantees.
+**Exit evidence:** CLI and log-view tests select multiple resolutions of one
+attempt, distinguish them from later effect attempts, reject invalid or missing
+selections, and prove the failure's emitted command reads its exact retained
+output in human and JSON modes. Parked because the owner requested recording
+the gap, not implementing a new selector in the current troubleshooting loop.
 
 ## Audit remediation (2026-10-26)
 
