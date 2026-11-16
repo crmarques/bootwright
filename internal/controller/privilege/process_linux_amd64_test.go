@@ -455,6 +455,8 @@ func TestSudoRunsOnlyTheSupervisorsInvocations(t *testing.T) {
 		{"-u", "#0", "-s", "--", self},
 		{"-E", "-u", "#0", "--", self},
 		{"--", self},
+		{"-u", "#0", "LD_PRELOAD=/tmp/x.so", "--", self},
+		{"-u", "#0", "HTTPS_PROXY=http://a b", "--", self},
 	} {
 		if admittedInvocation(args, reexecution) {
 			t.Errorf("the invocation %q was admitted", args)

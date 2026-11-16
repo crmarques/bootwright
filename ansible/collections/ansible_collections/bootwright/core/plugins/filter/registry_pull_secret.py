@@ -48,10 +48,10 @@ EXAMPLES = r"""
       - /dev/stdin
       - "{{ work }}/pull-secret.json"
     stdin: >-
-      {{ lookup('ansible.builtin.file', material.pullSecret)
+      {{ lookup('ansible.builtin.file', material.pullSecret, rstrip=false)
          | bootwright.core.registry_pull_secret(
              mirror,
-             lookup('ansible.builtin.file', material.mirrorUsername),
+             lookup('ansible.builtin.file', material.mirrorUsername, rstrip=false),
              lookup('ansible.builtin.file', material.mirrorPassword, rstrip=false)) }}
     stdin_add_newline: false
   changed_when: true

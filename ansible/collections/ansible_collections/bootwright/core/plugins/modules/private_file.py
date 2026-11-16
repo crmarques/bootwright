@@ -40,7 +40,7 @@ EXAMPLES = r"""
 - name: Write the install configuration with its bound material
   bootwright.core.private_file:
     path: /var/lib/example/install-config.yaml
-    content: "{{ lookup('ansible.builtin.file', example_material.pullSecret) }}"
+    content: "{{ lookup('ansible.builtin.file', example_material.pullSecret, rstrip=false) }}"
   no_log: true
   diff: false
 """

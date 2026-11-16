@@ -279,7 +279,7 @@ func admittedInvocation(args []string, reexecution func() (string, error)) bool 
 		return false
 	}
 	for i, option := range options[2:] {
-		if (option != "-n" || i != 0) && (strings.HasPrefix(option, "-") || !strings.Contains(option, "=")) {
+		if (option != "-n" || i != 0) && !safeAssignment(option) {
 			return false
 		}
 	}

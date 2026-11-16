@@ -556,7 +556,7 @@ def atomic(path, value):
         # A leftover stage makes every later O_EXCL write of this path fail in this boot.
         try:
             os.unlink(temporary)
-        except FileNotFoundError:
+        except OSError:
             pass
         raise
     parent = os.open(str(Path(path).parent), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)

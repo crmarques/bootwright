@@ -470,7 +470,7 @@ remedy named, unless it names another code:
   `bootwright controller uninstall --discard-unreadable`, because they may hold
   data and only a destroy consumes `data-loss` for them;
 - without `--keep-packages`, a setup record that carries a pending intent, or
-  that cannot be read or carries another format, refuses, because the
+  that does not decode as this build's format, refuses, because the
   packages that install added are not known: "an earlier install (`<id>`) was
   interrupted before it recorded what it installed" or "the install record was
   written by another Bootwright build", with the remedy "run
@@ -1132,9 +1132,11 @@ a runtime only whole, so both effects are idempotent. No stranded, abandoned
 or canceled receipt exists, and no setup refuses an earlier one's route or
 executable.
 
-**Format healing.** A setup record that cannot be read or carries another
+**Format healing.** A setup record that does not decode as this build's
 format, or a setup subtree holding an entry this build does not list, is
-another build's; setup's read and its locked transaction judge it alike. Setup plans "Discard setup state another
+another build's; a record or subtree that cannot be read for an I/O, bound or
+permission reason refuses, setup and `controller uninstall` alike, and is kept
+for the operator to repair; setup's read and its locked transaction judge it alike. Setup plans "Discard setup state another
 Bootwright build wrote (`<format>`)", removes the subtree after confirmation,
 taking every runtime's lock first so it never removes one in use, and
 proceeds. Because the discard removes every runtime and the wheel cache, the
