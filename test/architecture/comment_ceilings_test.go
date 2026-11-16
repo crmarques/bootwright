@@ -45,6 +45,6 @@ func commentLineCeilings() map[string]int {
 		"internal/storage/preflightlocal": 3, "internal/storage/rendering": 0, "internal/substrate": 291, "internal/substrate/baremetal": 103, "internal/substrate/kubevirt": 139,
 		"internal/substrate/libvirt": 319, "internal/trust": 62, "internal/trust/enrollment": 57,
 		"internal/workspace/contextfs": 848, "internal/workspace/contexts": 131,
-		"internal/workspace/invokerfs": 48, "internal/workspace/selectionfs": 32,
+		"internal/workspace/invokerfs": 48, "internal/workspace/selectionfs": 28,
 	}
 }

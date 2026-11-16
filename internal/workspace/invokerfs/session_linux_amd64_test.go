@@ -6,12 +6,13 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
 const stallMode = "__invokerfs_stall"
@@ -84,13 +85,16 @@ func protocolSession(t *testing.T) *Session {
 	return session
 }
 
-func testLaunch(helper string, deadline time.Duration) launch {
-	return launch{deadline: deadline, command: func(account Account, socket *os.File) *exec.Cmd {
-		command := helperCommand(account, socket)
-		command.Args = []string{helperExecutable, helper}
-		command.SysProcAttr.Credential = nil
-		return command
+func testLauncher(helper string) nativeexec.Launcher {
+	return nativeexec.Launcher{Starter: func(ctx context.Context, command nativeexec.Command) (*nativeexec.Process, error) {
+		command.Args = []string{helper}
+		command.Credential = nil
+		return nativeexec.Start(ctx, command)
 	}}
+}
+
+func testLaunch(helper string, deadline time.Duration) launch {
+	return launch{deadline: deadline, launcher: testLauncher(helper)}
 }
 
 func spawnedSession(t *testing.T) *Session {
@@ -583,7 +587,7 @@ func TestHelperCommandIsTheRunningBinaryUnderTheInvokingCredentials(t *testing.T
 	groups := []uint32{10, 1001}
 	command := helperCommand(Account{UID: 1000, GID: 1001, Groups: groups}, socket)
 	groups[0] = 0
-	if command.Path != "/proc/self/exe" || strings.Join(command.Args, " ") != "/proc/self/exe "+HelperMode {
+	if command.Path != "/proc/self/exe" || strings.Join(command.Args, " ") != HelperMode {
 		t.Errorf("the helper runs %s %q, want this running binary", command.Path, command.Args)
 	}
 	if strings.Join(command.Env, " ") != "LANG=C LC_ALL=C" || command.Dir != "/" || command.Stdin != nil || command.Stdout != nil || command.Stderr != nil {
@@ -592,11 +596,10 @@ func TestHelperCommandIsTheRunningBinaryUnderTheInvokingCredentials(t *testing.T
 	if len(command.ExtraFiles) != 1 || command.ExtraFiles[0] != socket || command.WaitDelay != time.Second {
 		t.Errorf("the helper holds %d extra files and waits %s", len(command.ExtraFiles), command.WaitDelay)
 	}
-	attributes := command.SysProcAttr
-	if attributes == nil || attributes.Credential == nil || attributes.Pdeathsig != syscall.SIGKILL {
-		t.Fatalf("the helper runs without the invoking credentials or a parent-death signal: %+v", attributes)
+	if command.Credential == nil || command.ParentDeath != syscall.SIGKILL {
+		t.Fatalf("the helper runs without the invoking credentials or a parent-death signal: %+v", command)
 	}
-	credential := attributes.Credential
+	credential := command.Credential
 	if credential.Uid != 1000 || credential.Gid != 1001 || len(credential.Groups) != 2 || credential.Groups[0] != 10 || credential.Groups[1] != 1001 || credential.NoSetGroups {
 		t.Errorf("the helper runs as %+v", credential)
 	}

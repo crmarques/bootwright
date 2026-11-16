@@ -641,7 +641,7 @@ func effectGrants() map[string][]string {
 		// issues, names no other os member, and starts at most one helper,
 		// this running binary under that account, whose descriptors it passes
 		// on.
-		invokerFiles: {"os.ErrClosed", "os.File", "os.Geteuid", "os.NewFile", "os/exec", "syscall"},
+		invokerFiles: {"os.ErrClosed", "os.File", "os.Geteuid", "os.NewFile", "syscall"},
 		// Media acquisition receives an operator-named file as a descriptor
 		// from the invoking account's opener and opens no path itself, or
 		// downloads from one authorized endpoint; it runs no process and holds

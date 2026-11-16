@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"syscall"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -68,10 +67,15 @@ func (s *Store) perform(ctx context.Context, action string, selection contexts.S
 	if err := ctx.Err(); err != nil {
 		return contexts.Selection{}, err
 	}
-	if os.Geteuid() == s.options.UID {
+	effective := os.Geteuid
+	if s.effective != nil {
+		effective = s.effective
+	}
+	euid := effective()
+	if euid == s.options.UID {
 		return s.local(ctx, action, selection)
 	}
-	if os.Geteuid() != 0 || s.options.UID <= 0 || s.options.GID < 0 {
+	if euid != 0 || s.options.UID <= 0 || s.options.GID < 0 {
 		return contexts.Selection{}, state("selection account identity is unavailable")
 	}
 	options := s.options
@@ -84,7 +88,7 @@ func (s *Store) perform(ctx context.Context, action string, selection contexts.S
 	command := helperCommand(data, options)
 	output := nativeexec.Head(maximumRecord)
 	command.Stdout = output
-	if result := nativeexec.Run(operation, command); !result.Succeeded() {
+	if result := s.launcher.Run(operation, command); !result.Succeeded() {
 		if ctx.Err() != nil {
 			return contexts.Selection{}, ctx.Err()
 		}
@@ -111,22 +115,13 @@ func decodeHelperResponse(data []byte, overflow bool) (contexts.Selection, error
 	return response.Selection, nil
 }
 
-// helperExecutable is the running program's own image. The forked child
-// resolves it to the image it was forked from after its credential drop,
-// because a process may always read its own /proc/self/exe, so a file renamed
-// over the program's path can never run as the selection account. The
-// parent's /proc/<pid>/exe is not readable after that drop.
-const helperExecutable = "/proc/self/exe"
-
-// helperCommand runs this same program in helper mode under the selection
-// account, with a fixed environment and directory, killed with its parent.
+// helperCommand runs this same program, pinned through /proc/self/exe so a
+// file renamed over its path never runs as the selection account, in helper
+// mode under that account, killed with its parent.
 func helperCommand(data []byte, options Options) nativeexec.Command {
-	return nativeexec.Command{
-		Path: helperExecutable, Args: []string{HelperMode}, Env: []string{"LANG=C", "LC_ALL=C"}, Dir: "/",
-		Stdin:       bytes.NewReader(data),
-		Credential:  &syscall.Credential{Uid: uint32(options.UID), Gid: uint32(options.GID), Groups: append([]uint32(nil), options.Groups...)},
-		ParentDeath: syscall.SIGKILL, WaitDelay: time.Second,
-	}
+	command := nativeexec.Helper(HelperMode, nativeexec.Account{UID: uint32(options.UID), GID: uint32(options.GID), Groups: options.Groups})
+	command.Stdin = bytes.NewReader(data)
+	return command
 }
 
 // ServeHelper accepts only the private selection protocol, under the account

@@ -4,6 +4,7 @@ package selectionfs
 import (
 	"context"
 
+	"github.com/crmarques/bootwright/internal/nativeexec"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -14,7 +15,11 @@ type Options struct {
 	Groups   []uint32
 }
 
-type Store struct{ options Options }
+type Store struct {
+	options   Options
+	effective func() int
+	launcher  nativeexec.Launcher
+}
 
 func New(options Options) *Store {
 	options.Groups = append([]uint32(nil), options.Groups...)

@@ -6,40 +6,29 @@ import (
 	"context"
 	"encoding/binary"
 	"os"
-	"os/exec"
 	"runtime"
 	"syscall"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
-const (
-	requestDeadline  = 10 * time.Second
-	helperExecutable = "/proc/self/exe"
-)
+const requestDeadline = 10 * time.Second
 
 type launch struct {
-	command  func(Account, *os.File) *exec.Cmd
+	launcher nativeexec.Launcher
 	deadline time.Duration
 }
 
-var production = launch{command: helperCommand, deadline: requestDeadline}
+var production = launch{deadline: requestDeadline}
 
 // helperCommand runs this same program, which the child resolves through
 // procfs after its credential change, so root never resolves a pathname the
 // invoking account controls.
-func helperCommand(account Account, socket *os.File) *exec.Cmd {
-	return &exec.Cmd{
-		Path:       helperExecutable,
-		Args:       []string{helperExecutable, HelperMode},
-		Env:        []string{"LANG=C", "LC_ALL=C"},
-		Dir:        "/",
-		ExtraFiles: []*os.File{socket},
-		SysProcAttr: &syscall.SysProcAttr{
-			Credential: &syscall.Credential{Uid: uint32(account.UID), Gid: uint32(account.GID), Groups: append([]uint32(nil), account.Groups...)},
-			Pdeathsig:  syscall.SIGKILL,
-		},
-		WaitDelay: time.Second,
-	}
+func helperCommand(account Account, socket *os.File) nativeexec.Command {
+	command := nativeexec.Helper(HelperMode, nativeexec.Account{UID: uint32(account.UID), GID: uint32(account.GID), Groups: account.Groups})
+	command.ExtraFiles = []*os.File{socket}
+	return command
 }
 
 // channel is root's end of one helper. The helper's replies are untrusted:
@@ -60,11 +49,7 @@ func spawn(ctx context.Context, account Account, l launch) (*channel, error) {
 	if err != nil {
 		return nil, errHelper
 	}
-	command := l.command(account, remote)
-	started := make(chan error, 1)
-	exited := make(chan struct{})
-	go supervise(command, started, exited)
-	err = <-started
+	process, err := l.launcher.Start(ctx, helperCommand(account, remote))
 	remote.Close()
 	if err != nil {
 		local.Close()
@@ -73,24 +58,7 @@ func spawn(ctx context.Context, account Account, l launch) (*channel, error) {
 		}
 		return nil, errHelper
 	}
-	process := command.Process
-	return connect(ctx, local, account, l.deadline, func() { process.Kill() }, exited)
-}
-
-// supervise starts and reaps the helper from one locked thread, because the
-// kernel sends Pdeathsig when the creating thread exits (golang/go#27505).
-// The helper's exit status is untrusted and carries nothing, so Wait's error
-// is not consulted.
-func supervise(command *exec.Cmd, started chan<- error, exited chan<- struct{}) {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	if err := command.Start(); err != nil {
-		started <- err
-		return
-	}
-	started <- nil
-	command.Wait()
-	close(exited)
+	return connect(ctx, local, account, l.deadline, process.Kill, process.Done())
 }
 
 func socketPair() (*os.File, *os.File, error) {

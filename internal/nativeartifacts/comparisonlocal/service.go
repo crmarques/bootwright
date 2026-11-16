@@ -43,8 +43,7 @@ type Service struct {
 	Scratch            string
 
 	effective func() int
-	helper    func(context.Context, Account, []byte) ([]byte, error)
-	start     func(context.Context, nativeexec.Command) nativeexec.Result
+	launcher  nativeexec.Launcher
 }
 
 type identity struct {
@@ -168,11 +167,7 @@ func lookTool(program string, search []string) (string, error) {
 }
 
 func (s Service) run(ctx context.Context, command nativeexec.Command, program string) error {
-	start := nativeexec.Run
-	if s.start != nil {
-		start = s.start
-	}
-	result := start(ctx, command)
+	result := s.launcher.Run(ctx, command)
 	switch {
 	case ctx.Err() != nil:
 		return ctx.Err()

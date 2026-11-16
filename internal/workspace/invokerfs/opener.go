@@ -3,7 +3,11 @@
 // that receives a descriptor keeps every type, ownership and stability proof.
 package invokerfs
 
-import "context"
+import (
+	"context"
+
+	"github.com/crmarques/bootwright/internal/nativeexec"
+)
 
 // HelperMode is the one argument the credential-dropped helper accepts.
 const HelperMode = "__bootwright_open"
@@ -18,7 +22,8 @@ type Account struct {
 // Opener resolves the invoking account only when a root process begins a
 // session, so constructing one acquires no account capability.
 type Opener struct {
-	account func(context.Context) (Account, error)
+	account  func(context.Context) (Account, error)
+	launcher nativeexec.Launcher
 }
 
 func New(account func(context.Context) (Account, error)) *Opener {

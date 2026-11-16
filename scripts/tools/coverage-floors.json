@@ -67,10 +67,10 @@
     "internal/managedos/media": 94.3,
     "internal/managedos/media/storecontract": 0.0,
     "internal/managedos/medialocal": 91.4,
-    "internal/nativeartifacts/comparisonlocal": 76.8,
+    "internal/nativeartifacts/comparisonlocal": 81.4,
     "internal/nativeartifacts/rendering": 89.8,
     "internal/nativeartifacts/renderlocal": 87.5,
-    "internal/nativeexec": 95.0,
+    "internal/nativeexec": 96.3,
     "internal/nativefs": 89.3,
     "internal/network": 96.2,
     "internal/reconciliation": 89.7,
@@ -104,8 +104,8 @@
     "internal/trust/enrollment": 92.7,
     "internal/workspace/contextfs": 82.1,
     "internal/workspace/contexts": 89.4,
-    "internal/workspace/invokerfs": 79.2,
-    "internal/workspace/selectionfs": 78.2
+    "internal/workspace/invokerfs": 84.6,
+    "internal/workspace/selectionfs": 85.1
   },
   "collection": {
     "action": 91.3,

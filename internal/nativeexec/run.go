@@ -37,6 +37,7 @@ type Command struct {
 	Foreground  bool
 	Credential  *syscall.Credential
 	ParentDeath syscall.Signal
+	ExtraFiles  []*os.File
 }
 
 type Result struct {
@@ -56,16 +57,69 @@ func Run(ctx context.Context, command Command) Result {
 	if !filepath.IsAbs(command.Path) {
 		return Result{Outcome: StartFailed, ExitCode: -1, Err: errRelative}
 	}
+	process, group := prepare(ctx, command)
+	err := supervise(process, command.ParentDeath != 0)
+	return classify(ctx, process, err, group)
+}
+
+func prepare(ctx context.Context, command Command) (*exec.Cmd, bool) {
 	process := exec.CommandContext(ctx, command.Path, command.Args...)
 	process.Env = append([]string{}, command.Env...)
 	process.Dir = cmp.Or(command.Dir, "/")
 	process.Stdin, process.Stdout, process.Stderr = command.Stdin, command.Stdout, command.Stderr
+	process.ExtraFiles = append([]*os.File(nil), command.ExtraFiles...)
 	process.WaitDelay = cmp.Or(command.WaitDelay, DefaultWaitDelay)
 	process.SysProcAttr = attributes(command)
 	group, interrupt := !command.Foreground, cmp.Or(command.Interrupt, syscall.SIGKILL)
 	process.Cancel = func() error { return signal(process.Process, interrupt, group) }
-	err := supervise(process, command.ParentDeath != 0)
-	return classify(ctx, process, err, group)
+	return process, group
+}
+
+type Process struct {
+	done   chan struct{}
+	result Result
+	cancel context.CancelFunc
+}
+
+func Start(ctx context.Context, command Command) (*Process, error) {
+	if !filepath.IsAbs(command.Path) {
+		return nil, errRelative
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	process, group := prepare(ctx, command)
+	started := make(chan error, 1)
+	p := &Process{done: make(chan struct{}), cancel: cancel}
+	go p.supervise(ctx, process, command.ParentDeath != 0, group, started)
+	if err := <-started; err != nil {
+		cancel()
+		return nil, err
+	}
+	return p, nil
+}
+
+func (p *Process) supervise(ctx context.Context, process *exec.Cmd, locked, group bool, started chan<- error) {
+	defer close(p.done)
+	if locked {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+	}
+	if err := process.Start(); err != nil {
+		started <- err
+		return
+	}
+	started <- nil
+	err := process.Wait()
+	p.result = classify(ctx, process, err, group)
+	p.cancel()
+}
+
+func (p *Process) Kill() { p.cancel() }
+
+func (p *Process) Done() <-chan struct{} { return p.done }
+
+func (p *Process) Wait() Result {
+	<-p.done
+	return p.result
 }
 
 func supervise(process *exec.Cmd, locked bool) error {

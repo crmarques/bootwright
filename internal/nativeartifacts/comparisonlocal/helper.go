@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -30,13 +29,12 @@ const (
 )
 
 const (
-	maximumTree      = 64 << 20
-	maximumRequest   = maximumTree + 64<<10
-	maximumResponse  = 16 << 10
-	maximumPath      = 4096
-	maximumText      = 2048
-	helperDeadline   = time.Minute
-	helperExecutable = "/proc/self/exe"
+	maximumTree     = 64 << 20
+	maximumRequest  = maximumTree + 64<<10
+	maximumResponse = 16 << 10
+	maximumPath     = 4096
+	maximumText     = 2048
+	helperDeadline  = time.Minute
 )
 
 var errHelper = errors.New("the invoking account's file helper failed")
@@ -69,13 +67,9 @@ func (s Service) perform(ctx context.Context, who identity, request helperReques
 	if err != nil || len(data) > maximumRequest {
 		return "", refuse("the comparison request exceeds what the invoking account's helper accepts", "narrow the diff to fewer objects")
 	}
-	helper := spawnHelper
-	if s.helper != nil {
-		helper = s.helper
-	}
 	operation, cancel := context.WithTimeout(ctx, helperDeadline)
 	defer cancel()
-	output, err := helper(operation, who.account, data)
+	output, err := s.spawnHelper(operation, who.account, data)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
@@ -85,21 +79,20 @@ func (s Service) perform(ctx context.Context, who identity, request helperReques
 	return decodeResponse(request.Action, output)
 }
 
-func spawnHelper(ctx context.Context, account Account, data []byte) ([]byte, error) {
+func (s Service) spawnHelper(ctx context.Context, account Account, data []byte) ([]byte, error) {
 	command := helperCommand(account, data)
 	output := nativeexec.Head(maximumResponse)
 	command.Stdout = output
-	if result := nativeexec.Run(ctx, command); !result.Succeeded() || output.Overflowed() {
+	if result := s.launcher.Run(ctx, command); !result.Succeeded() || output.Overflowed() {
 		return nil, errHelper
 	}
 	return output.Bytes(), nil
 }
 
 func helperCommand(account Account, data []byte) nativeexec.Command {
-	return nativeexec.Command{
-		Path: helperExecutable, Args: []string{HelperMode}, Env: []string{"LANG=C", "LC_ALL=C"}, Dir: "/",
-		Stdin: bytes.NewReader(data), Credential: accountCredential(account), ParentDeath: syscall.SIGKILL, WaitDelay: time.Second,
-	}
+	command := nativeexec.Helper(HelperMode, nativeexec.Account{UID: uint32(account.UID), GID: uint32(account.GID), Groups: account.Groups})
+	command.Stdin = bytes.NewReader(data)
+	return command
 }
 
 func decodeResponse(action string, data []byte) (string, error) {

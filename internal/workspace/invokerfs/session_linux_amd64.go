@@ -93,7 +93,7 @@ func (o *Opener) begin(ctx context.Context, euid int) (*Session, error) {
 	case account.UID == 0:
 		return newSession(direct{root: true}), nil
 	case account.UID > 0 && account.UID <= maxID && account.GID >= 0 && account.GID <= maxID:
-		helper, err := spawn(ctx, account, production)
+		helper, err := spawn(ctx, account, launch{launcher: o.launcher, deadline: production.deadline})
 		if err != nil {
 			return nil, err
 		}

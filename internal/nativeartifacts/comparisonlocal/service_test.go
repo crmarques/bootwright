@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -230,6 +232,30 @@ type accountHelper struct {
 	accounts []Account
 	actions  []string
 	reply    func(helperRequest) helperResponse
+	tool     func(context.Context, nativeexec.Command) nativeexec.Result
+}
+
+func (h *accountHelper) run(ctx context.Context, command nativeexec.Command) nativeexec.Result {
+	if command.Path != nativeexec.SelfExecutable {
+		if h.tool == nil {
+			h.t.Fatalf("root started %s", command.Path)
+		}
+		return h.tool(ctx, command)
+	}
+	credential := command.Credential
+	if !slices.Equal(command.Args, []string{HelperMode}) || credential == nil || command.ParentDeath != syscall.SIGKILL {
+		h.t.Fatalf("helper command %+v", command)
+	}
+	data, err := io.ReadAll(command.Stdin)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	output, err := h.serve(ctx, Account{UID: int(credential.Uid), GID: int(credential.Gid), Groups: credential.Groups}, data)
+	if err != nil {
+		return nativeexec.Result{Outcome: nativeexec.Exited, ExitCode: 1}
+	}
+	command.Stdout.Write(output)
+	return nativeexec.Result{Outcome: nativeexec.Exited}
 }
 
 func (h *accountHelper) serve(ctx context.Context, account Account, data []byte) ([]byte, error) {
@@ -261,7 +287,7 @@ func (h *accountHelper) serve(ctx context.Context, account Account, data []byte)
 func rootServing(t *testing.T, helper *accountHelper) Service {
 	return Service{
 		Trees: forbiddenTrees{t}, Account: func(context.Context) (Account, error) { return synthetic, nil },
-		effective: func() int { return 0 }, helper: helper.serve,
+		effective: func() int { return 0 }, launcher: nativeexec.Launcher{Runner: helper.run},
 	}
 }
 
@@ -325,7 +351,7 @@ func TestRootServingAnotherAccountRunsTheToolAsThatAccount(t *testing.T) {
 	service := rootServing(t, helper)
 	service.Scratch, service.Terminal, service.Language = t.TempDir(), "xterm", "C.UTF-8"
 	var commands []nativeexec.Command
-	service.start = func(_ context.Context, command nativeexec.Command) nativeexec.Result {
+	helper.tool = func(_ context.Context, command nativeexec.Command) nativeexec.Result {
 		commands = append(commands, command)
 		return nativeexec.Result{Outcome: nativeexec.Exited, ExitCode: 1}
 	}
@@ -397,7 +423,7 @@ func rootAccount(context.Context) (Account, error) {
 
 func TestRunToolRefusesARootInvokingAccountBeforeWritingAnything(t *testing.T) {
 	service := Service{Trees: forbiddenTrees{t}, Account: rootAccount, effective: func() int { return 0 }, Scratch: t.TempDir()}
-	service.start = func(context.Context, nativeexec.Command) nativeexec.Result {
+	service.launcher.Runner = func(context.Context, nativeexec.Command) nativeexec.Result {
 		t.Fatal("a comparison program was started as root")
 		return nativeexec.Result{}
 	}
