@@ -295,8 +295,34 @@ focus:
 quick: fmt-check vet
 	./scripts/quick-test
 
+# Every production package that starts a goroutine, imports sync or takes a
+# file lock; test/architecture refuses one missing here. cmd/bootwright takes
+# about nine minutes under -race, so the timeout is raised from the 10-minute
+# default to leave room for a loaded host (B1339, B1457).
+RACE_PACKAGES = ./internal/reconciliation/... ./internal/controller/privilege/... ./internal/trust/... ./cmd/bootwright/... \
+	./ansible \
+	./api/v1alpha1 \
+	./internal/adapterprotocol \
+	./internal/cli \
+	./internal/controller \
+	./internal/controller/hostdnf \
+	./internal/controller/stagelocal \
+	./internal/controller/venvlocal \
+	./internal/environment \
+	./internal/environment/clusterpreflight \
+	./internal/machine/access \
+	./internal/machine/power \
+	./internal/machine/sshlocal \
+	./internal/nativeartifacts/comparisonlocal \
+	./internal/substrate/kubevirt \
+	./internal/workspace/contextfs \
+	./internal/workspace/invokerfs \
+	./internal/workspace/selectionfs
+
+RACE_TIMEOUT = 30m
+
 race: wheels
-	$(GO) test -race ./internal/reconciliation/... ./internal/controller/privilege/... ./internal/trust/... ./cmd/bootwright/...
+	$(GO) test -race -timeout $(RACE_TIMEOUT) $(RACE_PACKAGES)
 
 # Every gate that needs no network once module and wheel caches are warm. Vulnerability
 # data and the Ansible tool bootstrap need network, so they are reported unrun.
