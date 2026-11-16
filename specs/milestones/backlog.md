@@ -4073,6 +4073,8 @@ holding such a clause, the clauses pending and the work they enable.
   Bootwright-owned NetworkManager trunk and one owned nftables routing table
   per provider (X395); (7), turning on `net.ipv4.ip_forward`, is outside the
   approved boundary.
+- [D274](#d274): clauses (1) to (9), the code quality audit 005 program
+  (X497 to X500).
 
 ### D1
 
@@ -9193,3 +9195,41 @@ The current discovery contract changes: unfinished HTTPS boots are removed
 with their existing executable before a fresh SSH discovery. The owner's
 focused-check instruction remains in force until E2E acceptance. No real-host
 operation or push is authorized.
+
+### D274
+
+**session-pending** (2026-11-16, the owner's request; clauses (1) to (9) are
+the session's): shown [code audit 005](../../audits/005-code-quality/report-fable.md)
+and its improvement plan, asks to "proceed with plan implementation". This
+authorizes, out of sequence for implementation, the plan's workstreams in its
+order: X497 (M1, B1435 to B1449) and X498 (M2, B1450 to B1452) for the
+confirmed defects, X499 (M3, B1453) after them, and X500 (M1, B1454 to B1462)
+for the gates, no more than two active at once; then B1463 to B1470 (W2 to
+W9), each cut into slices when it starts. The owner did not answer the plan's
+open decisions, so the session takes the report's recommendations, pending
+the owner's review:
+
+1. A setup state that cannot be read for an I/O, bound or permission reason
+   refuses and keeps the state; only content that decodes with another format
+   reads as written by another build (B1439).
+2. Ceph readiness stays judged in the Python worker as a named exception until
+   W4 reshapes the Ceph request (B1466).
+3. Coverage is measured per package with floors that only rise; Python
+   coverage uses a recorder on the standard library, not a new dependency
+   (B1455).
+4. One static analyzer is pinned in the tools module with an exclusion list
+   that only shrinks (B1456).
+5. The per-package golden helpers stay, held to the model by a drift check
+   (B1462).
+6. A role may include an assertions-only file before its handoff (B1466).
+7. Keyring identity reservations are compacted into one authenticated record,
+   a spec change in the safety class (B1468).
+8. The unreachable native Ceph SSH transport is deleted with its test
+   patches (B1456).
+9. End-to-end cases share a base; examples stay self-contained (B1470).
+
+The owner's focused-check instruction of [D273](#d273) remains in force:
+until E2E acceptance, each slice lands on its focused checks, the changed
+packages' tests and, in the safety class, their race runs, and records that
+`make check` was deferred. No real-host operation, release or push is
+authorized.
