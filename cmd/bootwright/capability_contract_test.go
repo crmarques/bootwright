@@ -845,7 +845,7 @@ func contractProduced(t *testing.T, row contractRow, execution lifecycle.Executi
 	digest := execution.Block.RequestDigest
 	evidence := []json.RawMessage{json.RawMessage(`{}`), contractPresence(t, row, execution, digest), contractAbsence(t, row, digest), contractPartial(t, row, execution, digest)}
 	for _, operation := range []string{"apply", "observe", "destroy", "observe-removal"} {
-		for _, outcome := range []string{"changed", "unchanged"} {
+		for _, outcome := range []reconciliation.Outcome{reconciliation.OutcomeChanged, reconciliation.OutcomeUnchanged} {
 			for _, scripted := range evidence {
 				runner.script(lifecycle.RunResult{Outcome: outcome, Evidence: scripted}, nil)
 				result, observation, _ := contractCall(capability, operation, execution)
@@ -999,7 +999,7 @@ func contractEvidence(t *testing.T, row contractRow, example contractExample, bl
 		foreign = append(foreign, contractUnready(t, row, execution, other), contractRemovalPartial(t, row, execution, other))
 	}
 	for _, operation := range contractMutationOperations(row) {
-		for _, outcome := range []string{"changed", "unchanged"} {
+		for _, outcome := range []reconciliation.Outcome{reconciliation.OutcomeChanged, reconciliation.OutcomeUnchanged} {
 			for _, evidence := range append([]json.RawMessage{json.RawMessage(`{}`)}, foreign...) {
 				runner.script(lifecycle.RunResult{Outcome: outcome, Evidence: evidence}, nil)
 				result, _, _ := contractCall(capability, operation, execution)
@@ -1122,7 +1122,7 @@ func contractEvidenceKinds(t *testing.T, row contractRow, block reconciliation.B
 		if row.retirementOnly && attempt.operation == "destroy" {
 			continue
 		}
-		for _, outcome := range []string{"changed", "unchanged"} {
+		for _, outcome := range []reconciliation.Outcome{reconciliation.OutcomeChanged, reconciliation.OutcomeUnchanged} {
 			for _, evidence := range attempt.evidence {
 				runner.script(lifecycle.RunResult{Outcome: outcome, Evidence: evidence}, nil)
 				result, _, _ := contractCall(capability, attempt.operation, execution)
@@ -1172,7 +1172,7 @@ func contractEvidenceControls(t *testing.T, row contractRow, block reconciliatio
 	absence := contractAbsence(t, row, block.RequestDigest)
 	controls := []struct {
 		operation string
-		outcome   string
+		outcome   reconciliation.Outcome
 		evidence  json.RawMessage
 		want      reconciliation.Outcome
 	}{

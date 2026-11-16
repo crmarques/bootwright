@@ -143,13 +143,8 @@ func (c MachineCapability) mutate(ctx context.Context, execution lifecycle.Execu
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	var outcome reconciliation.Outcome
-	switch result.Outcome {
-	case "changed":
-		outcome = reconciliation.OutcomeChanged
-	case "unchanged":
-		outcome = reconciliation.OutcomeUnchanged
-	default:
+	outcome, usable := result.Outcome, result.Outcome.Settled()
+	if !usable {
 		return unknown, refusal("lifecycle.state", "the machine adapter reported no usable outcome", "")
 	}
 	digest := execution.Block.RequestDigest
@@ -182,7 +177,7 @@ func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Exec
 	}
 	if effect, _ := machineEffect(reconciliation.Apply, result.Evidence, request, execution.Block.RequestDigest); effect == reconciliation.EffectCompleted {
 		return lifecycle.Observation{
-			Effect: reconciliation.EffectCompleted, Outcome: reconciliation.Outcome(result.Outcome), Evidence: result.Evidence,
+			Effect: reconciliation.EffectCompleted, Outcome: result.Outcome, Evidence: result.Evidence,
 		}, nil
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil

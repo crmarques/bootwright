@@ -233,13 +233,8 @@ func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execu
 		lifecycle.ClearProduced(result.Produced)
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	var outcome reconciliation.Outcome
-	switch result.Outcome {
-	case "changed":
-		outcome = reconciliation.OutcomeChanged
-	case "unchanged":
-		outcome = reconciliation.OutcomeUnchanged
-	default:
+	outcome, usable := result.Outcome, result.Outcome.Settled()
+	if !usable {
 		lifecycle.ClearProduced(result.Produced)
 		return unknown, refusal("lifecycle.state", "the installation adapter reported no usable outcome", "")
 	}

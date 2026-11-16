@@ -591,11 +591,8 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 }
 
 func usableOutcome(result lifecycle.RunResult, subject string) (reconciliation.Outcome, error) {
-	switch result.Outcome {
-	case "changed":
-		return reconciliation.OutcomeChanged, nil
-	case "unchanged":
-		return reconciliation.OutcomeUnchanged, nil
+	if result.Outcome.Settled() {
+		return result.Outcome, nil
 	}
 	return "", refusal("lifecycle.state", "the "+subject+" adapter reported no usable outcome", "")
 }

@@ -22,9 +22,9 @@ type resizingHypervisor struct {
 
 func (h resizingHypervisor) Run(_ context.Context, run lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	size := h.request.Disks[0].SizeGiB
-	outcome := "changed"
+	outcome := reconciliation.OutcomeChanged
 	if run.Operation == "observe" {
-		size, outcome = h.observedGiB, "unchanged"
+		size, outcome = h.observedGiB, reconciliation.OutcomeUnchanged
 	}
 	evidence := libvirt.MachineEvidence{
 		Answered: true, Controller: h.request.Controller.Image, Domain: h.request.Domain, Listener: held(true), Owned: true,

@@ -276,7 +276,7 @@ func (c ReplicationCapability) Apply(ctx context.Context, e lifecycle.Execution)
 		lifecycle.ClearProduced(result.Produced)
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "replication did not prove both endpoints and initial synchronization", "")
 	}
-	outcome, known := map[string]reconciliation.Outcome{"changed": reconciliation.OutcomeChanged, "unchanged": reconciliation.OutcomeUnchanged}[result.Outcome]
+	outcome, known := result.Outcome, result.Outcome.Settled()
 	if !known {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "replication returned no known outcome", "")
 	}

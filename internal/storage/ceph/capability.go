@@ -533,10 +533,8 @@ func (c Capability) mutate(ctx context.Context, e lifecycle.Execution, operation
 		lifecycle.ClearProduced(result.Produced)
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "Ceph did not prove the requested postcondition", "")
 	}
-	outcome := reconciliation.OutcomeChanged
-	if result.Outcome == "unchanged" {
-		outcome = reconciliation.OutcomeUnchanged
-	} else if result.Outcome != "changed" {
+	outcome, usable := result.Outcome, result.Outcome.Settled()
+	if !usable {
 		lifecycle.ClearProduced(result.Produced)
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "Ceph returned an unknown outcome", "")
 	}

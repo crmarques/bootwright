@@ -135,7 +135,7 @@ func ReadOnlyRun(e Execution) bool { return e.ReadOnly || e.Attempt == 0 || e.Re
 const MaxDeadline = 6 * time.Hour
 
 type RunResult struct {
-	Outcome  string
+	Outcome  reconciliation.Outcome
 	Evidence json.RawMessage
 	Produced []Produced
 	// NotStarted reports a run the runner refused before it launched any job,

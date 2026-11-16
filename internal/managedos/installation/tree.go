@@ -234,16 +234,10 @@ func (c TreeCapability) mutate(ctx context.Context, execution lifecycle.Executio
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	outcome := reconciliation.OutcomeUnknown
-	if result.Outcome == "changed" {
-		outcome = reconciliation.OutcomeChanged
-	}
-	if result.Outcome == "unchanged" {
-		outcome = reconciliation.OutcomeUnchanged
-	}
+	outcome, usable := result.Outcome, result.Outcome.Settled()
 	evidence, err := decodeTreeEvidence(result.Evidence, execution.Block.RequestDigest)
 	valid := err == nil && evidence.Postcondition && (operation != "destroy" || evidence.Absent) && treeEffect(evidence, request, operation == "destroy") == reconciliation.EffectCompleted
-	if outcome == reconciliation.OutcomeUnknown || !valid {
+	if !usable || !valid {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, refusal("lifecycle.state", "the package tree adapter did not prove its postcondition", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil

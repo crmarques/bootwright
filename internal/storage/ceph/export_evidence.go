@@ -163,7 +163,7 @@ func (c ConsumerCapability) Apply(ctx context.Context, e lifecycle.Execution) (l
 	if err == nil && effect == reconciliation.EffectCompleted {
 		err = validateExportProduced(result.Produced, r, e.ApplyOperation)
 	}
-	outcome, ok := map[string]reconciliation.Outcome{"changed": reconciliation.OutcomeChanged, "unchanged": reconciliation.OutcomeUnchanged}[result.Outcome]
+	outcome, ok := result.Outcome, result.Outcome.Settled()
 	if err != nil || effect != reconciliation.EffectCompleted || !ok {
 		lifecycle.ClearProduced(result.Produced)
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "Ceph consumer did not prove its complete postcondition", "")

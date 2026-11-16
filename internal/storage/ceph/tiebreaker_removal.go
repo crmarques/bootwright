@@ -42,7 +42,8 @@ func (c Capability) tiebreaker(ctx context.Context, e lifecycle.Execution, opera
 	if err != nil {
 		return TiebreakerEvidence{}, err
 	}
-	if operation == "destroy" && (result.Outcome != "changed" && result.Outcome != "unchanged" || !evidence.Removed || !evidence.Attempted && result.Outcome != "unchanged") {
+	usable := result.Outcome.Settled()
+	if operation == "destroy" && (!usable || !evidence.Removed || !evidence.Attempted && result.Outcome != reconciliation.OutcomeUnchanged) {
 		return TiebreakerEvidence{}, failure("lifecycle.unknown", "the provided tiebreaker Machine/"+host.Machine+"'s removal did not prove its footprint absent", "")
 	}
 	return evidence, nil

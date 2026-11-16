@@ -61,7 +61,7 @@ func TestSMBApplyProvesItsPostcondition(t *testing.T) {
 			}
 		})
 	}
-	for _, outcome := range []string{"failed", "skipped", ""} {
+	for _, outcome := range []reconciliation.Outcome{"failed", "skipped", ""} {
 		runner := &recordingRunner{result: lifecycle.RunResult{Outcome: outcome, Evidence: smbReady(t, e, r, nil)}}
 		got, err := NewSMB(runner).Apply(context.Background(), e)
 		refusedWith(t, err, "lifecycle.unknown", "Ceph SMB returned an unknown outcome", "")

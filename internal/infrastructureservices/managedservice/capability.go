@@ -342,7 +342,8 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	if result.Outcome != "changed" && result.Outcome != "unchanged" {
+	outcome, usable := result.Outcome, result.Outcome.Settled()
+	if !usable {
 		return unknown, Refusal("lifecycle.state", "the managed service adapter reported no usable outcome", "")
 	}
 	digest := execution.Block.RequestDigest
@@ -356,10 +357,6 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 	}
 	if err != nil {
 		return unknown, err
-	}
-	outcome := reconciliation.OutcomeChanged
-	if result.Outcome == "unchanged" {
-		outcome = reconciliation.OutcomeUnchanged
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }

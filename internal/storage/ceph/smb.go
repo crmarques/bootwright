@@ -522,7 +522,7 @@ func (c SMBCapability) Apply(ctx context.Context, e lifecycle.Execution) (lifecy
 		lifecycle.ClearProduced(result.Produced)
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "Ceph SMB did not prove the requested postcondition", "")
 	}
-	outcome, known := map[string]reconciliation.Outcome{"changed": reconciliation.OutcomeChanged, "unchanged": reconciliation.OutcomeUnchanged}[result.Outcome]
+	outcome, known := result.Outcome, result.Outcome.Settled()
 	if !known {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "Ceph SMB returned an unknown outcome", "")
 	}

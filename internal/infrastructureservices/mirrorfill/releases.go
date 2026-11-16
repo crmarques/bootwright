@@ -221,9 +221,9 @@ func (c ReleaseFill) mutate(ctx context.Context, execution lifecycle.Execution, 
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	outcome := map[string]reconciliation.Outcome{"changed": reconciliation.OutcomeChanged, "unchanged": reconciliation.OutcomeUnchanged}[result.Outcome]
+	outcome, usable := result.Outcome, result.Outcome.Settled()
 	evidence, err := decodeReleaseEvidence(result.Evidence, execution.Block.RequestDigest)
-	if outcome == "" || err != nil || !evidence.Postcondition || releaseEffect(evidence, request, operation == "destroy") != reconciliation.EffectCompleted {
+	if !usable || err != nil || !evidence.Postcondition || releaseEffect(evidence, request, operation == "destroy") != reconciliation.EffectCompleted {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, refusal("lifecycle.state", "the mirror release adapter did not prove its postcondition", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil

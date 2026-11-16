@@ -336,13 +336,8 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	var outcome reconciliation.Outcome
-	switch result.Outcome {
-	case "changed":
-		outcome = reconciliation.OutcomeChanged
-	case "unchanged":
-		outcome = reconciliation.OutcomeUnchanged
-	default:
+	outcome, usable := result.Outcome, result.Outcome.Settled()
+	if !usable {
 		return unknown, refusal("lifecycle.state", "the installation adapter reported no usable outcome", "")
 	}
 	digest := execution.Block.RequestDigest

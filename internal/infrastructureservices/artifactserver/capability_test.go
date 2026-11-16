@@ -233,7 +233,7 @@ func TestApplyValidatesTheAdapterOutcomeAndEvidence(t *testing.T) {
 	if err != nil || result.Outcome != reconciliation.OutcomeUnchanged {
 		t.Fatalf("replay = %+v (%v)", result, err)
 	}
-	for name, outcome := range map[string]string{"no-effect": "no-effect", "failed": "failed", "invented": "done"} {
+	for name, outcome := range map[string]reconciliation.Outcome{"no-effect": "no-effect", "failed": "failed", "invented": "done"} {
 		t.Run(name, func(t *testing.T) {
 			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: outcome}}
 			result, err := New(runner, fixedClock{}).Apply(context.Background(), call)

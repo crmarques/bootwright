@@ -18,6 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/adapterprotocol"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -447,7 +448,7 @@ func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Endi
 		if j.request.Warn != nil && len(ending.Warnings) != 0 {
 			j.request.Warn(ctx, warnings(ending.Warnings))
 		}
-		return lifecycle.RunResult{Outcome: ending.Outcome, Evidence: slices.Clone(ending.Evidence)}, nil
+		return lifecycle.RunResult{Outcome: reconciliation.Outcome(ending.Outcome), Evidence: slices.Clone(ending.Evidence)}, nil
 	case adapterprotocol.Canceled:
 		return lifecycle.RunResult{}, ctx.Err()
 	case adapterprotocol.Named:

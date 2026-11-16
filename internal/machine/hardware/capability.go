@@ -17,8 +17,6 @@ import (
 
 type Capability struct{ runner Runner }
 
-var outcomes = map[string]reconciliation.Outcome{"changed": reconciliation.OutcomeChanged, "unchanged": reconciliation.OutcomeUnchanged}
-
 func New(runner Runner) Capability { return Capability{runner: runner} }
 
 func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
@@ -92,7 +90,7 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	outcome, usable := outcomes[result.Outcome]
+	outcome, usable := result.Outcome, result.Outcome.Settled()
 	if !usable {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, refusal("lifecycle.state", "the machine hardware adapter reported no usable outcome", "")
 	}
@@ -115,7 +113,7 @@ func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) 
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	outcome, usable := outcomes[result.Outcome]
+	outcome, usable := result.Outcome, result.Outcome.Settled()
 	evidence, err := decodeEvidence(result.Evidence)
 	if err != nil || !usable || !evidence.Absent || !evidence.Postcondition || evidence.Request != execution.Block.RequestDigest {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, refusal("lifecycle.state", "the machine hardware adapter did not prove the release of its claim", "")

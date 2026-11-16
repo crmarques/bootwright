@@ -51,6 +51,8 @@ const (
 	OutcomeUnknown   Outcome = "unknown"
 )
 
+func (o Outcome) Settled() bool { return o == OutcomeChanged || o == OutcomeUnchanged }
+
 func ValidOperationState(value OperationState) bool {
 	switch value {
 	case OperationRunning, OperationPaused, OperationFailed, OperationUnknown, OperationDone:

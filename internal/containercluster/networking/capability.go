@@ -35,10 +35,8 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 	if err != nil || effect != reconciliation.EffectCompleted {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown, Evidence: safe}, fmt.Errorf("cluster network adapter did not prove completion")
 	}
-	outcome := reconciliation.OutcomeChanged
-	if result.Outcome == "unchanged" {
-		outcome = reconciliation.OutcomeUnchanged
-	} else if result.Outcome != "changed" {
+	outcome, usable := result.Outcome, result.Outcome.Settled()
+	if !usable {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown, Evidence: safe}, fmt.Errorf("cluster network adapter returned unknown outcome")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: safe}, nil

@@ -245,7 +245,7 @@ func TestDestroyRetiresAClusterBlockWhoseApplyRefusedAtPrerequisites(t *testing.
 	r := providedStretchRequest(t)
 	untouched, _ := json.Marshal(removedTiebreaker(r, true, false))
 	runner := &tiebreakerRunner{answer: func(request lifecycle.RunRequest) (lifecycle.RunResult, error) {
-		outcome := "unchanged"
+		outcome := reconciliation.OutcomeUnchanged
 		if request.Operation == "observe" {
 			outcome = ""
 		}

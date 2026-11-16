@@ -61,9 +61,9 @@ func (i *placingInstaller) Run(_ context.Context, run lifecycle.RunRequest) (lif
 	if run.Operation == "apply" || len(run.Outputs) != 0 {
 		produced = adminKubeconfig()
 	}
-	outcome := "unchanged"
+	outcome := reconciliation.OutcomeUnchanged
 	if run.Operation == "apply" {
-		outcome = "changed"
+		outcome = reconciliation.OutcomeChanged
 	}
 	return lifecycle.RunResult{Outcome: outcome, Evidence: installEvidenceOf(evidence), Produced: produced}, nil
 }

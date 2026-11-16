@@ -593,9 +593,9 @@ func (c HostCapability) Apply(ctx context.Context, e lifecycle.Execution) (lifec
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	outcome := map[string]reconciliation.Outcome{"changed": reconciliation.OutcomeChanged, "unchanged": reconciliation.OutcomeUnchanged}[result.Outcome]
+	outcome, usable := result.Outcome, result.Outcome.Settled()
 	evidence, err := decodeHostEvidence(result.Evidence, e.Block.RequestDigest)
-	if outcome == "" || err != nil || hostEffect(evidence, r) != reconciliation.EffectCompleted {
+	if !usable || err != nil || hostEffect(evidence, r) != reconciliation.EffectCompleted {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "the Ceph host preparation did not prove its postcondition", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
@@ -646,7 +646,7 @@ func (c HostCapability) Destroy(ctx context.Context, e lifecycle.Execution) (lif
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
 	evidence, err := decodeHostEvidence(result.Evidence, e.Block.RequestDigest)
-	if err != nil || result.Outcome != "unchanged" || !retained(evidence, r) {
+	if err != nil || result.Outcome != reconciliation.OutcomeUnchanged || !retained(evidence, r) {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "the Ceph host release did not prove that it made no effect", "")
 	}
 	return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: result.Evidence}, nil
@@ -780,10 +780,8 @@ func (c HostCapability) cleanupPhysicalHost(ctx context.Context, e lifecycle.Exe
 	if err != nil || !evidence.identifies(r) || evidence.NativeRemoved && !retained(evidence, r) || !observe && (!evidence.NativeRemoved || !retained(evidence, r)) {
 		return lifecycle.Result{}, failure("lifecycle.unknown", "the retained-root Ceph host cleanup did not prove native absence", "continue the original removal")
 	}
-	outcome := reconciliation.OutcomeUnchanged
-	if result.Outcome == "changed" {
-		outcome = reconciliation.OutcomeChanged
-	} else if result.Outcome != "unchanged" {
+	outcome, usable := result.Outcome, result.Outcome.Settled()
+	if !usable {
 		return lifecycle.Result{}, physicalPolicyFailure()
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil

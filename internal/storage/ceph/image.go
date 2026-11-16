@@ -337,12 +337,12 @@ func (c ImageCapability) mutate(ctx context.Context, e lifecycle.Execution, oper
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	outcome := map[string]reconciliation.Outcome{"changed": reconciliation.OutcomeChanged, "unchanged": reconciliation.OutcomeUnchanged}[result.Outcome]
+	outcome, usable := result.Outcome, result.Outcome.Settled()
 	evidence, err := decodeImageEvidence(result.Evidence, e.Block.RequestDigest)
 	if err == nil && operation == "apply" && selectedResolution(evidence, r) && !authoredMatches(evidence, r) {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, imageDigestMismatch()
 	}
-	if outcome == "" || err != nil || !evidence.Postcondition || imageEffect(evidence, r, operation == "destroy") != reconciliation.EffectCompleted {
+	if !usable || err != nil || !evidence.Postcondition || imageEffect(evidence, r, operation == "destroy") != reconciliation.EffectCompleted {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "the Ceph image resolution did not prove its postcondition", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil

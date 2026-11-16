@@ -172,7 +172,7 @@ func (c HostCapability) Apply(ctx context.Context, execution lifecycle.Execution
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	outcome, err := usableOutcome(result.Outcome, "KubeVirt provider")
+	outcome, err := usableOutcome(result, "KubeVirt provider")
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
 	}
@@ -193,7 +193,7 @@ func (c HostCapability) Destroy(ctx context.Context, execution lifecycle.Executi
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	outcome, err := usableOutcome(result.Outcome, "KubeVirt provider")
+	outcome, err := usableOutcome(result, "KubeVirt provider")
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
 	}
@@ -203,12 +203,9 @@ func (c HostCapability) Destroy(ctx context.Context, execution lifecycle.Executi
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
 
-func usableOutcome(reported, subject string) (reconciliation.Outcome, error) {
-	switch reported {
-	case "changed":
-		return reconciliation.OutcomeChanged, nil
-	case "unchanged":
-		return reconciliation.OutcomeUnchanged, nil
+func usableOutcome(result lifecycle.RunResult, subject string) (reconciliation.Outcome, error) {
+	if result.Outcome.Settled() {
+		return result.Outcome, nil
 	}
 	return "", refusal("lifecycle.state", "the "+subject+" adapter reported no usable outcome", "")
 }
@@ -487,7 +484,7 @@ func (c MachineCapability) mutate(ctx context.Context, execution lifecycle.Execu
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	outcome, err := usableOutcome(result.Outcome, "KubeVirt machine")
+	outcome, err := usableOutcome(result, "KubeVirt machine")
 	if err != nil {
 		return unknown, err
 	}

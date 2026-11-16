@@ -674,11 +674,12 @@ func TestTheInstallOffersItsKubeconfigOnlyOnProvedCompletion(t *testing.T) {
 	}
 	released := func(e *InstallEvidence) { e.Absent, e.Postcondition, e.Media = true, true, []string{} }
 	for _, test := range []struct {
-		name, outcome string
-		mutate        func(*InstallEvidence)
-		invoke        func(InstallCapability, lifecycle.Execution) ([]lifecycle.Produced, error)
-		declares      bool
-		offers        bool
+		name     string
+		outcome  reconciliation.Outcome
+		mutate   func(*InstallEvidence)
+		invoke   func(InstallCapability, lifecycle.Execution) ([]lifecycle.Produced, error)
+		declares bool
+		offers   bool
 	}{
 		{"apply proving presence", "changed", nil, applied, true, true},
 		{"apply settled", "unchanged", nil, applied, true, true},

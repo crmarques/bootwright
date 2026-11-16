@@ -215,9 +215,9 @@ func (h *kubevirtHost) machine(run lifecycle.RunRequest) (lifecycle.RunResult, e
 	} else {
 		evidence.Absent, evidence.Postcondition = true, !h.claims[name] && !h.uploaded[name]
 	}
-	outcome := "unchanged"
+	outcome := reconciliation.OutcomeUnchanged
 	if run.Operation != "observe" {
-		outcome = "changed"
+		outcome = reconciliation.OutcomeChanged
 	}
 	return kubevirtResult(outcome, evidence)
 }
@@ -326,7 +326,7 @@ func kubevirtInstalled(run lifecycle.RunRequest, request agentinstall.InstallReq
 	return result, err
 }
 
-func kubevirtResult(outcome string, evidence any) (lifecycle.RunResult, error) {
+func kubevirtResult(outcome reconciliation.Outcome, evidence any) (lifecycle.RunResult, error) {
 	data, err := json.Marshal(evidence)
 	return lifecycle.RunResult{Outcome: outcome, Evidence: data}, err
 }

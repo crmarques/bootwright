@@ -271,9 +271,9 @@ func (c FirewallCapability) mutate(ctx context.Context, execution lifecycle.Exec
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	outcome := map[string]reconciliation.Outcome{"changed": reconciliation.OutcomeChanged, "unchanged": reconciliation.OutcomeUnchanged}[result.Outcome]
+	outcome, usable := result.Outcome, result.Outcome.Settled()
 	evidence, err := decodeFirewallEvidence(result.Evidence, execution.Block.RequestDigest)
-	if outcome == "" || err != nil || evidence.Absent != removal || !evidence.Postcondition || firewallEffect(evidence, request, digests, removal) != reconciliation.EffectCompleted {
+	if !usable || err != nil || evidence.Absent != removal || !evidence.Postcondition || firewallEffect(evidence, request, digests, removal) != reconciliation.EffectCompleted {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, refusal("lifecycle.state", "the host firewall adapter did not prove its postcondition on Machine/"+request.Identity.Object, "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil

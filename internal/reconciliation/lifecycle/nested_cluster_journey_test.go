@@ -264,9 +264,9 @@ func (h *hostDomains) Run(_ context.Context, run lifecycle.RunRequest) (lifecycl
 		}
 		delete(h.defined, name)
 	}
-	outcome := "unchanged"
+	outcome := reconciliation.OutcomeUnchanged
 	if run.Operation != "observe" {
-		outcome = "changed"
+		outcome = reconciliation.OutcomeChanged
 	}
 	if !h.defined[name] {
 		return lifecycle.RunResult{Outcome: outcome, Evidence: evidenceOf(libvirt.MachineEvidence{Absent: true, Answered: true,
