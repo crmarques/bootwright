@@ -1559,7 +1559,9 @@ certificate; the worker verifies nothing that depends on the machine's clock.
 A different certificate, an unauthenticated answer or the fixed refusal ends
 the wait with its cause; silence keeps waiting up to the request deadline,
 while the controller rechecks every minute that the machine still runs with
-this discovery's media attached. The controller validates the canonical
+this discovery's media attached. Ownership checks use the common Redfish
+[media echo comparison](substrates.md#identity-and-power-operations) during
+observation, replay, waiting and cleanup. The controller validates the canonical
 framing, the `linux` source and the binding, and persists the immutable report
 before cleanup. The bootstrap prints fixed phases without hardware or secret
 values. Optional unmatched module aliases are quiet; driver probing and worker

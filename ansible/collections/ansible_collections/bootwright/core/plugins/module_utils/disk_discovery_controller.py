@@ -28,6 +28,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import tls_trust
 from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
 from ansible_collections.bootwright.core.plugins.module_utils import private_records as records
 from ansible_collections.bootwright.core.plugins.module_utils import redfish_control
+from ansible_collections.bootwright.core.plugins.module_utils import redfish_discovery
 
 ROOT = Path(hosted_area.ROOT)
 VERSION = "os-disk-discovery-v1"
@@ -170,7 +171,7 @@ class Controller:
             raise ValueError("discovery target power is unknown")
         _directory, url = self.publication()
         inserted = client.inserted()
-        if inserted not in ("", url) or (power == "On" and inserted != url):
+        if not redfish_discovery.image_matches(inserted, url) and (power == "On" or inserted != ""):
             raise ValueError("foreign virtual media")
 
     def completion(self):
@@ -405,7 +406,7 @@ class Controller:
         power = self.target(client)
         if power == "Off":
             raise ValueError("discovery target stopped before its inventory")
-        if client.inserted() != url:
+        if not redfish_discovery.image_matches(client.inserted(), url):
             raise ValueError("discovery lost ownership of the running boot")
 
     def receive(self):
@@ -443,7 +444,7 @@ class Controller:
         destination, url = self.publication()
         del destination
         if power == "On":
-            if not self.booted() or client.inserted() != url:
+            if not self.booted() or not redfish_discovery.image_matches(client.inserted(), url):
                 raise ValueError("discovery target is already running")
             self.skip(*BOOT_GROUPS)
             return  # The original RAM worker is still booting or serving.
@@ -456,7 +457,8 @@ class Controller:
         client = self.client()
         if self.target(client) != "Off":
             raise ValueError("discovery target started before insertion")
-        if client.inserted() not in ("", url):
+        inserted = client.inserted()
+        if inserted != "" and not redfish_discovery.image_matches(inserted, url):
             raise ValueError("foreign virtual media")
         certificate = records.read(Path(self.material["artifactCertificate"])).decode()
         self.phase = "media-delivery"
@@ -482,7 +484,7 @@ class Controller:
         del unused
         with self.progress("power-off"):
             while self.target(client) != "Off":
-                if client.inserted() != url:
+                if not redfish_discovery.image_matches(client.inserted(), url):
                     raise ValueError("discovery lost ownership of the running boot")
                 client.power("ForceOff", "Off")
                 if time.monotonic() >= deadline:
@@ -490,7 +492,8 @@ class Controller:
                 time.sleep(3)
                 client = self.client()
         with self.progress("eject-media"):
-            if client.inserted() not in ("", url):
+            inserted = client.inserted()
+            if inserted != "" and not redfish_discovery.image_matches(inserted, url):
                 raise ValueError("foreign virtual media during cleanup")
             virtual = self.request["controller"]["virtualMedia"]
             certificate = records.read(Path(self.material["artifactCertificate"])).decode()
