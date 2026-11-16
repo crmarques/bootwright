@@ -625,6 +625,17 @@ func TestDirectSessionsNeverResolveTheAccount(t *testing.T) {
 	}
 }
 
+func TestAMissingOpenerRefusesARootProcess(t *testing.T) {
+	var opener *Opener
+	session, err := opener.begin(context.Background(), 0)
+	if session != nil {
+		session.Close()
+	}
+	if !errors.Is(err, errIdentity) {
+		t.Fatalf("a root process without an opener began %v, %v", session, err)
+	}
+}
+
 func TestOnlyADirectRootSessionReportsADenialToRoot(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads a mode-0 file")

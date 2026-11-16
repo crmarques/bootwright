@@ -66,11 +66,18 @@ func newSession(l link) *Session {
 // named the paths, and otherwise starts one bounded helper under the invoking
 // account. The session holds ctx until Close; its end kills the helper.
 func (o *Opener) Begin(ctx context.Context) (*Session, error) {
+	return o.begin(ctx, os.Geteuid())
+}
+
+func (o *Opener) begin(ctx context.Context, euid int) (*Session, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if o == nil || os.Geteuid() != 0 {
-		return newSession(direct{root: os.Geteuid() == 0}), nil
+	if euid != 0 {
+		return newSession(direct{}), nil
+	}
+	if o == nil {
+		return nil, errIdentity
 	}
 	if o.account == nil {
 		return nil, errIdentity
