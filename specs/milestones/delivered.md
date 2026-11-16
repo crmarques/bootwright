@@ -16228,3 +16228,22 @@ non-cryptographic directive, D274 (10). An independent review found no
 blocking defect; its follow-ups (the `local.d` remedy, real empty host labels
 in the Ceph fixture and a Python test that no longer masks a null) are in.
 
+## X508 — One descriptor-relative file kit
+
+### B1478
+
+Split from B1463 under [D274](backlog.md#d274) (audit 005 W2.2).
+`internal/nativefs` owns the no-follow open from the root and the open
+beneath a held directory (`openat2`), the one-component open, identity and
+denial checks, the bounded read, atomic publication and verified tree removal,
+and the typed rename, unlink and symlink calls. The context store reaches
+`openat2` and `renameat2` through it with identical flags and keeps its own
+walks, locking and checkpoints; inputfs, the secret material reader, both
+storage preflight walkers, hostlinux's reads, stagelocal's and the Ansible
+runner's tree removal and renderlocal's publication use it. Copies kept on
+purpose: hostlinux's walker (it follows root-owned links), renderlocal's tree
+writer, the context store's own walks, and the fixed-name publications of the
+Ansible runner and selectionfs. An independent review found no blocking
+defect; its follow-ups (a one-component check, refusals of unsafe zero
+values, a reported close failure) are applied.
+
