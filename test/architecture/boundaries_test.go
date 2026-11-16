@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -244,6 +245,7 @@ type sourceFile struct {
 	path    string
 	owner   string
 	syntax  *ast.File
+	fileSet *token.FileSet
 	imports []packageImport
 }
 
@@ -252,10 +254,24 @@ type packageImport struct {
 	path  string
 }
 
+// parsedProductionSources lists and parses the production source once per
+// process: the tree does not change while the suite runs, and every check
+// reads the same files. The checks only read the syntax trees they share.
+var parsedProductionSources = sync.OnceValues(loadProductionSources)
+
 func productionSources(t *testing.T) []sourceFile {
 	t.Helper()
+	sources, err := parsedProductionSources()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return slices.Clone(sources)
+}
+
+func loadProductionSources() ([]sourceFile, error) {
 	var sources []sourceFile
 	root := filepath.Join("..", "..")
+	fileSet := token.NewFileSet()
 	for _, directory := range []string{"api", "internal", "ansible", filepath.Join("cmd", "bootwright")} {
 		err := walkSource(root, directory, func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
@@ -264,7 +280,7 @@ func productionSources(t *testing.T) []sourceFile {
 			if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 				return nil
 			}
-			syntax, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+			syntax, err := parser.ParseFile(fileSet, path, nil, 0)
 			if err != nil {
 				return err
 			}
@@ -272,7 +288,7 @@ func productionSources(t *testing.T) []sourceFile {
 			if err != nil {
 				return err
 			}
-			source := sourceFile{path: filepath.ToSlash(relative), owner: filepath.ToSlash(filepath.Dir(relative)), syntax: syntax}
+			source := sourceFile{path: filepath.ToSlash(relative), owner: filepath.ToSlash(filepath.Dir(relative)), syntax: syntax, fileSet: fileSet}
 			for _, imp := range syntax.Imports {
 				name, err := strconv.Unquote(imp.Path.Value)
 				if err != nil {
@@ -288,10 +304,10 @@ func productionSources(t *testing.T) []sourceFile {
 			return nil
 		})
 		if err != nil {
-			t.Fatal(err)
+			return nil, err
 		}
 	}
-	return sources
+	return sources, nil
 }
 
 func TestPackageDependencyDirection(t *testing.T) {

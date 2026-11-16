@@ -2,9 +2,6 @@ package architecture_test
 
 import (
 	"go/ast"
-	"go/parser"
-	"go/token"
-	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -26,12 +23,8 @@ func TestProductionFunctionsStayWithinTheLineLimit(t *testing.T) {
 	known := longFunctionsAwaitingSplit()
 	var seen []string
 	for _, source := range productionSources(t) {
-		fileSet := token.NewFileSet()
-		syntax, err := parser.ParseFile(fileSet, filepath.Join("..", "..", source.path), nil, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, declaration := range syntax.Decls {
+		fileSet := source.fileSet
+		for _, declaration := range source.syntax.Decls {
 			function, ok := declaration.(*ast.FuncDecl)
 			if !ok || function.Body == nil {
 				continue

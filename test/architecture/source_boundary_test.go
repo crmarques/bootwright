@@ -6,6 +6,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"sync"
 	"testing"
 )
 
@@ -42,10 +43,19 @@ func (tree sourceTree) ReadDir(name string) ([]fs.DirEntry, error) {
 	return slices.DeleteFunc(entries, func(entry fs.DirEntry) bool { return !tree.present[path.Join(name, entry.Name())] }), nil
 }
 
+// sourceTrees holds one listing per root: the suite's walks of the repository
+// share one Git listing and one stat of each listed path.
+var sourceTrees sync.Map
+
+func listedSourceTree(root string) (sourceTree, error) {
+	list, _ := sourceTrees.LoadOrStore(root, sync.OnceValues(func() (sourceTree, error) { return newSourceTree(root) }))
+	return list.(func() (sourceTree, error))()
+}
+
 // walkSource walks directory under root as filepath.WalkDir does, but only
 // through sourceTree: the paths it visits are joined to root.
 func walkSource(root, directory string, visit fs.WalkDirFunc) error {
-	tree, err := newSourceTree(root)
+	tree, err := listedSourceTree(root)
 	if err != nil {
 		return err
 	}
