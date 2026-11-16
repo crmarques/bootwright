@@ -196,6 +196,110 @@ func appliedDeadline(t *testing.T, root string, bound documentedBound, declared 
 	return fmt.Sprintf("%s in %s never returns %s for the deadline %s passes to context.WithTimeout", function.Name, source, name, runner)
 }
 
+// deadlineFixture declares a deadline bound and runners that apply it, or
+// fail to, in each way appliedDeadline tells apart; deadlineConsumer applies
+// it from another source.
+const (
+	deadlineFixture = `package a
+
+import (
+	"context"
+	"time"
+)
+
+const RunTimeout = time.Minute
+
+const otherTimeout = time.Second
+
+func direct(ctx context.Context) { _, _ = context.WithTimeout(ctx, RunTimeout) }
+
+func other(ctx context.Context) { _, _ = context.WithTimeout(ctx, otherTimeout) }
+
+func literal(ctx context.Context) { _, _ = context.WithTimeout(ctx, 2*time.Minute) }
+
+func defaulted(ctx context.Context, stated time.Duration) { _, _ = context.WithTimeout(ctx, deadlineOf(stated)) }
+
+func deadlineOf(stated time.Duration) time.Duration {
+	if stated > 0 {
+		return stated
+	}
+	return RunTimeout
+}
+
+func forgotten(ctx context.Context, stated time.Duration) { _, _ = context.WithTimeout(ctx, statedOf(stated)) }
+
+func statedOf(stated time.Duration) time.Duration { return stated }
+
+func clamped(ctx context.Context, stated time.Duration) { _, _ = context.WithTimeout(ctx, clampOf(stated)) }
+
+func clampOf(stated time.Duration) time.Duration { return min(stated, RunTimeout) }
+
+func widened(ctx context.Context, stated time.Duration) { _, _ = context.WithTimeout(ctx, widenOf(stated)) }
+
+func widenOf(stated time.Duration) time.Duration { return max(stated, RunTimeout) }
+`
+	deadlineConsumer = `package b
+
+import (
+	"context"
+
+	bounds "github.com/crmarques/bootwright/a"
+)
+
+func applied(ctx context.Context) { _, _ = context.WithTimeout(ctx, bounds.RunTimeout) }
+
+func unapplied(ctx context.Context) { _, _ = context.WithTimeout(ctx, RunTimeout) }
+`
+)
+
+// TestDeadlineApplicationRefusesWhatItGuards proves appliedDeadline on a
+// planted source: a runner passes the bound, or a call to a function that
+// returns it; a ceiling is clamped with min; a budget is never clamped to; and
+// a runner in another source names the bound through its import. Each other
+// deadline is refused with what it passes or returns.
+func TestDeadlineApplicationRefusesWhatItGuards(t *testing.T) {
+	root := t.TempDir()
+	for name, content := range map[string]string{"a/bounds.go": deadlineFixture, "b/run.go": deadlineConsumer} {
+		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	declared, err := parser.ParseFile(token.NewFileSet(), "a/bounds.go", deadlineFixture, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const passes = " in a/bounds.go passes %s to context.WithTimeout, want RunTimeout or a call to a function of that source applying it"
+	for _, row := range []struct {
+		name    string
+		applied application
+		want    string
+	}{
+		{"the bound itself", application{runner: "direct"}, ""},
+		{"another constant", application{runner: "other"}, "other" + fmt.Sprintf(passes, "otherTimeout")},
+		{"a literal", application{runner: "literal"}, "literal" + fmt.Sprintf(passes, "2 * time.Minute")},
+		{"a default", application{runner: "defaulted"}, ""},
+		{"a default that never applies the bound", application{runner: "forgotten"}, "statedOf in a/bounds.go never returns RunTimeout for the deadline forgotten passes to context.WithTimeout"},
+		{"a ceiling", application{runner: "clamped", ceiling: true}, ""},
+		{"an unclamped ceiling", application{runner: "defaulted", ceiling: true}, "deadlineOf in a/bounds.go never clamps the deadline defaulted passes to context.WithTimeout to RunTimeout with min"},
+		{"a ceiling widened with max", application{runner: "widened", ceiling: true}, "widenOf in a/bounds.go never clamps the deadline widened passes to context.WithTimeout to RunTimeout with min"},
+		{"a ceiling passed unclamped", application{runner: "direct", ceiling: true}, "direct" + fmt.Sprintf(passes, "RunTimeout")},
+		{"a budget", application{runner: "forgotten", budget: true}, ""},
+		{"a budget clamped to", application{runner: "clamped", budget: true}, "clampOf in a/bounds.go returns min(stated, RunTimeout) for the deadline clamped passes to context.WithTimeout, but no runner clamps to RunTimeout"},
+		{"a bound of another source", application{runner: "applied", source: "b/run.go"}, ""},
+		{"a bound of another source left unqualified", application{runner: "unapplied", source: "b/run.go"}, "unapplied in b/run.go passes RunTimeout to context.WithTimeout, want bounds.RunTimeout or a call to a function of that source applying it"},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			bound := documentedBound{source: "a/bounds.go", constant: "RunTimeout", applied: &row.applied}
+			if got := appliedDeadline(t, root, bound, declared); got != row.want {
+				t.Fatalf("appliedDeadline = %q, want %q", got, row.want)
+			}
+		})
+	}
+}
+
 // deadlineProof is the test each capability that states its run's deadline
 // declares in its own package: the deadline covers every budget its frozen
 // request carries, since the runner honors the deadline a request states.

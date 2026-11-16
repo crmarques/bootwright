@@ -311,13 +311,22 @@ func loadProductionSources() ([]sourceFile, error) {
 }
 
 func TestPackageDependencyDirection(t *testing.T) {
-	roles := packageRoles()
+	for _, violation := range dependencyViolations(productionSources(t), packageRoles(), applicationDependencies()) {
+		t.Error(violation)
+	}
+}
+
+// dependencyViolations reports each import the role matrix or the declared
+// application dependencies refuse, and each role or dependency entry no
+// source needs.
+func dependencyViolations(sources []sourceFile, roles map[string]packageRole, dependencies map[string][]string) []string {
+	var violations []string
 	owners, consumed := map[string]bool{}, map[string]bool{}
-	for _, source := range productionSources(t) {
+	for _, source := range sources {
 		owners[source.owner] = true
 		consumer, ok := roles[source.owner]
 		if !ok {
-			t.Errorf("%s has no declared package role", source.owner)
+			violations = append(violations, fmt.Sprintf("%s has no declared package role", source.owner))
 			continue
 		}
 		for _, imported := range source.imports {
@@ -327,21 +336,21 @@ func TestPackageDependencyDirection(t *testing.T) {
 			}
 			provider, ok := roles[providerPath]
 			if !ok {
-				t.Errorf("%s imports unclassified package %s", source.path, providerPath)
+				violations = append(violations, fmt.Sprintf("%s imports unclassified package %s", source.path, providerPath))
 				continue
 			}
 			if !permitsDependency(consumer, provider) {
-				t.Errorf("%s (%s) depends on %s (%s)", source.path, consumer, providerPath, provider)
+				violations = append(violations, fmt.Sprintf("%s (%s) depends on %s (%s)", source.path, consumer, providerPath, provider))
 				continue
 			}
 			if consumer == applicationRole && provider == applicationRole && source.owner != providerPath {
-				allowed, declared := applicationDependencies()[source.owner]
+				allowed, declared := dependencies[source.owner]
 				if !declared {
-					t.Errorf("%s consumes another application package but declares no dependency set", source.owner)
+					violations = append(violations, fmt.Sprintf("%s consumes another application package but declares no dependency set", source.owner))
 					continue
 				}
 				if !slices.Contains(allowed, providerPath) {
-					t.Errorf("%s consumes %s without declaring why in applicationDependencies", source.path, providerPath)
+					violations = append(violations, fmt.Sprintf("%s consumes %s without declaring why in applicationDependencies", source.path, providerPath))
 				}
 				consumed[source.owner+" "+providerPath] = true
 			}
@@ -349,19 +358,82 @@ func TestPackageDependencyDirection(t *testing.T) {
 	}
 	for _, owner := range sortedKeys(roles) {
 		if !owners[owner] {
-			t.Errorf("packageRoles classifies %s, which has no production source; remove it", owner)
+			violations = append(violations, fmt.Sprintf("packageRoles classifies %s, which has no production source; remove it", owner))
 		}
 	}
-	for _, consumer := range sortedKeys(applicationDependencies()) {
+	for _, consumer := range sortedKeys(dependencies) {
 		if roles[consumer] != applicationRole || !owners[consumer] {
-			t.Errorf("applicationDependencies declares %s, which is not an application package with production source; remove it", consumer)
+			violations = append(violations, fmt.Sprintf("applicationDependencies declares %s, which is not an application package with production source; remove it", consumer))
 			continue
 		}
-		for _, provider := range applicationDependencies()[consumer] {
+		for _, provider := range dependencies[consumer] {
 			if !consumed[consumer+" "+provider] {
-				t.Errorf("applicationDependencies lets %s consume %s, which it no longer imports; remove the edge", consumer, provider)
+				violations = append(violations, fmt.Sprintf("applicationDependencies lets %s consume %s, which it no longer imports; remove the edge", consumer, provider))
 			}
 		}
+	}
+	return violations
+}
+
+// TestDependencyDirectionRefusesWhatItGuards proves the dependency rule on a
+// planted module: one forbidden edge of every role, an undeclared and an
+// unlisted application dependency, an unclassified package on each side, and
+// a stale role, consumer and edge. The permitted edges beside them, the
+// composition root's among them, pass.
+func TestDependencyDirectionRefusesWhatItGuards(t *testing.T) {
+	const module = "github.com/crmarques/bootwright/"
+	roles := map[string]packageRole{
+		"internal/domain": domainRole, "internal/stale": domainRole, "internal/application": applicationRole,
+		"internal/other": applicationRole, "internal/third": applicationRole, "internal/adapter": adapterRole,
+		"internal/adapter2": adapterRole, "internal/cli": cliRole, "internal/technical": technicalRole,
+		"ansible": embeddedRole, "cmd/bootwright": compositionRole,
+	}
+	imports := map[string][]string{
+		"internal/domain":       {"internal/technical", "internal/application"},
+		"internal/application":  {"internal/domain", "internal/other", "internal/third", "internal/adapter"},
+		"internal/other":        {"internal/application"},
+		"internal/third":        {"internal/technical"},
+		"internal/adapter":      {"internal/domain", "internal/application", "internal/adapter2"},
+		"internal/adapter2":     {"internal/cli"},
+		"internal/cli":          {"internal/application", "internal/adapter"},
+		"internal/technical":    {"internal/domain", "internal/unknown"},
+		"ansible":               {"internal/domain"},
+		"cmd/bootwright":        {"internal/adapter", "internal/cli", "ansible"},
+		"internal/unclassified": {"internal/domain"},
+	}
+	var sources []sourceFile
+	for _, owner := range sortedKeys(imports) {
+		content := "package " + path.Base(owner) + "\nimport (\n"
+		for _, provider := range imports[owner] {
+			content += "\t_ " + strconv.Quote(module+provider) + "\n"
+		}
+		sources = append(sources, compositionSource(t, owner, content+")\n"))
+	}
+	dependencies := map[string][]string{
+		"internal/application": {"internal/other", "internal/gone"},
+		"internal/domain":      {},
+	}
+	got := dependencyViolations(sources, roles, dependencies)
+	slices.Sort(got)
+	want := []string{
+		"ansible/fixture.go (embedded assets) depends on internal/domain (domain)",
+		"internal/adapter/fixture.go (adapter) depends on internal/adapter2 (adapter)",
+		"internal/adapter2/fixture.go (adapter) depends on internal/cli (CLI)",
+		"internal/application/fixture.go (application) depends on internal/adapter (adapter)",
+		"internal/application/fixture.go consumes internal/third without declaring why in applicationDependencies",
+		"internal/cli/fixture.go (CLI) depends on internal/adapter (adapter)",
+		"internal/domain/fixture.go (domain) depends on internal/application (application)",
+		"internal/other consumes another application package but declares no dependency set",
+		"internal/technical/fixture.go (technical) depends on internal/domain (domain)",
+		"internal/technical/fixture.go imports unclassified package internal/unknown",
+		"internal/unclassified has no declared package role",
+		"applicationDependencies declares internal/domain, which is not an application package with production source; remove it",
+		"applicationDependencies lets internal/application consume internal/gone, which it no longer imports; remove the edge",
+		"packageRoles classifies internal/stale, which has no production source; remove it",
+	}
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("violations:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 

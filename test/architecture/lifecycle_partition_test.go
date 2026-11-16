@@ -1,6 +1,7 @@
 package architecture_test
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -147,11 +148,7 @@ func loadLifecycleGraph(t *testing.T) *lifecycleGraph {
 	if err != nil {
 		t.Fatal(err)
 	}
-	types := lifecycleTypes{
-		fields: map[string]map[string]string{}, embedded: map[string][]string{}, named: map[string]bool{},
-		interfaces: map[string]bool{}, results: map[string][]string{},
-	}
-	graph := &lifecycleGraph{funcs: map[string]*lifecycleFunc{}, edges: map[string][]string{}, ports: map[string]map[string]bool{}, handles: map[string]bool{}}
+	files := map[string]*ast.File{}
 	for _, entry := range entries {
 		name := entry.Name()
 		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -161,6 +158,20 @@ func loadLifecycleGraph(t *testing.T) *lifecycleGraph {
 		if err != nil {
 			t.Fatal(err)
 		}
+		files[name] = syntax
+	}
+	return lifecycleGraphOf(files)
+}
+
+// lifecycleGraphOf links the functions the files declare, by file name.
+func lifecycleGraphOf(files map[string]*ast.File) *lifecycleGraph {
+	types := lifecycleTypes{
+		fields: map[string]map[string]string{}, embedded: map[string][]string{}, named: map[string]bool{},
+		interfaces: map[string]bool{}, results: map[string][]string{},
+	}
+	graph := &lifecycleGraph{funcs: map[string]*lifecycleFunc{}, edges: map[string][]string{}, ports: map[string]map[string]bool{}, handles: map[string]bool{}}
+	for _, name := range sortedKeys(files) {
+		syntax := files[name]
 		imports := map[string]bool{}
 		for _, imported := range syntax.Imports {
 			alias := strings.Trim(imported.Path.Value, `"`)
@@ -832,48 +843,174 @@ func TestLifecyclePlannerReachesNoEffect(t *testing.T) {
 	graph := loadLifecycleGraph(t)
 	entries := graph.matchAll(t, "planner entry point", lifecyclePlannerEntries())
 	sinks := graph.matchAll(t, "effect sink", lifecycleEffectSinks())
-	walk := graph.reach(entries, lifecyclePlannerEdgeExemptions())
-	for _, edge := range lifecyclePlannerEdgeExemptions() {
+	for _, violation := range plannerViolations(graph, entries, sinks, lifecycleForbiddenCalls(), lifecyclePlannerEdgeExemptions(), lifecyclePlannerCallExemptions()) {
+		t.Error(violation)
+	}
+}
+
+// plannerViolations reports each effect sink, Transaction holder and forbidden
+// port call the planner entries reach, and each exemption nothing uses.
+func plannerViolations(graph *lifecycleGraph, entries, sinks map[string]bool, forbidden, edgeExemptions, callExemptions []string) []string {
+	var violations []string
+	walk := graph.reach(entries, edgeExemptions)
+	for _, edge := range edgeExemptions {
 		if !walk.edges[edge] {
-			t.Errorf("planner edge exemption %q no longer occurs; remove it", edge)
+			violations = append(violations, fmt.Sprintf("planner edge exemption %q no longer occurs; remove it", edge))
 		}
 	}
 	usedCalls := map[string]bool{}
 	for _, key := range walk.reached() {
 		if sinks[key] {
-			t.Errorf("planner reaches effect %s: %s", key, walk.path(key))
+			violations = append(violations, fmt.Sprintf("planner reaches effect %s: %s", key, walk.path(key)))
 		}
 		if graph.handles[key] {
-			t.Errorf("planner reaches %s, which takes a Transaction: %s", key, walk.path(key))
+			violations = append(violations, fmt.Sprintf("planner reaches %s, which takes a Transaction: %s", key, walk.path(key)))
 		}
-		for _, name := range lifecycleForbiddenCalls() {
+		for _, name := range forbidden {
 			if !graph.ports[key][name] {
 				continue
 			}
 			exemption := key + ":" + name
-			if slices.Contains(lifecyclePlannerCallExemptions(), exemption) {
+			if slices.Contains(callExemptions, exemption) {
 				usedCalls[exemption] = true
 				continue
 			}
-			t.Errorf("planner reaches %s, which calls %s: %s", key, name, walk.path(key))
+			violations = append(violations, fmt.Sprintf("planner reaches %s, which calls %s: %s", key, name, walk.path(key)))
 		}
 	}
-	for _, exemption := range lifecyclePlannerCallExemptions() {
+	for _, exemption := range callExemptions {
 		if !usedCalls[exemption] {
-			t.Errorf("planner call exemption %q no longer occurs; remove it", exemption)
+			violations = append(violations, fmt.Sprintf("planner call exemption %q no longer occurs; remove it", exemption))
 		}
 	}
+	return violations
 }
 
 func TestLifecycleExecutorNeverReplans(t *testing.T) {
 	graph := loadLifecycleGraph(t)
 	entries := graph.matchAll(t, "executor entry point", lifecycleExecutorEntries())
 	targets := graph.matchAll(t, "replanning target", lifecycleReplanningTargets())
+	for _, violation := range replanViolations(graph, entries, targets) {
+		t.Error(violation)
+	}
+}
+
+// replanViolations reports each replanning target the executor entries reach.
+func replanViolations(graph *lifecycleGraph, entries, targets map[string]bool) []string {
+	var violations []string
 	walk := graph.reach(entries, nil)
 	for _, key := range walk.reached() {
 		if targets[key] {
-			t.Errorf("executor re-plans through %s: %s", key, walk.path(key))
+			violations = append(violations, fmt.Sprintf("executor re-plans through %s: %s", key, walk.path(key)))
 		}
+	}
+	return violations
+}
+
+// lifecycleFixture is a planted lifecycle package: one effect sink, one
+// replanning target and one forbidden port, reached from a planner function
+// per way the resolver links a call, and one planner that reaches none.
+const lifecycleFixture = `package lifecycle
+
+type Transaction struct{ id string }
+
+type store interface{ MutateLifecycle() error }
+
+type executes interface{ execute() }
+
+type Service struct{ store store }
+
+type wrapper struct{ *Service }
+
+type holder struct{ tx Transaction }
+
+func (s *Service) execute() {}
+
+func (s *Service) planFrom() {}
+
+func (s *Service) clean() { s.planFrom() }
+
+func (s *Service) direct() { s.execute() }
+
+func (s *Service) throughInterface() {
+	var target executes = s
+	target.execute()
+}
+
+func (s *Service) throughEmbedding() {
+	held := wrapper{s}
+	held.execute()
+}
+
+func (s *Service) throughUnknown(targets map[string]executes) { targets["x"].execute() }
+
+func (s *Service) throughClosure() { run := func() { s.execute() }; run() }
+
+func (s *Service) throughHelper() { helper(s) }
+
+func helper(s *Service) { s.direct() }
+
+func (s *Service) throughPort() { _ = s.store.MutateLifecycle() }
+
+func (s *Service) holding(state holder) {}
+
+func (s *Service) run() { s.planFrom() }
+
+func (s *Service) runClean() { s.execute() }
+`
+
+// TestLifecyclePartitionRefusesWhatItGuards proves the partition rules on a
+// planted package: each planner entry reaches the effect through the call
+// form its name says (directly, through an interface, an embedded field, a
+// receiver of unknown type, a closure or a package function), through a port,
+// or takes a Transaction; an exempted call and edge pass and a stale exemption
+// fails; and an executor entry that re-plans fails where one that executes
+// passes.
+func TestLifecyclePartitionRefusesWhatItGuards(t *testing.T) {
+	syntax, err := parser.ParseFile(token.NewFileSet(), "fixture.go", lifecycleFixture, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph := lifecycleGraphOf(map[string]*ast.File{"fixture.go": syntax})
+	sinks := map[string]bool{"Service.execute": true}
+	forbidden := []string{"MutateLifecycle"}
+	effect := func(chain ...string) []string {
+		return []string{"planner reaches effect Service.execute: " + strings.Join(append(chain, "Service.execute"), " -> ")}
+	}
+	for _, row := range []struct {
+		entry                 string
+		edgeExemptions, calls []string
+		want                  []string
+	}{
+		{"Service.clean", nil, nil, nil},
+		{"Service.direct", nil, nil, effect("Service.direct")},
+		{"Service.throughInterface", nil, nil, effect("Service.throughInterface")},
+		{"Service.throughEmbedding", nil, nil, effect("Service.throughEmbedding")},
+		{"Service.throughUnknown", nil, nil, effect("Service.throughUnknown")},
+		{"Service.throughClosure", nil, nil, effect("Service.throughClosure")},
+		{"Service.throughHelper", nil, nil, effect("Service.throughHelper", "helper", "Service.direct")},
+		{"Service.throughPort", nil, nil, []string{"planner reaches Service.throughPort, which calls MutateLifecycle: Service.throughPort"}},
+		{"Service.holding", nil, nil, []string{"planner reaches Service.holding, which takes a Transaction: Service.holding"}},
+		{"Service.throughPort", nil, []string{"Service.throughPort:MutateLifecycle"}, nil},
+		{"Service.direct", []string{"Service.direct>Service.execute"}, nil, nil},
+		{"Service.clean", []string{"Service.clean>Service.execute"}, []string{"Service.clean:MutateLifecycle"}, []string{
+			`planner edge exemption "Service.clean>Service.execute" no longer occurs; remove it`,
+			`planner call exemption "Service.clean:MutateLifecycle" no longer occurs; remove it`,
+		}},
+	} {
+		t.Run(row.entry, func(t *testing.T) {
+			got := plannerViolations(graph, map[string]bool{row.entry: true}, sinks, forbidden, row.edgeExemptions, row.calls)
+			if !slices.Equal(got, row.want) {
+				t.Fatalf("violations:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(row.want, "\n"))
+			}
+		})
+	}
+	targets := map[string]bool{"Service.planFrom": true}
+	if got, want := replanViolations(graph, map[string]bool{"Service.run": true}, targets), []string{"executor re-plans through Service.planFrom: Service.run -> Service.planFrom"}; !slices.Equal(got, want) {
+		t.Errorf("executor violations = %q, want %q", got, want)
+	}
+	if got := replanViolations(graph, map[string]bool{"Service.runClean": true}, targets); len(got) != 0 {
+		t.Errorf("an executor that only executes was refused: %q", got)
 	}
 }
 
