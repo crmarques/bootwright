@@ -206,6 +206,11 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		}
 	}
 	binding.reservations = append(binding.reservations, published...)
+	// Validate the composed identities now, but keep the original positions:
+	// hostKeyedReservations still needs them to attach every pinned host key.
+	if _, err := canonicalReservations(binding.reservations); err != nil {
+		return reconciliation.Plan{}, capabilityBinding{}, err
+	}
 	definitions, err = s.dependOnStageTails(definitions)
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
@@ -343,7 +348,7 @@ func hostKeyedReservations(binding capabilityBinding, material map[string]secret
 		reservation.Keys = append(slices.Clone(reservation.Keys), prerequisites.QualifiedKeys(qualifier, claim.keys)...)
 		reservations[claim.reservation] = reservation
 	}
-	return reservations, nil
+	return canonicalReservations(reservations)
 }
 
 func undeclaredControllerAddress(claim hostKeyedClaim) error {

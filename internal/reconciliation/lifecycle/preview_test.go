@@ -316,11 +316,11 @@ func TestAnApplyPublishesItsSSHClaimsQualifiedByTheirHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := append(reservationOf("alpha"),
-		prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{
-			"ssh/192.0.2.10:22/socket:0.0.0.0:3128", pinnedQualifier("services") + "socket:0.0.0.0:3128"}},
 		prerequisites.HostReservation{Context: testContextName, Kind: "dns", Service: "delta", Keys: []string{
 			"ssh/192.0.2.20:22/socket:192.0.2.9:3128", pinnedQualifier("storage") + "socket:192.0.2.9:3128"}},
 		prerequisites.HostReservation{Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"path:/srv/ntp", "socket:192.0.2.1:123"}},
+		prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{
+			"ssh/192.0.2.10:22/socket:0.0.0.0:3128", pinnedQualifier("services") + "socket:0.0.0.0:3128"}},
 		prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "zeta", Keys: []string{
 			"ssh/192.0.2.10:2222/socket:0.0.0.0:3128", "ssh/192.0.2.10:2222/unit:bootwright-zeta",
 			pinnedQualifier("forwarded") + "socket:0.0.0.0:3128", pinnedQualifier("forwarded") + "unit:bootwright-zeta"}},

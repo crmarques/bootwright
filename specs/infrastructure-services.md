@@ -146,6 +146,15 @@ identities before its first effect. Workspace stores them with the shared
 controller record, so a second context refuses rather than silently taking a
 port, unit or path that another context owns.
 
+Contributions with the same context, capability kind and service identify one
+reservation. Reconciliation combines them only when every contribution is
+shared and has identical object-kind and releasing metadata, retaining the
+sorted unique union of their keys within the existing record bound. This lets
+discovery and installation retain the same installer image together. Duplicate
+exclusive identities or inconsistent metadata refuse during planning; SSH
+host-key qualification completes before claims are combined for publication.
+Workspace continues to require a canonical record with unique identities.
+
 A reservation key is one of:
 
 | Key | Claims |
