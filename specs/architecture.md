@@ -1377,7 +1377,10 @@ owning spec, which names the check.
   proved by a fixture it refuses, and each kind of grant by the clauses it
   exempts and the ones it leaves. A production function, in Go or in the
   collection's plugins, stays within 100 lines; the lists of functions
-  awaiting their split are empty and only shrink.
+  awaiting their split are empty and only shrink. It also stays below a
+  cyclomatic complexity of 40 unless it is on a tracked list that only shrinks:
+  a function on it that no longer reaches 40 fails until it is removed
+  (`test/architecture/complexity_budget_test.go`).
 - Hold the lifecycle's planner and executor apart, the operation plan being the
   only hand-off from one to the other: `TestLifecyclePlannerReachesNoEffect`,
   `TestLifecycleExecutorNeverReplans` and `TestLifecycleFilesAreClassified` in
