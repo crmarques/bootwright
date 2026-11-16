@@ -1063,6 +1063,47 @@ def test_reload_snapshot_detects_runtime_changes_inside_a_foreign_service_defini
     assert namespace["registries_equal"](client, {"ssh"})
 
 
+def offline_zones(rich_rules=(), extra=""):
+    rules = "".join("\n\t" + rule for rule in rich_rules)
+    zones = ("block\n  target: %%REJECT%%\n  sources: \n  services: \n  rich rules: \n\n"
+             "public (default)\n  target: default\n  sources: \n  services: ssh\n  ports: \n  rich rules: " + rules + "\n" + extra)
+    answers = {"--list-all-zones": zones.encode(), "--get-policies": b""}
+
+    def run(argv):
+        return 0, answers.get(argv[-1], b"")
+    return SimpleNamespace(run=run)
+
+
+def test_offline_ssh_shape_admits_zones_without_sources_or_rich_rules():
+    from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
+    direct.offline_ssh_shape(offline_zones())
+
+
+@pytest.mark.parametrize("rules", [
+    ['rule family="ipv6" source address="2001:db8::1" accept', 'rule family="ipv4" service name="ssh" reject'],
+    ['rule family="ipv4" service name="http" log prefix="x:" level="info" accept', 'rule family="ipv4" port port="22" protocol="tcp" drop'],
+    ['rule family="ipv6" source address="2001:db8::/32" service name="ssh" reject'],
+    ['rule family="ipv4" service name="ssh" reject'],
+])
+def test_offline_ssh_shape_refuses_every_rich_rule_including_one_holding_a_colon(rules):
+    from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
+    with pytest.raises(worker.Refused) as refused:
+        direct.offline_ssh_shape(offline_zones(rules))
+    assert refused.value.cause == "ssh-admission"
+
+
+@pytest.mark.parametrize("extra", ["  forward\n", "  target: default\n", "trusted\n  rule family=\"ipv4\" reject\n",
+                                   "public (default\n", "caf\xe9\n"])
+def test_offline_ssh_shape_refuses_a_zone_listing_it_cannot_parse(extra):
+    from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
+    guest = offline_zones()
+    zones = extra.encode("latin-1") + guest.run(["--list-all-zones"])[1]
+    guest.run = lambda argv: (0, zones if argv[-1] == "--list-all-zones" else b"")
+    with pytest.raises(worker.Refused) as refused:
+        direct.offline_ssh_shape(guest)
+    assert refused.value.cause == "ssh-admission"
+
+
 def test_an_overridden_ssh_service_name_does_not_prove_ssh_port_admission():
     from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
     target = SimpleNamespace(run=lambda _argv: (0, b"ssh\n  ports: 9999/tcp\n  destination:\n  includes:\n"))

@@ -80,6 +80,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import managedos_f
 
 SYSTEMCTL = "/usr/bin/systemctl"
 OFFLINE = "/usr/bin/firewall-offline-cmd"
+ZONE_HEADER = re.compile(worker.ZONE.pattern + r"(?: \((?:default|active)(?:, (?:default|active))?\))?")
 
 
 def harmless_offline_policy(guest, name):
@@ -111,12 +112,25 @@ def offline_ssh_shape(guest):
     code, output = guest.run([OFFLINE, "--list-all-zones"])
     if code != 0:
         raise worker.failed("ssh-admission")
-    rich = False
-    for line in output.decode("ascii").splitlines():
-        key, separator, value = line.strip().partition(":")
-        if key in ("sources", "rich rules") and value.strip():
-            raise worker.failed("ssh-admission")
-        if rich and line.strip() and not separator:
+    try:
+        lines = output.decode("ascii").splitlines()
+    except UnicodeError:
+        raise worker.failed("ssh-admission") from None
+    zone = rich = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            zone = rich = False
+            continue
+        if not line[0].isspace():
+            if not ZONE_HEADER.fullmatch(line):
+                raise worker.failed("ssh-admission")
+            zone, rich = True, False
+            continue
+        # firewalld prints each rich rule on its own indented line after the
+        # field, and a rule may itself contain a colon.
+        key, separator, value = stripped.partition(":")
+        if rich or not zone or not separator or (key in ("sources", "rich rules") and value.strip()):
             raise worker.failed("ssh-admission")
         rich = key == "rich rules"
     for flag in ("--get-all-rules", "--get-all-passthroughs", "--get-all-chains"):
