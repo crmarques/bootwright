@@ -7,10 +7,14 @@ laptop-class host, from host preparation to cleanup:
 e2e/<case>/
   values.yaml    the case's default input
   templates/     the Bootwright input as Helm templates, one object per file
+  kits.txt       the shared kits of _base/ the case takes, one per line
   runbook.md     prepare, run, verify, acceptance drills, destroy
 ```
 
-[render.sh](render.sh) renders one case into an input directory. Each case
+What several cases repeat lives once in a kit directory of `_base/`,
+laid out like `templates/`; a case takes a kit by naming it in `kits.txt`,
+and a kit file never shares a path with the case's own template. Examples stay
+self-contained. [render.sh](render.sh) renders one case into an input directory. Each case
 exists because a milestone item awaits its run: the runbook names the items it
 accepts and the evidence each needs. Record each accepted run as a row of the
 [acceptance ledger](../docs/acceptance.md).

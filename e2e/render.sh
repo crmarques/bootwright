@@ -8,7 +8,10 @@
 #
 # A case is a directory beside this script holding values.yaml (its default
 # input) and templates/ (one Bootwright object per file, laid out as the input
-# directory). Each --values file and --set overrides values.yaml in order.
+# directory). What several cases repeat lives once in _base/<kit>/, laid out
+# like templates/; the case's kits.txt names the kits it takes, one per line,
+# and a kit file never shares a path with the case's own template. Each
+# --values file and --set overrides values.yaml in order.
 # host.address "auto" takes the source address of this host's default route.
 # The output defaults to ~/bootwright-e2e/<case>; a render replaces only an
 # empty directory or an earlier render, never anything inside the repository.
@@ -87,6 +90,22 @@ trap 'rm -rf -- "$work"' EXIT
 mkdir -- "$work/chart"
 cp -R -- "$here/$case_name/templates" "$here/$case_name/values.yaml" "$work/chart/"
 printf 'apiVersion: v2\nname: %s\nversion: 0.1.0\n' "$case_name" >"$work/chart/Chart.yaml"
+
+if [[ -f "$here/$case_name/kits.txt" ]]; then
+  while IFS= read -r kit || [[ -n "$kit" ]]; do
+    [[ -n "$kit" ]] || continue
+    [[ -d "$here/_base/$kit" ]] || { echo "render.sh: $case_name names an unknown kit: $kit" >&2; exit 1; }
+    while IFS= read -r -d '' file; do
+      relative="${file#"$here/_base/$kit"/}"
+      if [[ -e "$work/chart/templates/$relative" ]]; then
+        echo "render.sh: $case_name and kit $kit both hold templates/$relative" >&2
+        exit 1
+      fi
+      mkdir -p -- "$work/chart/templates/$(dirname -- "$relative")"
+      cp -- "$file" "$work/chart/templates/$relative"
+    done < <(find "$here/_base/$kit" -type f -print0)
+  done <"$here/$case_name/kits.txt"
+fi
 
 if ! route="$(ip -4 route get 192.0.2.1 2>&1)"; then
   echo "render.sh: the default-route probe failed: ip -4 route get 192.0.2.1: ${route:-no output}" >&2

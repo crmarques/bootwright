@@ -1,0 +1,11 @@
+ceph-cluster-key
+ceph-entitlement
+cephfs-data-pool
+cephfs-metadata-pool
+controller-host
+guest-network
+helpers
+machine-key-ed25519
+openshift-pull-secret
+proxy
+rhel-boot

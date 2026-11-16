@@ -1,9 +1,0 @@
-apiVersion: bootwright.io/v1alpha1
-kind: CephClient
-metadata:
-  name: app-block
-
-spec:
-  clusterRef: ceph-e2e
-  poolRef: rbd-data
-  access: readWrite

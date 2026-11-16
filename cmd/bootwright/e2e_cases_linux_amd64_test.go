@@ -101,6 +101,8 @@ var e2eRenders = map[string][]e2eRender{
 	},
 }
 
+const e2eBaseDirectory = "_base"
+
 func e2eCaseNames(t *testing.T) []string {
 	t.Helper()
 	entries, err := os.ReadDir(filepath.Join("..", "..", "e2e"))
@@ -109,7 +111,7 @@ func e2eCaseNames(t *testing.T) []string {
 	}
 	var names []string
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || entry.Name() == e2eBaseDirectory {
 			continue
 		}
 		for _, required := range []string{"values.yaml", "templates"} {

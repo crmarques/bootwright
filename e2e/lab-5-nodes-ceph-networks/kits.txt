@@ -1,0 +1,10 @@
+ceph-cluster-key
+ceph-entitlement
+ceph-sample-storage
+cephfs-data-pool
+cephfs-metadata-pool
+controller-host
+helpers
+machine-key-ed25519
+proxy
+rhel-boot
