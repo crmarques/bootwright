@@ -159,7 +159,7 @@ def test_observation_keeps_its_read_only_dispatch_and_closes_custody(monkeypatch
 @pytest.mark.parametrize("cause", disk_discovery_progress.RETRIES)
 def test_retry_notices_use_the_same_value_free_progress_channel(monkeypatch, cause):
     records = []
-    monkeypatch.setattr(action.protocol, "emit", lambda record: records.append(record))
+    monkeypatch.setattr(action.protocol, "emit", records.append)
     action.report(cause, "failed")
     assert records == [{"phase": "group", "group": cause, "status": "failed"}]
     assert cause not in disk_discovery_progress.GROUPS

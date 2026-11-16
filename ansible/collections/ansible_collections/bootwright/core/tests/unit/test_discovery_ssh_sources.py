@@ -9,7 +9,8 @@ from ansible_collections.bootwright.core.plugins.module_utils import disk_discov
 
 EXTENT = b"File data lba: 0 , 7 , 5 , 10240 , '/images/install.img'\n"
 LISTING = b"-rw-r--r-- root/root 4294967296 2026-01-01 12:00 squashfs-root/LiveOS/rootfs.img\n"
-ELF = b"Class: ELF64\nData: 2's complement, little endian\nMachine: Advanced Micro Devices X86-64\n[Requesting program interpreter: /lib64/ld-linux-x86-64.so.2]\n0x01 (NEEDED) Shared library: [libcrypto.so.3]\n"
+ELF = (b"Class: ELF64\nData: 2's complement, little endian\nMachine: Advanced Micro Devices X86-64\n"
+       b"[Requesting program interpreter: /lib64/ld-linux-x86-64.so.2]\n0x01 (NEEDED) Shared library: [libcrypto.so.3]\n")
 
 
 @pytest.fixture(autouse=True)
@@ -59,7 +60,7 @@ def test_missing_optional_helper_is_not_an_empty_executable():
 
 
 @pytest.mark.parametrize("metadata,data", [(stat_file(size=5), b"data"), (stat_file("directory"), b"data"),
-                                         (stat_file(size=sources.MAX_COMPONENT + 1), b"data")])
+                                           (stat_file(size=sources.MAX_COMPONENT + 1), b"data")])
 def test_virtual_files_refuse_type_size_or_truncation(metadata, data):
     with pytest.raises(ValueError, match="source file"):
         sources.read_file(Path("/image"), "/usr/sbin/sshd", Mock(side_effect=[metadata, data]))

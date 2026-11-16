@@ -369,6 +369,7 @@ def test_publication_accepts_the_qualified_initramfs_growth(tmp_path, monkeypatc
         return image
 
     monkeypatch.setattr(controller.media, "remaster", build)
+
     @contextmanager
     def source(*args):
         yield "/held"

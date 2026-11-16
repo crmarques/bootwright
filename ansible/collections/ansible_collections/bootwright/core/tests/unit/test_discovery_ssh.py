@@ -72,7 +72,7 @@ def test_client_uses_the_bound_port_identity_and_only_inventory(custody, monkeyp
 
 
 @pytest.mark.parametrize("error,cause", [(b"Connection timed out", "ssh-timeout"), (b"Connection refused", "ssh-refused"),
-                                        (b"No route to host", "ssh-unreachable"), (b"PRIVATE unknown error", "ssh-not-ready")])
+                                         (b"No route to host", "ssh-unreachable"), (b"PRIVATE unknown error", "ssh-not-ready")])
 def test_retry_causes_are_closed_and_contain_no_native_text(custody, monkeypatch, error, cause):
     root, request, _native = custody
     monkeypatch.setattr(client.bounded_process, "run", Mock(return_value=bounded_process.Result(255, b"", error)))
@@ -123,8 +123,8 @@ def test_server_and_client_refuse_invalid_ports(tmp_path, port):
         path.write_bytes(b"")
     with pytest.raises(managedos_guest_ssh.SessionError):
         managedos_guest_ssh.guest_argv(ssh_config=str(paths[0]), known_hosts=str(paths[1]), identity=str(paths[2]),
-                                     host_key_algorithms=client.ALGORITHM, policy_host_key_algorithms=client.ALGORITHM,
-                                     user="root", address="192.0.2.10", remote_argv=["inventory"], port=port)
+                                       host_key_algorithms=client.ALGORITHM, policy_host_key_algorithms=client.ALGORITHM,
+                                       user="root", address="192.0.2.10", remote_argv=["inventory"], port=port)
 
 
 @pytest.mark.parametrize("command", (None, "", "sh", "inventory; reboot", "cat /run/discovery/host-key", "internal-sftp"))
