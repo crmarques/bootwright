@@ -88,7 +88,12 @@ mkdir -- "$work/chart"
 cp -R -- "$here/$case_name/templates" "$here/$case_name/values.yaml" "$work/chart/"
 printf 'apiVersion: v2\nname: %s\nversion: 0.1.0\n' "$case_name" >"$work/chart/Chart.yaml"
 
-detected="$(ip -4 route get 192.0.2.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
+if ! route="$(ip -4 route get 192.0.2.1 2>&1)"; then
+  echo "render.sh: the default-route probe failed: ip -4 route get 192.0.2.1: ${route:-no output}" >&2
+  echo "render.sh: this host has no usable default route or no ip command; add a default route and render again" >&2
+  exit 1
+fi
+detected="$(sed -n 's/.* src \([0-9.]*\).*/\1/p' <<<"$route")"
 helm template "$case_name" "$work/chart" "${overrides[@]}" \
   --set "host.detectedAddress=$detected" --output-dir "$work/out" >/dev/null
 

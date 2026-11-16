@@ -188,6 +188,26 @@ func TestE2ECaseRenderingDoesNotReadTheHostsRoutes(t *testing.T) {
 	}
 }
 
+func TestE2ERenderNamesAFailedRouteProbe(t *testing.T) {
+	tools := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tools, "ip"), []byte("#!/bin/sh\nexit 2\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(e2eRenderScript(t), "lab-rhel", "--out-dir", filepath.Join(t.TempDir(), "input"))
+	command.Env = append(os.Environ(), "PATH="+tools+string(os.PathListSeparator)+os.Getenv("PATH"))
+	var stdout, stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	if err := command.Run(); err == nil {
+		t.Fatalf("render.sh succeeded with a failing route probe: %s", stdout.String())
+	}
+	for _, want := range []string{"ip -4 route get 192.0.2.1", "default route", "add a default route"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Errorf("render.sh stderr lacks %q: %q", want, stderr.String())
+		}
+	}
+}
+
 func e2eRenderScript(t *testing.T) string {
 	t.Helper()
 	if _, err := exec.LookPath("helm"); err != nil {
