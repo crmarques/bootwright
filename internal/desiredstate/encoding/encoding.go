@@ -251,11 +251,13 @@ func validNumber(value string) bool {
 
 var coreSchemaScalar = regexp.MustCompile(`^(?:true|True|TRUE|false|False|FALSE|null|Null|NULL|~|[-+]?[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+|[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))$`)
 
+var yaml11Scalar = regexp.MustCompile(`^(?:y|Y|yes|Yes|YES|n|N|no|No|NO|on|On|ON|off|Off|OFF|=|<<|[-+]?0b[01_]+|[-+]?[1-9][0-9_]*(?::[0-5]?[0-9])+|[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\.[0-9_]*|[-+]?(?:[0-9][0-9_]*)(?:\.[0-9_]*)?(?:[eE][-+]?[0-9]+)?|[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}(?:(?:[Tt]|[ \t]+)[0-9]{1,2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]*)?(?:[ \t]*(?:Z|[-+][0-9]{1,2}(?::[0-9]{2})?))?)?)$`)
+
 func plainString(value string) bool {
 	if value == "" || strings.TrimSpace(value) != value || strings.Contains(value, ": ") || strings.Contains(value, " #") || strings.HasSuffix(value, ":") {
 		return false
 	}
-	if strings.ContainsRune("-?:,[]{}#&*!|>'\"%@`", rune(value[0])) || strings.HasPrefix(value, "...") || coreSchemaScalar.MatchString(value) {
+	if strings.ContainsRune("-?:,[]{}#&*!|>'\"%@`", rune(value[0])) || strings.HasPrefix(value, "...") || coreSchemaScalar.MatchString(value) || yaml11Scalar.MatchString(value) {
 		return false
 	}
 	for _, r := range value {

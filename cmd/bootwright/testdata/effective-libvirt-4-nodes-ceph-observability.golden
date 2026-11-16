@@ -735,7 +735,7 @@ spec:
     size: 2
     minSize: 2
   autoscale:
-    mode: on
+    mode: "on"
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: CephClient

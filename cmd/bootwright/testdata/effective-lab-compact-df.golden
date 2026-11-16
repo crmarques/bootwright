@@ -725,7 +725,7 @@ spec:
   role: rbd
   replicated: {}
   autoscale:
-    mode: on
+    mode: "on"
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: CephRBDImage

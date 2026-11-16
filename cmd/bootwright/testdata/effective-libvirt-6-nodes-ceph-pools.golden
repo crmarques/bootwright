@@ -800,7 +800,7 @@ spec:
     plugin: isa
     crushDeviceClass: hdd
   autoscale:
-    mode: on
+    mode: "on"
     pgNumMin: 8
     pgNumMax: 64
 ---
@@ -817,7 +817,7 @@ spec:
     plugin: isa
     crushDeviceClass: hdd
   autoscale:
-    mode: on
+    mode: "on"
     pgNumMin: 8
     pgNumMax: 64
 ---
@@ -832,7 +832,7 @@ spec:
     size: 3
     minSize: 2
   autoscale:
-    mode: on
+    mode: "on"
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: CephPool
@@ -844,7 +844,7 @@ spec:
   role: rbd
   replicated: {}
   autoscale:
-    mode: on
+    mode: "on"
     pgNumMin: 8
     pgNumMax: 64
   quota:

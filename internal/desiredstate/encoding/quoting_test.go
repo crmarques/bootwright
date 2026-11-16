@@ -12,6 +12,38 @@ func quotingCorpus() []string {
 	return []string{"ends:", "k:", "...x", "x\u2028y", "x\u2029y", "x\u0085y", "x\ufeffy", "a\x7fb", "a: b", "a #b", "plain-value", "9.8", "True"}
 }
 
+func yaml11Ambiguous() []string {
+	return []string{"y", "Y", "yes", "Yes", "YES", "n", "N", "no", "No", "NO", "on", "On", "ON", "off", "Off", "OFF", "1:20", "-1:20:30", "190:20:30.15", "1_000", "0b101", "2001-12-14", "2001-12-14t21:59:43.10-05:00", "=", "<<"}
+}
+
+func TestYAML11AmbiguousStringsAreDoubleQuoted(t *testing.T) {
+	fields := []api.FieldValue{}
+	for _, text := range yaml11Ambiguous() {
+		if plainString(text) {
+			t.Errorf("%q is a YAML 1.1 non-string but plainString accepts it", text)
+		}
+		fields = append(fields, api.FieldValue{Name: text, Value: api.StringValue(text)})
+	}
+	playbook := api.NewObject(api.CustomPlaybook, "probe", api.Value{}, api.MapValue(api.FieldValue{Name: "extraVars", Value: api.MapValue(fields...)}))
+	out, err := YAML(context.Background(), api.NewCatalog([]api.Object{playbook}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document yaml.Node
+	if err := yaml.Unmarshal(out, &document); err != nil {
+		t.Fatalf("effective YAML does not decode: %v\n%s", err, out)
+	}
+	extraVars := childNode(t, childNode(t, document.Content[0], "spec"), "extraVars")
+	if len(extraVars.Content) != 2*len(yaml11Ambiguous()) {
+		t.Fatalf("decoded %d nodes, want %d", len(extraVars.Content), 2*len(yaml11Ambiguous()))
+	}
+	for _, node := range extraVars.Content {
+		if node.Style != yaml.DoubleQuotedStyle {
+			t.Errorf("%q was written with style %v, want double-quoted", node.Value, node.Style)
+		}
+	}
+}
+
 func TestPlainStringsAreWrittenPlainAndOthersDoubleQuoted(t *testing.T) {
 	fields := []api.FieldValue{}
 	for _, text := range quotingCorpus() {
