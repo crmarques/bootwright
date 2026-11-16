@@ -11,7 +11,7 @@ machine_power_attempts: 150
 # verified against, or empty when the controller declares none and the system
 # trust store anchors it.
 machine_power_ca_data: >-
-  {{ lookup('ansible.builtin.file', bootwright_machine_power_material.controllerCA)
+  {{ lookup('ansible.builtin.file', bootwright_machine_power_material.controllerCA, rstrip=false)
      if bootwright_machine_power_material.controllerCA | default('') | length > 0 else '' }}
 
 # Whether the machine answers as the system this context's current apply

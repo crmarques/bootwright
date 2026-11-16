@@ -7,12 +7,12 @@
 - name: Read the machine this installation is about to overwrite
   bootwright.core.redfish_system_inspect:
     endpoint: '{{ substrate_baremetal_machine_target_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_user) }}'
-    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_password) }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_password, rstrip=false) }}'
     verify: '{{ substrate_baremetal_machine_target_verify }}'
     verification: "{{ bootwright_machine_port.verification | default(omit, true) }}"
     ca_data: >-
-      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_target_ca)
+      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_target_ca, rstrip=false)
          if substrate_baremetal_machine_target_ca | length > 0 else '' }}
     require_tpm: '{{ substrate_baremetal_machine_target_require_tpm | default(false) }}'
     root_disk: '{{ substrate_baremetal_machine_target_root_disk | default({}) }}'

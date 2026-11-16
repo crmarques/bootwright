@@ -73,7 +73,7 @@ managedos_install_anaconda_verify: '{{ bootwright_os_install_request.target.cont
 # when the controller declares none and the system trust store anchors it.
 managedos_install_anaconda_controller_ca: "{{ bootwright_os_install_material.controllerCA | default('') }}"
 managedos_install_anaconda_ca_data: >-
-  {{ lookup('ansible.builtin.file', managedos_install_anaconda_controller_ca)
+  {{ lookup('ansible.builtin.file', managedos_install_anaconda_controller_ca, rstrip=false)
      if managedos_install_anaconda_controller_ca | length > 0 else '' }}
 # How the controller is made to trust the artifact server it fetches the
 # installer from, exactly as the request froze it.
@@ -114,7 +114,7 @@ managedos_install_anaconda_image_url: >-
 # The artifact server's certificate: what the installing machine verifies its
 # private fetch against, and what a controller importing it is given.
 managedos_install_anaconda_certificate: >-
-  {{ lookup('ansible.builtin.file', bootwright_os_install_material.artifactCertificate)
+  {{ lookup('ansible.builtin.file', bootwright_os_install_material.artifactCertificate, rstrip=false)
      if bootwright_os_install_material.artifactCertificate is defined else '' }}
 
 # The installer's power-off, the identity answer and the fleet account's

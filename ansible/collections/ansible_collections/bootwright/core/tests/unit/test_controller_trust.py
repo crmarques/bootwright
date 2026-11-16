@@ -117,7 +117,7 @@ def test_every_redfish_call_passes_the_controller_bundle(role):
 def test_each_lifecycle_role_reads_the_bundle_it_was_handed(lookups, tmp_path, role, material, variable):
     bundle = tmp_path / "bmc-ca"
     bundle.write_text("-----BEGIN CERTIFICATE-----\nQ0E=\n-----END CERTIFICATE-----\n")
-    pem = "-----BEGIN CERTIFICATE-----\nQ0E=\n-----END CERTIFICATE-----"
+    pem = "-----BEGIN CERTIFICATE-----\nQ0E=\n-----END CERTIFICATE-----\n"
     for handed, expected in (({"controllerCA": str(bundle)}, pem), ({}, "")):
         variables = dict(defaults(role), **{material: handed})
         assert Templar(loader=LOADER, variables=variables).template(variables[variable]) == expected
@@ -208,8 +208,8 @@ def test_the_managed_os_installation_sets_and_settles_the_frozen_trust(lookups, 
     served = tmp_path / "artifact-ca"
     served.write_text("SERVED CERTIFICATE\n")
     for trust, enable, restore, remove, material, certificate in (
-            ("importCertificate", True, False, True, {"artifactCertificate": str(served)}, "SERVED CERTIFICATE"),
-            ("importCertificate", False, False, True, {"artifactCertificate": str(served)}, "SERVED CERTIFICATE"),
+            ("importCertificate", True, False, True, {"artifactCertificate": str(served)}, "SERVED CERTIFICATE\n"),
+            ("importCertificate", False, False, True, {"artifactCertificate": str(served)}, "SERVED CERTIFICATE\n"),
             ("disableVerification", False, True, False, {}, ""),
             ("disableVerification", False, False, False, {}, ""),
             ("established", True, False, False, {}, ""),

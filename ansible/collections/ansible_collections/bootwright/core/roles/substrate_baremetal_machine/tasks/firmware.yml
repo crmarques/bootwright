@@ -12,12 +12,12 @@
 - name: Apply or prove the declared firmware settings through the controller
   bootwright.core.redfish_firmware:
     endpoint: '{{ substrate_baremetal_machine_target_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_user) }}'
-    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_password) }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_target_password, rstrip=false) }}'
     verify: '{{ substrate_baremetal_machine_target_verify }}'
     verification: "{{ bootwright_machine_port.verification | default(omit, true) }}"
     ca_data: >-
-      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_target_ca)
+      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_target_ca, rstrip=false)
          if substrate_baremetal_machine_target_ca | length > 0 else '' }}
     firmware: '{{ substrate_baremetal_machine_target_firmware }}'
   register: substrate_baremetal_machine_firmware

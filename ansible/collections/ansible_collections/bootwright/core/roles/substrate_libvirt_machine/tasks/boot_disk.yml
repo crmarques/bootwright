@@ -10,10 +10,10 @@
 - name: Select the installed disk as the boot device
   bootwright.core.redfish_boot:
     endpoint: '{{ substrate_libvirt_machine_disk_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_user) }}'
-    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_password) }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_password, rstrip=false) }}'
     verify: '{{ substrate_libvirt_machine_disk_verify }}'
-    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_ca) }}'
+    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_ca, rstrip=false) }}'
     operation: boot
     target: Hdd
   register: substrate_libvirt_machine_disk_selected
@@ -36,10 +36,10 @@
 - name: Power the installed system on and poll it to running
   bootwright.core.redfish_boot:
     endpoint: '{{ substrate_libvirt_machine_disk_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_user) }}'
-    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_password) }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_password, rstrip=false) }}'
     verify: '{{ substrate_libvirt_machine_disk_verify }}'
-    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_ca) }}'
+    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_disk_ca, rstrip=false) }}'
     operation: power-on
   register: substrate_libvirt_machine_disk_started
   failed_when: false

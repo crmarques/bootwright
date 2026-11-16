@@ -20,10 +20,10 @@
 - name: Read the power state its controller reports, when it answers
   bootwright.core.redfish_system_read:
     endpoint: '{{ bootwright_substrate_machine_request.controller.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword, rstrip=false) }}'
     verify: true
-    ca_data: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerCertificate) }}'
+    ca_data: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerCertificate, rstrip=false) }}'
     media: false
   register: substrate_libvirt_machine_controller
   failed_when: false

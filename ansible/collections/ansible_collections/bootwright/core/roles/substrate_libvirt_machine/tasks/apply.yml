@@ -229,7 +229,7 @@
       - |-
         import base64, bcrypt, sys
         head, _separator, rest = sys.stdin.buffer.read().partition(b"\n")
-        password = rest.strip()
+        password = rest[:-1] if rest.endswith(b"\n") else rest
         try:
             line = base64.b64decode(head.strip(), validate=True).split(b"\n", 1)[0]
             kept = line.partition(b":")[2].strip()
@@ -239,7 +239,7 @@
         print((kept if verified else bcrypt.hashpw(password, bcrypt.gensalt())).decode())
     stdin: |-
       {{ substrate_libvirt_machine_credentials_published.content | default('') }}
-      {{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}
+      {{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword, rstrip=false) }}
   register: substrate_libvirt_machine_hash
   changed_when: false
   no_log: true
@@ -250,7 +250,7 @@
 - name: Publish the controller's authentication file
   bootwright.core.private_file:
     content: >-
-      {{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser)
+      {{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser, rstrip=false)
          }}:{{ substrate_libvirt_machine_hash.stdout | trim }}
     path: '{{ substrate_libvirt_machine_state }}/htpasswd'
   register: substrate_libvirt_machine_credentials
@@ -367,10 +367,10 @@
 - name: Prove the controller answers for exactly this machine
   bootwright.core.redfish_system_read:
     endpoint: '{{ bootwright_substrate_machine_request.controller.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword) }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerUser, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerPassword, rstrip=false) }}'
     verify: true
-    ca_data: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerCertificate) }}'
+    ca_data: '{{ lookup("ansible.builtin.file", bootwright_substrate_machine_material.controllerCertificate, rstrip=false) }}'
     media: false
   register: substrate_libvirt_machine_controller
   retries: 30

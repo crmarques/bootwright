@@ -262,8 +262,8 @@ IMAGE = "quay.io/metal3-io/sushy-tools@sha256:" + "0" * 64
 @pytest.fixture(name="material")
 def material_fixture(tmp_path):
     """The bound credential as the runner lends it: one file per value."""
-    (tmp_path / "user").write_text("admin\n")
-    (tmp_path / "password").write_text("correct horse\n")
+    (tmp_path / "user").write_text("admin")
+    (tmp_path / "password").write_text("correct horse")
     (tmp_path / "bcrypt.py").write_text(STAND_IN_BCRYPT)
     return tmp_path
 
@@ -393,11 +393,20 @@ def test_a_replay_publishes_the_authentication_file_it_found(material):
 
 def test_a_password_the_published_hash_no_longer_verifies_is_hashed_again(material):
     first = publish_credentials(material, None)
-    (material / "rotated").write_text("battery staple\n")
+    (material / "rotated").write_text("battery staple")
     rotated = publish_credentials(material, first, password="rotated")
     assert rotated != first
     assert verifies(material, rotated, "battery staple")
     assert not verifies(material, rotated, "correct horse")
+
+
+@pytest.mark.parametrize("password", [" leading space", "trailing space ", " both "], ids=["leading", "trailing", "both"])
+def test_a_password_keeps_its_surrounding_spaces_in_the_hash(material, password):
+    (material / "spaced").write_text(password)
+    published = publish_credentials(material, None, password="spaced")
+    assert verifies(material, published, password)
+    assert not verifies(material, published, password.strip())
+    assert publish_credentials(material, published, password="spaced") == published
 
 
 @pytest.mark.parametrize("found", [
@@ -501,7 +510,7 @@ def test_a_file_published_after_the_controller_started_restarts_it(material, fil
 
 
 def test_an_interrupted_rotation_restarts_the_controller_on_the_hash_it_kept(material):
-    (material / "rotated").write_text("battery staple\n")
+    (material / "rotated").write_text("battery staple")
     published = publish_credentials(material, None, password="rotated")
     assert publish_credentials(material, published, password="rotated") == published
     assert controller_attempt(material, newer=("htpasswd",)) == (True, "changed")

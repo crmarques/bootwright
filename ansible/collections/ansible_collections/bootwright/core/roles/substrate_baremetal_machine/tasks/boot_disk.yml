@@ -13,12 +13,12 @@
 - name: Select the installed disk as the boot device
   bootwright.core.redfish_boot:
     endpoint: '{{ substrate_baremetal_machine_disk_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_user) }}'
-    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_password) }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_password, rstrip=false) }}'
     verify: '{{ substrate_baremetal_machine_disk_verify }}'
     verification: "{{ bootwright_machine_port.verification | default(omit, true) }}"
     ca_data: >-
-      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_disk_ca)
+      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_disk_ca, rstrip=false)
          if substrate_baremetal_machine_disk_ca | length > 0 else '' }}
     operation: boot
     target: Hdd
@@ -42,12 +42,12 @@
 - name: Power the installed system on and poll it to running
   bootwright.core.redfish_boot:
     endpoint: '{{ substrate_baremetal_machine_disk_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_user) }}'
-    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_password) }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_password, rstrip=false) }}'
     verify: '{{ substrate_baremetal_machine_disk_verify }}'
     verification: "{{ bootwright_machine_port.verification | default(omit, true) }}"
     ca_data: >-
-      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_disk_ca)
+      {{ lookup('ansible.builtin.file', substrate_baremetal_machine_disk_ca, rstrip=false)
          if substrate_baremetal_machine_disk_ca | length > 0 else '' }}
     operation: power-on
   register: substrate_baremetal_machine_disk_started

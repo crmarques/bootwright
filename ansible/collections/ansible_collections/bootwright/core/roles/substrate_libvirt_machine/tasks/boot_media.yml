@@ -21,10 +21,10 @@
 - name: Power the machine off before it is booted
   bootwright.core.redfish_boot:
     endpoint: '{{ substrate_libvirt_machine_boot_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_user) }}'
-    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_password) }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_password, rstrip=false) }}'
     verify: '{{ substrate_libvirt_machine_boot_verify }}'
-    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_ca) }}'
+    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_ca, rstrip=false) }}'
     operation: power-off
   register: substrate_libvirt_machine_boot_stopped
   failed_when: false
@@ -46,10 +46,10 @@
 - name: Select the inserted media for an installer that powers the machine off
   bootwright.core.redfish_boot:
     endpoint: '{{ substrate_libvirt_machine_boot_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_user) }}'
-    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_password) }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_password, rstrip=false) }}'
     verify: '{{ substrate_libvirt_machine_boot_verify }}'
-    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_ca) }}'
+    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_ca, rstrip=false) }}'
     operation: boot
     target: Cd
   register: substrate_libvirt_machine_boot_selected
@@ -70,10 +70,10 @@
 - name: Power the machine on and poll it to running
   bootwright.core.redfish_boot:
     endpoint: '{{ substrate_libvirt_machine_boot_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_user) }}'
-    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_password) }}'
+    user: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_password, rstrip=false) }}'
     verify: '{{ substrate_libvirt_machine_boot_verify }}'
-    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_ca) }}'
+    ca_data: '{{ lookup("ansible.builtin.file", substrate_libvirt_machine_boot_ca, rstrip=false) }}'
     operation: power-on
   register: substrate_libvirt_machine_boot_started
   failed_when: false

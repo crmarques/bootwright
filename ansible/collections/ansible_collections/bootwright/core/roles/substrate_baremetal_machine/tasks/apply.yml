@@ -29,8 +29,8 @@
 - name: Read the machine through its own management controller
   bootwright.core.redfish_system_inspect:
     endpoint: '{{ bootwright_substrate_physical_request.controller.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_substrate_physical_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_substrate_physical_material.controllerPassword) }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_substrate_physical_material.controllerUser, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_substrate_physical_material.controllerPassword, rstrip=false) }}'
     verify: '{{ bootwright_substrate_physical_request.controller.tlsVerify }}'
     verification: "{{ bootwright_substrate_physical_request.controller.tlsVerification | default(omit, true) }}"
     ca_data: '{{ substrate_baremetal_machine_ca_data }}'

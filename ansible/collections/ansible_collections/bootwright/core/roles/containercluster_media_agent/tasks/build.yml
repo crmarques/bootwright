@@ -70,19 +70,19 @@
         content: >-
           {{ bootwright_cluster_media_request.installConfig
              | combine({
-                 'pullSecret': lookup('ansible.builtin.file', bootwright_cluster_media_material.pullSecret)
+                 'pullSecret': lookup('ansible.builtin.file', bootwright_cluster_media_material.pullSecret, rstrip=false) | trim
                    | bootwright.core.registry_pull_secret(
                      bootwright_cluster_media_request.registryMirror | default({}),
-                     lookup('ansible.builtin.file', bootwright_cluster_media_material.mirrorUsername)
+                     lookup('ansible.builtin.file', bootwright_cluster_media_material.mirrorUsername, rstrip=false)
                        if bootwright_cluster_media_material.mirrorUsername is defined else
-                     lookup('ansible.builtin.file', bootwright_cluster_media_material.mirrorAuth)
+                     lookup('ansible.builtin.file', bootwright_cluster_media_material.mirrorAuth, rstrip=false)
                        if bootwright_cluster_media_material.mirrorAuth is defined else '',
                      lookup('ansible.builtin.file', bootwright_cluster_media_material.mirrorPassword, rstrip=false)
                        if bootwright_cluster_media_material.mirrorPassword is defined else ''),
                  'sshKey': bootwright_cluster_media_material.sshKey,
                })
              | combine({
-                 'additionalTrustBundle': query('ansible.builtin.file', *containercluster_media_agent_trust_bundles)
+                 'additionalTrustBundle': query('ansible.builtin.file', *containercluster_media_agent_trust_bundles, rstrip=false)
                                           | map('trim') | join(containercluster_media_agent_line_break),
                } if containercluster_media_agent_trust_bundles | length > 0 else {})
              | bootwright.core.installer_proxy_credentials(
@@ -159,7 +159,7 @@
         containercluster_media_agent_line_break: "\n"
       bootwright.core.private_file:
         content: >-
-          {{ query('ansible.builtin.file', *containercluster_media_agent_trust_bundles)
+          {{ query('ansible.builtin.file', *containercluster_media_agent_trust_bundles, rstrip=false)
              | map('trim') | join(containercluster_media_agent_line_break) ~ containercluster_media_agent_line_break }}
         path: '{{ containercluster_media_agent_lent_trust }}/selected.pem'
       when: bootwright_cluster_media_request.trustBundleRefs | default([]) | length > 0
@@ -213,7 +213,7 @@
     - name: Set disk encryption in the generated AgentClusterInstall
       ansible.builtin.copy:
         content: >-
-          {{ lookup('ansible.builtin.file', containercluster_media_agent_work ~ '/cluster-manifests/agent-cluster-install.yaml')
+          {{ lookup('ansible.builtin.file', containercluster_media_agent_work ~ '/cluster-manifests/agent-cluster-install.yaml', rstrip=false)
              | from_yaml
              | bootwright.core.agent_disk_encryption(bootwright_cluster_media_request.diskEncryption,
                  bootwright_cluster_media_request.identity.cluster)

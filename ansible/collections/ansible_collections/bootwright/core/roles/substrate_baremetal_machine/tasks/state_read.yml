@@ -7,12 +7,12 @@
 - name: Read power and the presented media
   bootwright.core.redfish_system_read:
     endpoint: '{{ bootwright_machine_port.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_machine_port.user) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_machine_port.password) }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_port.user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_port.password, rstrip=false) }}'
     verify: '{{ bootwright_machine_port.verify }}'
     verification: "{{ bootwright_machine_port.verification | default(omit, true) }}"
     ca_data: >-
-      {{ lookup('ansible.builtin.file', bootwright_machine_port.ca)
+      {{ lookup('ansible.builtin.file', bootwright_machine_port.ca, rstrip=false)
          if bootwright_machine_port.ca | default('') | length > 0 else '' }}
     media: '{{ bootwright_machine_port.media | default(true) }}'
   register: substrate_baremetal_machine_port_result
@@ -27,12 +27,12 @@
 - name: Read the machine identity when the consumer holds a pin
   bootwright.core.redfish_system_inspect:
     endpoint: '{{ bootwright_machine_port.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_machine_port.user) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_machine_port.password) }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_port.user, rstrip=false) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_port.password, rstrip=false) }}'
     verify: '{{ bootwright_machine_port.verify }}'
     verification: "{{ bootwright_machine_port.verification | default(omit, true) }}"
     ca_data: >-
-      {{ lookup('ansible.builtin.file', bootwright_machine_port.ca)
+      {{ lookup('ansible.builtin.file', bootwright_machine_port.ca, rstrip=false)
          if bootwright_machine_port.ca | default('') | length > 0 else '' }}
   register: substrate_baremetal_machine_port_identity
   failed_when: false
@@ -54,7 +54,7 @@
   ansible.builtin.set_fact:
     substrate_baremetal_machine_port_result: >-
       {{ substrate_baremetal_machine_port_result | combine(substrate_baremetal_machine_port_result | bootwright.core.machine_port_state(
-         lookup('ansible.builtin.file', bootwright_machine_port.image_url_file)
+         lookup('ansible.builtin.file', bootwright_machine_port.image_url_file, rstrip=false)
          if bootwright_machine_port.image_url_file | default('') | length > 0 else '',
          bootwright_machine_port.media | default(true))) }}
   no_log: true
