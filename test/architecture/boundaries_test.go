@@ -149,8 +149,10 @@ func applicationDependencies() map[string][]string {
 		"internal/substrate/baremetal": {"internal/controller/prerequisites", "internal/reconciliation/lifecycle"},
 		"internal/substrate/kubevirt":  capabilityDependencies(),
 		// Storage derives its DVD package endpoint through ArtifactServer's
-		// published selection/path rules rather than reconstructing publication.
-		"internal/storage/ceph": {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle", "internal/infrastructureservices/artifactserver"},
+		// published selection/path rules rather than reconstructing publication,
+		// and resolves images through the frozen controller egress that controller
+		// setup publishes.
+		"internal/storage/ceph": {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle", "internal/infrastructureservices/artifactserver", "internal/controller/prerequisites"},
 		// Installation publishes through ArtifactServer's selection and path rules,
 		// and projects the bytes its publications write into the capacity budget.
 		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice", "internal/substrate/capacity"),

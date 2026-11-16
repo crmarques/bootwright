@@ -524,7 +524,10 @@ def test_execute_uses_the_frozen_controller_route_for_the_selected_image(tmp_pat
     assert result["evidence"]["digest"] == sha(raw(client.manifest)) and client.egress == route
 
 
-@pytest.mark.parametrize("route", [None, "{}", "null", "not-json", json.dumps({"httpProxy": "", "httpsProxy": "http://user:password@proxy.example.test:3128", "noProxy": []})])
+@pytest.mark.parametrize("route", [
+    None, "{}", "null", "not-json",
+    json.dumps({"httpProxy": "", "httpsProxy": "http://user:password@proxy.example.test:3128", "noProxy": []}),
+])
 def test_missing_or_invalid_frozen_route_refuses_before_tls_or_private_material(monkeypatch, route):
     monkeypatch.setattr(discovery, "tls_proof", lambda: pytest.fail("TLS before route admission"))
     monkeypatch.setattr(discovery, "protected_file", lambda *args, **kwargs: pytest.fail("material before route admission"))

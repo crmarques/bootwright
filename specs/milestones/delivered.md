@@ -16172,3 +16172,15 @@ the vulnerability gate warns of exceptions expiring within two weeks.
 A fitness test holds every per-package golden helper to one model, and a
 collection test ties each protocol module's documented refusal reasons to its
 action; the drifted copies and the export protocol's documentation are fixed.
+
+## X506 — Ceph image-resolution gate repairs
+
+### B1476
+
+A pre-existing defect that blocked the gates of [D274](backlog.md#d274)'s
+slices: after the Ceph image-resolution commits (`7a5b29cdb`, `51dc2daca`)
+`make check` failed on main. Storage now declares why it consumes controller
+setup's frozen egress in the package dependency rule; the registry proxy test
+skips where its execution-closure dependency `urllib3` is absent, as in the
+ansible-test units environment, and still runs in the plain lane; two test
+lines satisfy the collection sanity rules. No behavior changes.

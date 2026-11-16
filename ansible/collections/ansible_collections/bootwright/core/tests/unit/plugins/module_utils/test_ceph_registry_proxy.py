@@ -13,11 +13,14 @@ import subprocess
 import threading
 
 import pytest
-import urllib3
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_pull_broker as broker
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_registry_discovery as discovery
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_registry_proxy as proxy, transport_faults
+
+# urllib3 belongs to the execution closure, which the plain lane runs; the
+# ansible-test units environment does not carry it.
+urllib3 = pytest.importorskip("urllib3")
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[4]
 REQUEST = json.loads((COLLECTION / "tests" / "fixtures" / "ceph-image-call.golden").read_text())["request"]
@@ -148,7 +151,7 @@ def test_real_connect_keeps_bearer_inside_verified_origin_tls(tmp_path, secure_p
                     remote = stack.enter_context(socket.create_connection(origin_listener.getsockname(), timeout=5))
                     stream.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
                     while not stopping.is_set():
-                        ready, _, _ = select.select([stream, remote], [], [], 0.2)
+                        ready = select.select([stream, remote], [], [], 0.2)[0]
                         for source in ready:
                             data = source.recv(65536)
                             if not data:
