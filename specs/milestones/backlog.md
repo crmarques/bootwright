@@ -5930,7 +5930,7 @@ holding 4, 8 or 9 refuses at admission. This authorizes
 [B876](delivered.md#x246--bounded-managed-os-operator-acceptance) as slice X189 on M1 alone, out of sequence; the contract
 is [update within release](../managed-os.md#update-within-release). It closes
 the pre-existing defect that no code reads `spec.os.version`. Satellite
-registration is not authorized and is parked as [B877](m1.md#b877). The operator
+registration is not authorized and is parked as [B877](delivered.md#b877). The operator
 chooses repository IDs and update streams; no rule pairs a minor with a
 stream ([D163](#d163)).
 
@@ -5958,7 +5958,7 @@ vendor or firmware version ([D163](#d163)).
 words are taken by the session, pending the owner's review). The request:
 "Plan and implement the support for operator declare his internal satellite
 instance and how bootwright will use it to configure machines with rhel SO".
-It authorizes [B877](m1.md#b877) as slice X194 on M1, out of sequence, and is
+It authorizes [B877](delivered.md#b877) as slice X194 on M1, out of sequence, and is
 the dated waiver of B877's Requires on [B876](delivered.md#x246--bounded-managed-os-operator-acceptance), delivered in-tree
 and awaiting operator acceptance, for implementation only. The owner then
 asked how the feature affects repository configuration and package updates

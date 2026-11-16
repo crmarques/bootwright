@@ -1861,8 +1861,7 @@ The file stays on the installed system. Source: [dnf configuration reference](ht
 repo variables. With a release set, subscription-manager's repository
 library writes it literally into the URLs of `/etc/yum.repos.d/redhat.repo`;
 with none set, those URLs keep `$releasever` and dnf substitutes it, from that
-file when present. This is observed behavior, not a cited source, and the
-operator rehearsal of [B877](milestones/m1.md#b877) proves it. So a
+file when present. This is observed behavior, not a cited source. So a
 profile registering with a Satellite writes no release variable: a content
 view holding repositories synced for the major, such as `.../rhel9/9/...`,
 would otherwise be fetched at a minor path it does not serve. The hosted

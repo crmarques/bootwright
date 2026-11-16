@@ -10825,7 +10825,7 @@ hosted-registration and owned-unregistration arm. [B75](m1.md#b75) still
 requires [B346](m1.md#b346)'s FIPS-controller qualification;
 [B76](m1.md#b76)'s manual service-side removal and `--unregistered` gate
 remains open by the owner's choice. Physical-host qualification remains with
-[B78](m1.md#b78), and [B877](m1.md#b877)'s Satellite/Capsule rehearsal is
+[B78](m1.md#b78), and [B877](#b877)'s Satellite/Capsule rehearsal is
 separate.
 
 The wider three-shape networking run used mixed builds and remains an
@@ -12235,7 +12235,7 @@ is unrun; no real-machine operation or push was performed.
 
 ### X316 — Satellite content view selection
 
-Explicitly requested by the owner on 2026-11-06; advances [B877](m1.md#b877).
+Explicitly requested by the owner on 2026-11-06; advances [B877](#b877).
 The [RHSM fields](../api/secrets.md#rhsm) select an ordinary or composite
 content view and lifecycle environment during managed RHEL registration, as
 [registration](../managed-os.md#registration) specifies. The API, frozen
@@ -16246,4 +16246,34 @@ writer, the context store's own walks, and the fixed-name publications of the
 Ansible runner and selectionfs. An independent review found no blocking
 defect; its follow-ups (a one-component check, refusals of unsafe zero
 values, a reported close failure) are applied.
+
+## X194 — Satellite and Capsule registration
+
+### B877
+
+Authorized by [D192](backlog.md#d192), out of sequence. A Machine whose
+Entitlement declares a Satellite or Capsule registers with it and takes its
+subscription repositories and its update within the release from it, as
+[registration](../managed-os.md#registration),
+[update within release](../managed-os.md#update-within-release),
+[Satellite content selection](../managed-os-satellite.md) and the
+[RHSM fields](../api/secrets.md#rhsm) state. Commit
+`4aa76a5f4340f340acf68e71a69ed49745ee4e49` (2026-10-28) delivered admission,
+the frozen request, the CA bundle's lending, the registration worker, the
+release pin and the evidence, and records its gates: `make focus`, `make race`,
+`make docs-check` and `make check` passed, and an independent review found no
+blocking defect. [X316](#x316--satellite-content-view-selection) added the
+explicit content view and lifecycle environment selection.
+
+**Operator acceptance, 2026-11-16:** The owner ran B877's operator gate on
+clean build `51dc2daca5671ad800eb81a86b3fa101d5b56fb9` and accepted it in
+conversation. A Machine registered with a Satellite through its activation key
+and declared CA bundle and received its subscription repositories; its
+`withinRelease` update installed from the Satellite's content; the explicit
+content view and lifecycle environment selection gate passed; and destroy
+removed the registration. The [ledger](../../docs/acceptance.md#ledger)
+records the explicit exception for the retrospective registration of baseline
+`82da548dc1e7e4f1cff5d050dd682a797fc2e96e`. The run's host, inputs, commands,
+exact outcomes and logs are retained privately. This completes B877; it claims
+no separate Capsule, physical-host or whole-case qualification.
 
