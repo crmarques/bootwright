@@ -1605,6 +1605,9 @@ independently of the caller's umask.
 Before remastering, discovery reads the held source's one contiguous
 `images/install.img` extent in place with `unsquashfs`. Its qualified
 `LiveOS/rootfs.img` logical size is reserved before extraction, bounded to 8 GiB.
+The extractor creates its absent destination beneath an already-proved private
+scratch directory. An existing entry, including a dangling link, refuses before
+extraction or cleanup; extraction never enables overwrite.
 `debugfs` reads only the fixed SSH daemon, advertised split-session helpers and
 crypto policy from that temporary filesystem image. It never mounts that image,
 executes source binaries on the controller, or boots the installer second stage.

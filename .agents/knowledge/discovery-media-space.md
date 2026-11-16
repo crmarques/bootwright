@@ -106,3 +106,16 @@ with the production overlay and disposable SCSI disks. It proved the bound
 canonical inventory, wrong client/server key refusals, confined commands,
 zero QMP block writes and unchanged disk hashes. This is direct-kernel VM
 qualification, not physical BMC acceptance or a new BIOS/EFI ISO boot result.
+
+RHEL's supplied `unsquashfs` 4.4 refuses an already-created extraction root
+with `File exists` unless forced; 4.6 permits that root. The upstream
+[4.4 directory creation](https://github.com/plougher/squashfs-tools/blob/4.4/squashfs-tools/unsquashfs.c#L1512)
+and [4.6 root exception](https://github.com/plougher/squashfs-tools/blob/4.6.1/squashfs-tools/unsquashfs.c#L2044)
+show the distinction. Pre-creating the destination during qualification on a
+newer development tool therefore hid the refusal on the supported RHEL host.
+The reader now proves its private parent and requires an absent fixed child;
+`unsquashfs` creates that child without an overwrite flag. Pre-existing entries
+are refused before cleanup. The same tool from the checksum-verified RHEL DVD
+reproduced the refusal and then extracted and qualified the actual boot-image
+SSH runtime after the fix. This local run simulated controller root ownership;
+it did not contact a BMC or qualify a physical discovery boot.

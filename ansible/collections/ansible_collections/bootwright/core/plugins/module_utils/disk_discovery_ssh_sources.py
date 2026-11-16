@@ -113,7 +113,11 @@ def extract(held, profile, scratch, native):
     if not shutil.rmtree.avoids_symlink_attacks:
         raise ValueError("discovery SSH scratch cleanup")
     destination = scratch / "ssh-source"
-    records.directory(destination, True)
+    records.directory(scratch, False)
+    # Let unsquashfs create its destination. Older host tools refuse an existing
+    # directory without overwrite; the proven private parent protects creation.
+    if os.path.lexists(destination):
+        raise ValueError("discovery SSH source filesystem")
     try:
         native([tool("unsquashfs"), "-no-xattrs", "-no-progress", "-processors", "1", "-offset", str(profile["offset"]),
                 "-d", str(destination), held, "LiveOS/rootfs.img"], timeout=600, limit=65536)

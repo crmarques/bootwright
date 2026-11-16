@@ -90,7 +90,7 @@ def test_readelf_inspects_data_without_executing_the_server():
 
 
 def test_extraction_reads_only_rootfs_and_reaps_scratch_on_refusal(tmp_path, monkeypatch):
-    monkeypatch.setattr(sources.records, "directory", lambda path, create: path.mkdir(mode=0o700))
+    monkeypatch.setattr(sources.records, "directory", lambda path, create: path.mkdir(mode=0o700) if create else None)
     monkeypatch.setattr(sources, "secure_rootfs", lambda destination, size: destination / "rootfs.img")
     monkeypatch.setattr(sources, "read_file", Mock(side_effect=ValueError("discovery SSH source file")))
     native = Mock()
@@ -103,14 +103,18 @@ def test_extraction_reads_only_rootfs_and_reaps_scratch_on_refusal(tmp_path, mon
 
 
 def test_split_session_cannot_reference_a_missing_auth_helper(tmp_path, monkeypatch):
-    monkeypatch.setattr(sources.records, "directory", lambda path, create: path.mkdir(mode=0o700))
+    monkeypatch.setattr(sources.records, "directory", lambda path, create: path.mkdir(mode=0o700) if create else None)
     monkeypatch.setattr(sources.records, "write", lambda path, data: path.write_bytes(data))
     monkeypatch.setattr(sources, "secure_rootfs", lambda destination, size: destination / "rootfs.img")
     monkeypatch.setattr(sources, "libraries", lambda *args: {"libc.so.6"})
     session = b"\x7fELF" + sources.PATHS["sshd-auth"].encode() + b"\0"
     monkeypatch.setattr(sources, "read_file", Mock(side_effect=[b"\x7fELFmain", session, None]))
+
+    def extract(argv, **kwargs):
+        Path(argv[argv.index("-d") + 1]).mkdir(mode=0o700)
+
     with pytest.raises(ValueError, match="source helper"):
-        sources.extract("/held", {"offset": 4096, "rootSize": 1 << 30}, tmp_path, Mock())
+        sources.extract("/held", {"offset": 4096, "rootSize": 1 << 30}, tmp_path, extract)
     assert not (tmp_path / "ssh-source").exists()
 
 
@@ -146,3 +150,70 @@ def test_extracted_rootfs_is_proved_on_its_open_handle(tmp_path, monkeypatch, bo
         with pytest.raises((ValueError, OSError)):
             sources.secure_rootfs(destination, 5 if boundary == "size" else 4)
     assert foreign.read_bytes() == b"external fixture"
+
+
+@pytest.mark.parametrize("fail", (False, True))
+def test_extractor_creates_its_destination_inside_a_private_container(tmp_path, monkeypatch, fail):
+    def directory(path, create):
+        if create:
+            path.mkdir(mode=0o700)
+
+    monkeypatch.setattr(sources.records, "directory", directory)
+    monkeypatch.setattr(sources, "secure_rootfs", lambda destination, size: destination / "LiveOS/rootfs.img")
+    monkeypatch.setattr(sources, "libraries", lambda *args: {"libc.so.6"})
+    monkeypatch.setattr(sources, "read_file", Mock(side_effect=[b"\x7fELFmain", None, None, b"HostKeyAlgorithms ecdsa-sha2-nistp256\n"]))
+    destinations = []
+
+    def native(argv, **kwargs):
+        destination = Path(argv[argv.index("-d") + 1])
+        assert not destination.exists(), "unsquashfs must create the extraction destination"
+        assert destination.parent.stat().st_mode & 0o777 == 0o700
+        assert "-force" not in argv and "-f" not in argv
+        destinations.append(destination)
+        destination.mkdir()
+        if fail:
+            (destination / "partial").write_bytes(b"partial source fixture")
+            raise ValueError("synthetic source refusal")
+
+    if fail:
+        with pytest.raises(ValueError, match="synthetic source refusal"):
+            sources.extract("/held", {"offset": 4096, "rootSize": 1 << 30}, tmp_path, native)
+    else:
+        files, needed = sources.extract("/held", {"offset": 4096, "rootSize": 1 << 30}, tmp_path, native)
+        assert files["sshd"] == b"\x7fELFmain" and needed == {"libc.so.6"}
+    assert len(destinations) == 1 and not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("kind", ("directory", "symlink", "dangling"))
+def test_existing_extraction_target_is_never_overwritten_or_reaped(tmp_path, monkeypatch, kind):
+    foreign = tmp_path / "foreign"
+    foreign.mkdir()
+    (foreign / "keep").write_bytes(b"unrelated fixture")
+    destination = tmp_path / "ssh-source"
+    if kind != "directory":
+        destination.symlink_to(foreign if kind == "symlink" else foreign / "absent", target_is_directory=True)
+    else:
+        destination.mkdir()
+        (destination / "keep").write_bytes(b"existing fixture")
+    proof = Mock()
+    monkeypatch.setattr(sources.records, "directory", proof)
+    native = Mock(side_effect=AssertionError("started extraction over existing target"))
+    with pytest.raises(ValueError, match="source filesystem"):
+        sources.extract("/held", {"offset": 4096, "rootSize": 1 << 30}, tmp_path, native)
+    proof.assert_called_once_with(tmp_path, False)
+    native.assert_not_called()
+    assert (foreign / "keep").read_bytes() == b"unrelated fixture"
+    if kind != "directory":
+        assert destination.is_symlink()
+    else:
+        assert (destination / "keep").read_bytes() == b"existing fixture"
+
+
+def test_private_parent_proof_precedes_any_extraction(tmp_path, monkeypatch):
+    proof = Mock(side_effect=ValueError("unsafe private scratch"))
+    monkeypatch.setattr(sources.records, "directory", proof)
+    native = Mock(side_effect=AssertionError("extracted under an unproved parent"))
+    with pytest.raises(ValueError, match="unsafe private scratch"):
+        sources.extract("/held", {"offset": 4096, "rootSize": 1 << 30}, tmp_path, native)
+    native.assert_not_called()
+    assert not list(tmp_path.iterdir())
