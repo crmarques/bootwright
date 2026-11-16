@@ -109,6 +109,7 @@ import time
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils.host_addresses import bind_address_assigned
 from ansible_collections.bootwright.core.plugins.module_utils.infra_service import (
+    command_runner,
     foreign,
     observe,
     probe_dns,
@@ -155,7 +156,7 @@ def main():
     request = module.params["request"]
     attempts = max(1, min(int(module.params["attempts"]), MAX_ATTEMPTS))
     try:
-        observation = observe(module.run_command, request, module.params["runs_from"])
+        observation = observe(command_runner(), request, module.params["runs_from"])
     except (OSError, ValueError) as failure:
         module.fail_json(msg="the managed service could not be observed: %s" % type(failure).__name__)
         return

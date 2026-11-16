@@ -3,11 +3,12 @@
 The collection's controller and managed-host code encodes canonical JSON only
 in module_utils/canonical_json.py and starts a process only in
 module_utils/bounded_process.py, which the shipped Ceph and package worker
-bundles carry. Starting a process means a subprocess call, os.system, os.popen,
-os.fork, os.forkpty, any os.exec* or os.spawn* function, posix_spawn or
-pty.spawn, found in the syntax tree through any import alias; a command string
-inside a SOURCE constant is not a call, so such a file is named only when it
-also calls one. A file that runs alone (a script shipped as source, a worker in
+bundles carry. Starting a process means reaching, called or passed on, a
+subprocess runner, os.system, os.popen, os.fork, os.forkpty, any os.exec* or
+os.spawn* function, posix_spawn, pty.spawn, asyncio's subprocess starters or
+Ansible's run_command on any object, found in the syntax tree through any
+import alias; a command string inside a SOURCE constant is not a reach, so such
+a file is named only when it also reaches one. A file that runs alone (a script shipped as source, a worker in
 an image), a supervisor that forks or replaces itself on purpose, and an encoding
 that differs on purpose are named exceptions below, each with its reason. The
 lists only shrink: a file leaves its list with the change that makes it use the
@@ -39,7 +40,6 @@ CANONICAL_EXCEPTIONS = {
 }
 
 PROCESS_EXCEPTIONS = {
-    "plugins/module_utils/physical_erase_process.py": "the one runner of the erase RAM image, which carries no sibling module; the erase controller shares it",
     "plugins/module_utils/managedos_rhsm_worker.py": "the guest worker is one source sent over standard input and run alone",
     "plugins/module_utils/managedos_update_worker.py": "the guest worker is one source sent over standard input and run alone",
     "plugins/module_utils/managedos_firewall_worker.py": "the guest worker is one source sent over standard input and run alone",
@@ -55,6 +55,8 @@ OS_PROCESS_CALLS = frozenset(("system", "popen", "fork", "forkpty", "posix_spawn
                               "execl", "execle", "execlp", "execlpe", "execv", "execve", "execvp", "execvpe",
                               "spawnl", "spawnle", "spawnlp", "spawnlpe", "spawnv", "spawnve", "spawnvp", "spawnvpe"))
 PTY_PROCESS_CALLS = frozenset(("spawn", "fork"))
+ASYNCIO_PROCESS_CALLS = frozenset(("create_subprocess_exec", "create_subprocess_shell"))
+ANSIBLE_RUN_COMMAND = "run_command"
 
 
 def names_of(tree, module):
@@ -91,8 +93,25 @@ def encodes_canonical(tree):
                    for keyword in node.keywords)]
 
 
+def reaches(tree, module, accepted):
+    """Each reach for an accepted member of the module, called or passed on as a value, through any alias."""
+    modules, members = names_of(tree, module)
+    return [node for node in ast.walk(tree)
+            if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in modules and node.attr in accepted)
+            or (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and members.get(node.id) in accepted)]
+
+
+def runs_ansible_command(tree):
+    """Each reach for Ansible's run_command on any object: an attribute, called or passed on, or a getattr naming it."""
+    return [node for node in ast.walk(tree)
+            if (isinstance(node, ast.Attribute) and node.attr == ANSIBLE_RUN_COMMAND)
+            or (isinstance(node, ast.Call) and lookup_name(node.func) == "getattr"
+                and any(isinstance(arg, ast.Constant) and arg.value == ANSIBLE_RUN_COMMAND for arg in node.args))]
+
+
 def starts_process(tree):
-    return calls(tree, "subprocess", PROCESS_CALLS) + calls(tree, "os", OS_PROCESS_CALLS) + calls(tree, "pty", PTY_PROCESS_CALLS)
+    return (reaches(tree, "subprocess", PROCESS_CALLS) + reaches(tree, "os", OS_PROCESS_CALLS) + reaches(tree, "pty", PTY_PROCESS_CALLS)
+            + reaches(tree, "asyncio", ASYNCIO_PROCESS_CALLS) + runs_ansible_command(tree))
 
 
 def scan(finder):
@@ -134,8 +153,26 @@ def test_the_finders_see_aliases_members_and_nothing_in_strings():
     replaced = ast.parse("import os as o, pty\no.fork()\no.forkpty()\no.execve('/x', [], {})\no.execvp('x', [])\no.spawnv(0, '/x', [])\npty.spawn(['x'])\n"
                          "from os import execl as e\ne('/x', 'x')\n")
     assert len(starts_process(replaced)) == 7
-    inert = ast.parse("import subprocess, os\nsubprocess.PIPE\nsubprocess.TimeoutExpired\nos.kill(1, 9)\nos.getpid()\nSOURCE = 'subprocess.run([])'\n")
+    inert = ast.parse("import subprocess, os\nsubprocess.PIPE\nsubprocess.TimeoutExpired\nos.kill(1, 9)\nos.getpid()\nSOURCE = 'subprocess.run([])'\n"
+                      "def run_command(argv):\n    pass\nrun = 1\n")
     assert starts_process(inert) == []
+    passed = ast.parse("import subprocess, os, asyncio\nf(run=subprocess.run)\nspawn = os.posix_spawn\nfrom subprocess import Popen\nstart(Popen)\n"
+                       "asyncio.create_subprocess_exec('/x')\n")
+    assert len(starts_process(passed)) == 4
+    ansible = ast.parse("module.run_command(['/x'])\nobserve(module.run_command, request)\nself.module.run_command(['/x'])\n"
+                        "getattr(module, 'run_command')(['/x'])\n")
+    assert len(starts_process(ansible)) == 4
+
+
+def test_a_new_run_command_is_refused():
+    found = {RUNNER_OWNER} | {path for path in ("plugins/modules/new_module.py",)
+                              if starts_process(ast.parse("def main(module):\n    return module.run_command(['/x'])\n"))}
+    try:
+        check(found, RUNNER_OWNER, PROCESS_EXCEPTIONS, "starts a process", "run it through module_utils/bounded_process.py")
+    except AssertionError as refused:
+        assert "new_module.py starts a process" in str(refused)
+    else:
+        raise AssertionError("a new run_command was accepted")
 
 
 def test_a_file_off_its_site_module_and_off_the_list_is_refused():
@@ -234,7 +271,8 @@ def joins_remote_command(tree):
 
 def starts_a_shell(tree):
     """A call passing shell= anything but the literal False, or a ** mapping into a process start or naming shell."""
-    process = {id(node) for node in starts_process(tree)}
+    reached = {id(node) for node in starts_process(tree)}
+    process = {id(node) for node in ast.walk(tree) if isinstance(node, ast.Call) and id(node.func) in reached}
     return [node for node in ast.walk(tree) if isinstance(node, ast.Call) and any(
         (keyword.arg == "shell" and not (isinstance(keyword.value, ast.Constant) and keyword.value.value is False))
         or (keyword.arg is None and (id(node) in process or names_shell(keyword.value)))

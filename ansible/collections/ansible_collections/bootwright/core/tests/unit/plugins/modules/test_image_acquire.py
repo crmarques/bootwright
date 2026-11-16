@@ -6,6 +6,7 @@ import os
 
 import pytest
 
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 from ansible_collections.bootwright.core.plugins.modules import image_acquire
 
 DIGEST = "sha256:" + "a" * 64
@@ -95,3 +96,30 @@ def test_a_mirror_that_lacks_the_digest_fails_naming_it_and_removes_the_lent_fil
         image_acquire.acquire(runner, MIRRORED, EGRESS, "mirror.example.test:8443", "user", "pass", trust="PEM")
     assert MIRRORED in str(failed.value) and "manifest unknown" in str(failed.value)
     assert not os.path.exists(runner.lent["--authfile="][0])
+
+
+def test_podman_runs_bounded_with_the_fixed_environment_and_the_route_alone(monkeypatch):
+    calls = []
+
+    def run(argv, data=b"", timeout=60, limit=bounded_process.MAX_OUTPUT, **options):
+        calls.append((argv, timeout, options))
+        return bounded_process.Result(125, b"", b"Error: denied\n")
+
+    monkeypatch.setenv("REGISTRY_AUTH_FILE", "/ambient/auth.json")
+    monkeypatch.setattr(bounded_process, "run", run)
+    route = image_acquire.environment(EGRESS)
+    assert image_acquire.run(["/usr/bin/podman", "pull", ORIGIN], route) == (125, "", "Error: denied\n")
+    assert image_acquire.run(["/usr/bin/podman", "image", "exists", ORIGIN], None)[0] == 125
+    assert calls == [(["/usr/bin/podman", "pull", ORIGIN], image_acquire.PULL_SECONDS, {"environment": dict(image_acquire.ENVIRONMENT, **route)}),
+                     (["/usr/bin/podman", "image", "exists", ORIGIN], image_acquire.PULL_SECONDS, {"environment": image_acquire.ENVIRONMENT})]
+
+
+@pytest.mark.parametrize("kind, message", [("timeout", "podman did not finish within 1200 seconds"),
+                                           ("output", "podman could not be run within its bounds")])
+def test_a_podman_run_that_does_not_finish_is_a_named_failure(monkeypatch, kind, message):
+    def run(*args, **kwargs):
+        raise bounded_process.Failure(kind)
+
+    monkeypatch.setattr(bounded_process, "run", run)
+    with pytest.raises(RuntimeError, match="^%s$" % message):
+        image_acquire.run(["/usr/bin/podman", "pull", ORIGIN], image_acquire.environment(EGRESS))

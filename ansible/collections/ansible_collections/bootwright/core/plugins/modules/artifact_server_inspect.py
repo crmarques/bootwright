@@ -89,6 +89,7 @@ import time
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils.host_addresses import bind_address_assigned
+from ansible_collections.bootwright.core.plugins.module_utils.infra_service import command_runner
 from ansible_collections.bootwright.core.plugins.module_utils.artifact_server import (
     foreign,
     observe,
@@ -116,7 +117,7 @@ def main():
     request = module.params["request"]
     attempts = max(1, min(int(module.params["attempts"]), MAX_ATTEMPTS))
     try:
-        observation = observe(module.run_command, request)
+        observation = observe(command_runner(), request)
     except (OSError, ValueError) as failure:
         module.fail_json(msg="the artifact server could not be observed: %s" % type(failure).__name__)
         return

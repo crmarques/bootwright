@@ -86,8 +86,14 @@ from urllib.error import HTTPError, URLError
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.urls import open_url
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 
 SKOPEO = "/usr/bin/skopeo"
+ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
+# COPY_SECONDS bounds one skopeo copy of every platform of one image. Neither the request nor the task carries
+# a budget, so it is the one the release mirror gives one transfer (infrastructureservices_mirror_release.READ_BUDGET).
+COPY_SECONDS = 30 * 60
+COPY_OUTPUT = 4 << 20
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 REPOSITORY = re.compile(r"[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?(/[a-z0-9]+([._-]+[a-z0-9]+)*)+\Z")
 MIRROR = re.compile(r"([a-z0-9]([a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:.]+\]):[0-9]{1,5}\Z")
@@ -179,6 +185,18 @@ def copy_arguments(image, mirror, authfile, certificates):
     ]
 
 
+def run(argv, route):
+    """Run skopeo with the fixed environment and the frozen egress route alone."""
+    source = argv[-2][len("docker://"):]
+    try:
+        return bounded_process.runner(COPY_SECONDS, COPY_OUTPUT)(argv, environ_update=dict(ENVIRONMENT, **route))
+    except TimeoutError:
+        raise Refused("image-unreachable", "%s could not be copied into the image mirror: skopeo did not finish within %d seconds" % (
+            source, COPY_SECONDS)) from None
+    except OSError:
+        raise Refused("image-unreachable", "%s could not be copied into the image mirror: skopeo could not be run within its bounds" % source) from None
+
+
 def fill(run, read, images, mirror, egress, username, password, trust, observe=False, base=None):
     """Copy every image the mirror lacks, verify each, and report what it holds."""
     images = checked(images, mirror)
@@ -245,10 +263,6 @@ def main():
         "timeout": {"type": "int", "default": 60},
     }, supports_check_mode=False)
     params = module.params
-
-    def run(argv, route):
-        return module.run_command(argv, environ_update=route)
-
     read, scratch = reader(params["username"], params["password"], params["trust"], params["timeout"], module.tmpdir)
     try:
         changed, held = fill(run, read, params["images"], params["mirror"], params["egress"], params["username"],

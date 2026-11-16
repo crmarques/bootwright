@@ -32,7 +32,7 @@ MODULES = ("native_diagnostics", "native_specializations", "canonical_json", "ce
            "ceph_native_resources", "ceph_native_stretch", "ceph_native_nfs", "ceph_native_nvmeof", "ceph_native_observability", "ceph_native_units",
            "ceph_native_object", "ceph_smb_native",
            "ceph_replication_native", "ceph_export_dns", "ceph_export_native",
-           "ceph_host_route_probe", "ceph_pull_broker", "physical_machine_identity", "physical_erase_process", "physical_erase_worker",
+           "ceph_host_route_probe", "ceph_pull_broker", "physical_machine_identity", "physical_erase_worker",
            "ceph_host_runtime", "ceph_admin_credentials_native")
 MAX_INPUT = 2 << 20
 MAX_SOURCE = 1 << 20

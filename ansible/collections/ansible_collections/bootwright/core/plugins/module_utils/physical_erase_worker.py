@@ -18,10 +18,10 @@ import threading
 import time
 
 if __package__:
-    from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_process
+    from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
     from ansible_collections.bootwright.core.plugins.module_utils import physical_machine_identity
 else:
-    import physical_erase_process
+    import bounded_process
     import physical_machine_identity
 
 CHUNK = 4 * 1024 * 1024
@@ -47,6 +47,21 @@ MAX_OVERWRITE = 896 * 1024**3
 
 class Refusal(Exception):
     """A closed, non-sensitive refusal code."""
+
+
+ENV = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C"}
+
+
+def native(argv, data=b"", timeout=60, limit=65536):
+    """One private native command of erase custody or its RAM image: a fixed environment, cwd /, umask 077 and
+    no standard error, whose output and argv never reach an Ansible result. A run that does not finish is
+    native-command, native-timeout or native-output."""
+    try:
+        code, output, unused = bounded_process.run(argv, data, timeout, limit, environment=dict(ENV), cwd="/",
+                                                   capture_stderr=False, umask=0o077)
+    except bounded_process.Failure as failure:
+        raise Refusal("native-" + failure.kind) from None
+    return code, output
 
 
 def canonical(value):
@@ -453,14 +468,14 @@ def stacked(nodes):
 def dmsetup(run, *arguments):
     try:
         code, output = run([DMSETUP, *arguments], timeout=30, limit=4096)
-    except physical_erase_process.Refusal:
+    except Refusal:
         raise Refusal("disk-in-use") from None
     if code:
         raise Refusal("disk-in-use")
     return output.strip()
 
 
-def release_holders(nodes, run=physical_erase_process.run, proc=Path("/proc")):
+def release_holders(nodes, run=native, proc=Path("/proc")):
     """Remove unmounted, unopened device-mapper nodes over only the targets, deepest first."""
     stack = stacked(nodes)
     if not stack:

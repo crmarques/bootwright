@@ -166,3 +166,96 @@ def test_a_failure_after_the_start_still_kills_and_reaps_the_child(monkeypatch):
     assert len(started) == 1 and started[0].returncode is not None
     with pytest.raises(ProcessLookupError):
         os.killpg(started[0].pid, 0)
+
+
+def gone(pid, seconds=3):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def test_a_reap_that_outlasts_its_second_keeps_the_timeout(monkeypatch):
+    stuck = []
+    popen = bounded_process.subprocess.Popen
+
+    class Unreaped(popen):
+        def wait(self, timeout=None):
+            if timeout == 1 and not stuck:
+                stuck.append(self)
+                raise bounded_process.subprocess.TimeoutExpired(self.args, timeout)
+            return super().wait(timeout)
+
+    monkeypatch.setattr(bounded_process.subprocess, "Popen", Unreaped)
+    try:
+        with pytest.raises(bounded_process.Failure) as refused:
+            run("import time; time.sleep(30)", timeout=0.3)
+    finally:
+        for process in stuck:
+            process.wait(5)
+    assert len(stuck) == 1 and refused.value.kind == "timeout"
+
+
+LINGERING = ("import os, sys, time\n"
+             "child = os.fork()\n"
+             "if child == 0:\n"
+             "    time.sleep(30)\n"
+             "    os._exit(0)\n"
+             "open(sys.argv[1], 'w').write(str(child))\n"
+             "sys.stdout.write('done')\n"
+             "sys.exit(4)\n")
+
+
+def test_an_exited_leader_whose_descendant_holds_its_pipes_returns_promptly(tmp_path):
+    marker = tmp_path / "pid"
+    started = time.monotonic()
+    result = run(LINGERING, marker, timeout=20)
+    assert result == (4, b"done", b"") and time.monotonic() - started < 10
+    descendant = int(marker.read_text())
+    if not gone(descendant):
+        os.kill(descendant, signal.SIGKILL)
+        pytest.fail("the descendant outlived its group")
+
+
+def test_without_a_session_a_lingering_descendant_is_left_to_its_supervisor(tmp_path):
+    marker = tmp_path / "pid"
+    started = time.monotonic()
+    try:
+        result = run(LINGERING, marker, timeout=20, session=False)
+    finally:
+        descendant = int(marker.read_text())
+        alive = not gone(descendant, 0.2)
+        if alive:
+            os.kill(descendant, signal.SIGKILL)
+    assert result == (4, b"done", b"") and time.monotonic() - started < 10 and alive
+
+
+def test_the_run_command_shape_runs_with_exactly_the_environment_given(monkeypatch):
+    monkeypatch.setenv("BOOTWRIGHT_INHERITED_SENTINEL", "leaked")
+    call = bounded_process.runner(10)
+    source = "import os, sys; sys.stdout.write(repr(sorted(os.environ))); sys.stderr.buffer.write(b'\\xff'); sys.exit(2)"
+    code, out, err = call([sys.executable, "-I", "-c", source], check_rc=False, environ_update={"ONLY": "this"}, handle_exceptions=False)
+    assert code == 2 and "'ONLY'" in out and "BOOTWRIGHT_INHERITED_SENTINEL" not in out and err == "\udcff"
+    with pytest.raises(bounded_process.Failure):
+        call([sys.executable, "-I", "-c", "pass"], check_rc=True, environ_update={})
+
+
+def test_the_run_command_shape_raises_each_failure_as_an_os_error(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        bounded_process.runner(10)([str(tmp_path / "missing")], environ_update={})
+    with pytest.raises(TimeoutError):
+        bounded_process.runner(0.3)([sys.executable, "-I", "-c", "import time; time.sleep(30)"], environ_update={})
+    with pytest.raises(OSError) as flood:
+        bounded_process.runner(10, 16)([sys.executable, "-I", "-c", "print('x' * 64)"], environ_update={})
+    assert "output" in str(flood.value) and not isinstance(flood.value, (FileNotFoundError, TimeoutError))
+
+
+def test_a_umask_reaches_the_child_and_a_bad_one_is_refused():
+    assert run("import os; print(oct(os.umask(0)))", umask=0o077).stdout == b"0o77\n"
+    with pytest.raises(bounded_process.Failure) as refused:
+        run("pass", umask=0o1000)
+    assert refused.value.kind == "command"

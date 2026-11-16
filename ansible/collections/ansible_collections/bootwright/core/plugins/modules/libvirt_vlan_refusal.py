@@ -43,6 +43,7 @@ changed:
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_vlan_refusal import manage
+from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import command_runner
 
 
 def main():
@@ -51,7 +52,7 @@ def main():
         "state": {"type": "str", "choices": ["present", "absent"], "default": "present"},
     }, supports_check_mode=False)
     try:
-        changed = manage(module.run_command, module.params["request"], module.params["state"])
+        changed = manage(command_runner(), module.params["request"], module.params["state"])
     except (OSError, ValueError, KeyError, TypeError) as failure:
         module.fail_json(msg=str(failure) if isinstance(failure, ValueError) else "the owned VLAN refusal routes could not be changed safely")
         return

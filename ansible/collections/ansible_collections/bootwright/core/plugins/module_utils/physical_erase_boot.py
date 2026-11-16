@@ -6,7 +6,7 @@ import base64
 import inspect
 import json
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_worker
-from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_process
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 from ansible_collections.bootwright.core.plugins.module_utils import physical_machine_identity
 
 RAM = "/run/bootwright-erase"
@@ -18,12 +18,11 @@ from pathlib import Path
 import sys
 import time
 import physical_erase_worker as worker
-import physical_erase_process as process
 
 ROOT = Path("/run/bootwright-erase")
 
 def command(argv):
-    code, output = process.run(argv, timeout=10, limit=4096)
+    code, output = worker.native(argv, timeout=10, limit=4096)
     if code:
         raise worker.Refusal("installer-boundary")
     return output.decode("ascii").strip()
@@ -58,7 +57,7 @@ def isolate():
     for unit in units:
         if loaded[unit] == "not-found":
             continue
-        process.run(["/usr/bin/systemctl", "kill", "--kill-whom=all", "--signal=KILL", unit], timeout=10, limit=4096)
+        worker.native(["/usr/bin/systemctl", "kill", "--kill-whom=all", "--signal=KILL", unit], timeout=10, limit=4096)
         command(["/usr/bin/systemctl", "stop", unit])
         if command(["/usr/bin/systemctl", "show", "--property=ActiveState", "--value", unit]) not in ("inactive", "failed"):
             raise worker.Refusal("installer-running")
@@ -157,7 +156,7 @@ if __name__ == "__main__":
 def kickstart(network, request, private_key, authorized_key):
     files = {
         "physical_erase_worker.py": inspect.getsource(physical_erase_worker),
-        "physical_erase_process.py": inspect.getsource(physical_erase_process),
+        "bounded_process.py": inspect.getsource(bounded_process),
         "physical_machine_identity.py": inspect.getsource(physical_machine_identity),
         "runtime.py": RUNTIME,
         "request.json": json.dumps(request),

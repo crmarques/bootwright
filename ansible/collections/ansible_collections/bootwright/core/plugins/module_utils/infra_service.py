@@ -14,7 +14,7 @@ import ssl
 import struct
 import time
 
-from ansible_collections.bootwright.core.plugins.module_utils import host_sockets
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, host_sockets
 
 SYSTEMCTL = "/usr/bin/systemctl"
 PODMAN = "/usr/bin/podman"
@@ -28,6 +28,9 @@ PROBE_TIMEOUT = 5
 DNS_A, DNS_AAAA = 1, 28
 UNIT_STATES = ("active", "activating", "deactivating", "inactive", "failed")
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
+# COMMAND_SECONDS bounds one systemctl or podman read of a service observation. No request or task carries a
+# budget; a read answers in seconds, and a podman read may wait behind another podman call's storage lock.
+COMMAND_SECONDS = 300
 TRANSPORTS = {"DNSServer": ("tcp", "udp"), "NTPServer": ("udp",), "Proxy": ("tcp",), "Registry": ("tcp",)}
 
 
@@ -48,6 +51,11 @@ def probe_failure(error):
     if detail:
         return ("%s: %s" % (name, detail))[:PROBE_REASON]
     return name
+
+
+def command_runner():
+    """The bounded run a service or artifact server observation hands its helpers, in run_command's call shape."""
+    return bounded_process.runner(COMMAND_SECONDS)
 
 
 def invoke(runner, argv):

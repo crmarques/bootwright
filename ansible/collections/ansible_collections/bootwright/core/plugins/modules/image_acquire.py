@@ -70,8 +70,13 @@ import shutil
 import tempfile
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 
 PODMAN = "/usr/bin/podman"
+ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
+# PULL_SECONDS bounds one podman call. Neither the request nor the task carries a budget, so it is the bound
+# the Ceph host runtime gives one podman pull (ceph_host_runtime.PULL_SECONDS).
+PULL_SECONDS = 1200
 PINNED = re.compile(r"[a-z0-9][^@\s]*@sha256:[0-9a-f]{64}\Z")
 
 
@@ -137,6 +142,16 @@ def pull_arguments(image, scratch, host, document, trust):
     return argv + [image]
 
 
+def run(argv, route):
+    """Run podman with the fixed environment and, for a pull, the frozen egress route alone."""
+    try:
+        return bounded_process.runner(PULL_SECONDS)(argv, environ_update=dict(ENVIRONMENT, **(route or {})))
+    except TimeoutError:
+        raise RuntimeError("podman did not finish within %d seconds" % PULL_SECONDS) from None
+    except OSError:
+        raise RuntimeError("podman could not be run within its bounds") from None
+
+
 def acquire(run, image, egress, host="", username="", password="", auth="", trust="", base=None):
     """Pull image unless the host holds it, and report whether it pulled."""
     if PINNED.match(image) is None:
@@ -168,10 +183,6 @@ def main():
         "trust": {"type": "str", "default": ""},
     }, supports_check_mode=False)
     params = module.params
-
-    def run(argv, route):
-        return module.run_command(argv, environ_update=route or {})
-
     try:
         changed = acquire(run, params["image"], params["egress"], params["host"], params["username"],
                           params["password"], params["auth"], params["trust"], module.tmpdir)

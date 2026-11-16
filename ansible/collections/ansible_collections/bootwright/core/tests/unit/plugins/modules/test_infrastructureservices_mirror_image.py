@@ -6,6 +6,7 @@ import os
 
 import pytest
 
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 from ansible_collections.bootwright.core.plugins.modules import infrastructureservices_mirror_image as mirror_image
 
 DIGEST = "sha256:" + "a" * 64
@@ -137,3 +138,33 @@ def test_a_copy_the_mirror_then_does_not_hold_is_unreadable_not_a_mismatch(tmp_p
     with pytest.raises(mirror_image.Refused) as refused:
         fill(mirror, base=str(tmp_path))
     assert refused.value.reason == "mirror-unreadable"
+
+
+COPY = mirror_image.copy_arguments(IMAGES[1], MIRROR, "/scratch/auth.json", "/scratch/certificates")
+
+
+def test_skopeo_runs_bounded_with_the_fixed_environment_and_the_route_alone(monkeypatch):
+    calls = []
+
+    def run(argv, data=b"", timeout=60, limit=bounded_process.MAX_OUTPUT, **options):
+        calls.append((argv, timeout, limit, options))
+        return bounded_process.Result(0, b"Copying blob\n", b"")
+
+    monkeypatch.setenv("CONTAINERS_REGISTRIES_CONF", "/ambient/registries.conf")
+    monkeypatch.setattr(bounded_process, "run", run)
+    route = mirror_image.environment(EGRESS, MIRROR)
+    assert mirror_image.run(COPY, route) == (0, "Copying blob\n", "")
+    assert calls == [(COPY, mirror_image.COPY_SECONDS, mirror_image.COPY_OUTPUT, {"environment": dict(mirror_image.ENVIRONMENT, **route)})]
+
+
+@pytest.mark.parametrize("kind, cause", [("timeout", "skopeo did not finish within 1800 seconds"),
+                                         ("command", "skopeo could not be run within its bounds")])
+def test_a_copy_that_does_not_finish_names_the_origin_unreachable(monkeypatch, kind, cause):
+    def run(*args, **kwargs):
+        raise bounded_process.Failure(kind)
+
+    monkeypatch.setattr(bounded_process, "run", run)
+    with pytest.raises(mirror_image.Refused) as refused:
+        mirror_image.run(COPY, mirror_image.environment(EGRESS, MIRROR))
+    assert refused.value.reason == "image-unreachable"
+    assert str(refused.value) == "%s could not be copied into the image mirror: %s" % (IMAGES[1]["source"], cause)

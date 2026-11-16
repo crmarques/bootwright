@@ -7,7 +7,6 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_process as process
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_worker as worker
 
 
@@ -195,7 +194,7 @@ class HolderReleaseTests(unittest.TestCase):
         self.tree.stack(lv, self.disk)
 
         def timeout(argv, timeout=60, limit=65536):
-            raise process.Refusal("native-timeout")
+            raise worker.Refusal("native-timeout")
 
         with self.assertRaisesRegex(worker.Refusal, "disk-in-use"):
             worker.release_holders(self.nodes, run=timeout, proc=self.tree.proc)

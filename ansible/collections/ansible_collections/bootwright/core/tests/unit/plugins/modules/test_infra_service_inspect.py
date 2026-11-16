@@ -17,7 +17,7 @@ import pytest
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.testing import patch_module_args
 
-from ansible_collections.bootwright.core.plugins.module_utils import host_sockets, infra_service
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, host_sockets, infra_service
 from ansible_collections.bootwright.core.plugins.modules import infra_service_inspect as inspect
 
 UNIT = "bootwright-lab-proxy-egress"
@@ -54,7 +54,7 @@ def host(_module, argv, check_rc=False, environ_update=None, handle_exceptions=T
 def service_files(tmp_path, monkeypatch):
     """A unit definition written an hour before the start and a configuration file."""
     monkeypatch.setattr(infra_service, "UNIT_DIRECTORY", str(tmp_path) + "/")
-    monkeypatch.setattr(AnsibleModule, "run_command", host)
+    bounded_host(monkeypatch, host)
     unit = tmp_path / (UNIT + ".container")
     unit.write_text("published\n")
     os.utime(unit, ns=(STARTED - HOUR, STARTED - HOUR))
@@ -81,6 +81,17 @@ def test_the_module_compares_the_start_with_the_files_its_task_names(service, ca
         "unit": "active", "container": IMAGE, "containerPresent": True, "contentRoot": True,
         "startedAfterFiles": started_after,
     }
+
+
+def bounded_host(monkeypatch, host):
+    """Answer the module's bounded runs from a run_command-shaped fake host; Ansible's own run_command must not run."""
+    def run(argv, data=b"", timeout=60, limit=bounded_process.MAX_OUTPUT, *, environment, **options):
+        assert timeout == infra_service.COMMAND_SECONDS and limit == bounded_process.MAX_OUTPUT and data == b"" and options == {}
+        code, out, err = host(None, argv, check_rc=False, environ_update=environment)
+        return bounded_process.Result(code, out.encode(), err.encode())
+
+    monkeypatch.setattr(bounded_process, "run", run)
+    monkeypatch.setattr(AnsibleModule, "run_command", lambda *args, **kwargs: pytest.fail("the module used run_command"))
 
 
 def run(arguments, capsys):
@@ -125,7 +136,7 @@ def planted_listener(monkeypatch):
 def test_the_module_reports_a_listener_the_service_does_not_own(service, listener, monkeypatch, capsys, unit, present, foreign):
     request, _configuration = service
     request = dict(request, kind="Proxy", bindAddress="127.0.0.1", port=listener)
-    monkeypatch.setattr(AnsibleModule, "run_command", state_host(unit, present))
+    bounded_host(monkeypatch, state_host(unit, present))
     result = run({"request": request, "foreign": True}, capsys)
     assert result["foreign"] == ([{"transport": "tcp", "address": "127.0.0.1", "port": listener}] if foreign else [])
     assert "foreign" not in run({"request": request}, capsys)
@@ -189,3 +200,13 @@ def test_a_definite_refusal_is_not_retried(monkeypatch, capsys):
     monkeypatch.setattr(inspect, "RETRY_DELAY", 0)
     result = run({"request": {"port": 5000}, "readiness": True, "attempts": 5}, capsys)
     assert calls == [1] and result["failures"] == [{"port": 5000, "reason": "listener-failed"}]
+
+
+def test_a_host_command_past_its_bound_fails_the_observation(service, monkeypatch, capsys):
+    request, _configuration = service
+
+    def outran(*args, **kwargs):
+        raise bounded_process.Failure("timeout")
+    monkeypatch.setattr(bounded_process, "run", outran)
+    result = run({"request": request}, capsys)
+    assert result["failed"] is True and result["msg"] == "the managed service could not be observed: TimeoutError"

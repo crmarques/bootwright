@@ -49,7 +49,7 @@ changed:
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_nm_connections import manage
-from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import host_conflicts, network_guests
+from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import command_runner, host_conflicts, network_guests
 
 
 def main():
@@ -58,7 +58,7 @@ def main():
         "state": {"type": "str", "choices": ["present", "pruned", "absent"], "default": "present"},
     }, supports_check_mode=False)
     request = module.params["request"]
-    run = module.run_command
+    run = command_runner()
     context = str((request.get("identity") or {}).get("context") or "")
 
     def guests(bridge):

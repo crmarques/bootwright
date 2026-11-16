@@ -3,7 +3,7 @@
 from pathlib import Path
 import tempfile
 import unittest
-from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_process as process
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_worker as worker
 
 
@@ -169,7 +169,7 @@ class EraseBoundaryTests(unittest.TestCase):
         # The actual embedded runtime is loaded, with no __main__ entrypoint.
         import sys
 
-        with patch.dict(sys.modules, {"physical_erase_worker": worker, "physical_erase_process": process}):
+        with patch.dict(sys.modules, {"physical_erase_worker": worker}):
             namespace = {"__name__": "test_runtime"}
             exec(compile(boot.RUNTIME, "erase-runtime", "exec"), namespace)
         namespace["isolate"] = Mock(side_effect=worker.Refusal("installer-running"))
@@ -247,7 +247,7 @@ class WorkerLivenessTests(unittest.TestCase):
         from unittest.mock import Mock, patch
         from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_boot as boot
 
-        with patch.dict(sys.modules, {"physical_erase_worker": worker, "physical_erase_process": process}):
+        with patch.dict(sys.modules, {"physical_erase_worker": worker}):
             namespace = {"__name__": "test_runtime"}
             exec(compile(boot.RUNTIME, "erase-runtime", "exec"), namespace)
         with tempfile.TemporaryDirectory() as temporary:
@@ -291,17 +291,17 @@ class WorkerSourceAuthorityTests(unittest.TestCase):
 
         frozen = types.ModuleType("physical_machine_identity")
         exec(compile(inspect.getsource(physical_machine_identity), "frozen-identity", "exec"), frozen.__dict__)
-        runner = types.ModuleType("physical_erase_process")
-        exec(compile(inspect.getsource(process), "frozen-process", "exec"), runner.__dict__)
+        runner = types.ModuleType("bounded_process")
+        exec(compile(inspect.getsource(bounded_process), "frozen-process", "exec"), runner.__dict__)
         ambient = types.ModuleType("ambient_identity")
         ambient.prove = Mock(side_effect=AssertionError("ambient source must not identify erase targets"))
         prefix = "ansible_collections.bootwright.core.plugins.module_utils"
-        modules = {"physical_machine_identity": frozen, "physical_erase_process": runner, prefix + ".physical_machine_identity": ambient}
+        modules = {"physical_machine_identity": frozen, "bounded_process": runner, prefix + ".physical_machine_identity": ambient}
         namespace = {"__name__": "physical_erase_worker", "__package__": ""}
         with patch.dict(sys.modules, modules), patch.object(module_utils, "physical_machine_identity", ambient):
             exec(compile(inspect.getsource(worker), "frozen-worker", "exec"), namespace)
         self.assertIs(namespace["physical_machine_identity"], frozen)
-        self.assertIs(namespace["physical_erase_process"], runner)
+        self.assertIs(namespace["bounded_process"], runner)
         ambient.prove.assert_not_called()
 
     def test_packaged_worker_keeps_the_collection_loader_as_its_source_authority(self):
@@ -714,7 +714,7 @@ def isolation_runtime(tmp_path, damage):
     from unittest.mock import Mock, patch
     from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_boot as boot
 
-    with patch.dict(sys.modules, {"physical_erase_worker": worker, "physical_erase_process": process}):
+    with patch.dict(sys.modules, {"physical_erase_worker": worker}):
         namespace = {"__name__": "test_runtime"}
         exec(compile(boot.RUNTIME, "erase-runtime", "exec"), namespace)
     flags = ["bootwright.erase=1", "rd.live.ram=1", "rd.live.overlay.overlayfs=1", "inst.zram=0"]
@@ -759,7 +759,7 @@ def test_actual_isolation_refusals_never_start_writer(tmp_path):
         root.mkdir()
         namespace = isolation_runtime(root, damage)
         expected = "boot-purpose" if "=" in damage else "ram-upper" if damage == "ram-work" else damage
-        with patch.object(process, "run", return_value=(0, b"")), patch.object(worker, "execute") as execute:
+        with patch.object(worker, "native", return_value=(0, b"")), patch.object(worker, "execute") as execute:
             try:
                 namespace["run"]()
             except worker.Refusal as error:
@@ -773,5 +773,5 @@ def test_actual_isolation_accepts_only_a_ram_overlay_without_installer(tmp_path)
     from unittest.mock import patch
 
     namespace = isolation_runtime(tmp_path, "valid")
-    with patch.object(process, "run", return_value=(0, b"")):
+    with patch.object(worker, "native", return_value=(0, b"")):
         namespace["isolate"]()

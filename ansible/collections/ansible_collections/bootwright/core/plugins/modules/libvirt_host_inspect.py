@@ -49,7 +49,7 @@ observation:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import observe_host
+from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import command_runner, observe_host
 
 
 def main():
@@ -58,7 +58,7 @@ def main():
         supports_check_mode=True,
     )
     try:
-        observation = observe_host(module.run_command, module.params["request"])
+        observation = observe_host(command_runner(), module.params["request"])
     except (OSError, ValueError, KeyError) as failure:
         module.fail_json(msg="the provider host could not be observed: %s" % type(failure).__name__)
         return

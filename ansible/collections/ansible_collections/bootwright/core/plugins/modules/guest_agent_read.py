@@ -65,7 +65,7 @@ import base64
 import json
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import virsh_reason
+from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import command_runner, virsh_reason
 
 # ALLOWED is the closed set this operation may read. A consumer that needs
 # another file adds it here deliberately, so the channel can never be used to
@@ -139,7 +139,7 @@ def main():
         return
     limit = max(1, min(int(module.params["limit"]), MAX_LIMIT))
     try:
-        content = read_file(module.run_command, module.params["uri"], module.params["domain"], path, limit)
+        content = read_file(command_runner(), module.params["uri"], module.params["domain"], path, limit)
     except Unanswered as unanswered:
         module.exit_json(changed=False, answered=False, content="", reason=unanswered.reason)
         return

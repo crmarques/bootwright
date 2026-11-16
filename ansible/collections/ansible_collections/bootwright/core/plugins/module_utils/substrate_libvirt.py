@@ -14,6 +14,7 @@ import re
 import sys
 from xml.etree import ElementTree
 
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_firewall_ready import observe as observe_firewall_ready
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_nm_connections import observe as observe_connections
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_routing import forwarding_required
@@ -33,6 +34,10 @@ ATTACHED_DISK_LIMIT = 32
 ATTACHED_TARGET = re.compile(r"[a-z]{1,8}[0-9a-z]{0,8}\Z")
 UNIT_STATES = ("active", "activating", "deactivating", "inactive", "failed")
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
+# COMMAND_SECONDS bounds one host command of a libvirt substrate module. Neither the request nor the task
+# carries a budget; it covers nmcli's own 60 second activation wait and systemd's default 90 second job
+# timeout with room, so it only stops a command that would otherwise hang the task.
+COMMAND_SECONDS = 300
 
 # DOMAIN_STATES is libvirt's own vocabulary for what a domain is doing. Only
 # `shut off` means removing it interrupts nothing: a paused, suspended or
@@ -72,6 +77,11 @@ TCP_LISTEN = 0x0A
 HEX_DIGITS = frozenset("0123456789ABCDEFabcdef")
 ANY_IPV4 = ipaddress.IPv4Address("0.0.0.0")
 ANY_IPV6 = ipaddress.IPv6Address("::")
+
+
+def command_runner():
+    """The bounded run every libvirt substrate module hands its helpers, in run_command's call shape."""
+    return bounded_process.runner(COMMAND_SECONDS, 4 * MAX_OUTPUT)
 
 
 def invoke(runner, argv, limit=MAX_OUTPUT):

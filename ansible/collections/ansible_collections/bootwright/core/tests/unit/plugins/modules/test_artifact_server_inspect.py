@@ -15,7 +15,7 @@ import pytest
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.testing import patch_module_args
 
-from ansible_collections.bootwright.core.plugins.module_utils import artifact_server, host_sockets
+from ansible_collections.bootwright.core.plugins.module_utils import artifact_server, bounded_process, host_sockets, infra_service
 from ansible_collections.bootwright.core.plugins.modules import artifact_server_inspect as inspect
 
 UNIT = "bootwright-lab-artifacts"
@@ -32,6 +32,17 @@ def state_host(present):
             return (0, IMAGE + "\n", "") if present else (125, "", "no such container")
         raise AssertionError("unexpected command %r" % (argv,))
     return run_command
+
+
+def bounded_host(monkeypatch, host):
+    """Answer the module's bounded runs from a run_command-shaped fake host; Ansible's own run_command must not run."""
+    def run(argv, data=b"", timeout=60, limit=bounded_process.MAX_OUTPUT, *, environment, **options):
+        assert timeout == infra_service.COMMAND_SECONDS and limit == bounded_process.MAX_OUTPUT and data == b"" and options == {}
+        code, out, err = host(None, argv, check_rc=False, environ_update=environment)
+        return bounded_process.Result(code, out.encode(), err.encode())
+
+    monkeypatch.setattr(bounded_process, "run", run)
+    monkeypatch.setattr(AnsibleModule, "run_command", lambda *args, **kwargs: pytest.fail("the module used run_command"))
 
 
 def run(arguments, capsys):
@@ -75,7 +86,7 @@ def server(tmp_path, port):
 def test_the_module_reports_a_listener_the_server_does_not_own(tmp_path, listener, monkeypatch, capsys, unit, present, foreign):
     request = server(tmp_path, listener)
     monkeypatch.setattr(artifact_server, "unit_state", lambda _runner, _path, _service: unit)
-    monkeypatch.setattr(AnsibleModule, "run_command", state_host(present))
+    bounded_host(monkeypatch, state_host(present))
     result = run({"request": request, "foreign": True}, capsys)
     assert result.get("failed") is not True
     assert result["foreign"] == ([{"transport": "tcp", "address": "127.0.0.1", "port": listener}] if foreign else [])
@@ -88,7 +99,7 @@ def test_an_unreadable_socket_table_fails_the_task(tmp_path, monkeypatch, capsys
         raise error("table")
     monkeypatch.setattr(host_sockets, "table_lines", unreadable)
     monkeypatch.setattr(artifact_server, "unit_state", lambda _runner, _path, _service: "")
-    monkeypatch.setattr(AnsibleModule, "run_command", state_host(False))
+    bounded_host(monkeypatch, state_host(False))
     result = run({"request": server(tmp_path, 8443), "foreign": True}, capsys)
     assert result["failed"] is True
     assert result["msg"] == "the host's socket tables could not be read: %s" % error.__name__
@@ -130,3 +141,12 @@ def test_missing_or_malformed_fingerprint_is_unknown(monkeypatch, capsys, finger
     result = run({"request": {}, "readiness": True, "attempts": 1, "fingerprint": "a" * 64}, capsys)
     assert result["failures"] == [{"port": 8443, "reason": "readiness-unproved"}]
     assert not result["listeners"]
+
+
+def test_a_host_command_past_its_bound_fails_the_observation(tmp_path, monkeypatch, capsys):
+    def outran(*args, **kwargs):
+        raise bounded_process.Failure("timeout")
+    monkeypatch.setattr(bounded_process, "run", outran)
+    monkeypatch.setattr(AnsibleModule, "run_command", lambda *args, **kwargs: pytest.fail("the module used run_command"))
+    result = run({"request": server(tmp_path, 8443)}, capsys)
+    assert result["failed"] is True and result["msg"] == "the artifact server could not be observed: TimeoutError"

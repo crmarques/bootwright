@@ -17,7 +17,6 @@ from ansible_collections.bootwright.core.plugins.module_utils import private_rec
 from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
 from ansible_collections.bootwright.core.plugins.module_utils import managedos_guest_ssh as ssh
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_boot as boot
-from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_process as process
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_redfish as redfish
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_worker as worker
 from ansible_collections.bootwright.core.plugins.module_utils import ssh_key_policy
@@ -28,7 +27,7 @@ MEDIA = Path("/var/lib/bootwright/media")
 
 
 def native(argv, timeout=60):
-    code, output = process.run(argv, timeout=timeout)
+    code, output = worker.native(argv, timeout=timeout)
     if code:
         raise worker.Refusal("native-command")
     return output
@@ -283,7 +282,7 @@ class Controller:
             address=self.request["install"]["address"],
             remote_argv=[command],
         )
-        code, output = process.run(argv, data, timeout=30, limit=32768)
+        code, output = worker.native(argv, data, timeout=30, limit=32768)
         return ssh.Outcome(code, output, False, False)
 
     def await_receipt(self):
