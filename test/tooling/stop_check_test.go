@@ -1,4 +1,4 @@
-package architecture_test
+package tooling_test
 
 import (
 	"bytes"

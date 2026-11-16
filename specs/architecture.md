@@ -404,7 +404,7 @@ typed stub whose every method returns `availability.ErrNotImplemented` after the
 context check; it exposes no successful result schema, and the CLI alone renders
 results and unavailable messages.
 
-Repository-fitness packages under `test/architecture` inspect source and assets
+Repository-fitness packages under `test/` inspect source and assets
 but contain no production behavior. They enforce dependency direction, effect
 boundaries, composition-only binding, the package kinds above, the CLI import
 allowlist, and the stub set, whose commands the CLI catalog leaves unavailable.
@@ -1276,6 +1276,12 @@ reviewers retain semantic judgments that source checks cannot prove. A check
 holds a stated rule and never replaces it: the rule keeps its statement in its
 owning spec, which names the check.
 
+- The fitness checks live in three test-only packages, which `go test` runs
+  beside one another: `test/architecture` holds the rules over Go source and
+  assets, `test/docs` the guidance, specification and milestone checks, and
+  `test/tooling` the checks of the repository's scripts, Makefile and
+  workflows. The architecture checks list and parse the production source once
+  per run and share it.
 - Check every production Go package for inward dependencies, declared context
   ownership, and no direct adapter-to-adapter calls or domain vendor/I/O leaks.
 - Reject concrete service types and their constructors outside composition,
@@ -1335,7 +1341,7 @@ owning spec, which names the check.
   no guidance outside the ignored paths cites it, and a guidance byte budget
   once it exceeds its file's size by more than a tenth of itself; each
   `.claude/rules` page has a budget of its own. `make docs-check` runs the
-  tests listed in `test/architecture/testdata/docs-checks.txt`, and
+  tests listed in `test/docs/testdata/docs-checks.txt`, and
   `TestDocsChecksListIsComplete` fails on a listed test no file declares and on
   a test that the convention names and the list omits: one whose name begins
   with Docs, CephMatrix or CephProfile after Test, one that ends in
@@ -1369,8 +1375,8 @@ owning spec, which names the check.
   qualifier, and no order in which it reads the files decides its verdict.
   Every other docs check that lists files reads only the files Git tracks,
   never an untracked or ignored one: the guidance checks of
-  `test/architecture/docs_test.go`, the milestone checker of
-  `test/architecture/milestones_test.go` and the operator command lines of
+  `test/docs/docs_test.go`, the milestone checker of
+  `test/docs/milestones_test.go` and the operator command lines of
   `internal/cli/docs_commands_test.go`. The guidance checks skip the dated
   reports under `audits/`, which cite the repository at the commit they
   audited. A link or cited path resolves only to
@@ -1401,10 +1407,10 @@ owning spec, which names the check.
   and `TestOperationPlanHoldsNoHandles` in
   `internal/reconciliation/lifecycle/operation_plan_test.go` keeps the plan free
   of ports, functions, channels and secret material.
-- `make quick` tests, besides the architecture suite, each package with a
-  changed Go file and each package whose directory encloses, at any depth, a
-  changed file that is not Go source, as a `go:embed` pattern or a read of
-  `testdata` reaches it; each package that imports one, directly, through a
+- `make quick` tests, besides the fitness packages under `test/`, each package
+  with a changed Go file and each package whose directory encloses, at any
+  depth, a changed file that is not Go source, as a `go:embed` pattern or a
+  read of `testdata` reaches it; each package that imports one, directly, through a
   dependency or only from its tests; and each package whose tests name, as a
   quoted path, the first path element of a changed file that is not Go source,
   as a test reading `specs/` or `examples/` does. Paths are matched as Git
@@ -1424,7 +1430,7 @@ owning spec, which names the check.
   changed, a deleted one included, which type-checks each dependent and its
   tests without running them; the tests of each changed package and each
   reader `make quick` selects, except a reader of a changed Markdown file, and
-  never a dependent or, unless selected so, the architecture suite. For the
+  never a dependent or, unless selected so, a fitness package. For the
   collection, it lints its changed YAML files, syntax-checks its changed
   playbooks and runs sanity over its changed files; it runs the unit tests that
   import a changed Python file, directly or through other collection files, or

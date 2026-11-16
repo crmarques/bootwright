@@ -652,7 +652,7 @@ only since D144),
 `TestPublicationLeavesNoStageOnFailure`, `TestTransitionTablesMatchSpec`,
 `TestDiagnosticCodesMatchOutputSpec`, `TestDocumentedBoundsMatchCode`,
 `TestCommandCatalogMatchesSpec` and the docs gate in
-`test/architecture/docs_test.go`.
+`test/docs/docs_test.go`.
 
 **Constraints left behind:** M5a stays blocked on S3b and M4a's physical nodes
 refuse until S2b; concurrency stays one until S4b and a real-host run;
@@ -8660,7 +8660,7 @@ and `internal/canonicaljson` pins that divergence. The pylint
 requirement. `TestEveryCollectionAndScriptSourceMapsToALanguageRow`
 maps every tracked collection and script source to a row of
 [language responsibility](../architecture.md#language-responsibility).
-`make docs-check` selects its tests from `test/architecture/testdata/docs-checks.txt`,
+`make docs-check` selects its tests from `test/docs/testdata/docs-checks.txt`,
 which `TestDocsChecksListIsComplete` holds complete. The playbook entry-point
 test allows exactly the install playbook's eight task files, and
 `test_entry_point_reads.py` refuses undeclared `bootwright_*` reads, with the
@@ -10173,7 +10173,7 @@ default with its descriptor `Budget`; and
 names, provided and required tokens, top-level configuration members, timeout
 defaults and operator-managed approval, and requires each absent package's
 item to be named by the page's Not yet met line. The three joined
-`test/architecture/testdata/docs-checks.txt`. The unreferenced goldens
+`test/docs/testdata/docs-checks.txt`. The unreferenced goldens
 `help-add-ons-add.golden` and `help-add-ons-delete.golden` are deleted. The
 request and evidence schemas are unchanged.
 

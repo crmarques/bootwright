@@ -882,7 +882,7 @@ version, `HEAD` and a clean source, unless `bootwright.cdx.json` is what that
 executable's `sbom` writes, and unless `bootwright.notices.txt` names the
 SHA-256 of that document. It ships the executable, the two documents and a
 `SHA256SUMS` over them, and nothing else, into `dist` (`RELEASE_DIR`)
-([`TestReleaseRefusesWhatItMustNotShip`](../test/architecture/release_recipe_test.go),
+([`TestReleaseRefusesWhatItMustNotShip`](../test/tooling/release_recipe_test.go),
 which runs the real Makefile against stand-ins for the engine and `scripts/go`).
 The release is unsigned and no provenance statement accompanies it; the
 verdict it carries is the one the gate wrote during that build.

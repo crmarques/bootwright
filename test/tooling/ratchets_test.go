@@ -1,4 +1,4 @@
-package architecture_test
+package tooling_test
 
 import (
 	"bytes"
@@ -6,49 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 )
-
-func TestByteBudgetsFailWithMoreThanATenthToSpare(t *testing.T) {
-	root := t.TempDir()
-	for name, size := range map[string]int{"exact.md": 90, "slack.md": 89, "over.md": 101, "rule.md": 10, "untracked.md": 90} {
-		ratchetWrite(t, root, name, strings.Repeat("x", size), 0o644)
-	}
-	tracked := []string{"exact.md", "over.md", "rule.md", "slack.md"}
-	budgets := map[string]int{"exact.md": 100, "slack.md": 100, "over.md": 100, "untracked.md": 100}
-	got := byteBudgetViolations(root, tracked, budgets, []string{"exact.md", "rule.md"})
-	want := []string{
-		"over.md is 101 bytes, above its 100-byte budget; move detail to an on-demand page",
-		"slack.md is 89 bytes, more than a tenth below its 100-byte budget; lower the budget to 98",
-		"budgeted file untracked.md is not tracked",
-		"rule.md has no byte budget; add one to docsByteBudgets",
-	}
-	if !slices.Equal(got, want) {
-		t.Fatalf("violations = %q, want %q", got, want)
-	}
-	budgets = map[string]int{"exact.md": 100, "slack.md": 98, "rule.md": 11}
-	if got := byteBudgetViolations(root, tracked, budgets, []string{"exact.md", "rule.md"}); len(got) != 0 {
-		t.Fatalf("the budgets each violation names still fail: %q", got)
-	}
-}
-
-func TestIgnoredGuidancePathsFailOnceNothingOutsideThemCitesThem(t *testing.T) {
-	present := trackedPaths([]string{"examples/present/README.md"})
-	files := []markdownFile{
-		{path: "README.md", lines: []string{"Keep drafts in `examples/cited/`.", "```", "`examples/fenced/`", "```"}},
-		{path: "examples/inside/README.md", lines: []string{"`examples/inside/` only names itself."}},
-	}
-	ignored := map[string]bool{"examples/cited/": true, "examples/fenced/": true, "examples/inside/": true, "examples/present/": true}
-	var want []string
-	for _, path := range []string{"examples/fenced/", "examples/inside/", "examples/present/"} {
-		want = append(want, "ignoredGuidancePaths excuses "+path+", which no guidance outside it cites; remove it")
-	}
-	if got := citedPathViolations(present, files, ignored); !slices.Equal(got, want) {
-		t.Fatalf("violations = %q, want %q", got, want)
-	}
-}
 
 // ratchetGoStub stands in for scripts/go. It answers the two listings
 // quick-test takes with the output their templates define
@@ -117,7 +77,7 @@ func TestQuickTestSelectsChangedPackagesAndNamesWhatTheBuildOmits(t *testing.T) 
 	}
 
 	stdout, stderr, err := ratchetQuickTest(root)
-	if err != nil || stdout != "test ./test/architecture/... example.test/fixture/a example.test/fixture/b example.test/fixture/d\n" ||
+	if err != nil || stdout != "test ./test/... example.test/fixture/a example.test/fixture/b example.test/fixture/d\n" ||
 		stderr != "quick-test: gated is outside the default build; its own gate runs it\n" {
 		t.Fatalf("quick-test: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 	}
@@ -141,7 +101,7 @@ func TestQuickTestTestsThePackageAMovedFileLeft(t *testing.T) {
 	}
 
 	stdout, stderr, err := ratchetQuickTest(root)
-	if err != nil || stdout != "test ./test/architecture/... example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/d example.test/fixture/e\n" || stderr != "" {
+	if err != nil || stdout != "test ./test/... example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/d example.test/fixture/e\n" || stderr != "" {
 		t.Fatalf("quick-test: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 	}
 }
@@ -154,7 +114,7 @@ func TestQuickTestSelectsThePackagesWhoseTestsAloneImportAChange(t *testing.T) {
 	} {
 		ratchetWrite(t, root, step.change+"/"+step.change+".go", "package "+step.change+"\n\nconst changed = true\n", 0o644)
 		stdout, stderr, err := ratchetQuickTest(root)
-		if err != nil || stdout != "test ./test/architecture/... "+step.want+"\n" || stderr != "" {
+		if err != nil || stdout != "test ./test/... "+step.want+"\n" || stderr != "" {
 			t.Fatalf("quick-test after changing %s: %v\nstdout:\n%s\nstderr:\n%s", step.change, err, stdout, stderr)
 		}
 	}
@@ -170,7 +130,7 @@ func TestQuickTestSelectsThePackagesWhoseTestsReadAChangedFile(t *testing.T) {
 	} {
 		ratchetWrite(t, root, step.change, "changed\n", 0o644)
 		stdout, stderr, err := ratchetQuickTest(root)
-		if err != nil || stdout != "test ./test/architecture/..."+step.want+"\n" || stderr != step.notice {
+		if err != nil || stdout != "test ./test/..."+step.want+"\n" || stderr != step.notice {
 			t.Fatalf("quick-test after changing %s: %v\nstdout:\n%s\nstderr:\n%s", step.change, err, stdout, stderr)
 		}
 	}
@@ -216,12 +176,12 @@ func TestQuickTestFocusTestsChangesWithoutTheirDependents(t *testing.T) {
 func TestQuickTestListsWhatItWouldTest(t *testing.T) {
 	root := ratchetQuickTestFixture(t)
 	stdout, stderr, err := ratchetQuickTest(root, "--list")
-	if err != nil || stdout != "./test/architecture/...\n" || stderr != "" {
+	if err != nil || stdout != "./test/...\n" || stderr != "" {
 		t.Fatalf("quick-test --list without a change: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 	}
 	ratchetWrite(t, root, "a/a.go", "package a\n\nconst changed = true\n", 0o644)
 	stdout, stderr, err = ratchetQuickTest(root, "--list")
-	if err != nil || stdout != "./test/architecture/...\nexample.test/fixture/a\nexample.test/fixture/b\nexample.test/fixture/d\n" || stderr != "" {
+	if err != nil || stdout != "./test/...\nexample.test/fixture/a\nexample.test/fixture/b\nexample.test/fixture/d\n" || stderr != "" {
 		t.Fatalf("quick-test --list: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 	}
 }
@@ -289,7 +249,7 @@ func TestQuickTestSelectsEveryPackageWhoseDirectoryHoldsAChangedFile(t *testing.
 	} {
 		ratchetWrite(t, root, step.change, "changed\n", 0o644)
 		stdout, stderr, err := ratchetQuickTest(root)
-		if err != nil || stdout != "test ./test/architecture/... "+step.want+"\n" || stderr != "" {
+		if err != nil || stdout != "test ./test/... "+step.want+"\n" || stderr != "" {
 			t.Fatalf("quick-test after changing %s: %v\nstdout:\n%s\nstderr:\n%s", step.change, err, stdout, stderr)
 		}
 	}
@@ -312,13 +272,13 @@ func TestQuickTestSelectsThePackagesOfAPathGitQuotes(t *testing.T) {
 	ratchetGit(t, root, "add", ".")
 	ratchetGit(t, root, "commit", "-q", "-m", "quoted")
 	stdout, stderr, err := ratchetQuickTest(root)
-	if err != nil || stdout != "test ./test/architecture/... example.test/fixture/c example.test/fixture/e\n" || stderr != "" {
+	if err != nil || stdout != "test ./test/... example.test/fixture/c example.test/fixture/e\n" || stderr != "" {
 		t.Fatalf("quick-test after committing c/ç.go: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 	}
 
 	for _, step := range []struct{ change, want string }{
-		{"a/testdata/é.golden", "./test/architecture/... example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/d example.test/fixture/e"},
-		{"ñ/data.yaml", "./test/architecture/... example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/d example.test/fixture/e example.test/fixture/s"},
+		{"a/testdata/é.golden", "./test/... example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/d example.test/fixture/e"},
+		{"ñ/data.yaml", "./test/... example.test/fixture/a example.test/fixture/b example.test/fixture/c example.test/fixture/d example.test/fixture/e example.test/fixture/s"},
 		{"a/testdata/back\\slash.golden", "./..."},
 		{"ø/data.yaml", "./..."},
 	} {

@@ -40,7 +40,7 @@ push, release, or extra product scope.
 Commands (through the pinned wrappers, never a bare `go`):
 
 - `make focus`: checks this branch's diff selects.
-- `make quick`: formatting, vet, architecture suite, changed packages.
+- `make quick`: formatting, vet, fitness suites, changed packages.
 - `make docs-check`: guidance links, cited paths and spec tables.
 - `./scripts/go test ./internal/<package>/...`: one package's tests.
 - `./scripts/ansible-check --suite units [PATH...]`: collection unit tests.

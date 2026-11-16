@@ -51,7 +51,7 @@ changed plugin or list the plugins tree, every Ansible check for a change to
 the Ansible configuration or locks, and docs-check for guidance.
 
 It never proves what only the gate runs: the dependents' tests, the
-architecture suite unless the change selects it, the second vet platform,
+fitness suites unless the change selects them, the second vet platform,
 the static analyzer, completion, vulnerability and module checks, the ansible-test units, the unit
 run under the managed-host floor, full sanity and syntax, and the integration
 targets. A collection test that reads a role or a plugin as data without

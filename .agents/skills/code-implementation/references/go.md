@@ -83,7 +83,7 @@ more than its parameter names, except the exceptions that check lists.
 Use pinned repository entrypoints, always `./scripts/go` and never a bare `go`;
 never install an unreviewed latest tool to make a gate available. Iterate with
 the [verification tiers](verification.md): a probe, then `make focus`; run
-`make quick` (formatting, vet, the architecture suite and the changed packages
+`make quick` (formatting, vet, the fitness suites and the changed packages
 with their dependents) when many packages import the change. Run `make race` when
 changed paths may execute concurrently or affect shared state, cancellation, or
 goroutine lifetime; CI runs it on every push and pull request.

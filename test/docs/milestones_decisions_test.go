@@ -1,4 +1,4 @@
-package architecture_test
+package docs_test
 
 import (
 	"fmt"

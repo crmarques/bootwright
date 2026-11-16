@@ -292,7 +292,7 @@ ansible-check:
 # *RefusalTableMatchesUnsupported and *ObservableFieldTableMatchesProjector
 # tests and the other names that test lists is listed, and every listed test
 # exists. TestDocsCheckRecipeReadsTheList holds this recipe to the list.
-DOCS_CHECKS := test/architecture/testdata/docs-checks.txt
+DOCS_CHECKS := test/docs/testdata/docs-checks.txt
 docs-check: wheels
 	$(GO) test -count=1 -run '^($(shell awk '{print $$2}' $(DOCS_CHECKS) | paste -sd'|' -))$$' $(shell awk '{print "./" $$1}' $(DOCS_CHECKS) | sort -u)
 
@@ -301,7 +301,7 @@ docs-check: wheels
 focus:
 	python3 -I scripts/tools/focus.py
 
-# The inner-loop tier: formatting, vet, the architecture suite and the packages
+# The inner-loop tier: formatting, vet, the fitness suites and the packages
 # this branch changed together with their dependents.
 quick: fmt-check vet
 	./scripts/quick-test

@@ -1,4 +1,4 @@
-package architecture_test
+package docs_test
 
 import (
 	"fmt"
@@ -193,7 +193,7 @@ func TestDocsCheckRecipeReadsTheList(t *testing.T) {
 }
 
 func TestDocsCheckRecipeRefusesAHardCodedSelection(t *testing.T) {
-	const good = "DOCS_CHECKS := test/architecture/testdata/docs-checks.txt\ndocs-check:\n\t$(GO) test -run '^($(shell awk '{print $$2}' $(DOCS_CHECKS)))$$' ./a\n\nfocus:\n\ttrue\n"
+	const good = "DOCS_CHECKS := test/docs/testdata/docs-checks.txt\ndocs-check:\n\t$(GO) test -run '^($(shell awk '{print $$2}' $(DOCS_CHECKS)))$$' ./a\n\nfocus:\n\ttrue\n"
 	if problem := docsCheckRecipeProblem(good); problem != "" {
 		t.Fatalf("a recipe reading the list was refused: %s", problem)
 	}
@@ -227,8 +227,8 @@ func docsCheckRecipeProblem(makefile string) string {
 		return "Makefile has no docs-check recipe"
 	}
 	text := strings.Join(recipe, "\n")
-	if !strings.Contains(text, "$(DOCS_CHECKS)") || !strings.Contains(makefile, "DOCS_CHECKS := test/architecture/"+docsChecksList) {
-		return "the Makefile docs-check recipe must read the list test/architecture/" + docsChecksList + " through $(DOCS_CHECKS)"
+	if !strings.Contains(text, "$(DOCS_CHECKS)") || !strings.Contains(makefile, "DOCS_CHECKS := test/docs/"+docsChecksList) {
+		return "the Makefile docs-check recipe must read the list test/docs/" + docsChecksList + " through $(DOCS_CHECKS)"
 	}
 	if strings.Contains(text, "Test") {
 		return "the Makefile docs-check recipe names a test; the list owns the selection"

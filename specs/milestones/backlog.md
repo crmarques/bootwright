@@ -2791,7 +2791,7 @@ probe tests and a live run.
 
 **Owner:** Specification maintenance. **Kind:** enabling. **Requires:** none.
 **Definition:** Specified. `docsSectionExceptions` in
-`test/architecture/docs_gates_test.go` grants ten level-2 sections a ceiling
+`test/docs/docs_gates_test.go` grants ten level-2 sections a ceiling
 above the section budget, up to 88812 bytes, and `docsLeafExceptions` grants
 the leaves above the leaf budget; the first split targets are
 [Installation](../managed-os.md#installation) and

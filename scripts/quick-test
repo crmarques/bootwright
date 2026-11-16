@@ -3,13 +3,13 @@
 # changed Go file, or whose directory encloses a changed file that is not Go
 # source; every package that depends on one, directly or only through its
 # tests; every package whose tests name, as a quoted path, the first path
-# element of a changed file that is not Go source; and the architecture fitness
-# suite. A change to the module files, a path Git always quotes, or no base to
+# element of a changed file that is not Go source; and the fitness suites under
+# test/. A change to the module files, a path Git always quotes, or no base to
 # compare against, tests everything. A selected directory the default build
 # does not list, such as a package behind a build tag, is named and left to its
 # own gate.
 #
-# --focus narrows the inner loop: no dependent, no architecture suite unless
+# --focus narrows the inner loop: no dependent, no fitness suite unless
 # selected, and no reader of a changed Markdown file, which docs-check covers.
 # --list prints the selection, one package or pattern per line, instead of
 # testing it; --base prints the commit the branch is compared against.
@@ -96,7 +96,7 @@ fi
 readers=$(printf '%s\n' "$named" | grep '\.go$' | while IFS= read -r file; do dirname -- "$file"; done | sort -u)
 if test -z "$directories$readers$others"; then
     if $focus; then run; fi
-    run ./test/architecture/...
+    run ./test/...
 fi
 # The listing is taken on its own so that its failure stops the run: piped into
 # the selection, a failed listing left out every package it could not list.
@@ -153,4 +153,4 @@ packages=$(printf '%s\n' "$graph" | awk -F '\t' -v targets="$targets" -v readers
 if $focus; then
     run $packages
 fi
-run ./test/architecture/... $packages
+run ./test/... $packages
