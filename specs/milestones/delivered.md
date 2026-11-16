@@ -16277,3 +16277,19 @@ records the explicit exception for the retrospective registration of baseline
 exact outcomes and logs are retained privately. This completes B877; it claims
 no separate Capsule, physical-host or whole-case qualification.
 
+## X510 — One ownership rule and one helper launcher
+
+### B1480
+
+Split from B1463 under [D274](backlog.md#d274) (audit 005 W2.3 and W2.4).
+`nativefs.Ownership` holds the rule that a path and its ancestors are owned by
+a trusted account and not writable by group or others, with an explicit
+sticky-directory policy; executable qualification, the Python runtime, the
+privilege checks, bundle trust and `render --sensitive` / `diff --output-dir`
+use it with the policies they had. `nativeexec.Helper` and `Launcher` start
+the privilege-dropping helpers of invokerfs, selectionfs and the comparison
+helper one way, on the X507 runner, with a seam through which their root-only
+branches now run in tests; the invokerfs helper now leads its own process
+group. An independent review found no path admitted that was refused before
+and no blocking defect.
+
