@@ -172,12 +172,6 @@ func (t *transaction) Publish(ctx context.Context, name, environment string, sou
 	return "", state("input revision reservation exhausted its collision limit")
 }
 
-// discardRevision removes a revision this publication created and then failed
-// to complete. Nothing selects it yet, and only pristine contexts collect
-// unselected revisions, so it would otherwise hold its bytes and a revision
-// slot for good. It ignores cancellation, so a cancelled publication still
-// cleans up, and its own failure is ignored: the refusal that caused it is the
-// one to report.
 func (s *Store) discardRevision(ctx context.Context, revisions, fresh *directory, revision string) {
 	ctx = context.WithoutCancel(ctx)
 	remaining := desiredstate.MaxFiles + desiredstate.MaxMarkers + 1

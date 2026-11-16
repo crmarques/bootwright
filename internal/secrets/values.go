@@ -23,10 +23,7 @@ const (
 	PublicKeyPart   Part = "public-key"
 )
 
-// Material owns confidential bytes. Formatting and JSON never reveal them. The
-// bytes sit behind a function because fmt cannot call String on a Material held
-// in an unexported field, and under every verb it prints a function only as its
-// address, where a pointer or map would be walked.
+// Material's bytes sit behind a function, which fmt prints only as an address.
 type Material struct{ held func() map[Part][]byte }
 
 func materialOf(parts map[Part][]byte) Material {

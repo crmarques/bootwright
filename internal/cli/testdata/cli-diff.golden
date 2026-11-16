@@ -42,7 +42,7 @@ diff desired/storage/pools.yaml applied/storage/pools.yaml
 -    size: 3
 -    minSize: 2
 -  autoscale:
--    mode: on
+-    mode: "on"
 ----
 -apiVersion: bootwright.io/v1alpha1
 -kind: CephPool
@@ -56,6 +56,6 @@ diff desired/storage/pools.yaml applied/storage/pools.yaml
 +    size: 2
      minSize: 2
    autoscale:
-     mode: on
+     mode: "on"
 
 3 objects differ: 1 changed, 1 added, 1 removed, 0 unmanaged, 0 unknown; 1 unchanged

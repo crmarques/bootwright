@@ -301,8 +301,6 @@ func runCommand(ctx context.Context, request command) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
-// commandError reads as one printable line: the reason, then the end of the
-// command's stderr, where a Python tool prints its error last.
 type commandError struct {
 	cause  error
 	stderr string
@@ -317,8 +315,6 @@ func (e *commandError) Error() string {
 
 func (e *commandError) Unwrap() error { return e.cause }
 
-// tail keeps the last stderrTail bytes written, so a long pip log costs
-// bounded memory and the failing line survives.
 type tail struct{ data []byte }
 
 func (t *tail) Write(data []byte) (int, error) {

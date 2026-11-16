@@ -45,7 +45,7 @@ Plan:     this executable plans 1 block differently, 1 more and 1 fewer
 [31m-    size: 3[0m
 [31m-    minSize: 2[0m
 [31m-  autoscale:[0m
-[31m-    mode: on[0m
+[31m-    mode: "on"[0m
 [31m----[0m
 [31m-apiVersion: bootwright.io/v1alpha1[0m
 [31m-kind: CephPool[0m
@@ -59,6 +59,6 @@ Plan:     this executable plans 1 block differently, 1 more and 1 fewer
 [32m+    size: 2[0m
      minSize: 2
    autoscale:
-     mode: on
+     mode: "on"
 
 4 objects differ: 1 changed, 1 added, 1 removed, 0 unmanaged, 1 unknown; 1 unchanged

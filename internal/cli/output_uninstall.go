@@ -56,8 +56,6 @@ func (p *ControllerPresenter) RemovalOutput() prerequisites.RunOutput {
 	return escapedLines{out: p.progress.out}
 }
 
-// dnf prints repository-controlled text, so each line is escaped as any other
-// untrusted display text is; only its line breaks stay raw.
 type escapedLines struct{ out io.Writer }
 
 func (w escapedLines) Write(p []byte) (int, error) {

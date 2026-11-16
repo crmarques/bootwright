@@ -458,8 +458,6 @@ type capped struct {
 	truncated bool
 }
 
-// Overflow is drained, not refused: a short write makes os/exec close the
-// pipe and dnf die of EPIPE.
 func (c *capped) Write(p []byte) (int, error) {
 	kept, room := p, c.limit-len(c.data)
 	if len(p) > room {
