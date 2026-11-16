@@ -13,15 +13,13 @@ import os
 from pathlib import Path
 import re
 import sys
-import hmac
-import http.server
-import ssl
 
 if __package__:
     from ansible_collections.bootwright.core.plugins.module_utils import absolute_deadline
     from ansible_collections.bootwright.core.plugins.module_utils import bounded_process as process
     from ansible_collections.bootwright.core.plugins.module_utils import canonical_json
     from ansible_collections.bootwright.core.plugins.module_utils import disk_inventory
+    from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_sshd as sshd
     from ansible_collections.bootwright.core.plugins.module_utils import physical_machine_identity as identity
 else:
     sys.path.insert(0, "/run/discovery")
@@ -29,13 +27,12 @@ else:
     import bounded_process as process
     import canonical_json
     import disk_inventory
+    import disk_discovery_sshd as sshd
     import physical_machine_identity as identity
 
 ROOT = Path("/run/discovery")
 ENV = {"PATH": "/usr/bin:/usr/sbin:/bin:/sbin", "LC_ALL": "C", "PYTHONDONTWRITEBYTECODE": "1"}
 MAX_REPORT = 48 << 10
-PORT = 9443
-REFUSED = b"inventory-refused"
 NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,14}\Z")
 
 
@@ -129,58 +126,8 @@ def write(path, data):
         os.close(fd)
 
 
-class Server(http.server.HTTPServer):
-    """One bounded TLS connection at a time; no request is logged."""
-
-    allow_reuse_address = False
-
-    def get_request(self):
-        connection, address = self.socket.accept()
-        connection.settimeout(10)
-        try:
-            return self.tls.wrap_socket(connection, server_side=True), address
-        except BaseException:
-            connection.close()
-            raise
-
-    def handle_error(self, request, client_address):
-        pass
-
-
-class Handler(http.server.BaseHTTPRequestHandler):
-    def log_message(self, format, *args):
-        pass
-
-    def answer(self, code, body=b""):
-        self.send_response(code)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def do_GET(self):
-        authorization = self.headers.get_all("Authorization", [])
-        if self.path != "/report" or len(authorization) != 1 or not hmac.compare_digest(authorization[0], "Bearer " + self.server.token):
-            return self.answer(403)
-        self.answer(*self.server.result)
-
-
-def serve(request, result):
-    """Answer authenticated pulls until power-off; nothing here ends the boot."""
-    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    tls.minimum_version = ssl.TLSVersion.TLSv1_2
-    tls.load_cert_chain(str(ROOT / "server.pem"), str(ROOT / "server-key.pem"))
-    with Server((request["network"]["address"], PORT), Handler) as server:
-        server.tls, server.result, server.token, server.timeout = tls, result, request["reportToken"], 10
-        while True:
-            try:
-                with absolute_deadline.limited(30):
-                    server.handle_request()
-            except TimeoutError:
-                continue
-
-
 def phase(message):
-    # Only fixed phase text enters the console: no identities or exception text.
+    # Only fixed phase text and the declared port: no identities or exceptions.
     # This standalone RAM worker has no AnsibleModule logging channel.
     # pylint: disable-next=ansible-bad-function
     print("Bootwright discovery: " + message, flush=True)
@@ -221,6 +168,10 @@ def prepare_network():
     phase("checking RAM isolation and machine identity")
     ram_boundary()
     request = read_json(ROOT / "request.json", 32768)
+    if (set(request) != {"binding", "network", "interfaces", "ssh", "deadlineSeconds"}
+            or request["deadlineSeconds"] != 1800 or set(request["ssh"]) != {"port"}):
+        raise ValueError("discovery worker request")
+    sshd.configuration(request["network"]["address"], request["ssh"]["port"])
     binding = request["binding"]
     identity.prove(binding["uuid"], binding["macs"])
     phase("configuring the declared network")
@@ -254,18 +205,24 @@ def run():
         request = prepare_network()
     try:
         with absolute_deadline.limited(300):
-            result = (200, collect(request))
-        phase("serving the inventory on port 9443 until the controller powers this machine off")
+            collect(request)
     except Exception:  # pylint: disable=broad-exception-caught
         # The fixed refusal lets the controller stop waiting; no cause text leaves.
-        result = (409, REFUSED)
-        phase("inventory refused; serving that refusal on port 9443 until the controller powers this machine off")
-    serve(request, result)
+        write(ROOT / "refused", b"inventory-refused")
+        phase("inventory refused; the SSH inventory command will report that refusal")
+    sshd.serve(request, write, phase)
 
 
 if __name__ == "__main__":
     try:
-        run()
+        if sys.argv[1:] == ["report"]:
+            sshd.report()
+        elif not sys.argv[1:]:
+            run()
+        else:
+            raise SystemExit(64)
+    except SystemExit:
+        raise
     except BaseException:
         # No hardware values, keys or exception strings enter the boot console.
         raise SystemExit(1)

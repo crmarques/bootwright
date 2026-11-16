@@ -10,10 +10,20 @@ import re
 import inspect
 
 from ansible_collections.bootwright.core.plugins.module_utils import absolute_deadline, bounded_process, canonical_json
-from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_worker, disk_inventory, physical_machine_identity
+from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_worker, disk_discovery_sshd, disk_inventory, physical_machine_identity
 import stat
 
-MAX_OVERLAY = 2 << 20
+MAX_OVERLAY = 8 << 20
+EXECUTABLES = {
+    "sshd": "usr/sbin/sshd",
+    "sshd-session": "usr/libexec/openssh/sshd-session",
+    "sshd-auth": "usr/libexec/openssh/sshd-auth",
+}
+ACCOUNTS = {
+    "etc/passwd": b"root:x:0:0:RAM inventory:/root:/bin/sh\nsshd:x:74:74:SSH privilege separation:/var/empty/sshd:/sbin/nologin\n",
+    "etc/group": b"root:x:0:\nsshd:x:74:\n",
+    "etc/shadow": b"root:$6$bootwright$*:1:0:99999:7:::\nsshd:!:1:0:99999:7:::\n",
+}
 REQUIRED_INITRD = (
     "bin/sh",
     "usr/bin/mount",
@@ -60,7 +70,7 @@ mkdir -p /run/discovery
 printf '%s\n' /bin/false >/proc/sys/kernel/modprobe
 timeout -k 2 180 /bin/sh /bootwright-discovery/drivers.sh || inert
 cp -R /bootwright-discovery/. /run/discovery/
-# The worker serves its answer until the controller powers the machine off
+# The restricted SSH daemon serves until the controller powers the machine off
 # through the BMC; it never returns on success and nothing here powers off.
 python3 -I /run/discovery/disk_discovery_worker.py
 inert
@@ -126,21 +136,24 @@ def overlay(payload):
     if not payload or any(not re.fullmatch(r"[a-z][a-z0-9_.-]{0,63}", name) for name in payload):
         raise ValueError("discovery image payload")
     files = [("init", INIT.encode("ascii"), 0o755), ("bootwright-discovery/drivers.sh", DRIVERS.encode("ascii"), 0o700)]
-    files.extend(("bootwright-discovery/" + name, data, 0o600) for name, data in sorted(payload.items()))
+    files.extend((name, data, 0o600 if name == "etc/shadow" else 0o644) for name, data in ACCOUNTS.items())
+    files.extend((name, b"", 0o600) for name in ("root/.keep", "var/empty/sshd/.keep", "usr/share/empty.sshd/.keep"))
+    files.extend((EXECUTABLES[name], data, 0o755) if name in EXECUTABLES else ("bootwright-discovery/" + name, data, 0o600)
+                 for name, data in sorted(payload.items()))
     return newc(files)
 
 
-def payload(binding, network, interfaces, token, certificate, key):
+def payload(binding, network, interfaces, ssh, deadline, host_key, authorized_key):
     """One exact source bundle is used by execution and offline qualification.
 
-    The per-attempt server key lives only in this private image and in custody,
-    and the controller pins its certificate before the bearer token crosses.
+    The controller pins this operation's host key. Its client private key never
+    enters the image; only the restricted authorized public key is delivered.
     """
-    modules = (absolute_deadline, bounded_process, canonical_json, disk_inventory, physical_machine_identity, disk_discovery_worker)
+    modules = (absolute_deadline, bounded_process, canonical_json, disk_inventory, physical_machine_identity, disk_discovery_worker, disk_discovery_sshd)
     files = {module.__name__.rsplit(".", 1)[-1] + ".py": inspect.getsource(module).encode("utf-8") for module in modules}
     files["request.json"] = canonical_json.canonical({
-        "binding": binding, "interfaces": interfaces, "network": network, "reportToken": token,
+        "binding": binding, "interfaces": interfaces, "network": network, "ssh": ssh, "deadlineSeconds": deadline,
     })
-    files["server.pem"] = certificate
-    files["server-key.pem"] = key
+    files["host-key"] = host_key
+    files["authorized_keys"] = b"restrict " + authorized_key.strip() + b"\n"
     return files

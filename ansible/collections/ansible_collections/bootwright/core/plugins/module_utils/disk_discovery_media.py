@@ -18,6 +18,7 @@ import shutil
 
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_boot as boot
 from ansible_collections.bootwright.core.plugins.module_utils import discovery_capacity
+from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_ssh_sources as ssh_sources
 from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 from ansible_collections.bootwright.core.plugins.module_utils import private_records
 
@@ -37,7 +38,7 @@ class CommandFailure(ValueError):
     """Only a fixed tool name and its exit status may leave this boundary."""
 
     def __init__(self, tool, code):
-        self.tool = tool if tool in ("xorriso", "lsinitrd", "mkksiso", "openssl", "chcon") else "unknown"
+        self.tool = tool if tool in ("xorriso", "lsinitrd", "mkksiso", "ssh-keygen", "unsquashfs", "debugfs", "readelf", "chcon") else "unknown"
         self.code = code if type(code) is int and -128 <= code <= 255 else -1
         super().__init__("discovery native command refused")
 
@@ -102,7 +103,7 @@ def extract(held, source, destination):
     native(["/usr/bin/xorriso", "-osirrox", "on", "-indev", held, "-extract", source, str(destination)], timeout=300)
 
 
-def qualified_initrd(path):
+def qualified_initrd(path, libraries=()):
     # The qualified archive supplies the shell and fixed tools our PID1 uses.
     # Listing performs no extraction or execution of source-image content.
     listing = native(["/usr/bin/lsinitrd", str(path)], timeout=120, limit=1 << 20).decode("ascii")
@@ -131,12 +132,14 @@ def qualified_initrd(path):
                 return path
         raise ValueError("initrd link cycle")
 
-    names.update(path for path in boot.REQUIRED_INITRD if resolve(path) in names)
-    if not set(boot.REQUIRED_INITRD) <= names:
+    required = (*boot.REQUIRED_INITRD, "lib64/ld-linux-x86-64.so.2", *("lib64/" + name for name in libraries))
+    names.update(path for path in required if resolve(path) in names)
+    if not set(required) <= names:
         raise ValueError("RHEL initrd lacks discovery bootstrap tools")
 
 
-def build(request, root, payload):
+@contextmanager
+def verified_source(request):
     media = request["bootMedia"]
     source = MEDIA / media["name"]
     if source.parent != MEDIA:
@@ -153,20 +156,22 @@ def build(request, root, payload):
         if digest.hexdigest() != media["sha256"]:
             raise ValueError("discovery source image digest")
         held = "/proc/" + str(os.getpid()) + "/fd/" + str(fd)
-        return remaster(held, root, payload)
+        yield held
     finally:
         os.close(fd)
 
 
-def remaster(held, root, payload):
+def remaster(held, root, payload, source_profile):
     reap_intermediates(root)
     scratch = root / "media-work"
     private_records.directory(scratch, True)
     image = root / "discovery.iso"
     complete = False
     try:
+        runtime, libraries = ssh_sources.extract(held, source_profile, scratch, native)
+        payload = dict(payload, **runtime)
         held = boot_tree(held, scratch)
-        additions = patched_initrds(held, scratch, payload)
+        additions = patched_initrds(held, scratch, payload, libraries)
         # Lorax merges these directories and updates BIOS, GRUB and embedded
         # EFI configuration in one supported --add operation. No intermediate ISO.
         native(
@@ -188,7 +193,7 @@ def remaster(held, root, payload):
             image.unlink(missing_ok=True)
 
 
-def patched_initrds(held, scratch, payload):
+def patched_initrds(held, scratch, payload, libraries):
     overlay = boot.overlay(payload)
     paths = initrd_paths(held)
     additions = set()
@@ -199,7 +204,7 @@ def patched_initrds(held, scratch, payload):
                 private_records.directory(scratch / parent, True)
         extract(held, path, original)
         digest_file(original, MAX_INITRD)
-        qualified_initrd(original)
+        qualified_initrd(original, libraries)
         with original.open("ab") as destination:
             # A compressed initramfs followed by an uncompressed newc archive
             # is the kernel's supported concatenated initramfs format.
@@ -222,11 +227,11 @@ def reap_intermediates(root):
 
 
 @contextmanager
-def construction(lock_root, work, destination, source_size):
+def construction(lock_root, work, destination, source_size, ssh_peak=0):
     maximum = publication_bound(source_size)
     # Reserve each peak, while previous publications still count in statvfs.
     intermediates = source_size + len(SUPPORTED_INITRDS) * (MAX_INITRD + boot.MAX_OVERLAY) + MAX_BOOT_GROWTH
-    budgets = {work.stat().st_dev: (work, maximum + intermediates)}
+    budgets = {work.stat().st_dev: (work, max(maximum + intermediates + ssh_sources.MAX_BUNDLE, ssh_peak))}
     if destination.stat().st_dev not in budgets:
         budgets[destination.stat().st_dev] = (destination, maximum)
     with discovery_capacity.reserve(lock_root, budgets):

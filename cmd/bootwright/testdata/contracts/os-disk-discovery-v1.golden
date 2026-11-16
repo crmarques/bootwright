@@ -1,12 +1,12 @@
 implementation: os-disk-discovery-v1
-content-digest: 85db9076a6a21c450f79783ddbd616c7f0378dffd32d8257fcd5c22b6c35e0b6
+content-digest: 3b221fbf4c47753b9c26ee7ef35529319dc69b2e834eede019e150c94cf3c53c
 request-version: os-disk-discovery-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none
 fixed-places: none
 effect-pins:
-  bmc-drive-inventory-or-minimal-ram-boot-controller-pull-bmc-poweroff-v1
+  bmc-drive-inventory-or-minimal-ram-boot-pinned-ssh-bmc-poweroff-v1
   verified-media-default
 request-identity:
   identity.context
@@ -61,6 +61,8 @@ request-schema:
   private.certificateRef string omitempty
   private.path string
   private.url string
+  ssh struct installation.DiscoverySSH
+  ssh.port int
   version string
 evidence-schema:
   cleaned bool

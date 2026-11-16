@@ -41,7 +41,8 @@ func machineFirmwareSchema() *Shape {
 func machineDiskDiscoverySchema() *Shape {
 	match := record(field("model", nonempty()), field("controllerPCIAddress", nonempty()), field("minSizeBytes", integer("4096", "70368744177664")), field("maxSizeBytes", integer("4096", "70368744177664")))
 	identity := record(field("wwn", nonempty()), field("serialNumber", nonempty()), required("sizeBytes", integer("4096", "70368744177664")))
-	return atomic(record(defaulted("inventory", enumeration("automatic", "boot"), StringValue("automatic")), field("match", match), field("exclude", &Shape{Type: Sequence, Atomic: true, Element: identity})))
+	ssh := record(defaulted("port", port(), IntegerValue("22")))
+	return atomic(record(defaulted("inventory", enumeration("automatic", "boot"), StringValue("automatic")), defaulted("ssh", ssh, MapValue()), field("match", match), field("exclude", &Shape{Type: Sequence, Atomic: true, Element: identity})))
 }
 
 func machineSubstrateSchema() *Shape {

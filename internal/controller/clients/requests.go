@@ -199,11 +199,11 @@ func wholePart(request Request) bool {
 	return false
 }
 
-// ContentDigest hashes only the stage label, Implementation and Version; the
-// contract golden test makes a request or evidence shape change move Version.
+// ContentDigest also pins the installer-media native closure, whose package
+// expansion is an effect outside the frozen request's boolean selection.
 func ContentDigest() string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
-		"bootwright.controller.client-stage-v1", Implementation, Version,
+		"bootwright.controller.client-stage-v1", Implementation, Version, "installer-media-qualified-ssh-source-tools-v1",
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

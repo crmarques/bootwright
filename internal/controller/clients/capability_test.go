@@ -458,7 +458,7 @@ func TestTheStageInstallsMissingClosuresThroughHostDnf(t *testing.T) {
 		want    []string
 	}{
 		"a provider hosted here":          {objects: []api.Object{environment(), machine(), hostedProvider()}, present: []string{"qemu-img", "swtpm"}, want: hypervisor},
-		"installer-media tooling":         {objects: append([]api.Object{environment(), machine()}, installerMedia()...), want: []string{"podman", "lorax", "xorriso"}},
+		"installer-media tooling":         {objects: append([]api.Object{environment(), machine()}, installerMedia()...), want: []string{"podman", "lorax", "xorriso", "squashfs-tools", "e2fsprogs", "binutils"}},
 		"a Machine on a libvirt provider": {objects: append([]api.Object{environment(), machine()}, guestOnLibvirt()...), want: []string{"libvirt-client"}},
 	} {
 		t.Run(name, func(t *testing.T) {

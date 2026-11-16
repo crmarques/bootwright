@@ -9179,3 +9179,17 @@ discovery and installation boots are kept, so installation authorization still
 names an exact disk. An outbound-only network now needs `inventory: automatic`
 answered by the BMC, or a route from the controller to the machine. No
 real-host operation or push is authorized.
+
+### D273
+
+**owner** (2026-11-16): asks to implement SSH collection instead of HTTPS for
+the RAM disk inventory, authorizing X494 (M1, B1432). The session takes a
+discovery-owned `ssh.port`, default 22, ephemeral mutually pinned SSH keys and
+a forced inventory-only command as the narrow implementation. It retains the
+installer-free RAM boot and BMC-owned cleanup;
+verified source-image tools provide the daemon. This supersedes D272's HTTPS
+pull endpoint, without an alternative transport or a compatibility reader.
+The current discovery contract changes: unfinished HTTPS boots are removed
+with their existing executable before a fresh SSH discovery. The owner's
+focused-check instruction remains in force until E2E acceptance. No real-host
+operation or push is authorized.

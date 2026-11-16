@@ -24,8 +24,8 @@
     "fingerprint": "b57e88294b3b12ee1131d930dd70745b471b6903c7859f15aaa35944ecd7b7c7"
   },
   "controller-prerequisites": {
-    "contentDigest": "d3a2b16a74e0a6bec87b04a72745a571687edb5caf26414a3c1d119081925714",
-    "fingerprint": "c96a737f12b7ae4ccad16f23e16ae294e6f9359333ab8d8037bd285200b1a5a3"
+    "contentDigest": "83a06f61907914bc84f5e220bc80bdba04d44b636af0780c2ae6626ca2c0e341",
+    "fingerprint": "5d11d9a9efc0e5daaa195ed73b4e1039d205fbe6c79785d51d9b16072c6980db"
   },
   "dns-server-dnsmasq-v1": {
     "contentDigest": "544a52237167283339c48158b98dc4639c72040c96fb129f3ba84675bde743df",
@@ -64,8 +64,8 @@
     "fingerprint": "0cd63f73b7d107fee4f4ab3890704298d9de28ac05707a2c31dc88619e891844"
   },
   "os-disk-discovery-v1": {
-    "contentDigest": "85db9076a6a21c450f79783ddbd616c7f0378dffd32d8257fcd5c22b6c35e0b6",
-    "fingerprint": "2281a73bffa81a8dd0a4b21e6eca0b0d36b5635acb3b2a4a9db3c51d0d072026"
+    "contentDigest": "3b221fbf4c47753b9c26ee7ef35529319dc69b2e834eede019e150c94cf3c53c",
+    "fingerprint": "5721ca0d1155839cefb346232d372289f768ec95489eefa2e8c5fc53fda23e54"
   },
   "os-host-firewall-v1": {
     "contentDigest": "ef74fbe8098b01389b0dcef264da682b89702c0bc590db7d5a40412626a3c9cd",

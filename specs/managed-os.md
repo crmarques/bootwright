@@ -1547,17 +1547,25 @@ The inventory image runs a fixed PID1 entirely from the verified initramfs.
 It starts no systemd, udev, Anaconda or installer second stage and mounts only
 RAM and kernel pseudo-filesystems. Automatic RAID, LVM and swap activation is
 disabled. The worker configures the declared static IPv4 ethernet, bond or VLAN,
-reads the inventory and serves one answer on the declared install address and
-TCP port 9443 until the machine is powered off: the report, or a fixed refusal
-when it could not read its disks. Declared DNS resolvers are configured in RAM
-when needed. The controller polls that address, which the network must route
-from the controller; enterprise rules remain operator-managed. Each pull
-connects over TLS, pins the per-attempt server certificate the controller
-generated into custody and the private image, and only then sends the
-independent per-attempt bearer token. The controller's own clock judges that
-certificate; the worker verifies nothing that depends on the machine's clock.
-A different certificate, an unauthenticated answer or the fixed refusal ends
-the wait with its cause; silence keeps waiting up to the request deadline,
+reads the inventory and starts a restricted OpenSSH endpoint on the declared
+install address and `rootDevice.discover.ssh.port` (default 22) until the
+controller powers it off. Declared DNS resolvers are configured in RAM when
+needed. The controller initiates this connection; enterprise rules must admit
+it independently of BMC-to-controller artifact HTTPS. The endpoint admits only
+a generated per-operation client key and the forced `inventory` command. It
+permits no shell, other command, subsystem, password, PAM, PTY, forwarding or
+user startup file. The host key is a distinct generated per-operation identity;
+strict known-host checking precedes authentication, with no key scanning or
+trust on first use. Only the client public key enters the private image; its
+private key remains in controller custody. Both identities must satisfy the
+controller's reduced SSH crypto policy. Keys are P-256 ECDSA, which is also
+available under the supported FIPS policy. The worker's crypto directives come
+only from the verified source image's filtered OpenSSH crypto policy.
+
+The controller reads the canonical report, or a fixed refusal exit status,
+over a bounded SSH command. Authentication and host-pin failures end the wait;
+connection refusals, timeouts and unreachable routes produce closed, throttled
+progress notices and keep waiting up to the request deadline,
 while the controller rechecks every minute that the machine still runs with
 this discovery's media attached. Ownership checks use the common Redfish
 [media echo comparison](substrates.md#identity-and-power-operations) during
@@ -1594,7 +1602,19 @@ only the frozen private machine subtree. Retry repairs restrictive directory
 creation residue there without changing unrelated ancestors or other safe modes.
 Published ISO permissions are set explicitly before atomic publication,
 independently of the caller's umask.
-Discovery first copies only the held source's boot tree into private scratch,
+Before remastering, discovery reads the held source's one contiguous
+`images/install.img` extent in place with `unsquashfs`. Its qualified
+`LiveOS/rootfs.img` logical size is reserved before extraction, bounded to 8 GiB.
+`debugfs` reads only the fixed SSH daemon, advertised split-session helpers and
+crypto policy from that temporary filesystem image. It never mounts that image,
+executes source binaries on the controller, or boots the installer second stage.
+`readelf` qualifies the x86-64 loader and library names; every required library
+must already resolve in the source initramfs. The source SSH bundle is bounded
+to 8 MiB, scratch is reaped before remastering, and controller prerequisites
+include `squashfs-tools`, `e2fsprogs` and `binutils` for these read-only tools.
+No network package fetch or binary from another OS enters the RAM worker.
+
+Discovery then copies only the held source's boot tree into private scratch,
 replaying both El Torito boot records: the top-level `.discinfo`, `.treeinfo`,
 `EFI`, `images` and `isolinux` entries, and within `images` only `efiboot.img`
 and `pxeboot`. The installer second stage `images/install.img` must be present
@@ -1607,7 +1627,8 @@ payload or mutable patched component is shared between machines or operations.
 Construction and publication run concurrently within the runner's concurrency
 limit when their filesystem budgets fit. A brief exclusive admission lock
 accounts for every live builder's full worst-case peak: the bounded image,
-boot-tree copy, initramfs and native-tool scratch on the work filesystem, and a
+boot-tree copy, initramfs and native-tool scratch, including the qualified
+SSH source extraction peak, on the work filesystem, and a
 publication copy when it uses another filesystem. Each builder holds a kernel
 lock on its private transient budget record until construction, publication and
 intermediate cleanup stop. A shared construction guard excludes exclusive

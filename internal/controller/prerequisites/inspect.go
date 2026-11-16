@@ -608,7 +608,7 @@ func closureRequirement(id string) string {
 	case "nmstate":
 		return "NMState network configuration generator"
 	case "installer-media":
-		return "installer-media tooling (lorax, xorriso)"
+		return "installer-media tooling (lorax, xorriso, squashfs-tools, e2fsprogs, binutils)"
 	case "image-mirror":
 		return "image mirror copy tool (skopeo)"
 	}

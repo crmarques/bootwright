@@ -1,4 +1,4 @@
-"""One argv builder for every fixed command an installation runs on its installed machine.
+"""One argv builder for fixed commands over pinned managed-machine SSH.
 
 The command runs as the fleet account over the connection the role's guest.yml
 and reachable.yml make, option for option: the placement host's reduced
@@ -111,7 +111,7 @@ def require_destination(user, address):
         raise SessionError("the guest address is not valid")
 
 
-def guest_argv(*, ssh_config, known_hosts, host_key_algorithms, policy_host_key_algorithms, identity, user, address, remote_argv):
+def guest_argv(*, ssh_config, known_hosts, host_key_algorithms, policy_host_key_algorithms, identity, user, address, remote_argv, port=22):
     """The pinned session's argv for one remote command, given as an argv that remote_command joins."""
     if ssh_config == "/dev/null":
         raise SessionError("the guest session requires the reduced placement-host policy configuration")
@@ -120,6 +120,8 @@ def guest_argv(*, ssh_config, known_hosts, host_key_algorithms, policy_host_key_
     require_file(identity, "fleet identity")
     require_algorithms(host_key_algorithms, policy_host_key_algorithms)
     require_destination(user, address)
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise SessionError("the guest SSH port is not valid")
     try:
         remote = remote_command.remote_command(remote_argv)
     except ValueError:
@@ -131,6 +133,8 @@ def guest_argv(*, ssh_config, known_hosts, host_key_algorithms, policy_host_key_
     argv = [SSH, "-F", ssh_config]
     for option in options:
         argv.extend(["-o", option])
+    if port != 22:
+        argv.extend(["-p", str(port)])
     return argv + ["-i", identity, user + "@" + address, remote]
 
 

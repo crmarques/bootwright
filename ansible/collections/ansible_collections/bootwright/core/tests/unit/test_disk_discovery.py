@@ -5,6 +5,7 @@ import os
 import signal
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import Mock
@@ -39,8 +40,8 @@ def test_custom_init_calls_the_worker_in_the_actual_private_payload(monkeypatch)
     instance = controller.Controller.__new__(controller.Controller)
     instance.root = Path("/fixture")
     instance.binding = {"nonce": "a" * 64}
-    instance.request = {"interfaces": [], "network": {}}
-    instance.load = lambda: {"reportToken": "b" * 64, "token": "c" * 64}
+    instance.request = {"interfaces": [], "network": {}, "ssh": {"port": 22}, "deadlineSeconds": 1800}
+    instance.load = lambda: {"token": "c" * 64}
     monkeypatch.setattr(controller.records, "read", lambda path: b"synthetic " + path.name.encode())
     payload = instance.payload()
     archive = unpack(boot.overlay(payload))
@@ -57,8 +58,9 @@ def test_custom_init_calls_the_worker_in_the_actual_private_payload(monkeypatch)
     assert "/sys/bus/scsi/devices/*/modalias" in boot.DRIVERS
     assert "timeout -k 2 180" in init
     assert "--quiet" in boot.DRIVERS
-    assert payload["server-key.pem"] == b"synthetic server-key.pem"
-    assert payload["server.pem"] == b"synthetic server.pem"
+    assert payload["host-key"] == b"synthetic host-key"
+    assert payload["authorized_keys"] == b"restrict synthetic client-key.pub\n"
+    assert "client-key" not in payload and "server.pem" not in payload
     assert "tls_trust.py" not in payload and "artifact.pem" not in payload
     assert "sysrq" not in init and "poweroff" not in init
 
@@ -119,7 +121,7 @@ def test_discovery_reports_the_exact_refused_boot_step_without_starting_later_st
     instance.publish = Mock()
     instance.booted = Mock(return_value=False)
     instance.mark_boot = Mock()
-    instance.prepare_tls = Mock()
+    instance.prepare_ssh = Mock()
     instance.request = {"controller": {"virtualMedia": {"trust": "importCertificate", "enableVerification": False}}}
     instance.material = {"artifactCertificate": "/fixture/certificate.pem"}
     monkeypatch.setattr(controller.records, "read", lambda path: b"synthetic certificate")
@@ -245,7 +247,7 @@ def test_removed_discovery_never_recreates_private_keys(tmp_path, monkeypatch):
     instance.prepare = Mock(side_effect=AssertionError("recreated removed transport keys"))
     with pytest.raises(ValueError, match="removed"):
         instance.apply()
-    assert not (instance.root / "tls").exists()
+    assert not (instance.root / "ssh").exists()
 
 
 def test_observation_cannot_complete_before_local_cleanup_is_sealed(tmp_path, monkeypatch):
@@ -266,7 +268,7 @@ def test_observation_cannot_complete_before_local_cleanup_is_sealed(tmp_path, mo
 
 def test_publication_deletion_is_durable_before_completion(tmp_path, monkeypatch):
     instance = fixture_custody(tmp_path, monkeypatch)
-    state = {"binding": instance.binding, "token": "a" * 64, "reportToken": "b" * 64}
+    state = {"binding": instance.binding, "token": "a" * 64}
     (instance.root / "custody.json").write_bytes(controller.canonical_json.canonical(state))
     parent = Path(instance.request["private"]["path"])
     directory = parent / state["token"]
@@ -366,7 +368,12 @@ def test_publication_accepts_the_qualified_initramfs_growth(tmp_path, monkeypatc
         image.write_bytes(b"synthetic private ISO")
         return image
 
-    monkeypatch.setattr(controller.media, "build", build)
+    monkeypatch.setattr(controller.media, "remaster", build)
+    @contextmanager
+    def source(*args):
+        yield "/held"
+    monkeypatch.setattr(controller.media, "verified_source", source)
+    monkeypatch.setattr(controller.media.ssh_sources, "inspect", lambda *args: {"rootSize": 1 << 30})
     monkeypatch.setattr(controller.media, "native", Mock(return_value=b""))
     foreign_inode = (serving / "private").stat().st_ino if layout == "foreign-child" else None
     root_owned_tree(tmp_path, monkeypatch, foreign_inode)
@@ -563,7 +570,7 @@ def test_publication_refuses_nonregular_and_symlink_sources(tmp_path):
 ])
 def test_unfinished_observation_proves_live_ownership_without_mutation(tmp_path, monkeypatch, power, media, allowed):
     instance = fixture_custody(tmp_path, monkeypatch)
-    state = {"binding": instance.binding, "token": "a" * 64, "reportToken": "b" * 64}
+    state = {"binding": instance.binding, "token": "a" * 64}
     (instance.root / "custody.json").write_bytes(controller.canonical_json.canonical(state))
     instance.publication = Mock(return_value=(tmp_path / "private", "owned"))
     instance.target.return_value = power

@@ -32,42 +32,65 @@ def delivery_code(error):
     return "media-connection"
 
 
+REFUSALS = {
+    "discovery request shape": "request",
+    "discovery binding": "binding",
+    "discovery controller TLS": "bmc-tls",
+    "discovery private media TLS": "media-tls",
+    "discovery controller identity": "hardware-identity",
+    "missing discovery custody has unresolved external ownership": "external-ownership",
+    "missing discovery custody has unresolved publication": "publication-ownership",
+    "discovery target is already running": "target-running",
+    "discovery target power is unknown": "power-unknown",
+    "foreign virtual media": "foreign-media",
+    "discovery source image identity": "media-identity",
+    "discovery source image digest": "media-digest",
+    "discovery publication size": "publication-size",
+    "discovery publication file": "publication-file",
+    "discovery publication path": "publication-path",
+    "discovery publication copy": "publication-copy",
+    "discovery source size bound": "source-size",
+    "RHEL initrd lacks discovery bootstrap tools": "initrd-tools",
+    "unqualified discovery initrd layout": "initrd-layout",
+    "discovery report deadline": "inventory-timeout",
+    "discovery SSH key": "ssh-custody",
+    "discovery SSH custody": "ssh-custody",
+    "foreign discovery SSH material": "ssh-custody",
+    "discovery SSH policy drift": "ssh-policy",
+    "discovery SSH client failed": "ssh-client",
+    "discovery SSH authentication refused": "ssh-authentication",
+    "discovery SSH answer": "ssh-answer",
+    "discovery SSH source tool": "ssh-source-tool",
+    "discovery SSH source layout": "ssh-source",
+    "discovery SSH source extent": "ssh-source",
+    "discovery SSH source filesystem": "ssh-source",
+    "discovery SSH source file": "ssh-source",
+    "discovery SSH source path": "ssh-source",
+    "discovery SSH source link": "ssh-source",
+    "discovery SSH source ELF": "ssh-source",
+    "discovery SSH source helper": "ssh-source",
+    "discovery SSH source size": "ssh-source",
+    "discovery SSH source ownership": "ssh-source",
+    "discovery RAM inventory refused": "inventory-refused",
+    "a foreign service answers the discovery address": "foreign-answer",
+    "discovery target stopped before its inventory": "target-stopped",
+    "discovery lost ownership of the running boot": "lost-ownership",
+    "discovery poweroff deadline": "poweroff-timeout",
+    "private discovery listener unavailable": "media-response",
+    "custody-directory": "custody-directory",
+    "custody-mode": "custody-mode",
+    "custody-file": "custody-file",
+}
+
+
 def diagnostic(error, controller):
     """Never publish exception text, request values, subprocess output or paths."""
-    refusals = {
-        "discovery request shape": "request",
-        "discovery binding": "binding",
-        "discovery controller TLS": "bmc-tls",
-        "discovery private media TLS": "media-tls",
-        "discovery controller identity": "hardware-identity",
-        "missing discovery custody has unresolved external ownership": "external-ownership",
-        "missing discovery custody has unresolved publication": "publication-ownership",
-        "discovery target is already running": "target-running",
-        "discovery target power is unknown": "power-unknown",
-        "foreign virtual media": "foreign-media",
-        "discovery source image identity": "media-identity",
-        "discovery source image digest": "media-digest",
-        "discovery publication size": "publication-size",
-        "discovery publication file": "publication-file",
-        "discovery publication path": "publication-path",
-        "discovery publication copy": "publication-copy",
-        "discovery source size bound": "source-size",
-        "RHEL initrd lacks discovery bootstrap tools": "initrd-tools",
-        "unqualified discovery initrd layout": "initrd-layout",
-        "discovery report deadline": "inventory-timeout",
-        "discovery RAM inventory refused": "inventory-refused",
-        "a foreign service answers the discovery address": "foreign-answer",
-        "discovery target stopped before its inventory": "target-stopped",
-        "discovery lost ownership of the running boot": "lost-ownership",
-        "discovery poweroff deadline": "poweroff-timeout",
-        "private discovery listener unavailable": "media-response",
-        "custody-directory": "custody-directory",
-        "custody-mode": "custody-mode",
-        "custody-file": "custody-file",
-    }
+
     code = "contract"
     if isinstance(error, custody.media.CommandFailure):
         code = "native-" + error.tool
+    elif isinstance(error, custody.ssh.ssh_key_policy.PolicyError):
+        code = "ssh-policy"
     elif isinstance(error, custody.redfish_control.UnverifiedCertificate):
         code = "bmc-tls"
     elif isinstance(error, custody.redfish_control.ControllerError):
@@ -88,10 +111,10 @@ def diagnostic(error, controller):
     elif isinstance(error, bounded_process.Failure):
         code = "native-process"
     elif isinstance(error, ValueError):
-        code = refusals.get(str(error), "contract")
+        code = REFUSALS.get(str(error), "contract")
     phase = getattr(controller, "phase", "custody")
     phases = (
-        "custody", "controller", "bmc-inventory", "media", "publication", "tls", "media-delivery",
+        "custody", "controller", "bmc-inventory", "media", "publication", "ssh", "media-delivery",
         "media-insertion", "boot-selection", "power-on", "inventory", "cleanup",
     )
     if phase not in phases:

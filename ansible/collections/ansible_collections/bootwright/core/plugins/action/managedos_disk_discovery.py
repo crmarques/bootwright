@@ -13,7 +13,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.disk_discovery_run
 
 
 def report(group, status):
-    if group not in progress.GROUPS or status not in adapter_protocol.GROUP_STATUSES:
+    if group not in progress.GROUPS + progress.RETRIES or status not in adapter_protocol.GROUP_STATUSES:
         raise ValueError("discovery progress group")
     result = adapter_protocol.publish({"phase": "group", "group": group, "status": status}, protocol.CAPABILITY, protocol.emit)
     if result.get("failed"):

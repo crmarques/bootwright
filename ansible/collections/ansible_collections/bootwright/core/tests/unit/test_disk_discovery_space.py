@@ -25,6 +25,7 @@ def test_lorax_adds_only_the_patched_initrds_to_the_boot_tree(tmp_path, monkeypa
     qualified = Mock()
     monkeypatch.setattr(media, "qualified_initrd", qualified)
     monkeypatch.setattr(media.private_records, "directory", lambda path, create: path.mkdir(mode=0o700) if create else None)
+    monkeypatch.setattr(media.ssh_sources, "extract", lambda *args: ({"ssh-policy": b"policy"}, {"libc.so.6"}))
     commands = []
 
     def native(argv, **kwargs):
@@ -54,10 +55,10 @@ def test_lorax_adds_only_the_patched_initrds_to_the_boot_tree(tmp_path, monkeypa
     monkeypatch.setattr(media, "native", native)
     if failure:
         with pytest.raises(ValueError, match="synthetic tool failure"):
-            media.remaster("/held/source.iso", tmp_path, {"request.json": b"private fixture"})
+            media.remaster("/held/source.iso", tmp_path, {"request.json": b"private fixture"}, {})
         assert not (tmp_path / "discovery.iso").exists()
     else:
-        assert media.remaster("/held/source.iso", tmp_path, {"request.json": b"private fixture"}).read_bytes() == b"private finished ISO"
+        assert media.remaster("/held/source.iso", tmp_path, {"request.json": b"private fixture"}, {}).read_bytes() == b"private finished ISO"
     assert qualified.call_count == 2
     assert len(commands) == 2
     assert not (tmp_path / "patched.iso").exists()
@@ -178,7 +179,7 @@ def test_construction_overlaps_when_each_peak_fits(tmp_path, monkeypatch, capaci
 
 def test_concurrent_capacity_checks_include_previously_published_images(tmp_path, monkeypatch, capacity_identity):
     maximum = media.publication_bound(64 << 20)
-    scratch = (64 << 20) + len(media.SUPPORTED_INITRDS) * (media.MAX_INITRD + media.boot.MAX_OVERLAY) + media.MAX_BOOT_GROWTH
+    scratch = (64 << 20) + len(media.SUPPORTED_INITRDS) * (media.MAX_INITRD + media.boot.MAX_OVERLAY) + media.MAX_BOOT_GROWTH + media.ssh_sources.MAX_BUNDLE
     available = 2 * maximum + scratch
     active, peak = 0, 0
     barrier = threading.Barrier(3)

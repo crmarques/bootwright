@@ -13,6 +13,9 @@ BOUNDARIES = ("observe-on", "observe-off", "running", "resume", "start", "cleanu
 
 def fixture(tmp_path, monkeypatch, boundary, observed):
     instance = controller.Controller.__new__(controller.Controller)
+    instance.root = tmp_path
+    monkeypatch.setattr(controller.ssh, "validate", Mock())
+    monkeypatch.setattr(controller.ssh, "policy", Mock())
     client = Mock()
     client.inserted.return_value = observed
     instance.client = Mock(return_value=client)
@@ -23,7 +26,7 @@ def fixture(tmp_path, monkeypatch, boundary, observed):
     instance.publication = Mock(return_value=(tmp_path / "private" / "token", EXPECTED))
     instance.booted = Mock(return_value=True)
     instance.mark_boot = Mock()
-    instance.prepare_tls = Mock()
+    instance.prepare_ssh = Mock()
     instance.publish = Mock()
     instance.material = {"artifactCertificate": str(tmp_path / "certificate.pem")}
     instance.request = {"controller": {"virtualMedia": {

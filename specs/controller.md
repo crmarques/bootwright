@@ -252,7 +252,7 @@ One Go table names the host packages by name or RPM capability:
 | Stage | container runtime | `podman` |
 | Stage | libvirt client | `libvirt-client` |
 | Stage | hypervisor | `libvirt-daemon`, `libvirt-daemon-driver-network`, `libvirt-daemon-driver-qemu`, `libvirt-daemon-driver-storage-core`, `qemu-img`, `qemu-kvm-core`, `swtpm`, `swtpm-tools` |
-| Stage | installer media | `lorax`, `xorriso` |
+| Stage | installer media | `lorax`, `xorriso`, `squashfs-tools`, `e2fsprogs`, `binutils` |
 | Stage | image mirror, the managed image mirror's `Registry` on the controller Machine | `skopeo` |
 | Stage | agent-installed OpenShiftCluster with a node that references a declared Machine | `nmstate` |
 | Stage | agent-installed multi-node baremetal OpenShiftCluster with an OpenShift-sourced IPv4 virtual IP in a managed libvirt network of a provider hosted on the controller Machine | `iputils` |

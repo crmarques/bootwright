@@ -768,7 +768,24 @@ A physical RHEL installation may opt in with
 `substrate.baremetal.rootDevice.discover`. This arm selects alone. Its
 `inventory` is `automatic`, the default, which reads the BMC's drive inventory
 and boots only when that inventory cannot stand in for Linux, or `boot`, which
-always inventories through a RAM boot. Its optional
+always inventories through a RAM boot. The RAM worker exposes a restricted SSH
+endpoint at the declared installation address. `discover.ssh.port` is an
+integer from 1 through 65535, default 22. The controller must reach that port;
+artifact HTTPS delivery uses the ArtifactServer's separate configured port.
+No discovery SSH credential is authored: Bootwright generates and pins distinct
+host and client keys for each operation. This is independent of installed-OS
+`access.ssh` configuration. For example:
+
+```yaml
+rootDevice:
+  discover:
+    ssh:
+      port: 2222
+    match:
+      maxSizeBytes: 600000000000
+```
+
+Its optional
 `match` record limits exact model, controller PCI address and minimum/maximum
 byte capacity; optional exclusions name stable disk identities. A model
 compares with the text the inventory's source reports. An empty match

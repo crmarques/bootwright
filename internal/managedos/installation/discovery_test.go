@@ -335,6 +335,13 @@ func TestDiscoveryFreezesOnlyTheDeclaredInventoryChoice(t *testing.T) {
 	if automatic.Inventory != InventoryAutomatic {
 		t.Fatalf("an undeclared choice is %q", automatic.Inventory)
 	}
+	if automatic.SSH.Port != 22 {
+		t.Fatalf("undeclared discovery SSH port = %d, want 22", automatic.SSH.Port)
+	}
+	custom := plan(api.MapValue(field("ssh", api.MapValue(field("port", api.IntegerValue("2222"))))), nil)
+	if custom.SSH.Port != 2222 {
+		t.Fatalf("discovery SSH port was not frozen: %+v", custom.SSH)
+	}
 	if boot := plan(api.MapValue(field("inventory", api.StringValue(InventoryBoot))), nil); boot.Inventory != InventoryBoot {
 		t.Fatalf("a declared boot inventory is %q", boot.Inventory)
 	}

@@ -1,8 +1,5 @@
 """BMC drive inventory first; otherwise the controller pulls from a RAM boot."""
 
-from email.message import Message
-import ssl
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -95,7 +92,7 @@ def custody(tmp_path, monkeypatch, inventory="automatic"):
     instance.root = tmp_path
     instance.binding = {"nonce": "a" * 64}
     instance.digest = "b" * 64
-    instance.request = {"inventory": inventory, "network": {"address": "192.0.2.10"}, "deadlineSeconds": 1800,
+    instance.request = {"inventory": inventory, "network": {"address": "192.0.2.10"}, "deadlineSeconds": 1800, "ssh": {"port": 2222},
                         "private": {"path": str(tmp_path / "served")}}
     instance.lock = None
     monkeypatch.setattr(controller.os, "fsync", Mock())
@@ -155,11 +152,11 @@ def test_boot_is_marked_durably_before_any_publication_or_bmc_write(tmp_path, mo
     instance.material = {"artifactCertificate": str(tmp_path / "certificate.pem")}
     (tmp_path / "certificate.pem").write_bytes(b"certificate fixture")
     instance.request["controller"] = {"virtualMedia": {"trust": "established", "enableVerification": False}}
-    instance.prepare_tls = lambda: order.append("tls")
+    instance.prepare_ssh = lambda: order.append("ssh")
     instance.publish = lambda: order.append("publish:" + str(instance.booted()))
     monkeypatch.setattr(controller, "listener_probe", Mock())
     instance.start()
-    assert order == ["tls", "publish:True", "insert"]
+    assert order == ["ssh", "publish:True", "insert"]
     assert (tmp_path / "boot.json").exists()
 
 
@@ -173,69 +170,24 @@ def test_destroy_before_any_boot_stops_and_ejects_nothing(tmp_path, monkeypatch)
     instance.finish.assert_called_once_with(False)
 
 
-class Connection:
-    answers = []
-
-    def __init__(self, host, leaf, port, context, timeout):
-        self.host, self.port = host, port
-        self.sent = None
-
-    def connect(self):
-        answer = self.answers.pop(0)
-        if isinstance(answer, BaseException):
-            raise answer
-        self.answer = answer
-
-    def request(self, method, path, headers):
-        self.sent = (method, path, headers)
-
-    def getresponse(self):
-        status, body = self.answer
-        return SimpleNamespace(status=status, read=lambda limit: body[:limit])
-
-    def close(self):
-        pass
-
-
-def pull_fixture(tmp_path, monkeypatch, answers):
+@pytest.mark.parametrize("cause", ("ssh-timeout", "ssh-refused", "ssh-unreachable", "ssh-not-ready"))
+def test_controller_reports_only_closed_retry_causes(tmp_path, monkeypatch, cause):
     instance = custody(tmp_path, monkeypatch)
-    (tmp_path / "tls").mkdir()
-    (tmp_path / "tls/server.pem").write_bytes(b"pinned certificate")
-    instance.load = lambda: {"reportToken": "c" * 64, "token": "d" * 64}
-    monkeypatch.setattr(controller.tls_trust, "context", lambda certificate, mode: (Mock(), b"leaf"))
-    Connection.answers = list(answers)
-    monkeypatch.setattr(controller.tls_trust, "CertificateConnection", Connection)
-    return instance
+    instance.report_progress = Mock()
+    monkeypatch.setattr(controller.ssh, "pull", Mock(return_value=(None, cause)))
+    assert instance.pull() is None
+    instance.report_progress.assert_called_once_with(cause, "failed")
+    instance.report_progress.reset_mock()
+    assert instance.pull() is None
+    instance.report_progress.assert_not_called()
 
 
-def test_the_controller_pulls_from_the_declared_address_and_port(tmp_path, monkeypatch):
-    seen = []
-    original = Connection.request
-
-    def request(self, method, path, headers):
-        seen.append((self.host, self.port, method, path, headers["Authorization"]))
-        original(self, method, path, headers)
-
-    monkeypatch.setattr(Connection, "request", request)
-    instance = pull_fixture(tmp_path, monkeypatch, [(200, b"report")])
+def test_controller_reads_ssh_report_without_logging_contents(tmp_path, monkeypatch):
+    instance = custody(tmp_path, monkeypatch)
+    instance.report_progress = Mock(side_effect=AssertionError("report entered progress"))
+    monkeypatch.setattr(controller.ssh, "pull", Mock(return_value=(b"report", "")))
     assert instance.pull() == b"report"
-    assert seen == [("192.0.2.10", 9443, "GET", "/report", "Bearer " + "c" * 64)]
-
-
-@pytest.mark.parametrize("answer,expected", [
-    (ConnectionRefusedError(), None), (TimeoutError(), None), (OSError(), None),
-])
-def test_no_answer_yet_is_not_a_failure(tmp_path, monkeypatch, answer, expected):
-    assert pull_fixture(tmp_path, monkeypatch, [answer]).pull() is expected
-
-
-@pytest.mark.parametrize("answer,message", [
-    (ssl.SSLCertVerificationError(), "foreign service"), ((403, b""), "foreign service"),
-    ((409, worker.REFUSED), "inventory refused"), ((200, b"x" * (controller.MAX_REPORT + 1)), "report size"),
-])
-def test_a_definite_answer_ends_the_wait_with_its_cause(tmp_path, monkeypatch, answer, message):
-    with pytest.raises(ValueError, match=message):
-        pull_fixture(tmp_path, monkeypatch, [answer]).pull()
+    controller.ssh.pull.assert_called_once_with(tmp_path, instance.request)
 
 
 def test_waiting_rechecks_ownership_and_stops_when_the_machine_does(tmp_path, monkeypatch):
@@ -305,56 +257,18 @@ def test_cleanup_forces_off_only_its_own_boot(tmp_path, monkeypatch):
     client.power.assert_not_called()
 
 
-def handler(token, path="/report", result=(200, b"report")):
-    instance = worker.Handler.__new__(worker.Handler)
-    instance.path = path
-    instance.headers = Message()
-    if token is not None:
-        instance.headers["Authorization"] = "Bearer " + token
-    instance.server = SimpleNamespace(token="c" * 64, result=result)
-    instance.answer = Mock()
-    instance.do_GET()
-    return instance.answer
-
-
-def test_the_worker_answers_only_the_authenticated_report_path():
-    handler("c" * 64).assert_called_once_with(200, b"report")
-    handler("c" * 64, result=(409, worker.REFUSED)).assert_called_once_with(409, worker.REFUSED)
-    for token, path in (("d" * 64, "/report"), (None, "/report"), ("c" * 64, "/ack"), ("c" * 64, "/report/../x")):
-        handler(token, path).assert_called_once_with(403)
-
-
-def test_a_failed_inventory_serves_a_fixed_refusal_without_its_cause(monkeypatch):
-    served = []
+def test_failed_inventory_keeps_its_cause_private_and_starts_restricted_ssh(monkeypatch):
     monkeypatch.setattr(worker, "prepare_network", lambda: {"network": {"address": "192.0.2.10"}})
     monkeypatch.setattr(worker, "collect", Mock(side_effect=ValueError("SECRET serial ABC123")))
-    monkeypatch.setattr(worker, "serve", lambda request, result: served.append(result))
+    written = []
+    monkeypatch.setattr(worker, "write", lambda path, data: written.append((path.name, data)))
+    serve = Mock()
+    monkeypatch.setattr(worker.sshd, "serve", serve)
     monkeypatch.setattr(worker, "phase", Mock())
     worker.run()
-    assert served == [(409, worker.REFUSED)]
-
-
-def test_the_worker_listens_on_its_declared_address_and_fixed_port(monkeypatch):
-    bound = []
-
-    class Server:
-        def __init__(self, address, handler_class):
-            bound.append(address)
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def handle_request(self):
-            raise KeyboardInterrupt
-
-    monkeypatch.setattr(worker, "Server", Server)
-    monkeypatch.setattr(worker.ssl, "SSLContext", Mock())
-    with pytest.raises(KeyboardInterrupt):
-        worker.serve({"network": {"address": "192.0.2.10"}, "reportToken": "c" * 64}, (200, b"report"))
-    assert bound == [("192.0.2.10", 9443)]
+    assert written == [("refused", b"inventory-refused")]
+    serve.assert_called_once()
+    assert "SECRET" not in repr(serve.call_args)
 
 
 def test_the_boot_tree_keeps_only_what_the_kernel_and_loaders_read(monkeypatch):
@@ -367,7 +281,3 @@ def test_the_boot_tree_keeps_only_what_the_kernel_and_loaders_read(monkeypatch):
     listings["/images"] = b"'/images' '/images/efiboot.img' '/images/pxeboot'"
     with pytest.raises(ValueError, match="initrd layout"):
         media.outside_boot_tree("/held")
-
-
-def test_controller_and_worker_share_one_port_and_refusal():
-    assert controller.PORT == worker.PORT and controller.REFUSED == worker.REFUSED

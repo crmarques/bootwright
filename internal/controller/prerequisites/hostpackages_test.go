@@ -48,7 +48,7 @@ func TestTheStageSelectsOnlyWhatTheCapabilitiesNeed(t *testing.T) {
 		{"nothing", NativeRequirements{}, []string{}},
 		{"container runtime", NativeRequirements{ContainerRuntime: true}, []string{"podman"}},
 		{"client", NativeRequirements{LibvirtClient: true}, []string{"libvirt-client"}},
-		{"media", NativeRequirements{InstallerMedia: true}, []string{"lorax", "xorriso"}},
+		{"media", NativeRequirements{InstallerMedia: true}, []string{"lorax", "xorriso", "squashfs-tools", "e2fsprogs", "binutils"}},
 		{"hypervisor", NativeRequirements{Hypervisor: true}, []string{
 			"libvirt-daemon", "libvirt-daemon-driver-network", "libvirt-daemon-driver-qemu",
 			"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm-core", "swtpm", "swtpm-tools",
@@ -60,7 +60,7 @@ func TestTheStageSelectsOnlyWhatTheCapabilitiesNeed(t *testing.T) {
 			if test.want != nil && !slices.Equal(got, test.want) {
 				t.Fatal(got)
 			}
-			if test.name == "all" && (len(got) != 12 || got[0] != "podman" || got[1] != "libvirt-client" || got[11] != "xorriso") {
+			if test.name == "all" && (len(got) != 15 || got[0] != "podman" || got[1] != "libvirt-client" || got[14] != "binutils") {
 				t.Fatal(got)
 			}
 		})

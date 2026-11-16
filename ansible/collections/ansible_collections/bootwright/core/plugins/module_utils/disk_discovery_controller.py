@@ -6,13 +6,11 @@ import base64
 import errno
 import fcntl
 import hashlib
-import http.client
 import json
 import os
 from pathlib import Path
 import re
 import secrets
-import ssl
 import stat
 import time
 import urllib.request
@@ -24,6 +22,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import disk_discov
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_boot as boot
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_bmc as bmc
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_progress as progress
+from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_ssh as ssh
 from ansible_collections.bootwright.core.plugins.module_utils import tls_trust
 from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
 from ansible_collections.bootwright.core.plugins.module_utils import private_records as records
@@ -34,18 +33,20 @@ ROOT = Path(hosted_area.ROOT)
 VERSION = "os-disk-discovery-v1"
 MAX_REPORT = 48 << 10
 ENV = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C"}
-PORT = 9443
-REFUSED = b"inventory-refused"
 POLL_SECONDS = 5
 OWNERSHIP_SECONDS = 60
-BOOT_GROUPS = ("build-media", "publish-media", "verify-delivery", "insert-media", "select-boot", "power-on")
+BOOT_GROUPS = ("prepare-ssh", "build-media", "publish-media", "verify-delivery", "insert-media", "select-boot", "power-on")
 
 
 def validate(request, digest, binding):
-    keys = {"version", "identity", "bootMedia", "controller", "interfaces", "inventory", "network", "private", "deadlineSeconds", "placement"}
+    keys = {"version", "identity", "bootMedia", "controller", "interfaces", "inventory", "network", "private", "deadlineSeconds", "placement", "ssh"}
     if set(request) != keys or request["version"] != VERSION or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
         raise ValueError("discovery request shape")
     if request["inventory"] not in ("automatic", "boot"):
+        raise ValueError("discovery request shape")
+    if (not isinstance(request["ssh"], dict) or set(request["ssh"]) != {"port"}
+            or isinstance(request["ssh"]["port"], bool) or not isinstance(request["ssh"]["port"], int)
+            or not 1 <= request["ssh"]["port"] <= 65535):
         raise ValueError("discovery request shape")
     if (
         request["controller"].get("tlsVerify") is not True
@@ -114,9 +115,9 @@ class Controller:
     def load(self):
         state = json.loads(records.read(self.root / "custody.json"))
         if (
-            set(state) != {"binding", "token", "reportToken"}
+            set(state) != {"binding", "token"}
             or state["binding"] != self.binding
-            or any(re.fullmatch(r"[0-9a-f]{64}", state[key]) is None for key in ("token", "reportToken"))
+            or re.fullmatch(r"[0-9a-f]{64}", state["token"]) is None
         ):
             raise ValueError("foreign discovery custody")
         return state
@@ -199,7 +200,7 @@ class Controller:
             self.prove_unprepared()
             records.write(
                 self.root / "custody.json",
-                canonical_json.canonical({"binding": self.binding, "token": secrets.token_hex(32), "reportToken": secrets.token_hex(32)}),
+                canonical_json.canonical({"binding": self.binding, "token": secrets.token_hex(32)}),
             )
         state = self.load()
         return state
@@ -213,69 +214,19 @@ class Controller:
             records.write(self.root / "boot.json", canonical_json.canonical({"request": self.digest, "version": VERSION}))
             os.fsync(self.lock)
 
-    def prepare_tls(self):
-        if (self.root / "tls").exists():
-            records.directory(self.root / "tls", False)
-            return
-        self.reap_tls_stages()
-        self.phase = "tls"
-        stage = self.root / (".tls-stage-" + secrets.token_hex(16))
-        records.directory(stage, True)
-        try:
-            key, certificate = stage / "server-key.pem", stage / "server.pem"
-            media.native([
-                "/usr/bin/openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "30",
-                "-subj", "/CN=Bootwright RAM inventory", "-addext", "basicConstraints=critical,CA:FALSE",
-                "-addext", "extendedKeyUsage=serverAuth", "-keyout", str(key), "-out", str(certificate),
-            ])
-            for path in (key, certificate):
-                os.chmod(path, 0o600)
-                records.read(path)
-                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-                try:
-                    os.fsync(fd)
-                finally:
-                    os.close(fd)
-            held = os.open(stage, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-            try:
-                os.fsync(held)
-            finally:
-                os.close(held)
-            os.rename(stage, self.root / "tls")
-            os.fsync(self.lock)
-        finally:
-            if stage.exists():
-                for name in ("server-key.pem", "server.pem"):
-                    (stage / name).unlink(missing_ok=True)
-                stage.rmdir()
-
-    def reap_tls_stages(self):
-        with os.scandir(self.root) as entries:
-            names = [entry.name for entry in islice(entries, 4097)]
-        if len(names) > 4096:
-            raise ValueError("discovery custody entry bound")
-        for name in names:
-            if re.fullmatch(r"\.tls-stage-[0-9a-f]{32}", name) is None:
-                continue
-            stage = self.root / name
-            records.directory(stage, False)
-            with os.scandir(stage) as entries:
-                children = [entry.name for entry in islice(entries, 3)]
-            if set(children) - {"server-key.pem", "server.pem"}:
-                raise ValueError("foreign discovery TLS stage")
-            for child in children:
-                records.read(stage / child)
-                (stage / child).unlink()
-            stage.rmdir()
+    def prepare_ssh(self):
+        self.phase = "ssh"
+        with self.progress("prepare-ssh"):
+            ssh.prepare(self.root, self.request, media.native)
 
     def payload(self):
         return boot.payload(
             self.binding,
             self.request["network"],
             self.request["interfaces"],
-            self.load()["reportToken"],
-            records.read(self.root / "tls/server.pem"),
-            records.read(self.root / "tls/server-key.pem"),
+            self.request["ssh"], self.request["deadlineSeconds"],
+            records.read(self.root / "ssh/host-key"),
+            records.read(self.root / "ssh/client-key.pub"),
         )
 
     def read_bmc(self):
@@ -312,17 +263,20 @@ class Controller:
             media.reap_intermediates(self.root)
             (self.root / "discovery.iso").unlink(missing_ok=True)
             self.phase = "media"
-            with media.construction(ROOT, self.root, destination, self.request["bootMedia"]["size"]):
-                try:
-                    image = media.build(self.request, self.root, self.payload())
-                    built()
-                    with self.progress("publish-media"):
-                        self.phase = "publication"
-                        publish_image(image, destination / "discovery.iso", media.publication_bound(self.request["bootMedia"]["size"]))
-                        media.native(["/usr/bin/chcon", "--reference", str(destination.parents[4]), "--recursive", str(destination)])
-                        os.fsync(self.lock)
-                finally:
-                    (self.root / "discovery.iso").unlink(missing_ok=True)
+            with media.verified_source(self.request) as held:
+                source = media.ssh_sources.inspect(held, self.request["bootMedia"]["size"], media.native)
+                peak = source["rootSize"] + media.ssh_sources.MAX_BUNDLE + media.MAX_BOOT_GROWTH
+                with media.construction(ROOT, self.root, destination, self.request["bootMedia"]["size"], peak):
+                    try:
+                        image = media.remaster(held, self.root, self.payload(), source)
+                        built()
+                        with self.progress("publish-media"):
+                            self.phase = "publication"
+                            publish_image(image, destination / "discovery.iso", media.publication_bound(self.request["bootMedia"]["size"]))
+                            media.native(["/usr/bin/chcon", "--reference", str(destination.parents[4]), "--recursive", str(destination)])
+                            os.fsync(self.lock)
+                    finally:
+                        (self.root / "discovery.iso").unlink(missing_ok=True)
 
     def publication_directories(self, destination):
         private = Path(self.request["private"]["path"])
@@ -377,29 +331,14 @@ class Controller:
         return client.power_state()
 
     def pull(self):
-        """One authenticated GET, or None while nothing answers at the address."""
-        certificate = records.read(self.root / "tls/server.pem").decode("ascii")
-        context, leaf = tls_trust.context(certificate, "certificate")
-        connection = tls_trust.CertificateConnection(self.request["network"]["address"], leaf, port=PORT, context=context, timeout=10)
-        try:
-            with absolute_deadline.limited(30):
-                connection.connect()  # Pin the per-attempt leaf before the token crosses TLS.
-                connection.request("GET", "/report", headers={"Authorization": "Bearer " + self.load()["reportToken"]})
-                response = connection.getresponse()
-                status, content = response.status, response.read(MAX_REPORT + 1)
-        except ssl.SSLCertVerificationError:
-            raise ValueError("a foreign service answers the discovery address") from None
-        except (OSError, http.client.HTTPException):
-            return None
-        finally:
-            connection.close()
-        if len(content) > MAX_REPORT:
-            raise ValueError("discovery report size")
-        if status == 409 and content == REFUSED:
-            raise ValueError("discovery RAM inventory refused")
-        if status != 200:
-            raise ValueError("a foreign service answers the discovery address")
-        return content
+        """Read only the forced inventory command through this boot's SSH key."""
+        data, cause = ssh.pull(self.root, self.request)
+        if cause:
+            now = time.monotonic()
+            if cause != getattr(self, "ssh_cause", "") or now - getattr(self, "ssh_notice", 0) >= 30:
+                progress.retry(getattr(self, "report_progress", None), cause)
+                self.ssh_cause, self.ssh_notice = cause, now
+        return data
 
     def owned_running(self, url):
         client = self.client()
@@ -446,12 +385,13 @@ class Controller:
         if power == "On":
             if not self.booted() or not redfish_discovery.image_matches(client.inserted(), url):
                 raise ValueError("discovery target is already running")
+            ssh.validate(self.root / "ssh", self.request, ssh.policy(), media.native)
             self.skip(*BOOT_GROUPS)
             return  # The original RAM worker is still booting or serving.
         if power != "Off":
             raise ValueError("discovery target power is unknown")
         self.mark_boot()
-        self.prepare_tls()
+        self.prepare_ssh()
         self.publish()
         self.phase = "controller"
         client = self.client()
@@ -535,13 +475,9 @@ class Controller:
 
     def reap(self):
         media.reap_intermediates(self.root)
-        self.reap_tls_stages()
-        tls = self.root / "tls"
-        if tls.exists():
-            records.directory(tls, False)
-            for name in ("server-key.pem", "server.pem"):
-                (tls / name).unlink(missing_ok=True)
-            tls.rmdir()
+        ssh.reap_stages(self.root)
+        if (self.root / "ssh").exists():
+            ssh.remove(self.root / "ssh")
         for name in ("discovery.iso", "patched.iso", "initrd-0", "initrd-1"):
             (self.root / name).unlink(missing_ok=True)
 
@@ -608,7 +544,7 @@ class Controller:
         self.prove_unprepared()
         records.write(
             self.root / "custody.json",
-            canonical_json.canonical({"binding": self.binding, "token": secrets.token_hex(32), "reportToken": secrets.token_hex(32)}),
+            canonical_json.canonical({"binding": self.binding, "token": secrets.token_hex(32)}),
         )
         return self.finish(False)
 

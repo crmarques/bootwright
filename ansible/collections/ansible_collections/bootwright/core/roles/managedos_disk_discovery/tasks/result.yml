@@ -22,7 +22,7 @@
       media: private discovery media construction
       publication: private discovery media publication
       bmc-inventory: management-controller drive inventory
-      tls: private inventory TLS preparation
+      ssh: private inventory SSH preparation
       media-delivery: private HTTPS media delivery
       media-insertion: verified virtual-media trust and insertion
       boot-selection: one-time virtual-media boot selection
@@ -70,13 +70,22 @@
       initrd-tools: the RHEL initramfs lacks required discovery tools
       initrd-layout: the source ISO initramfs layout is unqualified
       inventory-timeout: >-
-        the RAM boot never answered on its declared address and TCP port 9443; read the last
+        the RAM boot never answered on its declared address and discovery SSH port; read the last
         "Bootwright discovery" phase on the machine console, then check the declared install
         address, VLAN, bond and the route from the controller; the machine stays on until removal
       inventory-refused: >-
         the RAM boot answered but refused to read its disks (a missing storage driver, or unstable,
         unreadable or no supported whole disks); the machine stays on until removal
-      foreign-answer: another service, not this attempt's RAM boot, answers on the declared address and port 9443
+      foreign-answer: the SSH endpoint did not present this operation's pinned host key
+      ssh-policy: the controller SSH crypto policy refused discovery keys or changed after preparation
+      ssh-custody: operation-scoped SSH keys, pins or private material were not proved
+      ssh-client: the bounded SSH client did not complete
+      ssh-authentication: the pinned RAM SSH server refused this operation's client key
+      ssh-answer: the forced SSH command did not return the bounded inventory protocol
+      ssh-source-tool: >-
+        a required source-image inspection tool is missing or untrusted; apply controller
+        prerequisites with squashfs-tools, e2fsprogs and binutils before discovery
+      ssh-source: the verified RHEL image lacks a qualified SSH runtime or its bounded source layout
       target-stopped: the machine powered off before its inventory was read; remove the discovery and repeat it
       lost-ownership: the running machine no longer has this discovery's media attached; it was left untouched
       poweroff-timeout: the BMC did not report the machine off within its deadline
@@ -106,7 +115,10 @@
       native-xorriso: xorriso did not complete ISO inspection or remastering
       native-lsinitrd: lsinitrd did not complete initramfs inspection
       native-mkksiso: mkksiso did not complete boot-configuration remastering
-      native-openssl: openssl did not complete inventory certificate preparation
+      native-ssh-keygen: ssh-keygen did not complete operation-scoped inventory key preparation
+      native-unsquashfs: unsquashfs did not complete bounded source-image inspection or extraction
+      native-debugfs: debugfs did not complete read-only SSH component extraction
+      native-readelf: readelf did not complete SSH runtime qualification
       native-chcon: chcon did not complete the private publication SELinux labeling
       native-unknown: a fixed native command failed
       contract: a bounded discovery contract was refused

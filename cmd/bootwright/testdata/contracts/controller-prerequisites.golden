@@ -1,12 +1,12 @@
 implementation: controller-prerequisites
-content-digest: d3a2b16a74e0a6bec87b04a72745a571687edb5caf26414a3c1d119081925714
+content-digest: 83a06f61907914bc84f5e220bc80bdba04d44b636af0780c2ae6626ca2c0e341
 request-version: controller-clients-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none
 fixed-places: none
 effect-pins:
-  none
+  installer-media-qualified-ssh-source-tools-v1
 request-identity:
   packages
   tools[].kind

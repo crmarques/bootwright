@@ -21,7 +21,7 @@ def boot_fixture(monkeypatch, failed=None):
     instance.publish = Mock()
     instance.booted = Mock(return_value=False)
     instance.mark_boot = Mock()
-    instance.prepare_tls = Mock()
+    instance.prepare_ssh = Mock()
     instance.request = {"controller": {"virtualMedia": {
         "trust": "established", "enableVerification": False,
         "restoreVerification": False, "removeCertificate": False,
@@ -60,12 +60,15 @@ def test_boot_progress_is_live_and_never_reports_later_work_after_failure(monkey
 
 def test_resuming_owned_running_boot_reports_skips_without_rebooting(monkeypatch):
     instance, client, events = boot_fixture(monkeypatch)
+    monkeypatch.setattr(controller.ssh, "validate", Mock())
+    monkeypatch.setattr(controller.ssh, "policy", Mock())
+    instance.root = Path("/fixture")
     instance.target.return_value = "On"
     instance.booted.return_value = True
     client.inserted.return_value = instance.publication()[1]
     instance.start()
     assert events == [(group, "skipped") for group in
-                      ("build-media", "publish-media", "verify-delivery", "insert-media", "select-boot", "power-on")]
+                      controller.BOOT_GROUPS]
     instance.publish.assert_not_called()
     client.insert.assert_not_called()
     client.power.assert_not_called()
@@ -97,7 +100,14 @@ def test_media_build_and_publication_report_before_blocking_work(tmp_path, monke
         assert events[-2:] == [("build-media", "ok"), ("publish-media", "running")]
 
     monkeypatch.setattr(controller.media, "construction", construction)
-    monkeypatch.setattr(controller.media, "build", build)
+    monkeypatch.setattr(controller.media, "remaster", build)
+
+    @contextmanager
+    def source(*args):
+        yield "/held"
+
+    monkeypatch.setattr(controller.media, "verified_source", source)
+    monkeypatch.setattr(controller.media.ssh_sources, "inspect", lambda *args: {"rootSize": 1 << 30})
     monkeypatch.setattr(controller.media, "native", Mock())
     monkeypatch.setattr(controller, "publish_image", publish)
     monkeypatch.setattr(controller.os, "fsync", Mock())

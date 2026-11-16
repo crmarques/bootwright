@@ -48,14 +48,19 @@ type DiscoveryRequest struct {
 	Network         DiscoveryNetwork     `json:"network"`
 	Placement       machineref.Placement `json:"placement"`
 	Private         Publication          `json:"private"`
+	SSH             DiscoverySSH         `json:"ssh"`
 	Version         string               `json:"version"`
+}
+
+type DiscoverySSH struct {
+	Port int `json:"port"`
 }
 
 func DiscoveryBlockID(name string) string {
 	return reconciliation.BlockIdentity("os-disk-discovery-", name)
 }
 func DiscoveryContentDigest() string {
-	h := sha256.Sum256([]byte(DiscoveryImplementation + ":" + discoveryVersion + ":bmc-drive-inventory-or-minimal-ram-boot-controller-pull-bmc-poweroff-v1" + ":" + substrate.RedfishMediaPolicy))
+	h := sha256.Sum256([]byte(DiscoveryImplementation + ":" + discoveryVersion + ":bmc-drive-inventory-or-minimal-ram-boot-pinned-ssh-bmc-poweroff-v1" + ":" + substrate.RedfishMediaPolicy))
 	return hex.EncodeToString(h[:])
 }
 func (r DiscoveryRequest) Canonical() ([]byte, error) {
@@ -92,6 +97,7 @@ func discoveryRequest(catalog api.Catalog, m api.Object, input lifecycle.PlanInp
 		return DiscoveryRequest{}, needs, err
 	}
 	r := DiscoveryRequest{Version: discoveryVersion, Placement: boot.Placement, Identity: boot.Identity, BootMedia: boot.BootMedia, Controller: boot.Target.Controller, Interfaces: boot.Target.Hardware.Interfaces, Inventory: discoveryInventory(m), Private: *boot.Private, DeadlineSeconds: 1800,
+		SSH:     DiscoverySSH{Port: discoverySSHPort(m)},
 		Network: DiscoveryNetwork{Address: install.Address, Prefix: install.Prefix, Gateway: install.Gateway, Interface: install.Interface, Nameservers: install.Nameservers, Type: install.InterfaceType, VLANBase: install.VLANBase, VLANID: install.VLANID, BondPorts: install.BondPorts, BondOptions: install.BondOptions}}
 	r.Identity.Block = DiscoveryBlockID(m.Name())
 	r.Private.CertificateRef = boot.TLSCertificateRef
@@ -104,6 +110,13 @@ func discoveryRequest(catalog api.Catalog, m api.Object, input lifecycle.PlanInp
 		return DiscoveryRequest{}, needs, refusal("lifecycle.unsupported", "disk discovery publishes its private inventory media only over HTTPS", "select a controller-local HTTPS artifact server")
 	}
 	return r, needs, nil
+}
+
+func discoverySSHPort(m api.Object) int {
+	if port, ok := substrate.MachineDiscoveryPolicy(m).Get("ssh", "port").Int64(); ok {
+		return int(port)
+	}
+	return 22
 }
 
 func discoveryInventory(m api.Object) string {

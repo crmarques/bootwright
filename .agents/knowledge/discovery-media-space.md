@@ -84,3 +84,25 @@ failure nor a stopped worker; use the fixed bootstrap phases and receipt state.
 The focused
 [`test_disk_discovery_space.py`](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_disk_discovery_space.py)
 guards one-pass arguments, transfer/fallback, concurrent capacity and recovery.
+
+The SSH inventory worker adds one bounded source-extraction phase before
+remastering; the allocation measurements above predate it. The builder reads
+`images/install.img` directly from its verified ISO extent with `unsquashfs
+-offset`, extracts only its bounded `LiveOS/rootfs.img`, and reads the fixed
+SSH runtime with read-only `debugfs`. It reserves the exact rootfs logical size
+plus its bounded bundle, then reaps that scratch before the boot-tree copy.
+It never boots or mounts that source filesystem. The source RHEL SSH daemon
+may require `/usr/share/empty.sshd` rather than `/var/empty/sshd`; both inert,
+root-owned empty privilege-separation directories are supplied in RAM. A
+source daemon's `-t` check inside the VM is necessary: matching ELF library
+names alone did not catch the absent directory. See the
+[SSH source reader](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/disk_discovery_ssh_sources.py)
+and [restricted daemon](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/disk_discovery_sshd.py).
+OpenSSH's [sshd_config](https://man.openbsd.org/sshd_config.5) defines the
+forced-command, key-only authentication and disabled forwarding controls.
+
+The isolated actual-image SSH qualification used the RHEL 9.8 kernel/initramfs
+with the production overlay and disposable SCSI disks. It proved the bound
+canonical inventory, wrong client/server key refusals, confined commands,
+zero QMP block writes and unchanged disk hashes. This is direct-kernel VM
+qualification, not physical BMC acceptance or a new BIOS/EFI ISO boot result.
