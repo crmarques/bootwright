@@ -21,7 +21,7 @@ STAMP = -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.source=$(SOU
 VULNCHECK ?= on
 CLIENTS_CACHE ?= $(shell ./scripts/cache-dir)/client-releases
 VULNERABILITY_CHECK = $(shell cat bin/vulnerability-check 2>/dev/null)
-vulngate:
+vulngate: wheels
 	@set -eu; mkdir -p bin; rm -f bin/vulnerability-check; \
 	if test '$(VULNCHECK)' = skip; then \
 		echo unchecked >bin/vulnerability-check; \
@@ -49,7 +49,8 @@ comma := ,
 # The executable carries the runtime lock's wheels, so controller install
 # downloads none. The tool places them where the build embeds them, checking
 # each against the lock, and keeps them in the shared cache directory, so a
-# warm cache builds offline.
+# warm cache builds offline. Every target that compiles the module depends on
+# it, so a parallel make never compiles while a wheel is being placed.
 WHEELS_CACHE ?= $(shell ./scripts/cache-dir)/runtime-wheels
 wheels:
 	$(GO) -C scripts/tools run ./runtimewheels -lock "$(CURDIR)/internal/controller/runtimelock/lock.json" \
@@ -237,13 +238,13 @@ release:
 	for name in bootwright.cdx.json bootwright.notices.txt bootwright SHA256SUMS; do mv -f -- "$$stage/$$name" "$$out/$$name"; done; \
 	echo "release: $$out holds $(RELEASE_FILES) SHA256SUMS of $(VERSION), commit $$head"
 
-test:
+test: wheels
 	# The timeout bounds a whole package, including the CLI's executable builds
 	# while the full Ansible gate competes for CPU on cold CI runners.
 	$(GO) test -timeout=20m ./...
 	$(GO) -C scripts/tools test ./clientassets/... ./licenses/... ./runtimewheels/... ./tooltable/... ./vulngate/...
 
-vet:
+vet: wheels
 	$(GO) vet ./...
 	GOOS=darwin GOARCH=arm64 $(GO) vet ./...
 
@@ -262,10 +263,10 @@ modules-check:
 	$(GO) mod verify
 	$(GO) -C scripts/tools mod verify
 
-completion-test:
+completion-test: wheels
 	$(GO) test -count=1 -tags=completion ./test/completion
 
-vulncheck:
+vulncheck: wheels
 	./scripts/govulncheck -db "$(VULNDB)" ./...
 
 ansible-check:
@@ -281,7 +282,7 @@ ansible-check:
 # tests and the other names that test lists is listed, and every listed test
 # exists. TestDocsCheckRecipeReadsTheList holds this recipe to the list.
 DOCS_CHECKS := test/architecture/testdata/docs-checks.txt
-docs-check:
+docs-check: wheels
 	$(GO) test -count=1 -run '^($(shell awk '{print $$2}' $(DOCS_CHECKS) | paste -sd'|' -))$$' $(shell awk '{print "./" $$1}' $(DOCS_CHECKS) | sort -u)
 
 # The probe tier: the narrowest checks of each file this branch changed, which
@@ -294,10 +295,10 @@ focus:
 quick: fmt-check vet
 	./scripts/quick-test
 
-race:
+race: wheels
 	$(GO) test -race ./internal/reconciliation/... ./internal/controller/privilege/... ./internal/trust/... ./cmd/bootwright/...
 
-# Every gate that needs no network once module caches are warm. Vulnerability
+# Every gate that needs no network once module and wheel caches are warm. Vulnerability
 # data and the Ansible tool bootstrap need network, so they are reported unrun.
 check-offline: fmt-check licenses-check test vet completion-test
 	@echo 'check-offline: vulncheck, ansible-check and modules-check were not run; they are unrun, not passed.'
