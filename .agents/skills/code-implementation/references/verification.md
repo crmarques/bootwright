@@ -20,6 +20,10 @@ file. The gate took about 300 s on 2026-11-02, its longest lane the plain
 serial unit loop, and seconds for its Ansible part when that reused a recorded
 pass.
 
+`make cover` is no tier: CI runs it beside the gate, and a change that adds a
+package or tests runs it, then `make cover-floors`, to raise the
+[coverage floors](../../../../specs/architecture.md#architecture-verification).
+
 ## Probe
 
 The probe is the empirical check: the narrowest command that exercises the

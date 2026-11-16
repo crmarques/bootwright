@@ -81,8 +81,25 @@ def selected_suites(arguments: list[str]) -> tuple[set[str], list[str]]:
         + "|".join(SUITES)
         + "] or [--suite "
         + "|".join(NARROWED)
-        + " PATH...]"
+        + " PATH...] or [--coverage DIRECTORY]"
     )
+
+
+def coverage_directory(arguments: list[str]) -> Optional[Path]:
+    """Return the directory a coverage run records into, or None for a check.
+
+    A coverage run is the plain unit loop alone, over every test, with
+    coverage_recorder.py recording the plugins' executed lines into the
+    directory, an existing empty one, for make cover.
+    """
+    if arguments[:1] != ["--coverage"]:
+        return None
+    if len(arguments) != 2:
+        selected_suites(["--usage"])
+    directory = Path(arguments[1]).resolve()
+    if not directory.is_dir() or any(directory.iterdir()):
+        raise SystemExit(f"{arguments[1]} is no existing empty directory")
+    return directory
 
 
 def collection_targets(collection: Path, paths: list[str]) -> list[str]:
@@ -421,6 +438,7 @@ class Run:
     environment: dict
     selected: set[str]
     targets: list[str]
+    coverage: Optional[Path] = None
 
 
 def prepared_wheelhouse(run_: Run) -> Path:
@@ -605,6 +623,7 @@ def plain_lane(run_: Run, wheelhouse: Path) -> Lane:
     installs that loader instead. -P and -s keep the working directory and the
     user site off the path, as -I does, while PYTHONPATH is still read.
     Narrowed, it runs the targets alone, and nothing else of the suite runs.
+    A coverage run loads the recorder from a directory of its own on the path.
     """
     pytest = [str(run_.executable), "-P", "-s", "-m", "pytest"]
 
@@ -616,8 +635,22 @@ def plain_lane(run_: Run, wheelhouse: Path) -> Lane:
         plain = dict(environment, PYTHONPATH=str(collections))
         if run_.targets:
             return narrowed_units(pytest, test_collection, run_.targets, plain)
+        command = pytest
+        if run_.coverage is not None:
+            recorder = run_.area / "recorder"
+            recorder.mkdir()
+            shutil.copyfile(
+                run_.root / "scripts/tools/coverage_recorder.py",
+                recorder / "coverage_recorder.py",
+            )
+            plain.update(
+                PYTHONPATH=os.pathsep.join([str(collections), str(recorder)]),
+                BOOTWRIGHT_COVERAGE_ROOT=str(test_collection),
+                BOOTWRIGHT_COVERAGE_OUT=str(run_.coverage),
+            )
+            command = pytest + ["-p", "coverage_recorder"]
         run(
-            pytest + [str(test_collection.relative_to(collections) / "tests/unit")],
+            command + [str(test_collection.relative_to(collections) / "tests/unit")],
             output,
             cwd=collections,
             env=plain,
@@ -631,6 +664,8 @@ def check_lanes(
     run_: Run, playbooks: list[Path], inventory: Path
 ) -> list[tuple[str, Lane]]:
     """Return the lanes the selected checks need, in the order they report."""
+    if run_.coverage is not None:
+        return [("plain", plain_lane(run_, prepared_wheelhouse(run_)))]
     lanes: list[tuple[str, Lane]] = []
     if "syntax" in run_.selected:
         command = [
@@ -929,7 +964,11 @@ def main() -> int:
         raise SystemExit(
             "Ansible checks require the pinned CPython 3.13.16 interpreter."
         )
-    selected, paths = selected_suites(sys.argv[1:])
+    coverage = coverage_directory(sys.argv[1:])
+    if coverage is None:
+        selected, paths = selected_suites(sys.argv[1:])
+    else:
+        selected, paths = {"units"}, []
 
     root = Path(__file__).resolve().parents[2]
     requirements = root / "scripts/tools/ansible-requirements.txt"
@@ -1014,7 +1053,7 @@ def main() -> int:
                     raise SystemExit(
                         "No shipped playbook is at or under " + " ".join(paths)
                     )
-            if "units" in selected and not targets:
+            if "units" in selected and not targets and coverage is None:
                 # The harness's own tests; -B keeps bytecode out of the checkout.
                 # AREA_VARIABLE names this run's area, so they parse the area that
                 # every process here takes as its HOME.
@@ -1039,6 +1078,7 @@ def main() -> int:
                 environment,
                 selected,
                 targets,
+                coverage,
             )
             return run_lanes(check_lanes(run_, playbooks, inventory), area / "logs")
 

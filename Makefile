@@ -1,4 +1,4 @@
-.PHONY: build release wheels vulngate licenses licenses-check tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check execution-contracts-check focus quick race check-offline check check-go staticcheck
+.PHONY: build release wheels vulngate licenses licenses-check tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check execution-contracts-check focus quick race check-offline check check-go staticcheck cover cover-floors
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -334,6 +334,25 @@ RACE_TIMEOUT = 30m
 
 race: wheels
 	$(GO) test -race -timeout $(RACE_TIMEOUT) $(RACE_PACKAGES)
+
+# Statement coverage, which the gate does not measure, so make check runs each
+# suite once: every Go package by its own tests, and the collection's plugins,
+# per kind, by the plain unit loop under a standard-library recorder. The
+# figures land in $(COVERAGE_DIR), and the check holds them to
+# scripts/tools/coverage-floors.json, whose floors only rise; cover-floors
+# raises them to the last measurement. CI runs it beside the gate.
+COVERAGE_DIR := out/coverage
+COVERAGE_FLOORS = python3 -I scripts/tools/coverage_floors.py --root "$(CURDIR)" --go-profile $(COVERAGE_DIR)/go.profile \
+	--collection-lines $(COVERAGE_DIR)/collection --floors scripts/tools/coverage-floors.json
+cover: wheels
+	rm -rf $(COVERAGE_DIR)
+	mkdir -p $(COVERAGE_DIR)/collection
+	$(GO) test -timeout=20m -coverprofile=$(COVERAGE_DIR)/go.profile ./...
+	./scripts/ansible-check --coverage $(COVERAGE_DIR)/collection
+	$(COVERAGE_FLOORS) check --summary $(COVERAGE_DIR)/coverage.json
+
+cover-floors:
+	$(COVERAGE_FLOORS) refresh
 
 # Every gate that needs no network once module and wheel caches are warm. Vulnerability
 # data and the Ansible tool bootstrap need network, so they are reported unrun.

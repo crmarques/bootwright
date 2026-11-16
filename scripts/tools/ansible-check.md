@@ -78,6 +78,12 @@ plain loop is `pytest ansible_collections/bootwright/core/tests/unit` run from
 `ansible/collections` with that directory on `PYTHONPATH`, using the prepared
 environment's pytest.
 
+`./scripts/ansible-check --coverage DIRECTORY`, which `make cover` runs, is
+that plain loop alone over every test, with `coverage_recorder.py` loaded as a
+pytest plugin from a directory of its own on `PYTHONPATH`; it records the
+plugins' executed lines into the directory, which must exist and be empty,
+and neither reads nor writes a pass record.
+
 `./scripts/ansible-check --suite syntax|lint|sanity|units|integration` runs
 one of those suites for a local inner loop. Paths after the suite narrow it to
 files and directories of the collection: syntax checks the shipped playbooks at

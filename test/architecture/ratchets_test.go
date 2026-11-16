@@ -266,6 +266,15 @@ func TestTheIntegrationGuardUnitsPass(t *testing.T) {
 	}
 }
 
+// make cover alone measures coverage and holds it to its floors, so the gate
+// proves the floor check on planted violations and the recorder on a fixture.
+func TestTheCoverageFloorUnitsPass(t *testing.T) {
+	command := exec.Command("python3", "-I", "-B", filepath.Join("..", "..", "scripts", "tools", "coverage_floors_test.py"))
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("coverage_floors_test.py failed: %v\n%s", err, output)
+	}
+}
+
 // A go:embed directory pattern descends into every subdirectory, one holding
 // another package included, and stops only at a module boundary
 // (https://github.com/golang/go/blob/go1.26.8/src/cmd/go/internal/load/pkg.go#L2247-L2251),

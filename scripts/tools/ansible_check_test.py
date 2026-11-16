@@ -743,6 +743,45 @@ class UsesRecordTest(unittest.TestCase):
                 self.assertFalse(ansible_check.uses_record(arguments, environ))
 
 
+class CoverageDirectoryTest(unittest.TestCase):
+    """A coverage run names one existing empty directory, and a check none."""
+
+    def test_a_check_names_no_directory(self):
+        for arguments in ([], ["--suite", "units"], ["--suite", "units", "a"]):
+            with self.subTest(arguments=arguments):
+                self.assertIsNone(ansible_check.coverage_directory(arguments))
+
+    def test_a_coverage_run_needs_an_existing_empty_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self.assertEqual(
+                ansible_check.coverage_directory(["--coverage", temporary]),
+                directory.resolve(),
+            )
+            (directory / "lines.1.json").write_text("{}", encoding="utf-8")
+            for arguments in (
+                ["--coverage", temporary],
+                ["--coverage", str(directory / "absent")],
+                ["--coverage"],
+                ["--coverage", temporary, "extra"],
+            ):
+                with self.subTest(arguments=arguments):
+                    with self.assertRaises(SystemExit):
+                        ansible_check.coverage_directory(arguments)
+
+    def test_a_coverage_run_is_the_plain_lane_alone(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            area = Path(temporary)
+            run_ = ansible_check.Run(
+                area, area, area, area, area, area, {}, {"units"}, [], area
+            )
+            with mock.patch.object(
+                ansible_check, "prepared_wheelhouse", return_value=area
+            ):
+                lanes = ansible_check.check_lanes(run_, [], area / "inventory.json")
+            self.assertEqual([name for name, _ in lanes], ["plain"])
+
+
 class WrittenSinceTest(unittest.TestCase):
     """A write to any input after the start shows, even when undone."""
 

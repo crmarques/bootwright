@@ -1384,6 +1384,16 @@ owning spec, which names the check.
   cyclomatic complexity of 40 unless it is on a tracked list that only shrinks:
   a function on it that no longer reaches 40 fails until it is removed
   (`test/architecture/complexity_budget_test.go`).
+- Statement coverage only rises. `make cover`, which CI runs beside the gate
+  so neither suite runs twice there, measures each Go package by its own tests
+  and each kind of collection plugin by the plain unit loop under a recorder
+  on the standard library, and `scripts/tools/coverage_floors.py` holds each
+  to its floor in `scripts/tools/coverage-floors.json`, in tenths of a point:
+  a figure below its floor fails, and so does one that would hold a floor more
+  than the tolerance above its own, a measured name without a floor and a
+  floor no name was measured for. A refreshed floor sits a margin below the
+  figure, which absorbs a run-to-run variation; a refresh never lowers one.
+  Code that runs only in a child process counts as unrun.
 - Hold the lifecycle's planner and executor apart, the operation plan being the
   only hand-off from one to the other: `TestLifecyclePlannerReachesNoEffect`,
   `TestLifecycleExecutorNeverReplans` and `TestLifecycleFilesAreClassified` in
