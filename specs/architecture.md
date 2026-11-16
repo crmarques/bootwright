@@ -1384,11 +1384,14 @@ owning spec, which names the check.
   track fails, and a tracked file a check reads that the working tree lacks
   fails until its removal is staged. Each clause of the effect boundary is
   proved by a fixture it refuses, and each kind of grant by the clauses it
-  exempts and the ones it leaves; so are the dependency direction rule, the
-  lifecycle partition and the deadline application rule, each by a planted
-  violation of every form it refuses. A production function, in Go or in the
-  collection's plugins, stays within 100 lines; the lists of functions
-  awaiting their split are empty and only shrink. It also stays below a
+  exempts and the ones it leaves. An adapter held to reading its input also
+  calls no method of a held `os.File` or `os.Root` that writes, resizes,
+  changes or removes, as the type checker resolves the calls on either
+  platform the module builds for. That rule, the dependency direction rule,
+  the lifecycle partition and the deadline application rule are each proved
+  by a planted violation of every form they refuse. A production function, in
+  Go or in the collection's plugins, stays within 100 lines; the lists of
+  functions awaiting their split are empty and only shrink. It stays below a
   cyclomatic complexity of 40 unless it is on a tracked list that only shrinks:
   a function on it that no longer reaches 40 fails until it is removed
   (`test/architecture/complexity_budget_test.go`).
