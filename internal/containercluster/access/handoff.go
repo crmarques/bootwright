@@ -81,6 +81,9 @@ func safeArguments(args []string) bool {
 			return false
 		}
 		flag, _, _ := strings.Cut(arg, "=")
+		if args[0] == "whoami" && strings.HasPrefix(flag, "-") && !strings.HasPrefix(flag, "--") && strings.Contains(flag, "t") {
+			return false
+		}
 		switch flag {
 		case "--from-literal", "--password-stdin", "--show-token", "--kubeconfig", "--context", "--cluster", "--user", "--server", "-s", "--token", "--username", "--password", "--client-key", "--client-certificate", "--certificate-authority", "--insecure-skip-tls-verify", "--tls-server-name", "--proxy-url", "--cache-dir":
 			return false

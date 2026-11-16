@@ -61,7 +61,7 @@ func TestClientHandoffsRefuseBeforeMetadataOrCredentials(t *testing.T) {
 			}
 		}
 	}
-	for _, args := range [][]string{nil, {"get", "\x00"}, {"get", "\xff"}, {"get", "--token=private"}, {"get", "--server", "https://other.test"}, {"get", "--kubeconfig=other"}, {"get", "-shttps://other.test"}, {"login", "secret"}, {"--namespace=default", "config", "set-credentials", "example", "--exec-command=/tmp/helper"}, {"create", "secret", "generic", "example", "--from-literal=password=secret"}} {
+	for _, args := range [][]string{nil, {"get", "\x00"}, {"get", "\xff"}, {"get", "--token=private"}, {"get", "--server", "https://other.test"}, {"get", "--kubeconfig=other"}, {"get", "-shttps://other.test"}, {"login", "secret"}, {"--namespace=default", "config", "set-credentials", "example", "--exec-command=/tmp/helper"}, {"create", "secret", "generic", "example", "--from-literal=password=secret"}, {"whoami", "--show-token"}, {"whoami", "--show-token=true"}, {"whoami", "-t"}, {"whoami", "-t=true"}, {"whoami", "-ct"}, {"whoami", "-tc"}, {"whoami", "--show-context", "-t"}} {
 		reader, metadata := custody(), readyMetadata()
 		result, err := New(&effectiveState{objects: graph()}, reader, locate, current("lab")).WithMetadata(metadata).OC(t.Context(), OCRequest{Name: "sno", Command: args})
 		if result != nil || code(t, err) != "access.handoff" || len(reader.reads)+len(metadata.calls) != 0 {
