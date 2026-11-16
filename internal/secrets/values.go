@@ -23,51 +23,70 @@ const (
 	PublicKeyPart   Part = "public-key"
 )
 
-// Material owns confidential bytes. Formatting and JSON never reveal them.
-type Material struct{ parts map[Part][]byte }
+// Material owns confidential bytes. Formatting and JSON never reveal them. The
+// bytes sit behind a function because fmt cannot call String on a Material held
+// in an unexported field, and under every verb it prints a function only as its
+// address, where a pointer or map would be walked.
+type Material struct{ held func() map[Part][]byte }
+
+func materialOf(parts map[Part][]byte) Material {
+	return Material{held: func() map[Part][]byte { return parts }}
+}
 
 func NewMaterial(parts map[Part][]byte) Material {
-	m := Material{parts: make(map[Part][]byte, len(parts))}
+	held := make(map[Part][]byte, len(parts))
 	for part, value := range parts {
-		m.parts[part] = slices.Clone(value)
+		held[part] = slices.Clone(value)
 	}
-	return m
+	return materialOf(held)
+}
+
+func (m Material) partMap() map[Part][]byte {
+	if m.held == nil {
+		return nil
+	}
+	return m.held()
 }
 
 func (m Material) Parts() []Part {
-	parts := make([]Part, 0, len(m.parts))
-	for p := range m.parts {
+	held := m.partMap()
+	parts := make([]Part, 0, len(held))
+	for p := range held {
 		parts = append(parts, p)
 	}
 	slices.Sort(parts)
 	return parts
 }
 
-func (m Material) Part(part Part) ([]byte, bool) { b, ok := m.parts[part]; return slices.Clone(b), ok }
+func (m Material) Part(part Part) ([]byte, bool) {
+	b, ok := m.partMap()[part]
+	return slices.Clone(b), ok
+}
 
 // Lend narrows this material to the named parts for a consumer that reads only
 // those. The view shares these bytes rather than copying them, so it leaves no
 // copy behind and clearing this material clears it too; only the lender clears
 // it. A part this material does not hold stays absent.
 func (m Material) Lend(parts ...Part) Material {
-	lent := Material{parts: make(map[Part][]byte, len(parts))}
+	held := m.partMap()
+	lent := make(map[Part][]byte, len(parts))
 	for _, part := range parts {
-		if value, ok := m.parts[part]; ok {
-			lent.parts[part] = value
+		if value, ok := held[part]; ok {
+			lent[part] = value
 		}
 	}
-	return lent
+	return materialOf(lent)
 }
 
 func (m Material) Size() int {
 	n := 0
-	for _, b := range m.parts {
+	for _, b := range m.partMap() {
 		n += len(b)
 	}
 	return n
 }
 func (m Material) Clear() {
-	for _, b := range m.parts {
+	for _, b := range m.partMap() {
 		clear(b)
 	}
 }
