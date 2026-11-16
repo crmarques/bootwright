@@ -191,13 +191,13 @@ func (s Service) updateAdminCredential(ctx context.Context, tx Transaction, basi
 		active, activeFound, err = read(basis.updater.AdminCredentialSeed(basis.block))
 	}
 	defer active.Material.Clear()
+	if err != nil {
+		return err
+	}
 	if !activeFound && !basis.updater.AdminCredentialMayBeMissing() {
 		return failure("access.unavailable", "the original administrator credential is missing", "restore the original credential custody")
 	}
-	if err != nil || active.Unproved || active.Identity != "" && active.Identity != identity {
-		if err != nil {
-			return err
-		}
+	if active.Unproved || active.Identity != "" && active.Identity != identity {
 		return failure("access.unavailable", "the administrator credential's custody is unproved", "restore the original credential custody")
 	}
 	pending, found, err := read(basis.output + "-update")

@@ -1368,6 +1368,9 @@ type testBinder struct {
 	journal     []string
 	produceErr  error
 	withdrawErr error
+	// readErr fails the read of a produced entry by "<block>/<name>", as a
+	// custody store that cannot be read or a cancelled read does.
+	readErr map[string]error
 	// versions names each Secret's current version once a test tracks them;
 	// a binding then pins the versions current when it was issued, and a
 	// version's material comes from versionMaterial. rebinds lists every

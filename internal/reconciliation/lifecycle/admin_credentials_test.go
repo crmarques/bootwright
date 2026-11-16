@@ -18,7 +18,7 @@ type credentialCapability struct {
 	*testCapability
 	prepares, updates int
 	remote            string
-	fail              bool
+	fail, strict      bool
 	pending           func() bool
 }
 
@@ -133,7 +133,34 @@ func TestAdminCredentialUpdateRefusesBeforeAnApplyOrForAnUnknownCluster(t *testi
 	}
 }
 
-func (c *credentialCapability) AdminCredentialMayBeMissing() bool { return true }
+func (c *credentialCapability) AdminCredentialMayBeMissing() bool { return !c.strict }
+
+func TestAdminCredentialUpdateReportsAFailedOrCancelledCustodyReadAsItself(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+	}{
+		{"failing", errors.New("custody store unreadable")},
+		{"cancelled", context.Canceled},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			h, capability := adminHarness(t)
+			if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
+				t.Fatal(err)
+			}
+			capability.strict = true
+			h.binder.readErr = map[string]error{"credential-cluster/admin-password": test.err}
+			request := UpdateAdminCredentialsRequest{ContextName: testContextName, Name: "edge", SkipConfirmation: true}
+			result, err := h.service.UpdateAdminCredentials(context.Background(), request)
+			if result != nil || !errors.Is(err, test.err) {
+				t.Fatalf("update = %+v %v, want the custody read's own error", result, err)
+			}
+			if capability.prepares != 0 || capability.updates != 0 {
+				t.Fatal("a failed custody read reached the cluster")
+			}
+		})
+	}
+}
 
 func TestAdministratorPasswordRefusesIncompleteOrCorruptUpdates(t *testing.T) {
 	h, _ := adminHarness(t)

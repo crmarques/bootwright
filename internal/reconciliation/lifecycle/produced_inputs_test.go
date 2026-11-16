@@ -74,6 +74,9 @@ func (b *testBinder) ReadProduced(ctx context.Context, request custody.ReadProdu
 		return secretstore.ProducedMaterial{}, false, errors.New("wrong context")
 	}
 	key := request.Block + "/" + request.Name
+	if err := b.readErr[key]; err != nil {
+		return secretstore.ProducedMaterial{}, false, err
+	}
 	value, found := b.produced[key]
 	return secretstore.ProducedMaterial{Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)}), Unproved: b.unproved[key], Identity: b.identities[key]}, found, nil
 }
