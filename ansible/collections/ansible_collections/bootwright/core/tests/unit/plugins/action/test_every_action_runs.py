@@ -40,6 +40,7 @@ PROTOCOLS = {
 # run with arguments they refuse before reaching it.
 EFFECTS = {
     "controller_tool": "prepare_tool",
+    "managedos_disk_discovery": "execute",
     "cluster_objects_read": "Engine",
     "cluster_objects_write": "Engine",
     "substrate_kubevirt_api": "connect",

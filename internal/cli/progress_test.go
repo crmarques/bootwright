@@ -78,6 +78,21 @@ func newTestTerminalProgress(width int) (*progressPresenter, *manualClock, *byte
 	return &progressPresenter{out: &out, clock: clock.clock(), columns: fixedColumns(width)}, clock, &out
 }
 
+func TestTerminalProgressKeepsDiscoveryPhaseVisibleBesideALongBlockLabel(t *testing.T) {
+	presenter, clock, out := newTestTerminalProgress(80)
+	ctx := context.Background()
+	label := "inventory Linux-visible disks of node-a in RAM, then power off"
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: label, Identity: "node-a", Status: "running", Position: 6, Total: 8})
+	presenter.report(ctx, progressEvent{Heading: "Progress", Label: label, Identity: "node-a", Detail: "wait for RAM boot and inventory", Status: "running", Position: 6, Total: 8, Nested: true})
+	clock.advance(5 * time.Minute)
+	screen := terminalScreen(out.String())
+	line := screen[len(screen)-1]
+	if !strings.Contains(line, "node-a") || !strings.Contains(line, "wait for RAM") || !strings.Contains(line, "still running") || utf8.RuneCountInString(line) >= 80 {
+		t.Fatalf("current phase or machine disappeared from the progress row: %q", line)
+	}
+	presenter.finish()
+}
+
 func TestProgressRowsAlignAndCloseWithElapsedTime(t *testing.T) {
 	presenter, clock, out := newTestProgress()
 	ctx := context.Background()

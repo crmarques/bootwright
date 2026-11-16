@@ -1,6 +1,6 @@
 ---
 - name: Reject a synthetic discovery request before custody or network access
-  bootwright.core.disk_discovery:
+  bootwright.core.managedos_disk_discovery:
     operation: apply
     request:
       version: os-disk-discovery-v1

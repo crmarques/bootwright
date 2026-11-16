@@ -16,7 +16,19 @@ options:
     required: true
     choices:
       - loaded
+      - group
       - completed
+  group:
+    description: Fixed presentation group identity.
+    type: str
+  status:
+    description: Presentation group status.
+    type: str
+    choices:
+      - running
+      - ok
+      - failed
+      - skipped
   digest:
     description: Frozen request digest.
     type: str

@@ -22,6 +22,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import canonical_j
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_media as media
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_boot as boot
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_receipt as receipt
+from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_progress as progress
 from ansible_collections.bootwright.core.plugins.module_utils import tls_trust
 from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
 from ansible_collections.bootwright.core.plugins.module_utils import private_records as records
@@ -80,8 +81,9 @@ def validate(request, digest, binding):
 
 
 class Controller:
-    def __init__(self, request, digest, material, create=False):
+    def __init__(self, request, digest, material, create=False, progress=None):
         self.phase = "custody"
+        self.report_progress = progress
         self.request, self.digest, self.material = request, digest, material
         encoded = material.get("bindingBase64", "")
         if not isinstance(encoded, str) or len(encoded) > 8192:
@@ -102,6 +104,12 @@ class Controller:
     def close(self):
         if self.lock is not None:
             os.close(self.lock)
+
+    def progress(self, group):
+        return progress.step(getattr(self, "report_progress", None), group)
+
+    def skip(self, *groups):
+        progress.skip(getattr(self, "report_progress", None), groups)
 
     def load(self):
         state = json.loads(records.read(self.root / "custody.json"))
@@ -223,24 +231,27 @@ class Controller:
         return parent / state["token"], self.request["private"]["url"] + "/" + state["token"] + "/discovery.iso"
 
     def publish(self):
-        self.load()
-        self.phase = "publication"
-        destination, unused = self.publication()
-        del unused
-        self.publication_directories(destination)
-        reap_publication_stages(destination)
-        media.reap_intermediates(self.root)
-        (self.root / "discovery.iso").unlink(missing_ok=True)
-        self.phase = "media"
-        with media.construction(ROOT, self.root, destination, self.request["bootMedia"]["size"]):
-            try:
-                image = media.build(self.request, self.root, self.payload())
-                self.phase = "publication"
-                publish_image(image, destination / "discovery.iso", media.publication_bound(self.request["bootMedia"]["size"]))
-                media.native(["/usr/bin/chcon", "--reference", str(destination.parents[4]), "--recursive", str(destination)])
-                os.fsync(self.lock)
-            finally:
-                (self.root / "discovery.iso").unlink(missing_ok=True)
+        with self.progress("build-media") as built:
+            self.load()
+            self.phase = "publication"
+            destination, unused = self.publication()
+            del unused
+            self.publication_directories(destination)
+            reap_publication_stages(destination)
+            media.reap_intermediates(self.root)
+            (self.root / "discovery.iso").unlink(missing_ok=True)
+            self.phase = "media"
+            with media.construction(ROOT, self.root, destination, self.request["bootMedia"]["size"]):
+                try:
+                    image = media.build(self.request, self.root, self.payload())
+                    built()
+                    with self.progress("publish-media"):
+                        self.phase = "publication"
+                        publish_image(image, destination / "discovery.iso", media.publication_bound(self.request["bootMedia"]["size"]))
+                        media.native(["/usr/bin/chcon", "--reference", str(destination.parents[4]), "--recursive", str(destination)])
+                        os.fsync(self.lock)
+                finally:
+                    (self.root / "discovery.iso").unlink(missing_ok=True)
 
     def publication_directories(self, destination):
         private = Path(self.request["private"]["path"])
@@ -313,6 +324,7 @@ class Controller:
         if power == "On":
             if client.inserted() != url:
                 raise ValueError("discovery target is already running")
+            self.skip("build-media", "publish-media", "verify-delivery", "insert-media", "select-boot", "power-on")
             return  # The original RAM worker is still booting or serving.
         if power != "Off":
             raise ValueError("discovery target power is unknown")
@@ -325,37 +337,43 @@ class Controller:
             raise ValueError("foreign virtual media")
         certificate = records.read(Path(self.material["artifactCertificate"])).decode()
         self.phase = "media-delivery"
-        listener_probe(url, certificate)
+        with self.progress("verify-delivery"):
+            listener_probe(url, certificate)
         self.phase = "media-insertion"
         virtual = self.request["controller"]["virtualMedia"]
-        client.insert(url, virtual["trust"], certificate, private=True, enable_verification=virtual["enableVerification"])
+        with self.progress("insert-media"):
+            client.insert(url, virtual["trust"], certificate, private=True, enable_verification=virtual["enableVerification"])
         self.phase = "boot-selection"
-        client.boot_once("Cd")
+        with self.progress("select-boot"):
+            client.boot_once("Cd")
         self.phase = "power-on"
-        client.power("On", "On")
+        with self.progress("power-on"):
+            client.power("On", "On")
 
     def cleanup(self, acknowledged, receiver=None):
         deadline = time.monotonic() + 600
         client = self.client()
         unused, url = self.publication()
         del unused
-        while self.target(client) != "Off":
-            if client.inserted() != url:
-                raise ValueError("discovery lost ownership of the running boot")
-            if not acknowledged:
-                client.power("ForceOff", "Off")
-            if time.monotonic() >= deadline:
-                raise ValueError("discovery poweroff deadline")
-            if receiver is None:
-                time.sleep(3)
-            else:
-                receiver.poll()  # Replay a lost ACK until verified shutdown.
-            client = self.client()
-        if client.inserted() not in ("", url):
-            raise ValueError("foreign virtual media during cleanup")
-        virtual = self.request["controller"]["virtualMedia"]
-        certificate = records.read(Path(self.material["artifactCertificate"])).decode()
-        client.eject(virtual["restoreVerification"], virtual["removeCertificate"], certificate)
+        with self.progress("power-off"):
+            while self.target(client) != "Off":
+                if client.inserted() != url:
+                    raise ValueError("discovery lost ownership of the running boot")
+                if not acknowledged:
+                    client.power("ForceOff", "Off")
+                if time.monotonic() >= deadline:
+                    raise ValueError("discovery poweroff deadline")
+                if receiver is None:
+                    time.sleep(3)
+                else:
+                    receiver.poll()  # Replay a lost ACK until verified shutdown.
+                client = self.client()
+        with self.progress("eject-media"):
+            if client.inserted() not in ("", url):
+                raise ValueError("foreign virtual media during cleanup")
+            virtual = self.request["controller"]["virtualMedia"]
+            certificate = records.read(Path(self.material["artifactCertificate"])).decode()
+            client.eject(virtual["restoreVerification"], virtual["removeCertificate"], certificate)
         directory, unused = self.publication()
         del unused
         (directory / "discovery.iso").unlink(missing_ok=True)
@@ -399,38 +417,52 @@ class Controller:
 
     def apply(self):
         if (self.root / "completed.json").exists():
-            before = self.finish_local()
+            self.skip(*progress.GROUPS[:-1])
+            with self.progress("seal-cleanup"):
+                before = self.finish_local()
             if not before["completed"]:
                 raise ValueError("discovery was removed")
             return before
-        self.prepare()
-        before = self.evidence()
+        with self.progress("inspect-target"):
+            self.prepare()
+            before = self.evidence()
         if before["cleaned"]:
             if not before["completed"]:
                 raise ValueError("discovery was removed")
             return before
         self.phase = "receipt-listener"
-        with receipt.Receiver(self) as receiver:
-            if self.report() is None:
-                self.start()
-            self.receive(receiver)
-            self.phase = "cleanup"
-            self.cleanup(True, receiver)
-        return self.finish(True)
+        with self.progress("prepare-receipt") as prepared:
+            with receipt.Receiver(self) as receiver:
+                prepared()
+                if self.report() is None:
+                    self.start()
+                else:
+                    self.skip("build-media", "publish-media", "verify-delivery", "insert-media", "select-boot", "power-on")
+                with self.progress("receive-inventory"):
+                    self.receive(receiver)
+                self.phase = "cleanup"
+                self.cleanup(True, receiver)
+        with self.progress("seal-cleanup"):
+            return self.finish(True)
 
     def destroy(self):
         # Completed discovery never inspects or stops an OS installed later.
         if (self.root / "completed.json").exists():
-            return self.finish_local()
-        if not (self.root / "custody.json").exists():
-            self.remove_unprepared()
-        before = self.evidence()
+            self.skip("inspect-target", "power-off", "eject-media")
+            with self.progress("seal-cleanup"):
+                return self.finish_local()
+        with self.progress("inspect-target"):
+            if not (self.root / "custody.json").exists():
+                self.remove_unprepared()
+            before = self.evidence()
         if before["cleaned"]:
             self.reap()
+            self.skip("power-off", "eject-media", "seal-cleanup")
             return before
         self.phase = "cleanup"
         self.cleanup(False)
-        return self.finish(False)
+        with self.progress("seal-cleanup"):
+            return self.finish(False)
 
     def remove_unprepared(self):
         # A kill before custody was committed cannot have published or booted

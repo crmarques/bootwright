@@ -9,7 +9,7 @@ import urllib.error
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.modules import disk_discovery as module
+from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_runtime as module
 
 
 @pytest.mark.parametrize("error", [ValueError("SECRET private-url"), KeyError("SECRET"), TypeError("SECRET"), OSError("SECRET"), FileNotFoundError("SECRET")])
@@ -114,14 +114,9 @@ def test_disabled_authoritative_bmc_verification_is_actionable_without_a_trust_w
 
 
 def test_missing_dependency_during_observation_never_fabricates_removable_evidence(monkeypatch):
-    class Refused(Exception):
-        pass
-    invocation = Mock(params={"operation": "observe", "request": {}, "digest": "a" * 64, "material": {}})
-    invocation.fail_json.side_effect = Refused
-    monkeypatch.setattr(module, "AnsibleModule", Mock(return_value=invocation))
+    arguments = {"operation": "observe", "request": {}, "digest": "a" * 64, "material": {}}
     monkeypatch.setattr(module.custody, "Controller", Mock(side_effect=FileNotFoundError("SECRET unavailable")))
-    with pytest.raises(Refused):
-        module.main()
-    invocation.exit_json.assert_not_called()
-    invocation.fail_json.assert_called_once()
-    assert "SECRET" not in repr(invocation.fail_json.call_args)
+    result = module.execute(arguments)
+    assert result["failed"] and "evidence" not in result
+    assert result["discovery_failure"] == "missing-file"
+    assert "SECRET" not in repr(result)

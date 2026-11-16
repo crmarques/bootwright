@@ -84,7 +84,7 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		add(role, "observe.yml", "ansible.builtin.assert", "validates the frozen request in memory", read)
 	}
 	add("managedos_disk_discovery", "result.yml", "ansible.builtin.assert", "reports only static bounded failure classifications in memory", read)
-	add("managedos_disk_discovery", "observe.yml", observeCollection+"disk_discovery", "reads immutable local custody without networking, boot, acknowledgement or cleanup", func(params, _ map[string]any) bool {
+	add("managedos_disk_discovery", "observe.yml", observeCollection+"managedos_disk_discovery", "reads custody and BMC identity/state without boot, acknowledgement or cleanup", func(params, _ map[string]any) bool {
 		return params["operation"] == "observe"
 	})
 	add("managedos_disk_discovery", "observe.yml", observeCollection+"managedos_disk_discovery_protocol", "publishes loaded or read-only completion on the runner channel", func(params, _ map[string]any) bool {

@@ -109,6 +109,7 @@ func (c DiscoveryCapability) Plan(ctx context.Context, input lifecycle.PlanInput
 		dependencies[0].Family = substrate.MachineFamily
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: r.Identity.Block, Kind: Kind, Object: r.Identity.Object, Family: DiscoveryFamily, Implementation: DiscoveryImplementation, ContentDigest: DiscoveryContentDigest(), Stage: reconciliation.StageMachines, Request: wire,
 			Description: "inventory Linux-visible disks of " + r.Identity.Object + " in RAM, then power off",
+			Groups:      discoveryGroups(r.Identity.Object, input.Verb == reconciliation.Destroy),
 			Impacts:     []string{"boot-readonly-disk-inventory " + r.Identity.Object, "power-off " + r.Identity.Object},
 			Requires:    dependencies, Exclusive: []string{substrate.ControllerMediaReservationKey(r.Controller.Endpoint), substrate.ControllerReservationKey(r.Controller.Endpoint)}})
 		if r.Controller.VirtualMedia.EnableVerification {
@@ -425,7 +426,7 @@ func (c DiscoveryCapability) Removal(ctx context.Context, b reconciliation.Block
 	if err != nil {
 		return lifecycle.Removal{}, err
 	}
-	return lifecycle.Removal{Description: "remove only an unfinished discovery boot of " + r.Identity.Object + " and retain its disk inventory", Impacts: []string{"cleanup-owned-discovery-media " + r.Identity.Object}, ReplaySafe: true}, ctx.Err()
+	return lifecycle.Removal{Description: "remove only an unfinished discovery boot of " + r.Identity.Object + " and retain its disk inventory", Impacts: []string{"cleanup-owned-discovery-media " + r.Identity.Object}, Groups: discoveryRemovalGroups(b.Groups), ReplaySafe: true}, ctx.Err()
 }
 func (DiscoveryCapability) Quiescent(ctx context.Context, _ lifecycle.Probe) (lifecycle.Quiescence, error) {
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "discovery cleanup independently proves its own temporary boot and never stops a later installed OS"}, ctx.Err()

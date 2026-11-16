@@ -101,6 +101,7 @@ type progressStep struct {
 	position  int
 	total     int
 	detail    string
+	nested    bool
 	completed int
 	declared  int
 	ctx       context.Context
@@ -140,6 +141,7 @@ func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
 		return
 	}
 	if event.Nested || event.Status == "running" {
+		step.nested = event.Nested
 		step.detail, step.note = event.Detail, ""
 		p.running(step, now)
 		p.arm(now)
@@ -464,6 +466,16 @@ func (p *progressPresenter) row(status string, step *progressStep, detail, suffi
 	}
 	if !p.terminal() {
 		return lead + subject + tail
+	}
+	if status == "running" && step.nested && detail != "" && displayCellWidth(lead+subject+tail) > p.columns()-progressWrapGuard {
+		subject = progressPosition(step.position, step.total)
+		if step.identity != "" {
+			subject += styleIdentity(escapeDisplayLine(step.identity), opts) + ": "
+		}
+		subject += escapeDisplayLine(detail)
+		if step.identity == "" {
+			subject += styleMuted(" ("+escapeDisplayLine(step.label)+")", opts)
+		}
 	}
 	return fitTerminalRow(lead, subject, tail, p.columns())
 }

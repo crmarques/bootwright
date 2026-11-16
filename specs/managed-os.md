@@ -1501,6 +1501,10 @@ Linux-visible disk identities through a confirmed inventory boot. `apply`
 automatically prepares missing inventory before it plans installation; the
 explicit `machine discover` command runs the same preparation independently.
 Both entry points use the same request derivation, runner and native procedure.
+The controller-local procedure streams fixed progress phases through the
+adapter channel before and after native work, including inventory waiting and
+temporary-boot cleanup. Progress carries no private values and is never
+inventory, ownership or completion evidence.
 Private media delivery verifies the bound serving leaf through the shared full
 TLS verifier on every supported Python runtime. Delivery refusals distinguish
 HTTP, certificate and connection causes without exposing the private URL.

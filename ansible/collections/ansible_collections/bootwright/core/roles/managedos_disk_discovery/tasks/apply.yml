@@ -11,7 +11,7 @@
   no_log: true
 
 - name: Reach the frozen disk discovery operation
-  bootwright.core.disk_discovery:
+  bootwright.core.managedos_disk_discovery:
     operation: apply
     request: '{{ bootwright_disk_discovery_request }}'
     digest: '{{ bootwright_disk_discovery_digest }}'
