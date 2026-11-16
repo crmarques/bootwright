@@ -555,6 +555,16 @@ func TestDnfGetsACleanEnvironmentAndOnlyTheAdmittedRoute(t *testing.T) {
 			t.Fatal("a missing executable ran")
 		}
 	})
+	t.Run("a child writing past the bound finishes and is shown truncated", func(t *testing.T) {
+		stdout, stderr := &capped{limit: previewLimit}, &capped{limit: errorLimit}
+		exit, err := execute(context.Background(), command{path: "/usr/bin/head", args: []string{"-c", "1048576", "/dev/zero"}, env: []string{"LC_ALL=C"}}, stdout, stderr)
+		if err != nil || exit != 0 {
+			t.Fatalf("the child did not finish: %d %v %q", exit, err, stderr.String())
+		}
+		if !stdout.truncated || stdout.Len() != previewLimit {
+			t.Fatalf("truncated=%v len=%d", stdout.truncated, stdout.Len())
+		}
+	})
 }
 
 // A context's controller stage forwards the route its controller Machine
