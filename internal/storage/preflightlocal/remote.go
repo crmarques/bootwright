@@ -15,6 +15,8 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/preflight"
 )
 
+const MaxOutput = 64 << 10
+
 type RemoteCommands interface {
 	Run(ctx context.Context, contextName, machine string, argv []string, bound int) ([]byte, int, error)
 }

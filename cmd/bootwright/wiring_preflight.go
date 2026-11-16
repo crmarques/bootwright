@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/sshlocal"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/preflight"
@@ -56,22 +58,22 @@ func (r remoteCommands) Run(ctx context.Context, contextName, machine string, ar
 	if r.reconciler == nil {
 		return nil, 0, errors.New("verified remote command is unavailable")
 	}
-	capture := &preflightlocal.Capture{Limit: bound}
+	capture := nativeexec.Refusing(cmp.Or(max(bound, 0), preflightlocal.MaxOutput))
 	client := sshlocal.New(r.deps.Home, r.deps.Owner, sessionFiles(r.deps.Files))
 	sessions := machineaccess.New(r.state, currentSelection(r.deps.Selection), machineaccess.Options{
 		Lender: *r.reconciler, Ownership: machineOwnership{reconciler: *r.reconciler}, Evidence: machineHostKeys{reconciler: *r.reconciler}, Trust: r.deps.Trust, Launcher: client,
 		Streams: machineaccess.Streams{Out: capture, Err: io.Discard},
 	})
 	result, err := sessions.Exec(ctx, machineaccess.ExecRequest{ContextName: contextName, Names: []string{machine}, Command: argv})
-	if err != nil || result == nil || capture.Overflow {
-		clear(capture.Data)
+	if err != nil || result == nil || capture.Overflowed() {
+		capture.Clear()
 		return nil, 0, errors.New("verified bounded remote command did not complete")
 	}
 	if result.ExitCode != 0 {
-		clear(capture.Data)
+		capture.Clear()
 		return nil, result.ExitCode, nil
 	}
-	return capture.Data, 0, nil
+	return capture.Bytes(), 0, nil
 }
 
 func preflightCommands(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) preflight.Commands {
@@ -88,14 +90,14 @@ type preflightClient interface {
 
 func preflightReads(state machineaccess.EffectiveState, selection machineaccess.CurrentSelection, base machineaccess.Options, client func() preflightClient) preflight.Commands {
 	return preflight.CommandFunc(func(ctx context.Context, request preflight.CommandRequest) ([]byte, error) {
-		capture := &preflightlocal.Capture{}
+		capture := nativeexec.Refusing(preflightlocal.MaxOutput)
 		launcher := client()
 		options := base
 		options.Launcher, options.Streams, options.FleetIdentity = launcher, machineaccess.Streams{Out: capture, Err: io.Discard}, requestFleetIdentity(request)
 		sessions := machineaccess.New(state, selection, options)
 		result, err := sessions.Exec(ctx, machineaccess.ExecRequest{ContextName: request.ContextName, Names: []string{request.Machine}, SSH: request.SSH, Command: request.Argv})
 		if preflight.UntrustedIdentity(err) {
-			clear(capture.Data)
+			capture.Clear()
 			if !request.ObserveUntrusted {
 				return nil, preflight.UntrustedKey{}
 			}
@@ -106,18 +108,18 @@ func preflightReads(state machineaccess.EffectiveState, selection machineaccess.
 			return nil, preflight.UntrustedKey{Fingerprint: key.Fingerprint()}
 		}
 		if err == nil && result != nil && result.ExitCode == sshTransportExit {
-			clear(capture.Data)
+			capture.Clear()
 			return nil, preflight.ErrUnreached
 		}
-		if err == nil && result != nil && result.ExitCode != 0 && !capture.Overflow {
-			clear(capture.Data)
+		if err == nil && result != nil && result.ExitCode != 0 && !capture.Overflowed() {
+			capture.Clear()
 			return nil, preflight.ExitStatus{Code: result.ExitCode}
 		}
-		if err != nil || result == nil || result.ExitCode != 0 || capture.Overflow {
-			clear(capture.Data)
+		if err != nil || result == nil || result.ExitCode != 0 || capture.Overflowed() {
+			capture.Clear()
 			return nil, errors.New("verified bounded prerequisite command did not complete")
 		}
-		return capture.Data, nil
+		return capture.Bytes(), nil
 	})
 }
 

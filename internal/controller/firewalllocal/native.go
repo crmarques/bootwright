@@ -1,43 +1,31 @@
 package firewalllocal
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"net"
 	"net/netip"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
-type capture struct{ bytes.Buffer }
-
-func (c *capture) Write(data []byte) (int, error) {
-	if c.Len()+len(data) > 65536 {
-		return 0, errors.New("firewall query output exceeded its bound")
-	}
-	return c.Buffer.Write(data)
-}
+const outputBound = 65536
 
 func command(ctx context.Context, args []string) ([]byte, error) {
 	executable, err := nativeexec.Qualify("/usr/bin/firewall-cmd")
 	if err != nil {
 		return nil, errors.New("the system executable is not root-owned below qualified directories")
 	}
-	cmd := exec.CommandContext(ctx, executable, args...)
-	cmd.Dir = "/"
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C"}
-	cmd.WaitDelay = time.Second
-	output, failures := &capture{}, &capture{}
-	cmd.Stdout, cmd.Stderr = output, failures
-	if err := cmd.Run(); err != nil {
-		var exited *exec.ExitError
-		if !errors.As(err, &exited) || !qualifiedNegative(args, output.String(), failures.String(), exited.ExitCode()) {
-			return nil, errors.New("read-only runtime firewall query did not complete")
-		}
+	output, failures := nativeexec.Head(outputBound), nativeexec.Head(outputBound)
+	result := nativeexec.Run(ctx, nativeexec.Command{
+		Path: executable, Args: args, Env: []string{"PATH=/usr/bin:/bin", "LC_ALL=C"},
+		Stdout: output, Stderr: failures, WaitDelay: time.Second,
+	})
+	complete := result.Outcome == nativeexec.Exited && result.Err == nil && !output.Overflowed() && !failures.Overflowed()
+	if !complete || result.ExitCode != 0 && !qualifiedNegative(args, output.String(), failures.String(), result.ExitCode) {
+		return nil, errors.New("read-only runtime firewall query did not complete")
 	}
 	return output.Bytes(), nil
 }

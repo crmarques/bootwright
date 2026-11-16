@@ -11,6 +11,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
 const (
@@ -36,14 +37,14 @@ func (p *Packages) Snapshot(ctx context.Context) ([]prerequisites.InstalledPacka
 	}
 	querying, cancel := context.WithTimeout(ctx, repoTimeout)
 	defer cancel()
-	stdout, stderr := &capped{limit: snapshotLimit}, &capped{limit: errorLimit}
+	stdout, stderr := nativeexec.Head(snapshotLimit), nativeexec.Head(errorLimit)
 	args := []string{"-qa", "--queryformat", snapshotFormat}
 	exit, err := p.run(querying, command{path: rpm, args: args, env: p.rpmEnvironment()}, stdout, stderr)
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 	unreadable := diagnostics.NewFailureWithRemediation("controller.state", "rpm could not list the installed packages", "", "check that the RPM database is readable")
-	if err != nil || exit != 0 || stdout.truncated || stderr.Len() != 0 {
+	if err != nil || exit != 0 || stdout.Overflowed() || stderr.Len() != 0 {
 		return nil, unreadable
 	}
 	installed := []prerequisites.InstalledPackage{}
@@ -75,7 +76,7 @@ func (p *Packages) EraseTest(ctx context.Context, names []string) error {
 	}
 	erasing, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
-	stdout, stderr := &capped{limit: errorLimit}, &capped{limit: errorLimit}
+	stdout, stderr := nativeexec.Head(errorLimit), nativeexec.Head(errorLimit)
 	args := append([]string{"--erase", "--test", "--"}, names...)
 	exit, err := p.run(erasing, command{path: rpm, args: args, env: p.rpmEnvironment()}, stdout, stderr)
 	if ctx.Err() != nil {
@@ -121,7 +122,7 @@ func (p *Packages) RemovalPreview(ctx context.Context, names []string) (prerequi
 	}
 	previewing, cancel := context.WithTimeout(ctx, previewTime)
 	defer cancel()
-	stdout, stderr := &capped{limit: previewLimit}, &capped{limit: errorLimit}
+	stdout, stderr := nativeexec.Head(previewLimit), nativeexec.Head(errorLimit)
 	args := append([]string{"remove", "--assumeno", noCleanup, "--"}, names...)
 	exit, err := p.run(previewing, command{path: dnf, args: args, env: p.dnfEnvironment()}, stdout, stderr)
 	if ctx.Err() != nil {
@@ -136,7 +137,7 @@ func (p *Packages) RemovalPreview(ctx context.Context, names []string) (prerequi
 	if exit != 0 && (exit != 1 || !strings.Contains(stderr.String(), "Operation aborted")) {
 		return prerequisites.HostPackagePreview{}, removalFailure("dnf could not preview the removal: "+lastError(stderr.String(), stdout.String()), "fix the host's dnf configuration")
 	}
-	return prerequisites.HostPackagePreview{Text: sanitize(stdout.String()), Truncated: stdout.truncated}, nil
+	return prerequisites.HostPackagePreview{Text: sanitize(stdout.String()), Truncated: stdout.Overflowed()}, nil
 }
 
 func (p *Packages) Remove(ctx context.Context, names []string, output prerequisites.RunOutput) error {
@@ -149,7 +150,7 @@ func (p *Packages) Remove(ctx context.Context, names []string, output prerequisi
 	}
 	removing, cancel := context.WithTimeout(ctx, installTime)
 	defer cancel()
-	stream := &stream{out: output, tail: &tail{limit: tailLimit}}
+	stream := &stream{out: output, tail: nativeexec.Tail(tailLimit)}
 	args := append([]string{"remove", "--assumeyes", noCleanup, "--"}, names...)
 	exit, err := p.run(removing, command{path: dnf, args: args, env: p.dnfEnvironment()}, stream, stream)
 	if ctx.Err() != nil {

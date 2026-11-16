@@ -3,15 +3,14 @@
 package venvlocal
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -20,6 +19,7 @@ import (
 	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
 const (
@@ -283,19 +283,19 @@ func writeRuntimeFiles(stage, final string, runtime prerequisites.Runtime) error
 func runCommand(ctx context.Context, request command) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
-	process := exec.CommandContext(ctx, request.Path, request.Arguments...)
-	process.Env, process.Dir = request.Environment, request.Directory
-	process.WaitDelay = commandWaitDelay
-	var stdout bounded
-	var stderr tail
-	process.Stdout, process.Stderr = &stdout, &stderr
-	if err := process.Run(); err != nil {
-		if ctx.Err() != nil {
-			err = ctx.Err()
+	stdout, stderr := nativeexec.Head(maxOutput), nativeexec.Tail(stderrTail)
+	result := nativeexec.Run(ctx, nativeexec.Command{
+		Path: request.Path, Args: request.Arguments, Env: request.Environment, Dir: request.Directory,
+		Stdout: stdout, Stderr: stderr, WaitDelay: commandWaitDelay,
+	})
+	if !result.Succeeded() {
+		cause := result.Err
+		if cause == nil {
+			cause = errors.New("exit status " + strconv.Itoa(result.ExitCode))
 		}
-		return nil, &commandError{cause: err, stderr: stderr.text()}
+		return nil, &commandError{cause: cause, stderr: printable(stderr.Bytes())}
 	}
-	if stdout.overflow {
+	if stdout.Overflowed() {
 		return nil, errors.New("the command printed more than its output bound")
 	}
 	return stdout.Bytes(), nil
@@ -315,41 +315,12 @@ func (e *commandError) Error() string {
 
 func (e *commandError) Unwrap() error { return e.cause }
 
-type tail struct{ data []byte }
-
-func (t *tail) Write(data []byte) (int, error) {
-	written := len(data)
-	if len(data) > stderrTail {
-		data = data[len(data)-stderrTail:]
-	}
-	if excess := len(t.data) + len(data) - stderrTail; excess > 0 {
-		t.data = append(t.data[:0], t.data[excess:]...)
-	}
-	t.data = append(t.data, data...)
-	return written, nil
-}
-
-func (t *tail) text() string {
-	printable := strings.Map(func(r rune) rune {
+func printable(data []byte) string {
+	text := strings.Map(func(r rune) rune {
 		if r == utf8.RuneError || unicode.IsControl(r) || unicode.IsSpace(r) {
 			return ' '
 		}
 		return r
-	}, string(t.data))
-	return strings.Join(strings.Fields(printable), " ")
-}
-
-type bounded struct {
-	bytes.Buffer
-	overflow bool
-}
-
-func (b *bounded) Write(data []byte) (int, error) {
-	written := len(data)
-	if room := maxOutput - b.Len(); written > room {
-		b.overflow = true
-		data = data[:max(room, 0)]
-	}
-	b.Buffer.Write(data)
-	return written, nil
+	}, string(data))
+	return strings.Join(strings.Fields(text), " ")
 }

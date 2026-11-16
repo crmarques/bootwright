@@ -7,13 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
 const (
@@ -44,7 +44,7 @@ type Service struct {
 
 	effective func() int
 	helper    func(context.Context, Account, []byte) ([]byte, error)
-	start     func(*exec.Cmd) (bool, error)
+	start     func(context.Context, nativeexec.Command) nativeexec.Result
 }
 
 type identity struct {
@@ -116,7 +116,7 @@ func (s Service) RunTool(ctx context.Context, program string, files []rendering.
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		command := toolCommand(ctx, who, executable, scratch, filepath.Join(scratch, pair.Desired), filepath.Join(scratch, pair.Other), environment)
+		command := toolCommand(who, executable, scratch, filepath.Join(scratch, pair.Desired), filepath.Join(scratch, pair.Other), environment)
 		command.Stdin, command.Stdout, command.Stderr = s.In, s.Out, s.Err
 		if err := s.run(ctx, command, program); err != nil {
 			return err
@@ -125,17 +125,14 @@ func (s Service) RunTool(ctx context.Context, program string, files []rendering.
 	return nil
 }
 
-func toolCommand(ctx context.Context, who identity, executable, directory, desired, other string, environment []string) *exec.Cmd {
-	command := exec.CommandContext(ctx, executable, desired, other)
-	command.Env = append([]string(nil), environment...)
-	command.Dir = directory
-	var credential *syscall.Credential
-	if who.delegate {
-		credential = accountCredential(who.account)
+func toolCommand(who identity, executable, directory, desired, other string, environment []string) nativeexec.Command {
+	command := nativeexec.Command{
+		Path: executable, Args: []string{desired, other}, Env: append([]string(nil), environment...), Dir: directory,
+		Foreground: true, Interrupt: syscall.SIGTERM, ParentDeath: syscall.SIGKILL, WaitDelay: terminationGrace,
 	}
-	command.SysProcAttr = processAttributes(credential)
-	command.Cancel = func() error { return command.Process.Signal(syscall.SIGTERM) }
-	command.WaitDelay = terminationGrace
+	if who.delegate {
+		command.Credential = accountCredential(who.account)
+	}
 	return command
 }
 
@@ -170,38 +167,19 @@ func lookTool(program string, search []string) (string, error) {
 	return "", exec.ErrNotFound
 }
 
-func (s Service) run(ctx context.Context, command *exec.Cmd, program string) error {
-	start := supervise
+func (s Service) run(ctx context.Context, command nativeexec.Command, program string) error {
+	start := nativeexec.Run
 	if s.start != nil {
 		start = s.start
 	}
-	started, err := start(command)
+	result := start(ctx, command)
 	switch {
 	case ctx.Err() != nil:
 		return ctx.Err()
-	case started:
+	case result.Outcome != nativeexec.StartFailed:
 		return nil
 	}
-	return toolFailure(program, err)
-}
-
-func supervise(command *exec.Cmd) (bool, error) {
-	type outcome struct {
-		started bool
-		err     error
-	}
-	done := make(chan outcome, 1)
-	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-		if err := command.Start(); err != nil {
-			done <- outcome{err: err}
-			return
-		}
-		done <- outcome{started: true, err: command.Wait()}
-	}()
-	result := <-done
-	return result.started, result.err
+	return toolFailure(program, result.Err)
 }
 
 func toolFailure(program string, err error) error {

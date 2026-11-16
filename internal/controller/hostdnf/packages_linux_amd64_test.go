@@ -17,6 +17,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
 const (
@@ -556,13 +557,13 @@ func TestDnfGetsACleanEnvironmentAndOnlyTheAdmittedRoute(t *testing.T) {
 		}
 	})
 	t.Run("a child writing past the bound finishes and is shown truncated", func(t *testing.T) {
-		stdout, stderr := &capped{limit: previewLimit}, &capped{limit: errorLimit}
+		stdout, stderr := nativeexec.Head(previewLimit), nativeexec.Head(errorLimit)
 		exit, err := execute(context.Background(), command{path: "/usr/bin/head", args: []string{"-c", "1048576", "/dev/zero"}, env: []string{"LC_ALL=C"}}, stdout, stderr)
 		if err != nil || exit != 0 {
 			t.Fatalf("the child did not finish: %d %v %q", exit, err, stderr.String())
 		}
-		if !stdout.truncated || stdout.Len() != previewLimit {
-			t.Fatalf("truncated=%v len=%d", stdout.truncated, stdout.Len())
+		if !stdout.Overflowed() || stdout.Len() != previewLimit {
+			t.Fatalf("truncated=%v len=%d", stdout.Overflowed(), stdout.Len())
 		}
 	})
 }

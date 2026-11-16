@@ -8,14 +8,15 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
 const HelperMode = "__bootwright_tree"
@@ -85,23 +86,20 @@ func (s Service) perform(ctx context.Context, who identity, request helperReques
 }
 
 func spawnHelper(ctx context.Context, account Account, data []byte) ([]byte, error) {
-	command := helperCommand(ctx, account, data)
-	output := &boundedBuffer{}
-	command.Stdout, command.Stderr = output, io.Discard
-	if started, err := supervise(command); !started || err != nil || output.overflow {
+	command := helperCommand(account, data)
+	output := nativeexec.Head(maximumResponse)
+	command.Stdout = output
+	if result := nativeexec.Run(ctx, command); !result.Succeeded() || output.Overflowed() {
 		return nil, errHelper
 	}
-	return output.data, nil
+	return output.Bytes(), nil
 }
 
-func helperCommand(ctx context.Context, account Account, data []byte) *exec.Cmd {
-	command := exec.CommandContext(ctx, helperExecutable, HelperMode)
-	command.Env = []string{"LANG=C", "LC_ALL=C"}
-	command.Dir = "/"
-	command.Stdin = bytes.NewReader(data)
-	command.SysProcAttr = processAttributes(accountCredential(account))
-	command.WaitDelay = time.Second
-	return command
+func helperCommand(account Account, data []byte) nativeexec.Command {
+	return nativeexec.Command{
+		Path: helperExecutable, Args: []string{HelperMode}, Env: []string{"LANG=C", "LC_ALL=C"}, Dir: "/",
+		Stdin: bytes.NewReader(data), Credential: accountCredential(account), ParentDeath: syscall.SIGKILL, WaitDelay: time.Second,
+	}
 }
 
 func decodeResponse(action string, data []byte) (string, error) {
@@ -239,19 +237,4 @@ func boundedText(text string) bool {
 		}
 	}
 	return true
-}
-
-type boundedBuffer struct {
-	data     []byte
-	overflow bool
-}
-
-func (b *boundedBuffer) Write(p []byte) (int, error) {
-	n := len(p)
-	if remaining := maximumResponse - len(b.data); n > remaining {
-		b.overflow = true
-		p = p[:remaining]
-	}
-	b.data = append(b.data, p...)
-	return n, nil
 }

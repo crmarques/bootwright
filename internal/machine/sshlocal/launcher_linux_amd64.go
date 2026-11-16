@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -102,16 +101,14 @@ func (l Launcher) Run(ctx context.Context, session machine.Session, in io.Reader
 	if err != nil {
 		return 0, err
 	}
-	command := exec.CommandContext(ctx, client, arguments(session, held, pinned)...)
-	command.Stdin, command.Stdout, command.Stderr = in, out, errOut
-	command.Env = l.environment()
-	command.Dir = "/"
-	command.Cancel = func() error { return command.Process.Signal(syscall.SIGTERM) }
-	command.WaitDelay = terminationGrace
-	if err := command.Run(); err != nil {
-		return exitStatus(err)
+	return exitStatus(nativeexec.Run(ctx, interactive(client, arguments(session, held, pinned), l.environment(), in, out, errOut)))
+}
+
+func interactive(client string, args, env []string, in io.Reader, out, errOut io.Writer) nativeexec.Command {
+	return nativeexec.Command{
+		Path: client, Args: args, Env: env, Stdin: in, Stdout: out, Stderr: errOut,
+		Foreground: true, Interrupt: syscall.SIGTERM, WaitDelay: terminationGrace,
 	}
-	return 0, nil
 }
 
 // HostKeyAlgorithms admits a proved key against this host's SSH crypto policy.
@@ -144,47 +141,28 @@ func (l Launcher) pinned(ctx context.Context, client string, policy []byte, sess
 func (l Launcher) evaluate(ctx context.Context, client string, policy []byte, session machine.Session) ([]string, error) {
 	evaluation, cancel := context.WithTimeout(ctx, policyEvaluationTimeout)
 	defer cancel()
-	output := &boundedOutput{limit: maxEvaluatedPolicyBytes}
-	command := exec.CommandContext(evaluation, client, "-G", "-F", "/dev/stdin", "-o", "CanonicalizeHostname=no", "localhost")
-	command.Stdin, command.Stdout, command.Stderr = bytes.NewReader(policy), output, io.Discard
-	command.Env = []string{"LC_ALL=C"}
-	command.Dir = "/"
-	command.WaitDelay = terminationGrace
-	ran := command.Run()
+	output := nativeexec.Head(maxEvaluatedPolicyBytes)
+	ran := nativeexec.Run(evaluation, nativeexec.Command{
+		Path: client, Args: []string{"-G", "-F", "/dev/stdin", "-o", "CanonicalizeHostname=no", "localhost"}, Env: []string{"LC_ALL=C"},
+		Stdin: bytes.NewReader(policy), Stdout: output, WaitDelay: terminationGrace,
+	})
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	name := client + " -G"
 	switch {
-	case ran != nil && errors.Is(evaluation.Err(), context.DeadlineExceeded):
+	case ran.Outcome == nativeexec.Deadline:
 		return nil, unevaluatedPolicy(session, l.PolicyPath, name+" did not finish within 10s")
-	case output.exceeded:
+	case output.Overflowed():
 		return nil, unevaluatedPolicy(session, l.PolicyPath, name+" output exceeds 256 KiB")
-	case ran != nil:
+	case !ran.Succeeded():
 		return nil, unevaluatedPolicy(session, l.PolicyPath, name+" failed")
 	}
-	admitted, err := evaluatedHostKeyAlgorithms(output.data)
+	admitted, err := evaluatedHostKeyAlgorithms(output.Bytes())
 	if err != nil {
 		return nil, unevaluatedPolicy(session, l.PolicyPath, name+" "+err.Error())
 	}
 	return admitted, nil
-}
-
-type boundedOutput struct {
-	data     []byte
-	limit    int
-	exceeded bool
-}
-
-func (b *boundedOutput) Write(p []byte) (int, error) {
-	room := b.limit - len(b.data)
-	if len(p) > room {
-		b.exceeded = true
-		b.data = append(b.data, p[:max(room, 0)]...)
-		return len(p), nil
-	}
-	b.data = append(b.data, p...)
-	return len(p), nil
 }
 
 // Observe reads the key a server presents without offering any credential.
@@ -219,13 +197,10 @@ func (l Launcher) Observe(ctx context.Context, address string, port int) (trust.
 	defer config.Close()
 	observe, cancel := context.WithTimeout(ctx, observationTimeout)
 	defer cancel()
-	command := exec.CommandContext(observe, client,
-		observation(address, port, int(config.Fd()), recorded, int(observationTimeout/time.Second))...)
-	command.Env = l.environment()
-	command.Dir = "/"
-	command.Stdin, command.Stdout, command.Stderr = nil, io.Discard, io.Discard
-	command.WaitDelay = terminationGrace
-	_ = command.Run()
+	_ = nativeexec.Run(observe, nativeexec.Command{
+		Path: client, Args: observation(address, port, int(config.Fd()), recorded, int(observationTimeout/time.Second)),
+		Env: l.environment(), WaitDelay: terminationGrace,
+	})
 	if err := ctx.Err(); err != nil {
 		return trust.HostKey{}, err
 	}
@@ -528,15 +503,14 @@ func (l Launcher) environment() []string {
 // exitStatus reports what the client's own termination means. A signalled
 // client reports the conventional status a shell would, so an interrupted
 // session is distinguishable from a command that failed.
-func exitStatus(err error) (int, error) {
-	var exit *exec.ExitError
-	if !errors.As(err, &exit) {
+func exitStatus(result nativeexec.Result) (int, error) {
+	switch {
+	case result.Signal != 0:
+		return 128 + int(result.Signal), nil
+	case result.ExitCode < 0 || result.Outcome == nativeexec.Lingered || result.Outcome == nativeexec.Exited && result.Err != nil:
 		return 0, failure("the SSH client could not be started", "")
 	}
-	if status, ok := exit.Sys().(syscall.WaitStatus); ok && status.Signaled() {
-		return 128 + int(status.Signal()), nil
-	}
-	return exit.ExitCode(), nil
+	return result.ExitCode, nil
 }
 
 func closeAll(files []*os.File) {

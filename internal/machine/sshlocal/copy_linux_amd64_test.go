@@ -346,3 +346,15 @@ func TestCopyManifestRejectsTraversalAndMalformedParents(t *testing.T) {
 		}
 	}
 }
+
+func TestALocalWorkerThatFailsReportsItsExit(t *testing.T) {
+	c, ctx := copyFixture(t)
+	c.qualify = func(string) (string, error) { return "/usr/bin/false", nil }
+	worker, err := c.local(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := worker.close(); err == nil || !strings.Contains(err.Error(), "exited 1") {
+		t.Fatalf("a failed local worker closed with %v", err)
+	}
+}

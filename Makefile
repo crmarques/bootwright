@@ -317,6 +317,10 @@ RACE_PACKAGES = ./internal/reconciliation/... ./internal/controller/privilege/..
 	./internal/cli \
 	./internal/controller \
 	./internal/controller/hostdnf \
+	./internal/controller/hostowned \
+	./internal/controller/firewalllocal \
+	./internal/containercluster/preflightlocal \
+	./internal/storage/preflightlocal \
 	./internal/controller/stagelocal \
 	./internal/controller/venvlocal \
 	./internal/environment \
@@ -325,6 +329,7 @@ RACE_PACKAGES = ./internal/reconciliation/... ./internal/controller/privilege/..
 	./internal/machine/power \
 	./internal/machine/sshlocal \
 	./internal/nativeartifacts/comparisonlocal \
+	./internal/nativeexec \
 	./internal/substrate/kubevirt \
 	./internal/workspace/contextfs \
 	./internal/workspace/invokerfs \

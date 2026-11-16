@@ -7,9 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/nativeexec"
@@ -26,46 +24,25 @@ func New(config Config) *Probe {
 	return &Probe{config: config, run: execute, qualify: nativeexec.Qualify, sockets: socketBeneath, entries: directoryNames}
 }
 
-type bounded struct {
-	data     []byte
-	limit    int
-	overflow bool
-}
-
-func (b *bounded) Write(p []byte) (int, error) {
-	room := b.limit - len(b.data)
-	if len(p) > room {
-		b.overflow = true
-		p = p[:max(room, 0)]
-	}
-	b.data = append(b.data, p...)
-	return len(p), nil
-}
-
 var errOverflow = errors.New("probe output exceeds its bound")
 
 func execute(ctx context.Context, path string, args []string) (result, error) {
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
-	stdout, stderr := &bounded{limit: outputLimit}, &bounded{limit: stderrLimit}
-	cmd := exec.CommandContext(ctx, path, args...)
-	cmd.Dir = "/"
-	cmd.Env = []string{"LC_ALL=C", "PATH=/usr/sbin:/usr/bin", "HOME=/root"}
-	cmd.Stdout, cmd.Stderr = stdout, stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.WaitDelay = 10 * time.Second
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	err := cmd.Run()
-	if stdout.overflow {
+	stdout, stderr := nativeexec.Head(outputLimit), nativeexec.Head(stderrLimit)
+	ran := nativeexec.Run(ctx, nativeexec.Command{
+		Path: path, Args: args, Env: []string{"LC_ALL=C", "PATH=/usr/sbin:/usr/bin", "HOME=/root"},
+		Stdout: stdout, Stderr: stderr, WaitDelay: 10 * time.Second,
+	})
+	if stdout.Overflowed() {
 		return result{}, errOverflow
 	}
-	answer := result{stdout: stdout.data, stderr: string(stderr.data)}
-	var exit *exec.ExitError
-	if errors.As(err, &exit) && exit.Exited() {
-		answer.code = exit.ExitCode()
+	answer := result{stdout: stdout.Bytes(), stderr: stderr.String(), code: ran.ExitCode}
+	if ran.Outcome == nativeexec.Exited && ran.Err == nil {
 		return answer, nil
 	}
-	return answer, err
+	answer.code = 0
+	return answer, ran.Err
 }
 
 func socketBeneath(root string) (bool, error) {

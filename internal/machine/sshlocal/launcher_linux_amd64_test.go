@@ -19,6 +19,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 	"golang.org/x/sys/unix"
 )
 
@@ -647,5 +648,45 @@ func TestAnUnboundOpenerRefusesAnOfferedKey(t *testing.T) {
 	refusedAccess(t, err, "a session key with no opener")
 	if out.Len() != 0 {
 		t.Fatalf("the client ran: %q", out.String())
+	}
+}
+
+func TestACancelledEvaluationOrObservationReportsTheCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rig := policyClient(t, "hostkeyalgorithms "+fipsStyleList+"\n", 0, fipsStylePolicy)
+	if _, err := rig.launcher.HostKeyAlgorithms(ctx, keyedSession("ecdsa-sha2-nistp256")); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled evaluation returned %v", err)
+	}
+	if _, err := launcher(t, stubClient(t, `exit 255`)).Observe(ctx, "198.51.100.11", 22); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled observation returned %v", err)
+	}
+}
+
+func TestEveryClientEndMapsToTheSessionStatusOrARefusal(t *testing.T) {
+	for _, test := range []struct {
+		result nativeexec.Result
+		code   int
+		failed bool
+	}{
+		{nativeexec.Result{Outcome: nativeexec.Exited, ExitCode: 3}, 3, false},
+		{nativeexec.Result{Outcome: nativeexec.Signalled, ExitCode: -1, Signal: syscall.SIGTERM}, 143, false},
+		{nativeexec.Result{Outcome: nativeexec.Cancelled, ExitCode: 255, Err: context.Canceled}, 255, false},
+		{nativeexec.Result{Outcome: nativeexec.Cancelled, ExitCode: -1, Err: context.Canceled}, 0, true},
+		{nativeexec.Result{Outcome: nativeexec.StartFailed, ExitCode: -1, Err: os.ErrNotExist}, 0, true},
+		{nativeexec.Result{Outcome: nativeexec.Lingered, Err: errors.New("wait delay")}, 0, true},
+		{nativeexec.Result{Outcome: nativeexec.Exited, Err: errors.New("copy")}, 0, true},
+	} {
+		code, err := exitStatus(test.result)
+		if code != test.code || (err != nil) != test.failed {
+			t.Errorf("exitStatus(%+v) = %d, %v", test.result, code, err)
+		}
+	}
+}
+
+func TestTheInteractiveSessionStaysInTheTerminalsForeground(t *testing.T) {
+	command := interactive("/usr/bin/ssh", []string{"host"}, nil, nil, nil, nil)
+	if !command.Foreground || command.Interrupt != syscall.SIGTERM || command.WaitDelay != terminationGrace {
+		t.Fatalf("interactive command = %+v, want the terminal's foreground, SIGTERM and the termination grace", command)
 	}
 }

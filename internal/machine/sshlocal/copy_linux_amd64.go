@@ -4,6 +4,7 @@ package sshlocal
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -11,11 +12,11 @@ import (
 	"io"
 	"math"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -166,16 +167,17 @@ func (c Copier) local(ctx context.Context) (*copyWorker, error) {
 		return nil, errors.New("a qualified /usr/bin/python3 is required")
 	}
 	return startCopyWorker(ctx, func(inner context.Context, in io.Reader, out io.Writer) error {
-		command := exec.CommandContext(inner, python, "-I", "-B", "-c", copyWorkerSource)
-		command.Stdin, command.Stdout, command.Stderr = in, out, io.Discard
-		command.Env, command.Dir = []string{"LANG=C", "LC_ALL=C"}, "/"
-		command.SysProcAttr = &syscall.SysProcAttr{}
-		if os.Geteuid() == 0 {
-			command.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(account.UID), Gid: uint32(account.GID), Groups: slices.Clone(account.Groups)}
+		command := nativeexec.Command{
+			Path: python, Args: []string{"-I", "-B", "-c", copyWorkerSource}, Env: []string{"LANG=C", "LC_ALL=C"},
+			Stdin: in, Stdout: out, Interrupt: syscall.SIGTERM, WaitDelay: terminationGrace,
 		}
-		command.Cancel = func() error { return command.Process.Signal(syscall.SIGTERM) }
-		command.WaitDelay = terminationGrace
-		return command.Run()
+		if os.Geteuid() == 0 {
+			command.Credential = &syscall.Credential{Uid: uint32(account.UID), Gid: uint32(account.GID), Groups: slices.Clone(account.Groups)}
+		}
+		if result := nativeexec.Run(inner, command); !result.Succeeded() {
+			return cmp.Or(result.Err, errors.New("local file worker exited "+strconv.Itoa(result.ExitCode)))
+		}
+		return nil
 	})
 }
 

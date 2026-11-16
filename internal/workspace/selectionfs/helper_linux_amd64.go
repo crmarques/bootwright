@@ -8,11 +8,11 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"os/exec"
 	"syscall"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -81,17 +81,16 @@ func (s *Store) perform(ctx context.Context, action string, selection contexts.S
 	}
 	operation, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	command := helperCommand(operation, data, options)
-	var output boundedBuffer
-	command.Stdout = &output
-	command.Stderr = io.Discard
-	if err := command.Run(); err != nil {
+	command := helperCommand(data, options)
+	output := nativeexec.Head(maximumRecord)
+	command.Stdout = output
+	if result := nativeexec.Run(operation, command); !result.Succeeded() {
 		if ctx.Err() != nil {
 			return contexts.Selection{}, ctx.Err()
 		}
 		return contexts.Selection{}, state("selection account helper failed")
 	}
-	return decodeHelperResponse(output.data, output.overflow)
+	return decodeHelperResponse(output.Bytes(), output.Overflowed())
 }
 
 // decodeHelperResponse reads the helper's answer. A refusal keeps the
@@ -121,30 +120,13 @@ const helperExecutable = "/proc/self/exe"
 
 // helperCommand runs this same program in helper mode under the selection
 // account, with a fixed environment and directory, killed with its parent.
-func helperCommand(ctx context.Context, data []byte, options Options) *exec.Cmd {
-	command := exec.CommandContext(ctx, helperExecutable, HelperMode)
-	command.Env = []string{"LANG=C", "LC_ALL=C"}
-	command.Dir = "/"
-	command.Stdin = bytes.NewReader(data)
-	command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uint32(options.UID), Gid: uint32(options.GID), Groups: append([]uint32(nil), options.Groups...)}, Pdeathsig: syscall.SIGKILL}
-	command.WaitDelay = time.Second
-	return command
-}
-
-type boundedBuffer struct {
-	data     []byte
-	overflow bool
-}
-
-func (b *boundedBuffer) Write(p []byte) (int, error) {
-	n := len(p)
-	remaining := maximumRecord - len(b.data)
-	if n > remaining {
-		b.overflow = true
-		p = p[:remaining]
+func helperCommand(data []byte, options Options) nativeexec.Command {
+	return nativeexec.Command{
+		Path: helperExecutable, Args: []string{HelperMode}, Env: []string{"LANG=C", "LC_ALL=C"}, Dir: "/",
+		Stdin:       bytes.NewReader(data),
+		Credential:  &syscall.Credential{Uid: uint32(options.UID), Gid: uint32(options.GID), Groups: append([]uint32(nil), options.Groups...)},
+		ParentDeath: syscall.SIGKILL, WaitDelay: time.Second,
 	}
-	b.data = append(b.data, p...)
-	return n, nil
 }
 
 // ServeHelper accepts only the private selection protocol, under the account

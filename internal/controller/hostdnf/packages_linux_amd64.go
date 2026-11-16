@@ -4,9 +4,7 @@ package hostdnf
 
 import (
 	"context"
-	"errors"
 	"io"
-	"os/exec"
 	"regexp"
 	"slices"
 	"strings"
@@ -150,12 +148,12 @@ func (p *Packages) query(ctx context.Context, rpm, requirement string) query {
 	if versioned {
 		format += provideFormat
 	}
-	stdout, stderr := &capped{limit: errorLimit}, &capped{limit: errorLimit}
+	stdout, stderr := nativeexec.Head(errorLimit), nativeexec.Head(errorLimit)
 	args := []string{"-q", "--whatprovides", "--queryformat", format, "--", name}
 	exit, err := p.run(ctx, command{path: rpm, args: args, env: p.rpmEnvironment()}, stdout, stderr)
 	unreadable := query{err: failure("rpm could not report what provides "+requirement, "Check that the RPM database is readable")}
 	switch {
-	case err != nil || stdout.truncated:
+	case err != nil || stdout.Overflowed():
 		return unreadable
 	case exit == 1 && stdout.String() == "no package provides "+name+"\n" && stderr.Len() == 0:
 		return query{}
@@ -199,7 +197,7 @@ func (p *Packages) Preview(ctx context.Context, missing []string) (prerequisites
 	}
 	previewing, cancel := context.WithTimeout(ctx, previewTime)
 	defer cancel()
-	stdout, stderr := &capped{limit: previewLimit}, &capped{limit: errorLimit}
+	stdout, stderr := nativeexec.Head(previewLimit), nativeexec.Head(errorLimit)
 	args := append([]string{"install", "--assumeno", weakDeps, "--"}, missing...)
 	exit, err := p.run(previewing, command{path: dnf, args: args, env: p.dnfEnvironment()}, stdout, stderr)
 	if ctx.Err() != nil {
@@ -221,7 +219,7 @@ func (p *Packages) Preview(ctx context.Context, missing []string) (prerequisites
 		}
 	}
 	text := sanitize(stdout.String())
-	preview := prerequisites.HostPackagePreview{Text: text, Truncated: stdout.truncated}
+	preview := prerequisites.HostPackagePreview{Text: text, Truncated: stdout.Overflowed()}
 	if names := coreNames(text, missing); len(names) != 0 {
 		preview.Notes = []string{"this install also adds or updates core packages (" + strings.Join(names, ", ") + "); dnf applies it as for any package install"}
 	}
@@ -238,7 +236,7 @@ func (p *Packages) Install(ctx context.Context, missing []string, output prerequ
 	}
 	installing, cancel := context.WithTimeout(ctx, installTime)
 	defer cancel()
-	stream := &stream{out: output, tail: &tail{limit: tailLimit}}
+	stream := &stream{out: output, tail: nativeexec.Tail(tailLimit)}
 	args := append([]string{"install", "--assumeyes", weakDeps, "--"}, missing...)
 	exit, err := p.run(installing, command{path: dnf, args: args, env: p.dnfEnvironment()}, stream, stream)
 	if ctx.Err() != nil {
@@ -321,7 +319,7 @@ func (p *Packages) repositories(ctx context.Context, dnf string, results []query
 	}
 	ctx, cancel := context.WithTimeout(ctx, repoTimeout)
 	defer cancel()
-	stdout, stderr := &capped{limit: errorLimit}, &capped{limit: errorLimit}
+	stdout, stderr := nativeexec.Head(errorLimit), nativeexec.Head(errorLimit)
 	args := append([]string{"repoquery", "--installed", "--qf", `%{name} %{arch} %{from_repo}\n`, "--"}, names...)
 	if exit, err := p.run(ctx, command{path: dnf, args: args, env: p.dnfEnvironment()}, stdout, stderr); err != nil || exit != 0 {
 		return repositories
@@ -452,43 +450,9 @@ func unqualified(tool string) error {
 	return failure(tool+" is not a root-owned system executable", "Restore the host's "+tool+" under /usr/bin with root ownership and no group or other write access")
 }
 
-type capped struct {
-	data      []byte
-	limit     int
-	truncated bool
-}
-
-func (c *capped) Write(p []byte) (int, error) {
-	kept, room := p, c.limit-len(c.data)
-	if len(p) > room {
-		c.truncated = true
-		kept = p[:max(room, 0)]
-	}
-	c.data = append(c.data, kept...)
-	return len(p), nil
-}
-
-func (c *capped) String() string { return string(c.data) }
-func (c *capped) Len() int       { return len(c.data) }
-
-type tail struct {
-	data  []byte
-	limit int
-}
-
-func (t *tail) Write(p []byte) (int, error) {
-	t.data = append(t.data, p...)
-	if len(t.data) > t.limit {
-		t.data = t.data[len(t.data)-t.limit:]
-	}
-	return len(p), nil
-}
-
-func (t *tail) String() string { return string(t.data) }
-
 type stream struct {
 	out  prerequisites.RunOutput
-	tail *tail
+	tail *nativeexec.Output
 }
 
 // A log sink that fails must not abort a transaction dnf has begun.
@@ -501,22 +465,14 @@ func (s *stream) Write(p []byte) (int, error) {
 }
 
 func execute(ctx context.Context, c command, stdout, stderr io.Writer) (int, error) {
-	cmd := exec.CommandContext(ctx, c.path, c.args...)
-	cmd.Dir = "/"
-	cmd.Env = c.env
-	cmd.Stdout, cmd.Stderr = stdout, stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.WaitDelay = 30 * time.Second
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM) }
-	err := cmd.Run()
-	if err == nil {
-		return 0, nil
+	result := nativeexec.Run(ctx, nativeexec.Command{
+		Path: c.path, Args: c.args, Env: c.env, Stdout: stdout, Stderr: stderr,
+		WaitDelay: 30 * time.Second, Interrupt: syscall.SIGTERM,
+	})
+	if result.Outcome == nativeexec.Exited && result.Err == nil {
+		return result.ExitCode, nil
 	}
-	var exit *exec.ExitError
-	if errors.As(err, &exit) && exit.Exited() {
-		return exit.ExitCode(), nil
-	}
-	return -1, err
+	return -1, result.Err
 }
 
 func qualifiedSystemExecutable(path string) (string, error) {

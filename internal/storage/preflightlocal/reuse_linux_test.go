@@ -74,15 +74,6 @@ func TestDiskCreditRequiresUniqueFilesAndSameFilesystem(t *testing.T) {
 		t.Fatal("credited another filesystem")
 	}
 }
-func TestCaptureRefusesExcessWithoutRetainingIt(t *testing.T) {
-	capture := &Capture{}
-	if _, err := capture.Write(make([]byte, MaxOutput)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := capture.Write([]byte("secret excess")); err == nil || !capture.Overflow || len(capture.Data) != MaxOutput {
-		t.Fatal("capture exceeded bound")
-	}
-}
 func TestARuntimeProofFailureKeepsTheProvedDiskCredit(t *testing.T) {
 	allocation := preflight.Allocation{Machine: "m1", Quantities: preflight.Quantities{Memory: 100, Disk: 1000}}
 	credit, err := reuseCredit(allocation, 600, 0, errors.New("the runtime process changed during observation"))

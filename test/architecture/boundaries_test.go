@@ -588,13 +588,12 @@ func readOnlyAdapters() []string {
 // package lists exactly the capabilities it uses.
 func effectGrants() map[string][]string {
 	return map[string][]string{
-		everyPackage:                               {"net.ParseMAC", "net/netip", "net/url"},
-		"internal/nativeexec":                      {"os", "syscall"},
-		"internal/acquisition":                     {"net/http", "net.Conn", "net.DefaultResolver", "net.DNSError", "net.JoinHostPort", "net.SplitHostPort"},
-		"internal/containercluster/preflightlocal": {"io", "os/exec"},
+		everyPackage:           {"net.ParseMAC", "net/netip", "net/url"},
+		"internal/nativeexec":  {"io", "os", "os/exec", "syscall"},
+		"internal/acquisition": {"net/http", "net.Conn", "net.DefaultResolver", "net.DNSError", "net.JoinHostPort", "net.SplitHostPort"},
 		// Listener hostnames resolve in the native inspector, under its deadline;
 		// this grants the resolver member, not arbitrary networking.
-		"internal/controller/firewalllocal": {"os/exec", "net.Interfaces", "net.DefaultResolver"},
+		"internal/controller/firewalllocal": {"net.Interfaces", "net.DefaultResolver"},
 		"internal/cli":                      {"fmt.Fprintf", "fmt.Fprintln", "github.com/spf13/cobra", "github.com/spf13/pflag", "io"},
 		// The input adapter reads through the handles it holds and names no
 		// other os member.
@@ -605,7 +604,7 @@ func effectGrants() map[string][]string {
 		"internal/workspace/contextfs": {"crypto/rand", "golang.org/x/sys/unix.AT_EMPTY_PATH",
 			"golang.org/x/sys/unix.IoctlGetInt", "golang.org/x/sys/unix.STATX_BTIME", "golang.org/x/sys/unix.Statx", "golang.org/x/sys/unix.Statx_t",
 			"io", "os", "syscall", "unsafe"},
-		"internal/workspace/selectionfs":        {"crypto/rand", "io", "os", "os/exec", "syscall"},
+		"internal/workspace/selectionfs":        {"crypto/rand", "io", "os", "syscall"},
 		"internal/workspace/contexts":           {"io"},
 		"internal/secrets/material":             {"crypto/rand", "io", "net.IP", "os", "syscall"},
 		"internal/secrets/localkeyring":         {"crypto/rand", "io"},
@@ -622,15 +621,15 @@ func effectGrants() map[string][]string {
 		},
 		"internal/controller/bundlelocal":  {"io", "net.Dialer", "net/http", "os", "syscall"},
 		"internal/controller/ansiblelocal": {"io", "os", "os/exec", "syscall"},
-		"internal/controller/hostdnf":      {"io", "os/exec", "syscall"},
-		"internal/controller/hostowned":    {"io", "os", "os/exec", "syscall"},
-		"internal/controller/venvlocal":    {"io", "os", "os/exec", "syscall"},
+		"internal/controller/hostdnf":      {"io", "syscall"},
+		"internal/controller/hostowned":    {"io", "os"},
+		"internal/controller/venvlocal":    {"io", "os", "syscall"},
 		"internal/controller/stagelocal":   {"golang.org/x/sys/unix", "io", "os", "syscall"},
 		// The SSH session adapter runs the one pinned client as a child and
 		// hands it the operator's streams and its material descriptors. An
 		// offered key arrives as a descriptor from the invoking account's
 		// opener, proved on that descriptor and copied, never opened here.
-		"internal/machine/sshlocal": {"io", "os", "os/exec", "syscall"},
+		"internal/machine/sshlocal": {"io", "os", "syscall"},
 		// Machine access names those streams to hand them on; it opens nothing.
 		"internal/machine/access": {"io"},
 		// The invoking account's opener opens only through the descriptors it

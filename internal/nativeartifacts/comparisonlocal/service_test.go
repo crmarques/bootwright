@@ -13,6 +13,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
 func TestMain(m *testing.M) {
@@ -323,10 +324,10 @@ func TestRootServingAnotherAccountRunsTheToolAsThatAccount(t *testing.T) {
 	helper := &accountHelper{t: t, trees: &recordingTrees{}}
 	service := rootServing(t, helper)
 	service.Scratch, service.Terminal, service.Language = t.TempDir(), "xterm", "C.UTF-8"
-	var commands []*exec.Cmd
-	service.start = func(command *exec.Cmd) (bool, error) {
+	var commands []nativeexec.Command
+	service.start = func(_ context.Context, command nativeexec.Command) nativeexec.Result {
 		commands = append(commands, command)
-		return true, &exec.ExitError{}
+		return nativeexec.Result{Outcome: nativeexec.Exited, ExitCode: 1}
 	}
 	pairs := []rendering.ComparisonPair{{Desired: "desired/a.yaml", Other: "applied/a.yaml"}}
 	if err := service.RunTool(context.Background(), "/usr/bin/meld", []rendering.TreeFile{{Path: "desired/a.yaml"}, {Path: "applied/a.yaml"}}, pairs); err != nil {
@@ -337,13 +338,13 @@ func TestRootServingAnotherAccountRunsTheToolAsThatAccount(t *testing.T) {
 	}
 	scratch := helper.trees.published
 	command := commands[0]
-	if !slices.Equal(command.Args, []string{"/usr/bin/meld", filepath.Join(scratch, "desired/a.yaml"), filepath.Join(scratch, "applied/a.yaml")}) || command.Dir != scratch {
+	if command.Path != "/usr/bin/meld" || !slices.Equal(command.Args, []string{filepath.Join(scratch, "desired/a.yaml"), filepath.Join(scratch, "applied/a.yaml")}) || command.Dir != scratch {
 		t.Fatalf("command %q in %q", command.Args, command.Dir)
 	}
 	if !slices.Equal(command.Env, []string{"TERM=xterm", "LANG=C.UTF-8", "HOME=/home/synthetic", "PATH=/usr/local/bin:/usr/bin:/bin"}) {
 		t.Fatalf("environment %q", command.Env)
 	}
-	if credential := command.SysProcAttr.Credential; credential == nil || credential.Uid != 60001 || credential.Gid != 60002 || !slices.Equal(credential.Groups, []uint32{60002, 60003}) {
+	if credential := command.Credential; credential == nil || credential.Uid != 60001 || credential.Gid != 60002 || !slices.Equal(credential.Groups, []uint32{60002, 60003}) {
 		t.Fatalf("credential %#v", credential)
 	}
 	if _, err := os.Stat(scratch); !os.IsNotExist(err) {
@@ -396,9 +397,9 @@ func rootAccount(context.Context) (Account, error) {
 
 func TestRunToolRefusesARootInvokingAccountBeforeWritingAnything(t *testing.T) {
 	service := Service{Trees: forbiddenTrees{t}, Account: rootAccount, effective: func() int { return 0 }, Scratch: t.TempDir()}
-	service.start = func(*exec.Cmd) (bool, error) {
+	service.start = func(context.Context, nativeexec.Command) nativeexec.Result {
 		t.Fatal("a comparison program was started as root")
-		return false, nil
+		return nativeexec.Result{}
 	}
 	pairs := []rendering.ComparisonPair{{Desired: "desired/a.yaml", Other: "applied/a.yaml"}}
 	found := refusalCode(t, service.RunTool(context.Background(), "/usr/bin/meld", []rendering.TreeFile{{Path: "desired/a.yaml"}}, pairs))

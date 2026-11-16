@@ -3,7 +3,6 @@
 package selectionfs
 
 import (
-	"context"
 	"slices"
 	"syscall"
 	"testing"
@@ -17,15 +16,14 @@ import (
 // stay as they were.
 func TestTheSelectionHelperRunsTheProcfsPinnedExecutable(t *testing.T) {
 	options := Options{UID: 60001, GID: 60002, Home: "/home/synthetic", Groups: []uint32{60002, 60003}}
-	command := helperCommand(context.Background(), []byte("{}"), options)
-	if command.Path != "/proc/self/exe" || !slices.Equal(command.Args, []string{"/proc/self/exe", HelperMode}) {
+	command := helperCommand([]byte("{}"), options)
+	if command.Path != "/proc/self/exe" || !slices.Equal(command.Args, []string{HelperMode}) {
 		t.Fatalf("helper command = %q %q, want /proc/self/exe in helper mode", command.Path, command.Args)
 	}
-	attributes := command.SysProcAttr
-	if attributes == nil || attributes.Credential == nil || attributes.Pdeathsig != syscall.SIGKILL {
-		t.Fatalf("helper process attributes = %#v", attributes)
+	if command.Credential == nil || command.ParentDeath != syscall.SIGKILL || command.Foreground {
+		t.Fatalf("helper process attributes = %#v", command)
 	}
-	if credential := attributes.Credential; credential.Uid != 60001 || credential.Gid != 60002 || !slices.Equal(credential.Groups, []uint32{60002, 60003}) {
+	if credential := command.Credential; credential.Uid != 60001 || credential.Gid != 60002 || !slices.Equal(credential.Groups, []uint32{60002, 60003}) {
 		t.Fatalf("helper credential = %#v", credential)
 	}
 	if !slices.Equal(command.Env, []string{"LANG=C", "LC_ALL=C"}) || command.Dir != "/" || command.Stdin == nil || command.WaitDelay != time.Second {
