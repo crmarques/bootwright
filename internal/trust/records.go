@@ -123,11 +123,11 @@ func (s Store) validate(pins bool) error {
 		}
 		machines[record.Machine] = true
 		token := HostToken(record.Address, record.Port)
-		existing, seen := pinned[token]
+		existing, seen := pinned[hostTokenKey(token)]
 		if pins && seen && existing.HostKey() != record.HostKey() {
 			return divergentPin(token, existing.Machine, record.Machine)
 		}
-		pinned[token] = record
+		pinned[hostTokenKey(token)] = record
 	}
 	return nil
 }
@@ -204,7 +204,7 @@ func (s *Store) DropDivergentUnused(uses func(machine string) bool) []Record {
 	keys := map[string]HostKey{}
 	divergent := map[string]bool{}
 	for _, record := range s.Hosts {
-		token := HostToken(record.Address, record.Port)
+		token := hostTokenKey(HostToken(record.Address, record.Port))
 		if key, seen := keys[token]; seen && key != record.HostKey() {
 			divergent[token] = true
 		}
@@ -213,7 +213,7 @@ func (s *Store) DropDivergentUnused(uses func(machine string) bool) []Record {
 	kept := make([]Record, 0, len(s.Hosts))
 	var removed []Record
 	for _, record := range s.Hosts {
-		if divergent[HostToken(record.Address, record.Port)] && !uses(record.Machine) {
+		if divergent[hostTokenKey(HostToken(record.Address, record.Port))] && !uses(record.Machine) {
 			removed = append(removed, record)
 			continue
 		}
@@ -257,12 +257,12 @@ func (s Store) Clone() Store {
 // store is kept, so a key that diverges from it stays a refusal of Validate
 // rather than a silent replacement; a nil uses keeps every record.
 func (s *Store) Supersede(record Record, uses func(machine string) bool) []Record {
-	endpoint := HostToken(record.Address, record.Port)
+	endpoint := hostTokenKey(HostToken(record.Address, record.Port))
 	kept := make([]Record, 0, len(s.Hosts)+1)
 	var removed []Record
 	for _, existing := range s.Hosts {
 		if existing.Machine != record.Machine && uses != nil && !uses(existing.Machine) &&
-			HostToken(existing.Address, existing.Port) == endpoint {
+			hostTokenKey(HostToken(existing.Address, existing.Port)) == endpoint {
 			removed = append(removed, existing)
 			continue
 		}

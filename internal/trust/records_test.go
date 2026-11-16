@@ -97,6 +97,33 @@ func TestOneAddressPinsExactlyOneKey(t *testing.T) {
 	}
 }
 
+// OpenSSH matches an address by its canonical form, so two spellings of one
+// endpoint are one pin, as a known_hosts line is read (G02-03).
+func TestTwoSpellingsOfOneAddressPinOneKey(t *testing.T) {
+	for _, spellings := range [][2]string{
+		{"192.0.2.10", "::ffff:192.0.2.10"},
+		{"2001:db8::10", "2001:DB8:0:0:0:0:0:10"},
+		{"node-a.example.com", "Node-A.Example.COM"},
+	} {
+		t.Run(spellings[0], func(t *testing.T) {
+			store := Store{FormatVersion: FormatVersion, Hosts: []Record{
+				record(t, "node-a", spellings[0], 1), record(t, "node-b", spellings[1], 2),
+			}}
+			if err := store.Validate(); err == nil {
+				t.Fatalf("%s and %s pinned divergent keys", spellings[0], spellings[1])
+			}
+			dropping := Store{FormatVersion: FormatVersion, Hosts: slices.Clone(store.Hosts)}
+			if dropped := dropping.DropDivergentUnused(func(name string) bool { return name == "node-a" }); len(dropped) != 1 || dropped[0].Machine != "node-b" {
+				t.Fatalf("dropped = %+v", dropped)
+			}
+			retired := Store{FormatVersion: FormatVersion, Hosts: []Record{record(t, "retired", spellings[1], 2)}}
+			if superseded := retired.Supersede(record(t, "node-a", spellings[0], 1), func(name string) bool { return name == "node-a" }); len(superseded) != 1 || superseded[0].Machine != "retired" {
+				t.Fatalf("superseded = %+v", superseded)
+			}
+		})
+	}
+}
+
 func TestATrustStoreRefusesContentNoSessionCouldRead(t *testing.T) {
 	valid := record(t, "node-a", "192.0.2.10", 1)
 	for _, test := range []struct{ name, data string }{
