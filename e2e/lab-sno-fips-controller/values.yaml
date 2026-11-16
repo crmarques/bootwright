@@ -69,7 +69,8 @@ security:
 # bridge, which carries the node's address there, so that environment's MetalLB
 # pool announces on it and its IngressController takes its address from it.
 # Pods draw from the environment's cidr less the node, app and pool
-# addresses. The workload manifests under workloads/ assume these defaults.
+# addresses. The workload manifests under workloads/ assume these defaults;
+# TestSNOStaticWorkloadsFollowTheCaseDefaults holds them to it.
 environments:
   enabled: true
 
