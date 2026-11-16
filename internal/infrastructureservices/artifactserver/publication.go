@@ -147,12 +147,7 @@ func named(values api.Value, name string) (api.Value, bool) {
 		}
 		return values.Items()[0], true
 	}
-	for _, item := range values.Items() {
-		if item.Get("name").Text() == name {
-			return item, true
-		}
-	}
-	return api.Value{}, false
+	return values.Named("name", name)
 }
 
 func hasPrefix(value, prefix string) bool {

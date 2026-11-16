@@ -93,7 +93,7 @@ func unrealizedSegments(catalog api.Catalog, provider, machine api.Object) []str
 	var refused []string
 	for _, nic := range substrate.MachineNICs(machine) {
 		reference := substrate.NICSegment(catalog, provider, machine, nic)
-		segment, found := findNamed(provider.Spec().Get("segments"), "name", reference)
+		segment, found := provider.Spec().Get("segments").Named("name", reference)
 		if !found {
 			continue
 		}
@@ -234,7 +234,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 	}
 	for _, iface := range target.Interfaces {
 		reference := substrate.NICSegment(catalog, provider, machine, iface.Name)
-		segment, found := findNamed(provider.Spec().Get("segments"), "name", reference)
+		segment, found := provider.Spec().Get("segments").Named("name", reference)
 		if !found {
 			return MachineRequest{}, refusal("api.reference", "NIC "+iface.Name+" of the Machine selects no segment of its provider",
 				"add a spec.substrate.kubevirt.nics entry for NIC "+iface.Name+" naming a segment of "+provider.Identity()+" on "+machine.Identity())
@@ -284,18 +284,6 @@ func placementFor(catalog api.Catalog, controllerMachine string) (machineref.Pla
 			"declare it or correct spec.controller.machineRef")
 	}
 	return machineref.PlacementFor(host, controllerMachine)
-}
-
-func findNamed(values api.Value, key, name string) (api.Value, bool) {
-	if name == "" {
-		return api.Value{}, false
-	}
-	for _, value := range values.Items() {
-		if value.Get(key).Text() == name {
-			return value, true
-		}
-	}
-	return api.Value{}, false
 }
 
 func refusal(code, message, remediation string) error {

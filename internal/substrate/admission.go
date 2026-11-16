@@ -244,7 +244,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		domains := arm.Get("failureDomains").Items()
 		for index, domain := range domains {
 			path := fmt.Sprintf("$.spec.vsphere.failureDomains[%d]", index)
-			server, ok := findNamed(arm.Get("vcenters"), "server", domain.Get("server").Text())
+			server, ok := arm.Get("vcenters").Named("server", domain.Get("server").Text())
 			if domain.Has("server") && !ok {
 				issues = add(issues, reference(path+".server", "failure-domain server must name a declared vCenter"))
 			} else if ok && domain.Get("topology", "datacenter").Present() && !slices.Contains(server.Get("datacenters").Strings(), domain.Get("topology", "datacenter").Text()) {
@@ -405,18 +405,6 @@ func ExternalBridges(provider api.Object) []string {
 	}
 	slices.Sort(bridges)
 	return slices.Compact(bridges)
-}
-
-func findNamed(values api.Value, key, name string) (api.Value, bool) {
-	var found api.Value
-	count := 0
-	for _, value := range values.Items() {
-		if value.Get(key).Text() == name {
-			found = value
-			count++
-		}
-	}
-	return found, count == 1
 }
 
 func validateFirmware(o api.Object) []api.Issue {

@@ -192,7 +192,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placem
 	if port > 65535 {
 		return MachineRequest{}, refusal("api.value", "the provider's emulated BMC range leaves the port space", "lower spec.libvirt.bmcEmulation.port on "+provider.Identity())
 	}
-	profile, found := findNamed(provider.Spec().Get("libvirt", "machineProfiles"), "name", substrate.MachineProfileRef(machine))
+	profile, found := provider.Spec().Get("libvirt", "machineProfiles").Named("name", substrate.MachineProfileRef(machine))
 	if !found {
 		return MachineRequest{}, refusal("api.reference", "the Machine's profile does not resolve on its provider", "correct spec.substrate.libvirt.profileRef on "+machine.Identity())
 	}
@@ -279,7 +279,7 @@ func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextNam
 	interfaces := make([]Interface, 0, len(nics))
 	for _, nic := range nics {
 		reference := substrate.NICSegment(catalog, provider, machine, nic.Name)
-		segment, found := findNamed(substrate.Segments(catalog, provider), "name", reference)
+		segment, found := substrate.Segments(catalog, provider).Named("name", reference)
 		if !found || !segment.Has("libvirt") {
 			return nil, refusal("api.reference", "NIC "+nic.Name+" of the Machine selects no libvirt segment of its provider", "add a spec.substrate.libvirt.nics entry for NIC "+nic.Name+" naming a libvirt segment of "+provider.Identity()+" on "+machine.Identity())
 		}
@@ -303,18 +303,6 @@ func placementFor(catalog api.Catalog, provider api.Object, controllerMachine st
 		return machineref.Placement{}, refusal("api.reference", "the provider's host Machine is not in the selected graph", "declare "+reference+" or change spec.libvirt.machineRef")
 	}
 	return machineref.PlacementFor(host, controllerMachine)
-}
-
-func findNamed(values api.Value, key, name string) (api.Value, bool) {
-	if name == "" {
-		return api.Value{}, false
-	}
-	for _, value := range values.Items() {
-		if value.Get(key).Text() == name {
-			return value, true
-		}
-	}
-	return api.Value{}, false
 }
 
 func refusal(code, message, remediation string) error {

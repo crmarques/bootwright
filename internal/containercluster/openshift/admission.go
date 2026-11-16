@@ -499,7 +499,7 @@ func endpointAddress(o api.Object, endpoint api.Value, c api.Catalog, path strin
 		var address api.Value
 		if ref := source.Get("bindAddressRef"); ref.Present() {
 			var ok bool
-			address, ok = named(addresses, ref.Text())
+			address, ok = addresses.Named("name", ref.Text())
 			if !ok {
 				return api.Value{}, source, nil
 			}
@@ -905,17 +905,6 @@ func decimal(s string) bool {
 		}
 	}
 	return true
-}
-func named(values api.Value, name string) (api.Value, bool) {
-	var found api.Value
-	count := 0
-	for _, value := range values.Items() {
-		if value.Get("name").Text() == name {
-			found = value
-			count++
-		}
-	}
-	return found, count == 1
 }
 func invariant(field, message string) api.Issue {
 	return api.Issue{Code: "api.invariant", Field: field, Message: message}

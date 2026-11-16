@@ -23,7 +23,7 @@ func refusedNetwork(catalog api.Catalog, machine api.Object, host installHost) (
 		return "", ""
 	}
 	network := machine.Spec().Get("network")
-	entry, found := findNamed(network.Get("addresses"), "name", network.Get("installAddressRef").Text())
+	entry, found := network.Get("addresses").Named("name", network.Get("installAddressRef").Text())
 	iface := entry.Get("interface").Text()
 	address, err := netip.ParseAddr(entry.Get("address").Text())
 	if !found || iface == "" || err != nil || !address.Is4() {

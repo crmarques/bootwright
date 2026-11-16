@@ -150,7 +150,7 @@ func packageSource(request Request) (string, error) {
 func installAddress(catalog api.Catalog, machine api.Object) (string, int, string, error) {
 	network := machine.Spec().Get("network")
 	reference := network.Get("installAddressRef").Text()
-	entry, found := findNamed(network.Get("addresses"), "name", reference)
+	entry, found := network.Get("addresses").Named("name", reference)
 	if !found {
 		return "", 0, "", refusal("api.reference", "the Machine's install address does not resolve", "set spec.network.installAddressRef on "+machine.Identity())
 	}
@@ -166,7 +166,7 @@ func installAddress(catalog api.Catalog, machine api.Object) (string, int, strin
 }
 
 func machineHostname(machine api.Object) (string, error) {
-	entry, found := findNamed(machine.Spec().Get("network", "addresses"), "name", "fqdn")
+	entry, found := machine.Spec().Get("network", "addresses").Named("name", "fqdn")
 	if !found || entry.Get("address").Text() == "" {
 		return "", refusal("api.required", "the Machine declares no fully qualified name", "declare an fqdn address on "+machine.Identity())
 	}

@@ -67,7 +67,7 @@ func availableOfType(template api.Value, kind string) []api.Value {
 }
 
 func availableNamed(template api.Value, name string, kinds ...string) (api.Value, bool) {
-	declared, found := findNamed(template.Get("interfaces"), "name", name)
+	declared, found := template.Get("interfaces").Named("name", name)
 	return declared, found && available(declared) && slices.Contains(kinds, declared.Get("type").Text())
 }
 
@@ -101,7 +101,7 @@ func installInterfaceRefusal(catalog api.Catalog, machine api.Object, template a
 			}
 		}
 	}
-	declared, found := findNamed(template.Get("interfaces"), "name", iface)
+	declared, found := template.Get("interfaces").Named("name", iface)
 	if kind := declared.Get("type").Text(); found && !slices.Contains(installInterfaceTypes, kind) {
 		return "the installer configures only an ethernet, bond or VLAN install interface, and the install interface " + iface + " of " + identity + " is of type " + kind,
 			"assign the install address of " + identity + " to an ethernet, bond or VLAN interface"
@@ -233,7 +233,7 @@ func vlanRefusal(catalog api.Catalog, machine api.Object, template, declared api
 	}
 	for _, leaf := range leaves {
 		reference := substrate.NICSegment(catalog, provider, machine, substrate.InterfaceNIC(machine, leaf))
-		segment, attached := findNamed(substrate.Segments(catalog, provider), "name", reference)
+		segment, attached := substrate.Segments(catalog, provider).Named("name", reference)
 		network, managed := substrate.ManagedSegmentNetwork(segment)
 		switch {
 		case !attached || !managed || network.VLAN == int(id):
@@ -260,7 +260,7 @@ func vlanName(name, id string) bool {
 
 func readInstallTopology(template api.Value, iface string) installTopology {
 	topology := installTopology{Interface: iface, Type: "ethernet"}
-	declared, found := findNamed(template.Get("interfaces"), "name", iface)
+	declared, found := template.Get("interfaces").Named("name", iface)
 	if !found {
 		return topology
 	}

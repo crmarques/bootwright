@@ -101,7 +101,7 @@ func hostNetwork(host api.Object, segment api.Value) (api.Value, bool) {
 	if ref.Get("apiGroup").Text() != "k8s.ovn.org" || ref.Get("kind").Text() != "ClusterUserDefinedNetwork" {
 		return api.Value{}, false
 	}
-	return findNamed(host.Spec().Get("networking", "secondaryNetworks"), "name", ref.Get("name").Text())
+	return host.Spec().Get("networking", "secondaryNetworks").Named("name", ref.Get("name").Text())
 }
 
 func validateHostedProvider(o api.Object, c api.Catalog) []api.Issue {

@@ -20,7 +20,7 @@ func NamedSegment(c api.Catalog, provider api.Object, name string) (api.Value, b
 	if name == "" {
 		return api.Value{}, false
 	}
-	return findNamed(Segments(c, provider), "name", name)
+	return Segments(c, provider).Named("name", name)
 }
 
 func SegmentLabel(c api.Catalog, provider api.Object, name string) string {

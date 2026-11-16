@@ -751,18 +751,6 @@ func mediaTrustRefusal(machine api.Object, request Request) error {
 		"select an https artifactServerEndpoint on a server declaring spec.tls.secretRef")
 }
 
-func findNamed(values api.Value, key, name string) (api.Value, bool) {
-	if name == "" {
-		return api.Value{}, false
-	}
-	for _, value := range values.Items() {
-		if value.Get(key).Text() == name {
-			return value, true
-		}
-	}
-	return api.Value{}, false
-}
-
 func refusal(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }

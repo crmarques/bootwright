@@ -83,6 +83,24 @@ func (v Value) Get(path ...string) Value {
 	return v
 }
 func (v Value) Has(path ...string) bool { return v.Get(path...).Present() }
+
+func (v Value) Named(key, name string) (Value, bool) {
+	var found Value
+	count := 0
+	if name == "" {
+		return found, false
+	}
+	for _, item := range v.items {
+		if item.Get(key).Text() == name {
+			found = item
+			count++
+		}
+	}
+	if count != 1 {
+		return Value{}, false
+	}
+	return found, true
+}
 func (v Value) With(name string, value Value) Value {
 	fields := slices.Clone(v.fields)
 	for i, f := range fields {
