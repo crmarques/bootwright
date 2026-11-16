@@ -273,9 +273,7 @@ func TestAnotherBuildsSetupFormatRefusesALaunch(t *testing.T) {
 	}{
 		{"an unsupported format", setupStateName, []byte("{\"format\":\"bootwright.setup-state-v2\",\"runtimes\":{}}\n"), "bootwright.setup-state-v2"},
 		{"malformed", setupStateName, []byte("not a record"), unreadableSetupFormat},
-		{"oversized", setupStateName, bytes.Repeat([]byte(" "), maxSetupState+1), unreadableSetupFormat},
-		{"unrecognized entry", "venvs", []byte("x"), unrecognizedSetupFormat},
-	}
+		{"unrecognized entry", "venvs", []byte("x"), unrecognizedSetupFormat}}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			store := New(testOptions(filepath.Join(t.TempDir(), "state")))
@@ -318,6 +316,79 @@ func TestAnotherBuildsSetupFormatRefusesALaunch(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A setup subtree that cannot be read is not another build's: an I/O, bound or
+// permission failure refuses both a launch and setup and keeps every entry.
+func TestAnUnreadableSetupSubtreeRefusesAndIsKept(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a file whatever its mode")
+	}
+	cases := []struct {
+		name   string
+		damage func(t *testing.T, install string)
+	}{
+		{"a state record denied", func(t *testing.T, install string) { chmodRestored(t, filepath.Join(install, setupStateName), 0) }},
+		{"a state record with unsafe permissions", func(t *testing.T, install string) {
+			chmodRestored(t, filepath.Join(install, setupStateName), 0644)
+		}},
+		{"a state record over its byte bound", func(t *testing.T, install string) {
+			if err := os.WriteFile(filepath.Join(install, setupStateName), bytes.Repeat([]byte(" "), maxSetupState+1), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"a subtree over its entry bound", func(t *testing.T, install string) {
+			for index := range maxSetupEntries {
+				if err := os.WriteFile(filepath.Join(install, fmt.Sprintf("%s%032x", runtimeStagePrefix, index)), nil, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}},
+		{"a runtimes directory denied", func(t *testing.T, install string) {
+			chmodRestored(t, filepath.Join(install, setupRuntimesName), 0)
+		}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			store := New(testOptions(filepath.Join(t.TempDir(), "state")))
+			mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+				if _, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "kept", setupDigest(2)), setupDigest(2)); err != nil {
+					return err
+				}
+				return tx.Record(context.Background(), setupReceiptState())
+			})
+			install := filepath.Join(store.options.Root, controllerContainer, installSubtree)
+			test.damage(t, install)
+			before := setupEntries(t, store)
+			view, err := store.ReadSetup(context.Background())
+			if err == nil || view.Foreign != "" || view.Exists {
+				t.Fatalf("launch read %#v %v, want a refusal", view, err)
+			}
+			called := false
+			err = store.MutateSetup(context.Background(), func(prerequisites.SetupTransaction) error {
+				called = true
+				return nil
+			})
+			if err == nil || called {
+				t.Fatalf("setup ran over an unreadable subtree: %v", err)
+			}
+			if after := setupEntries(t, store); !slices.Equal(after, before) || !slices.Contains(after, setupStateName) || !slices.Contains(after, setupRuntimesName) {
+				t.Fatalf("the refusal changed the subtree from %q to %q", before, after)
+			}
+		})
+	}
+}
+
+func chmodRestored(t *testing.T, path string, mode os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, mode); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, info.Mode().Perm()) })
 }
 
 func TestOwnSetupStateIsNeverDiscarded(t *testing.T) {

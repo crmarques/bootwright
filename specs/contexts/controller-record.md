@@ -267,8 +267,11 @@ matching the requirement and package name across NEVRA updates. If no log run
 can be retained, the durable setup ID instead uses `install-` followed by a
 random 32-digit hexadecimal token; it names no output file.
 `runtimes` names the current and the previous
-runtime digest. A record that cannot be read, or that carries another format,
-is another build's: a launch refuses `controller.state`, "the controller setup
+runtime digest. A record or subtree that cannot be read for an I/O, bound or
+permission reason is refused as a storage failure and kept, never taken as
+another build's. A record whose content does not decode as this build's
+format, or a subtree holding a name this build does not list, is another
+build's: a launch refuses `controller.state`, "the controller setup
 record was written by another Bootwright build", and one that finds `pending`
 refuses `controller.state`, "a controller setup (`<id>`) was interrupted
 before it finished", each with the remedy `run bootwright controller install`. Setup

@@ -389,8 +389,8 @@ wheel or refreshes repository metadata.
 
 The plan names each action setup takes, in order:
 
-- `discard-setup-state`, when the setup record cannot be read or carries
-  another format: "Discard setup state another Bootwright build wrote
+- `discard-setup-state`, when the setup record does not decode as this
+  build's format or carries another format: "Discard setup state another Bootwright build wrote
   (`<format>`)", which removes the subtree after confirmation;
 - `resume`, when a pending intent is present: "An earlier setup
   (`install-000042`) was interrupted during `<step>`; this run re-inspects the

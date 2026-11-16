@@ -104,10 +104,7 @@ func readSetupState(ctx context.Context, dir *directory) (prerequisites.SetupVie
 		return prerequisites.SetupView{}, nil
 	}
 	if err != nil {
-		if canceled := ctx.Err(); canceled != nil {
-			return prerequisites.SetupView{}, canceled
-		}
-		return prerequisites.SetupView{Exists: true, Foreign: unreadableSetupFormat}, nil
+		return prerequisites.SetupView{}, err
 	}
 	value, foreign := decodeSetupState(data)
 	return prerequisites.SetupView{Exists: true, State: value, Foreign: foreign}, nil
@@ -269,15 +266,18 @@ func (t *setupTransaction) admit(ctx context.Context) error {
 func recognizedSetup(ctx context.Context, dir *directory) (bool, error) {
 	names, err := directoryNames(dir, maxSetupEntries)
 	if err != nil {
-		return false, ctx.Err()
+		return false, err
 	}
 	for _, name := range names {
 		switch name {
 		case setupLockName, setupStateName:
 		case setupRuntimesName, setupCacheName:
 			child, err := openDirectory(dir, name)
+			if errors.Is(err, syscall.ENOTDIR) {
+				return false, nil
+			}
 			if err != nil {
-				return false, ctx.Err()
+				return false, err
 			}
 			child.file.Close()
 		default:
