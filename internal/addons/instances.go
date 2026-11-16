@@ -279,7 +279,7 @@ func ValidatePackages(o api.Object, c api.Catalog, r Registry, facts ClusterFact
 			}
 		}
 	}
-	return boundedIssues(issues)
+	return api.BoundIssues(issues)
 }
 
 func ValidateWithRegistry(o api.Object, c api.Catalog, r Registry, facts ClusterFacts) []api.Issue {
@@ -287,7 +287,7 @@ func ValidateWithRegistry(o api.Object, c api.Catalog, r Registry, facts Cluster
 		return Validate(o, c)
 	}
 	issues := validateBinding(o, c)
-	return boundedIssues(append(issues, ValidatePackages(o, c, r, facts)...))
+	return api.BoundIssues(append(issues, ValidatePackages(o, c, r, facts)...))
 }
 
 func validateMemberUniqueness(cluster string, members []selectedMember, add selectionReporter) {

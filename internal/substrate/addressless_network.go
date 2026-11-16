@@ -29,7 +29,7 @@ func validateAddresslessNetwork(o api.Object) []api.Issue {
 		{arm.Get("routedNetworkRefs").Len() != 0, "routedNetworkRefs", "an addressless Network cannot enable host routing", "remove spec.libvirt.routedNetworkRefs"},
 	} {
 		if rule.invalid {
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt." + rule.field,
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt." + rule.field,
 				Message: o.Identity() + ": " + rule.message, Remediation: rule.remedy + " on " + o.Identity()})
 		}
 	}
@@ -44,7 +44,7 @@ func validateHostNetworkAddress(o api.Object) []api.Issue {
 	const path = "$.spec.libvirt"
 	var issues []api.Issue
 	if !arm.Has("hostAddress") {
-		issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".hostAddress",
+		issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path + ".hostAddress",
 			Message:     o.Identity() + " declares no gateway, so the libvirt host's own address on the bridge has nothing to default to",
 			Remediation: "set spec.libvirt.hostAddress on " + o.Identity() + " to the host's address inside the network, or declare the gateway it defaults to"})
 	} else if address, err := netip.ParseAddr(arm.Get("hostAddress").Text()); err == nil {
@@ -54,7 +54,7 @@ func validateHostNetworkAddress(o api.Object) []api.Issue {
 			reason = network.ReservedAddress(prefix, address)
 		}
 		if reason != "" {
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".hostAddress",
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path + ".hostAddress",
 				Message:     "host address " + address.String() + " of " + o.Identity() + " " + reason,
 				Remediation: "set spec.libvirt.hostAddress on " + o.Identity() + " to a host address inside the network's cidr"})
 		}

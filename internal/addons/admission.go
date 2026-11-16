@@ -86,7 +86,7 @@ func ValidatePartial(o api.Object, _ api.Catalog) []api.Issue {
 	if o.Spec().Get("provides").Len() > 0 && o.Spec().Has("readiness", "checks") && o.Spec().Get("readiness", "checks").Len() == 0 {
 		issues = append(issues, addonIssue("api.invariant", "spec.readiness.checks", "An add-on providing capabilities requires an effective readiness check.", "add a check to readiness.checks, or remove provides"))
 	}
-	return boundedIssues(issues)
+	return api.BoundIssues(issues)
 }
 
 func Validate(o api.Object, c api.Catalog) []api.Issue {
@@ -96,7 +96,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		if o.Spec().Get("provides").Len() > 0 && o.Spec().Get("readiness", "checks").Len() == 0 {
 			issues = append(issues, addonIssue("api.invariant", "spec.readiness.checks", "An add-on providing capabilities requires an effective readiness check.", "add a check to readiness.checks, or remove provides"))
 		}
-		return boundedIssues(issues)
+		return api.BoundIssues(issues)
 	case api.ClusterAddonProfile:
 		_, issues := expandSelection(o, c)
 		return issues
@@ -136,8 +136,8 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 	issues = append(issues, validateReadiness(s, partial)...)
 	issues = append(issues, validateManifests(s.Get("manifestSet", "manifests"), "spec.manifestSet.manifests", partial)...)
 	for i, step := range s.Get("steps").Items() {
-		if len(issues) >= maxIssues {
-			return issues[:maxIssues]
+		if len(issues) >= api.MaxIssues {
+			return issues[:api.MaxIssues]
 		}
 		field := indexed("spec.steps", i)
 		if partial {
@@ -160,15 +160,15 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 		}
 		issues = append(issues, validateStepTarget(step.Get("target"), field+".target", c, partial)...)
 		for j, output := range step.Get("outputs").Items() {
-			if len(issues) >= maxIssues {
-				return issues[:maxIssues]
+			if len(issues) >= api.MaxIssues {
+				return issues[:api.MaxIssues]
 			}
 			if output.Get("secret").Bool() && output.Get("format").Text() == "sha256" {
 				issues = append(issues, addonIssue("api.invariant", indexed(field+".outputs", j), "A SHA-256 output cannot be marked secret.", "remove secret: true from the SHA-256 output"))
 			}
 		}
 	}
-	return boundedIssues(issues)
+	return api.BoundIssues(issues)
 }
 
 func validateStepTarget(target api.Value, field string, c api.Catalog, partial bool) []api.Issue {
@@ -178,15 +178,15 @@ func validateStepTarget(target api.Value, field string, c api.Catalog, partial b
 			issues = append(issues, addonIssue("api.invariant", field+".static", "A static target requires at least one cluster or Machine.", "list at least one cluster or Machine in the static target"))
 		}
 		for i, ref := range static.Get("machines").Items() {
-			if len(issues) >= maxIssues {
-				return issues[:maxIssues]
+			if len(issues) >= api.MaxIssues {
+				return issues[:api.MaxIssues]
 			}
 			if machine, found := c.Find(api.Machine, ref.Text()); found && !machine.Spec().Has("access", "ssh") {
 				issues = append(issues, addonIssue("api.reference", indexed(field+".static.machines", i), "Static playbook targets must select SSH-accessible Machines.", "select a Machine that declares spec.access.ssh, or give that Machine SSH access"))
 			}
 		}
 	}
-	return boundedIssues(issues)
+	return api.BoundIssues(issues)
 }
 
 func validateManifests(manifests api.Value, field string, partial bool) []api.Issue {
@@ -195,8 +195,8 @@ func validateManifests(manifests api.Value, field string, partial bool) []api.Is
 		if partial && !manifest.Has("path") {
 			continue
 		}
-		if len(issues) >= maxIssues {
-			return issues[:maxIssues]
+		if len(issues) >= api.MaxIssues {
+			return issues[:api.MaxIssues]
 		}
 		value := manifest.Get("path").Text()
 		ext := strings.ToLower(path.Ext(value))
@@ -230,13 +230,4 @@ func addonIssue(code, field, message, remediation string) api.Issue {
 		message = strings.ToLower(message[:1]) + message[1:]
 	}
 	return api.Issue{Code: code, Field: field, Message: message, Remediation: remediation}
-}
-
-const maxIssues = 999
-
-func boundedIssues(issues []api.Issue) []api.Issue {
-	if len(issues) > maxIssues {
-		return issues[:maxIssues]
-	}
-	return issues
 }

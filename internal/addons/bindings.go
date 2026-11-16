@@ -43,8 +43,8 @@ func expandIndexed(owner api.Object, c api.Catalog, profiles, definitions map[st
 	issues := []api.Issue{}
 	complete := true
 	for len(stack) != 0 {
-		if len(issues) >= maxIssues {
-			return result, issues[:maxIssues], false
+		if len(issues) >= api.MaxIssues {
+			return result, issues[:api.MaxIssues], false
 		}
 		current := &stack[len(stack)-1]
 		if current.next < len(current.refs) {
@@ -78,8 +78,8 @@ func expandIndexed(owner api.Object, c api.Catalog, profiles, definitions map[st
 			continue
 		}
 		for _, name := range current.object.Spec().Get("addonRefs").Strings() {
-			if len(issues) >= maxIssues {
-				return result, issues[:maxIssues], false
+			if len(issues) >= api.MaxIssues {
+				return result, issues[:api.MaxIssues], false
 			}
 			if seen[name] {
 				continue
@@ -127,7 +127,7 @@ func validateBinding(binding api.Object, c api.Catalog) []api.Issue {
 			issues = append(issues, addonIssue("api.invariant", indexed("spec.afterRefs", i), "spec.afterRefs names ClusterAddonBinding/"+ref+", which binds OpenShiftCluster/"+other.Spec().Get("clusterRef").Text()+", not OpenShiftCluster/"+cluster, "name a binding of OpenShiftCluster/"+cluster+", or remove "+ref+" from spec.afterRefs"))
 		}
 	}
-	return boundedIssues(issues)
+	return api.BoundIssues(issues)
 }
 
 type Attachment struct{ ClusterRef, ConsumerRef string }

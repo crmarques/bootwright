@@ -55,7 +55,7 @@ func validateOverlayOverlaps(o api.Object, c api.Catalog) []api.Issue {
 				continue
 			}
 			reported[subnet.prefix] = true
-			issues = add(issues, invariantRemediation(field, fmt.Sprintf("the %s %s of %s overlaps %s, %s, so traffic to that subnet would stay inside the cluster", kind, overlay.Masked(), o.Identity(), subnet.prefix, subnet.holder),
+			issues = api.AppendIssues(issues, invariantRemediation(field, fmt.Sprintf("the %s %s of %s overlaps %s, %s, so traffic to that subnet would stay inside the cluster", kind, overlay.Masked(), o.Identity(), subnet.prefix, subnet.holder),
 				fmt.Sprintf("choose a %s outside every declared Network and every node interface subnet and secondary-network IPAM subnet of %s", kind, o.Identity())))
 		}
 	}
@@ -88,7 +88,7 @@ func validateVIPAdjacency(o api.Object, c api.Catalog) []api.Issue {
 			if !ok || holdsSubnetOf(bound, c, address.Unmap()) {
 				continue
 			}
-			issues = add(issues, invariantRemediation("$.spec.install.endpoints."+slot+".address",
+			issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.endpoints."+slot+".address",
 				fmt.Sprintf("the %s VIP %s lies in no interface subnet of node %s (%s), which can hold it, and keepalived moves a VIP only among nodes on its layer-2 network", slot, address, node.Get("name").Text(), bound.Identity()),
 				fmt.Sprintf("assign %s an interface address whose prefix contains %s, or choose a VIP in a subnet every node that can hold it is addressed in", bound.Identity(), address)))
 		}

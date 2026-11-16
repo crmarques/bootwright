@@ -118,20 +118,20 @@ func validateHostedProvider(o api.Object, c api.Catalog) []api.Issue {
 	name := o.Spec().Get(ArmKubeVirt, "namespace").Text()
 	for _, namespace := range namespaces {
 		if namespace.Name == name && namespace.Conflict != "" {
-			issues = add(issues, issue("$.spec.kubevirt.namespace", "namespace "+name+" cannot carry the selector of every secondary network its providers attach to: "+namespace.Conflict))
+			issues = api.AppendIssues(issues, issue("$.spec.kubevirt.namespace", "namespace "+name+" cannot carry the selector of every secondary network its providers attach to: "+namespace.Conflict))
 		}
 	}
 	for index, segment := range o.Spec().Get("segments").Items() {
 		if network, ok := hostNetwork(host, segment); ok && network.Get("ipam", "mode").Text() == "Enabled" {
 			name := network.Get("name").Text()
 			path := fmt.Sprintf("$.spec.segments[%d].kubevirt.networkRef", index)
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: path,
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path,
 				Message:     "a VirtualMachine attaches only to a host network that leaves IP address management to the guest, and secondary network " + name + " of " + host.Identity() + " sets ipam.mode Enabled, so its OVN port security would enforce the addresses it assigns and not the static install address",
 				Remediation: "set ipam.mode to Disabled on secondary network " + name + " of " + host.Identity() + ", or attach " + o.Identity() + " to a network that does"})
 		}
 	}
 	if len(namespaces) > MaxHostedNamespaces {
-		issues = add(issues, issue("$.spec.kubevirt.hostClusterRef", fmt.Sprintf("%s hosts at most %d KubeVirt provider namespaces, and its providers declare %d", host.Identity(), MaxHostedNamespaces, len(namespaces))))
+		issues = api.AppendIssues(issues, issue("$.spec.kubevirt.hostClusterRef", fmt.Sprintf("%s hosts at most %d KubeVirt provider namespaces, and its providers declare %d", host.Identity(), MaxHostedNamespaces, len(namespaces))))
 	}
 	return issues
 }

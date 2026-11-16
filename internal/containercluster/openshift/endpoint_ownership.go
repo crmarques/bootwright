@@ -107,7 +107,7 @@ func endpointCollisions(cluster api.Object, catalog api.Catalog, slot string, en
 		if claim.Address != address.Unmap() || claim.NextHop && source != "installer" || endpointOwnsClaim(cluster, catalog, endpoint, claim) {
 			continue
 		}
-		issues = add(issues, invariantRemediation(field, fmt.Sprintf("endpoint address %s is already held by %s at %s", address, claim.Object.Identity(), claim.Path), "choose an endpoint address distinct from the other declared holder"))
+		issues = api.AppendIssues(issues, invariantRemediation(field, fmt.Sprintf("endpoint address %s is already held by %s at %s", address, claim.Object.Identity(), claim.Path), "choose an endpoint address distinct from the other declared holder"))
 	}
 	return issues
 }

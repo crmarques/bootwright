@@ -35,7 +35,7 @@ func Validate(object api.Object, catalog api.Catalog, members func(api.Object) (
 	if rescue := spec.Get("lifecycle", "rescue"); rescue.Present() {
 		// The schema keeps the declaration for a later journey; until one
 		// exists, no lifecycle could act on it.
-		if len(issues) < 999 {
+		if len(issues) < api.MaxIssues {
 			issues = append(issues, api.Issue{Code: "api.invariant", Field: "$.spec.lifecycle.rescue",
 				Message:     "no rescue journey exists yet, so no lifecycle can use a rescue declaration",
 				Remediation: "remove spec.lifecycle.rescue from " + object.Identity()})
@@ -64,7 +64,7 @@ func fleetKeyIssues(fleetKey api.Value, catalog api.Catalog) []api.Issue {
 				names = append(names, machine.Name())
 			}
 		}
-		if fleetKey.Present() && !installs && machine.Spec().Get("access", "ssh", "auth", "privateKeyRef").Equal(fleetKey) && len(issues) < 999 {
+		if fleetKey.Present() && !installs && machine.Spec().Get("access", "ssh", "auth", "privateKeyRef").Equal(fleetKey) && len(issues) < api.MaxIssues {
 			issues = append(issues, api.Issue{Code: "api.invariant", Field: field,
 				Message: subject + " uses the fleet install key as its access key; the fleet key must differ from authored Machine access keys",
 				Remediation: "give " + subject + " its own sshKeyPair Secret or an operator identity, or choose another fleet key; if Bootwright dials it with the fleet key, " +
@@ -96,7 +96,7 @@ func validateController(environment api.Object, catalog api.Catalog, members fun
 	}
 	issues := []api.Issue{}
 	add := func(message, remediation string) {
-		if len(issues) < 999 {
+		if len(issues) < api.MaxIssues {
 			issues = append(issues, api.Issue{Code: "api.invariant", Field: "$.spec.controller.machineRef", Message: message, Remediation: remediation})
 		}
 	}

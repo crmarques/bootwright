@@ -77,7 +77,7 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 		return nil
 	}
 	issues := validateCloneCustomizations(o)
-	return add(issues, infrastructureservices.ValidateProxyChoice(o.Spec().Get("proxy"), "$.spec.proxy")...)
+	return api.AppendIssues(issues, infrastructureservices.ValidateProxyChoice(o.Spec().Get("proxy"), "$.spec.proxy")...)
 }
 
 func Validate(o api.Object, c api.Catalog) []api.Issue {
@@ -93,18 +93,18 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	s := o.Spec()
 	custom := s.Get("customizations")
 	issues := validateCloneCustomizations(o)
-	issues = add(issues, infrastructureservices.ValidateProxy(s.Get("proxy"), c, "$.spec.proxy", true)...)
-	issues = add(issues, infrastructureservices.ValidateServerSelections(s.Get("ntp"), c, api.NTPServer, "$.spec.ntp")...)
+	issues = api.AppendIssues(issues, infrastructureservices.ValidateProxy(s.Get("proxy"), c, "$.spec.proxy", true)...)
+	issues = api.AppendIssues(issues, infrastructureservices.ValidateServerSelections(s.Get("ntp"), c, api.NTPServer, "$.spec.ntp")...)
 	if family := s.Get("os", "family"); family.Present() && !strings.EqualFold(family.Text(), "rhel") {
-		issues = add(issues, issue("$.spec.os.family", "machine installation supports the rhel OS family", "set spec.os.family to rhel"))
+		issues = api.AppendIssues(issues, issue("$.spec.os.family", "machine installation supports the rhel OS family", "set spec.os.family to rhel"))
 	}
-	issues = add(issues, validateCustomizationEntries(custom)...)
-	issues = add(issues, validateSubscription(s, c)...)
-	issues = add(issues, validateUpdates(o, c)...)
-	issues = add(issues, validateServiceChoices(custom)...)
-	issues = add(issues, validateInstallerSources(o, c)...)
-	issues = add(issues, validateServedNames(o, c)...)
-	return add(issues, validateConsumers(o, c)...)
+	issues = api.AppendIssues(issues, validateCustomizationEntries(custom)...)
+	issues = api.AppendIssues(issues, validateSubscription(s, c)...)
+	issues = api.AppendIssues(issues, validateUpdates(o, c)...)
+	issues = api.AppendIssues(issues, validateServiceChoices(custom)...)
+	issues = api.AppendIssues(issues, validateInstallerSources(o, c)...)
+	issues = api.AppendIssues(issues, validateServedNames(o, c)...)
+	return api.AppendIssues(issues, validateConsumers(o, c)...)
 }
 
 // kickstartGrammar is the grammar of one class of authored value the Kickstart
@@ -141,19 +141,19 @@ func validateCustomizationEntries(custom api.Value) []api.Issue {
 	for i, repo := range custom.Get("repositories", "configure").Items() {
 		path := fmt.Sprintf("$.spec.customizations.repositories.configure[%d]", i)
 		if !RepositoryID(repo.Get("id").Text()) {
-			issues = add(issues, grammarIssue(path+".id", repositoryGrammar))
+			issues = api.AppendIssues(issues, grammarIssue(path+".id", repositoryGrammar))
 		}
 		entry := strings.TrimPrefix(path, "$.")
 		gpg := !repo.Has("gpgCheck") || repo.Get("gpgCheck").Bool()
 		if gpg && !repo.Has("gpgKeyURL") {
-			issues = add(issues, issue(path+".gpgKeyURL", "GPG checking requires a key URL", "set "+entry+".gpgKeyURL, or set "+entry+".gpgCheck to false"))
+			issues = api.AppendIssues(issues, issue(path+".gpgKeyURL", "GPG checking requires a key URL", "set "+entry+".gpgKeyURL, or set "+entry+".gpgCheck to false"))
 		}
 		if key := repo.Get("gpgKeyURL"); key.Present() && (!validMediaURL(key.Text(), true) || strings.ContainsAny(key.Text(), "\"'\\#")) {
-			issues = add(issues, issue(path+".gpgKeyURL", "GPG key URL must use HTTP(S) or an absolute file URI, with no quote, backslash or '#'",
+			issues = api.AppendIssues(issues, issue(path+".gpgKeyURL", "GPG key URL must use HTTP(S) or an absolute file URI, with no quote, backslash or '#'",
 				"set "+entry+".gpgKeyURL to an https://, http:// or file:/// URL"))
 		}
 		if name := repo.Get("displayName"); name.Present() && (!utf8.ValidString(name.Text()) || strings.IndexFunc(name.Text(), lineBreak) >= 0) {
-			issues = add(issues, issue(path+".displayName", "a repository display name is one line of UTF-8 text with no control character",
+			issues = api.AppendIssues(issues, issue(path+".displayName", "a repository display name is one line of UTF-8 text with no control character",
 				"correct "+entry+".displayName to one line of text"))
 		}
 	}
@@ -166,7 +166,7 @@ func validateKickstartValues(custom api.Value) []api.Issue {
 	var issues []api.Issue
 	for _, field := range []string{"language", "formats", "keyboard", "timezone"} {
 		if v := custom.Get("localization", field); v.Present() && !api.ValidLexical(localeGrammar.rule, v.Text()) {
-			issues = add(issues, grammarIssue("$.spec.customizations.localization."+field, localeGrammar))
+			issues = api.AppendIssues(issues, grammarIssue("$.spec.customizations.localization."+field, localeGrammar))
 		}
 	}
 	for _, group := range []struct {
@@ -180,7 +180,7 @@ func validateKickstartValues(custom api.Value) []api.Issue {
 	} {
 		for i, v := range custom.Get(group.path...).Items() {
 			if !api.ValidLexical(group.grammar.rule, v.Text()) {
-				issues = add(issues, grammarIssue(fmt.Sprintf("$.spec.customizations.%s[%d]", strings.Join(group.path, "."), i), group.grammar))
+				issues = api.AppendIssues(issues, grammarIssue(fmt.Sprintf("$.spec.customizations.%s[%d]", strings.Join(group.path, "."), i), group.grammar))
 			}
 		}
 	}
@@ -197,7 +197,7 @@ func validateSubscription(s api.Value, c api.Catalog) []api.Issue {
 	subscription := s.Get("subscription")
 	if ref := subscription.Get("entitlementRef"); ref.Present() {
 		if entitlement, ok := c.Find(api.Entitlement, ref.Text()); ok && entitlement.Spec().Get("type").Text() != "redhatRhel" {
-			issues = add(issues, reference("$.spec.subscription.entitlementRef", "OS registration requires a redhatRhel Entitlement",
+			issues = api.AppendIssues(issues, api.ReferenceIssue("$.spec.subscription.entitlementRef", "OS registration requires a redhatRhel Entitlement",
 				"select an Entitlement of type redhatRhel in spec.subscription.entitlementRef"))
 		}
 	}
@@ -205,26 +205,26 @@ func validateSubscription(s api.Value, c api.Catalog) []api.Issue {
 	if subRepos.Present() {
 		enable, disable := subRepos.Get("enable").Strings(), subRepos.Get("disable").Strings()
 		if len(enable)+len(disable) == 0 {
-			issues = add(issues, issue("$.spec.customizations.repositories.subscription", "subscription repositories require enable or disable entries",
+			issues = api.AppendIssues(issues, issue("$.spec.customizations.repositories.subscription", "subscription repositories require enable or disable entries",
 				"add enable or disable entries, or remove spec.customizations.repositories.subscription"))
 		}
 		if !subscription.Present() {
-			issues = add(issues, issue("$.spec.customizations.repositories.subscription", "subscription repositories require a registration entitlement",
+			issues = api.AppendIssues(issues, issue("$.spec.customizations.repositories.subscription", "subscription repositories require a registration entitlement",
 				"set spec.subscription, or remove spec.customizations.repositories.subscription"))
 		}
 		for _, id := range enable {
 			if id == "*" || !subscriptionRepositoryID(id) {
-				issues = add(issues, issue("$.spec.customizations.repositories.subscription.enable", "enabled repository IDs are not the wildcard and are printable ASCII with no whitespace, quote, slash, backslash, '#' or comma, not starting with '%'",
+				issues = api.AppendIssues(issues, issue("$.spec.customizations.repositories.subscription.enable", "enabled repository IDs are not the wildcard and are printable ASCII with no whitespace, quote, slash, backslash, '#' or comma, not starting with '%'",
 					"correct that entry of spec.customizations.repositories.subscription.enable"))
 			}
 			if slices.Contains(disable, id) {
-				issues = add(issues, issue("$.spec.customizations.repositories.subscription", "enabled and disabled repository IDs must be disjoint",
+				issues = api.AppendIssues(issues, issue("$.spec.customizations.repositories.subscription", "enabled and disabled repository IDs must be disjoint",
 					"remove the ID from spec.customizations.repositories.subscription.enable or from its disable list"))
 			}
 		}
 		for _, id := range disable {
 			if id != "*" && !subscriptionRepositoryID(id) {
-				issues = add(issues, issue("$.spec.customizations.repositories.subscription.disable", "disabled repository IDs must be identifiers or wildcard",
+				issues = api.AppendIssues(issues, issue("$.spec.customizations.repositories.subscription.disable", "disabled repository IDs must be identifiers or wildcard",
 					"correct that entry of spec.customizations.repositories.subscription.disable"))
 			}
 		}
@@ -251,13 +251,13 @@ func validateUpdates(o api.Object, c api.Catalog) []api.Issue {
 	profile := o.Identity()
 	var issues []api.Issue
 	if !declaresUpdateSource(s, c) {
-		issues = add(issues, issue("$.spec.updates.policy",
+		issues = api.AppendIssues(issues, issue("$.spec.updates.policy",
 			profile+" updates within its release but declares no update source: no managed subscription and no enabled configured repository",
 			"set spec.updates.policy to none on "+profile+", or declare a managed spec.subscription or an enabled spec.customizations.repositories.configure entry"))
 	}
 	pcrs := s.Get("customizations", "security", "diskEncryption", "unlock", "tpm2", "pcrIds").Items()
 	if slices.ContainsFunc(pcrs, func(pcr api.Value) bool { return slices.Contains(sealedBootPCRs, pcr.Text()) }) {
-		issues = add(issues, issue("$.spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds",
+		issues = api.AppendIssues(issues, issue("$.spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds",
 			profile+" seals its root disk to PCR 4, 8 or 9, which measure the boot loader, its commands and the kernel an update within the release replaces, so the disk would not unlock after the update's reboot",
 			"remove 4, 8 and 9 from spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds on "+profile+", or set spec.updates.policy to none on "+profile))
 	}
@@ -294,15 +294,15 @@ func validateServiceChoices(custom api.Value) []api.Issue {
 	enabled, disabled := custom.Get("services", "enabled").Strings(), custom.Get("services", "disabled").Strings()
 	for _, service := range enabled {
 		if slices.Contains(disabled, service) {
-			issues = add(issues, serviceOverlap())
+			issues = api.AppendIssues(issues, serviceOverlap())
 		}
 	}
 	if custom.Get("security", "firewall", "enabled").Bool() && (!slices.Contains(custom.Get("packages", "install").Strings(), "firewalld") || !slices.Contains(enabled, "firewalld")) {
-		issues = add(issues, issue("$.spec.customizations.security.firewall.enabled", "enabled firewall requires the firewalld package and enabled service",
+		issues = api.AppendIssues(issues, issue("$.spec.customizations.security.firewall.enabled", "enabled firewall requires the firewalld package and enabled service",
 			"add firewalld to spec.customizations.packages.install and spec.customizations.services.enabled, or disable spec.customizations.security.firewall"))
 	}
 	if tpm := custom.Get("security", "diskEncryption", "unlock", "tpm2"); tpm.Has("pcrBank") && !tpm.Has("pcrIds") {
-		issues = add(issues, issue("$.spec.customizations.security.diskEncryption.unlock.tpm2.pcrBank", "PCR bank requires selected PCR IDs",
+		issues = api.AppendIssues(issues, issue("$.spec.customizations.security.diskEncryption.unlock.tpm2.pcrBank", "PCR bank requires selected PCR IDs",
 			"set spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds, or remove its pcrBank"))
 	}
 	return issues
@@ -316,11 +316,11 @@ func validateInstallerSources(o api.Object, c api.Catalog) []api.Issue {
 		path  string
 		http  bool
 	}{{anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint", false}, {anaconda.Get("packageSource", "hostedTree", "artifactServerEndpoint"), "$.spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint", true}} {
-		issues = add(issues, infrastructureservices.ValidateArtifactEndpoint(selection.value, c, selection.path, selection.http)...)
+		issues = api.AppendIssues(issues, infrastructureservices.ValidateArtifactEndpoint(selection.value, c, selection.path, selection.http)...)
 		if server, ok := infrastructureservices.ArtifactEndpoint(selection.value, c); ok && server.Spec().Get("management").Text() == "managed" {
 			for _, machine := range consumers(o, c) {
 				if bootwrightInstalled(machine) && server.Spec().Get("machineRef").Text() == machine.Name() {
-					issues = add(issues, issue(selection.path+".serverRef",
+					issues = api.AppendIssues(issues, issue(selection.path+".serverRef",
 						"an installation cannot publish through an artifact server placed on the Machine it installs, because that server cannot serve until the installation completes",
 						"place "+server.Identity()+" on the controller Machine, or select a server placed there"))
 					break
@@ -330,11 +330,11 @@ func validateInstallerSources(o api.Object, c api.Catalog) []api.Issue {
 	}
 	if hosted := anaconda.Get("packageSource", "hostedTree"); hosted.Present() {
 		if !storeMediaReference(hosted.Get("fromMedia").Text()) {
-			issues = add(issues, storeMediaIssue("spec.installer.anaconda.packageSource.hostedTree.fromMedia",
+			issues = api.AppendIssues(issues, storeMediaIssue("spec.installer.anaconda.packageSource.hostedTree.fromMedia",
 				"hosted package content is local-media:<filename.iso> naming a DVD image of the host media store", o))
 		}
 		if image, ok := c.Find(api.MachineImage, anaconda.Get("imageRef").Text()); ok && image.Spec().Get("bootMedia").Equal(hosted.Get("fromMedia")) {
-			issues = add(issues, issue("$.spec.installer.anaconda.packageSource.hostedTree.fromMedia", "hosted content media must differ from the boot image",
+			issues = api.AppendIssues(issues, issue("$.spec.installer.anaconda.packageSource.hostedTree.fromMedia", "hosted content media must differ from the boot image",
 				"select the DVD image in spec.installer.anaconda.packageSource.hostedTree.fromMedia on "+o.Identity()+" and the boot image in spec.bootMedia on "+image.Identity()))
 		}
 	}
@@ -375,7 +375,7 @@ func validateConsumers(o api.Object, c api.Catalog) []api.Issue {
 	anaconda := s.Get("installer", "anaconda")
 	custom := s.Get("customizations")
 	if anaconda.Present() && !anaconda.Has("redfishVirtualMedia", "artifactServerEndpoint") && slices.ContainsFunc(consumers(o, c), bootwrightInstalled) {
-		issues = add(issues, issue("$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint",
+		issues = api.AppendIssues(issues, issue("$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint",
 			"a Bootwright-installed Machine boots its installer through Redfish virtual media, so the profile it selects names the artifact server endpoint its installer image is published through",
 			"set spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on "+o.Identity()))
 	}
@@ -388,11 +388,11 @@ func validateConsumers(o api.Object, c api.Catalog) []api.Issue {
 		profileName := substrate.MachineProfileRef(machine)
 		profile, profileOK := localProfile(provider.Spec().Get(variant, "machineProfiles"), profileName)
 		if s.Has("installer", "templateClone") && (variant != substrate.ArmVSphere || profileOK && !profile.Has("template")) {
-			issues = add(issues, issue("$.spec.installer.templateClone", "template clone consumers require a vSphere profile with a template",
+			issues = api.AppendIssues(issues, issue("$.spec.installer.templateClone", "template clone consumers require a vSphere profile with a template",
 				"select spec.installer.anaconda, or place each consumer on a vSphere provider profile with a template"))
 		}
 		if custom.Has("security", "diskEncryption") && variant != substrate.ArmBaremetal && profileOK && !profile.Has("tpm") {
-			issues = add(issues, issue("$.spec.customizations.security.diskEncryption", "virtual disk encryption requires TPM support in every consuming provider profile",
+			issues = api.AppendIssues(issues, issue("$.spec.customizations.security.diskEncryption", "virtual disk encryption requires TPM support in every consuming provider profile",
 				"declare tpm on machine profile "+profileName+" of "+provider.Identity()+", or remove spec.customizations.security.diskEncryption"))
 		}
 	}
@@ -437,21 +437,21 @@ func ValidateRHSM(o api.Object, authored bool) []api.Issue {
 	if management == "external" {
 		for _, key := range []string{"organizationRef", "activationKeyRef", "satellite"} {
 			if rhsm.Has(key) {
-				issues = add(issues, externalRHSMField(key))
+				issues = api.AppendIssues(issues, externalRHSMField(key))
 			}
 		}
 	} else if management == "managed" {
 		for _, key := range []string{"organizationRef", "activationKeyRef"} {
 			if !rhsm.Has(key) {
-				issues = add(issues, issue("$.spec.rhsm."+key, "managed RHSM requires organization and activation-key references",
+				issues = api.AppendIssues(issues, issue("$.spec.rhsm."+key, "managed RHSM requires organization and activation-key references",
 					"set spec.rhsm.organizationRef and spec.rhsm.activationKeyRef"))
 			}
 		}
 		if !authored && rhsm.Has("satellite") {
-			issues = add(issues, validateSatelliteSelection(o, rhsm.Get("satellite"))...)
+			issues = api.AppendIssues(issues, validateSatelliteSelection(o, rhsm.Get("satellite"))...)
 		}
 		if !authored && o.Spec().Get("type").Text() == "redhatRhel" && rhsm.Has("satellite") {
-			issues = add(issues, validateSatellite(o, rhsm.Get("satellite"))...)
+			issues = api.AppendIssues(issues, validateSatellite(o, rhsm.Get("satellite"))...)
 		}
 	}
 	return issues
@@ -460,13 +460,13 @@ func ValidateRHSM(o api.Object, authored bool) []api.Issue {
 func validateSatellite(o api.Object, satellite api.Value) []api.Issue {
 	var issues []api.Issue
 	if !satellite.Has("trustBundleRef") {
-		issues = add(issues, issue("$.spec.rhsm.satellite.trustBundleRef",
+		issues = api.AppendIssues(issues, issue("$.spec.rhsm.satellite.trustBundleRef",
 			"a registration with a Satellite or Capsule verifies its certificate against a declared CA bundle, and "+o.Identity()+" names none",
 			"set spec.rhsm.satellite.trustBundleRef on "+o.Identity()+" to the caBundle Secret holding the CA that signs the certificate of "+
 				satellite.Get("hostname").Text()+", such as the Satellite's katello-server-ca.crt"))
 	}
 	if raw := satellite.Get("contentBaseURL").Text(); raw != "" && !satelliteContentRoot(raw) {
-		issues = add(issues, issue("$.spec.rhsm.satellite.contentBaseURL",
+		issues = api.AppendIssues(issues, issue("$.spec.rhsm.satellite.contentBaseURL",
 			"the content root of a Satellite is an https URL of at most 2048 printable ASCII characters with a host and no query, fragment or user information",
 			"set spec.rhsm.satellite.contentBaseURL on "+o.Identity()+" to an https URL such as https://"+satellite.Get("hostname").Text()+
 				"/pulp/content, or remove it to take that default"))
@@ -522,7 +522,7 @@ func validateCloneCustomizations(o api.Object) []api.Issue {
 	for _, path := range [][]string{{"localization"}, {"packages"}, {"security", "selinux"}, {"security", "firewall"}, {"security", "fips"}, {"security", "diskEncryption"}} {
 		if custom.Get(path...).Present() {
 			field := "spec.customizations." + strings.Join(path, ".")
-			issues = add(issues, issue("$."+field, "template clone forbids Anaconda-only customization", "remove "+field))
+			issues = api.AppendIssues(issues, issue("$."+field, "template clone forbids Anaconda-only customization", "remove "+field))
 		}
 	}
 	return issues
@@ -583,14 +583,6 @@ func hasSpace(s string) bool { return strings.IndexFunc(s, unicode.IsSpace) >= 0
 func issue(field, message, remediation string) api.Issue {
 	return api.Issue{Code: "api.invariant", Field: field, Message: message, Remediation: remediation}
 }
-func reference(field, message, remediation string) api.Issue {
-	i := issue(field, message, remediation)
-	i.Code = "api.reference"
-	return i
-}
-func add(issues []api.Issue, more ...api.Issue) []api.Issue {
-	return append(issues, more[:min(len(more), 999-len(issues))]...)
-}
 
 var satelliteLabel = regexp.MustCompile(`^[A-Za-z0-9_-]{1,255}$`)
 
@@ -598,7 +590,7 @@ func validateSatelliteSelection(o api.Object, satellite api.Value) []api.Issue {
 	var issues []api.Issue
 	for _, key := range []string{"contentView", "lifecycleEnvironment"} {
 		if satellite.Has(key) && !satelliteLabel.MatchString(satellite.Get(key).Text()) {
-			issues = add(issues, issue("$.spec.rhsm.satellite."+key,
+			issues = api.AppendIssues(issues, issue("$.spec.rhsm.satellite."+key,
 				"a Satellite content selection uses labels of 1 to 255 ASCII letters, digits, underscores or hyphens",
 				"set spec.rhsm.satellite."+key+" on "+o.Identity()+" to the Satellite label, rather than its display name"))
 		}
@@ -607,7 +599,7 @@ func validateSatelliteSelection(o api.Object, satellite api.Value) []api.Issue {
 			other = "lifecycleEnvironment"
 		}
 		if satellite.Has(key) && !satellite.Has(other) {
-			issues = add(issues, issue("$.spec.rhsm.satellite."+other,
+			issues = api.AppendIssues(issues, issue("$.spec.rhsm.satellite."+other,
 				"an explicit Satellite content view requires its lifecycle environment, and vice versa",
 				"set both spec.rhsm.satellite.contentView and spec.rhsm.satellite.lifecycleEnvironment on "+o.Identity()+", or omit both to use the activation key's selection"))
 		}

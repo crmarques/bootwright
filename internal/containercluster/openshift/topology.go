@@ -65,18 +65,18 @@ func validateTopology(s api.Value, partial bool) []api.Issue {
 		}
 	}
 	if controlPlane == 0 {
-		return add(issues, invariantRemediation("$.spec.nodes", "an OpenShiftCluster requires at least one controlPlane node", "declare at least one controlPlane node in spec.nodes"))
+		return api.AppendIssues(issues, invariantRemediation("$.spec.nodes", "an OpenShiftCluster requires at least one controlPlane node", "declare at least one controlPlane node in spec.nodes"))
 	}
 	if version != "" && !slices.Contains(generalTopology.controlPlane, controlPlane) {
 		accepted := countList(generalTopology.controlPlane)
 		issue := invariant("$.spec.nodes", fmt.Sprintf("release %s accepts %s controlPlane nodes, not %d", minor, accepted, controlPlane))
 		issue.Remediation = "declare " + accepted + " controlPlane nodes"
-		issues = add(issues, issue)
+		issues = api.AppendIssues(issues, issue)
 	}
 	if controlPlane == 1 && compute > 0 {
 		issue := invariant("$.spec.nodes", fmt.Sprintf("a single-controlPlane cluster admits no worker or infra node, and %d are declared", compute))
 		issue.Remediation = "remove the worker and infra nodes, or declare as many controlPlane nodes as the release accepts"
-		issues = add(issues, issue)
+		issues = api.AppendIssues(issues, issue)
 	}
 	if len(nodes) > 1 && Platform(s) == "none" {
 		for _, slot := range endpointSlots {
@@ -84,7 +84,7 @@ func validateTopology(s api.Value, partial bool) []api.Issue {
 			if endpoint.Present() && sourceType(endpoint) == "installer" {
 				issue := invariant("$.spec.install.endpoints."+slot+".source.type", "a multi-node cluster on platform none installs no endpoint VIPs, so the installer cannot own this endpoint")
 				issue.Remediation = "declare an external or loadBalancer source for this endpoint"
-				issues = add(issues, issue)
+				issues = api.AppendIssues(issues, issue)
 			}
 		}
 	}

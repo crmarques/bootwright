@@ -73,8 +73,8 @@ func validateCustomResources(olm api.Value, partial bool) []api.Issue {
 	namespace := olm.Get("namespace", "name").Text()
 	subscription := effectiveSubscription(olm)
 	for i, entry := range olm.Get("customResources").Items() {
-		if len(issues) >= maxIssues {
-			return issues[:maxIssues]
+		if len(issues) >= api.MaxIssues {
+			return issues[:api.MaxIssues]
 		}
 		field := indexed("spec.olm.customResources", i)
 		gate := entry.Get("gate")
@@ -218,8 +218,8 @@ func validateReadiness(s api.Value, partial bool) []api.Issue {
 func validateChecks(checks api.Value, field, namespace, subscription string, own bool) []api.Issue {
 	issues := []api.Issue{}
 	for i, check := range checks.Items() {
-		if len(issues) >= maxIssues {
-			return issues[:maxIssues]
+		if len(issues) >= api.MaxIssues {
+			return issues[:api.MaxIssues]
 		}
 		at := indexed(field, i)
 		if secretCheck(check) {

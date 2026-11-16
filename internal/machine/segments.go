@@ -15,11 +15,11 @@ func validateSegments(c api.Catalog, o, provider api.Object, native api.Value) [
 	variant := substrate.Variant(provider)
 	issues := []api.Issue{}
 	if substrate.VirtualArm(variant) {
-		issues = appendIssues(issues, validateVirtualMACs(o, native, variant)...)
+		issues = api.AppendIssues(issues, validateVirtualMACs(o, native, variant)...)
 	}
-	issues = appendIssues(issues, validateBondSegments(o, native, "$.spec.substrate."+variant+".nics")...)
-	issues = appendIssues(issues, validateNICSegmentSelection(c, o, provider, native)...)
-	return appendIssues(issues, validateCapacities(c, o, provider, native)...)
+	issues = api.AppendIssues(issues, validateBondSegments(o, native, "$.spec.substrate."+variant+".nics")...)
+	issues = api.AppendIssues(issues, validateNICSegmentSelection(c, o, provider, native)...)
+	return api.AppendIssues(issues, validateCapacities(c, o, provider, native)...)
 }
 
 func validateNICSegmentSelection(c api.Catalog, o, provider api.Object, native api.Value) []api.Issue {
@@ -50,7 +50,7 @@ func validateNICSegmentSelection(c api.Catalog, o, provider api.Object, native a
 				remedy = "set segmentRef on the spec.substrate." + variant + ".nics entry of NIC " + nic + " on " + o.Identity() + " to one of " + strings.Join(names, ", ")
 			}
 		}
-		issues = appendIssues(issues, invariant(field, "NIC "+nic+" of "+o.Identity()+" carries interface "+match.Get("interface").Text()+", and "+provider.Identity()+" declares segments "+strings.Join(names, ", ")+", so the NIC needs its segment", remedy))
+		issues = api.AppendIssues(issues, invariant(field, "NIC "+nic+" of "+o.Identity()+" carries interface "+match.Get("interface").Text()+", and "+provider.Identity()+" declares segments "+strings.Join(names, ", ")+", so the NIC needs its segment", remedy))
 	}
 	return issues
 }
@@ -107,7 +107,7 @@ func validateCapacities(c api.Catalog, o, provider api.Object, native api.Value)
 			}
 			seen[reference] = true
 			if capacity := substrate.SegmentMTU(segment); mtu > capacity {
-				issues = appendIssues(issues, invariant("$.spec.network", fmt.Sprintf("interface %s of %s has MTU %d above capacity %d of %s, which its NIC %s is on", name, o.Identity(), mtu, capacity, substrate.SegmentLabel(c, provider, reference), nic),
+				issues = api.AppendIssues(issues, invariant("$.spec.network", fmt.Sprintf("interface %s of %s has MTU %d above capacity %d of %s, which its NIC %s is on", name, o.Identity(), mtu, capacity, substrate.SegmentLabel(c, provider, reference), nic),
 					mtuRemedy(o, name, source, capacity)+", or raise "+substrate.CapacityField(c, provider, reference)))
 			}
 		}
@@ -125,7 +125,7 @@ func validateCapacities(c api.Catalog, o, provider api.Object, native api.Value)
 			capacity = 1500
 		}
 		if mtu, source := effectiveMTU(native, name, map[string]bool{}); mtu > capacity {
-			issues = appendIssues(issues, invariant("$.spec.network", fmt.Sprintf("interface %s of %s has MTU %d above capacity %d of %s, on which it holds address %s", name, o.Identity(), mtu, capacity, match.Network.Identity(), address),
+			issues = api.AppendIssues(issues, invariant("$.spec.network", fmt.Sprintf("interface %s of %s has MTU %d above capacity %d of %s, on which it holds address %s", name, o.Identity(), mtu, capacity, match.Network.Identity(), address),
 				mtuRemedy(o, name, source, capacity)+", or raise spec.mtu of "+match.Network.Identity()))
 		}
 	}
@@ -251,7 +251,7 @@ func validateCarriage(o api.Object, c api.Catalog, native api.Value, owner api.O
 			if fabric {
 				remedy = "remove VLAN interface " + stackVLAN(native, leaf.path) + " from the stack of interface " + iface + " on " + o.Identity() + ", or " + moveNIC(c, provider, o, nic, "has untaggedNetworkRef "+owner.Name())
 			}
-			issues = appendIssues(issues, invariant(path, "interface "+iface+" of "+o.Identity()+" reaches "+owner.Identity()+" through a VLAN on NIC "+nic+", and "+label+" does not carry it tagged", remedy))
+			issues = api.AppendIssues(issues, invariant(path, "interface "+iface+" of "+o.Identity()+" reaches "+owner.Identity()+" through a VLAN on NIC "+nic+", and "+label+" does not carry it tagged", remedy))
 		case !leaf.tagged && untagged != owner.Name():
 			held := "carries no Network untagged"
 			if untagged != "" {
@@ -261,7 +261,7 @@ func validateCarriage(o api.Object, c api.Catalog, native api.Value, owner api.O
 			if field := substrate.CarriageField(c, provider, reference, false); field != "" {
 				remedy = "set " + field + " to " + owner.Name() + ", or " + moveNIC(c, provider, o, nic, "carries it")
 			}
-			issues = appendIssues(issues, invariant(path, "interface "+iface+" of "+o.Identity()+" reaches "+owner.Identity()+" untagged on NIC "+nic+", and "+label+" "+held, remedy))
+			issues = api.AppendIssues(issues, invariant(path, "interface "+iface+" of "+o.Identity()+" reaches "+owner.Identity()+" untagged on NIC "+nic+", and "+label+" "+held, remedy))
 		}
 	}
 	return issues
@@ -349,7 +349,7 @@ func validateStackedVLANs(o api.Object, c api.Catalog, native api.Value) []api.I
 				}
 				remedy = "add " + carried + " to " + substrate.CarriageField(c, provider, reference, true) + ", " + moveNIC(c, provider, o, nic, "carries it") + ", or correct vlan.id of " + name
 			}
-			issues = appendIssues(issues, invariant(configurationPath(o), "VLAN interface "+name+" of "+o.Identity()+" tags VLAN "+strconv.FormatInt(id, 10)+" on NIC "+nic+", and "+substrate.SegmentLabel(c, provider, reference)+" carries no tagged Network with that vlan", remedy))
+			issues = api.AppendIssues(issues, invariant(configurationPath(o), "VLAN interface "+name+" of "+o.Identity()+" tags VLAN "+strconv.FormatInt(id, 10)+" on NIC "+nic+", and "+substrate.SegmentLabel(c, provider, reference)+" carries no tagged Network with that vlan", remedy))
 		}
 	}
 	return issues

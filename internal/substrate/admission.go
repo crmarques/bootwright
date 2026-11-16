@@ -132,25 +132,25 @@ func ValidateBMCDefaults(bmc api.Value, path string, authored bool) []api.Issue 
 	tls := bmc.Get("virtualMedia", "tls")
 	issues := []api.Issue{}
 	if authored && tls.Present() && tls.Len() == 0 {
-		issues = add(issues, issue(path+".virtualMedia.tls", "an authored virtual-media TLS block must set an option"))
+		issues = api.AppendIssues(issues, issue(path+".virtualMedia.tls", "an authored virtual-media TLS block must set an option"))
 	}
-	issues = add(issues, validateControllerTrust(bmc, path)...)
+	issues = api.AppendIssues(issues, validateControllerTrust(bmc, path)...)
 	trust := tls.Get("trust").Text()
 	if trust == "" {
 		trust = TrustImportCertificate
 	}
 	if tls.Has("restoreVerificationAfterBoot") && trust != "disableVerification" {
-		issues = add(issues, issue(path+".virtualMedia.tls.restoreVerificationAfterBoot", "restoring verification requires disableVerification trust"))
+		issues = api.AppendIssues(issues, issue(path+".virtualMedia.tls.restoreVerificationAfterBoot", "restoring verification requires disableVerification trust"))
 	}
 	if tls.Has("removeCertificateAfterBoot") && trust != "importCertificate" {
-		issues = add(issues, issue(path+".virtualMedia.tls.removeCertificateAfterBoot", "removing a certificate requires importCertificate trust"))
+		issues = api.AppendIssues(issues, issue(path+".virtualMedia.tls.removeCertificateAfterBoot", "removing a certificate requires importCertificate trust"))
 	}
 	if tls.Get("enableVerification").Bool() {
 		controllerTLS := bmc.Get("tls")
 		if trust == TrustDisableVerification || controllerTLS.Get("verification").Text() == "none" ||
 			(controllerTLS.Has("verify") && !controllerTLS.Get("verify").Bool()) ||
 			(bmc.Has("address") && !strings.HasPrefix(bmc.Get("address").Text(), "https://")) {
-			issues = add(issues, issue(path+".virtualMedia.tls.enableVerification", "enabling media verification requires verified HTTPS BMC access and importCertificate or established trust"))
+			issues = api.AppendIssues(issues, issue(path+".virtualMedia.tls.enableVerification", "enabling media verification requires verified HTTPS BMC access and importCertificate or established trust"))
 		}
 	}
 	return issues
@@ -190,11 +190,11 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 	}
 	issues := validateHostedSegmentMTUs(o, c)
 	bmc := o.Spec().Get("baremetal", "defaults", "bmc")
-	issues = add(issues, ValidateBMCDefaults(bmc, "$.spec.baremetal.defaults.bmc", true)...)
-	issues = add(issues, validateProviderMediaTrust(bmc, "$.spec.baremetal.defaults.bmc")...)
+	issues = api.AppendIssues(issues, ValidateBMCDefaults(bmc, "$.spec.baremetal.defaults.bmc", true)...)
+	issues = api.AppendIssues(issues, validateProviderMediaTrust(bmc, "$.spec.baremetal.defaults.bmc")...)
 	staging := o.Spec().Get("vsphere", "isoStaging")
 	if staging.Present() && !staging.Has("datastore") && !staging.Has("folder") {
-		issues = add(issues, issue("$.spec.vsphere.isoStaging", "an authored staging block must set datastore or folder"))
+		issues = api.AppendIssues(issues, issue("$.spec.vsphere.isoStaging", "an authored staging block must set datastore or folder"))
 	}
 	return issues
 }
@@ -216,17 +216,17 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	}
 	arm := o.Spec().Get(variant)
 	if variant == "baremetal" {
-		issues = add(issues, ValidateBMCDefaults(arm.Get("defaults", "bmc"), "$.spec.baremetal.defaults.bmc", false)...)
+		issues = api.AppendIssues(issues, ValidateBMCDefaults(arm.Get("defaults", "bmc"), "$.spec.baremetal.defaults.bmc", false)...)
 	}
 	if variant == "libvirt" {
 		bmc := arm.Get("bmcEmulation")
-		issues = add(issues, validateEmulatedListener(bmc)...)
-		issues = add(issues, validateEmulatedCertificate(bmc, c)...)
-		issues = add(issues, requirePositiveCapacity(arm, variant, "libvirt")...)
-		issues = add(issues, validateLibvirtDataDisks(o, arm)...)
+		issues = api.AppendIssues(issues, validateEmulatedListener(bmc)...)
+		issues = api.AppendIssues(issues, validateEmulatedCertificate(bmc, c)...)
+		issues = api.AppendIssues(issues, requirePositiveCapacity(arm, variant, "libvirt")...)
+		issues = api.AppendIssues(issues, validateLibvirtDataDisks(o, arm)...)
 		first, last, ranged := bmcPortRange(o, c)
 		if ranged && last > 65535 {
-			issues = add(issues, issue("$.spec.libvirt.bmcEmulation.port", "the emulated BMC port range must end at or below 65535"))
+			issues = api.AppendIssues(issues, issue("$.spec.libvirt.bmcEmulation.port", "the emulated BMC port range must end at or below 65535"))
 		}
 		for _, other := range c.OfKind(api.InfraProvider) {
 			peer := other.Spec().Get("libvirt")
@@ -235,7 +235,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			}
 			peerFirst, peerLast, peerRanged := bmcPortRange(other, c)
 			if ranged && peerRanged && first <= peerLast && peerFirst <= last {
-				issues = add(issues, issue("$.spec.libvirt.bmcEmulation.port", "emulated BMC port ranges of providers on one host must not overlap"))
+				issues = api.AppendIssues(issues, issue("$.spec.libvirt.bmcEmulation.port", "emulated BMC port ranges of providers on one host must not overlap"))
 				break
 			}
 		}
@@ -246,41 +246,41 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			path := fmt.Sprintf("$.spec.vsphere.failureDomains[%d]", index)
 			server, ok := arm.Get("vcenters").Named("server", domain.Get("server").Text())
 			if domain.Has("server") && !ok {
-				issues = add(issues, reference(path+".server", "failure-domain server must name a declared vCenter"))
+				issues = api.AppendIssues(issues, reference(path+".server", "failure-domain server must name a declared vCenter"))
 			} else if ok && domain.Get("topology", "datacenter").Present() && !slices.Contains(server.Get("datacenters").Strings(), domain.Get("topology", "datacenter").Text()) {
-				issues = add(issues, reference(path+".topology.datacenter", "failure-domain datacenter must be declared on its vCenter"))
+				issues = api.AppendIssues(issues, reference(path+".topology.datacenter", "failure-domain datacenter must be declared on its vCenter"))
 			}
 		}
-		issues = add(issues, requirePositiveCapacity(arm, variant, "vSphere")...)
+		issues = api.AppendIssues(issues, requirePositiveCapacity(arm, variant, "vSphere")...)
 		for index, profile := range arm.Get("machineProfiles").Items() {
 			path := fmt.Sprintf("$.spec.vsphere.machineProfiles[%d]", index)
 			if !profile.Has("failureDomainRef") && len(domains) > 1 {
-				issues = add(issues, issue(path+".failureDomainRef", "multiple failure domains require an explicit profile selection"))
+				issues = api.AppendIssues(issues, issue(path+".failureDomainRef", "multiple failure domains require an explicit profile selection"))
 			}
 		}
 	}
 	for index, segment := range o.Spec().Get("segments").Items() {
 		path := fmt.Sprintf("$.spec.segments[%d]", index)
 		if !segment.Has(variant) {
-			issues = add(issues, issue(path, "segment arm must match its provider substrate"))
+			issues = api.AppendIssues(issues, issue(path, "segment arm must match its provider substrate"))
 		}
 		if variant == "vsphere" && arm.Get("failureDomains").Len() > 1 && !segment.Get("vsphere").Has("distributedSwitch") {
-			issues = add(issues, issue(path+".vsphere.distributedSwitch", "multiple failure domains require an explicit distributed switch"))
+			issues = api.AppendIssues(issues, issue(path+".vsphere.distributedSwitch", "multiple failure domains require an explicit distributed switch"))
 		}
 		if variant == "kubevirt" {
 			ref := segment.Get("kubevirt", "networkRef")
 			kind := ref.Get("kind").Text()
 			if kind == "ClusterUserDefinedNetwork" && ref.Has("namespace") {
-				issues = add(issues, issue(path+".kubevirt.networkRef.namespace", "cluster-scoped networks forbid a namespace"))
+				issues = api.AppendIssues(issues, issue(path+".kubevirt.networkRef.namespace", "cluster-scoped networks forbid a namespace"))
 			}
 			if ref.Present() && !ref.Has("apiGroup") {
-				issues = add(issues, issue(path+".kubevirt.networkRef.apiGroup", "unknown external network kinds require an explicit API group"))
+				issues = api.AppendIssues(issues, issue(path+".kubevirt.networkRef.apiGroup", "unknown external network kinds require an explicit API group"))
 			}
 		}
-		issues = add(issues, validateCarriage(o, c, segment, variant, index)...)
+		issues = api.AppendIssues(issues, validateCarriage(o, c, segment, variant, index)...)
 	}
-	issues = add(issues, validateHostedProvider(o, c)...)
-	return issues[:min(len(issues), 999)]
+	issues = api.AppendIssues(issues, validateHostedProvider(o, c)...)
+	return api.BoundIssues(issues)
 }
 
 // NameableListener reports whether an emulated BMC may listen on address: one
@@ -353,7 +353,7 @@ func requirePositiveCapacity(arm api.Value, variant, label string) []api.Issue {
 		for _, size := range []string{"cpu", "memoryMiB", "diskGiB"} {
 			value := profile.Get(size)
 			if value.Type() != api.Integer || value.Text() == "0" || strings.HasPrefix(value.Text(), "-") {
-				issues = add(issues, issue(fmt.Sprintf("$.spec.%s.machineProfiles[%d].%s", variant, index, size), label+" machine profiles require a positive capacity"))
+				issues = api.AppendIssues(issues, issue(fmt.Sprintf("$.spec.%s.machineProfiles[%d].%s", variant, index, size), label+" machine profiles require a positive capacity"))
 			}
 		}
 	}
@@ -381,13 +381,13 @@ func validateLibvirtDataDisks(o api.Object, arm api.Value) []api.Issue {
 		path := fmt.Sprintf("$.spec.libvirt.machineProfiles[%d].dataDisks", index)
 		disks := profile.Get("dataDisks")
 		if disks.Len() > MaxDataDisks {
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: path,
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path,
 				Message:     fmt.Sprintf("a libvirt domain presents at most %d data disks beside its root disk", MaxDataDisks),
 				Remediation: fmt.Sprintf("declare at most %d dataDisks on spec.libvirt.machineProfiles[%d] of %s", MaxDataDisks, index, o.Identity())})
 		}
 		for disk, data := range disks.Items() {
 			if data.Get("name").Text() == "root" {
-				issues = add(issues, api.Issue{Code: "api.invariant", Field: fmt.Sprintf("%s[%d].name", path, disk),
+				issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: fmt.Sprintf("%s[%d].name", path, disk),
 					Message:     "the data disk name root is reserved for the root disk, which the domain presents as vda from root.qcow2",
 					Remediation: fmt.Sprintf("rename spec.libvirt.machineProfiles[%d].dataDisks[%d] on %s", index, disk, o.Identity())})
 			}
@@ -418,13 +418,13 @@ func validateFirmware(o api.Object) []api.Issue {
 	}
 	issues := []api.Issue{}
 	if !block.Has("secureBoot") && !block.Has("bootMode") && !block.Has("biosAttributes") {
-		issues = add(issues, refuse(path, "a firmware block must declare secureBoot, bootMode or biosAttributes", "set one of "+FirmwarePath+".secureBoot, bootMode or biosAttributes, or remove "+FirmwarePath))
+		issues = api.AppendIssues(issues, refuse(path, "a firmware block must declare secureBoot, bootMode or biosAttributes", "set one of "+FirmwarePath+".secureBoot, bootMode or biosAttributes, or remove "+FirmwarePath))
 	}
 	if !MachineBMC(o).Present() {
-		issues = add(issues, refuse(path, "firmware settings are applied through the Machine's BMC and none is declared", "declare "+BMCPath+" beside "+FirmwarePath+", or remove "+FirmwarePath))
+		issues = api.AppendIssues(issues, refuse(path, "firmware settings are applied through the Machine's BMC and none is declared", "declare "+BMCPath+" beside "+FirmwarePath+", or remove "+FirmwarePath))
 	}
 	if o.Spec().Get("os", "provided").Bool() {
-		issues = add(issues, refuse(path, "an OS-ready Machine is not installed by Bootwright, so nothing applies its firmware block", "remove "+FirmwarePath+", or set os.provided: false so Bootwright installs the Machine"))
+		issues = api.AppendIssues(issues, refuse(path, "an OS-ready Machine is not installed by Bootwright, so nothing applies its firmware block", "remove "+FirmwarePath+", or set os.provided: false so Bootwright installs the Machine"))
 	}
 	attributes := block.Get("biosAttributes")
 	if !attributes.Present() {
@@ -433,27 +433,27 @@ func validateFirmware(o api.Object) []api.Issue {
 	field := path + ".biosAttributes"
 	entries := attributes.Fields()
 	if len(entries) < 1 || len(entries) > FirmwareAttributes {
-		issues = add(issues, refuse(field, fmt.Sprintf("biosAttributes must declare 1 to %d entries, not %d", FirmwareAttributes, len(entries)), "declare between 1 and "+fmt.Sprint(FirmwareAttributes)+" BIOS attributes, or remove biosAttributes"))
+		issues = api.AppendIssues(issues, refuse(field, fmt.Sprintf("biosAttributes must declare 1 to %d entries, not %d", FirmwareAttributes, len(entries)), "declare between 1 and "+fmt.Sprint(FirmwareAttributes)+" BIOS attributes, or remove biosAttributes"))
 	}
 	for index, entry := range entries {
 		at := fmt.Sprintf("%s entry %d (%s)", field, index+1, quotedName(entry.Name))
 		if !firmwareAttributeName(entry.Name) {
-			issues = add(issues, refuse(field, fmt.Sprintf("%s: a name must start with a letter and hold 2 to %d letters, digits or underscores", at, FirmwareNameBytes), "rename the attribute to the exact name the BMC publishes in its Bios Attributes"))
+			issues = api.AppendIssues(issues, refuse(field, fmt.Sprintf("%s: a name must start with a letter and hold 2 to %d letters, digits or underscores", at, FirmwareNameBytes), "rename the attribute to the exact name the BMC publishes in its Bios Attributes"))
 		} else if strings.Contains(strings.ToLower(entry.Name), "password") {
-			issues = add(issues, refuse(field, at+": a firmware password is secret material and never desired state", "remove the attribute and set the password through the BMC's own interface"))
+			issues = api.AppendIssues(issues, refuse(field, at+": a firmware password is secret material and never desired state", "remove the attribute and set the password through the BMC's own interface"))
 		}
 		switch value := entry.Value; value.Type() {
 		case api.String:
 			if !firmwareString(value.Text()) {
-				issues = add(issues, refuse(field, fmt.Sprintf("%s: a string value must be at most %d bytes of printable ASCII", at, FirmwareStringBytes), "shorten the value or remove control and non-ASCII characters"))
+				issues = api.AppendIssues(issues, refuse(field, fmt.Sprintf("%s: a string value must be at most %d bytes of printable ASCII", at, FirmwareStringBytes), "shorten the value or remove control and non-ASCII characters"))
 			}
 		case api.Integer:
 			if _, ok := value.Int64(); !ok {
-				issues = add(issues, refuse(field, at+": an integer value must fit in 64 bits", "use an integer between -9223372036854775808 and 9223372036854775807"))
+				issues = api.AppendIssues(issues, refuse(field, at+": an integer value must fit in 64 bits", "use an integer between -9223372036854775808 and 9223372036854775807"))
 			}
 		case api.Boolean:
 		default:
-			issues = add(issues, refuse(field, at+": a value must be a string, an integer or a boolean", "declare the attribute as a string, an integer or a boolean, not a null, a float, a list or a map"))
+			issues = api.AppendIssues(issues, refuse(field, at+": a value must be a string, an integer or a boolean", "declare the attribute as a string, an integer or a boolean, not a null, a float, a list or a map"))
 		}
 	}
 	return issues
@@ -492,18 +492,14 @@ func firmwareString(value string) bool {
 	return true
 }
 
+const providerRemediation = "make the provider and its local selections consistent"
+
 func issue(field, message string) api.Issue {
-	return api.Issue{Code: "api.invariant", Field: field, Message: message, Remediation: "make the provider and its local selections consistent"}
+	return api.Issue{Code: "api.invariant", Field: field, Message: message, Remediation: providerRemediation}
 }
 
 func reference(field, message string) api.Issue {
-	i := issue(field, message)
-	i.Code = "api.reference"
-	return i
-}
-
-func add(issues []api.Issue, more ...api.Issue) []api.Issue {
-	return append(issues, more[:min(len(more), 999-len(issues))]...)
+	return api.ReferenceIssue(field, message, providerRemediation)
 }
 
 func ClientTLSExceptions(object api.Object, path string) bool {

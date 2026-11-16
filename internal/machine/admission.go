@@ -244,19 +244,19 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 	}
 	s := o.Spec()
 	issues := []api.Issue{}
-	issues = appendIssues(issues, validateServiceIntent(o)...)
+	issues = api.AppendIssues(issues, validateServiceIntent(o)...)
 	if installed(o) && s.Has("access") {
-		issues = appendIssues(issues, invariant("$.spec.access", "Bootwright-installed Machines must not author access", "remove spec.access; Bootwright derives an installed Machine's access from the fleet key"))
+		issues = api.AppendIssues(issues, invariant("$.spec.access", "Bootwright-installed Machines must not author access", "remove spec.access; Bootwright derives an installed Machine's access from the fleet key"))
 	}
 	if s.Has("access", "ssh", "auth", "passwordRef") && !s.Has("access", "ssh", "user") {
-		issues = appendIssues(issues, invariant("$.spec.access.ssh.user", "password authentication requires an authored user", "set spec.access.ssh.user, or authenticate with spec.access.ssh.auth.privateKeyRef instead of a password"))
+		issues = api.AppendIssues(issues, invariant("$.spec.access.ssh.user", "password authentication requires an authored user", "set spec.access.ssh.user, or authenticate with spec.access.ssh.auth.privateKeyRef instead of a password"))
 	}
 	if s.Get("access", "rootLogin").Text() == "revoke" && !s.Has("access", "ssh") {
-		issues = appendIssues(issues, invariant("$.spec.access.rootLogin", "root-login revocation requires authored SSH access", "author spec.access.ssh for the login that replaces root, or remove spec.access.rootLogin"))
+		issues = api.AppendIssues(issues, invariant("$.spec.access.rootLogin", "root-login revocation requires authored SSH access", "author spec.access.ssh for the login that replaces root, or remove spec.access.rootLogin"))
 	}
-	issues = appendIssues(issues, substrate.ValidateBMCDefaults(substrate.MachineBMC(o), "$."+substrate.BMCPath, true)...)
-	issues = appendIssues(issues, validateNative(s.Get("network", "inline", "nmstate"), "$.spec.network.inline.nmstate", false)...)
-	issues = appendIssues(issues, validateNative(s.Get("network", "overrides"), "$.spec.network.overrides", true)...)
+	issues = api.AppendIssues(issues, substrate.ValidateBMCDefaults(substrate.MachineBMC(o), "$."+substrate.BMCPath, true)...)
+	issues = api.AppendIssues(issues, validateNative(s.Get("network", "inline", "nmstate"), "$.spec.network.inline.nmstate", false)...)
+	issues = api.AppendIssues(issues, validateNative(s.Get("network", "overrides"), "$.spec.network.overrides", true)...)
 	return issues
 }
 
@@ -269,38 +269,38 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	}
 	s := o.Spec()
 	issues := []api.Issue{}
-	issues = appendIssues(issues, validateServices(o, c)...)
+	issues = api.AppendIssues(issues, validateServices(o, c)...)
 	if envs := c.OfKind(api.Environment); len(envs) == 1 && s.Has("placement", "site") {
 		if _, ok := namedValue(envs[0].Spec().Get("sites"), s.Get("placement", "site").Text()); !ok {
-			issues = appendIssues(issues, reference("$.spec.placement.site", "site must name an Environment site", "set spec.placement.site to a site declared in the Environment's spec.sites"))
+			issues = api.AppendIssues(issues, api.ReferenceIssue("$.spec.placement.site", "site must name an Environment site", "set spec.placement.site to a site declared in the Environment's spec.sites"))
 		}
 	}
-	issues = appendIssues(issues, validateProvision(o)...)
+	issues = api.AppendIssues(issues, validateProvision(o)...)
 	provider, found := Provider(o, c)
 	variant := substrate.Variant(provider)
 	armIssues := validateArm(o, provider, found, variant)
-	issues = appendIssues(issues, armIssues...)
+	issues = api.AppendIssues(issues, armIssues...)
 	if found && variant != "" && len(armIssues) == 0 {
-		issues = appendIssues(issues, validateSubstrate(c, o, provider, variant)...)
+		issues = api.AppendIssues(issues, validateSubstrate(c, o, provider, variant)...)
 	}
-	issues = appendIssues(issues, validateSegmentRefs(c, o, provider, found && len(armIssues) == 0)...)
-	issues = appendIssues(issues, validateHardware(o, c, variant)...)
-	issues = appendIssues(issues, validateErase(o, variant)...)
-	issues = appendIssues(issues, validateClear(o, variant == substrate.ArmBaremetal)...)
-	issues = appendIssues(issues, validateVolumeRoot(o, variant)...)
-	issues = appendIssues(issues, validateRootSize(o)...)
-	issues = appendIssues(issues, validateSelectingSerials(o, c)...)
+	issues = api.AppendIssues(issues, validateSegmentRefs(c, o, provider, found && len(armIssues) == 0)...)
+	issues = api.AppendIssues(issues, validateHardware(o, c, variant)...)
+	issues = api.AppendIssues(issues, validateErase(o, variant)...)
+	issues = api.AppendIssues(issues, validateClear(o, variant == substrate.ArmBaremetal)...)
+	issues = api.AppendIssues(issues, validateVolumeRoot(o, variant)...)
+	issues = api.AppendIssues(issues, validateRootSize(o)...)
+	issues = api.AppendIssues(issues, validateSelectingSerials(o, c)...)
 	network := s.Get("network")
 	configured := network.Has("configRef") || network.Has("inline")
-	issues = appendIssues(issues, validateNetworkContacts(o, c, configured)...)
-	issues = appendIssues(issues, validateDerivedContact(o, c)...)
-	issues = appendIssues(issues, validateInstallNetwork(o, c, provider, found, variant, configured)...)
-	issues = appendIssues(issues, validateNetworkMembership(o, c)...)
-	issues = appendIssues(issues, validateAccess(o, c)...)
-	issues = appendIssues(issues, validateFirewall(o, c)...)
-	issues = appendIssues(issues, validatePlacementHost(o, c)...)
-	issues = appendIssues(issues, validateHostKey(o, c)...)
-	return appendIssues(issues, validateBMC(substrate.MachineBMC(o), s.Has("substrate", "providerRef") && !found)...)
+	issues = api.AppendIssues(issues, validateNetworkContacts(o, c, configured)...)
+	issues = api.AppendIssues(issues, validateDerivedContact(o, c)...)
+	issues = api.AppendIssues(issues, validateInstallNetwork(o, c, provider, found, variant, configured)...)
+	issues = api.AppendIssues(issues, validateNetworkMembership(o, c)...)
+	issues = api.AppendIssues(issues, validateAccess(o, c)...)
+	issues = api.AppendIssues(issues, validateFirewall(o, c)...)
+	issues = api.AppendIssues(issues, validatePlacementHost(o, c)...)
+	issues = api.AppendIssues(issues, validateHostKey(o, c)...)
+	return api.AppendIssues(issues, validateBMC(substrate.MachineBMC(o), s.Has("substrate", "providerRef") && !found)...)
 }
 
 func validateProvision(o api.Object) []api.Issue {
@@ -311,27 +311,27 @@ func validateProvision(o api.Object) []api.Issue {
 	if provided.Bool() {
 		for _, key := range []string{"installProfileRef", "install"} {
 			if s.Has("os", key) {
-				issues = appendIssues(issues, invariant("$.spec.os."+key, "OS-ready Machines forbid installation declarations", "remove spec.os."+key+", or set spec.os.provided to false for a Machine Bootwright installs"))
+				issues = api.AppendIssues(issues, invariant("$.spec.os."+key, "OS-ready Machines forbid installation declarations", "remove spec.os."+key+", or set spec.os.provided to false for a Machine Bootwright installs"))
 			}
 		}
 		for _, key := range []string{"configRef", "inline", "interfaceMatches", "installAddressRef", "overrides"} {
 			if network.Has(key) {
-				issues = appendIssues(issues, invariant("$.spec.network."+key, "OS-ready Machines declare contacts only", "remove spec.network."+key+"; an OS-ready Machine declares contacts only"))
+				issues = api.AppendIssues(issues, invariant("$.spec.network."+key, "OS-ready Machines declare contacts only", "remove spec.network."+key+"; an OS-ready Machine declares contacts only"))
 			}
 		}
 		if arm := substrate.MachineArm(o); substrate.VirtualArm(arm) && s.Has("substrate", arm, "nics") {
 			path := "spec.substrate." + arm + ".nics"
-			issues = appendIssues(issues, invariant("$."+path, "OS-ready Machines declare contacts only", "remove "+path+"; an OS-ready Machine declares contacts only"))
+			issues = api.AppendIssues(issues, invariant("$."+path, "OS-ready Machines declare contacts only", "remove "+path+"; an OS-ready Machine declares contacts only"))
 		}
 		for _, name := range substrate.MachineRootDeviceHints(o).Names() {
 			if path := substrate.RootDeviceHintPath(name); name != "deviceName" && name != "wwn" && name != "sizeBytes" {
-				issues = appendIssues(issues, api.Issue{Code: "api.deferred", Field: "$." + path,
+				issues = api.AppendIssues(issues, api.Issue{Code: "api.deferred", Field: "$." + path,
 					Message:     "nothing installs an OS-ready Machine, so " + path + " selects no disk; only deviceName and wwn name its root disk, to keep it out of Ceph OSD selections",
 					Remediation: "remove " + path + ", or keep it knowing nothing reads it on an OS-ready Machine"})
 			}
 		}
 	} else if provided.Present() && !s.Has("substrate", "providerRef") {
-		issues = appendIssues(issues, invariant("$.spec.substrate.providerRef", "non-provided Machines require a substrate provider", "set spec.substrate.providerRef to the InfraProvider that realizes this Machine, or set spec.os.provided to true for a Machine whose OS is already installed"))
+		issues = api.AppendIssues(issues, invariant("$.spec.substrate.providerRef", "non-provided Machines require a substrate provider", "set spec.substrate.providerRef to the InfraProvider that realizes this Machine, or set spec.os.provided to true for a Machine whose OS is already installed"))
 	}
 	return issues
 }
@@ -361,14 +361,14 @@ func validateSubstrate(c api.Catalog, o, provider api.Object, variant string) []
 	profileRef := s.Get("substrate", variant, "profileRef")
 	if variant != substrate.ArmBaremetal {
 		if provided.Present() && !provided.Bool() && !profileRef.Present() {
-			issues = appendIssues(issues, invariant(path, "virtual installation requires a provider-local machine profile", "set "+path[2:]+" to a machine profile of the selected provider"))
+			issues = api.AppendIssues(issues, invariant(path, "virtual installation requires a provider-local machine profile", "set "+path[2:]+" to a machine profile of the selected provider"))
 		}
 	}
 	if substrate.VirtualArm(variant) && provided.Present() && !provided.Bool() {
-		issues = appendIssues(issues, validateVirtualNICs(c, o, provider, variant)...)
+		issues = api.AppendIssues(issues, validateVirtualNICs(c, o, provider, variant)...)
 	}
 	if variant == substrate.ArmBaremetal && provided.Present() && !provided.Bool() {
-		issues = appendIssues(issues, validateBaremetal(o)...)
+		issues = api.AppendIssues(issues, validateBaremetal(o)...)
 	}
 	return issues
 }
@@ -378,7 +378,7 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 	provided := o.Spec().Get("os", "provided")
 	network := o.Spec().Get("network")
 	if network.Has("overrides") && !network.Has("configRef") {
-		issues = appendIssues(issues, invariant("$.spec.network.overrides", "network overrides require configRef", "select a reusable configuration with spec.network.configRef, or remove spec.network.overrides"))
+		issues = api.AppendIssues(issues, invariant("$.spec.network.overrides", "network overrides require configRef", "select a reusable configuration with spec.network.configRef, or remove spec.network.overrides"))
 	}
 	for _, key := range []string{"interfaceMatches", "installAddressRef"} {
 		if key == "installAddressRef" && anacondaInstalled(o, c) {
@@ -386,12 +386,12 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 		}
 		path := "spec.network." + key
 		if network.Has(key) && !configured && !provided.Bool() {
-			issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: "$." + path, Message: "network selections and bindings require a configured network",
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$." + path, Message: "network selections and bindings require a configured network",
 				Remediation: "select a network configuration on " + o.Identity() + " with spec.network.configRef or spec.network.inline, or remove " + path})
 		}
 	}
 	if network.Has("inline") {
-		issues = appendIssues(issues, validateConfiguration(network.Get("inline"), c, "$.spec.network.inline")...)
+		issues = api.AppendIssues(issues, validateConfiguration(network.Get("inline"), c, "$.spec.network.inline")...)
 	}
 	for i, address := range network.Get("addresses").Items() {
 		path := fmt.Sprintf("$.spec.network.addresses[%d]", i)
@@ -400,11 +400,11 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 			if provided.Bool() {
 				remediation = "remove " + path[2:] + ".interface from " + o.Identity() + "; an OS-ready Machine declares contacts only"
 			}
-			issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: path + ".interface", Message: "interface assignment requires a non-provided Machine with configured network", Remediation: remediation})
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path + ".interface", Message: "interface assignment requires a non-provided Machine with configured network", Remediation: remediation})
 		}
 		if address.Get("name").Text() == "fqdn" {
 			if address.Has("interface") || !api.ValidLexical("dns", address.Get("address").Text()) {
-				issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: path, Message: "fqdn must be an unassigned DNS contact",
+				issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path, Message: "fqdn must be an unassigned DNS contact",
 					Remediation: "correct " + path[2:] + " on " + o.Identity() + " to a lowercase DNS name with no interface"})
 			}
 			for _, other := range c.OfKind(api.Machine) {
@@ -413,7 +413,7 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 				}
 				for _, peer := range other.Spec().Get("network", "addresses").Items() {
 					if peer.Get("name").Text() == "fqdn" && peer.Get("address").Equal(address.Get("address")) {
-						issues = appendIssues(issues, invariant(path+".address", "Machine fqdn contacts must be unique", "give this Machine an fqdn contact no other Machine declares"))
+						issues = api.AppendIssues(issues, invariant(path+".address", "Machine fqdn contacts must be unique", "give this Machine an fqdn contact no other Machine declares"))
 					}
 				}
 			}
@@ -425,16 +425,16 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, found bool, variant string, configured bool) []api.Issue {
 	var issues []api.Issue
 	native, compositionIssues := ComposeNetwork(o, c)
-	issues = appendIssues(issues, compositionIssues...)
+	issues = api.AppendIssues(issues, compositionIssues...)
 	if found && configured {
-		issues = appendIssues(issues, validateSegments(c, o, provider, native)...)
+		issues = api.AppendIssues(issues, validateSegments(c, o, provider, native)...)
 	}
 	if found && variant == substrate.ArmLibvirt && len(compositionIssues) == 0 {
-		issues = appendIssues(issues, validateDomainInterfaces(o, c, native, configured)...)
+		issues = api.AppendIssues(issues, validateDomainInterfaces(o, c, native, configured)...)
 	}
 	if _, declared := namedValue(o.Spec().Get("network", "addresses"), o.Spec().Get("network", "installAddressRef").Text()); len(compositionIssues) == 0 && (declared || !o.Spec().Has("network", "installAddressRef")) {
 		address, selectionIssues := selectInstallAddress(o, c, false)
-		issues = appendIssues(issues, selectionIssues...)
+		issues = api.AppendIssues(issues, selectionIssues...)
 		if address.Present() {
 			prefix, _ := AssignedPrefix(o, c, address)
 			for _, other := range c.OfKind(api.Machine) {
@@ -444,17 +444,17 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 				peer, pi := selectInstallAddress(other, c, false)
 				pp, e := netip.ParseAddr(peer.Get("address").Text())
 				if len(pi) == 0 && e == nil && prefix.Addr() == pp {
-					issues = appendIssues(issues, invariant("$.spec.network.installAddressRef", "selected installation IPs must be unique across Machines", "select an install address whose IP no other Machine selects"))
+					issues = api.AppendIssues(issues, invariant("$.spec.network.installAddressRef", "selected installation IPs must be unique across Machines", "select an install address whose IP no other Machine selects"))
 					break
 				}
 			}
 			if found && variant == substrate.ArmLibvirt {
-				issues = appendIssues(issues, validateManagedSegmentContainment(c, o, prefix, provider, address.Get("interface").Text(), native)...)
+				issues = api.AppendIssues(issues, validateManagedSegmentContainment(c, o, prefix, provider, address.Get("interface").Text(), native)...)
 			}
-			issues = appendIssues(issues, validateInstallGateway(o, c, address, prefix, native)...)
+			issues = api.AppendIssues(issues, validateInstallGateway(o, c, address, prefix, native)...)
 		}
 		if anacondaInstalled(o, c) && len(selectionIssues) == 0 && (address.Present() || !c.UndecodableOfKind(api.Network)) {
-			issues = appendIssues(issues, validateAnacondaNetwork(address, native, configured)...)
+			issues = api.AppendIssues(issues, validateAnacondaNetwork(address, native, configured)...)
 		}
 	}
 	return issues
@@ -495,10 +495,10 @@ func validateAccess(o api.Object, c api.Catalog) []api.Issue {
 	s := o.Spec()
 	provided := s.Get("os", "provided")
 	if local := s.Get("access", "local"); local.Present() && (!local.Bool() || !provided.Bool()) {
-		issues = appendIssues(issues, invariant("$.spec.access.local", "local access must be true and requires an OS-ready Machine", "remove spec.access.local, or set it to true on an OS-ready Machine"))
+		issues = api.AppendIssues(issues, invariant("$.spec.access.local", "local access must be true and requires an OS-ready Machine", "remove spec.access.local, or set it to true on an OS-ready Machine"))
 	}
 	if s.Get("access", "rootLogin").Text() == "revoke" && (installed(o) || !successorLogin(o, c)) {
-		issues = appendIssues(issues, invariant("$.spec.access.rootLogin", "revoking root login requires a managed storage-cluster non-root successor login", "remove spec.access.rootLogin, or make this Machine a node of "+successorLoginHolders()))
+		issues = api.AppendIssues(issues, invariant("$.spec.access.rootLogin", "revoking root login requires a managed storage-cluster non-root successor login", "remove spec.access.rootLogin, or make this Machine a node of "+successorLoginHolders()))
 	}
 	return issues
 }
@@ -506,13 +506,13 @@ func validateAccess(o api.Object, c api.Catalog) []api.Issue {
 func validateBMC(bmc api.Value, unresolvedProvider bool) []api.Issue {
 	var issues []api.Issue
 	const path = substrate.BMCPath
-	issues = appendIssues(issues, substrate.ValidateBMCDefaults(bmc, "$."+path, false)...)
+	issues = api.AppendIssues(issues, substrate.ValidateBMCDefaults(bmc, "$."+path, false)...)
 	if bmc.Present() {
 		if !bmc.Has("credentialsRef") && !unresolvedProvider {
-			issues = appendIssues(issues, invariant("$."+path+".credentialsRef", "BMC credentials are required after provider inheritance", "set "+path+".credentialsRef, or inherit it from the provider's spec.baremetal.defaults.bmc.credentialsRef"))
+			issues = api.AppendIssues(issues, invariant("$."+path+".credentialsRef", "BMC credentials are required after provider inheritance", "set "+path+".credentialsRef, or inherit it from the provider's spec.baremetal.defaults.bmc.credentialsRef"))
 		}
 		if _, ok := substrate.NormalizeControllerEndpoint(bmc.Get("address").Text()); bmc.Has("address") && !ok {
-			issues = appendIssues(issues, invariant("$."+path+".address", "the BMC address must be a canonical absolute http or https URL naming exactly one /redfish/v1/Systems/<id> ComputerSystem", "set "+path+".address to an http or https URL ending in /redfish/v1/Systems/<id>"))
+			issues = api.AppendIssues(issues, invariant("$."+path+".address", "the BMC address must be a canonical absolute http or https URL naming exactly one /redfish/v1/Systems/<id> ComputerSystem", "set "+path+".address to an http or https URL ending in /redfish/v1/Systems/<id>"))
 		}
 	}
 	return issues
@@ -525,7 +525,7 @@ func validateBMC(bmc api.Value, unresolvedProvider bool) []api.Issue {
 func validateManagedSegmentContainment(c api.Catalog, o api.Object, address netip.Prefix, provider api.Object, installInterface string, native api.Value) []api.Issue {
 	var issues []api.Issue
 	for _, reference := range installSegmentReferences(c, o, provider, native, installInterface) {
-		issues = appendIssues(issues, validateManagedSegmentAddress(c, o, address, provider, reference)...)
+		issues = api.AppendIssues(issues, validateManagedSegmentAddress(c, o, address, provider, reference)...)
 	}
 	return issues
 }
@@ -632,7 +632,7 @@ func hostKeyCredentialCollisions(o api.Object, c api.Catalog, key string) []api.
 	}
 	issues := []api.Issue{}
 	collide := func(holder api.Object, field string) {
-		issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.os.install.hostKeyRef",
+		issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.os.install.hostKeyRef",
 			Message:     "the SSH host key Secret " + key + " is also " + holder.Identity() + "'s " + field + "; a host key is this Machine's own and no other credential",
 			Remediation: "name a dedicated sshKeyPair Secret in spec.os.install.hostKeyRef on " + o.Identity()})
 	}
@@ -658,38 +658,38 @@ func validateBaremetal(o api.Object) []api.Issue {
 	s := o.Spec()
 	issues := []api.Issue{}
 	if s.Get("hardware", "nics").Len() == 0 {
-		issues = appendIssues(issues, invariant("$.spec.hardware.nics", "bare-metal installation requires hardware NICs", "declare the install NICs in spec.hardware.nics"))
+		issues = api.AppendIssues(issues, invariant("$.spec.hardware.nics", "bare-metal installation requires hardware NICs", "declare the install NICs in spec.hardware.nics"))
 	}
 	for i, nic := range s.Get("hardware", "nics").Items() {
 		if substrate.MachineMAC(o, nic.Get("name").Text()) == "" {
-			issues = appendIssues(issues, invariant(fmt.Sprintf("$.spec.hardware.nics[%d]", i), "every bare-metal install NIC requires a MAC",
+			issues = api.AppendIssues(issues, invariant(fmt.Sprintf("$.spec.hardware.nics[%d]", i), "every bare-metal install NIC requires a MAC",
 				fmt.Sprintf("add a spec.substrate.baremetal.nics entry with nicRef %s and its macAddress", nic.Get("name").Text())))
 		}
 	}
 	if !substrate.MachineBMC(o).Present() {
-		issues = appendIssues(issues, invariant("$."+substrate.BMCPath, "bare-metal installation requires a BMC", "declare "+substrate.BMCPath+", or inherit it from the provider's spec.baremetal.defaults.bmc"))
+		issues = api.AppendIssues(issues, invariant("$."+substrate.BMCPath, "bare-metal installation requires a BMC", "declare "+substrate.BMCPath+", or inherit it from the provider's spec.baremetal.defaults.bmc"))
 	}
 	// A physical installation delivers its declared host key.
 	if installed(o) && !s.Has("os", "install", "hostKeyRef") {
-		issues = appendIssues(issues, invariant("$.spec.os.install.hostKeyRef", "bare-metal installation requires the SSH host key it delivers", "set spec.os.install.hostKeyRef to the sshKeyPair Secret whose pair the installation delivers as the host key"))
+		issues = api.AppendIssues(issues, invariant("$.spec.os.install.hostKeyRef", "bare-metal installation requires the SSH host key it delivers", "set spec.os.install.hostKeyRef to the sshKeyPair Secret whose pair the installation delivers as the host key"))
 	}
 	if reason, remedy := PhysicalRootDeviceNameRefusal(o); reason != "" {
-		return appendIssues(issues, invariant("$.spec.hardware.rootDevice.deviceName", reason, remedy))
+		return api.AppendIssues(issues, invariant("$.spec.hardware.rootDevice.deviceName", reason, remedy))
 	}
 	if wwn := s.Get("substrate", substrate.ArmBaremetal, "rootDevice", "wwn"); wwn.Present() && !substrate.ValidRootWWN(wwn.Text()) {
-		return appendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice.wwn", "a root disk's wwn is 0x followed by 16 or 32 lowercase hexadecimal digits",
+		return api.AppendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice.wwn", "a root disk's wwn is 0x followed by 16 or 32 lowercase hexadecimal digits",
 			"set spec.substrate.baremetal.rootDevice.wwn on "+o.Identity()+" to the disk's WWN in that form, as its /dev/disk/by-id/wwn-0x link names it"))
 	}
 	if !installed(o) {
 		if reason, remedy := AgentRootDeviceRefusal(o); reason != "" {
-			issues = appendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice", reason, remedy))
+			issues = api.AppendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice", reason, remedy))
 		}
 		return issues
 	}
 	physical := s.Get("substrate", substrate.ArmBaremetal, "rootDevice")
 	bySerial := physical.Has("serialNumber") && physical.Has("sizeBytes")
 	if !physical.Has("wwn") && !bySerial && !physical.Has("volumeRef") && !physical.Has("bootVolume") && !physical.Has("discover") {
-		issues = appendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice", "bare-metal installation requires a root selector: a wwn, serialNumber with sizeBytes, or a volumeRef or bootVolume logical volume",
+		issues = api.AppendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice", "bare-metal installation requires a root selector: a wwn, serialNumber with sizeBytes, or a volumeRef or bootVolume logical volume",
 			RootFormsRemedy(" on "+o.Identity())))
 	}
 	return issues
@@ -752,7 +752,7 @@ func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
 		path := fmt.Sprintf("$.spec.substrate.%s.nics[%d]", arm, i)
 		nicRef := entry.Get("nicRef").Text()
 		if bound[nicRef] {
-			issues = appendIssues(issues, invariant(path+".nicRef", "each hardware NIC has one MAC", "remove the repeated "+path[2:]+" entry"))
+			issues = api.AppendIssues(issues, invariant(path+".nicRef", "each hardware NIC has one MAC", "remove the repeated "+path[2:]+" entry"))
 		}
 		bound[nicRef] = true
 		mac, ok := canonicalMAC(entry.Get("macAddress").Text())
@@ -761,11 +761,11 @@ func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
 		}
 		path += ".macAddress"
 		if seen[mac] {
-			issues = appendIssues(issues, invariant(path, "canonical hardware MACs must be unique", "correct "+path[2:]+"; another NIC of this Machine declares the same MAC"))
+			issues = api.AppendIssues(issues, invariant(path, "canonical hardware MACs must be unique", "correct "+path[2:]+"; another NIC of this Machine declares the same MAC"))
 		}
 		seen[mac] = true
 		if variant == substrate.ArmVSphere && (mac < "00:50:56:00:00:00" || mac > "00:50:56:3f:ff:ff") {
-			issues = appendIssues(issues, invariant(path, "vSphere MAC must be in the manual assignment range", "set "+path[2:]+" to a MAC from 00:50:56:00:00:00 to 00:50:56:3f:ff:ff"))
+			issues = api.AppendIssues(issues, invariant(path, "vSphere MAC must be in the manual assignment range", "set "+path[2:]+" to a MAC from 00:50:56:00:00:00 to 00:50:56:3f:ff:ff"))
 		}
 		for _, other := range c.OfKind(api.Machine) {
 			if other.Identity() == o.Identity() {
@@ -774,7 +774,7 @@ func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
 			for _, peer := range substrate.MachineMACs(other).Items() {
 				pm, ok := canonicalMAC(peer.Get("macAddress").Text())
 				if ok && pm == mac {
-					issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: path, Message: "authored hardware MACs must be unique across Machines",
+					issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path, Message: "authored hardware MACs must be unique across Machines",
 						Remediation: "correct " + path[2:] + " on " + o.Identity() + ", a MAC " + other.Identity() + " also declares"})
 				}
 			}
@@ -821,12 +821,12 @@ func validateSegmentRefs(c api.Catalog, o, provider api.Object, found bool) []ap
 			if arm != substrate.ArmBaremetal {
 				continue
 			}
-			issues = appendIssues(issues, invariant(field, "NIC "+entry.Get("nicRef").Text()+" of "+o.Identity()+" names segment "+entry.Get("segmentRef").Text()+", and the Machine names no provider whose segments it could select",
+			issues = api.AppendIssues(issues, invariant(field, "NIC "+entry.Get("nicRef").Text()+" of "+o.Identity()+" names segment "+entry.Get("segmentRef").Text()+", and the Machine names no provider whose segments it could select",
 				"set spec.substrate.providerRef on "+o.Identity()+" to the InfraProvider that declares the segment, or remove "+field[2:]))
 			continue
 		}
 		if segment, ok := namedValue(substrate.Segments(c, provider), entry.Get("segmentRef").Text()); found && ok && !segment.Has(arm) {
-			issues = appendIssues(issues, reference(field, "segment must name a matching arm on the selected provider", "set "+field[2:]+" to a spec.segments entry of "+provider.Identity()+" that has its "+arm+" arm"))
+			issues = api.AppendIssues(issues, api.ReferenceIssue(field, "segment must name a matching arm on the selected provider", "set "+field[2:]+" to a spec.segments entry of "+provider.Identity()+" that has its "+arm+" arm"))
 		}
 	}
 	return issues
@@ -844,7 +844,7 @@ func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant string) 
 	for i, nic := range nics {
 		if !api.ValidLexical("ifname", nic) {
 			field := fmt.Sprintf("$.spec.hardware.nics[%d].name", i)
-			issues = appendIssues(issues, invariant(field, "NIC "+nic+" of "+o.Identity()+" is a "+variant+" vNIC the installer pins under its NIC name unless an interface matches it, and "+interfaceNameRule,
+			issues = api.AppendIssues(issues, invariant(field, "NIC "+nic+" of "+o.Identity()+" is a "+variant+" vNIC the installer pins under its NIC name unless an interface matches it, and "+interfaceNameRule,
 				"rename NIC "+nic+" in spec.hardware.nics on "+o.Identity()+" to an interface name the guest may use, such as enp"+strconv.Itoa(i+1)+"s0, and update every nicRef that names it"))
 		}
 	}
@@ -862,7 +862,7 @@ func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant string) 
 	}
 	for _, nic := range nics {
 		if substrate.NICSegment(c, provider, o, nic) == "" && !c.UndecodableOfKind(api.Network) {
-			issues = appendIssues(issues, invariant(path, fmt.Sprintf("NIC %s of %s selects no segment, and %s offers %d segments %s, not exactly one that every NIC defaults to", nic, o.Identity(), provider.Identity(), segments.Len(), offered),
+			issues = api.AppendIssues(issues, invariant(path, fmt.Sprintf("NIC %s of %s selects no segment, and %s offers %d segments %s, not exactly one that every NIC defaults to", nic, o.Identity(), provider.Identity(), segments.Len(), offered),
 				"add a "+path[2:]+" entry with nicRef "+nic+" and a segmentRef naming "+named+" on "+o.Identity()))
 		}
 	}
@@ -878,7 +878,7 @@ func validateVirtualMACs(o api.Object, native api.Value, variant string) []api.I
 			if override, found := namedValue(o.Spec().Get("network", "overrides", "interfaces"), name); found && override.Has("mac-address") {
 				field, where = "$.spec.network.overrides", "in spec.network.overrides of "+o.Identity()
 			}
-			issues = appendIssues(issues, invariant(field, "ethernet interface "+name+" of "+o.Identity()+" authors a mac-address, but a "+variant+" provider derives each vNIC's MAC from the context, Machine and NIC names",
+			issues = api.AppendIssues(issues, invariant(field, "ethernet interface "+name+" of "+o.Identity()+" authors a mac-address, but a "+variant+" provider derives each vNIC's MAC from the context, Machine and NIC names",
 				"remove mac-address from interface "+name+" "+where+", and match the interface to its NIC with spec.network.interfaceMatches if their names differ"))
 		}
 	}
@@ -941,7 +941,7 @@ func normalizeNativeMACs(native api.Value) api.Value {
 
 func validateConfiguration(config api.Value, c api.Catalog, path string) []api.Issue {
 	issues := validateNative(config.Get("nmstate"), path+".nmstate", false)
-	issues = appendIssues(issues, infrastructureservices.ValidateServerSelections(config.Get("dns"), c, api.DNSServer, path+".dns")...)
+	issues = api.AppendIssues(issues, infrastructureservices.ValidateServerSelections(config.Get("dns"), c, api.DNSServer, path+".dns")...)
 	managed := map[string]bool{}
 	for _, selection := range config.Get("dns").Items() {
 		if server, ok := c.Find(api.DNSServer, selection.Get("serverRef").Text()); ok && server.Spec().Get("management").Text() == "managed" {
@@ -949,7 +949,7 @@ func validateConfiguration(config api.Value, c api.Catalog, path string) []api.I
 		}
 	}
 	if len(managed) > 1 {
-		issues = appendIssues(issues, invariant(path+".dns", "a network may consume at most one distinct managed DNS server", "select at most one managed DNSServer in dns"))
+		issues = api.AppendIssues(issues, invariant(path+".dns", "a network may consume at most one distinct managed DNS server", "select at most one managed DNSServer in dns"))
 	}
 	return issues
 }
@@ -958,10 +958,10 @@ func validateServiceIntent(o api.Object) []api.Issue {
 	s := o.Spec()
 	issues := infrastructureservices.ValidateProxyChoice(s.Get("proxy"), "$.spec.proxy")
 	if provided := s.Get("os", "provided"); s.Has("proxy") && provided.Present() && !provided.Bool() && !installed(o) {
-		issues = appendIssues(issues, invariant("$.spec.proxy", "installer-provisioned Machines use their cluster's installation proxy choice", "remove spec.proxy; the installation proxy choice of this Machine's cluster applies"))
+		issues = api.AppendIssues(issues, invariant("$.spec.proxy", "installer-provisioned Machines use their cluster's installation proxy choice", "remove spec.proxy; the installation proxy choice of this Machine's cluster applies"))
 	}
 	if s.Has("os", "install", "ntp") && !installed(o) {
-		issues = appendIssues(issues, invariant("$.spec.os.install.ntp", "installation NTP choices require a Bootwright-installed Machine with installProfileRef", "remove spec.os.install.ntp, or name a MachineInstallProfile in spec.os.installProfileRef"))
+		issues = api.AppendIssues(issues, invariant("$.spec.os.install.ntp", "installation NTP choices require a Bootwright-installed Machine with installProfileRef", "remove spec.os.install.ntp, or name a MachineInstallProfile in spec.os.installProfileRef"))
 	}
 	return issues
 }
@@ -969,8 +969,8 @@ func validateServiceIntent(o api.Object) []api.Issue {
 func validateServices(o api.Object, c api.Catalog) []api.Issue {
 	s := o.Spec()
 	issues := validateServiceIntent(o)
-	issues = appendIssues(issues, infrastructureservices.ValidateProxy(s.Get("proxy"), c, "$.spec.proxy", installed(o))...)
-	issues = appendIssues(issues, infrastructureservices.ValidateServerSelections(s.Get("os", "install", "ntp"), c, api.NTPServer, "$.spec.os.install.ntp")...)
+	issues = api.AppendIssues(issues, infrastructureservices.ValidateProxy(s.Get("proxy"), c, "$.spec.proxy", installed(o))...)
+	issues = api.AppendIssues(issues, infrastructureservices.ValidateServerSelections(s.Get("os", "install", "ntp"), c, api.NTPServer, "$.spec.os.install.ntp")...)
 	return issues
 }
 
@@ -1120,7 +1120,7 @@ func validateBondSegments(o api.Object, native api.Value, nicsPath string) []api
 		if nestsSplitBond(native, s.name, split, map[string]bool{}) {
 			continue
 		}
-		issues = appendIssues(issues, invariant(fmt.Sprintf("%s[%d].segmentRef", nicsPath, s.differing),
+		issues = api.AppendIssues(issues, invariant(fmt.Sprintf("%s[%d].segmentRef", nicsPath, s.differing),
 			"bond "+s.name+" of "+o.Identity()+" has ports on different segments ("+strings.Join(s.placed, ", ")+"), so a failover would move the host onto another network",
 			"put the NIC of every port of bond "+s.name+" on one segment in "+nicsPath[2:]+" on "+o.Identity()+", or remove the port on another segment from the bond"))
 	}

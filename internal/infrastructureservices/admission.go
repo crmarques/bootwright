@@ -133,20 +133,20 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if value.Get("management").Text() != "managed" {
 		return issues
 	}
-	issues = add(issues, validateWildcardProbes(o.Kind(), value)...)
+	issues = api.AppendIssues(issues, validateWildcardProbes(o.Kind(), value)...)
 	if o.Kind() == api.DNSServer {
-		issues = add(issues, validateLocalDNSZones(value, c)...)
+		issues = api.AppendIssues(issues, validateLocalDNSZones(value, c)...)
 	}
 	machine, placed := c.Find(api.Machine, value.Get("machineRef").Text())
 	if placed {
-		issues = add(issues, validatePlacement(o.Kind(), value, machine)...)
-		issues = add(issues, validateReservationBound(o, machine)...)
+		issues = api.AppendIssues(issues, validatePlacement(o.Kind(), value, machine)...)
+		issues = api.AppendIssues(issues, validateReservationBound(o, machine)...)
 	}
 	if o.Kind() == api.Registry {
-		issues = add(issues, validateRegistryCredential(value, c)...)
+		issues = api.AppendIssues(issues, validateRegistryCredential(value, c)...)
 	}
 	if placed && (o.Kind() == api.ArtifactServer || o.Kind() == api.Registry) {
-		issues = add(issues, validateCertificateCoverage(o.Kind(), value, machine, c)...)
+		issues = api.AppendIssues(issues, validateCertificateCoverage(o.Kind(), value, machine, c)...)
 	}
 	return issues
 }
@@ -194,7 +194,7 @@ func validateCertificateCoverage(kind api.Kind, value api.Value, machine api.Obj
 		if _, err := netip.ParseAddr(address); err == nil {
 			field = "ipAddresses"
 		}
-		issues = add(issues, issue(fmt.Sprintf("$.spec.endpoints[%d]", index),
+		issues = api.AppendIssues(issues, issue(fmt.Sprintf("$.spec.endpoints[%d]", index),
 			"endpoint "+endpoint.Get("name").Text()+" serves HTTPS at "+address+", which the generated certificate of Secret/"+name+" does not name",
 			"add "+address+" to spec.source.generated."+field+" of Secret/"+name+", import the change with bootwright context update --name <context> --input-dir <dir>, "+
 				"then run bootwright secret generate --name "+name+" --context <context>"))
@@ -246,7 +246,7 @@ func listenerProtocol(value api.Value, name string) string {
 func validatePlacement(kind api.Kind, value api.Value, machine api.Object) []api.Issue {
 	issues := []api.Issue{}
 	if provided := machine.Spec().Get("os", "provided"); provided.Type() == api.Boolean && !provided.Bool() && !machine.Spec().Has("os", "installProfileRef") {
-		issues = add(issues, issue("$.spec.machineRef", machine.Identity()+" does not provide its operating system (os.provided: false) and names no install profile, so another installer owns it, and a managed service runs only on a Machine whose OS is ready or that Bootwright installs",
+		issues = api.AppendIssues(issues, issue("$.spec.machineRef", machine.Identity()+" does not provide its operating system (os.provided: false) and names no install profile, so another installer owns it, and a managed service runs only on a Machine whose OS is ready or that Bootwright installs",
 			"set spec.machineRef to a Machine with os.provided: true, or to one with os.installProfileRef"))
 	}
 	bind, bound := boundAddress(value)
@@ -261,15 +261,15 @@ func validatePlacement(kind api.Kind, value api.Value, machine api.Object) []api
 		resolved := machineAddress(machine, ref)
 		address, err := netip.ParseAddr(resolved)
 		if kind == api.DNSServer && err != nil {
-			issues = add(issues, issue(field, "a DNSServer endpoint must name an IP address, because a resolver is configured by address; address "+ref+" of "+machine.Identity()+" is the name "+resolved,
+			issues = api.AppendIssues(issues, issue(field, "a DNSServer endpoint must name an IP address, because a resolver is configured by address; address "+ref+" of "+machine.Identity()+" is the name "+resolved,
 				"set addressRef to an IP address declared in spec.network.addresses of "+machine.Identity()))
 		}
 		if err == nil && wildcard(value.Get("bindAddress").Text()) && address.Unmap().Is4() != (value.Get("bindAddress").Text() == "0.0.0.0") {
-			issues = add(issues, issue(field, "endpoint "+endpoint.Get("name").Text()+" resolves to "+address.String()+", but spec.bindAddress "+value.Get("bindAddress").Text()+" listens on the other IP family",
+			issues = api.AppendIssues(issues, issue(field, "endpoint "+endpoint.Get("name").Text()+" resolves to "+address.String()+", but spec.bindAddress "+value.Get("bindAddress").Text()+" listens on the other IP family",
 				"set spec.bindAddress and every IP endpoint to the same address family (0.0.0.0 for IPv4 or :: for IPv6)"))
 		}
 		if err == nil && bound && address != bind {
-			issues = add(issues, issue(field, "endpoint "+endpoint.Get("name").Text()+" resolves to "+address.String()+", but the service listens only on spec.bindAddress "+bind.String()+", so nothing answers there",
+			issues = api.AppendIssues(issues, issue(field, "endpoint "+endpoint.Get("name").Text()+" resolves to "+address.String()+", but the service listens only on spec.bindAddress "+bind.String()+", so nothing answers there",
 				"set spec.bindAddress to "+address.String()+" or to a wildcard (0.0.0.0 or ::), or name the address "+bind.String()+" in addressRef"))
 		}
 	}
@@ -297,7 +297,7 @@ func validateWildcardProbes(kind api.Kind, value api.Value) []api.Issue {
 		if slices.ContainsFunc(endpoints, func(endpoint api.Value) bool { return endpoint.Get("listenerRef").Text() == name }) {
 			continue
 		}
-		issues = add(issues, issue(fmt.Sprintf("$.spec.listeners[%d]", index), "listener "+name+" has no endpoint, so readiness under the wildcard bind "+bind+" can never prove it",
+		issues = api.AppendIssues(issues, issue(fmt.Sprintf("$.spec.listeners[%d]", index), "listener "+name+" has no endpoint, so readiness under the wildcard bind "+bind+" can never prove it",
 			"add an endpoint with listenerRef: "+name+", remove the listener, or set spec.bindAddress to an IP address of "+host))
 	}
 	return issues
@@ -344,13 +344,13 @@ func validateIntrinsic(o api.Object, partial bool) []api.Issue {
 	mode := value.Get("management").Text()
 	require := func(field string) {
 		if !partial && !value.Has(field) {
-			issues = add(issues, issue("$.spec."+field, "selected management mode requires this field", requirement(o.Kind(), field)))
+			issues = api.AppendIssues(issues, issue("$.spec."+field, "selected management mode requires this field", requirement(o.Kind(), field)))
 		}
 	}
 	forbid := func(fields ...string) {
 		for _, field := range fields {
 			if value.Has(field) {
-				issues = add(issues, issue("$.spec."+field, "field is not allowed for the selected management mode", "remove spec."+field+", which management: "+mode+" does not use"))
+				issues = api.AppendIssues(issues, issue("$.spec."+field, "field is not allowed for the selected management mode", "remove spec."+field+", which management: "+mode+" does not use"))
 			}
 		}
 	}
@@ -375,38 +375,38 @@ func validateIntrinsic(o api.Object, partial bool) []api.Issue {
 			require("connection")
 			connection := value.Get("connection")
 			if !partial && connection.Present() && !connection.Has("httpProxy") && !connection.Has("httpsProxy") {
-				issues = add(issues, issue("$.spec.connection", "external Proxy requires at least one proxy URL", "set spec.connection.httpProxy or spec.connection.httpsProxy"))
+				issues = api.AppendIssues(issues, issue("$.spec.connection", "external Proxy requires at least one proxy URL", "set spec.connection.httpProxy or spec.connection.httpsProxy"))
 			}
-			issues = add(issues, validateProxyEndpoints(connection)...)
+			issues = api.AppendIssues(issues, validateProxyEndpoints(connection)...)
 		case api.DNSServer, api.NTPServer:
 			require("address")
 		case api.Registry:
 			require("url")
 		case api.ArtifactServer:
 			if !partial {
-				issues = add(issues, issue("$.spec.management", "no consumer accepts an external ArtifactServer, because each one publishes into the server it selects",
+				issues = api.AppendIssues(issues, issue("$.spec.management", "no consumer accepts an external ArtifactServer, because each one publishes into the server it selects",
 					"set spec.management: managed with a spec.machineRef, or remove "+o.Identity()))
 			}
 			require("endpoints")
 			if value.Has("endpoints") && value.Get("endpoints").Len() == 0 {
-				issues = add(issues, issue("$.spec.endpoints", "external ArtifactServer requires at least one endpoint", "add a spec.endpoints entry with a url"))
+				issues = api.AppendIssues(issues, issue("$.spec.endpoints", "external ArtifactServer requires at least one endpoint", "add a spec.endpoints entry with a url"))
 			}
 		}
 	}
 	if o.Kind() == api.DNSServer && mode != "external" {
-		issues = add(issues, validateForwardZones(value)...)
+		issues = api.AppendIssues(issues, validateForwardZones(value)...)
 	}
-	issues = add(issues, validateImagePins(value, mode, partial)...)
-	issues = add(issues, validatePort(o.Kind(), value)...)
+	issues = api.AppendIssues(issues, validateImagePins(value, mode, partial)...)
+	issues = api.AppendIssues(issues, validatePort(o.Kind(), value)...)
 	if o.Kind() == api.Proxy && mode != "external" {
-		issues = add(issues, validateAllowedDestinations(value)...)
+		issues = api.AppendIssues(issues, validateAllowedDestinations(value)...)
 	}
 	if o.Kind() == api.LoadBalancer {
-		issues = add(issues, validateBindAddressNames(value)...)
+		issues = api.AppendIssues(issues, validateBindAddressNames(value)...)
 	}
 	if o.Kind() == api.ArtifactServer {
-		issues = add(issues, validateArtifactEndpoints(value, partial)...)
-		issues = add(issues, validateTransport(value, partial)...)
+		issues = api.AppendIssues(issues, validateArtifactEndpoints(value, partial)...)
+		issues = api.AppendIssues(issues, validateTransport(value, partial)...)
 	}
 	return issues
 }
@@ -475,7 +475,7 @@ func validateImagePins(value api.Value, mode string, partial bool) []api.Issue {
 	}
 	issues := []api.Issue{}
 	if !image.Has("local") && !image.Has("public") && !partial {
-		issues = add(issues, issue("$.spec.image", "an image pin must supply local or public intent", "set spec.image.local or spec.image.public, or remove spec.image"))
+		issues = api.AppendIssues(issues, issue("$.spec.image", "an image pin must supply local or public intent", "set spec.image.local or spec.image.public, or remove spec.image"))
 	}
 	if mode == "external" {
 		return issues
@@ -483,7 +483,7 @@ func validateImagePins(value api.Value, mode string, partial bool) []api.Issue {
 	for _, field := range []string{"local", "public"} {
 		pin := image.Get(field)
 		if pin.Type() == api.String && api.ValidLexical("image", pin.Text()) && !strings.Contains(pin.Text(), "@") {
-			issues = add(issues, issue("$.spec.image."+field, "a managed service image is pinned by content digest, because planning cannot resolve a tag",
+			issues = api.AppendIssues(issues, issue("$.spec.image."+field, "a managed service image is pinned by content digest, because planning cannot resolve a tag",
 				"write spec.image."+field+" as <repository>@sha256:<64 hex digits>"))
 		}
 	}
@@ -508,10 +508,10 @@ func validateBindAddressNames(value api.Value) []api.Issue {
 	for index, address := range addresses {
 		field, name := fmt.Sprintf("$.spec.bindAddresses[%d].name", index), address.Get("name").Text()
 		if len(addresses) > 1 && name == "" {
-			issues = add(issues, issue(field, "multiple load-balancer addresses require distinct names", "name every spec.bindAddresses entry"))
+			issues = api.AppendIssues(issues, issue(field, "multiple load-balancer addresses require distinct names", "name every spec.bindAddresses entry"))
 		}
 		if name != "" && seen[name] {
-			issues = add(issues, issue(field, "load-balancer bind-address names must be unique", fmt.Sprintf("give spec.bindAddresses[%d] a name no other entry uses", index)))
+			issues = api.AppendIssues(issues, issue(field, "load-balancer bind-address names must be unique", fmt.Sprintf("give spec.bindAddresses[%d] a name no other entry uses", index)))
 		}
 		seen[name] = true
 	}
@@ -531,12 +531,12 @@ func validateArtifactEndpoints(value api.Value, partial bool) []api.Issue {
 		}
 		for _, name := range required {
 			if !partial && !endpoint.Has(name) {
-				issues = add(issues, issue(field+"."+name, "artifact endpoint requires this field for its management mode", "set "+strings.TrimPrefix(field, "$.")+"."+name))
+				issues = api.AppendIssues(issues, issue(field+"."+name, "artifact endpoint requires this field for its management mode", "set "+strings.TrimPrefix(field, "$.")+"."+name))
 			}
 		}
 		for _, name := range forbidden {
 			if endpoint.Has(name) {
-				issues = add(issues, issue(field+"."+name, "artifact endpoint field conflicts with its management mode", "remove "+strings.TrimPrefix(field, "$.")+"."+name))
+				issues = api.AppendIssues(issues, issue(field+"."+name, "artifact endpoint field conflicts with its management mode", "remove "+strings.TrimPrefix(field, "$.")+"."+name))
 			}
 		}
 	}
@@ -554,14 +554,14 @@ func validateTransport(value api.Value, partial bool) []api.Issue {
 		https = https || listener.Get("protocol").Text() == "https"
 		port := listener.Get("port").Text()
 		if port != "" && ports[port] {
-			issues = add(issues, issue(fmt.Sprintf("$.spec.listeners[%d].port", index), "artifact listener ports must be unique", fmt.Sprintf("give spec.listeners[%d] a port no other listener uses", index)))
+			issues = api.AppendIssues(issues, issue(fmt.Sprintf("$.spec.listeners[%d].port", index), "artifact listener ports must be unique", fmt.Sprintf("give spec.listeners[%d] a port no other listener uses", index)))
 		}
 		ports[port] = true
 	}
 	if https && !value.Has("tls") && !partial {
-		issues = add(issues, issue("$.spec.tls", "HTTPS artifact listeners require TLS configuration", "set spec.tls.secretRef to a tlsCertificate Secret"))
+		issues = api.AppendIssues(issues, issue("$.spec.tls", "HTTPS artifact listeners require TLS configuration", "set spec.tls.secretRef to a tlsCertificate Secret"))
 	} else if !https && value.Has("tls") {
-		issues = add(issues, issue("$.spec.tls", "HTTP-only artifact listeners forbid TLS configuration", "remove spec.tls, or add an https listener"))
+		issues = api.AppendIssues(issues, issue("$.spec.tls", "HTTP-only artifact listeners forbid TLS configuration", "remove spec.tls, or add an https listener"))
 	}
 	return issues
 }
@@ -582,16 +582,6 @@ func hasNamed(values api.Value, name string) bool {
 
 func issue(field, message, remediation string) api.Issue {
 	return api.Issue{Code: "api.invariant", Field: field, Message: message, Remediation: remediation}
-}
-
-func reference(field, message, remediation string) api.Issue {
-	i := issue(field, message, remediation)
-	i.Code = "api.reference"
-	return i
-}
-
-func add(issues []api.Issue, more ...api.Issue) []api.Issue {
-	return append(issues, more[:min(len(more), 999-len(issues))]...)
 }
 
 func validateForwardZones(value api.Value) []api.Issue {

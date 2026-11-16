@@ -28,8 +28,8 @@ func ValidatePartial(o api.Object, _ api.Catalog) []api.Issue {
 	}
 	issues := validateContent(o.Spec(), "spec", api.NewCatalog(nil), true, true)
 	issues = append(issues, validateTargetsAndTags(o.Spec(), true)...)
-	if len(issues) > 999 {
-		return issues[:999]
+	if len(issues) > api.MaxIssues {
+		return issues[:api.MaxIssues]
 	}
 	return issues
 }
@@ -47,8 +47,8 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if len(issues) == 0 && !enabled(o) {
 		issues = append(issues, issue("api.deferred", "spec", "CustomPlaybook is a reserved declaration and cannot execute."))
 	}
-	if len(issues) > 999 {
-		return issues[:999]
+	if len(issues) > api.MaxIssues {
+		return issues[:api.MaxIssues]
 	}
 	return issues
 }
@@ -60,8 +60,8 @@ func validateTargetsAndTags(s api.Value, partial bool) []api.Issue {
 		issues = append(issues, issue("api.invariant", "spec.target", "At least one target list must be non-empty."))
 	}
 	for i, group := range target.Get("hostGroups").Items() {
-		if len(issues) >= 999 {
-			return issues[:999]
+		if len(issues) >= api.MaxIssues {
+			return issues[:api.MaxIssues]
 		}
 		if slices.Contains([]string{"localhost", "127.0.0.1", "bootwright_ocp_hosts", "bootwright_controller_hosts"}, group.Text()) {
 			issues = append(issues, issue("api.value", itemPath("spec.target.hostGroups", i), "Controller inventory identities are forbidden."))
@@ -72,15 +72,15 @@ func validateTargetsAndTags(s api.Value, partial bool) []api.Issue {
 		tags[tag] = true
 	}
 	for i, tag := range s.Get("skipTags").Items() {
-		if len(issues) >= 999 {
-			return issues[:999]
+		if len(issues) >= api.MaxIssues {
+			return issues[:api.MaxIssues]
 		}
 		if tags[tag.Text()] {
 			issues = append(issues, issue("api.invariant", itemPath("spec.skipTags", i), "Tags and skipped tags must not overlap."))
 		}
 	}
-	if len(issues) > 999 {
-		return issues[:999]
+	if len(issues) > api.MaxIssues {
+		return issues[:api.MaxIssues]
 	}
 	return issues
 }
@@ -297,8 +297,8 @@ func validateOrdering(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	for _, capability := range o.Spec().Get("provides").Strings() {
-		if len(issues) >= 999 {
-			return issues[:999]
+		if len(issues) >= api.MaxIssues {
+			return issues[:api.MaxIssues]
 		}
 		if len(providers[capability]) > 1 {
 			issues = append(issues, issue("api.duplicate", "spec.provides", "Enabled playbooks at an anchor cannot provide the same capability more than once."))
@@ -315,16 +315,16 @@ func validateOrdering(o api.Object, c api.Catalog) []api.Issue {
 		}
 		visited[current.Name()] = true
 		for _, requirement := range current.Spec().Get("requires").Strings() {
-			if len(issues) >= 999 {
-				return issues[:999]
+			if len(issues) >= api.MaxIssues {
+				return issues[:api.MaxIssues]
 			}
 			matches := providers[requirement]
 			if current.Name() == o.Name() && len(matches) == 0 {
 				issues = append(issues, issue("api.reference", "spec.requires", "A required capability has no enabled provider at this anchor."))
 			}
 			for _, provider := range matches {
-				if len(issues) >= 999 {
-					return issues[:999]
+				if len(issues) >= api.MaxIssues {
+					return issues[:api.MaxIssues]
 				}
 				if provider.Name() == o.Name() {
 					return append(issues, issue("api.invariant", "spec.requires", "Enabled playbook capability requirements form a cycle."))

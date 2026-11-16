@@ -11,7 +11,7 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 		for _, segment := range o.Spec().Get("segments").Items() {
 			for _, arm := range []string{"baremetal", "libvirt", "vsphere", "kubevirt"} {
 				if arm != variant && segment.Has(arm) {
-					issues = add(issues, issue("$.spec.segments", "segment arm must match its provider substrate"))
+					issues = api.AppendIssues(issues, issue("$.spec.segments", "segment arm must match its provider substrate"))
 				}
 			}
 		}

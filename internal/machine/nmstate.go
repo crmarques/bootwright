@@ -36,7 +36,7 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 	issues := validateNative(native, configurationPath(o), false)
 	overrides := o.Spec().Get("network", "overrides")
 	if overrides.Present() {
-		issues = appendIssues(issues, validateNative(overrides, "$.spec.network.overrides", true)...)
+		issues = api.AppendIssues(issues, validateNative(overrides, "$.spec.network.overrides", true)...)
 	}
 	if len(issues) != 0 {
 		return api.Value{}, issues
@@ -44,9 +44,9 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 	if overrides.Present() {
 		var mergeIssues []api.Issue
 		native, mergeIssues = mergeNative(native, overrides, "$.spec.network.overrides")
-		issues = appendIssues(issues, mergeIssues...)
+		issues = api.AppendIssues(issues, mergeIssues...)
 	}
-	issues = appendIssues(issues, validateNative(native, "$.spec.network", false)...)
+	issues = api.AppendIssues(issues, validateNative(native, "$.spec.network", false)...)
 	if len(issues) != 0 {
 		return api.Value{}, issues
 	}
@@ -60,12 +60,12 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 		field := fmt.Sprintf("$.spec.network.addresses[%d]", index)
 		prefix, problems := composedPrefix(o, c, assignment, field)
 		if len(problems) != 0 || !prefix.IsValid() {
-			issues = appendIssues(issues, problems...)
+			issues = api.AppendIssues(issues, problems...)
 			continue
 		}
 		position := interfaceIndex(interfaces, assignment.Get("interface").Text())
 		if position < 0 || unavailableInterface(interfaces[position]) {
-			issues = appendIssues(issues, reference(field+".interface", "assignment must name one available composed interface", "set interface to one available interface of the composed network configuration"))
+			issues = api.AppendIssues(issues, api.ReferenceIssue(field+".interface", "assignment must name one available composed interface", "set interface to one available interface of the composed network configuration"))
 			continue
 		}
 		family := "ipv6"
@@ -74,13 +74,13 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 		}
 		identity := assignment.Get("interface").Text() + "/" + family
 		if assignments[identity] || ips[prefix.Addr()] {
-			issues = appendIssues(issues, invariant(field, "static IPs and interface-family assignments must be unique", "remove the repeated static IP or interface-family assignment"))
+			issues = api.AppendIssues(issues, invariant(field, "static IPs and interface-family assignments must be unique", "remove the repeated static IP or interface-family assignment"))
 			continue
 		}
 		assignments[identity], ips[prefix.Addr()] = true, true
 		mode := interfaces[position].Get(family)
 		if mode.Has("enabled") && !mode.Get("enabled").Bool() || mode.Get("dhcp").Bool() || family == "ipv6" && mode.Get("autoconf").Bool() {
-			issues = appendIssues(issues, invariant(field+".interface", "static assignment conflicts with disabled or dynamic address configuration", "assign the static address to an interface whose IP family is enabled without DHCP or autoconfiguration"))
+			issues = api.AppendIssues(issues, invariant(field+".interface", "static assignment conflicts with disabled or dynamic address configuration", "assign the static address to an interface whose IP family is enabled without DHCP or autoconfiguration"))
 			continue
 		}
 		mode = mode.Default("enabled", api.BoolValue(true)).Default("dhcp", api.BoolValue(false))
@@ -91,7 +91,7 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 		interfaces[position] = interfaces[position].With(family, mode)
 	}
 	matches, matchIssues := resolveMatches(o, c, native)
-	issues = appendIssues(issues, matchIssues...)
+	issues = api.AppendIssues(issues, matchIssues...)
 	for _, match := range matches.Items() {
 		position := interfaceIndex(interfaces, match.Get("interface").Text())
 		address := substrate.MachineMAC(o, match.Get("nicRef").Text())
@@ -106,7 +106,7 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 			previous, valid := canonicalMAC(raw.Text())
 			if !valid || previous != mac {
 				name := match.Get("interface").Text()
-				issues = appendIssues(issues, invariant(configurationPath(o), "ethernet interface "+name+" of "+o.Identity()+" authors a mac-address other than that of NIC "+match.Get("nicRef").Text()+", which it matches",
+				issues = api.AppendIssues(issues, invariant(configurationPath(o), "ethernet interface "+name+" of "+o.Identity()+" authors a mac-address other than that of NIC "+match.Get("nicRef").Text()+", which it matches",
 					"remove mac-address from interface "+name+", or match the interface to the NIC with that MAC in spec.network.interfaceMatches on "+o.Identity()))
 				continue
 			}
@@ -192,7 +192,7 @@ func selectInstallAddress(o api.Object, c api.Catalog, required bool) (api.Value
 		if c.UndecodableOfKind(api.Network) {
 			return api.Value{}, nil
 		}
-		return api.Value{}, []api.Issue{reference("$.spec.network.installAddressRef", "install address must select an interface-assigned IP inside a declared Network", "set network.installAddressRef to an address in network.addresses that names an interface and lies inside a declared Network")}
+		return api.Value{}, []api.Issue{api.ReferenceIssue("$.spec.network.installAddressRef", "install address must select an interface-assigned IP inside a declared Network", "set network.installAddressRef to an address in network.addresses that names an interface and lies inside a declared Network")}
 	}
 	if len(defaultRoute) == 1 {
 		return defaultRoute[0], nil
@@ -232,10 +232,10 @@ func validateNative(native api.Value, path string, partial bool) []api.Issue {
 	}
 	issues := []api.Issue{}
 	if native.Has("nameResolutionRefs") {
-		issues = appendIssues(issues, invariant(path+".nameResolutionRefs", "use DNS server selections in the enclosing Bootwright dns field", "move the DNS server selections to the enclosing dns field"))
+		issues = api.AppendIssues(issues, invariant(path+".nameResolutionRefs", "use DNS server selections in the enclosing Bootwright dns field", "move the DNS server selections to the enclosing dns field"))
 	}
 	if native.Has("dns") {
-		issues = appendIssues(issues, invariant(path+".dns", "Bootwright DNS server selections belong in the enclosing dns field; native NMState uses dns-resolver", "move the selections to the enclosing dns field, and use dns-resolver for native resolver settings"))
+		issues = api.AppendIssues(issues, invariant(path+".dns", "Bootwright DNS server selections belong in the enclosing dns field; native NMState uses dns-resolver", "move the selections to the enclosing dns field, and use dns-resolver for native resolver settings"))
 	}
 	interfaces := native.Get("interfaces")
 	if interfaces.Present() && interfaces.Type() != api.Sequence {
@@ -243,9 +243,9 @@ func validateNative(native api.Value, path string, partial bool) []api.Issue {
 	}
 	seen := map[string]bool{}
 	for index, iface := range interfaces.Items() {
-		issues = appendIssues(issues, validateNativeInterface(iface, fmt.Sprintf("%s.interfaces[%d]", path, index), partial, seen)...)
+		issues = api.AppendIssues(issues, validateNativeInterface(iface, fmt.Sprintf("%s.interfaces[%d]", path, index), partial, seen)...)
 	}
-	return appendIssues(issues, validateNativeRoutes(native, path)...)
+	return api.AppendIssues(issues, validateNativeRoutes(native, path)...)
 }
 
 // interfaceNameRule is the message every interface-name refusal states: the
@@ -261,25 +261,25 @@ func validateNativeInterface(iface api.Value, field string, partial bool, seen m
 		value := iface.Get(key)
 		must := key == "name" || key == "type" && !partial
 		if must && !value.Present() || value.Present() && (value.Type() != api.String || value.Text() == "") {
-			issues = appendIssues(issues, typeIssue(field+"."+key, "native interface identity and state fields require nonempty strings", "set the field to a non-empty string"))
+			issues = api.AppendIssues(issues, typeIssue(field+"."+key, "native interface identity and state fields require nonempty strings", "set the field to a non-empty string"))
 		}
 	}
 	if name := iface.Get("name").Text(); name != "" {
 		if !api.ValidLexical("ifname", name) {
-			issues = appendIssues(issues, valueIssue(field+".name", interfaceNameRule, "correct "+strings.TrimPrefix(field, "$.")+".name to a name such as enp1s0"))
+			issues = api.AppendIssues(issues, valueIssue(field+".name", interfaceNameRule, "correct "+strings.TrimPrefix(field, "$.")+".name to a name such as enp1s0"))
 		}
 		if seen[name] {
-			issues = appendIssues(issues, invariant(field+".name", "native interface names must be unique", "give each native interface a unique name"))
+			issues = api.AppendIssues(issues, invariant(field+".name", "native interface names must be unique", "give each native interface a unique name"))
 		}
 		seen[name] = true
 	}
 	if mac := iface.Get("mac-address"); mac.Present() {
 		if _, ok := canonicalMAC(mac.Text()); !ok {
-			issues = appendIssues(issues, invariant(field+".mac-address", "native interface MAC must be EUI-48", "write mac-address as six colon-separated hexadecimal octets"))
+			issues = api.AppendIssues(issues, invariant(field+".mac-address", "native interface MAC must be EUI-48", "write mac-address as six colon-separated hexadecimal octets"))
 		}
 	}
 	for _, family := range []string{"ipv4", "ipv6"} {
-		issues = appendIssues(issues, validateNativeFamily(iface.Get(family), field+"."+family, family)...)
+		issues = api.AppendIssues(issues, validateNativeFamily(iface.Get(family), field+"."+family, family)...)
 	}
 	return issues
 }
@@ -295,14 +295,14 @@ func validateNativeFamily(mode api.Value, field, family string) []api.Issue {
 	}
 	for _, key := range keys {
 		if value := mode.Get(key); value.Present() && value.Type() != api.Boolean {
-			issues = appendIssues(issues, typeIssue(field+"."+key, "native IP-mode switches must be booleans", "set the switch to true or false"))
+			issues = api.AppendIssues(issues, typeIssue(field+"."+key, "native IP-mode switches must be booleans", "set the switch to true or false"))
 		}
 	}
 	if addresses := mode.Get("address"); addresses.Present() {
 		if addresses.Type() != api.Sequence {
-			issues = appendIssues(issues, typeIssue(field+".address", "native static addresses must be an array", "write address as a list, or remove it and assign the addresses in the Machine's network.addresses"))
+			issues = api.AppendIssues(issues, typeIssue(field+".address", "native static addresses must be an array", "write address as a list, or remove it and assign the addresses in the Machine's network.addresses"))
 		} else if addresses.Len() != 0 {
-			issues = appendIssues(issues, invariant(field+".address", "static addresses must be authored only in Machine network.addresses", "remove the native addresses and assign them in the Machine's network.addresses"))
+			issues = api.AppendIssues(issues, invariant(field+".address", "static addresses must be authored only in Machine network.addresses", "remove the native addresses and assign them in the Machine's network.addresses"))
 		}
 	}
 	return issues
@@ -311,14 +311,14 @@ func validateNativeFamily(mode api.Value, field, family string) []api.Issue {
 func validateNativeRoutes(native api.Value, path string) []api.Issue {
 	issues := []api.Issue{}
 	if routes := native.Get("routes"); routes.Present() && routes.Type() != api.Mapping {
-		issues = appendIssues(issues, typeIssue(path+".routes", "native routes must be a mapping", "write routes as a mapping with a config list"))
+		issues = api.AppendIssues(issues, typeIssue(path+".routes", "native routes must be a mapping", "write routes as a mapping with a config list"))
 	}
 	routes := native.Get("routes", "config")
 	if routes.Present() && routes.Type() != api.Sequence {
-		issues = appendIssues(issues, typeIssue(path+".routes.config", "native configured routes must be an array", "write routes.config as a list"))
+		issues = api.AppendIssues(issues, typeIssue(path+".routes.config", "native configured routes must be an array", "write routes.config as a list"))
 	}
 	for index, route := range routes.Items() {
-		issues = appendIssues(issues, validateNativeRoute(route, fmt.Sprintf("%s.routes.config[%d]", path, index))...)
+		issues = api.AppendIssues(issues, validateNativeRoute(route, fmt.Sprintf("%s.routes.config[%d]", path, index))...)
 	}
 	return issues
 }
@@ -330,20 +330,20 @@ func validateNativeRoute(route api.Value, field string) []api.Issue {
 	issues := []api.Issue{}
 	for _, key := range []string{"destination", "next-hop-interface", "state"} {
 		if value := route.Get(key); value.Present() && (value.Type() != api.String || value.Text() == "") {
-			issues = appendIssues(issues, typeIssue(field+"."+key, "native route fields require nonempty strings", "set the route field to a non-empty string"))
+			issues = api.AppendIssues(issues, typeIssue(field+"."+key, "native route fields require nonempty strings", "set the route field to a non-empty string"))
 		}
 	}
 	destination, destinationErr := netip.ParsePrefix(route.Get("destination").Text())
 	if route.Has("destination") && destinationErr != nil {
-		issues = appendIssues(issues, invariant(field+".destination", "native route destination must be a CIDR", "write the route destination as a CIDR"))
+		issues = api.AppendIssues(issues, invariant(field+".destination", "native route destination must be a CIDR", "write the route destination as a CIDR"))
 	}
 	if name := route.Get("next-hop-interface"); name.Type() == api.String && name.Text() != "" && !api.ValidLexical("ifname", name.Text()) {
-		issues = appendIssues(issues, valueIssue(field+".next-hop-interface", interfaceNameRule, "correct "+strings.TrimPrefix(field, "$.")+".next-hop-interface to a name such as enp1s0"))
+		issues = api.AppendIssues(issues, valueIssue(field+".next-hop-interface", interfaceNameRule, "correct "+strings.TrimPrefix(field, "$.")+".next-hop-interface to a name such as enp1s0"))
 	}
 	if hop := route.Get("next-hop-address"); hop.Present() {
 		address, err := netip.ParseAddr(hop.Text())
 		if hop.Type() != api.String || !api.ValidLexical("ip", hop.Text()) || err != nil || destinationErr == nil && address.Is4() != destination.Addr().Is4() {
-			issues = appendIssues(issues, valueIssue(field+".next-hop-address", "a route next hop is an IP literal without a zone, of its destination's family",
+			issues = api.AppendIssues(issues, valueIssue(field+".next-hop-address", "a route next hop is an IP literal without a zone, of its destination's family",
 				"correct "+strings.TrimPrefix(field, "$.")+".next-hop-address to an address such as 192.0.2.1 for an IPv4 destination"))
 		}
 	}
@@ -361,7 +361,7 @@ func resolveMatches(o api.Object, c api.Catalog, native api.Value) (api.Value, [
 		name := entry.Get("interface").Text()
 		position := interfaceIndex(interfaces, name)
 		if position < 0 || unavailableInterface(interfaces[position]) || interfaces[position].Get("type").Text() != "ethernet" {
-			issues = appendIssues(issues, reference(field+".interface", "interface "+name+" of "+o.Identity()+" is no available ethernet interface of its composed network configuration, so it matches no NIC",
+			issues = api.AppendIssues(issues, api.ReferenceIssue(field+".interface", "interface "+name+" of "+o.Identity()+" is no available ethernet interface of its composed network configuration, so it matches no NIC",
 				"set "+field[2:]+".interface to an available ethernet interface of the network configuration, or remove the entry"))
 		}
 		explicit[name], positions[name] = entry.Get("nicRef").Text(), index
@@ -377,7 +377,7 @@ func resolveMatches(o api.Object, c api.Catalog, native api.Value) (api.Value, [
 		if !authored {
 			if _, declared := namedValue(nics, name); !declared {
 				if required {
-					issues = appendIssues(issues, invariant("$.spec.network.interfaceMatches", "ethernet interface "+name+" of "+o.Identity()+" matches no NIC: spec.hardware.nics declares no NIC "+name+" and spec.network.interfaceMatches does not match it",
+					issues = api.AppendIssues(issues, invariant("$.spec.network.interfaceMatches", "ethernet interface "+name+" of "+o.Identity()+" matches no NIC: spec.hardware.nics declares no NIC "+name+" and spec.network.interfaceMatches does not match it",
 						"declare NIC "+name+" in spec.hardware.nics on "+o.Identity()+", or match interface "+name+" to a NIC in spec.network.interfaceMatches"))
 				}
 				continue
@@ -385,7 +385,7 @@ func resolveMatches(o api.Object, c api.Catalog, native api.Value) (api.Value, [
 			nic = name
 		}
 		if previous, twice := carried[nic]; twice {
-			issues = appendIssues(issues, invariant("$.spec.network.interfaceMatches", "NIC "+nic+" of "+o.Identity()+" is matched by interface "+previous+" and by interface "+name+", and one NIC carries one ethernet interface",
+			issues = api.AppendIssues(issues, invariant("$.spec.network.interfaceMatches", "NIC "+nic+" of "+o.Identity()+" is matched by interface "+previous+" and by interface "+name+", and one NIC carries one ethernet interface",
 				"match one of the two interfaces to another NIC in spec.network.interfaceMatches on "+o.Identity()))
 			continue
 		}
@@ -395,7 +395,7 @@ func resolveMatches(o api.Object, c api.Catalog, native api.Value) (api.Value, [
 	for _, value := range values {
 		name, nic := value.Get("interface").Text(), value.Get("nicRef").Text()
 		if _, declared := namedValue(nics, name); declared && nic != name && carried[name] == "" {
-			issues = appendIssues(issues, invariant(fmt.Sprintf("$.spec.network.interfaceMatches[%d].nicRef", positions[name]),
+			issues = api.AppendIssues(issues, invariant(fmt.Sprintf("$.spec.network.interfaceMatches[%d].nicRef", positions[name]),
 				"hardware NIC "+name+" of "+o.Identity()+" matches no interface but shares the name of interface "+name+", which NIC "+nic+" carries, so the installer would list "+name+" twice with two addresses",
 				"match NIC "+name+" to an interface in spec.network.interfaceMatches on "+o.Identity()+", or rename it in spec.hardware.nics"))
 		}
@@ -449,18 +449,10 @@ func invariant(field, message, remediation string) api.Issue {
 	return api.Issue{Code: "api.invariant", Field: field, Message: message, Remediation: remediation}
 }
 
-func reference(field, message, remediation string) api.Issue {
-	return api.Issue{Code: "api.reference", Field: field, Message: message, Remediation: remediation}
-}
-
 func valueIssue(field, message, remediation string) api.Issue {
 	return api.Issue{Code: "api.value", Field: field, Message: message, Remediation: remediation}
 }
 
 func typeIssue(field, message, remediation string) api.Issue {
 	return api.Issue{Code: "api.type", Field: field, Message: message, Remediation: remediation}
-}
-
-func appendIssues(issues []api.Issue, additions ...api.Issue) []api.Issue {
-	return append(issues, additions[:min(len(additions), 999-len(issues))]...)
 }

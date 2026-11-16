@@ -15,7 +15,7 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 		issues := []api.Issue{}
 		for _, key := range []string{"organizationRef", "activationKeyRef", "satellite"} {
 			if o.Spec().Has("rhsm", key) {
-				issues = add(issues, externalRHSMField(key))
+				issues = api.AppendIssues(issues, externalRHSMField(key))
 			}
 		}
 		return issues
@@ -24,11 +24,11 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 		return nil
 	}
 	issues := validateCloneCustomizations(o)
-	issues = add(issues, infrastructureservices.ValidateProxyChoice(o.Spec().Get("proxy"), "$.spec.proxy")...)
+	issues = api.AppendIssues(issues, infrastructureservices.ValidateProxyChoice(o.Spec().Get("proxy"), "$.spec.proxy")...)
 	custom := o.Spec().Get("customizations")
 	for _, service := range custom.Get("services", "enabled").Strings() {
 		if slices.Contains(custom.Get("services", "disabled").Strings(), service) {
-			issues = add(issues, serviceOverlap())
+			issues = api.AppendIssues(issues, serviceOverlap())
 		}
 	}
 	return issues

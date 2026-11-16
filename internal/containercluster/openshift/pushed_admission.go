@@ -25,7 +25,7 @@ func validatePushedNodes(cluster api.Object, catalog api.Catalog) []api.Issue {
 	if baremetal && cluster.Spec().Get("nodes").Len() > 1 {
 		for _, slot := range endpointSlots {
 			if sourceType(cluster.Spec().Get("install", "endpoints", slot)) != "installer" {
-				issues = add(issues, invariantRemediation("$.spec.install.endpoints."+slot+".source.type", "a KubeVirt baremetal platform requires installer endpoint sources", "set spec.install.endpoints."+slot+".source.type to installer"))
+				issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.endpoints."+slot+".source.type", "a KubeVirt baremetal platform requires installer endpoint sources", "set spec.install.endpoints."+slot+".source.type to installer"))
 			}
 		}
 	}
@@ -38,7 +38,7 @@ func validatePushedNodes(cluster api.Object, catalog api.Catalog) []api.Issue {
 		path := fmt.Sprintf("$.spec.nodes[%d].machineRef", index)
 		if encryptedNode(cluster, node.Get("role").Text()) {
 			if _, profile, found := substrate.SelectedProfile(catalog, bound); found && !substrate.PersistentTPM(profile) {
-				issues = add(issues, invariantRemediation(path, "an encrypted KubeVirt node needs a persistent vTPM, which a host stop would otherwise discard with the key its disk is sealed to",
+				issues = api.AppendIssues(issues, invariantRemediation(path, "an encrypted KubeVirt node needs a persistent vTPM, which a host stop would otherwise discard with the key its disk is sealed to",
 					"declare tpm: {} without persistent: false on the profile "+substrate.MachineProfileRef(bound)+" of "+provider.Identity()+", or remove the node's role from spec.security.diskEncryption.roles"))
 			}
 		}
@@ -52,7 +52,7 @@ func validatePushedNodes(cluster api.Object, catalog api.Catalog) []api.Issue {
 		slices.Sort(references)
 		for _, name := range slices.Compact(references) {
 			if kind := substrate.SegmentNetworkKind(provider, name); kind != "ClusterUserDefinedNetwork" && kind != "NetworkAttachmentDefinition" {
-				issues = add(issues, reference(path, "a KubeVirt baremetal platform requires ClusterUserDefinedNetwork or NetworkAttachmentDefinition segments", "select a Localnet ClusterUserDefinedNetwork or bridge NetworkAttachmentDefinition for every NIC of "+bound.Identity()))
+				issues = api.AppendIssues(issues, api.ReferenceIssue(path, "a KubeVirt baremetal platform requires ClusterUserDefinedNetwork or NetworkAttachmentDefinition segments", "select a Localnet ClusterUserDefinedNetwork or bridge NetworkAttachmentDefinition for every NIC of "+bound.Identity()))
 			}
 		}
 	}

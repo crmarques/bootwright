@@ -65,10 +65,10 @@ func validateNetworkMembership(o api.Object, c api.Catalog) []api.Issue {
 		}
 		path := fmt.Sprintf("$.spec.network.addresses[%d]", i)
 		iface := entry.Get("interface").Text()
-		issues = appendIssues(issues, validateAssignmentVLAN(o, native, match.Network, iface, path)...)
-		issues = appendIssues(issues, validateCarriage(o, c, native, match.Network, iface, path+".interface")...)
+		issues = api.AppendIssues(issues, validateAssignmentVLAN(o, native, match.Network, iface, path)...)
+		issues = api.AppendIssues(issues, validateCarriage(o, c, native, match.Network, iface, path+".interface")...)
 	}
-	return appendIssues(issues, validateStackedVLANs(o, c, native)...)
+	return api.AppendIssues(issues, validateStackedVLANs(o, c, native)...)
 }
 
 func validateAssignmentVLAN(o api.Object, native api.Value, owner api.Object, iface, path string) []api.Issue {

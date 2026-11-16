@@ -34,20 +34,20 @@ func validateNetworkArm(o api.Object, c api.Catalog) []api.Issue {
 	const path = "$.spec.libvirt"
 	var issues []api.Issue
 	if provider, found := c.Find(api.InfraProvider, arm.Get("providerRef").Text()); found && Variant(provider) != ArmLibvirt {
-		issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".providerRef",
+		issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path + ".providerRef",
 			Message:     "the libvirt arm of " + o.Identity() + " names " + provider.Identity() + ", which is not a libvirt provider, so no libvirt host defines the network",
 			Remediation: "set spec.libvirt.providerRef on " + o.Identity() + " to an InfraProvider with a spec.libvirt arm"})
 	}
 	for _, family := range []string{"ipv4", "ipv6"} {
 		if prefix, ok := network.Prefix(o, family); ok && IsManagedNetwork(o) && prefix.IsSingleIP() {
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec." + family + ".cidr",
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec." + family + ".cidr",
 				Message:     fmt.Sprintf("managed %s spans the single address %s, which the host's own address on its bridge takes, so no guest has an address on it", o.Identity(), prefix),
 				Remediation: fmt.Sprintf("widen spec.%s.cidr of %s to a subnet that holds guest addresses beside the host's", family, o.Identity())})
 		}
 	}
-	issues = add(issues, validateHostNetworkAddress(o)...)
-	issues = add(issues, validateSegmentName(o, c)...)
-	issues = add(issues, validateSharedHostNetworks(o, c)...)
+	issues = api.AppendIssues(issues, validateHostNetworkAddress(o)...)
+	issues = api.AppendIssues(issues, validateSegmentName(o, c)...)
+	issues = api.AppendIssues(issues, validateSharedHostNetworks(o, c)...)
 	_, leg := TaggedManagedNetwork(o)
 	carried := "carried untagged on its own bridge"
 	if leg {
@@ -58,20 +58,20 @@ func validateNetworkArm(o api.Object, c api.Catalog) []api.Issue {
 		tagged, found := c.Find(api.Network, name)
 		switch _, vlan := network.VLAN(tagged); {
 		case name == o.Name():
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: field, Message: o.Identity() + " is " + carried + ", so it cannot also be one of its tagged networks",
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: field, Message: o.Identity() + " is " + carried + ", so it cannot also be one of its tagged networks",
 				Remediation: "remove " + name + " from spec.libvirt.taggedNetworkRefs of " + o.Identity()})
 		case found && !vlan:
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: field, Message: tagged.Identity() + " declares no vlan, so " + o.Identity() + " cannot carry it tagged",
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: field, Message: tagged.Identity() + " declares no vlan, so " + o.Identity() + " cannot carry it tagged",
 				Remediation: "set spec.vlan on " + tagged.Identity() + ", or remove it from spec.libvirt.taggedNetworkRefs of " + o.Identity()})
 		case found && leg && networkMTU(tagged) != defaultMTU:
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: field,
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: field,
 				Message:     fmt.Sprintf("the trunk of tagged managed %s carries %s, whose mtu is %d, and an MTU other than %d on a trunk or leg is not yet admitted (B1285)", o.Identity(), tagged.Identity(), networkMTU(tagged), defaultMTU),
 				Remediation: fmt.Sprintf("set spec.mtu of %s to %d, or remove it from spec.libvirt.taggedNetworkRefs of %s", tagged.Identity(), defaultMTU, o.Identity())})
 		}
 	}
-	issues = add(issues, validateLeg(o)...)
-	issues = add(issues, validateLegConnectionName(o, c)...)
-	return add(issues, validateRoutedNetworks(o, c)...)
+	issues = api.AppendIssues(issues, validateLeg(o)...)
+	issues = api.AppendIssues(issues, validateLegConnectionName(o, c)...)
+	return api.AppendIssues(issues, validateRoutedNetworks(o, c)...)
 }
 
 func validateLegConnectionName(o api.Object, c api.Catalog) []api.Issue {
@@ -110,14 +110,14 @@ func validateRoutedNetworks(o api.Object, c api.Catalog) []api.Issue {
 		_, tagged := TaggedManagedNetwork(peer)
 		switch {
 		case found && (HostAddressingDisabled(o) || HostAddressingDisabled(peer)):
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: field,
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: field,
 				Message:     o.Identity() + " cannot route to or from addressless " + peer.Identity(),
 				Remediation: "remove " + name + " from spec.libvirt.routedNetworkRefs of " + o.Identity()})
 		case name == o.Name():
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: field, Message: o.Identity() + " cannot be routed to itself",
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: field, Message: o.Identity() + " cannot be routed to itself",
 				Remediation: "remove " + name + " from spec.libvirt.routedNetworkRefs of " + o.Identity()})
 		case found && (!tagged || ManagedNetworkProvider(peer) != ManagedNetworkProvider(o)):
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: field,
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: field,
 				Message:     o.Identity() + " routes only to tagged managed Networks of its own provider InfraProvider/" + ManagedNetworkProvider(o) + ", and " + peer.Identity() + " is not one; routing to an untagged libvirt network or across providers is not yet admitted (B1287)",
 				Remediation: "remove " + name + " from spec.libvirt.routedNetworkRefs of " + o.Identity() + ", or make " + peer.Identity() + " a managed Network with spec.vlan naming InfraProvider/" + ManagedNetworkProvider(o)})
 		}
@@ -146,23 +146,23 @@ func validateLeg(o api.Object) []api.Issue {
 	}
 	var issues []api.Issue
 	if o.Spec().Has("ipv6") {
-		issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.ipv6",
+		issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.ipv6",
 			Message:     "tagged managed " + o.Identity() + " is a host VLAN leg holding one IPv4 address, and IPv6 on a leg is not yet admitted (B1284)",
 			Remediation: "remove spec.ipv6 from " + o.Identity() + ", or remove spec.vlan to realize it as an untagged libvirt network"})
 	}
 	if mtu := networkMTU(o); mtu != defaultMTU {
-		issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.mtu",
+		issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.mtu",
 			Message:     fmt.Sprintf("tagged managed %s is a host VLAN leg on a trunk, and an MTU other than %d on a trunk or leg is not yet admitted (B1285), so its mtu %d is refused", o.Identity(), defaultMTU, mtu),
 			Remediation: fmt.Sprintf("set spec.mtu of %s to %d, or remove spec.vlan to realize it as an untagged libvirt network", o.Identity(), defaultMTU)})
 	}
 	bridge := o.Spec().Get(ArmLibvirt, "bridge").Text()
 	if strings.Contains(bridge, ".") {
-		issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
+		issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
 			Message:     "the trunk " + bridge + " of tagged managed " + o.Identity() + " is a bridge Bootwright creates, and a dot in a bridge name reads as the VLAN device of another link",
 			Remediation: "name the trunk without a dot in spec.libvirt.bridge of " + o.Identity() + ", such as " + strings.ReplaceAll(bridge, ".", "-")})
 	}
 	if device := LegDevice(bridge, vlan); api.ValidLexical("bridge", bridge) && len(device) > MaxInterfaceName {
-		issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
+		issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
 			Message:     fmt.Sprintf("the leg of tagged managed %s is the host VLAN device %s, %d bytes, and a Linux interface name holds at most %d", o.Identity(), device, len(device), MaxInterfaceName),
 			Remediation: fmt.Sprintf("shorten spec.libvirt.bridge of %s to at most %d bytes", o.Identity(), MaxInterfaceName-1-len(FormatPort(vlan)))})
 	}
@@ -347,36 +347,36 @@ func validateSharedHostNetworks(o api.Object, c api.Catalog) []api.Issue {
 		switch {
 		case own.bridge == "" || own.bridge != peer.bridge:
 		case own.sharesTrunk(peer) && own.vlan == peer.vlan:
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.vlan",
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.vlan",
 				Message:     fmt.Sprintf("VLAN %d of %s is also the VLAN of %s on trunk %s on host Machine/%s; the tagged managed Networks of one trunk carry distinct VLANs", own.vlan, own.label(), peer.label(), own.bridge, host),
 				Remediation: fmt.Sprintf("give %s or %s another vlan, or its own bridge", o.Identity(), peer.owner.Identity())})
 		case own.sharesTrunk(peer):
 		case own.trunk() || peer.trunk():
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
 				Message:     fmt.Sprintf("bridge %s of %s is also named by %s on host Machine/%s; a trunk Bootwright creates carries only the tagged managed Networks of one provider", own.bridge, own.label(), peer.label(), host),
 				Remediation: fmt.Sprintf("give %s or %s its own bridge", o.Identity(), peer.label())})
 		default:
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
 				Message:     fmt.Sprintf("bridge %s of %s is also named by %s on host Machine/%s; a bridge a managed Network defines belongs to that Network alone", own.bridge, own.label(), peer.label(), host),
 				Remediation: fmt.Sprintf("give %s or %s its own bridge", o.Identity(), peer.label())})
 		}
 		if own.device != "" && own.device == peer.bridge {
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
 				Message:     fmt.Sprintf("the leg of %s is the host VLAN device %s, which %s also names on host Machine/%s", own.label(), own.device, peer.label(), host),
 				Remediation: fmt.Sprintf("give %s or %s another bridge", o.Identity(), peer.label())})
 		}
 		if own.bridge != "" && own.bridge == peer.device {
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
 				Message:     fmt.Sprintf("bridge %s of %s is the host VLAN device of the leg of %s on host Machine/%s", own.bridge, own.label(), peer.label(), host),
 				Remediation: fmt.Sprintf("give %s or %s another bridge", o.Identity(), peer.label())})
 		}
 		if peer.owner.Kind() == api.Network && own.prefix.IsValid() && peer.prefix.IsValid() && own.prefix.Overlaps(peer.prefix) && !network.Overlapping(o, peer.owner, network.Family(own.prefix.Addr())) {
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.hostAddress",
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.hostAddress",
 				Message:     fmt.Sprintf("managed prefix %s of %s overlaps managed prefix %s of %s on host Machine/%s, and the host routes each managed prefix to its own bridge", own.prefix, own.label(), peer.prefix, peer.label(), host),
 				Remediation: fmt.Sprintf("give %s or %s a subnet no other managed Network on host Machine/%s overlaps", o.Identity(), peer.owner.Identity(), host)})
 		}
 	}
-	return add(issues, validateManagedBound(o, managed, host)...)
+	return api.AppendIssues(issues, validateManagedBound(o, managed, host)...)
 }
 
 func validateManagedBound(o api.Object, managed []hostSegment, host string) []api.Issue {

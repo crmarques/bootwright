@@ -46,14 +46,14 @@ func validateCarriage(o api.Object, c api.Catalog, segment api.Value, variant st
 	untagged := SegmentUntagged(segment)
 	fabric := !TaggedCarriage(variant)
 	if fabric && untagged == "" {
-		issues = add(issues, api.Issue{Code: "api.required", Field: path + ".untaggedNetworkRef",
+		issues = api.AppendIssues(issues, api.Issue{Code: "api.required", Field: path + ".untaggedNetworkRef",
 			Message:     "a " + variant + " segment delivers exactly one network to each NIC on it, and segment " + name + " of " + o.Identity() + " names none",
 			Remediation: "set " + entry + ".untaggedNetworkRef on " + o.Identity() + " to the Network its " + variant + " network carries"})
 	}
 	for i, tagged := range SegmentTagged(segment) {
 		field := fmt.Sprintf("%s.taggedNetworkRefs[%d]", path, i)
 		if fabric {
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: field,
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: field,
 				Message:     "a " + variant + " segment carries its one network untagged, and tagged carriage over a " + variant + " network is not yet admitted (B1172), so segment " + name + " of " + o.Identity() + " cannot carry Network/" + tagged + " tagged",
 				Remediation: "remove taggedNetworkRefs from " + entry + " of " + o.Identity() + ", and give Network/" + tagged + " a segment of its own with untaggedNetworkRef"})
 			continue
@@ -62,11 +62,11 @@ func validateCarriage(o api.Object, c api.Catalog, segment api.Value, variant st
 		_, vlan := network.VLAN(owner)
 		switch {
 		case tagged == untagged:
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: field,
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: field,
 				Message:     "segment " + name + " of " + o.Identity() + " carries Network/" + tagged + " untagged, so it cannot also carry it tagged",
 				Remediation: "remove Network/" + tagged + " from " + entry + ".taggedNetworkRefs or from untaggedNetworkRef on " + o.Identity()})
 		case found && !vlan:
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: field,
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: field,
 				Message:     owner.Identity() + " declares no vlan, so segment " + name + " of " + o.Identity() + " cannot carry it tagged",
 				Remediation: "set spec.vlan on " + owner.Identity() + ", or remove it from " + entry + ".taggedNetworkRefs of " + o.Identity()})
 		}
@@ -90,7 +90,7 @@ func validateHostedSegmentMTUs(o api.Object, c api.Catalog) []api.Issue {
 		}
 		resolved := segment.WithPath(defaultedNetworkRef(ref, o.Spec().Get(ArmKubeVirt, "namespace")), ArmKubeVirt, "networkRef")
 		if name, _, ok := HostNetworkMTU(host, resolved); ok {
-			issues = add(issues, api.Issue{Code: "api.invariant", Field: fmt.Sprintf("$.spec.segments[%d].mtu", index),
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: fmt.Sprintf("$.spec.segments[%d].mtu", index),
 				Message:     "segment " + segment.Get("name").Text() + " of " + o.Identity() + " is secondary network " + name + " of " + host.Identity() + ", whose mtu is the segment's capacity, so the segment declares none of its own",
 				Remediation: fmt.Sprintf("remove spec.segments[%d].mtu from %s, and set mtu on secondary network %s of %s", index, o.Identity(), name, host.Identity())})
 		}

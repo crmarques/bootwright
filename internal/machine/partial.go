@@ -15,28 +15,28 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 	if o.Kind() != api.Machine {
 		return issues
 	}
-	issues = appendIssues(issues, infrastructureservices.ValidateProxyChoice(o.Spec().Get("proxy"), "$.spec.proxy")...)
+	issues = api.AppendIssues(issues, infrastructureservices.ValidateProxyChoice(o.Spec().Get("proxy"), "$.spec.proxy")...)
 	if installed(o) && o.Spec().Has("access") {
-		issues = appendIssues(issues, invariant("$.spec.access", "Bootwright-installed Machines must not author access", "remove access; Bootwright derives an installed Machine's access from the fleet key"))
+		issues = api.AppendIssues(issues, invariant("$.spec.access", "Bootwright-installed Machines must not author access", "remove access; Bootwright derives an installed Machine's access from the fleet key"))
 	}
-	issues = appendIssues(issues, validateNative(o.Spec().Get("network", "inline", "nmstate"), "$.spec.network.inline.nmstate", true)...)
-	issues = appendIssues(issues, validateNative(o.Spec().Get("network", "overrides"), "$.spec.network.overrides", true)...)
+	issues = api.AppendIssues(issues, validateNative(o.Spec().Get("network", "inline", "nmstate"), "$.spec.network.inline.nmstate", true)...)
+	issues = api.AppendIssues(issues, validateNative(o.Spec().Get("network", "overrides"), "$.spec.network.overrides", true)...)
 	network := o.Spec().Get("network")
 	if network.Has("inline") && network.Has("overrides") {
-		issues = appendIssues(issues, invariant("$.spec.network.overrides", "inline configuration forbids reusable-template overrides", "remove network.overrides, or select a reusable configuration with network.configRef instead of network.inline"))
+		issues = api.AppendIssues(issues, invariant("$.spec.network.overrides", "inline configuration forbids reusable-template overrides", "remove network.overrides, or select a reusable configuration with network.configRef instead of network.inline"))
 	}
 	if mode := substrate.MachineBMC(o).Get("tls", "verification").Text(); mode != "" && mode != "full" {
-		issues = appendIssues(issues, invariant("$."+substrate.BMCPath+".tls.verification", "non-full TLS verification is per-Machine intent and never a kind default", "declare tls.verification on each Machine that needs it"))
+		issues = api.AppendIssues(issues, invariant("$."+substrate.BMCPath+".tls.verification", "non-full TLS verification is per-Machine intent and never a kind default", "declare tls.verification on each Machine that needs it"))
 	}
-	issues = appendIssues(issues, validateDefaultMediaTrust(substrate.MachineBMC(o))...)
-	issues = appendIssues(issues, validateDefaultFirmware(o)...)
+	issues = api.AppendIssues(issues, validateDefaultMediaTrust(substrate.MachineBMC(o))...)
+	issues = api.AppendIssues(issues, validateDefaultFirmware(o)...)
 	if o.Spec().Get("os", "provided").Bool() {
 		if o.Spec().Has("os", "install", "ntp") {
-			issues = appendIssues(issues, invariant("$.spec.os.install.ntp", "OS-ready Machines forbid installation NTP choices", "remove os.install.ntp"))
+			issues = api.AppendIssues(issues, invariant("$.spec.os.install.ntp", "OS-ready Machines forbid installation NTP choices", "remove os.install.ntp"))
 		}
 		for _, key := range []string{"configRef", "inline", "interfaceMatches", "installAddressRef", "overrides"} {
 			if network.Has(key) {
-				issues = appendIssues(issues, invariant("$.spec.network."+key, "OS-ready Machines declare contacts only", "remove network."+key+"; an OS-ready Machine declares contacts only"))
+				issues = api.AppendIssues(issues, invariant("$.spec.network."+key, "OS-ready Machines declare contacts only", "remove network."+key+"; an OS-ready Machine declares contacts only"))
 			}
 		}
 	}

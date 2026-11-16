@@ -23,7 +23,7 @@ func (a *admission) issue(code, field, message, remediation string) {
 	if cephProduct(a.object) {
 		message = textOf(a.object.Spec(), "type") + " Entitlement " + field + ": " + message
 	}
-	if len(a.issues) < 999 {
+	if len(a.issues) < api.MaxIssues {
 		a.issues = append(a.issues, api.Issue{Code: code, Field: field, Message: message, Remediation: remediation})
 	}
 }

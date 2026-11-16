@@ -141,14 +141,14 @@ func derivedNameIssues(o api.Object, c api.Catalog) []api.Issue {
 	var issues []api.Issue
 	for _, name := range []string{"api-int" + suffix, "*.apps" + suffix} {
 		if dnsNameTooLong(name) {
-			issues = add(issues, invariantRemediation("$.metadata.name", "the endpoint name "+name+" exceeds a DNS name's 253 bytes or a label's 63", remedy))
+			issues = api.AppendIssues(issues, invariantRemediation("$.metadata.name", "the endpoint name "+name+" exceeds a DNS name's 253 bytes or a label's 63", remedy))
 			break
 		}
 	}
 	for i, node := range o.Spec().Get("nodes").Items() {
 		fqdn := node.Get("name").Text() + suffix
 		if !node.Has("fqdn") && node.Get("name").Text() != "" && dnsNameTooLong(fqdn) {
-			issues = add(issues, invariantRemediation(fmt.Sprintf("$.spec.nodes[%d].name", i), "the derived node FQDN "+fqdn+" exceeds a DNS name's 253 bytes or a label's 63",
+			issues = api.AppendIssues(issues, invariantRemediation(fmt.Sprintf("$.spec.nodes[%d].name", i), "the derived node FQDN "+fqdn+" exceeds a DNS name's 253 bytes or a label's 63",
 				"shorten the node name, or "+remedy+", or author spec.nodes[].fqdn"))
 		}
 	}
@@ -211,7 +211,7 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 		endpoint := o.Spec().Get("install", "endpoints", slot)
 		kind := sourceType(endpoint)
 		if endpoint.Has("address") && (kind == "loadBalancer" || kind == "node") {
-			issues = add(issues, invariantRemediation("$.spec.install.endpoints."+slot+".address", "load-balancer and node endpoint sources forbid authored addresses", "remove the authored spec.install.endpoints."+slot+".address; the selected source supplies it"))
+			issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.endpoints."+slot+".address", "load-balancer and node endpoint sources forbid authored addresses", "remove the authored spec.install.endpoints."+slot+".address; the selected source supplies it"))
 		}
 	}
 	return issues
@@ -222,7 +222,7 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 		return nil
 	}
 	issues := ValidateAuthored(o, c)
-	issues = add(issues, validateLocal(o, true)...)
+	issues = api.AppendIssues(issues, validateLocal(o, true)...)
 	return issues
 }
 
@@ -231,14 +231,14 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		return nil
 	}
 	issues := validateLocal(o, false)
-	issues = add(issues, validatePushedNodes(o, c)...)
-	issues = add(issues, derivedNameIssues(o, c)...)
+	issues = api.AppendIssues(issues, validatePushedNodes(o, c)...)
+	issues = api.AppendIssues(issues, derivedNameIssues(o, c)...)
 	s := o.Spec()
 	install := s.Get("install")
 	nodes := s.Get("nodes").Items()
 	if !install.Has("platform") && len(nodes) > 1 {
 		if _, ready := providerTypes(o, c); ready {
-			issues = add(issues, invariantRemediation("$.spec.install.platform", "mixed provider types require an explicit installation platform", "declare spec.install.platform with the arm of the mixed node providers' platform"))
+			issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.platform", "mixed provider types require an explicit installation platform", "declare spec.install.platform with the arm of the mixed node providers' platform"))
 		}
 	}
 	baremetal := false
@@ -249,7 +249,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			continue
 		}
 		if provided := bound.Spec().Get("os", "provided"); provided.Present() && provided.Bool() {
-			issues = add(issues, reference(path, "container installation requires a Machine whose OS is not provided", "set spec.os.provided to false on "+bound.Identity()))
+			issues = api.AppendIssues(issues, api.ReferenceIssue(path, "container installation requires a Machine whose OS is not provided", "set spec.os.provided to false on "+bound.Identity()))
 		}
 		if provider, ok := machine.Provider(bound, c); ok && substrate.RealizesPhysicalNICs(provider) {
 			baremetal = true
@@ -257,42 +257,42 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		configuration, configured := machine.NetworkConfig(bound, c)
 		if configured && configuration.Get("dns").Len() > 0 {
 			if composed, problems := machine.ComposeNetwork(bound, c); len(problems) == 0 && composed.Has("dns-resolver", "config", "server") {
-				issues = add(issues, invariantRemediation(path, "node network declares both dns-resolver.config.server and selected dns name servers", "keep one of nmstate dns-resolver.config.server and dns on "+bound.Identity()+"; remove the other resolver declaration"))
+				issues = api.AppendIssues(issues, invariantRemediation(path, "node network declares both dns-resolver.config.server and selected dns name servers", "keep one of nmstate dns-resolver.config.server and dns on "+bound.Identity()+"; remove the other resolver declaration"))
 			}
 		}
 		if !configured && !bound.Spec().Get("network").Has("configRef") && !bound.Spec().Get("network").Has("inline") {
-			issues = add(issues, reference(path, "container installation requires configured Machine networking", "set spec.network.configRef or spec.network.inline on "+bound.Identity()))
+			issues = api.AppendIssues(issues, api.ReferenceIssue(path, "container installation requires configured Machine networking", "set spec.network.configRef or spec.network.inline on "+bound.Identity()))
 		}
 		if _, selectionIssues := machine.InstallAddress(bound, c); len(selectionIssues) > 0 {
 			for _, issue := range selectionIssues {
 				issue.Field = path
 				issue.Message = "node Machine requires one eligible static installation address"
-				issues = add(issues, issue)
+				issues = api.AppendIssues(issues, issue)
 			}
 		}
 	}
 	if baremetal && !install.Has("agent", "redfishVirtualMedia", "artifactServerEndpoint") {
-		issues = add(issues, invariantRemediation("$.spec.install.agent.redfishVirtualMedia.artifactServerEndpoint", "bare-metal nodes require a managed virtual-media artifact endpoint", "select a managed ArtifactServer endpoint in spec.install.agent.redfishVirtualMedia.artifactServerEndpoint"))
+		issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.agent.redfishVirtualMedia.artifactServerEndpoint", "bare-metal nodes require a managed virtual-media artifact endpoint", "select a managed ArtifactServer endpoint in spec.install.agent.redfishVirtualMedia.artifactServerEndpoint"))
 	}
 	if install.Get("mode").Text() == "disconnected" {
 		if !install.Has("agent", "bootArtifacts", "artifactServerEndpoint") {
-			issues = add(issues, invariantRemediation("$.spec.install.agent.bootArtifacts.artifactServerEndpoint", "disconnected installation requires a managed boot-artifacts endpoint", "select a managed ArtifactServer endpoint in spec.install.agent.bootArtifacts.artifactServerEndpoint"))
+			issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.agent.bootArtifacts.artifactServerEndpoint", "disconnected installation requires a managed boot-artifacts endpoint", "select a managed ArtifactServer endpoint in spec.install.agent.bootArtifacts.artifactServerEndpoint"))
 		}
 		mirror := install.Get("registries", "mirror")
 		if !mirror.Present() {
-			issues = add(issues, invariantRemediation("$.spec.install.registries.mirror", "disconnected installation requires a registry mirror selection", "set spec.install.registries.mirror to a Registry selection"))
+			issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.registries.mirror", "disconnected installation requires a registry mirror selection", "set spec.install.registries.mirror to a Registry selection"))
 		} else if registry, ok := c.Find(api.Registry, mirror.Get("registryRef").Text()); ok && !registry.Spec().Has("trustBundleRef") {
-			issues = add(issues, invariantRemediation("$.spec.install.registries.mirror.registryRef", "disconnected installation requires trustBundleRef on the selected Registry", "set spec.trustBundleRef on the Registry selected by spec.install.registries.mirror.registryRef"))
+			issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.registries.mirror.registryRef", "disconnected installation requires trustBundleRef on the selected Registry", "set spec.trustBundleRef on the Registry selected by spec.install.registries.mirror.registryRef"))
 		}
 	}
 	for _, consumer := range []string{"redfishVirtualMedia", "bootArtifacts"} {
 		path := "$.spec.install.agent." + consumer + ".artifactServerEndpoint"
 		selection := install.Get("agent", consumer, "artifactServerEndpoint")
-		issues = add(issues, infrastructureservices.ValidateArtifactEndpoint(selection, c, path, false)...)
+		issues = api.AppendIssues(issues, infrastructureservices.ValidateArtifactEndpoint(selection, c, path, false)...)
 		if server, ok := infrastructureservices.ArtifactEndpoint(selection, c); ok && server.Spec().Get("management").Text() == "managed" {
 			for _, node := range nodes {
 				if server.Spec().Get("machineRef").Equal(node.Get("machineRef")) {
-					issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".serverRef",
+					issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path + ".serverRef",
 						Message:     "a cluster installation cannot publish through an artifact server placed on one of its nodes, because that server cannot serve until the node is installed",
 						Remediation: "place " + server.Identity() + " on the controller Machine, or select a server placed there"})
 					break
@@ -300,19 +300,19 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 	}
-	issues = add(issues, infrastructureservices.ValidateProxy(install.Get("proxy"), c, "$.spec.install.proxy", false)...)
-	issues = add(issues, infrastructureservices.ValidateServerSelections(install.Get("ntp"), c, api.NTPServer, "$.spec.install.ntp")...)
-	issues = add(issues, infrastructureservices.ValidateRegistrySelection(install.Get("registries", "mirror"), c, "$.spec.install.registries.mirror")...)
+	issues = api.AppendIssues(issues, infrastructureservices.ValidateProxy(install.Get("proxy"), c, "$.spec.install.proxy", false)...)
+	issues = api.AppendIssues(issues, infrastructureservices.ValidateServerSelections(install.Get("ntp"), c, api.NTPServer, "$.spec.install.ntp")...)
+	issues = api.AppendIssues(issues, infrastructureservices.ValidateRegistrySelection(install.Get("registries", "mirror"), c, "$.spec.install.registries.mirror")...)
 	if install.Has("additionalTrustBundlePolicy") && install.Get("additionalTrustBundleRefs").Len() == 0 {
-		issues = add(issues, invariantRemediation("$.spec.install.additionalTrustBundlePolicy", "additionalTrustBundlePolicy requires additional trust bundles", "select at least one caBundle Secret in install.additionalTrustBundleRefs, or remove additionalTrustBundlePolicy"))
+		issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.additionalTrustBundlePolicy", "additionalTrustBundlePolicy requires additional trust bundles", "select at least one caBundle Secret in install.additionalTrustBundleRefs, or remove additionalTrustBundlePolicy"))
 	}
-	issues = add(issues, validateEndpoints(o, c)...)
-	issues = add(issues, validateMachineNetworkRefs(o, c)...)
-	issues = add(issues, validateNetworks(o, c)...)
-	issues = add(issues, validateOverlayOverlaps(o, c)...)
-	issues = add(issues, validateVIPAdjacency(o, c)...)
-	issues = add(issues, ValidateNetworkIntent(o, c)...)
-	return add(issues, inertDeclarations(s)...)
+	issues = api.AppendIssues(issues, validateEndpoints(o, c)...)
+	issues = api.AppendIssues(issues, validateMachineNetworkRefs(o, c)...)
+	issues = api.AppendIssues(issues, validateNetworks(o, c)...)
+	issues = api.AppendIssues(issues, validateOverlayOverlaps(o, c)...)
+	issues = api.AppendIssues(issues, validateVIPAdjacency(o, c)...)
+	issues = api.AppendIssues(issues, ValidateNetworkIntent(o, c)...)
+	return api.AppendIssues(issues, inertDeclarations(s)...)
 }
 
 func inertDeclarations(s api.Value) []api.Issue {
@@ -320,7 +320,7 @@ func inertDeclarations(s api.Value) []api.Issue {
 	for _, slot := range endpointSlots {
 		if s.Get("install", "endpoints", slot, "dnsName").Text() != "" {
 			path := "spec.install.endpoints." + slot + ".dnsName"
-			issues = add(issues, api.Issue{Code: "api.deferred", Field: "$." + path,
+			issues = api.AppendIssues(issues, api.Issue{Code: "api.deferred", Field: "$." + path,
 				Message:     "the agent installer derives every endpoint name from the cluster name and zone, so " + path + " changes no installation",
 				Remediation: "remove " + path + ", or keep it knowing the installation does not read it"})
 		}
@@ -334,19 +334,19 @@ func validateLocal(o api.Object, partial bool) []api.Issue {
 	s := o.Spec()
 	install := s.Get("install")
 	issues := []api.Issue{}
-	issues = add(issues, validateRelease(s, partial)...)
-	issues = add(issues, validateInstallChoices(install, partial)...)
+	issues = api.AppendIssues(issues, validateRelease(s, partial)...)
+	issues = api.AppendIssues(issues, validateInstallChoices(install, partial)...)
 	nodes := s.Get("nodes").Items()
-	issues = add(issues, validateNodes(s, nodes, partial)...)
-	issues = add(issues, validateEndpointSources(s, nodes, partial)...)
+	issues = api.AppendIssues(issues, validateNodes(s, nodes, partial)...)
+	issues = api.AppendIssues(issues, validateEndpointSources(s, nodes, partial)...)
 	for i, entry := range s.Get("networking", "clusterNetwork").Items() {
 		prefix, err := netip.ParsePrefix(entry.Get("cidr").Text())
 		host, ok := entry.Get("hostPrefix").Int64()
 		if err == nil && ok && (host <= int64(prefix.Bits()) || host > int64(prefix.Addr().BitLen())) {
-			issues = add(issues, invariantRemediation(fmt.Sprintf("$.spec.networking.clusterNetwork[%d].hostPrefix", i), "hostPrefix must be larger than the CIDR prefix and fit its address family", fmt.Sprintf("set spec.networking.clusterNetwork[%d].hostPrefix above the CIDR prefix and at most %d", i, prefix.Addr().BitLen())))
+			issues = api.AppendIssues(issues, invariantRemediation(fmt.Sprintf("$.spec.networking.clusterNetwork[%d].hostPrefix", i), "hostPrefix must be larger than the CIDR prefix and fit its address family", fmt.Sprintf("set spec.networking.clusterNetwork[%d].hostPrefix above the CIDR prefix and at most %d", i, prefix.Addr().BitLen())))
 		}
 	}
-	return add(issues, validateInstallNames(o, install)...)
+	return api.AppendIssues(issues, validateInstallNames(o, install)...)
 }
 
 func validateRelease(s api.Value, partial bool) []api.Issue {
@@ -355,16 +355,16 @@ func validateRelease(s api.Value, partial bool) []api.Issue {
 	release := distribution.Get("release")
 	var issues []api.Issue
 	if !partial && !release.Has("version") && !release.Has("image") {
-		issues = add(issues, invariantRemediation("$.spec.distribution.release", "release requires version or a pinned image", "set spec.distribution.release.version or a pinned spec.distribution.release.image"))
+		issues = api.AppendIssues(issues, invariantRemediation("$.spec.distribution.release", "release requires version or a pinned image", "set spec.distribution.release.version or a pinned spec.distribution.release.image"))
 	}
 	if release.Has("version") && !api.ValidLexical("cluster-release", release.Get("version").Text()) {
-		issues = add(issues, invariantRemediation("$.spec.distribution.release.version", "release version requires an exact major.minor.patch publisher release", "set spec.distribution.release.version to an exact publisher release, such as 4.22.0-rc.1"))
+		issues = api.AppendIssues(issues, invariantRemediation("$.spec.distribution.release.version", "release version requires an exact major.minor.patch publisher release", "set spec.distribution.release.version to an exact publisher release, such as 4.22.0-rc.1"))
 	}
 	if kind == "okd" && release.Has("channel") {
-		issues = add(issues, invariantRemediation("$.spec.distribution.release.channel", "release channels apply only to OpenShift", "remove spec.distribution.release.channel or select openshift in spec.distribution.type"))
+		issues = api.AppendIssues(issues, invariantRemediation("$.spec.distribution.release.channel", "release channels apply only to OpenShift", "remove spec.distribution.release.channel or select openshift in spec.distribution.type"))
 	}
 	if kind == "okd" && s.Get("security", "fips", "enabled").Bool() {
-		issues = add(issues, invariantRemediation("$.spec.security.fips.enabled", "FIPS requires OpenShift", "disable spec.security.fips.enabled or select openshift in spec.distribution.type"))
+		issues = api.AppendIssues(issues, invariantRemediation("$.spec.security.fips.enabled", "FIPS requires OpenShift", "disable spec.security.fips.enabled or select openshift in spec.distribution.type"))
 	}
 	return issues
 }
@@ -373,15 +373,15 @@ func validateInstallChoices(install api.Value, partial bool) []api.Issue {
 	var issues []api.Issue
 	mode := install.Get("mode").Text()
 	if mode == "connected" && install.Has("agent", "bootArtifacts") {
-		issues = add(issues, invariantRemediation("$.spec.install.agent.bootArtifacts", "connected installation obtains boot artifacts from the release payload", "remove spec.install.agent.bootArtifacts or select disconnected in spec.install.mode"))
+		issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.agent.bootArtifacts", "connected installation obtains boot artifacts from the release payload", "remove spec.install.agent.bootArtifacts or select disconnected in spec.install.mode"))
 	}
 	ssh := install.Get("nodeSSH")
 	if ssh.Present() {
 		if ssh.Has("keyPairRef") && (ssh.Has("publicKeyRef") || ssh.Has("privateKeyRef")) {
-			issues = add(issues, invariantRemediation("$.spec.install.nodeSSH", "key-pair and split SSH references are mutually exclusive", "keep either keyPairRef or the publicKeyRef/privateKeyRef references in spec.install.nodeSSH"))
+			issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.nodeSSH", "key-pair and split SSH references are mutually exclusive", "keep either keyPairRef or the publicKeyRef/privateKeyRef references in spec.install.nodeSSH"))
 		}
 		if !partial && !ssh.Has("keyPairRef") && !ssh.Has("publicKeyRef") {
-			issues = add(issues, invariantRemediation("$.spec.install.nodeSSH.publicKeyRef", "split SSH material requires a public-key reference", "set spec.install.nodeSSH.publicKeyRef or use spec.install.nodeSSH.keyPairRef"))
+			issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.nodeSSH.publicKeyRef", "split SSH material requires a public-key reference", "set spec.install.nodeSSH.publicKeyRef or use spec.install.nodeSSH.keyPairRef"))
 		}
 	}
 	return issues
@@ -395,23 +395,23 @@ func validateNodes(s api.Value, nodes []api.Value, partial bool) []api.Issue {
 		path := fmt.Sprintf("$.spec.nodes[%d]", i)
 		for _, label := range node.Get("labels").Fields() {
 			if !api.ValidLexical("kubernetes-label-key", label.Name) || !api.ValidLexical("kubernetes-label-value", label.Value.Text()) {
-				issues = add(issues, invariantRemediation(path+".labels", "node labels require Kubernetes label keys and values", "correct the Kubernetes label keys and values in "+path+".labels"))
+				issues = api.AppendIssues(issues, invariantRemediation(path+".labels", "node labels require Kubernetes label keys and values", "correct the Kubernetes label keys and values in "+path+".labels"))
 			}
 		}
 		for j, taint := range node.Get("taints").Items() {
 			if (!partial || taint.Has("key")) && !api.ValidLexical("kubernetes-label-key", taint.Get("key").Text()) || taint.Has("value") && !api.ValidLexical("kubernetes-label-value", taint.Get("value").Text()) {
-				issues = add(issues, invariantRemediation(fmt.Sprintf("%s.taints[%d]", path, j), "node taints require Kubernetes label keys and values", fmt.Sprintf("correct the Kubernetes key and value in %s.taints[%d]", path, j)))
+				issues = api.AppendIssues(issues, invariantRemediation(fmt.Sprintf("%s.taints[%d]", path, j), "node taints require Kubernetes label keys and values", fmt.Sprintf("correct the Kubernetes key and value in %s.taints[%d]", path, j)))
 			}
 		}
 	}
-	issues = add(issues, validateTopology(s, partial)...)
+	issues = api.AppendIssues(issues, validateTopology(s, partial)...)
 	if selected := s.Get("security", "diskEncryption", "roles"); selected.Present() && (!partial || s.Has("nodes")) {
 		if selected.Len() == 0 {
-			issues = add(issues, invariantRemediation("$.spec.security.diskEncryption.roles", "encryption role selection must select declared nodes", "set spec.security.diskEncryption.roles to at least one role declared in spec.nodes"))
+			issues = api.AppendIssues(issues, invariantRemediation("$.spec.security.diskEncryption.roles", "encryption role selection must select declared nodes", "set spec.security.diskEncryption.roles to at least one role declared in spec.nodes"))
 		}
 		for _, role := range selected.Strings() {
 			if !roles[role] {
-				issues = add(issues, invariantRemediation("$.spec.security.diskEncryption.roles", "every selected encryption role must have a declared node", "keep only roles declared in spec.nodes in spec.security.diskEncryption.roles"))
+				issues = api.AppendIssues(issues, invariantRemediation("$.spec.security.diskEncryption.roles", "every selected encryption role must have a declared node", "keep only roles declared in spec.nodes in spec.security.diskEncryption.roles"))
 			}
 		}
 	}
@@ -431,19 +431,19 @@ func validateEndpointSources(s api.Value, nodes []api.Value, partial bool) []api
 		if sourceKind != "loadBalancer" && (!partial || source.Has("type")) {
 			for _, key := range []string{"loadBalancerRef", "bindAddressRef"} {
 				if source.Has(key) {
-					issues = add(issues, invariantRemediation(path+".source."+key, "load-balancer selections require loadBalancer source", "remove "+path+".source."+key+" or set "+path+".source.type to loadBalancer"))
+					issues = api.AppendIssues(issues, invariantRemediation(path+".source."+key, "load-balancer selections require loadBalancer source", "remove "+path+".source."+key+" or set "+path+".source.type to loadBalancer"))
 				}
 			}
 		}
 		if !partial && len(nodes) == 1 && sourceKind == "installer" {
-			issues = add(issues, invariantRemediation(path+".source.type", "single-node clusters require node or external endpoint sources", "set "+path+".source.type to node or external"))
+			issues = api.AppendIssues(issues, invariantRemediation(path+".source.type", "single-node clusters require node or external endpoint sources", "set "+path+".source.type to node or external"))
 		}
 		if sourceKind == "node" && s.Has("nodes") && len(nodes) != 1 {
-			issues = add(issues, invariantRemediation(path+".source.type", "node endpoint source requires exactly one cluster node", "change "+path+".source.type to a source supported by the cluster topology, or declare exactly one spec.nodes entry"))
+			issues = api.AppendIssues(issues, invariantRemediation(path+".source.type", "node endpoint source requires exactly one cluster node", "change "+path+".source.type to a source supported by the cluster topology, or declare exactly one spec.nodes entry"))
 		}
 		if prefix := endpoint.Get("prefixLength"); prefix.Present() {
 			if !partial && !endpoint.Has("address") {
-				issues = add(issues, invariantRemediation(path+".prefixLength", "endpoint prefix length requires an address", "set "+path+".address or remove "+path+".prefixLength"))
+				issues = api.AppendIssues(issues, invariantRemediation(path+".prefixLength", "endpoint prefix length requires an address", "set "+path+".address or remove "+path+".prefixLength"))
 			}
 			if address, err := netip.ParseAddr(endpoint.Get("address").Text()); err == nil {
 				bits, ok := prefix.Int64()
@@ -452,7 +452,7 @@ func validateEndpointSources(s api.Value, nodes []api.Value, partial bool) []api
 					maxBits = 32
 				}
 				if ok && (bits < 1 || bits > maxBits) {
-					issues = add(issues, invariantRemediation(path+".prefixLength", "endpoint prefix length must fit its IP family", fmt.Sprintf("set %s.prefixLength between 1 and %d", path, maxBits)))
+					issues = api.AppendIssues(issues, invariantRemediation(path+".prefixLength", "endpoint prefix length must fit its IP family", fmt.Sprintf("set %s.prefixLength between 1 and %d", path, maxBits)))
 				}
 			}
 		}
@@ -469,7 +469,7 @@ func validateInstallNames(o api.Object, install api.Value) []api.Issue {
 	for _, entry := range install.Get("servingCertificates", "apiServer", "namedCertificates").Items() {
 		for _, name := range entry.Get("names").Strings() {
 			if internalNames[name] || strings.HasPrefix(name, "api-int."+o.Name()+".") {
-				issues = add(issues, invariantRemediation("$.spec.install.servingCertificates.apiServer.namedCertificates", "the internal API name cannot receive an API named certificate", "remove internal API names from spec.install.servingCertificates.apiServer.namedCertificates[].names"))
+				issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.servingCertificates.apiServer.namedCertificates", "the internal API name cannot receive an API named certificate", "remove internal API names from spec.install.servingCertificates.apiServer.namedCertificates[].names"))
 			}
 		}
 	}
@@ -477,7 +477,7 @@ func validateInstallNames(o api.Object, install api.Value) []api.Issue {
 	for i, source := range install.Get("registries", "imageDigestSources").Items() {
 		name := source.Get("source").Text()
 		if name != "" && seenSources[name] {
-			issues = add(issues, invariantRemediation(fmt.Sprintf("$.spec.install.registries.imageDigestSources[%d].source", i), "image digest sources must be unique", fmt.Sprintf("remove or combine the duplicate spec.install.registries.imageDigestSources[%d].source", i)))
+			issues = api.AppendIssues(issues, invariantRemediation(fmt.Sprintf("$.spec.install.registries.imageDigestSources[%d].source", i), "image digest sources must be unique", fmt.Sprintf("remove or combine the duplicate spec.install.registries.imageDigestSources[%d].source", i)))
 		}
 		seenSources[name] = true
 	}
@@ -545,7 +545,7 @@ func installerHoldsVIPs(o api.Object) bool {
 func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 	issues := []api.Issue{}
 	if !o.Spec().Has("install", "endpoints", "api", "address") {
-		issues = add(issues, invariantRemediation("$.spec.install.endpoints.api.address", "installation requires an effective API endpoint address", "set spec.install.endpoints.api.address for an installer or external source, or correct its node or loadBalancer source selection"))
+		issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.endpoints.api.address", "installation requires an effective API endpoint address", "set spec.install.endpoints.api.address for an installer or external source, or correct its node or loadBalancer source selection"))
 	}
 	networks, _ := machineNetworks(o, c)
 	nodes := o.Spec().Get("nodes").Items()
@@ -557,16 +557,16 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	if len(nodes) > 1 && owned > 0 && owned < len(endpointSlots) {
-		issues = add(issues, invariantRemediation("$.spec.install.endpoints", "the installer must own all three endpoint slots or none of them", "use installer for every endpoint source, or external or loadBalancer for every source"))
+		issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.endpoints", "the installer must own all three endpoint slots or none of them", "use installer for every endpoint source, or external or loadBalancer for every source"))
 	}
 	if vip {
 		endpoints := o.Spec().Get("install", "endpoints")
 		apiAddress := endpoints.Get("api", "address").Text()
 		if apiAddress != "" && endpoints.Get("api-int", "address").Text() != apiAddress {
-			issues = add(issues, invariantRemediation("$.spec.install.endpoints.api-int.address", "the internal API VIP must equal the API VIP", "set api-int.address to api.address"))
+			issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.endpoints.api-int.address", "the internal API VIP must equal the API VIP", "set api-int.address to api.address"))
 		}
 		if apiAddress != "" && endpoints.Get("ingress", "address").Text() == apiAddress {
-			issues = add(issues, invariantRemediation("$.spec.install.endpoints.ingress.address", "the ingress VIP must differ from the API VIP", "choose a distinct ingress.address"))
+			issues = api.AppendIssues(issues, invariantRemediation("$.spec.install.endpoints.ingress.address", "the ingress VIP must differ from the API VIP", "choose a distinct ingress.address"))
 		}
 	}
 	for _, slot := range endpointSlots {
@@ -576,30 +576,30 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 		}
 		path := "$.spec.install.endpoints." + slot
 		expected, _, selectionIssues := endpointAddress(o, endpoint, c, path)
-		issues = add(issues, selectionIssues...)
+		issues = api.AppendIssues(issues, selectionIssues...)
 		source := sourceType(endpoint)
 		if vip && source != "installer" {
-			issues = add(issues, invariantRemediation(path+".source.type", "the declared platform requires installer-owned endpoint VIPs", "use an installer source or declare platform none for external or loadBalancer sources"))
+			issues = api.AppendIssues(issues, invariantRemediation(path+".source.type", "the declared platform requires installer-owned endpoint VIPs", "use an installer source or declare platform none for external or loadBalancer sources"))
 		}
 		if source == "node" || source == "loadBalancer" {
 			if expected.Present() && endpoint.Has("address") && !expected.Equal(endpoint.Get("address")) {
-				issues = add(issues, invariant(path+".address", "effective endpoint address must agree with its selected source"))
+				issues = api.AppendIssues(issues, invariant(path+".address", "effective endpoint address must agree with its selected source"))
 			}
 		}
 		if (source == "installer" || source == "external") && !endpoint.Has("address") {
-			issues = add(issues, invariantRemediation(path+".address", "an installer or external endpoint requires an IP address; resolution before boot proves only a frozen address", "set "+path+".address to the endpoint IP literal"))
+			issues = api.AppendIssues(issues, invariantRemediation(path+".address", "an installer or external endpoint requires an IP address; resolution before boot proves only a frozen address", "set "+path+".address to the endpoint IP literal"))
 		}
 		address, err := netip.ParseAddr(endpoint.Get("address").Text())
 		if err != nil {
 			continue
 		}
 		if ipv4Compatible(address) {
-			issues = add(issues, invariantRemediation(path+".address", "an IPv4-compatible IPv6 endpoint address (::/96) prints differently in glibc; write the IPv4 address", "write "+path+".address as an IPv4 literal"))
+			issues = api.AppendIssues(issues, invariantRemediation(path+".address", "an IPv4-compatible IPv6 endpoint address (::/96) prints differently in glibc; write the IPv4 address", "write "+path+".address as an IPv4 literal"))
 		}
 		if len(networks) > 0 && !contains(networks, address) {
-			issues = add(issues, invariantRemediation(path+".address", "endpoint IP must belong to a consumed machine network", "set "+path+".address to an IP in a machine network of the cluster, the Network holding the bound Machines' install addresses or one listed in spec.networking.machineNetworkRefs, or add the Network that holds it to spec.networking.machineNetworkRefs"))
+			issues = api.AppendIssues(issues, invariantRemediation(path+".address", "endpoint IP must belong to a consumed machine network", "set "+path+".address to an IP in a machine network of the cluster, the Network holding the bound Machines' install addresses or one listed in spec.networking.machineNetworkRefs, or add the Network that holds it to spec.networking.machineNetworkRefs"))
 		}
-		issues = add(issues, endpointCollisions(o, c, slot, endpoint, address)...)
+		issues = api.AppendIssues(issues, endpointCollisions(o, c, slot, endpoint, address)...)
 		narrow := []netip.Prefix{}
 		for _, raw := range endpoint.Get("interfaceNetworks").Strings() {
 			if prefix, err := netip.ParsePrefix(raw); err == nil {
@@ -607,7 +607,7 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 		if len(narrow) > 0 && !contains(narrow, address) {
-			issues = add(issues, invariantRemediation(path+".interfaceNetworks", "endpoint interface networks must contain the owned address", "set "+path+".interfaceNetworks to CIDRs containing "+path+".address"))
+			issues = api.AppendIssues(issues, invariantRemediation(path+".interfaceNetworks", "endpoint interface networks must contain the owned address", "set "+path+".interfaceNetworks to CIDRs containing "+path+".address"))
 		}
 	}
 	return issues
@@ -814,7 +814,7 @@ func validateMachineNetworkRefs(o api.Object, c api.Catalog) []api.Issue {
 			continue
 		}
 		reported[name] = true
-		issues = add(issues, invariantRemediation("$.spec.networking.machineNetworkRefs", fmt.Sprintf("machineNetworkRefs of %s omits %s, which holds the install address of node %s (%s)", o.Identity(), match.Network.Identity(), node.Get("name").Text(), bound.Identity()),
+		issues = api.AppendIssues(issues, invariantRemediation("$.spec.networking.machineNetworkRefs", fmt.Sprintf("machineNetworkRefs of %s omits %s, which holds the install address of node %s (%s)", o.Identity(), match.Network.Identity(), node.Get("name").Text(), bound.Identity()),
 			fmt.Sprintf("add %s to spec.networking.machineNetworkRefs of %s, or remove machineNetworkRefs to take the machine networks from the nodes' install addresses", name, o.Identity())))
 	}
 	family := ""
@@ -827,7 +827,7 @@ func validateMachineNetworkRefs(o api.Object, c api.Catalog) []api.Issue {
 			continue
 		}
 		if _, ok := network.Prefix(declared, family); !ok {
-			issues = add(issues, invariantRemediation(fmt.Sprintf("$.spec.networking.machineNetworkRefs[%d]", i), fmt.Sprintf("%s declares no %s cidr, the address family of the install addresses of %s", declared.Identity(), family, o.Identity()),
+			issues = api.AppendIssues(issues, invariantRemediation(fmt.Sprintf("$.spec.networking.machineNetworkRefs[%d]", i), fmt.Sprintf("%s declares no %s cidr, the address family of the install addresses of %s", declared.Identity(), family, o.Identity()),
 				fmt.Sprintf("declare spec.%s.cidr on %s, or remove %s from spec.networking.machineNetworkRefs", family, declared.Identity(), name)))
 		}
 	}
@@ -913,12 +913,4 @@ func invariantRemediation(field, message, remediation string) api.Issue {
 	issue := invariant(field, message)
 	issue.Remediation = remediation
 	return issue
-}
-func reference(field, message, remediation string) api.Issue {
-	i := invariantRemediation(field, message, remediation)
-	i.Code = "api.reference"
-	return i
-}
-func add(issues []api.Issue, more ...api.Issue) []api.Issue {
-	return append(issues, more[:min(len(more), 999-len(issues))]...)
 }
