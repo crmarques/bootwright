@@ -32,6 +32,7 @@ import (
 const (
 	exceptionsFormat = "bootwright.vulnerability-exceptions-v1"
 	maxValidity      = 90 * 24 * time.Hour
+	warnAhead        = 14 * 24 * time.Hour
 	maxResponse      = 16 << 20
 )
 
@@ -140,6 +141,7 @@ func run(o options, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	warnExpiring(out, allowed, o.today)
 	found, err := goFindings(o.govulncheck)
 	if err != nil {
 		return err
@@ -203,6 +205,30 @@ func readExceptions(path string, today time.Time) ([]exception, error) {
 		}
 	}
 	return document.Exceptions, nil
+}
+
+func warnExpiring(out io.Writer, allowed []exception, today time.Time) {
+	expiring := map[string][]string{}
+	for _, entry := range allowed {
+		if expires, err := time.Parse(time.DateOnly, entry.Expires); err == nil && expires.Sub(today) <= warnAhead {
+			expiring[entry.Expires] = append(expiring[entry.Expires], entry.ID)
+		}
+	}
+	dates := make([]string, 0, len(expiring))
+	for date := range expiring {
+		dates = append(dates, date)
+	}
+	slices.Sort(dates)
+	for _, date := range dates {
+		ids := expiring[date]
+		slices.Sort(ids)
+		expires, _ := time.Parse(time.DateOnly, date)
+		subject, pronoun := fmt.Sprintf("%d exceptions expire", len(ids)), "them"
+		if len(ids) == 1 {
+			subject, pronoun = "1 exception expires", "it"
+		}
+		fmt.Fprintf(out, "vulngate: warning: %s on %s, in %d days: %s; decide %s anew before then\n", subject, date, int(expires.Sub(today)/(24*time.Hour)), strings.Join(ids, ", "), pronoun)
+	}
 }
 
 type scanResult struct {

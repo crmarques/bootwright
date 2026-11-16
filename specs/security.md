@@ -860,7 +860,10 @@ naming the advisory and its aliases, the component's `bom-ref`, `not_affected`
 with a CycloneDX justification or `no_fix`, a reason, and an expiry at most 90
 days ahead. An expired exception, one further ahead, and one that matches no
 finding fail too, so every exception is decided anew at least every 90 days
-(`TestAnExceptionThatIsExpiredTooDistantOrIncompleteFails`). The executable
+(`TestAnExceptionThatIsExpiredTooDistantOrIncompleteFails`). The gate warns,
+without failing, of each exception that expires within 14 days, grouped by
+date, and the scheduled vulnerability workflow copies the warnings into its
+summary (`TestAnExceptionThatExpiresWithinTwoWeeksWarnsWithoutFailing`). The executable
 embeds the exceptions, which its bill of materials carries as VEX, and the
 build stamps the verdict `version` prints. `VULNCHECK=skip` builds without the
 databases and stamps the executable `unchecked`.

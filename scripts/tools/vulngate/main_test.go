@@ -166,6 +166,25 @@ func TestAnExceptionThatIsExpiredTooDistantOrIncompleteFails(t *testing.T) {
 	}
 }
 
+func TestAnExceptionThatExpiresWithinTwoWeeksWarnsWithoutFailing(t *testing.T) {
+	vulns := map[string][]string{"kubevirt.io/kubevirt@1.9.1": {"GO-2026-3333", "GO-2026-4444", "GO-2026-5555"}}
+	f := newFixture(t, vulns, scanned, []exception{
+		excepted("GO-2026-3333", "tool:virtctl@1.9.1", "2026-11-24"),
+		excepted("GO-2026-4444", "tool:virtctl@1.9.1", "2026-11-24"),
+		excepted("GO-2026-5555", "tool:virtctl@1.9.1", "2026-11-25"),
+	})
+	var out strings.Builder
+	if err := run(f.options, &out); err != nil {
+		t.Fatalf("exceptions that have not expired failed the gate: %v\n%s", err, out.String())
+	}
+	if want := "vulngate: warning: 2 exceptions expire on 2026-11-24, in 14 days: GO-2026-3333, GO-2026-4444; decide them anew before then\n"; !strings.Contains(out.String(), want) {
+		t.Errorf("the gate did not warn of the exceptions that expire within 14 days:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "GO-2026-5555") {
+		t.Errorf("the gate warned of an exception that expires in 15 days:\n%s", out.String())
+	}
+}
+
 func TestAScanWithoutItsConfigurationIsRefused(t *testing.T) {
 	f := newFixture(t, nil, `{"finding":{"osv":"GO-1","trace":[]}}`+"\n", nil)
 	if err := run(f.options, &strings.Builder{}); err == nil {
