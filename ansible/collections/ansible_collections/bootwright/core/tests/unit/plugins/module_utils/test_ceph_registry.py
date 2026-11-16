@@ -462,13 +462,10 @@ def test_provider_stored_credentials_refuse_before_enrollment_or_service_effect(
     assert calls == [("fsid",), ("config-key", "ls")] * 2
 
 
-@pytest.mark.parametrize("mode", ["native", "verifiedTunnel"])
-def test_bootstrap_refuses_registry_material_before_scratch_or_native_effect(registry, monkeypatch, mode):
+def test_bootstrap_refuses_registry_material_before_scratch_or_native_effect(registry):
     native, unused, material = registry
     native.prepare_registry(material)
     writes = list(native.markers.writes)
-    native.request["clusterSSHTransport"] = mode
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
     private = {"clusterPrivateKey": "private-key", "clusterPublicKey": "public-key", "knownHosts": "host-keys", "registryJSON": "SYNTHETIC-SECRET-SENTINEL"}
     with pytest.raises(ceph_native.Refusal, match="^material$"):
         native.bootstrap(private)

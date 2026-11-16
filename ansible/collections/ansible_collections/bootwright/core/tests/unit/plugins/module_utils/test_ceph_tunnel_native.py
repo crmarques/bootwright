@@ -250,6 +250,16 @@ def profiled(cluster_request, tmp_path):
     return worker, inspected, inspected_id
 
 
+def custody_held(native):
+    """Lend a phase test the tunnel custody and its proofs, which this module and test_ceph_bootstrap_recovery cover."""
+    native.bootstrap_hold = contextlib.nullcontext
+    native.transport_hold = lambda settle=False: contextlib.nullcontext()
+    native.cache_hold = contextlib.nullcontext
+    native.verify_transport_bundle = lambda: None
+    native.verify_tunnel_configuration = lambda: None
+    return native
+
+
 def pinned(request, **changes):
     request = dict(request, image="registry.example.test/ceph" + "@sha256:" + "a" * 64, registry="registry.example.test")
     request.update(changes)
@@ -272,14 +282,14 @@ def test_supported_transport_is_the_pinned_release_over_verified_tunnel_only(clu
 
 
 @pytest.mark.parametrize("phase", ["claim", "authorize", "bootstrap", "enroll", "services", "pool", "client", "policy", "destroy"])
-def test_remote_dispatch_refuses_an_unsupported_release_before_any_effect(cluster_request, phase):
+def test_remote_dispatch_refuses_the_native_transport_before_any_effect(cluster_request, phase):
     cluster_request["clusterSSHTransport"] = "native"
     resources = {"pool": copy.deepcopy(POOL),
                  "client": {"name": "reader", "pool": "volumes", "access": "readOnly", "dataPools": [], "filesystem": "", "group": "", "subvolume": ""},
                  "policy": {"deviceClass": "", "failureDomain": "host", "name": "fast", "root": "default", "rule": "fast", "size": 2}}
     if phase in resources:
         cluster_request.update({"action": phase, phase: resources[phase]})
-    with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_native.dispatch({"request": pinned(cluster_request), "host": "node-1", "phase": phase, "private": {}})
 
 

@@ -28,6 +28,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_core, ceph_native, ceph_native_nfs, ceph_native_observe, ceph_native_worker, ceph_smb_native, ceph_tunnel_staging,
 )
 from ansible_collections.bootwright.core.plugins.modules import ceph_smb
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 FSID = "4c0a4300-aa43-458c-86d7-ac2256d1fc00"
 OWNER = "apply-123"
@@ -43,7 +44,7 @@ NATIVE_SENTINEL = "NATIVE-MESSAGE-SENTINEL"
 TYPES = sorted(ceph_smb_native.TYPES)
 
 
-def scope(transport="native"):
+def scope(transport="verifiedTunnel"):
     hosts = [{"name": "node-" + str(i), "machine": "machine-" + str(i), "address": "192.0.2." + str(i), "user": "operator", "port": 22,
               "devices": [{"path": "/dev/sda", "serial": "drive-scsi" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
@@ -64,7 +65,7 @@ def service(hosts=("node-1", "node-2"), clustered=False):
     return {"clustered": clustered, "hosts": list(hosts), "name": "smb.files"}
 
 
-def request(resource_type, transport="native", **served):
+def request(resource_type, transport="verifiedTunnel", **served):
     """One completed request of a resource type, as the Go SMB capability completes it."""
     base = {"cluster": "example", "controller": "controller", "machines": ["machine-1", "machine-2", "machine-3"],
             "object": "smb-" + resource_type.split(".")[-1], "resourceType": resource_type, "scope": scope(transport), "version": "ceph-smb-v1",
@@ -232,7 +233,7 @@ class Markers:
 
 
 def worker(value, monitor, markers=None):
-    native = ceph_smb_native.SMBWorker(value, "node-1", run=monitor.run, markers=markers or Markers())
+    native = tunnel_native.custody_held(ceph_smb_native.SMBWorker(value, "node-1", run=monitor.run, markers=markers or Markers()))
     elapsed = [0.0]
     native.clock = lambda: elapsed[0]
     native.pause = lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds)
@@ -782,7 +783,7 @@ def test_dispatch_routes_smb_phases_to_the_smb_worker(monkeypatch):
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_native.dispatch(dict(envelope, host="node-2"))
     with pytest.raises(ceph_native.Refusal, match="^request$"):
-        ceph_native.dispatch(dict(envelope, request=request("ceph.smb.share"), phase="smb_apply"))
+        ceph_native.dispatch(dict(envelope, request=request("ceph.smb.share", transport="native"), phase="smb_apply"))
     with pytest.raises(ceph_native.Refusal, match="^material$"):
         ceph_native.dispatch(dict(envelope, private={"smbSecret0": JOIN_SECRET}))
     assert not ceph_smb_native.PHASES & (ceph_native.CORE_PHASES | ceph_native.HOST_PHASES)

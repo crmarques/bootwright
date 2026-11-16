@@ -522,7 +522,6 @@ def test_export_request_admits_each_binding(subvolume):
 def test_dispatch_routes_an_export_to_the_export_worker(monkeypatch):
     reached = []
     monkeypatch.setattr(ceph_native_nfs.ExportWorker, "nfs_export", lambda self: reached.append(type(self)) or {"changed": False})
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = export_request()
     assert ceph_native.dispatch({"request": request, "host": "node-1", "phase": "nfs_export", "private": {}}) == {"changed": False}
     assert reached == [ceph_native_nfs.ExportWorker]
@@ -557,7 +556,6 @@ class Transport:
 
 
 def test_export_routes_through_the_unit_flow(monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = export_request()
     transport = Transport(ready_after=2)
     result = ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)

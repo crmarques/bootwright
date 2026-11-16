@@ -376,7 +376,6 @@ class Transport:
 
 def test_apply_writes_the_retained_pair_to_its_protected_output_once(core_request, tmp_path, monkeypatch):
     request = core_user_request(core_request)
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     output = tmp_path / "object-user"
     transport = Transport(request)
     result = ceph_core.execute(request, "apply", "d" * 64, transport, {"object-user": str(output)}, pause=lambda seconds: None)
@@ -407,7 +406,6 @@ def test_an_observe_with_no_output_reads_a_ready_user_without_its_pair(core_requ
 
 
 def test_an_apply_still_requires_the_users_output(core_request, monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     with pytest.raises(ceph_native.Refusal, match="^material$"):
         ceph_core.execute(core_user_request(core_request), "apply", "d" * 64, Transport(core_user_request(core_request)), {})
 
@@ -418,7 +416,6 @@ def test_an_apply_still_requires_the_users_output(core_request, monkeypatch):
 ])
 def test_apply_refuses_any_other_produced_shape(core_request, tmp_path, monkeypatch, private):
     request = core_user_request(core_request)
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     output = tmp_path / "object-user"
     with pytest.raises(ceph_native.Refusal, match="^material$"):
         ceph_core.execute(request, "apply", "d" * 64, Transport(request, private=private), {"object-user": str(output)}, pause=lambda seconds: None)
@@ -427,7 +424,6 @@ def test_apply_refuses_any_other_produced_shape(core_request, tmp_path, monkeypa
 
 def test_outputs_are_exactly_the_object_user_output(core_request, tmp_path, monkeypatch):
     request = core_user_request(core_request)
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     for outputs in ({}, {"client": str(tmp_path / "client")}, {"object-user": str(tmp_path / "a"), "client": str(tmp_path / "b")}):
         with pytest.raises(ceph_native.Refusal):
             ceph_core.execute(request, "apply", "d" * 64, Transport(request), outputs, pause=lambda seconds: None)

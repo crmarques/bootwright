@@ -276,7 +276,6 @@ def test_inactive_firewalld_plans_and_applies(monkeypatch, state):
         host = Host(state=state)
         assert native(request, host, name).ingress_firewall() == {"changed": False}
         assert host.log == [tuple(SYSTEMCTL)]
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = nfs_request()
     transport = Calls(units.Transport(request))
     execute(request, transport)
@@ -366,7 +365,6 @@ def test_ingress_firewall_refuses_an_unsettled_firewalld():
 def test_dispatch_admits_the_firewall_phase_only_on_an_ingress_host(monkeypatch):
     reached = []
     monkeypatch.setattr(ceph_native_units, "firewall_check", lambda worker, spec, ports: reached.append((type(worker), ports)))
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
 
     def dispatch(request, host, private=None):
         return ceph_native.dispatch({"request": request, "host": host, "phase": "ingress_firewall", "private": private or {}})
@@ -386,7 +384,6 @@ def test_dispatch_admits_the_firewall_phase_only_on_an_ingress_host(monkeypatch)
 
 
 def test_core_skips_the_firewall_check_without_an_ingress(monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = nfs_request("direct")
     transport = Calls(units.Transport(request))
     execute(request, transport)
@@ -516,7 +513,6 @@ class Holders(units.Transport):
 
 @pytest.mark.parametrize(("holders", "entry"), [((), "noholder@ingress.nfs.files"), (("node-1", "node-2"), "holders@ingress.nfs.files")])
 def test_readiness_needs_exactly_one_holder_per_virtual_ip(monkeypatch, holders, entry):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = nfs_request()
     assert ceph_native_units.PENDING.fullmatch(entry)
     clock = iter(range(0, 100000, 100))
@@ -529,7 +525,6 @@ def test_readiness_needs_exactly_one_holder_per_virtual_ip(monkeypatch, holders,
 
 
 def test_readiness_passes_with_one_holder_and_keeps_the_endpoint_proof(monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = nfs_request()
     transport = Holders(request, ("node-2",))
     result = execute(request, transport)
@@ -564,7 +559,6 @@ def test_the_holder_proof_asks_only_the_hosts_running_the_ingress_keepalived():
 
 
 def test_an_unreachable_keepalived_host_blocks_readiness_naming_it(monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = nfs_request()
 
     class Unreachable(units.Transport):

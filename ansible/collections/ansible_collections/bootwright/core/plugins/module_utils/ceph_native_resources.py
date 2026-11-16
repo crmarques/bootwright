@@ -12,7 +12,6 @@ from __future__ import annotations
 # pylint: disable=unidiomatic-typecheck
 
 import base64
-import contextlib
 import functools
 import hashlib
 import json
@@ -367,7 +366,7 @@ class ResourceWorker(ceph_native.Worker):
             require(completed is None or "rbd" in current.get("application_metadata", {}), "pool-drift")
             if completed is None:
                 self.markers.write(attempt_name, init)
-                proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+                proof = self.bootstrap_hold()
                 with proof:
                     self.command([*self.admin_argv("/usr/bin/rbd"), "pool", "init", name], json_result=False)
                 require("rbd" in self.owned_pool(pool["name"]).get("application_metadata", {}), "not-ready")
@@ -975,7 +974,7 @@ class ResourceWorker(ceph_native.Worker):
 
     def rbd_cli(self, *args, json_result=True):
         """One rbd command with the operation's own admin custody, under the bootstrap hold as every native call."""
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold()
         with proof:
             return self.command([*self.admin_argv("/usr/bin/rbd"), *args], json_result=json_result)
 

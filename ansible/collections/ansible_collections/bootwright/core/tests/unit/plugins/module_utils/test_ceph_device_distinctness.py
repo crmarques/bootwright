@@ -30,9 +30,7 @@ def bound_rows(request, collision):
 
 
 @pytest.mark.parametrize("collision", [None, "serial", "wwn"])
-@pytest.mark.parametrize("transport", ["native", "verifiedTunnel"])
-def test_aggregate_rejects_shared_observed_disk(core_request, collision, transport):
-    core_request["clusterSSHTransport"] = transport
+def test_aggregate_rejects_shared_observed_disk(core_request, collision):
     values = bound_rows(core_request, collision)
     calls = []
 
@@ -59,10 +57,8 @@ def test_service_identity_record_refuses_collision_without_publication(core_requ
     assert not native.markers.writes and not calls
 
 
-@pytest.mark.parametrize("route", ["native", "verifiedTunnel"])
-def test_shared_disk_refuses_before_any_cluster_preparation_effect(core_request, monkeypatch, route):
+def test_shared_disk_refuses_before_any_cluster_preparation_effect(core_request, monkeypatch):
     values = bound_rows(core_request, "wwn")
-    core_request["clusterSSHTransport"] = route
     calls = []
 
     class Transport:
@@ -72,21 +68,16 @@ def test_shared_disk_refuses_before_any_cluster_preparation_effect(core_request,
             return {"devices": [value for value in values if value["host"] == host["name"]]}
 
     bootstrap = core_request["hosts"][0]
+    monkeypatch.setattr(ceph_core.ceph_tunnel_staging, "prove_recovery_record", lambda *args, **kwargs: "unclaimed")
+    monkeypatch.setattr(ceph_core, "recovery_preparations", lambda *args: {host["name"]: "unclaimed" for host in core_request["hosts"]})
     with pytest.raises(ceph_native.Refusal, match="^device-identity$"):
-        if route == "native":
-            ceph_core.apply_native_cluster(core_request, bootstrap, Transport(), {"exists": False})
-        else:
-            monkeypatch.setattr(ceph_core.ceph_tunnel_staging, "prove_recovery_record", lambda *args, **kwargs: "unclaimed")
-            monkeypatch.setattr(ceph_core, "recovery_preparations", lambda *args: {host["name"]: "unclaimed" for host in core_request["hosts"]})
-            ceph_core.apply_tunnel_cluster(core_request, bootstrap, Transport(), {}, [])
+        ceph_core.apply_tunnel_cluster(core_request, bootstrap, Transport(), {}, [])
     assert calls == ["host_devices"] * len(core_request["hosts"])
 
 
-@pytest.mark.parametrize("route", ["native", "verifiedTunnel"])
-def test_shared_disk_refuses_before_orphan_purge_or_service_write(core_request, route):
+def test_shared_disk_refuses_before_orphan_purge_or_service_write(core_request):
     native, calls = fixtures.worker(core_request, {})
     values = bound_rows(native.request, "serial")
-    native.request["clusterSSHTransport"] = route
     native.ceph = lambda *args: {"fsid": core_request["fsid"]}
     native.prove_registry = native.provider_registry_absent = lambda: None
     native.purge_orphan_osds = lambda values: pytest.fail("purged before disjoint disk proof")

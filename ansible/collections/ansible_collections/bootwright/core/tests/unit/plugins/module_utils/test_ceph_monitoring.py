@@ -636,7 +636,6 @@ class MaterialTransport(units.Transport):
 
 
 def test_execute_unit_passes_bound_material_to_its_apply_phase_only(monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = monitoring_request()
     transport = MaterialTransport(request, ready_after=2)
     result = ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
@@ -685,7 +684,6 @@ def test_transport_admits_the_unit_material(tmp_path):
 def test_dispatch_lends_the_bound_material_to_the_unit_phase_only(monkeypatch):
     reached = []
     monkeypatch.setattr(ceph_native_units.UnitWorker, "unit", lambda self: reached.append(self.bound) or {"changed": False})
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = monitoring_request()
     assert ceph_native.dispatch({"request": request, "host": "node-1", "phase": "unit", "private": dict(MATERIAL)}) == {"changed": False}
     assert reached == [MATERIAL]

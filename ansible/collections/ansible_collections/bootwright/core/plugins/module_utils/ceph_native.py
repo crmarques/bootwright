@@ -752,7 +752,7 @@ def scope_checks(request):
     key = urlsplit(package_url(request["packageRepositoryKey"]))
     require((repository.scheme, repository.hostname, repository.port or 443) == (key.scheme, key.hostname, key.port or 443), "artifact")
     require(named(request["clusterSSHUser"]))
-    require(request["clusterSSHTransport"] in ("native", "verifiedTunnel"))
+    require(request["clusterSSHTransport"] == "verifiedTunnel")
     require(named(request["clusterKeyRef"]) and named(request["registryRef"]))
     require("registryTrustBundleRef" not in request or named(request["registryTrustBundleRef"]))
     require(isinstance(request["registry"], str) and re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]{1,255}", request["registry"]) is not None)
@@ -993,10 +993,9 @@ def validate_services(request, hosts, seen):
         require(len(class_groups(spec)) == 1 or not ({"db_devices", "wal_devices"} & set(spec)), "osd-unqualified")
     require(kinds >= {"mon", "mgr"})
     require(request["bootstrap"] in next(s["placement"]["hosts"] for s in services if s["service_type"] == "mon"))
-    if request["clusterSSHTransport"] == "verifiedTunnel":
-        helper, unused = tunnel_helpers()
-        helper.targets(request)
-        require(request["bootstrap"] in next(s["placement"]["hosts"] for s in services if s["service_type"] == "mgr"), "native-tunnel-unproved")
+    helper, unused = tunnel_helpers()
+    helper.targets(request)
+    require(request["bootstrap"] in next(s["placement"]["hosts"] for s in services if s["service_type"] == "mgr"), "native-tunnel-unproved")
     require(selected_devices == {(h["name"], d["path"]) for h in hosts for d in h["devices"]}, "device-unproved")
 
 
@@ -1616,17 +1615,17 @@ class Worker:
                 "--auth_client_required=cephx", "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring")]
 
     def ceph(self, *args, data=b"", json_result=True, secrets=(), timeout=60):
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold()
         with proof:
             return self.command([*self.admin_argv("/usr/bin/ceph"), "--format", "json", *args],
                                 data=data, json_result=json_result, secrets=secrets, timeout=timeout)
 
     def recovery_enabled(self):
-        return self.request["clusterSSHTransport"] == "verifiedTunnel" and self.markers.read("bootstrap-scope.json") is not None
+        return self.markers.read("bootstrap-scope.json") is not None
 
     def ceph_text(self, *args):
         """Primitive native output still holds the same original admin custody."""
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold()
         with proof:
             return self.command([*self.admin_argv("/usr/bin/ceph"), *args], json_result=False)
 
@@ -1993,7 +1992,7 @@ class Worker:
             physical = self.physical_devices()
         if owned and self.recovery_enabled() and self.host["name"] == self.request["bootstrap"] and self.markers.read("bootstrap-enrollment.json") is None:
             self.bootstrap_state()
-        elif owned and self.request["clusterSSHTransport"] == "verifiedTunnel" and any(str(d.get("name", "")).startswith("mgr.") for d in daemons):
+        elif owned and any(str(d.get("name", "")).startswith("mgr.") for d in daemons):
             self.verify_transport_bundle()
             pending = self.verify_manager_mounts(daemons, observing=True)
             if pending:
@@ -2095,7 +2094,7 @@ class Worker:
         synchronized = self.command(["/usr/bin/timedatectl", "show", "--property=NTPSynchronized", "--value"], json_result=False)
         require(synchronized.strip() == b"yes", "host-time")
         result = {"name": self.host["name"], "owned": self.markers.owned(), "exists": bool(self.daemons())}
-        if self.request["clusterSSHTransport"] == "verifiedTunnel" and self.request["action"] == "cluster":
+        if self.request["action"] == "cluster":
             result["recovery"] = self.preparation_state()
         return result
 
@@ -2109,9 +2108,8 @@ class Worker:
             self.require_call_home_path()
         self.markers.create()
         self.markers.write("artifact.json", identity)
-        if self.request["clusterSSHTransport"] == "verifiedTunnel":
-            unused, staging = tunnel_helpers()
-            self.markers.write("bootstrap-scope.json", staging.recovery_scope(self.request))
+        unused, staging = tunnel_helpers()
+        self.markers.write("bootstrap-scope.json", staging.recovery_scope(self.request))
         return {"changed": not owned}
 
     def prove_authorization(self):
@@ -2689,10 +2687,7 @@ class Worker:
     def authorize(self, private):
         """Add only the separately owned cluster key to an existing account."""
         require(self.markers.owned(), "ownership")
-        expected = {"clusterPublicKey", "registryJSON"}
-        if self.request["clusterSSHTransport"] == "verifiedTunnel":
-            expected |= {"clusterPrivateKey", "knownHosts"}
-        require(set(private) == expected, "material")
+        require(set(private) == {"clusterPublicKey", "registryJSON", "clusterPrivateKey", "knownHosts"}, "material")
         self.tunnel_host_key_preflight(private)
         registry = registry_material(self.request, private["registryJSON"])
         public = private["clusterPublicKey"]
@@ -2707,10 +2702,8 @@ class Worker:
             raise Refusal("material") from None
         account = pwd.getpwnam(self.request["clusterSSHUser"])
         require(account.pw_uid > 0 and os.path.isabs(account.pw_dir), "cluster-account")
-        line = "restrict " + parts[0] + " " + parts[1] + " bootwright:" + self.request["owner"]
-        if self.request["clusterSSHTransport"] == "verifiedTunnel":
-            helper, unused = tunnel_helpers()
-            line = helper.authorization_line(public, self.request["owner"])
+        helper, unused = tunnel_helpers()
+        line = helper.authorization_line(public, self.request["owner"])
         identity = {"uid": account.pw_uid, "home": account.pw_dir, "line": line}
         recorded = self.markers.read("ssh-authorization.json")
         require(recorded is None or recorded == identity, "ownership")
@@ -2723,8 +2716,7 @@ class Worker:
                 directory = os.open(".ssh", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=home)
             except FileNotFoundError:
                 self.registry_preflight(registry)
-                if self.request["clusterSSHTransport"] == "verifiedTunnel":
-                    self.tunnel_policy_preflight()
+                self.tunnel_policy_preflight()
                 # Ownership is durable before even this non-Ceph account effect.
                 self.markers.write("ssh-authorization.json", identity)
                 os.mkdir(".ssh", 0o700, dir_fd=home)
@@ -2747,14 +2739,12 @@ class Worker:
             matching = [entry for entry in text.splitlines() if parts[1] in entry.split()]
             require(not matching or recorded == identity and matching == [line], "foreign-authorization")
             self.registry_preflight(registry)
-            if self.request["clusterSSHTransport"] == "verifiedTunnel":
-                self.tunnel_policy_preflight()
+            self.tunnel_policy_preflight()
             registry_changed = self.prepare_registry(registry)
-            if self.request["clusterSSHTransport"] == "verifiedTunnel":
-                managers = next(s["placement"]["hosts"] for s in self.request["services"] if s["service_type"] == "mgr")
-                if self.host["name"] in managers:
-                    self.transport({name: private[name] for name in ("clusterPrivateKey", "clusterPublicKey", "knownHosts")})
-                self.tunnel_guest_policy()
+            managers = next(s["placement"]["hosts"] for s in self.request["services"] if s["service_type"] == "mgr")
+            if self.host["name"] in managers:
+                self.transport({name: private[name] for name in ("clusterPrivateKey", "clusterPublicKey", "knownHosts")})
+            self.tunnel_guest_policy()
             if matching:
                 return self.authorization_result(registry_changed)
             self.markers.write("ssh-authorization.json", identity)
@@ -2864,14 +2854,12 @@ class Worker:
 
     def tunnel_preflight(self, private):
         """Read only: the coordinator asks each manager host before it claims or authorizes any host."""
-        require(self.request["clusterSSHTransport"] == "verifiedTunnel" and set(private) == {"knownHosts"}, "material")
+        require(set(private) == {"knownHosts"}, "material")
         self.tunnel_host_key_preflight(private)
         return {"changed": False}
 
     def tunnel_host_key_preflight(self, private):
         """Before any authorization effect, a manager host proves its tunnel client admits an algorithm of every pinned host key."""
-        if self.request["clusterSSHTransport"] != "verifiedTunnel":
-            return
         managers = next(s["placement"]["hosts"] for s in self.request["services"] if s["service_type"] == "mgr")
         if self.host["name"] not in managers:
             return
@@ -2893,7 +2881,6 @@ class Worker:
     def transport(self, private):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_tunnel_custody as custody
         require(self.markers.owned(), "ownership")
-        require(self.request["clusterSSHTransport"] == "verifiedTunnel", "native-tunnel-unproved")
         require(set(private) == {"clusterPrivateKey", "clusterPublicKey", "knownHosts"}, "material")
         scope = self.transport_scope()
         policy = self.manager_policy()
@@ -2926,44 +2913,7 @@ class Worker:
         require(self.host["name"] == self.request["bootstrap"])
         require(set(private) == {"clusterPrivateKey", "clusterPublicKey", "knownHosts"}, "material")
         self.prove_registry()
-        if self.request["clusterSSHTransport"] == "verifiedTunnel":
-            return self.tunnel_bootstrap(private)
-        if self.daemons():
-            require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
-            self.provider_registry_absent()
-            self.config_database()
-            return {"changed": self.accept_call_home()}
-        # IBM enables call-home at license acceptance. Until a pinned binary's
-        # suppression is qualified, refuse disabled intent before bootstrap.
-        require(self.request["callHome"] == "enabled", "call-home-unqualified")
-        with tempfile.TemporaryDirectory(prefix=".bootstrap-", dir=self.markers.path) as scratch:
-            for name in ("clusterPrivateKey", "clusterPublicKey", "knownHosts"):
-                private_write(os.path.join(scratch, name), private[name].encode())
-            ssh_config = ("Host *\n  StrictHostKeyChecking yes\n  UserKnownHostsFile " + os.path.join(self.markers.path, "known_hosts") +
-                          "\n  GlobalKnownHostsFile /dev/null\n  IdentitiesOnly yes\n  IdentityAgent none\n  PasswordAuthentication no\n"
-                          "  KbdInteractiveAuthentication no\n  ForwardAgent no\n  ProxyCommand none\n  ProxyJump none\n")
-            known_path = os.path.join(self.markers.path, "known_hosts")
-            if not os.path.exists(known_path):
-                private_write(known_path, private["knownHosts"].encode())
-            else:
-                require(read_regular(known_path, private=True) == private["knownHosts"].encode(), "host-trust")
-            private_write(os.path.join(scratch, "ssh_config"), ssh_config.encode())
-            private_write(os.path.join(scratch, "ceph.conf"), bootstrap_config(self.request))
-            argv = [self.tool, "--image", self.request["image"], "bootstrap", "--fsid", self.request["fsid"], "--mon-ip", self.request["monIP"], "--output-dir",
-                    self.markers.path, "--skip-pull", "--skip-monitoring-stack", "--skip-dashboard", "--skip-admin-label", "--allow-fqdn-hostname",
-                    "--ssh-user", self.request["clusterSSHUser"], "--ssh-private-key", os.path.join(scratch, "clusterPrivateKey"), "--ssh-public-key",
-                    os.path.join(scratch, "clusterPublicKey"), "--ssh-config", os.path.join(scratch, "ssh_config"), "--config",
-                    os.path.join(scratch, "ceph.conf"), "--automatically-accept-license"]
-            if self.request.get("singleHostDefaults"):
-                argv.append("--single-host-defaults")
-            if self.request["clusterNetworks"]:
-                argv.extend(["--cluster-network", ",".join(self.request["clusterNetworks"])])
-            self.command(argv, timeout=600, json_result=False)
-        require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
-        self.provider_registry_absent()
-        self.config_database()
-        self.accept_call_home()
-        return {"changed": True}
+        return self.tunnel_bootstrap(private)
 
     def tunnel_bootstrap(self, private):
         unused, staging = tunnel_helpers()
@@ -3114,20 +3064,20 @@ class Worker:
         return result
 
     def tunnel_effect(self, *arguments, **options):
-        proof = self.transport_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+        proof = self.transport_hold()
         with proof, self.cache_hold():
             return self.ceph(*arguments, **options)
 
     def cache_hold(self):
         """Once published, every native SSH effect holds the exact cephadm cache inode."""
-        if self.request["clusterSSHTransport"] != "verifiedTunnel" or self.markers.read("cache-ready.json") is None:
+        if self.markers.read("cache-ready.json") is None:
             return contextlib.nullcontext()
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime as runtime
         return runtime.Cache(self).execution_proof()
 
     def cache(self):
         """Publish and prove the exact cephadm bytes on this host before enrollment."""
-        require(self.markers.owned() and self.request["clusterSSHTransport"] == "verifiedTunnel", "ownership")
+        require(self.markers.owned(), "ownership")
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime as runtime
         if self.host["name"] == self.request["bootstrap"]:
             require(self.markers.read("tunnel-mounted.json") is not None, "native-tunnel-unproved")
@@ -3640,12 +3590,11 @@ class Worker:
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         self.prove_registry()
         self.provider_registry_absent()
-        if self.request["clusterSSHTransport"] == "verifiedTunnel":
-            require(self.markers.read("tunnel-mounted.json") is not None, "native-tunnel-unproved")
-            require(self.markers.read("cache-ready.json") is not None, "cache-unproved")
-            self.verify_transport_bundle()
-            self.manager_retry(self.verify_tunnel_configuration)
-            self.verify_manager_mounts(self.daemons())
+        require(self.markers.read("tunnel-mounted.json") is not None, "native-tunnel-unproved")
+        require(self.markers.read("cache-ready.json") is not None, "cache-unproved")
+        self.verify_transport_bundle()
+        self.manager_retry(self.verify_tunnel_configuration)
+        self.verify_manager_mounts(self.daemons())
         scope = self.recovery_scope()
         enrolled = self.markers.read("bootstrap-enrollment.json")
         require(enrolled is None or enrolled == scope, "ownership")
@@ -3807,7 +3756,7 @@ class Worker:
 
     def service_spec(self, service):
         value = json.loads(canonical(service))
-        if self.request["clusterSSHTransport"] == "verifiedTunnel" and value["service_type"] == "mgr":
+        if value["service_type"] == "mgr":
             helper, unused = tunnel_helpers()
             value["extra_container_args"] = ["--volume=" + os.path.join(self.markers.path, "transport") + ":" + helper.CONTAINER_ROOT + ":ro,z"]
         if value["service_type"] != "osd":
@@ -3876,8 +3825,7 @@ class Worker:
 
     def prove_service_projections(self, projections, observed, scope):
         """Admit only descriptions synthesized from this operation's remaining seed daemons."""
-        require(self.request["clusterSSHTransport"] == "verifiedTunnel"
-                and self.host["name"] == self.request["bootstrap"], "foreign-service")
+        require(self.host["name"] == self.request["bootstrap"], "foreign-service")
         unused, staging = tunnel_helpers()
         intent = staging.stage_intent(self.request)
         for name in ("bootstrap-protocol.json", "bootstrap-attempt.json", "bootstrap-enrollment.json"):
@@ -3958,11 +3906,9 @@ class Worker:
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         self.prove_registry()
         self.provider_registry_absent()
-        if self.request["clusterSSHTransport"] == "verifiedTunnel" or any(host.get("physical") for host in self.request["hosts"]):
-            require(self.device_identities(devices) is not None, "device-identity")
+        require(self.device_identities(devices) is not None, "device-identity")
         purged = self.purge_orphan_osds(orphans or [])
-        if self.request["clusterSSHTransport"] == "verifiedTunnel":
-            self.manager_retry(self.verify_tunnel_configuration)
+        self.manager_retry(self.verify_tunnel_configuration)
         self.config_database()
         groups = self.normalized_services([self.service_spec(value) for value in self.request["services"]])
         wanted = [value for group in groups for value in group]
@@ -4027,7 +3973,7 @@ class Worker:
 
     def ceph_status(self, *args, data=b""):
         """Only the exit status: no native output, and no input it echoes, leaves this call."""
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold()
         with proof:
             code, unused = self.run([*self.admin_argv("/usr/bin/ceph"), *args], data=data, timeout=60)
         return code
@@ -4059,7 +4005,7 @@ class Worker:
 
     def dashboard_tls_private(self, *args, data=b""):
         """Private native output never enters NativeFailure, even when a command fails."""
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold()
         with proof:
             code, output = self.run([*self.admin_argv("/usr/bin/ceph"), *args], data=data, timeout=60)
         require(code == 0, "native-command")
@@ -4243,7 +4189,7 @@ class Worker:
                         continue
                     filename, intent, unused_attempt = intents[target]
                     submitted.add(target)
-                    proof = self.transport_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+                    proof = self.transport_hold()
                     with proof, self.cache_hold():
                         self.markers.write(filename, intent)
                         self.ceph("orch", "daemon", "redeploy", "mgr." + target, json_result=False)
@@ -4296,10 +4242,9 @@ class Worker:
             require(self.clock() < deadline, "native-timeout")
             self.pause(DASHBOARD_INTERVAL)
         self.markers.write(done, record)
-        if self.request["clusterSSHTransport"] == "verifiedTunnel":
-            self.verify_transport_bundle()
-            self.manager_retry(self.verify_tunnel_configuration)
-            self.verify_manager_mounts(self.daemons())
+        self.verify_transport_bundle()
+        self.manager_retry(self.verify_tunnel_configuration)
+        self.verify_manager_mounts(self.daemons())
         return changed
 
     def dashboard_users(self):
@@ -4485,12 +4430,11 @@ class Worker:
         evidence["exists"], (evidence["incarnation"], monmap) = True, self.monmap_incarnation()
         self.prove_registry()
         self.provider_registry_absent()
-        if self.request["clusterSSHTransport"] == "verifiedTunnel":
-            with self.manager_served():
-                self.verify_tunnel_configuration()
-            if any(str(d.get("name", "")).startswith("mgr.") for d in daemons):
-                self.verify_transport_bundle()
-                pending = self.verify_manager_mounts(daemons, observing=True)
+        with self.manager_served():
+            self.verify_tunnel_configuration()
+        if any(str(d.get("name", "")).startswith("mgr.") for d in daemons):
+            self.verify_transport_bundle()
+            pending = self.verify_manager_mounts(daemons, observing=True)
         self.config_database()
         status = self.ceph("status")
         require(isinstance(status, dict) and status.get("fsid") == self.request["fsid"], "native-output")

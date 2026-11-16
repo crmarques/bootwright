@@ -347,7 +347,6 @@ def test_coordinator_runs_only_missing_proved_transitions(core_request, monkeypa
                 return {"changed": True}
             return super().call(host, phase, private, timeout=timeout, devices=devices)
 
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
     transport = Transport(core_request, clock, ready_after=1)
     outputs = {"dashboard": str(tmp_path / "dashboard")}
     assert ceph_core.execute(core_request, "apply", "d" * 64, transport, outputs, now=clock.now, pause=clock.pause)["evidence"]["ready"]

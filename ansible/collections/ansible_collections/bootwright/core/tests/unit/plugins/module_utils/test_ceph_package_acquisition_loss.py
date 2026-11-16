@@ -160,7 +160,6 @@ def prepared_fixture(monkeypatch):
     for item in plan["packages"]:
         item["source"].update(sha256=hashlib.sha256(b"payload").hexdigest(), bytes=7)
     plan["digest"] = native_resolution.digest({name: item for name, item in plan.items() if name != "digest"})
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
     monkeypatch.setattr(os, "geteuid", lambda: 0)
     monkeypatch.setattr(packages, "host_admission", lambda value: None)
     monkeypatch.setattr(native_resolution, "solve4", lambda *args: copy.deepcopy(plan))

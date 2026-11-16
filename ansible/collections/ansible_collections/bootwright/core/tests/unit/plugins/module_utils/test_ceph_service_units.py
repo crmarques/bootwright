@@ -690,7 +690,6 @@ def test_unit_request_admits_each_mode(mode):
 def test_dispatch_routes_a_unit_to_the_unit_worker(monkeypatch):
     reached = []
     monkeypatch.setattr(ceph_native_units.UnitWorker, "unit", lambda self: reached.append(type(self)) or {"changed": False})
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = unit_request()
     assert ceph_native.dispatch({"request": request, "host": "node-1", "phase": "unit", "private": {}}) == {"changed": False}
     assert reached == [ceph_native_units.UnitWorker]
@@ -747,7 +746,6 @@ def first_holder(request, host, daemons):
 
 
 def test_core_execute_runs_the_unit_on_the_bootstrap_host_only(monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = unit_request("direct")
     transport = Transport(request, ready_after=2, blocking=["nfs@nfs.files", "vip@ingress.nfs.files"])
     result = ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
@@ -759,7 +757,6 @@ def test_core_execute_runs_the_unit_on_the_bootstrap_host_only(monkeypatch):
 
 
 def test_core_destroy_runs_the_unit_destroy_then_one_observation_on_the_bootstrap_host(monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = unit_request("direct")
     removed = {"exists": False, "ready": False, "removed": True, "partial": False, "daemons": []}
     transport = Transport(request, observed=removed)
@@ -773,7 +770,6 @@ def test_core_destroy_runs_the_unit_destroy_then_one_observation_on_the_bootstra
 
 @pytest.mark.parametrize("lost", ["owned", "exists", "partial"])
 def test_core_unit_wait_refuses_an_unowned_or_settled_unready_unit_without_polling(monkeypatch, lost):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = unit_request("direct")
     clock = iter(range(0, 100000, 300))
     transport = Transport(request, ready_after=99, observed={lost: False})
@@ -784,7 +780,6 @@ def test_core_unit_wait_refuses_an_unowned_or_settled_unready_unit_without_polli
 
 
 def test_core_unit_readiness_timeout_names_the_missing_daemons(monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = unit_request("direct")
     clock = iter(range(0, 100000, 300))
     transport = Transport(request, ready_after=99, blocking=["nfs@nfs.files"])

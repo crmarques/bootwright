@@ -200,7 +200,6 @@ def test_every_per_site_virtual_ip_answers_before_the_gateway_is_ready(tmp_path,
 
 
 def test_the_firewall_check_covers_every_per_site_ingress_host_in_one_window(monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = stretch_gateway(per_site())
     transport = gw.Transport(request, ready_after=1)
     ceph_core.ingress_firewall(request, transport, ceph_native_object.frontends(request))

@@ -6,6 +6,7 @@ import copy
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as fixtures
 
 core_request = fixtures.core_request
@@ -27,7 +28,7 @@ def clear_record(native, osd=OSD):
 
 @pytest.fixture
 def host(core_request, monkeypatch, tmp_path):
-    native = ceph_native.Worker(core_request, core_request["bootstrap"], markers=fixtures.Markers())
+    native = tunnel_native.custody_held(ceph_native.Worker(core_request, core_request["bootstrap"], markers=fixtures.Markers()))
     native.prove_registry = lambda: None
     tools = []
     native.verify_tool = lambda: tools.append(True)
@@ -341,7 +342,7 @@ def test_a_devices_file_entry_stays_while_a_pv_of_its_uuid_remains(host):
 
 
 def bootstrap_worker(core_request, osds):
-    native = ceph_native.Worker(core_request, core_request["bootstrap"], markers=fixtures.Markers())
+    native = tunnel_native.custody_held(ceph_native.Worker(core_request, core_request["bootstrap"], markers=fixtures.Markers()))
     effects = []
 
     def ceph(*args, json_result=True, **kwargs):

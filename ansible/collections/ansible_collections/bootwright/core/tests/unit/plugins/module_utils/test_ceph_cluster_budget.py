@@ -77,7 +77,6 @@ def test_fresh_call_plan_has_concurrent_rounds(core_request, monkeypatch, tmp_pa
 
     clock = core.ReadinessClock()
     transport = Transport(core_request, clock, ready_after=1)
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
     assert ceph_core.execute(core_request, "apply", "d" * 64, transport, {"dashboard": str(tmp_path / "dashboard")},
                              now=clock.now, pause=clock.pause)["evidence"]["ready"]
     assert counts == Counter(bootstrap_state=1, dashboard=1, observe=2, host_state=2 * count, prerequisites=count, devices=2 * count,
@@ -376,7 +375,6 @@ def test_osd_preparation_round_is_one_call_per_physical_host_whatever_its_disks(
 
     clock = core.ReadinessClock()
     transport = Transport(core_request, clock, ready_after=1)
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
     ceph_core.execute(core_request, "apply", "d" * 64, transport, {"dashboard": str(tmp_path / "dashboard")}, now=clock.now, pause=clock.pause)
     assert counts["osd_prepare"] == count and counts["host_devices"] == 2 * count
     assert counts["devices"] == 2 * count and counts["services"] == 1

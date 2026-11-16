@@ -20,6 +20,7 @@ import json
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_resources
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core_fixtures
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_filesystems as fs_fixtures
 
@@ -124,7 +125,7 @@ def worker(world, subvolume=None):
         marks.records.update({"pool-" + name + ".json": {"name": name}, "pool-id-" + name + ".json": {"id": identifier}})
     marks.records.update({"filesystem-files.json": fs_fixtures.fs_value(groups=[fs_fixtures.group_value()]), "filesystem-id.files.json": {"id": 7},
                           "group.files.csi.json": fs_fixtures.group_value()})
-    native = ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks)
+    native = tunnel_native.custody_held(ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks))
     clock = [0.0]
     native.clock, native.pause = lambda: clock[0], lambda seconds: clock.__setitem__(0, clock[0] + seconds)
     return native, marks
@@ -440,7 +441,6 @@ def test_subvolume_apply_calls_the_subvolume_phase(core_request, monkeypatch):
                 return {"name": host["name"], "owned": True, "exists": True}
             return {"changed": phase == "subvolume"}
 
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     result = ceph_core.execute(request, "apply", "d" * 64, CoreTransport())
     assert result["changed"] and result["evidence"]["resource"] == {"id": UUIDS[0], "path": path}
     assert calls.count("subvolume") == 1 and calls.index("observe") < calls.index("subvolume") < len(calls) - 1

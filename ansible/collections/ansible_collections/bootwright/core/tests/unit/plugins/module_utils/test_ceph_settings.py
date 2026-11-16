@@ -20,6 +20,7 @@ import json
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_resources
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 FSID = "4c0a4300-aa43-458c-86d7-ac2256d1fc00"
 OWNER = "apply-123"
@@ -41,7 +42,7 @@ def cluster():
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
             "packageRepository": "https://packages.example.test/native",
             "packageRepositoryKey": "https://packages.example.test/keys/ibm.asc", "bootstrap": "node-1",
-            "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "native", "clusterKeyRef": "cluster-key",
+            "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "verifiedTunnel", "clusterKeyRef": "cluster-key",
             "registryRef": "registry-key", "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"],
             "clusterNetworks": [], "hosts": hosts,
             "services": [{"service_type": "mon", "placement": {"hosts": names}}, {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
@@ -102,7 +103,7 @@ class Markers:
 
 
 def worker(monitor, request=None):
-    return ceph_native_resources.ResourceWorker(request or settings_request(), "node-1", run=monitor.run, markers=Markers())
+    return tunnel_native.custody_held(ceph_native_resources.ResourceWorker(request or settings_request(), "node-1", run=monitor.run, markers=Markers()))
 
 
 def test_settings_writes_each_absent_frozen_image_key_in_name_order():
@@ -149,7 +150,7 @@ class ForeignMarkers(Markers):
 
 def test_settings_refuses_a_cluster_this_operation_does_not_own_before_any_read_or_write():
     monitor = Monitor()
-    native = ceph_native_resources.ResourceWorker(settings_request(), "node-1", run=monitor.run, markers=ForeignMarkers())
+    native = tunnel_native.custody_held(ceph_native_resources.ResourceWorker(settings_request(), "node-1", run=monitor.run, markers=ForeignMarkers()))
     with pytest.raises(ceph_native.Refusal, match="^ownership$"):
         native.settings()
     assert monitor.log == []
@@ -287,7 +288,6 @@ def test_core_execute_dispatches_the_settings_phase(monkeypatch):
     def pause(seconds):
         clock[0] += seconds
 
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     result = ceph_core.execute(request, "apply", "d" * 64, Transport(), now=lambda: clock[0], pause=pause)
     assert result["changed"] and result["evidence"]["ready"] and result["evidence"]["action"] == "settings"
     assert [call for call in calls if call[1] == "settings"] == [("node-1", "settings")]

@@ -21,7 +21,6 @@ from __future__ import annotations
 # pylint: disable=unidiomatic-typecheck
 
 import base64
-import contextlib
 import copy
 import ipaddress
 import json
@@ -305,7 +304,7 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
         """The core worker's admin command; an apply alone passes `recover`, which keeps its exit code for its own refusal."""
         if recover is None:
             return super().ceph(*args, data=data, json_result=json_result)
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold()
         with proof:
             return self.command([*self.admin_argv("/usr/bin/ceph"), "--format", "json", *args],
                                 data=data, json_result=json_result, recover=recover)

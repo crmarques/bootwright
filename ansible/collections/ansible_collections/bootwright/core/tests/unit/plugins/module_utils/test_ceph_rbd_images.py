@@ -21,6 +21,7 @@ import json
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_resources
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 FSID = "4c0a4300-aa43-458c-86d7-ac2256d1fc00"
 OWNER = "apply-123"
@@ -44,7 +45,7 @@ def cluster(count=3):
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
             "packageRepository": "https://packages.example.test/native",
             "packageRepositoryKey": "https://packages.example.test/keys/ibm.asc", "bootstrap": "node-1",
-            "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "native", "clusterKeyRef": "cluster-key",
+            "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "verifiedTunnel", "clusterKeyRef": "cluster-key",
             "registryRef": "registry-key", "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"],
             "clusterNetworks": [], "hosts": hosts,
             "services": [{"service_type": "mon", "placement": {"hosts": names}}, {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
@@ -164,7 +165,7 @@ def worker(world, image):
     marks = Markers(world)
     marks.records.update({"pool-volumes.json": {"name": "volumes"}, "pool-id-volumes.json": {"id": 8},
                           "pool-ec-data.json": {"name": "ec-data"}, "pool-id-ec-data.json": {"id": 9}})
-    return ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks), marks
+    return tunnel_native.custody_held(ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks)), marks
 
 
 def attempt(image):

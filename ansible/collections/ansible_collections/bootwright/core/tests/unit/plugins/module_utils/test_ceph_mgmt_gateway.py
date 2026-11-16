@@ -226,7 +226,6 @@ def test_gateway_document_applied_with_binding_first(tmp_path, normalization, mo
     assert applying(monitor, markers).unit() == {"changed": False} and len(monitor.stdin) == 1
     reached = []
     monkeypatch.setattr(ceph_native_units.UnitWorker, "unit", lambda self: reached.append(self.bound) or {"changed": False})
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     with pytest.raises(ceph_native.Refusal, match="^material$"):
         ceph_native.dispatch({"request": request, "host": "node-1", "phase": "unit", "private": dict(SEEN)})
     assert reached == []
@@ -348,7 +347,6 @@ class MaterialTransport(units.Transport):
 
 
 def test_execute_unit_checks_the_bound_digest(monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = gateway_request()
     served = {"certificateSHA256": LEAF_SHA256, "reachable": True}
     transport = MaterialTransport(request, served, ready_after=2)
@@ -402,7 +400,6 @@ def test_gateway_frontend_is_the_gateway_port_on_the_virtual_ip(tmp_path, monkey
     monitor = monitoring.Monitor(request)
     assert units.worker(monitor, units.markers_for(tmp_path, request)).ingress_firewall() == {"changed": False}
     assert checked == [("node-1", VIP, [PORT, INTERNAL_PORT])] and monitor.mutations == []
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     transport = MaterialTransport(request, {"certificateSHA256": LEAF_SHA256, "reachable": True})
     ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
     assert sorted(transport.calls[1:3]) == [("node-1", "ingress_firewall"), ("node-2", "ingress_firewall")]

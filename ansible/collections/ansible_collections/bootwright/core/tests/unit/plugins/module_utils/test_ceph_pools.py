@@ -22,6 +22,7 @@ import json
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_resources
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 FSID = "4c0a4300-aa43-458c-86d7-ac2256d1fc00"
 OWNER = "apply-123"
@@ -39,7 +40,7 @@ def cluster(count=6):
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
             "packageRepository": "https://packages.example.test/native",
             "packageRepositoryKey": "https://packages.example.test/keys/ibm.asc", "bootstrap": "node-1",
-            "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "native", "clusterKeyRef": "cluster-key",
+            "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "verifiedTunnel", "clusterKeyRef": "cluster-key",
             "registryRef": "registry-key", "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"],
             "clusterNetworks": [], "hosts": hosts,
             "services": [{"service_type": "mon", "placement": {"hosts": names[:3]}}, {"service_type": "mgr", "placement": {"hosts": names[:3], "count": 2}},
@@ -225,7 +226,7 @@ def resource(world, action, value, count=6):
     request = cluster(count)
     request.update({"action": action, action: value})
     marks = Markers(world)
-    return ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks), marks
+    return tunnel_native.custody_held(ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks)), marks
 
 
 def pool_attempt(native):
@@ -803,7 +804,6 @@ def test_policy_apply_calls_the_policy_phase(monkeypatch):
                 return {"name": host["name"], "owned": True, "exists": True}
             return {"changed": phase == "policy"}
 
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     result = ceph_core.execute(request, "apply", "d" * 64, Transport())
     assert result["changed"] and result["evidence"]["resource"] == {"id": "3", "path": ""}
     assert calls.count("policy") == 1 and calls.index("policy") > calls.index("observe")

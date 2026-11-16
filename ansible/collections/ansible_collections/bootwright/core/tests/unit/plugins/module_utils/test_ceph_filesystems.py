@@ -21,6 +21,7 @@ import json
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_resources
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core_fixtures
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_native_services as services_fixtures
 
@@ -49,7 +50,7 @@ def cluster(mds_count=None):
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
             "packageRepository": "https://packages.example.test/native",
             "packageRepositoryKey": "https://packages.example.test/keys/ibm.asc", "bootstrap": "node-1",
-            "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "native", "clusterKeyRef": "cluster-key",
+            "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "verifiedTunnel", "clusterKeyRef": "cluster-key",
             "registryRef": "registry-key", "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"],
             "clusterNetworks": [], "hosts": hosts,
             "services": [{"service_type": "mon", "placement": {"hosts": names}}, {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
@@ -200,7 +201,7 @@ def worker(world, filesystem=None, mds_count=None, service_id="files"):
     marks = Markers(world)
     for name, identifier in POOL_IDS.items():
         marks.records.update({"pool-" + name + ".json": {"name": name}, "pool-id-" + name + ".json": {"id": identifier}})
-    return ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks), marks
+    return tunnel_native.custody_held(ceph_native_resources.ResourceWorker(request, "node-1", run=world.run, markers=marks)), marks
 
 
 def attempt(filesystem):
@@ -635,7 +636,6 @@ def test_fs_apply_calls_the_filesystem_phases(core_request, monkeypatch, groups)
                 return {"name": host["name"], "owned": True, "exists": True}
             return {"changed": phase == "filesystem"}
 
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     result = ceph_core.execute(request, "apply", "d" * 64, CoreTransport())
     assert result["changed"] and result["evidence"]["resource"] == {"id": "7", "path": ""}
     phases = [phase for phase in calls if phase.startswith("filesystem")]

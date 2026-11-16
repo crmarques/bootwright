@@ -30,7 +30,6 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 
 ACTUAL_PLATFORM = packages.actual_platform
-SUPPORTED = ceph_native.supported_transport
 
 
 @pytest.fixture(autouse=True)
@@ -50,8 +49,9 @@ def package_request():
             "release": "synthetic-release", "ansiblePackageVersion": "5.0.3-1", "packageRepository": "https://publisher.example.test/ceph",
             "packageRepositoryKey": "https://publisher.example.test/keys/ibm.asc",
             "bootstrap": "node-1",
-            "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "native", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
-            "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,
+            "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "verifiedTunnel", "clusterKeyRef": "cluster-key",
+            "registryRef": "registry-key", "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"],
+            "clusterNetworks": [], "hosts": hosts,
             "services": [{"service_type": "mon", "placement": {"hosts": names}}, {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
                          {"service_type": "osd", "service_id": "data", "placement": {"hosts": names}, "spec": {"data_devices": {"paths": ["/dev/vdb"]}}}],
             "packages": {"version": "ceph-packages-v1", "licenseAccepted": True,
@@ -125,7 +125,6 @@ def boundary(package_request, monkeypatch):
     journal, acquisition = Journal(), Acquisition()
     state = {"inventorySHA256": plan["beforeSHA256"], "rootsReady": False}
     events = []
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
     monkeypatch.setattr(os, "geteuid", lambda: 0)
     monkeypatch.setattr(packages, "host_admission", lambda value: None)
     monkeypatch.setattr(native_resolution, "solve4", lambda *args: copy.deepcopy(plan))
@@ -278,7 +277,7 @@ def test_missing_grants_refuse_before_package_effects(package_request, boundary,
 
 
 def test_an_unsupported_release_prevents_even_package_acquisition(package_request, boundary, monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", SUPPORTED)
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: False)
     with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):
         prepare(package_request, boundary)
     assert boundary.acquisition.calls == [] and boundary.journal.writes == []

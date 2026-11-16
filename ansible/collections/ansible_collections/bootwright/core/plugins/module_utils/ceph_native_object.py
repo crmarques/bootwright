@@ -604,7 +604,7 @@ class ObjectWorker(ceph_native_units.UnitWorker):
 
     def radosgw(self, *args, json_result=True):
         """radosgw-admin with the cluster's original admin custody, as `ceph` runs; never a user, key, caps or metadata command."""
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold()
         with proof:
             return self.command([*self.admin_argv(RADOSGW_ADMIN), "--format", "json", *args], json_result=json_result)
 
@@ -1007,7 +1007,7 @@ class UserWorker(ObjectWorker):
         """radosgw-admin user list, info or create in the gateway's zone. Its stdout can hold the user's keys, so it stays in this
         worker's memory and a failure reports only stderr."""
         argv = [*self.admin_argv(RADOSGW_ADMIN), "--format", "json", "user", *args, *self.site("realm", "zonegroup", "zone")]
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold()
         with proof:
             code, output = self.run(argv, timeout=60)
         if code != 0:

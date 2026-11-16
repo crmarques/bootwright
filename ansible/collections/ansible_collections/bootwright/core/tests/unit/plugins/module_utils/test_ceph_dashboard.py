@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 CERTIFICATE_DER = b"synthetic-self-signed-dashboard-certificate"
 CERTIFICATE_PEM = (b"-----BEGIN CERTIFICATE-----\n" + base64.encodebytes(CERTIFICATE_DER) + b"-----END CERTIFICATE-----\n")
@@ -65,7 +66,7 @@ def dashboard(tmp_path, monkeypatch):
                "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
                "packageRepositoryKey": "https://public.dhe.ibm.com/keys/ibm.asc",
                "bootstrap": "node-1", "monIP": "192.0.2.1", "clusterSSHUser": "operator",
-               "clusterSSHTransport": "native", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
+               "clusterSSHTransport": "verifiedTunnel", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
                "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,
                "services": [{"service_type": "mon", "placement": {"hosts": names}},
                             {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
@@ -282,9 +283,11 @@ def dashboard(tmp_path, monkeypatch):
         clock.pauses.append(seconds)
         clock.value += seconds
 
-    native = ceph_native.Worker(request, request["bootstrap"], run=run, markers=markers)
+    native = tunnel_native.custody_held(ceph_native.Worker(request, request["bootstrap"], run=run, markers=markers))
     native.verify_tool = lambda: {"synthetic-artifact": True}
-    native.bootstrap_hold = contextlib.nullcontext
+    # The redeploy's mount proof reads the manager units; test_the_tunnel_mount_and_unit_observation_is_reproved_after_the_redeploy covers it.
+    native.daemons = lambda: []
+    native.verify_manager_mounts = lambda daemons, observing=False: []
     native.clock = lambda: clock.value
     native.pause = pause
     return SimpleNamespace(native=native, state=state, markers=markers, request=request, directory=directory, clock=clock)
@@ -581,7 +584,6 @@ def test_the_dashboard_read_phase_skips_the_release_gate_and_the_dashboard_phase
 
 
 def test_the_tunnel_mount_and_unit_observation_is_reproved_after_the_redeploy(dashboard):
-    dashboard.request["clusterSSHTransport"] = "verifiedTunnel"
     events = []
     real = dashboard.native.ceph
 
@@ -723,7 +725,6 @@ def test_an_unfinished_dashboard_phase_observes_partial_work_and_writes_nothing(
 @pytest.mark.parametrize("operation, outputs", [("apply", {}), ("apply", {"client": "/x"}), ("observe", {"client": "/x"}),
                                                 ("observe", {"dashboard": "/x", "client": "/y"})])
 def test_the_cluster_action_names_exactly_its_dashboard_output(dashboard, operation, outputs, monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     with pytest.raises(ceph_native.Refusal, match="^(material|request)$"):
         ceph_core.execute(dashboard.request, operation, "d" * 64, PhaseTransport(dashboard.request, {}), outputs)
 

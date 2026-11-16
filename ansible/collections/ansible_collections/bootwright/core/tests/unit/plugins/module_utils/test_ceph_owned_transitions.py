@@ -7,6 +7,7 @@ import pytest
 import yaml
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as fixtures
 
 core_request = fixtures.core_request
@@ -14,7 +15,12 @@ core_request = fixtures.core_request
 
 @pytest.fixture
 def world(core_request):
-    native = ceph_native.Worker(core_request, core_request["bootstrap"], markers=fixtures.Markers())
+    markers = fixtures.Markers()
+    markers.published[ceph_native.DEVICE_IDENTITIES] = fixtures.identities(core_request)
+    markers.published.update({"tunnel-mounted.json": {}, "cache-ready.json": {}})
+    native = tunnel_native.custody_held(ceph_native.Worker(core_request, core_request["bootstrap"], markers=markers))
+    native.daemons = lambda: []
+    native.verify_manager_mounts = lambda daemons, observing=False: []
     native.prove_registry = lambda: None
     native.provider_registry_absent = lambda: None
     native.license_accepted = lambda: True
@@ -122,6 +128,7 @@ def test_osd_effects_use_only_frozen_host_specific_volume_aliases(world):
 @pytest.fixture
 def device_world(world, monkeypatch):
     native, unused_hosts, unused_services, unused_effects = world
+    del native.markers.published[ceph_native.DEVICE_IDENTITIES]
     disk = {"path": "/dev/vdb", "type": "disk", "serial": "disk1", "size": 1024 ** 3, "fstype": None, "mountpoints": []}
     signatures, rows, calls = [], [], []
     monkeypatch.setattr(ceph_native.os.path, "realpath", lambda path: "/dev/vdb" if path == "/dev/disk/by-id/virtio-disk1" else path)

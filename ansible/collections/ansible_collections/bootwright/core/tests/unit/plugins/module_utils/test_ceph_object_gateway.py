@@ -687,7 +687,6 @@ def test_dispatch_routes_a_gateway_to_the_object_worker(monkeypatch):
     reached = []
     for phase in ceph_native_object.APPLY_PHASES:
         monkeypatch.setattr(ceph_native_object.ObjectWorker, phase, lambda self, phase=phase: reached.append((type(self), phase)) or {"changed": False})
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = gateway_request()
     for phase in ceph_native_object.APPLY_PHASES:
         assert ceph_native.dispatch({"request": request, "host": "node-1", "phase": phase, "private": {}}) == {"changed": False}
@@ -734,7 +733,6 @@ class Transport:
 def test_gateway_native_call_count_within_budget(monkeypatch):
     """The Go deadline budgets five worker round trips (one covers every ingress host's firewall check) and one readiness wait for an apply
     (internal/storage/ceph/gateway.go)."""
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = gateway_request()
     transport = Transport(request, ready_after=2)
     result = ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
@@ -751,7 +749,6 @@ def test_gateway_native_call_count_within_budget(monkeypatch):
 
 
 def test_gateway_readiness_timeout_names_the_backend(monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = gateway_request()
     clock = iter(range(0, 100000, 300))
     transport = Transport(request, ready_after=99)
@@ -949,7 +946,6 @@ def test_gateway_private_material_is_admitted_per_phase(monkeypatch):
     for phase in ceph_native_object.APPLY_PHASES:
         monkeypatch.setattr(ceph_native_object.ObjectWorker, phase, lambda self, phase=phase: reached.append((phase, self.tls)) or {"changed": False})
     monkeypatch.setattr(ceph_native_object.ObjectWorker, "observe", lambda self: reached.append(("observe", self.tls)) or {})
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = tls_request()
 
     def dispatch(phase, private):
@@ -1153,7 +1149,6 @@ class TLSTransport(Transport):
 
 
 def test_execute_gateway_passes_bound_material_per_phase(monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = tls_request()
     transport = TLSTransport(request, ready_after=2)
     result = ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)

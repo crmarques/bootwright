@@ -288,7 +288,6 @@ class SSOTransport(units.Transport):
 
 
 def test_sso_enable_runs_once_after_the_proof(tmp_path, monkeypatch):
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = sso_request()
     one = {"changed": False, "daemons": 1, "proved": True}
     transport = SSOTransport(request, [{"changed": False, "daemons": 0, "proved": True}, one, one, one])
@@ -329,7 +328,6 @@ def test_sso_enable_waits_within_the_window_for_the_orchestrator_to_list_a_runni
     assert native.sso() == {"changed": False, "pending": True} and native.sso() == {"changed": False, "pending": True}
     assert ("dashboard", "sso", "enable", "oauth2") not in monitor.mutations and monitor.enabled is False
     assert native.sso() == {"changed": True, "pending": False} and monitor.enabled is True
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     one = {"changed": False, "daemons": 1, "proved": True}
     pending = {"changed": False, "pending": True}
     transport = SSOTransport(request, [one, one], [pending, pending, {"changed": True, "pending": False}])

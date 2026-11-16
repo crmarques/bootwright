@@ -16,6 +16,7 @@ import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_replication, ceph_replication_native as native
 from ansible_collections.bootwright.core.plugins.modules import ceph_replication as module
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_pools as pools
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_smb_native as smb
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils.test_ceph_client_custody import client  # pylint: disable=unused-import
@@ -149,7 +150,7 @@ class Transport:
         assert side == self.side and host["name"] == value[side]["scope"]["bootstrap"]
         self.calls.append((phase, index, timeout))
         start = len(self.monitor.calls)
-        worker = native.ReplicationWorker(value, side, host["name"], run=self.monitor.run, markers=self.markers)
+        worker = tunnel_native.custody_held(native.ReplicationWorker(value, side, host["name"], run=self.monitor.run, markers=self.markers))
         methods = {"replication_prepare": worker.prepare, "replication_token": worker.bootstrap_token, "replication_pool_observe": worker.observe_pool}
         if phase == "replication_import":
             result = worker.import_peer(native.token(private["token"], value["primary"]["scope"]["fsid"]))
@@ -369,8 +370,8 @@ def test_bootstrap_retains_private_custody_without_secret_hash(client):
     assert record["version"] == "ceph-replication-custody-v1"
     assert set(record) == {"version", "scope", "custodyID", "metadata"}
     metadata = ceph_native.Custody.metadata(path.stat(), complete=True)
-    worker = native.ReplicationWorker(value, "primary", value["primary"]["scope"]["bootstrap"],
-                                      run=primary.monitor.run, markers=primary.markers)
+    worker = tunnel_native.custody_held(native.ReplicationWorker(value, "primary", value["primary"]["scope"]["bootstrap"],
+                                                                 run=primary.monitor.run, markers=primary.markers))
     assert worker.bootstrap_token() == {"token": material.decode("ascii")}
     assert primary.monitor.created_tokens == 2
     assert primary.markers.read("replication-id-replica.json") == record

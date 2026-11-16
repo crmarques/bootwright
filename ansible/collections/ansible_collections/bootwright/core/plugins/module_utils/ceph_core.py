@@ -1030,7 +1030,7 @@ def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
         ceph_native.require(stages[bootstrap["name"]] == "complete"
                             and all(stages[host["name"]] == "prepared" for host in request["hosts"] if host != bootstrap), "partial-cluster")
     if any(host.get("physical") for host in request["hosts"]):
-        device_identities(request, transport, concurrent=True)
+        device_identities(request, transport)
     host_round(transport, request["hosts"], "devices")
     changed = False
     private = transport.bootstrap_material()
@@ -1056,7 +1056,7 @@ def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
     changed = enroll_hosts(request, bootstrap, transport) or changed
     changed = transport.call(bootstrap, "license")["changed"] or changed
     host_round(transport, request["hosts"], "devices")
-    devices = device_identities(request, transport, concurrent=True)
+    devices = device_identities(request, transport)
     names = {name for service in request["services"] if service["service_type"] == "osd" for name in service["placement"]["hosts"]}
     prepared = host_round(transport, [host for host in request["hosts"] if host["name"] in names], "osd_prepare")
     changed = any(value["changed"] for value in prepared) or changed
@@ -1077,12 +1077,10 @@ def prepared_orphans(prepared):
     return sorted({osd for value in prepared for osd in value.get("orphans", [])})
 
 
-def device_identities(request, transport, *, concurrent=False):
+def device_identities(request, transport):
     """Every host's retained SDK identities, in declared host and device order."""
     result = []
-    values = (host_round(transport, request["hosts"], "host_devices") if concurrent
-              else [transport.call(host, "host_devices") for host in request["hosts"]])
-    for host, value in zip(request["hosts"], values):
+    for host, value in zip(request["hosts"], host_round(transport, request["hosts"], "host_devices")):
         ceph_native.require(isinstance(value, dict) and set(value) == {"devices"}, "device-identity")
         result.extend(ceph_host_runtime.rows(request, host["name"], value["devices"]))
     ceph_host_runtime.distinct_devices(result)
@@ -1193,34 +1191,6 @@ def shared_hosts(value):
         raise ceph_native.Refusal("request") from None
 
 
-def apply_native_cluster(request, bootstrap, transport, before):
-    changed = False
-    # Devices precede ownership; an existing native default path
-    # retains its original partial-cluster refusal.
-    ceph_native.require(not before["exists"], "partial-cluster")
-    devices = device_identities(request, transport) if any(host.get("physical") for host in request["hosts"]) else None
-    for host in request["hosts"]:
-        transport.call(host, "devices")
-    for host in request["hosts"]:
-        changed = transport.call(host, "claim")["changed"] or changed
-    private = transport.bootstrap_material()
-    for host in request["hosts"]:
-        authorization = {name: private[name] for name in ("clusterPublicKey", "registryJSON")}
-        changed = transport.call(host, "authorize", authorization)["changed"] or changed
-    ssh_material = {name: private[name] for name in ("clusterPrivateKey", "clusterPublicKey", "knownHosts")}
-    changed = transport.call(bootstrap, "bootstrap", ssh_material)["changed"] or changed
-    changed = transport.call(bootstrap, "enroll")["changed"] or changed
-    changed = transport.call(bootstrap, "license")["changed"] or changed
-    for host in request["hosts"]:
-        transport.call(host, "devices")
-    if devices is not None:
-        devices = device_identities(request, transport)
-        changed = transport.call(bootstrap, "services", devices=devices)["changed"] or changed
-    else:
-        changed = transport.call(bootstrap, "services")["changed"] or changed
-    return changed
-
-
 def execute(request, operation, request_digest, transport, outputs=None, *, now=time.monotonic, pause=time.sleep, connect=tls_certificate,
             retirement=None, reading=None, shared=None):
     """Keep read-only observation distinct from any preparation or mutation; only an observation no operation records reads unrecorded.
@@ -1264,22 +1234,19 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
     if operation == "apply":
         preparations = (host_round(transport, request["hosts"], "prerequisites") if request["action"] == "cluster"
                         else [transport.call(host, "prerequisites") for host in request["hosts"]])
-        tunnel = request["action"] == "cluster" and request["clusterSSHTransport"] == "verifiedTunnel"
-        state = transport.call(bootstrap, "bootstrap_state") if tunnel else None
+        cluster = request["action"] == "cluster"
+        state = transport.call(bootstrap, "bootstrap_state") if cluster else None
         stage = None
-        if tunnel:
+        if cluster:
             stage, before = tunnel_before(request, request_digest, bootstrap, state, preparations)
         else:
             before = transport.call(bootstrap, "observe")
         if not before["ready"]:
-            if request["action"] == "cluster":
-                if tunnel:
-                    if stage != "complete":
-                        changed = apply_tunnel_cluster(request, bootstrap, transport, state, preparations) or changed
-                    if "stretch" in request:
-                        changed = activate_stretch(request, request_digest, bootstrap, transport, now, pause) or changed
-                else:
-                    changed = apply_native_cluster(request, bootstrap, transport, before) or changed
+            if cluster:
+                if stage != "complete":
+                    changed = apply_tunnel_cluster(request, bootstrap, transport, state, preparations) or changed
+                if "stretch" in request:
+                    changed = activate_stretch(request, request_digest, bootstrap, transport, now, pause) or changed
             elif request["action"] in ("pool", "policy", "rbd", "subvolume", "settings"):
                 changed = transport.call(bootstrap, request["action"])["changed"] or changed
             elif request["action"] == "filesystem":

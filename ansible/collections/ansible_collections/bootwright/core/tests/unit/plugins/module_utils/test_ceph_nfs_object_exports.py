@@ -347,6 +347,5 @@ def test_object_export_request_admits_and_routes_to_the_object_export_worker(mon
     assert ceph_native.validate(request) is request
     reached = []
     monkeypatch.setattr(ceph_native_nfs.ExportWorker, "nfs_export", lambda self: reached.append(type(self)) or {"changed": False})
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     assert ceph_native.dispatch({"request": export_request(), "host": "node-1", "phase": "nfs_export", "private": {}}) == {"changed": False}
     assert reached == [ceph_native_object.ExportUserWorker]

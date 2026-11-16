@@ -3,7 +3,6 @@ from __future__ import annotations
 
 # pylint: disable=unidiomatic-typecheck
 import base64
-import contextlib
 import hmac
 import json
 
@@ -130,7 +129,7 @@ class ReplicationWorker(ceph_native_resources.ResourceWorker):
 
     def native(self, program, args, data=b"", secret=False, missing=False):
         """Tokens and auth reads never enter diagnostics, including malformed output and nonzero exits."""
-        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+        proof = self.bootstrap_hold()
         argv = [*self.admin_argv("/usr/bin/" + program), *QUIET, *args]
         with proof:
             code, output = self.run(argv, data=data, timeout=60)

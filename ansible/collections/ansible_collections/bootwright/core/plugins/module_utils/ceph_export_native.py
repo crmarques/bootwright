@@ -9,7 +9,6 @@ from __future__ import annotations
 # pylint: disable=unidiomatic-typecheck
 
 import base64
-import contextlib
 import hashlib
 import ipaddress
 import json
@@ -136,7 +135,7 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         gateway = self.export["gateway"]
         argv = [*self.admin_argv("/usr/bin/radosgw-admin"), "--format", "json", *args,
                 "--rgw-realm", gateway["realm"], "--rgw-zonegroup", gateway["zoneGroup"], "--rgw-zone", gateway["zone"]]
-        with self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext():
+        with self.bootstrap_hold():
             code, output = self.run(argv, timeout=60)
         require(code == 0, "export-prerequisite-gateway-query")
         try:

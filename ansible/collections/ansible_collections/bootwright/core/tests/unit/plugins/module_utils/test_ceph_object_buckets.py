@@ -585,7 +585,6 @@ def test_dispatch_lends_a_tls_bucket_only_its_certificate(ready, monkeypatch):
     cluster, unused, unused_rgw = ready
     seen = []
     monkeypatch.setattr(ceph_native_object.BucketWorker, "object_bucket", lambda self: seen.append((type(self), self.tls)) or {"changed": False})
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     envelope = {"request": cluster.request, "host": "node-1", "phase": "object_bucket", "private": {}}
     assert ceph_native.dispatch(envelope) == {"changed": False} and seen == [(ceph_native_object.BucketWorker, {})]
     with pytest.raises(ceph_native.Refusal, match="^material$"):
@@ -643,7 +642,6 @@ class Transport:
 @pytest.mark.parametrize("tls", [False, True])
 def test_apply_runs_one_bucket_phase_then_waits_lending_only_the_certificate(core_request, monkeypatch, tls):
     request = core_bucket_request(core_request, **({"certificateRef": "gateway-tls", "endpoint": "s3.example.test", "port": 443} if tls else {}))
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     transport = Transport(request, ready_after=1)
     result = ceph_core.execute(request, "apply", "d" * 64, transport, {}, pause=lambda seconds: None)
     private = {"gatewayCertificate": gateway.CERT} if tls else None

@@ -499,7 +499,6 @@ def test_the_controller_accepts_a_later_stage_a_continuation_reports(monkeypatch
             return dict(result, stage="stretch-enabled") if phase == "stretch_locate" else result
 
     transport = Later(value, clock, "complete")
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
     assert ceph_core.execute(value, "apply", "d" * 64, transport, {"dashboard": str(tmp_path / "dashboard")}, now=clock.now, pause=clock.pause)["changed"]
 
 
@@ -509,7 +508,6 @@ def test_the_cluster_block_activates_stretch_after_services_and_before_readiness
     core.package_intent(value)
     clock = core.ReadinessClock()
     transport = ActivationTransport(value, clock, stage)
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
     result = ceph_core.execute(value, "apply", "d" * 64, transport, {"dashboard": str(tmp_path / "dashboard")}, now=clock.now, pause=clock.pause)
     assert result["evidence"]["ready"] and result["evidence"]["stretch"] == {"stage": "verified", "enabled": True}
     phases = [phase for unused, phase, unused in transport.calls if phase != "host_state"]
@@ -528,7 +526,6 @@ def test_an_activated_stretch_cluster_is_not_activated_again(monkeypatch, tmp_pa
     clock = core.ReadinessClock()
     transport = ActivationTransport(value, clock, "complete")
     transport.activated = "verified"
-    monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
     result = ceph_core.execute(value, "apply", "d" * 64, transport, {"dashboard": str(tmp_path / "dashboard")}, now=clock.now, pause=clock.pause)
     assert result["evidence"]["ready"]
     assert not {"stretch_locate", "stretch_enable"} & {phase for unused, phase, unused in transport.calls}

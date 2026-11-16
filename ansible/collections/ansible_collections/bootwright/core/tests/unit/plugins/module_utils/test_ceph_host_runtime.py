@@ -1178,9 +1178,9 @@ def test_host_observation_reports_a_prepared_host(request_value, tmp_path):
 
 
 @pytest.mark.parametrize("phase", ["images", "profile", "route", "device_identity"])
-def test_host_phases_refuse_an_unsupported_release_before_any_effect(request_value, phase):
+def test_host_phases_refuse_the_native_transport_before_any_effect(request_value, phase):
     request_value["clusterSSHTransport"] = "native"
-    with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
         runtime.dispatch(dict({"request": request_value, "host": "node-1", "phase": phase, "private": {"registryJSON": "x"} if phase == "images" else {}},
                               **{runtime.ENVELOPE_EXTRA[phase]: ceph_pull() if phase == "images" else []} if phase in runtime.ENVELOPE_EXTRA else {}))
 

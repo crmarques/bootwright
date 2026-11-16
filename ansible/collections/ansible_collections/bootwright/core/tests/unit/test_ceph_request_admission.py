@@ -40,7 +40,7 @@ CORE = {
     "cluster": "example",
     "clusterKeyRef": "cluster-key",
     "clusterNetworks": ["198.51.100.0/24"],
-    "clusterSSHTransport": "native",
+    "clusterSSHTransport": "verifiedTunnel",
     "clusterSSHUser": "operator",
     "config": {"global": {"osd_pool_default_size": "2"}},
     "controller": "controller",
