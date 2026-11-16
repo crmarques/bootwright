@@ -18,6 +18,7 @@ import (
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/power"
+	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -311,6 +312,29 @@ func TestThePowerRolesAdmitTheRequestsThisBuildSends(t *testing.T) {
 				Variable: bound.variable, Canonical: compact.Bytes()}
 			for _, problem := range roleRefusals(request) {
 				t.Errorf("%s: %s", name, problem)
+			}
+		}
+	}
+}
+
+// Discovery preparation has its own request, outside the installed-OS run.
+// Check its actual Go encoding against every bound role entry point too.
+func TestTheDiscoveryRolesAdmitTheRequestsThisBuildSends(t *testing.T) {
+	for _, port := range []int{22, 2222} {
+		request := installation.DiscoveryRequest{
+			Version: installation.DiscoveryImplementation, Inventory: installation.InventoryAutomatic,
+			Interfaces: []installation.Interface{}, DeadlineSeconds: 1800,
+			SSH: installation.DiscoverySSH{Port: port},
+		}
+		wire, err := request.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, operation := range []string{"apply", "observe", "destroy"} {
+			run := lifecycle.RunRequest{Implementation: installation.DiscoveryImplementation,
+				Operation: operation, Variable: "bootwright_disk_discovery", Canonical: wire}
+			for _, problem := range roleRefusals(run) {
+				t.Errorf("%s, port %d: %s", operation, port, problem)
 			}
 		}
 	}

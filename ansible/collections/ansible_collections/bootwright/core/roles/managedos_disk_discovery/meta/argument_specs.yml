@@ -28,6 +28,13 @@ argument_specs:
           network:
             type: dict
             required: true
+          ssh:
+            type: dict
+            required: true
+            options:
+              port:
+                type: int
+                required: true
           private:
             type: dict
             required: true

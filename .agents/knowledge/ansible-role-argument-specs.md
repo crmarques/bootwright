@@ -51,6 +51,15 @@ That test renders every consumer's include of the machine port and validates
 it with `ArgumentSpecValidator`, as this action does, rather than waiting for a
 host to refuse it.
 
+A worker-level or VM rehearsal does not exercise this preceding validation.
+Adding a frozen request field must also update the role metadata: discovery's
+`ssh` record was initially rejected before the native action ran. The
+[Go producer-to-role regression](../../cmd/bootwright/role_admission_test.go)
+checks the real discovery request encoding, and the
+[discovery entry-point regression](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_discovery_role_port.py)
+loads each shipped playbook's first Ansible task and validates default/custom
+SSH settings through that task's argument specification.
+
 ## What an extra-vars file is trusted with
 
 `--extra-vars @file` is loaded `trusted_as_template=True`
