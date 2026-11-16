@@ -129,7 +129,7 @@ func (w *treeWriter) adopt(parent int, name string) error {
 }
 
 func (f Files) foreign(stat unix.Stat_t) string {
-	return ownershipRefusal(f.ownership(nativefs.StickyRefused).Admits(stat.Uid, nativefs.RawMode(stat.Mode)))
+	return ownershipRefusal(f.ownership(nativefs.StickyRefused).Admits(stat.Uid, nativefs.RawMode(uint32(stat.Mode))))
 }
 
 func emptyDirectory(handle int) (bool, error) {
