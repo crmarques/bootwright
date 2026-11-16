@@ -347,16 +347,18 @@ func (c ReplicationCapability) Quiescent(ctx context.Context, p lifecycle.Probe)
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 	}
 	if p.RetiredWithHosts {
-		if r, err := DecodeReplicationRequest(p.Block.Request); err == nil {
-			pending, err := pendingPhysicalClusters(p.Execution(), []string{r.Primary.Cluster, r.Secondary.Cluster}, replicationMachines(r))
-			if err != nil {
-				return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: survivingReason, Remedy: survivingRemedy}, nil
-			}
-			if len(pending) != 0 {
-				return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: pendingPhysicalReason}, nil
-			}
-			return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: retiredReason}, nil
+		r, err := DecodeReplicationRequest(p.Block.Request)
+		if err != nil {
+			return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 		}
+		pending, err := pendingPhysicalClusters(p.Execution(), []string{r.Primary.Cluster, r.Secondary.Cluster}, replicationMachines(r))
+		if err != nil {
+			return lifecycle.Quiescence{State: lifecycle.Unproved}, err
+		}
+		if len(pending) != 0 {
+			return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: pendingPhysicalReason}, nil
+		}
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: retiredReason}, nil
 	}
 	return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: survivingReason, Remedy: survivingRemedy}, nil
 }

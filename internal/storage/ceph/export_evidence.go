@@ -230,9 +230,21 @@ func (c ConsumerCapability) ObserveRemoval(ctx context.Context, e lifecycle.Exec
 	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: data}, nil
 }
 func (c ConsumerCapability) Quiescent(ctx context.Context, p lifecycle.Probe) (lifecycle.Quiescence, error) {
-	_, err := c.retirement(ctx, p.Execution())
+	if err := ctx.Err(); err != nil {
+		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
+	}
+	r, err := DecodeConsumerRequest(p.Block.Request)
 	if err != nil {
+		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
+	}
+	if !p.RetiredWithHosts || r.PhysicalHosts {
 		return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: survivingReason, Remedy: survivingRemedy}, nil
+	}
+	if _, err := c.identity(ctx, p.Execution()); err != nil {
+		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
+	}
+	if _, err := pendingPhysicalClusters(p.Execution(), []string{r.Cluster}, r.Machines); err != nil {
+		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 	}
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: retiredReason}, nil
 }

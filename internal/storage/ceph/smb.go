@@ -576,10 +576,14 @@ func (SMBCapability) Quiescent(ctx context.Context, probe lifecycle.Probe) (life
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 	}
 	if probe.RetiredWithHosts {
-		if r, err := DecodeSMBRequest(probe.Block.Request); err == nil && len(r.Machines) != 0 {
+		r, err := DecodeSMBRequest(probe.Block.Request)
+		if err != nil {
+			return lifecycle.Quiescence{State: lifecycle.Unproved}, err
+		}
+		if len(r.Machines) != 0 {
 			pending, err := pendingPhysicalClusters(probe.Execution(), []string{r.Cluster}, r.Machines)
 			if err != nil {
-				return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: survivingReason, Remedy: survivingRemedy}, nil
+				return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 			}
 			if len(pending) != 0 {
 				return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: pendingPhysicalReason}, nil

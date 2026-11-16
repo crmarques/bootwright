@@ -675,6 +675,9 @@ func (c MachineCapability) Quiescent(ctx context.Context, probe lifecycle.Probe)
 	stop := "bootwright machine stop --context " + execution.Context + " --name " + request.Identity.Object
 	result, err := c.run(ctx, execution, "observe", request)
 	if err != nil {
+		if ctx.Err() != nil {
+			return lifecycle.Quiescence{}, ctx.Err()
+		}
 		return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: "its VirtualMachineInstance could not be read", Stop: stop}, nil
 	}
 	evidence, err := decodeMachineEvidence(result.Evidence, execution.Block.RequestDigest)
