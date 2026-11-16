@@ -1604,12 +1604,21 @@ directory merge. Only the qualified patched initramfs members enter those
 directories; the existing BIOS and EFI boot configuration updates and signed
 boot components are retained. No private
 payload or mutable patched component is shared between machines or operations.
-Construction and publication hold one controller-wide kernel lock, released
-before network boot and inventory collection. Under it, capacity checks include
-the bounded image, the boot-tree copy, initramfs and native-tool scratch on the
-work filesystem, and a publication copy when it uses another filesystem. Earlier published
-images remain allocated and count against the next builder's available space.
-The checks reserve no space against unrelated writers or quotas.
+Construction and publication run concurrently within the runner's concurrency
+limit when their filesystem budgets fit. A brief exclusive admission lock
+accounts for every live builder's full worst-case peak: the bounded image,
+boot-tree copy, initramfs and native-tool scratch on the work filesystem, and a
+publication copy when it uses another filesystem. Each builder holds a kernel
+lock on its private transient budget record until construction, publication and
+intermediate cleanup stop. A shared construction guard excludes exclusive
+holders without serializing builders. Current free space still includes every
+allocated scratch file and earlier publication, so counting full active budgets
+is conservative. A builder waits boundedly while other active builders can
+release capacity; insufficient capacity without such a builder refuses before
+construction. Stale budget records are reclaimed only when their kernel lock
+is proved free; unrelated files are never reclaimed. These leases reserve no
+space against unrelated writers or quotas. No construction lock or budget
+lease remains during network boot and inventory collection.
 Publication transfers the completed single-link image by atomic rename when
 the filesystem permits it. Cross-filesystem rename detection selects an
 exact-size copy with short-write handling and a fresh capacity check. Both

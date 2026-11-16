@@ -133,11 +133,28 @@ def test_interrupted_atomic_replacement_preserves_the_previous_publication(tmp_p
     assert not list(tmp_path.glob(".stage-*"))
 
 
-def test_capacity_combines_paths_on_one_filesystem_before_building(tmp_path, monkeypatch):
+@pytest.fixture
+def capacity_identity(monkeypatch):
+    """Only root identity/ancestry is simulated; real flock and files are used."""
+    original = os.fstat
+
+    def root_owned(fd):
+        fields = list(original(fd))
+        fields[4] = 0
+        return os.stat_result(fields)
+
+    def directory(path, create, mode=0o700):
+        if create:
+            path.mkdir(mode=mode, exist_ok=True)
+
+    monkeypatch.setattr(media.os, "fstat", root_owned)
+    monkeypatch.setattr(media.private_records, "directory", directory)
+
+
+def test_capacity_combines_paths_on_one_filesystem_before_building(tmp_path, monkeypatch, capacity_identity):
     work, served = tmp_path / "work", tmp_path / "served"
     work.mkdir()
     served.mkdir()
-    monkeypatch.setattr(media.private_records, "directory", lambda *args: None)
     monkeypatch.setattr(media.os, "statvfs", lambda path: SimpleNamespace(f_bavail=1, f_frsize=1, f_bsize=1))
     with pytest.raises(OSError) as caught:
         with media.construction(tmp_path, work, served, 64 << 20):
@@ -146,8 +163,20 @@ def test_capacity_combines_paths_on_one_filesystem_before_building(tmp_path, mon
     assert list(work.iterdir()) == []
 
 
-def test_concurrent_capacity_checks_include_previously_published_images(tmp_path, monkeypatch):
-    monkeypatch.setattr(media.private_records, "directory", lambda *args: None)
+def test_construction_overlaps_when_each_peak_fits(tmp_path, monkeypatch, capacity_identity):
+    monkeypatch.setattr(media.os, "statvfs", lambda path: SimpleNamespace(f_bavail=1 << 40, f_frsize=1, f_bsize=1))
+    together = threading.Barrier(3)
+
+    def construct(number):
+        with media.construction(tmp_path, tmp_path, tmp_path, 64 << 20):
+            together.wait(timeout=5)
+            return number
+
+    with ThreadPoolExecutor(max_workers=3) as workers:
+        assert sorted(workers.map(construct, (1, 2, 3))) == [1, 2, 3]
+
+
+def test_concurrent_capacity_checks_include_previously_published_images(tmp_path, monkeypatch, capacity_identity):
     maximum = media.publication_bound(64 << 20)
     scratch = (64 << 20) + len(media.SUPPORTED_INITRDS) * (media.MAX_INITRD + media.boot.MAX_OVERLAY) + media.MAX_BOOT_GROWTH
     available = 2 * maximum + scratch
@@ -180,14 +209,15 @@ def test_concurrent_capacity_checks_include_previously_published_images(tmp_path
         results = list(workers.map(construct, (1, 2, 3)))
     assert sorted(results) == [False, True, True]
     assert peak == 1
-    assert observed == [2 * maximum + scratch, maximum + scratch, scratch]
+    assert [size for index, size in enumerate(observed) if index == 0 or size != observed[index - 1]] == [
+        2 * maximum + scratch, maximum + scratch, scratch,
+    ]
 
 
-def test_capacity_checks_each_filesystem_and_releases_the_lock_on_cancellation(tmp_path, monkeypatch):
+def test_capacity_checks_each_filesystem_and_releases_the_lock_on_cancellation(tmp_path, monkeypatch, capacity_identity):
     work, served = tmp_path / "work", tmp_path / "served"
     work.mkdir()
     served.mkdir()
-    monkeypatch.setattr(media.private_records, "directory", lambda *args: None)
     original_stat = Path.stat
 
     def filesystem(path, *args, **kwargs):

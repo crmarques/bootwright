@@ -7,8 +7,6 @@ boot tree: no second stage, package repositories or other installer content.
 from __future__ import annotations
 
 import hashlib
-import errno
-import fcntl
 from contextlib import contextmanager
 import os
 from pathlib import Path
@@ -19,6 +17,7 @@ import posixpath
 import shutil
 
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_boot as boot
+from ansible_collections.bootwright.core.plugins.module_utils import discovery_capacity
 from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 from ansible_collections.bootwright.core.plugins.module_utils import private_records
 
@@ -224,22 +223,11 @@ def reap_intermediates(root):
 
 @contextmanager
 def construction(lock_root, work, destination, source_size):
-    # Serialize only construction/publication across contexts. Published images
-    # remain allocated while other nodes boot, so the next check includes them.
-    private_records.directory(lock_root, False)
-    fd = os.open(lock_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        maximum = publication_bound(source_size)
-        # The boot-tree copy is never larger than its source.
-        intermediates = source_size + len(SUPPORTED_INITRDS) * (MAX_INITRD + boot.MAX_OVERLAY) + MAX_BOOT_GROWTH
-        budgets = {work.stat().st_dev: (work, maximum + intermediates)}
-        if destination.stat().st_dev not in budgets:
-            budgets[destination.stat().st_dev] = (destination, maximum)
-        for path, required in budgets.values():
-            capacity = os.statvfs(path)
-            if capacity.f_bavail * (capacity.f_frsize or capacity.f_bsize) < required:
-                raise OSError(errno.ENOSPC, "discovery construction capacity")
+    maximum = publication_bound(source_size)
+    # Reserve each peak, while previous publications still count in statvfs.
+    intermediates = source_size + len(SUPPORTED_INITRDS) * (MAX_INITRD + boot.MAX_OVERLAY) + MAX_BOOT_GROWTH
+    budgets = {work.stat().st_dev: (work, maximum + intermediates)}
+    if destination.stat().st_dev not in budgets:
+        budgets[destination.stat().st_dev] = (destination, maximum)
+    with discovery_capacity.reserve(lock_root, budgets):
         yield
-    finally:
-        os.close(fd)

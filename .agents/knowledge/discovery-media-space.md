@@ -59,6 +59,16 @@ fixture because root privileges were unavailable. Production keeps embedded
 EFI rebuilding enabled. This comparison does not qualify that rebuilding or
 prove the same exact allocation on XFS/ext4 or under quotas.
 
+The construction-wide exclusive lock also serialized independent node builds.
+The [capacity lease helper](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/discovery_capacity.py)
+now admits overlapping builders under the
+[media construction rule](../../specs/managed-os.md#automatic-root-disk-discovery).
+Its kernel-locked records carry only per-filesystem byte budgets; process IDs
+and elapsed time never prove a record stale. The three-way overlap test uses
+real file locks, while constrained-capacity tests retain serial admission.
+The measurements above predate this concurrency change and do not qualify its
+physical peak or throughput.
+
 These are Bootwright measurements and tool-contract observations, not a Red
 Hat support claim for the custom inventory image. RHEL-host native-tool and
 physical BMC acceptance remain operator gates. Exact optimized-media BIOS and
