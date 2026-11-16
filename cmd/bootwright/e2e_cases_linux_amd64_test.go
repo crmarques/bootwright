@@ -32,8 +32,20 @@ type e2eRender struct {
 }
 
 var e2eRenders = map[string][]e2eRender{
-	"lab-rhel": {{name: "default"}},
-	"lab-sno":  {{name: "default"}},
+	"lab-rhel": {
+		{name: "default"},
+		{name: "fips", sets: []string{"security.fips=true"}},
+		{name: "tpm2", sets: []string{"security.tpm2=true"}},
+		{name: "registration", sets: []string{"registration.enabled=true"}},
+		{name: "registration and release updates", sets: []string{"registration.enabled=true", "registration.updateWithinRelease=true"}},
+	},
+	"lab-sno": {
+		{name: "default"},
+		{name: "fips", sets: []string{"security.fips=true"}},
+		{name: "tpm2", sets: []string{"security.tpm2=true"}},
+		{name: "nmstate on", sets: nmstatePins("addons.nmstate=true")},
+		{name: "metallb on", sets: metallbPins("addons.metallb=true")},
+	},
 	"lab-sno-fips-controller": {
 		{name: "default", sets: fipsControllerSubscriptions()},
 		{name: "tpm2 off", sets: append(fipsControllerSubscriptions(), "security.tpm2=false")},
@@ -50,11 +62,30 @@ var e2eRenders = map[string][]e2eRender{
 			"fdf.catalog.image=icr.io/cpopen/isf-data-foundation-catalog@sha256:2222222222222222222222222222222222222222222222222222222222222222",
 		)},
 	},
-	"lab-network-variants":           {{name: "default"}},
+	"lab-network-variants": {
+		{name: "default"},
+		{name: "fips", sets: []string{"security.fips=true"}},
+		{name: "tpm2", sets: []string{"security.tpm2=true"}},
+		{name: "registration", sets: []string{"registration.enabled=true"}},
+		{name: "registration and release updates", sets: []string{"registration.enabled=true", "registration.updateWithinRelease=true"}},
+		{name: "bond mode refusal", sets: []string{"bond.mode=802.3ad"}, refuses: "qualifies only active-backup bonding"},
+		{name: "single context", sets: []string{"name=nv-cutoff", "single=true"}},
+		{name: "cut-off context", sets: []string{"name=nv-cutoff", "single=true", "cutoff=true"}},
+	},
 	"lab-3-nodes-ceph-host-variants": {{name: "default"}},
-	"lab-3-nodes-ocp":                {{name: "metallb off", sets: []string{"addons.metallb=false"}}},
-	"lab-3-nodes-ocp-features":       {{name: "mirror off", sets: []string{"mirror.enabled=false"}}},
-	"lab-5-nodes-ceph-networks":      {{name: "default"}},
+	"lab-3-nodes-ocp": {
+		{name: "metallb on", sets: metallbPins()},
+		{name: "metallb off", sets: []string{"addons.metallb=false"}},
+	},
+	"lab-3-nodes-ocp-features": {
+		{name: "mirror on", sets: mirrorPins()},
+		{name: "mirror off", sets: []string{"mirror.enabled=false"}},
+		{name: "proxy off", sets: []string{"mirror.enabled=false", "proxy.enabled=false"}},
+		{name: "tpm2 off", sets: []string{"mirror.enabled=false", "security.tpm2=false"}},
+		{name: "fips", sets: []string{"mirror.enabled=false", "security.fips=true"}},
+		{name: "ipv6", sets: []string{"mirror.enabled=false", "ipv6=true", "networks.ipv6.controllerAddress=2001:db8:2::2"}},
+	},
+	"lab-5-nodes-ceph-networks": {{name: "default"}},
 	"lab-6-nodes-ceph-network-matrix": {
 		{name: "default"},
 		{name: "nfs off", sets: []string{"ceph.services.nfs=false"}},
@@ -358,10 +389,19 @@ func planE2EInput(t *testing.T, directory string) (string, []prerequisites.HostR
 }
 
 func fipsControllerSubscriptions() []string {
-	return []string{
-		"addons.subscriptions.nmstate.channel=stable", "addons.subscriptions.nmstate.startingCSV=kubernetes-nmstate-operator.v4.22.0",
-		"addons.subscriptions.metallb.channel=stable", "addons.subscriptions.metallb.startingCSV=metallb-operator.v4.22.0",
-	}
+	return append(nmstatePins(), metallbPins()...)
+}
+
+func nmstatePins(extra ...string) []string {
+	return append(extra, "addons.subscriptions.nmstate.channel=stable", "addons.subscriptions.nmstate.startingCSV=kubernetes-nmstate-operator.v4.22.0")
+}
+
+func metallbPins(extra ...string) []string {
+	return append(extra, "addons.subscriptions.metallb.channel=stable", "addons.subscriptions.metallb.startingCSV=metallb-operator.v4.22.0")
+}
+
+func mirrorPins() []string {
+	return []string{"mirror.url=mirror.example.test:5000", "mirror.releaseRepository=ocp/release", "mirror.componentRepository=ocp/components"}
 }
 
 func dataFoundationSubscription() []string {
