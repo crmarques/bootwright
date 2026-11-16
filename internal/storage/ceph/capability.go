@@ -416,8 +416,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if c.kind == api.CephCluster && (r.Action == "settings" || r.Action == "service") {
 		action = r.Action
 	}
-	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || (r.Action == "service") != (r.Service != nil) || (r.Action == "gateway") != (r.Gateway != nil) ||
-		(r.Action == "nvmeof") != (r.NVMeOF != nil) || (r.Action == "nfs-export") != (r.NFSExport != nil) || (r.Action == "object-user") != (r.ObjectUser != nil) || (r.Action == "object-bucket") != (r.ObjectBucket != nil) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || r.Client != nil && r.Client.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
+	if action == "" || r.Action != action || !onlyOwnArm(r) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || r.Client != nil && r.Client.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
 		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 	}
 	if r.Owner != "" || r.FSID != "" || e.ApplyOperation == "" {
@@ -429,6 +428,18 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	r.Owner = e.ApplyOperation
 	r.FSID = FSIDFor(e.ApplyOperation, r.Cluster)
 	return r, nil
+}
+
+func onlyOwnArm(r Request) bool {
+	arms := map[string]bool{"settings": r.Settings != nil, "service": r.Service != nil, "gateway": r.Gateway != nil, "policy": r.Policy != nil, "pool": r.Pool != nil,
+		"client": r.Client != nil, "rbd": r.RBD != nil, "filesystem": r.Filesystem != nil, "subvolume": r.Subvolume != nil, "nvmeof": r.NVMeOF != nil,
+		"nfs-export": r.NFSExport != nil, "object-user": r.ObjectUser != nil, "object-bucket": r.ObjectBucket != nil}
+	for action, present := range arms {
+		if present != (action == r.Action) {
+			return false
+		}
+	}
+	return true
 }
 
 func (c Capability) prepare(ctx context.Context, e lifecycle.Execution) (Request, error) {
