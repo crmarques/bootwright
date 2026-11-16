@@ -16096,3 +16096,79 @@ blank-line issues and one unnecessary lambda, so the collection's sanity suite
 failed. The tests are reformatted and the lambda replaced by the bound method;
 no assertion changes. The delivering commit records the narrowed sanity and
 units suites over the four files and the full gate.
+
+## X499 — Cluster handoff token commands
+
+### B1453
+
+Authorized by [D274](backlog.md#d274); code audit 005 finding G21-07. The
+cluster client handoff refused `--show-token` but issued a descriptor for
+`oc whoami -t` and its grouped short forms, which print the session token.
+The handoff now refuses every short-flag form of `whoami` that carries `t`,
+alongside the long forms. Commands that print a service-account token (`oc
+create token`, `oc serviceaccounts get-token`) are not refused; whether the
+token-reveal rule covers them is left to the owner. The delivering commit
+records the refusal tests failing first.
+
+## X500 — Audit 005 gates
+
+Delivered under [D274](backlog.md#d274) (3), (4), (5) and (8); B1461, the
+fitness-suite restructuring, stays open on the M1 page.
+
+### B1454
+
+CI runs `scripts/check-commits` on every push: over the pushed range on the
+default branch, refusing a rewrite whose range cannot be known, and from the
+merge base elsewhere. The check job's cache key covers the tool table and the
+runtime lock, and a concurrency group cancels a superseded run except on the
+default branch, whose runs check only their own range.
+
+### B1455
+
+Statement coverage is measured by `make cover`, which CI runs beside the gate,
+and held to floors that only rise in `scripts/tools/coverage-floors.json`, per
+Go package and per collection plugin kind; the collection is measured by a
+standard-library recorder under the plain unit loop. The privilege test that
+failed under coverage compares stdout only.
+
+### B1456
+
+A pinned staticcheck runs in `check-go` with an exclusion list that only
+shrinks. Its first run found a defect, fixed with a regression test: a run
+output's number was read without its prefix. Unused code and the audit's dead
+code are deleted, including the retired OSD vocabulary of CephCluster
+admission and the unreachable native Ceph SSH transport in the collection;
+the matching Go request arms remain for a later slice. The tools module is
+vetted and formatted by the gate.
+
+### B1457
+
+`make race` covers every production package that starts a goroutine, imports
+`sync` or takes a file lock, with an explicit timeout, and
+`test/architecture` refuses a concurrent package outside its list.
+
+### B1458
+
+[Architecture verification](../architecture.md#architecture-verification)
+holds production functions below a cyclomatic complexity of 40 unless they are
+on a list that only shrinks.
+
+### B1459
+
+Fuzz targets cover the adapter record decoder, the canonical JSON decoder and
+the lexical rules; the scheduled vulnerability workflow runs every fuzz target
+in the module, and a structural test keeps that list complete.
+
+### B1460
+
+The release environment is an allowlist that refuses make variables from
+outside the Makefile and requires a digest-pinned build image; the container
+build context holds `.git` and the tracked tree only, so a plain build still
+stamps itself; every target that compiles the module depends on the wheels;
+the vulnerability gate warns of exceptions expiring within two weeks.
+
+### B1462
+
+A fitness test holds every per-package golden helper to one model, and a
+collection test ties each protocol module's documented refusal reasons to its
+action; the drifted copies and the export protocol's documentation are fixed.
