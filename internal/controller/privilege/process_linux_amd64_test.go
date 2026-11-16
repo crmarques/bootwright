@@ -649,7 +649,9 @@ func TestRootManualSudoAccountProvenanceFixture(t *testing.T) {
 				command.SysProcAttr.Credential = &syscall.Credential{Uid: 60001, Gid: 60002, Groups: []uint32{60002}}
 				command.Env = append(command.Env, "SUDO_UID=0", "SUDO_GID=0", "SUDO_USER=root")
 			}
-			output, err := command.CombinedOutput()
+			var stderr strings.Builder
+			command.Stderr = &stderr
+			output, err := command.Output()
 			if test.deny {
 				if err == nil {
 					t.Fatal("the metadata of a re-execution whose sudo is gone was accepted")
@@ -657,7 +659,7 @@ func TestRootManualSudoAccountProvenanceFixture(t *testing.T) {
 				return
 			}
 			if err != nil || string(output) != "verified\n" {
-				t.Fatalf("account provenance fixture: %v %q", err, output)
+				t.Fatalf("account provenance fixture: %v %q, stderr %q", err, output, stderr.String())
 			}
 		})
 	}

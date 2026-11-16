@@ -79,9 +79,11 @@ func TestSudoColorHintDoesNotReachSubprocesses(t *testing.T) {
 	for _, value := range []string{"", "truecolor"} {
 		child := exec.Command(self, "__bootwright_discard_terminal_hint")
 		child.Env = []string{"PATH=/usr/bin", "COLORTERM=" + value}
-		output, err := child.CombinedOutput()
+		var stderr strings.Builder
+		child.Stderr = &stderr
+		output, err := child.Output()
 		if err != nil || string(output) != "hint absent\n" {
-			t.Fatalf("guarded subprocess: %v, output %q", err, output)
+			t.Fatalf("guarded subprocess: %v, output %q, stderr %q", err, output, stderr.String())
 		}
 	}
 }
