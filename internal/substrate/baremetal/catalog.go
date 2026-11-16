@@ -1,10 +1,6 @@
 package baremetal
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"strings"
-
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -28,9 +24,8 @@ func BlockID(machine string) string { return reconciliation.BlockIdentity("machi
 // counts as proving a physical machine invalidates a frozen plan rather than
 // silently applying to one.
 func ContentDigest() string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
+	return reconciliation.ContentDigestOf(
 		"bootwright.substrate.baremetal.machine-v1", Implementation, requestVersion,
 		"identity+exact-addresses+power+system-claim+every-mac-claim+logical-volume",
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	)
 }

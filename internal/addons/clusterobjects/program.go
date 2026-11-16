@@ -2,8 +2,6 @@ package clusterobjects
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -76,23 +74,20 @@ func NewObjectEntry(object Object) (ObjectEntry, error) {
 	return entry, validateObject(entry)
 }
 
-func DesiredDigest(body []byte) string { return hash(ObjectDomain, string(body)) }
+func DesiredDigest(body []byte) string {
+	return reconciliation.ContentDigestOf(ObjectDomain, string(body))
+}
 
 func OwnerMark(operation, block string, ref Ref) string {
 	group := ""
 	if parts := strings.SplitN(ref.APIVersion, "/", 2); len(parts) == 2 {
 		group = parts[0]
 	}
-	return hash(OwnerDomain, operation, block, group, ref.Kind, ref.Namespace, ref.Name)
+	return reconciliation.ContentDigestOf(OwnerDomain, operation, block, group, ref.Kind, ref.Namespace, ref.Name)
 }
 
 func FieldManager(operation, block string) string {
-	return "bootwright-" + hash(OwnerDomain, operation, block)[:32]
-}
-
-func hash(parts ...string) string {
-	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(sum[:])
+	return "bootwright-" + reconciliation.ContentDigestOf(OwnerDomain, operation, block)[:32]
 }
 
 func NewPlacementEntry(placement SecretPlacement) (PlacementEntry, error) {

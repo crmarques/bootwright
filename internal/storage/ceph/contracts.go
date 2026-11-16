@@ -2,8 +2,6 @@ package ceph
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"slices"
 	"strings"
 
@@ -81,6 +79,6 @@ func unsupportedFailure() error {
 }
 
 func ContentDigest() string {
-	d := sha256.Sum256([]byte(Implementation + "\x00" + Version + "\x00" + EvidenceVersion + "\x00" + PackageVersion + "\x00" + RetirementVersion + "\x00" + TiebreakerEvidenceVersion + "\x00selected-tunnel-image-v1\x00health-scoped-to-owned-pools-and-filesystems-v1\x00gateway-dashboard-cephadm-client-tls-v1\x00gateway-native-ca-endpoint-proof-v1"))
-	return hex.EncodeToString(d[:])
+	return reconciliation.ContentDigestOf(Implementation, Version, EvidenceVersion, PackageVersion, RetirementVersion, TiebreakerEvidenceVersion,
+		"selected-tunnel-image-v1", "health-scoped-to-owned-pools-and-filesystems-v1", "gateway-dashboard-cephadm-client-tls-v1", "gateway-native-ca-endpoint-proof-v1")
 }

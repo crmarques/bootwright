@@ -2,9 +2,7 @@ package power
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"maps"
@@ -576,8 +574,7 @@ func pinValues(pin machine.HardwareIdentity) map[string]string {
 // implements, so evidence returned for one request shape can never satisfy
 // another.
 func ContentDigest() string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
+	return reconciliation.ContentDigestOf(
 		"bootwright.machine.power-v1", Implementation, RequestVersion, Operation, Variable,
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	)
 }

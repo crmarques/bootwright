@@ -1,14 +1,13 @@
 package kubevirt
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -61,8 +60,7 @@ func spreadOf(catalog api.Catalog, contextName, machine string) string {
 	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
 		for _, node := range cluster.Spec().Get("nodes").Items() {
 			if node.Get("machineRef").Text() == machine {
-				digest := sha256.Sum256([]byte(strings.Join([]string{"bootwright.substrate.kubevirt.spread-v1", contextName, cluster.Name(), node.Get("role").Text()}, "\x00")))
-				return hex.EncodeToString(digest[:8])
+				return reconciliation.ContentDigestOf("bootwright.substrate.kubevirt.spread-v1", contextName, cluster.Name(), node.Get("role").Text())[:16]
 			}
 		}
 	}

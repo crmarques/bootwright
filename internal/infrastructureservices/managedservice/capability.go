@@ -2,8 +2,6 @@ package managedservice
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"net/netip"
 	"slices"
@@ -52,11 +50,10 @@ func (d Definition) BlockID(service string) string {
 // changing the request shape, the compiled image or the host layout
 // invalidates a frozen plan.
 func (d Definition) ContentDigest() string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
+	return reconciliation.ContentDigestOf(
 		"bootwright.infrastructureservices.managed-service-v1",
 		d.Implementation, d.Version, d.Image, HostedRoot, ServicesArea, UnitPrefix,
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	)
 }
 
 // Capability realizes one managed network service kind. It owns what

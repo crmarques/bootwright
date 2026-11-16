@@ -99,9 +99,10 @@ func FirewallContentDigest() string {
 		Name: name, Networks: []string{"192.0.2.10/32", "192.0.2.0/24"}, Ports: []FirewallPort{{Number: 443, Transport: "tcp"}, {Number: 53, Transport: "udp"}},
 		Protocols: []string{"vrrp"}, Publisher: "publisher",
 	}, mark)))
-	digest := sha256.Sum256([]byte(strings.Join([]string{"bootwright.managedos.host-firewall-v1", FirewallImplementation, FirewallEvidenceVersion, FirewallServiceRoot,
-		mark, name, hex.EncodeToString(sample[:])}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return reconciliation.ContentDigestOf(
+		"bootwright.managedos.host-firewall-v1", FirewallImplementation, FirewallEvidenceVersion, FirewallServiceRoot,
+		mark, name, hex.EncodeToString(sample[:]),
+	)
 }
 
 func FirewallBlockID(machine string) string {

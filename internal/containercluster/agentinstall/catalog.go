@@ -1,9 +1,6 @@
 package agentinstall
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -100,12 +97,12 @@ func WorkRoot(contextName, cluster string) string {
 // behavior this build implements, so changing a request shape or the published
 // layout invalidates a frozen plan.
 func MediaContentDigest() string {
-	return contentDigest("bootwright.containercluster.media-agent-v1",
+	return reconciliation.ContentDigestOf("bootwright.containercluster.media-agent-v1",
 		MediaImplementation, mediaRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, rebuildRule)
 }
 
 func InstallContentDigest() string {
-	return contentDigest("bootwright.containercluster.install-agent-v1",
+	return reconciliation.ContentDigestOf("bootwright.containercluster.install-agent-v1",
 		InstallImplementation, installRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, clientTool, hostAccessLend, hostAccessBound, bootRecord, insertRecord, substrate.RedfishMediaPolicy)
 }
 
@@ -116,8 +113,3 @@ const (
 	insertRecord    = "insert-recorded-before-media"
 	rebuildRule     = "rebuild-never-over-insert"
 )
-
-func contentDigest(parts ...string) string {
-	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(digest[:])
-}

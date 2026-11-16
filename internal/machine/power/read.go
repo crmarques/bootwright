@@ -2,8 +2,6 @@ package power
 
 import (
 	"cmp"
-	"crypto/sha256"
-	"encoding/hex"
 	"maps"
 	"slices"
 	"strconv"
@@ -60,10 +58,9 @@ func (s ReadSurvey) Canonical() ([]byte, error) {
 // implements, so evidence returned for one survey shape can never satisfy
 // another.
 func ReadContentDigest() string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
+	return reconciliation.ContentDigestOf(
 		"bootwright.machine.power-read-v1", ReadImplementation, ReadRequestVersion, ReadOperation, ReadVariable,
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	)
 }
 
 // readSurveysFor groups the selected Machines by the host that reaches their

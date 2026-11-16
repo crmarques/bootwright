@@ -1,10 +1,6 @@
 package hardware
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"strings"
-
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
@@ -42,8 +38,7 @@ func BlockID(machine string) string {
 }
 
 func ContentDigest() string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{"bootwright.machine.hardware-v1", Implementation, EvidenceVersion, AddressRule, ClaimRule}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return reconciliation.ContentDigestOf("bootwright.machine.hardware-v1", Implementation, EvidenceVersion, AddressRule, ClaimRule)
 }
 
 func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, error) {

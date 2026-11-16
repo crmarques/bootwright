@@ -1,9 +1,7 @@
 package artifactserver
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"strings"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 // Implementation is the frozen identity of this capability. A plan records it,
@@ -33,7 +31,7 @@ const unitPrefix = "bootwright"
 // value fixes the Go-side contract, so changing the request shape, the default
 // image or the host layout invalidates a frozen plan.
 func ContentDigest() string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
+	return reconciliation.ContentDigestOf(
 		"bootwright.infrastructureservices.artifact-server-v1",
 		Implementation,
 		requestVersion,
@@ -41,8 +39,7 @@ func ContentDigest() string {
 		HostedRoot,
 		servicesArea,
 		unitPrefix,
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	)
 }
 
 func DefaultImage() string { return defaultImage }

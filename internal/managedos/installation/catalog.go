@@ -1,10 +1,7 @@
 package installation
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -133,12 +130,11 @@ func BlockID(machine string) string { return reconciliation.BlockIdentity("os-in
 // changing the request shape, the derived Kickstart or the published layout
 // invalidates a frozen plan.
 func ContentDigest() string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
+	return reconciliation.ContentDigestOf(
 		"bootwright.managedos.install-anaconda-v1",
 		Implementation, requestVersion, kickstartVersion,
 		consumerPrefix, privatePrefix, servedRoot, MarkerPath, HostKeyPath,
 		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), provedDiskBoot, substrate.RedfishMediaPolicy,
 		"anaconda-home-partition-policy",
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	)
 }

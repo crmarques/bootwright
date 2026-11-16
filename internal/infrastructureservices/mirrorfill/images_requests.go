@@ -1,10 +1,7 @@
 package mirrorfill
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"regexp"
-	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
@@ -89,8 +86,7 @@ func (r ImagesRequest) SecretClasses() secrets.Classes {
 }
 
 func ImagesContentDigest() string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{"bootwright.infrastructureservices.mirror-fill-v1", ImagesImplementation, ImagesEvidenceVersion}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return reconciliation.ContentDigestOf("bootwright.infrastructureservices.mirror-fill-v1", ImagesImplementation, ImagesEvidenceVersion)
 }
 
 func ImagesBlockID(environment string) string {

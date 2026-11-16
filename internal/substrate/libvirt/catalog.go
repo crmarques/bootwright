@@ -1,8 +1,6 @@
 package libvirt
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -73,18 +71,13 @@ func MachineBlockID(machine string) string { return reconciliation.BlockIdentity
 // this build implements, so changing the request shape, the pinned emulator or
 // the host layout invalidates a frozen plan.
 func HostContentDigest() string {
-	return contentDigest("bootwright.substrate.libvirt.host-v1", HostImplementation, hostRequestVersion,
+	return reconciliation.ContentDigestOf("bootwright.substrate.libvirt.host-v1", HostImplementation, hostRequestVersion,
 		strings.Join(hypervisorPackages, ","), substrate.ImagePrefix, substrate.Prefix, strings.Join(serviceUnits, ","), "bridge-use-claim", "vlan-refusal-v1", "nm-trunk-legs-v1", "routing-table-v1", "nm-unfrozen-connections-v1", "routing-ruleset-file-v1", "nm-carrier-policy-v1", "/etc/NetworkManager/conf.d")
 }
 
 func MachineContentDigest() string {
-	return contentDigest("bootwright.substrate.libvirt.machine-v1", MachineImplementation, machineRequestVersion,
+	return reconciliation.ContentDigestOf("bootwright.substrate.libvirt.machine-v1", MachineImplementation, machineRequestVersion,
 		emulatorImage, substrate.ImagePrefix, substrate.Prefix, "data-media-ssd-scsi-v1", "shared-bmc-claim", "attached-disk-evidence-v1", substrate.RedfishMediaPolicy)
-}
-
-func contentDigest(parts ...string) string {
-	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(digest[:])
 }
 
 func EmulatorImage() string { return emulatorImage }

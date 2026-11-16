@@ -1,8 +1,6 @@
 package mirrorfill
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"regexp"
 	"strings"
 
@@ -100,8 +98,7 @@ func safePath(path string) bool {
 func (r FilesRequest) SecretReferences() []string { return r.Placement.SecretReferences() }
 
 func FilesContentDigest() string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{"bootwright.infrastructureservices.mirror-fill-v1", FilesImplementation, FilesEvidenceVersion}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return reconciliation.ContentDigestOf("bootwright.infrastructureservices.mirror-fill-v1", FilesImplementation, FilesEvidenceVersion)
 }
 
 func FilesBlockID(environment string) string {

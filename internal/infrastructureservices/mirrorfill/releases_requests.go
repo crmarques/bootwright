@@ -1,8 +1,6 @@
 package mirrorfill
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"regexp"
 	"strings"
 
@@ -138,8 +136,7 @@ func (r ReleaseRequest) SecretClasses() secrets.Classes {
 }
 
 func ReleaseContentDigest() string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{"bootwright.infrastructureservices.mirror-fill-v1", ReleaseImplementation, ReleaseEvidenceVersion}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return reconciliation.ContentDigestOf("bootwright.infrastructureservices.mirror-fill-v1", ReleaseImplementation, ReleaseEvidenceVersion)
 }
 
 func ReleaseBlockID(cluster string) string {

@@ -1,11 +1,8 @@
 package clients
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"net/url"
 	"slices"
-	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
@@ -202,10 +199,9 @@ func wholePart(request Request) bool {
 // ContentDigest also pins the installer-media native closure, whose package
 // expansion is an effect outside the frozen request's boolean selection.
 func ContentDigest() string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
+	return reconciliation.ContentDigestOf(
 		"bootwright.controller.client-stage-v1", Implementation, Version, "installer-media-qualified-ssh-source-tools-v1",
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	)
 }
 
 // refuse is every refusal this package raises. Each one names what settles it,
