@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+
 jobs:
   check:
     runs-on: ubuntu-24.04
@@ -22,7 +26,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache
-          key: check-${{ runner.os }}-${{ hashFiles('scripts/tools/ansible-requirements.txt', 'scripts/tools/ansible-check-interpreter.json', 'scripts/tools/ansible-check-floor-interpreter.json', 'scripts/tools/ansible-test-artifacts.json', 'scripts/tools/go.sum') }}
+          key: check-${{ runner.os }}-${{ hashFiles('scripts/tools/ansible-requirements.txt', 'scripts/tools/ansible-check-interpreter.json', 'scripts/tools/ansible-check-floor-interpreter.json', 'scripts/tools/ansible-test-artifacts.json', 'scripts/tools/go.sum', 'internal/controller/tooltable.json', 'internal/controller/runtimelock/lock.json') }}
       - run: make check
         env:
           # CI runs the Ansible check in full and never reads or writes its
@@ -40,11 +44,33 @@ jobs:
       - run: make race
 
   commits:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - run: ./scripts/check-commits "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
+      - if: github.event_name == 'pull_request'
+        run: ./scripts/check-commits "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
+      - if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        # The default branch is checked from the previous tip, so a rewritten
+        # tip that is no ancestor of the push is refused instead of left
+        # unchecked. Any other ref is checked from where it left the default
+        # branch, so a run cancelled by a newer push leaves no commit unchecked.
+        run: |
+          set -eu
+          if test "$REF" = "refs/heads/$DEFAULT_BRANCH"; then
+            if test "$BEFORE" = 0000000000000000000000000000000000000000 || ! git merge-base --is-ancestor "$BEFORE" "$SHA"; then
+              echo "::error::the push to $DEFAULT_BRANCH does not extend its previous tip ($BEFORE), so the commits to check are unknown; check them by hand with scripts/check-commits"
+              exit 1
+            fi
+            base=$BEFORE
+          else
+            base=$(git merge-base "origin/$DEFAULT_BRANCH" "$SHA")
+          fi
+          ./scripts/check-commits "$base" "$SHA"
