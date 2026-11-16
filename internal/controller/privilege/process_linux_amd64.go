@@ -258,17 +258,33 @@ func (ProcessExecutor) Run(ctx context.Context, request Command) (int, error) {
 		return 1, errors.New("sudo executable cannot be verified")
 	}
 	args := append([]string(nil), request.Arguments...)
-	for i, arg := range args {
-		if arg == "--" {
-			path, err := ReexecutionPath()
-			if err != nil || i+1 >= len(args) || args[i+1] != path {
-				return 1, errors.New("invocation executable cannot be verified")
-			}
-			break
-		}
+	if !admittedInvocation(args, ReexecutionPath) {
+		return 1, errors.New("invocation executable cannot be verified")
 	}
 	request.Executable, request.Arguments = sudo, args
 	return runProcess(ctx, request, relayGrace)
+}
+
+// admittedInvocation admits only the Supervisor's argument shapes: the policy
+// probe, the two credential validations, and the elevated child, which runs
+// the re-executed Bootwright and nothing else.
+func admittedInvocation(args []string, reexecution func() (string, error)) bool {
+	separator := slices.Index(args, "--")
+	if separator < 0 {
+		return slices.Equal(args, []string{"-n", "-ll"}) || slices.Equal(args, []string{"-u", "#0", "-v"}) ||
+			slices.Equal(args, []string{"-n", "-u", "#0", "-v"})
+	}
+	options := args[:separator]
+	if len(options) < 2 || options[0] != "-u" || options[1] != "#0" {
+		return false
+	}
+	for i, option := range options[2:] {
+		if (option != "-n" || i != 0) && (strings.HasPrefix(option, "-") || !strings.Contains(option, "=")) {
+			return false
+		}
+	}
+	path, err := reexecution()
+	return err == nil && separator+1 < len(args) && args[separator+1] == path
 }
 
 // relayGrace is how long the policy probe or a refresh has to finish after

@@ -430,6 +430,41 @@ func TestReexecutionPathPinsRunningExecutable(t *testing.T) {
 	}
 }
 
+func TestSudoRunsOnlyTheSupervisorsInvocations(t *testing.T) {
+	const self = "/proc/7/exe"
+	reexecution := func() (string, error) { return self, nil }
+	for _, args := range [][]string{
+		{"-n", "-ll"},
+		{"-u", "#0", "-v"},
+		{"-n", "-u", "#0", "-v"},
+		{"-u", "#0", "--", self},
+		{"-u", "#0", "-n", "HTTPS_PROXY=http://proxy:3128", "--", self, "apply", "--", "x"},
+	} {
+		if !admittedInvocation(args, reexecution) {
+			t.Errorf("the supervisor's invocation %q was refused", args)
+		}
+	}
+	for _, args := range [][]string{
+		{"-u", "#0", "/bin/sh"},
+		{"/bin/sh"},
+		{"-u", "#0", "-v", "/bin/sh"},
+		{"-n", "-ll", "/bin/sh"},
+		{},
+		{"-u", "#0", "--", "/bin/sh"},
+		{"-u", "#0", "--"},
+		{"-u", "#0", "-s", "--", self},
+		{"-E", "-u", "#0", "--", self},
+		{"--", self},
+	} {
+		if admittedInvocation(args, reexecution) {
+			t.Errorf("the invocation %q was admitted", args)
+		}
+	}
+	if admittedInvocation([]string{"-u", "#0", "--", self}, func() (string, error) { return "", errAccount }) {
+		t.Error("an unverifiable executable was admitted")
+	}
+}
+
 // The unprivileged supervisor resolves the executable's path before it
 // elevates. A directory on that path it cannot search refuses naming the
 // invoking account, never root, and the local copy, and the elevation reports
