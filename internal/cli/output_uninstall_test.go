@@ -78,3 +78,18 @@ func TestADiscardPlanNamesWhatItDiscardsAndWhatStays(t *testing.T) {
 		t.Fatalf("a discard plan shows a dnf preview:\n%s", out.String())
 	}
 }
+
+// dnf's output carries repository-controlled text, so it reaches the terminal
+// escaped line by line, as every other native output does.
+func TestDnfRemovalOutputReachesTheTerminalEscaped(t *testing.T) {
+	var out bytes.Buffer
+	output := NewControllerPresenter(WithPresentation(&out, PresentationOptions{Format: "text"}), io.Discard, nil).RemovalOutput()
+	for _, chunk := range []string{"Removing: evil\x1b]0;owned\x07 pkg\r\n", "Complete\x1b[2J!\n"} {
+		if n, err := output.Write([]byte(chunk)); err != nil || n != len(chunk) {
+			t.Fatalf("%d %v", n, err)
+		}
+	}
+	if want := "Removing: evil\\u001b]0;owned\\u0007 pkg\\r\nComplete\\u001b[2J!\n"; out.String() != want {
+		t.Fatalf("got %q, want %q", out.String(), want)
+	}
+}

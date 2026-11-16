@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"io"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
@@ -52,7 +53,22 @@ func (p *ControllerPresenter) RemovalOutput() prerequisites.RunOutput {
 	if p == nil || p.progress.out == nil {
 		return io.Discard
 	}
-	return p.progress.out
+	return escapedLines{out: p.progress.out}
+}
+
+// dnf prints repository-controlled text, so each line is escaped as any other
+// untrusted display text is; only its line breaks stay raw.
+type escapedLines struct{ out io.Writer }
+
+func (w escapedLines) Write(p []byte) (int, error) {
+	lines := strings.Split(string(p), "\n")
+	for index, line := range lines {
+		lines[index] = escapeDisplayLine(line)
+	}
+	if _, err := io.WriteString(w.out, strings.Join(lines, "\n")); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 func validUninstall(result *prerequisites.UninstallResult) bool {
