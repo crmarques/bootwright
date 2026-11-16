@@ -69,6 +69,10 @@ identifies the authored reference, selected digest and platform, and the cluster
 pool and client blocks depend on it. The result is frozen: continuation never
 refreshes a tag or substitutes another release. Native acquisition failures
 retain their cause and the requested coordinate through Bootwright's diagnostics.
+The saved image-resolution output also retains that
+bounded redacted projection, including a fixed transport category or validation
+site when the registry returned no native error; raw exception values and
+credential-bearing responses remain private.
 The guest re-proves the pulled image's platform and repository digest. The
 operator supplies neither a Podman login nor a locally cached image.
 Credential delivery and the original acquisition binding remain Secrets-owned.

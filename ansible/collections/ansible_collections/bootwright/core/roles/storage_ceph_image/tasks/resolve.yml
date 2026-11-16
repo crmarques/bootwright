@@ -37,7 +37,9 @@
 
 - name: Refuse an unproved image resolution
   ansible.builtin.fail:
-    msg: The pinned IBM Ceph image could not be resolved
+    msg: >-
+      {{ storage_ceph_image_result.publicFailure
+         | default('Ceph image resolution returned no bounded diagnostic; inspect the controller runtime and retry apply') }}
   when: storage_ceph_image_result.evidence is not defined
 
 - name: Publish the bounded image resolution evidence

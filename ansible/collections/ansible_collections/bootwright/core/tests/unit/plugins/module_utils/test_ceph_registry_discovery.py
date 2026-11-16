@@ -708,6 +708,8 @@ def test_module_refusal_never_discloses_unbounded_native_error(monkeypatch):
         module.main()
     assert captured["argument_spec"]["material"]["no_log"] is True and captured["supports_check_mode"] is False
     detail = captured["failure"].pop("detail")
+    message = captured["failure"].pop("publicFailure")
+    assert "adapter-exception" in message and "ValueError@ceph_image_resolve.main:" in message and "secret" not in message
     assert captured["failure"] == {"msg": "Ceph image resolution refused", "reason": "adapter-exception"}
     assert detail.startswith("ValueError@ceph_image_resolve.main:") and "secret" not in detail
 
@@ -716,6 +718,41 @@ def test_every_discovery_exit_names_a_reason_and_no_value():
     assert discovery.refusal(discovery.DiscoveryRefusal("timeout")) == ("timeout", None)
     assert discovery.refusal(discovery.DiscoveryRefusal("synthetic-unlisted")) == ("unknown", "synthetic-unlisted")
     assert discovery.refusal(OSError("synthetic secret")) == ("adapter-exception", "OSError@unknown.frame:0")
+
+
+@pytest.mark.parametrize("cause,expected", [(TimeoutError("private signed URL and credential"), "registry-timeout"),
+                                            (socket.gaierror(-2, "private name"), "registry-dns"),
+                                            (ConnectionRefusedError("private endpoint"), "ConnectionRefusedError@"),
+                                            (ssl.SSLError("private TLS details"), "SSLError@")])
+def test_transport_refusal_names_its_type_and_image_without_exception_values(monkeypatch, cause, expected):
+    class Broken:
+        def request(self, *_args, **_kwargs):
+            raise cause
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(discovery.http.client, "HTTPSConnection", lambda *_args, **_kwargs: Broken())
+    monkeypatch.setattr(discovery.Registry, "retried", lambda self, attempt: attempt())
+    with pytest.raises(discovery.DiscoveryRefusal) as caught:
+        discovery.resolve_artifact("Basic private credential", object(), GOLDEN["request"])
+    native = caught.value.native_error
+    assert native_diagnostics.valid(native) and native["coordinate"] == GOLDEN["request"]["image"]
+    assert expected in native["cause"] and "private" not in json.dumps(native)
+    if expected.endswith("@"):
+        assert "ceph_registry_discovery.exchange:" in native["cause"]
+
+
+def test_manifest_refusal_names_the_validation_site_and_selected_auxiliary(monkeypatch):
+    request = dict(GOLDEN["request"], base=REGISTRY + "/team/monitoring", tag="1.2.3", image=REGISTRY + "/team/monitoring:1.2.3")
+    client = Client(indexed=False, authenticated=False)
+    client.rows[0] = (200, {"content-type": "text/plain"}, b"private malformed manifest")
+    monkeypatch.setattr(discovery, "Registry", lambda *_args: client)
+    with pytest.raises(discovery.DiscoveryRefusal) as caught:
+        discovery.resolve_artifact("Basic private credential", object(), request)
+    native = caught.value.native_error
+    assert native["coordinate"] == request["image"]
+    assert "discovery@ceph_registry_discovery." in native["cause"] and "private" not in json.dumps(native)
 
 
 def test_authored_direct_digest_is_resolved_without_any_tag_request():

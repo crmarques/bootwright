@@ -67,6 +67,10 @@ detail:
   description: Non-secret cause, a refusal name or an exception type and code site.
   type: str
   returned: failure
+publicFailure:
+  description: Bounded refusal boundary and already-redacted native cause safe for saved logs.
+  type: str
+  returned: failure
 """
 
 from ansible.module_utils.basic import AnsibleModule
@@ -87,11 +91,12 @@ def main():
     except Exception as error:
         reason, detail = discovery.refusal(error)
         failure = {"reason": reason}
-        native_error = getattr(error, "native_error", None)
+        native_error = getattr(error, "native_error", None) if isinstance(error, discovery.DiscoveryRefusal) else None
         if native_diagnostics.valid(native_error):
             failure["nativeError"] = native_error
         if detail:
             failure["detail"] = detail
+        failure["publicFailure"] = discovery.public_failure(reason, detail, native_error)
         module.fail_json(msg="Ceph image resolution refused", **failure)
     module.exit_json(**result)
 

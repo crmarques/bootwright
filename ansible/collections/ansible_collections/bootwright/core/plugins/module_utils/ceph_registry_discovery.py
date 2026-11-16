@@ -84,6 +84,12 @@ def transport_lost(error):
 def lost(cause):
     error = DiscoveryRefusal("discovery")
     error.transport = transport_lost(cause)
+    if isinstance(cause, socket.gaierror):
+        error.transport_cause = "registry-dns"
+    elif isinstance(cause, (TimeoutError, socket.timeout)):
+        error.transport_cause = "registry-timeout"
+    else:
+        error.transport_cause = ceph_native_worker.cause(cause)
     return error
 
 
@@ -92,6 +98,27 @@ def refusal(error):
     if isinstance(error, DiscoveryRefusal) and str(error) in REASONS:
         return str(error), None
     return ("unknown" if isinstance(error, DiscoveryRefusal) else "adapter-exception"), ceph_native_worker.cause(error)
+
+
+def public_failure(reason, detail, native_error):
+    """The log receives only a fixed boundary and the already-redacted native projection."""
+    explanations = {
+        "request": "the frozen image request was refused",
+        "artifact": "the controller's registry TLS trust source could not be proved",
+        "material": "the protected registry credential or trust-bundle loan was refused",
+        "discovery": "the registry request, response or selected manifest could not be proved",
+        "timeout": "the bounded registry-resolution deadline expired",
+        "unknown": "the resolver returned an unclassified refusal",
+        "adapter-exception": "the image resolver did not complete",
+        "image-digest-mismatch": "the resolved platform manifest differs from the authored digest",
+    }
+    selected = reason if reason in explanations else "unknown"
+    message = "Ceph image resolution refused (" + selected + "): " + explanations[selected] + "."
+    if native_diagnostics.valid(native_error):
+        message += "\n" + native_error["coordinate"] + ": " + native_error["cause"]
+    elif isinstance(detail, str) and ceph_native_worker.EXCEPTION_CAUSE.fullmatch(detail):
+        message += "\nCause: " + detail
+    return message
 
 
 def decode(data, reason):
@@ -711,6 +738,19 @@ def resolve(basic, client, request):
     return selected["digest"]
 
 
+def resolve_artifact(basic, context, request):
+    """Name the selected public image and the fixed failure site, never exception values."""
+    try:
+        return resolve(basic, Registry(context, request), request)
+    except DiscoveryRefusal as error:
+        if not native_diagnostics.valid(getattr(error, "native_error", None)):
+            cause = getattr(error, "transport_cause", None) or ceph_native_worker.cause(error)
+            if not ceph_native_worker.valid_cause(cause):
+                cause = "discovery"
+            error.native_error = native_diagnostics.error_detail(request["image"], "registry metadata resolution refused: " + cause)
+        raise
+
+
 def resolution(request, request_digest, child, auxiliary=()):
     """The presence of one resolution, refusing an authored index digest of the image or of an auxiliary image."""
     authored = authored_digest(request)
@@ -742,13 +782,13 @@ def execute(operation, request, digest_value, material):
             basic = basic_material(loan.read(MAX_REGISTRY + 1), request["registry"])
             prove()
             prove_tls()
-            child = resolve(basic, Registry(context, request), request)
+            child = resolve_artifact(basic, context, request)
             prove()
             prove_tls()
             auxiliary = []
             for entry in request.get("auxiliary", []):
                 sub = auxiliary_request(request, entry)
-                auxiliary.append(resolve(basic, Registry(context, sub), sub))
+                auxiliary.append(resolve_artifact(basic, context, sub))
                 prove()
                 prove_tls()
     return {"changed": False, "evidence": resolution(original, digest_value, child, auxiliary)}
