@@ -16112,8 +16112,7 @@ records the refusal tests failing first.
 
 ## X500 — Audit 005 gates
 
-Delivered under [D274](backlog.md#d274) (3), (4), (5) and (8); B1461, the
-fitness-suite restructuring, stays open on the M1 page.
+Delivered under [D274](backlog.md#d274) (3), (4), (5) and (8).
 
 ### B1454
 
@@ -16166,6 +16165,16 @@ outside the Makefile and requires a digest-pinned build image; the container
 build context holds `.git` and the tracked tree only, so a plain build still
 stamps itself; every target that compiles the module depends on the wheels;
 the vulnerability gate warns of exceptions expiring within two weeks.
+
+### B1461
+
+The fitness suite parses the production source once per run; the docs and
+tooling checks moved to `test/docs` and `test/tooling`, so `go test` runs the
+three packages in parallel (the suite fell from about 32 s to about 13 s on a
+warm cache). The dependency-direction, lifecycle-partition and deadline rules
+are proved on planted violations, and a type-checked rule refuses a write,
+resize, ownership change, create, link or remove through a read-only
+adapter's held files.
 
 ### B1462
 
