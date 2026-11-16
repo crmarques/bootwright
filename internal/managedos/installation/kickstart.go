@@ -101,6 +101,7 @@ type Installation struct {
 	// decides the path it is installed at and the type it is proved to be.
 	HostKeyType   string
 	Hostname      string
+	HomePartition string
 	Interface     string
 	InterfaceType string
 	Keyboard      string
@@ -249,6 +250,7 @@ var kickstartFields = []struct {
 	{"the host key path", "the product-owned host key path", kickstartToken, func(i Installation) []string { return []string{i.HostKeyPath} }},
 	{"the delivered host key type", "spec.source.generated.keyType of the Secret spec.os.install.hostKeyRef names", kickstartToken, func(i Installation) []string { return []string{i.HostKeyType} }},
 	{"the host name", "the fqdn address in spec.network.addresses of the Machine", kickstartToken, func(i Installation) []string { return []string{i.Hostname} }},
+	{"the home partition policy", "spec.installer.anaconda.partitioning.home of the install profile", kickstartToken, func(i Installation) []string { return []string{i.HomePartition} }},
 	{"the install interface", "the interface of the install address in spec.network.addresses of the Machine", kickstartToken, func(i Installation) []string { return []string{i.Interface} }},
 	{"the keyboard layout", "spec.customizations.localization.keyboard of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Keyboard} }},
 	{"the language", "spec.customizations.localization.language of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Language} }},
@@ -282,9 +284,7 @@ var kickstartFields = []struct {
 	}},
 }
 
-// guardKickstartValues refuses any value that is not what its directive
-// carries. Every rendering function stays untouched, so a valid installation
-// renders the same bytes it always did.
+// guardKickstartValues refuses values their Kickstart directive cannot carry.
 func guardKickstartValues(input Installation) error {
 	for _, field := range kickstartFields {
 		for _, value := range field.read(input) {
@@ -297,6 +297,10 @@ func guardKickstartValues(input Installation) error {
 					"correct "+field.source)
 			}
 		}
+	}
+	if input.HomePartition != "" && input.HomePartition != "automatic" && input.HomePartition != "none" {
+		return refusal("api.value", "the Anaconda home partition policy is neither automatic nor none",
+			"correct spec.installer.anaconda.partitioning.home on the MachineInstallProfile")
 	}
 	for _, option := range input.BondOptions {
 		name, value, paired := strings.Cut(option, "=")
@@ -468,7 +472,7 @@ func serialRootInstallation(input Installation) bool {
 // storageLines clear and partition exactly the named or %pre-resolved device,
 // or leave the installer to choose when a Machine its substrate created names none.
 func storageLines(input Installation) []string {
-	autopart := "autopart --type=lvm"
+	autopart := autopartLine(input)
 	if input.DiskEncryption != nil {
 		autopart = "%include " + storageInclude
 	}
@@ -484,6 +488,15 @@ func storageLines(input Installation) []string {
 		"clearpart --all --initlabel --drives=" + device,
 		autopart,
 	}
+}
+
+// autopartLine is shared with the encrypted storage include so the install
+// profile selects the same layout with and without encryption.
+func autopartLine(input Installation) string {
+	if input.HomePartition == "none" {
+		return "autopart --type=lvm --nohome"
+	}
+	return "autopart --type=lvm"
 }
 
 func securityLines(input Installation) []string {

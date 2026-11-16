@@ -916,6 +916,7 @@ The `anaconda` arm contains:
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `imageRef` | string | yes | Global `MachineImage`. |
+| `partitioning.home` | string | no | `automatic` (default) or `none`; optional `partitioning` is closed. Selects the [installation partitioning policy](../managed-os.md#installation-partitioning). |
 | `redfishVirtualMedia.artifactServerEndpoint.serverRef` | string | with endpoint block | Global managed ArtifactServer; required and never inferred. |
 | `redfishVirtualMedia.artifactServerEndpoint.endpointRef` | string | with endpoint block | Endpoint name on the selected managed ArtifactServer. |
 | `packageSource` | object | no | Absent installs from the boot media; otherwise exactly `hostedTree`. |

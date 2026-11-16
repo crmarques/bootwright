@@ -38,7 +38,7 @@ controller:
   address: 198.51.100.10
   cpu: 2
   memoryMiB: 3072
-  diskGiB: 40
+  diskGiB: 56
 
 # Each context's emulated BMC on this host: the bootstrap one on loopback, the
 # fips one on the gateway address the FIPS controller dials.

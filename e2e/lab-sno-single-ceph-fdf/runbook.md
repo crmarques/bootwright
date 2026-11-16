@@ -17,11 +17,11 @@ Red Hat ODF CSV for the IBM catalog's CSV.
 
 | VM | vCPU | RAM GiB | Disk GiB |
 | --- | --- | --- | --- |
-| FIPS controller | 2 | 3 | 40 |
+| FIPS controller | 2 | 3 | 56 |
 | SNO, FIPS and TPM2 root encryption | 8 | 16 | 100 |
 | Ceph, one MON/MGR/MDS/RGW and two OSDs | 3 | 6 | 20 root + 2 × 10 data |
 | Provider reserve | 1 | 2 | 10 |
-| Total budget | 14 | 27 | 190 |
+| Total budget | 14 | 27 | 206 |
 
 These are intentionally small test sizes, not vendor sizing recommendations.
 NooBaa is disabled through `fdf.multiCloudGateway: false`; object storage uses
@@ -32,6 +32,11 @@ admission does not establish runtime fit. Swap is not capacity. The disk
 budget excludes cached ISOs, package publications, installer staging and
 logs; the apply gate also checks those. Import one ISO at a time on the
 controller and remove its temporary source after verifying its stored digest.
+The bootstrap install profile selects
+[`installer.anaconda.partitioning.home: none`](../../specs/managed-os.md#installation-partitioning)
+so `/home` shares the controller's root filesystem from installation. A
+larger virtual disk alone does not prevent Anaconda from allocating a
+separate `/home` and leaving too little space under `/var/lib`.
 
 Run this case after cleaning up any other rehearsal. It shares service ports,
 VM names, the infrastructure CIDR and VLAN IDs with the source case. Preserve
@@ -147,7 +152,24 @@ bootwright machine exec --context "$CTX_BOOT" --name "$CONTROLLER_NAME" -- \
     cat /proc/sys/crypto/fips_enabled
 ```
 
-Require `1`. Use the source case's explicit controller handoff and SSH trust
+Require `1`. Before transferring media, check the installed layout:
+
+```bash
+bootwright machine exec --context "$CTX_BOOT" --name "$CONTROLLER_NAME" -- \
+    bash -s <<'CONTROLLER'
+set -euo pipefail
+test "$(findmnt -n -o TARGET --target /home)" = /
+df -h / /home
+lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS
+CONTROLLER
+```
+
+Require `/home` on `/` and the root filesystem to use the space left after
+boot and swap. Preserve enough free root space for both stored ISOs, the
+published DVD tree, cluster boot media, runtime images and logs. The install
+profile supplies this layout; no post-install volume changes are needed.
+
+Use the source case's explicit controller handoff and SSH trust
 establishment steps, with **these** context names and `CONTROLLER_NAME`:
 transfer the pinned Bootwright binary and `oc`, rendered `fips` input,
 `PROFILE`, `ceph-client-network.yaml`, both storage manifests, pull secret and

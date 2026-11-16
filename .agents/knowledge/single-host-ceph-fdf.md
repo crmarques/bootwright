@@ -34,3 +34,10 @@ before FDF. The
 [local-gateway masquerade rule](https://github.com/openshift/ovn-kubernetes/blob/release-4.22/go-controller/pkg/node/gateway_nftables.go#L740-L824)
 uses the outgoing interface address, so another storage EgressIP is unnecessary.
 Successful pod traffic and post-reboot forwarding still need live proof.
+
+RHEL's [automatic partitioning](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-commands-and-options-reference_rhel-installer)
+can allocate a separate `/home` on disks of at least 50 GiB. Increasing the
+controller disk alone therefore does not reserve that capacity for media and
+publications under `/var/lib`. The case selects the Anaconda
+[home partition policy](../../specs/managed-os.md#installation-partitioning) at
+installation and checks the resulting mount layout before importing media.

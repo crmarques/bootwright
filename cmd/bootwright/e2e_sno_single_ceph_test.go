@@ -15,9 +15,33 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
+	"github.com/crmarques/bootwright/internal/managedos/installation"
 
 	"go.yaml.in/yaml/v3"
 )
+
+func TestSingleCephControllerDeclaresItsInstallLayout(t *testing.T) {
+	directories := renderE2ECase(t, e2eRenderScript(t), "lab-sno-single-ceph-fdf", e2eRender{name: "default", sets: fipsControllerSubscriptions()})
+	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{directories[0]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, _ := compileAcceptance(t, sources)
+	catalog := state.Effective()
+	provider := requireObject(t, catalog, api.InfraProvider, "lab-libvirt")
+	profiles := provider.Spec().Get("libvirt", "machineProfiles").Items()
+	if len(profiles) != 1 || profiles[0].Get("diskGiB").Text() != "56" {
+		t.Fatal("the controller disk does not cover its media and publication budget")
+	}
+	profile := requireObject(t, catalog, api.MachineInstallProfile, "rhel")
+	if profile.Spec().Get("installer", "anaconda", "partitioning", "home").Text() != "none" {
+		t.Fatal("the controller installation leaves /home to automatic partitioning")
+	}
+	requests, _, err := installation.Requests(catalog, "controller", "synthetic")
+	if err != nil || len(requests) != 1 || !strings.Contains(requests[0].Kickstart, "\nautopart --type=lvm --nohome\n") {
+		t.Fatalf("the controller's planned installer lost its home policy: %v", err)
+	}
+}
 
 func TestSingleCephSNOHasFiveNetworksAndOnlyClientStorageAccess(t *testing.T) {
 	directories := renderE2ECase(t, e2eRenderScript(t), "lab-sno-single-ceph-fdf", e2eRender{name: "default", sets: fipsControllerSubscriptions()})

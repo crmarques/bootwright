@@ -204,6 +204,8 @@ func TestTheFrozenRequestsMatchTheirGoldens(t *testing.T) {
 		"lab-rhel": labCatalog(), "lab-rhel-checksummed": labCatalog(checksummed),
 		"lab-rhel-ssh-placed": sshPlaced, "lab-rhel-site-services": siteServicesCatalog(),
 		"lab-rhel-encrypted":              labCatalog(encryptingProfile()),
+		"lab-rhel-nohome":                 labCatalog(withHomePartition(installProfile(), "none")),
+		"lab-rhel-encrypted-nohome":       labCatalog(withHomePartition(encryptingProfile(), "none")),
 		"lab-rhel-registered":             labCatalog(registeringProfile(), rhelEntitlement()),
 		"lab-rhel-updated":                labCatalog(updatingProfile(), rhelEntitlement()),
 		"lab-rhel-satellite":              labCatalog(updatingProfile(), satelliteEntitlement()),

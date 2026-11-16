@@ -145,6 +145,19 @@ applies: an installation names its boot image's for its Machine, and the
 [shared publication block](#shared-package-tree-publication) names a hosted
 tree's DVD's for its `MachineInstallProfile`, since only that block reads it.
 
+## Installation partitioning
+
+`spec.installer.anaconda.partitioning.home` selects the automatic LVM
+partitioning policy. `automatic`, also the omitted policy, leaves the native
+installer's layout choices in place. `none` passes `--nohome` to Anaconda so
+`/home` resides on the root filesystem instead of a separate partition or
+logical volume. Boot, swap and root sizing retain their native rules and
+limits. The same selection applies to the storage include of an encrypted
+installation, retaining its disk proof, LUKS2 and TPM2 settings. This is
+install-time intent; changing an installed layout follows the ordinary
+destroy/reinstall journey. Native option semantics belong to the
+[RHEL Kickstart reference](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-commands-and-options-reference_rhel-installer).
+
 ## Installation
 
 ### Selection

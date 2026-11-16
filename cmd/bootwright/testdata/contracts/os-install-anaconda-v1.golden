@@ -1,5 +1,5 @@
 implementation: os-install-anaconda-v1
-content-digest: d908d85a05a18c58cfb4662fbfe0ad2c44b60f14d22aafb7432b77a956258fa7
+content-digest: 1bb65ca142b94a27f5118520140a23df15a4a38508ed5cf33b4682bbf7d14f99
 request-version: os-install-anaconda-v1
 automation-formats: none
 mark-formats: none
@@ -16,6 +16,7 @@ effect-pins:
   300
   proved-installation-disk-boot,replay-safe-unread-registration,bond-permanent-lower-links
   verified-media-default
+  anaconda-home-partition-policy
 request-identity:
   identity.context
   identity.object

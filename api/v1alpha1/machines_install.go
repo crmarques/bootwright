@@ -6,7 +6,7 @@ func machineImageSchema() *Shape {
 
 func machineInstallSchema() *Shape {
 	packageSource := choice(field("hostedTree", record(required("fromMedia", nonempty()), required("artifactServerEndpoint", artifactEndpoint()))))
-	anaconda := record(required("imageRef", ref(MachineImage)), field("redfishVirtualMedia", record(field("artifactServerEndpoint", artifactEndpoint()))), field("packageSource", packageSource))
+	anaconda := record(required("imageRef", ref(MachineImage)), field("redfishVirtualMedia", record(field("artifactServerEndpoint", artifactEndpoint()))), field("packageSource", packageSource), field("partitioning", record(defaulted("home", enumeration("automatic", "none"), StringValue("automatic")))))
 	clone := record(required("seed", choice(field("cloudInit", record(defaulted("growRootFilesystem", boolean(), BoolValue(true)))))))
 	configure := &Shape{Type: Sequence, Atomic: true, NameKey: "id", Element: record(required("id", nonempty()), required("baseURL", lexical("repository-url")), field("displayName", nonempty()), defaulted("enabled", boolean(), BoolValue(true)), defaulted("gpgCheck", boolean(), BoolValue(true)), field("gpgKeyURL", nonempty()))}
 	customizations := record(

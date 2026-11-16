@@ -74,6 +74,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		Formats:          formats,
 		Gateway:          gateway,
 		Hostname:         hostname,
+		HomePartition:    profile.Spec().Get("installer", "anaconda", "partitioning", "home").Text(),
 		Interface:        iface,
 		Keyboard:         orDefault(customizations.Get("localization", "keyboard").Text(), "us"),
 		Language:         language,

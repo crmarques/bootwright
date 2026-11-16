@@ -19,6 +19,9 @@ spec:
     anaconda:
       imageRef: rhel-boot
 
+      partitioning:
+        home: none
+
       redfishVirtualMedia:
         artifactServerEndpoint:
           serverRef: lab-artifacts

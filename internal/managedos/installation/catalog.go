@@ -138,6 +138,7 @@ func ContentDigest() string {
 		Implementation, requestVersion, kickstartVersion,
 		consumerPrefix, privatePrefix, servedRoot, MarkerPath, HostKeyPath,
 		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), provedDiskBoot, substrate.RedfishMediaPolicy,
+		"anaconda-home-partition-policy",
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

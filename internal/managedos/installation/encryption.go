@@ -145,7 +145,7 @@ func encryptionPreLines(input Installation) []string {
 		"echo 'Bootwright: the recovery passphrase this installation fetched is not 8 to 256 printable characters free of spaces, quotes, backslashes and #; refusing before any disk is touched.' >&2",
 		"exit 1",
 		"fi",
-		`printf '%s%s\n' 'autopart --type=lvm --encrypted --luks-version=luks2`+pbkdf+` --passphrase=' "${bootwright_recovery}" > `+storageInclude,
+		`printf '%s%s\n' '`+autopartLine(input)+` --encrypted --luks-version=luks2`+pbkdf+` --passphrase=' "${bootwright_recovery}" > `+storageInclude,
 		"unset bootwright_recovery",
 		"%end",
 		"",
