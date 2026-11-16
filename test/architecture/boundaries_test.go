@@ -38,6 +38,7 @@ func packageRoles() map[string]packageRole {
 		"internal/diagnostics":                     technicalRole,
 		"internal/adapterprotocol":                 technicalRole,
 		"internal/nativeexec":                      technicalRole,
+		"internal/nativefs":                        technicalRole,
 		"internal/canonicaljson":                   technicalRole,
 		"internal/desiredstate/customplaybooks":    domainRole,
 		"internal/desiredstate/inputfs":            adapterRole,
@@ -576,6 +577,10 @@ const readOnlyInput = "internal/desiredstate/inputfs"
 // never opens a file for writing or mutates one.
 const invokerFiles = "internal/workspace/invokerfs"
 
+// nativeFiles is the descriptor-relative file kit; a read-only adapter may
+// open and read through it but names none of its mutating members.
+const nativeFiles = "internal/nativefs"
+
 // readOnlyAdapters are the packages the input-mutation clause holds.
 func readOnlyAdapters() []string {
 	return []string{readOnlyInput, invokerFiles, "internal/storage/preflightlocal"}
@@ -590,6 +595,7 @@ func effectGrants() map[string][]string {
 	return map[string][]string{
 		everyPackage:           {"net.ParseMAC", "net/netip", "net/url"},
 		"internal/nativeexec":  {"io", "os", "os/exec", "syscall"},
+		"internal/nativefs":    {"crypto/rand", "golang.org/x/sys/unix", "io", "os", "syscall"},
 		"internal/acquisition": {"net/http", "net.Conn", "net.DefaultResolver", "net.DNSError", "net.JoinHostPort", "net.SplitHostPort"},
 		// Listener hostnames resolve in the native inspector, under its deadline;
 		// this grants the resolver member, not arbitrary networking.
@@ -597,13 +603,13 @@ func effectGrants() map[string][]string {
 		"internal/cli":                      {"fmt.Fprintf", "fmt.Fprintln", "github.com/spf13/cobra", "github.com/spf13/pflag", "io"},
 		// The input adapter reads through the handles it holds and names no
 		// other os member.
-		readOnlyInput:                      {"io", "os.File", "os.NewFile", "syscall"},
+		readOnlyInput:                      {"os.File", "syscall"},
 		"internal/desiredstate/yamlstream": {"io"},
 		// The context store reads a held directory's birth time or inode
 		// generation, which tell a recreated context from the one it replaced.
 		"internal/workspace/contextfs": {"crypto/rand", "golang.org/x/sys/unix.AT_EMPTY_PATH",
 			"golang.org/x/sys/unix.IoctlGetInt", "golang.org/x/sys/unix.STATX_BTIME", "golang.org/x/sys/unix.Statx", "golang.org/x/sys/unix.Statx_t",
-			"io", "os", "syscall", "unsafe"},
+			"io", "os", "syscall"},
 		"internal/workspace/selectionfs":        {"crypto/rand", "io", "os", "syscall"},
 		"internal/workspace/contexts":           {"io"},
 		"internal/secrets/material":             {"crypto/rand", "io", "net.IP", "os", "syscall"},
@@ -613,11 +619,10 @@ func effectGrants() map[string][]string {
 		"internal/controller/privilege":         {"io", "os", "os/exec", "os/signal", "syscall"},
 		"internal/controller/hostlinux":         {"golang.org/x/sys/unix", "io", "os"},
 		"internal/storage/preflightlocal": {
-			"golang.org/x/sys/unix.CPUSet", "golang.org/x/sys/unix.Close", "golang.org/x/sys/unix.Fstat", "golang.org/x/sys/unix.Fstatfs",
-			"golang.org/x/sys/unix.O_CLOEXEC", "golang.org/x/sys/unix.O_DIRECTORY", "golang.org/x/sys/unix.O_NOFOLLOW",
-			"golang.org/x/sys/unix.O_NONBLOCK", "golang.org/x/sys/unix.O_PATH", "golang.org/x/sys/unix.O_RDONLY", "golang.org/x/sys/unix.Open", "golang.org/x/sys/unix.Openat",
+			"golang.org/x/sys/unix.CPUSet", "golang.org/x/sys/unix.Fstat", "golang.org/x/sys/unix.Fstatfs",
+			"golang.org/x/sys/unix.O_NONBLOCK", "golang.org/x/sys/unix.O_PATH", "golang.org/x/sys/unix.O_RDONLY",
 			"golang.org/x/sys/unix.SchedGetaffinity", "golang.org/x/sys/unix.S_IFLNK", "golang.org/x/sys/unix.S_IFMT", "golang.org/x/sys/unix.S_IFREG",
-			"golang.org/x/sys/unix.Statfs_t", "golang.org/x/sys/unix.Stat_t", "io", "os.File", "os.IsNotExist", "os.NewFile",
+			"golang.org/x/sys/unix.Statfs_t", "golang.org/x/sys/unix.Stat_t", "io", "os.File", "os.IsNotExist",
 		},
 		"internal/controller/bundlelocal":  {"io", "net.Dialer", "net/http", "os", "syscall"},
 		"internal/controller/ansiblelocal": {"io", "os", "os/exec", "syscall"},
@@ -651,7 +656,7 @@ func effectGrants() map[string][]string {
 		// temporary file beside it, and replaces only a regular file. It
 		// writes a comparison tree through directory descriptors opened
 		// without following a link, and removes only the entries it made.
-		"internal/nativeartifacts/renderlocal":     {"crypto/rand", "golang.org/x/sys/unix", "os", "syscall"},
+		"internal/nativeartifacts/renderlocal":     {"golang.org/x/sys/unix", "os", "syscall"},
 		"internal/nativeartifacts/comparisonlocal": {"io", "os", "os/exec", "syscall"},
 		"cmd/bootwright":                           {"crypto/rand.Read", "io", modulePath + "internal/cli", "net/http.Request", "os", "syscall", "unsafe"},
 	}
@@ -718,6 +723,8 @@ func mutatingMember(name, member string) bool {
 		return slices.Contains([]string{"O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "Write", "Unlink", "Rename"}, member)
 	case "golang.org/x/sys/unix":
 		return slices.Contains([]string{"O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "Write", "Unlink", "Unlinkat", "Rename", "Renameat"}, member)
+	case modulePath + nativeFiles:
+		return slices.Contains([]string{"Publish", "RemoveTree", "RenameNoReplace", "Unlink", "Symlink"}, member)
 	}
 	return false
 }
@@ -746,6 +753,7 @@ func TestEveryEffectClauseRefusesWhatItGuards(t *testing.T) {
 		presentation   = "package fixture\nimport (\n\t_ \"io\"\n\t_ \"github.com/spf13/cobra\"\n\t_ \"" + cli + "\"\n)\n"
 		mutation       = "package inputfs\nimport \"syscall\"\nvar _ = []any{syscall.O_RDONLY, syscall.O_WRONLY, syscall.O_RDWR, syscall.O_CREAT, syscall.O_TRUNC, syscall.Write, syscall.Unlink, syscall.Rename}\n"
 		unixMutation   = "package preflightlocal\nimport \"golang.org/x/sys/unix\"\nvar _ = []any{unix.O_RDONLY, unix.O_WRONLY, unix.O_RDWR, unix.O_CREAT, unix.O_TRUNC, unix.Write, unix.Unlink, unix.Unlinkat, unix.Rename, unix.Renameat}\n"
+		kitMutation    = "package preflightlocal\nimport \"github.com/crmarques/bootwright/internal/nativefs\"\nvar _ = []any{nativefs.OpenNoFollow, nativefs.Publish, nativefs.RemoveTree, nativefs.RenameNoReplace, nativefs.Unlink, nativefs.Symlink}\n"
 		storageWrite   = "package preflightlocal\nimport \"os\"\nvar _ = []any{os.IsNotExist, os.WriteFile}\n"
 		networking     = "package fixture\nimport \"net\"\nvar _ = []any{net.Dial, net.ParseIP}\n"
 		printing       = "package fixture\nimport \"fmt\"\nvar _ = []any{fmt.Println, fmt.Fprintln, fmt.Scanln, fmt.Fscanf, fmt.Sprintf, fmt.Sscan, fmt.Errorf}\n"
@@ -769,6 +777,10 @@ func TestEveryEffectClauseRefusesWhatItGuards(t *testing.T) {
 	for _, member := range unixMutating {
 		unixGrants = append(unixGrants, "golang.org/x/sys/unix."+member)
 		unixFound = append(unixFound, preflightLocal+"/fixture.go grants input mutation through unix."+member)
+	}
+	var kitFound []string
+	for _, member := range []string{"Publish", "RemoveTree", "RenameNoReplace", "Unlink", "Symlink"} {
+		kitFound = append(kitFound, preflightLocal+"/fixture.go grants input mutation through nativefs."+member)
 	}
 	unauthorized := func(path string, imports ...string) []string {
 		var found []string
@@ -805,6 +817,7 @@ func TestEveryEffectClauseRefusesWhatItGuards(t *testing.T) {
 		{"(d) input mutation", readOnlyInput, mutation, append([]string{"syscall"}, mutationGrants...), mutations(readOnlyInput)},
 		{"(d) mutation by the invoking account's opener", invokerFiles, mutation, append([]string{"syscall"}, mutationGrants...), mutations(invokerFiles)},
 		{"(d) mutation through golang.org/x/sys/unix by the storage preflight", preflightLocal, unixMutation, append([]string{"golang.org/x/sys/unix.O_RDONLY"}, unixGrants...), unixFound},
+		{"(d) mutation through the file kit by the storage preflight", preflightLocal, kitMutation, nil, kitFound},
 		{"(d) guards the read-only adapters alone", fixture, mutation, []string{"syscall"}, nil},
 		{"(e) networking", fixture, networking, nil, []string{source + " accesses networking through net.Dial", source + " accesses networking through net.ParseIP"}},
 		{"(e) exempt by its member alone", fixture, networking, []string{"net.ParseIP"}, []string{source + " accesses networking through net.Dial"}},

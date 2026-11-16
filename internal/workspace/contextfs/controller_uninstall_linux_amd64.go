@@ -12,10 +12,10 @@ import (
 	"slices"
 	"strings"
 	"syscall"
-	"unsafe"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/nativefs"
 )
 
 var _ prerequisites.UninstallStore = (*Store)(nil)
@@ -679,18 +679,8 @@ func (t *uninstallTransaction) renameAside(parent *directory, name string, ident
 }
 
 func renameNoReplaceIn(parent *directory, oldName, newName string) syscall.Errno {
-	oldPointer, err := syscall.BytePtrFromString(oldName)
-	if err != nil {
-		return syscall.EINVAL
-	}
-	newPointer, err := syscall.BytePtrFromString(newName)
-	if err != nil {
-		return syscall.EINVAL
-	}
-	_, _, errno := syscall.Syscall6(renameat2Trap, parent.file.Fd(), uintptr(unsafe.Pointer(oldPointer)),
-		parent.file.Fd(), uintptr(unsafe.Pointer(newPointer)), renameNoReplace, 0)
-	runtime.KeepAlive(oldPointer)
-	runtime.KeepAlive(newPointer)
+	errno := errnoOf(nativefs.RenameNoReplace(int(parent.file.Fd()), oldName, newName))
+	runtime.KeepAlive(parent.file)
 	return errno
 }
 

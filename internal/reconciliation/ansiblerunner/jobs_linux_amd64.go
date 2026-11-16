@@ -19,6 +19,7 @@ import (
 	"unicode/utf8"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/nativefs"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -452,7 +453,7 @@ func (s *seizedJob) remove(scratch []string) error {
 		}
 	}
 	remaining := s.dirs.entries
-	if err := emptyTree(s.job, s.device, 0, &remaining, recordName, holderName, lockName); err != nil {
+	if err := nativefs.RemoveTree(s.job, runTree(s.device, &remaining), recordName, holderName, lockName); err != nil {
 		return err
 	}
 	if err := s.dirs.jobs.Remove(s.name); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -539,7 +540,7 @@ func (d runDirectories) removeDirectory(parent *os.Root, name string) error {
 		return nil
 	}
 	remaining := d.entries
-	if err := emptyTree(dir, stat.Dev, 0, &remaining); err != nil {
+	if err := nativefs.RemoveTree(dir, runTree(stat.Dev, &remaining)); err != nil {
 		return err
 	}
 	if err := parent.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -599,76 +600,8 @@ func (d runDirectories) private(info os.FileInfo, err error) (*syscall.Stat_t, b
 	return stat, ok && stat.Uid == d.owner && stat.Mode&0077 == 0
 }
 
-// emptyTree removes everything beneath one verified run directory. A link is
-// removed as itself and never followed, a directory is entered only through a
-// handle that is the entry listed, and an entry on another filesystem, such as
-// a mount left behind, refuses rather than being emptied. The last names go
-// after every other entry, in their order.
-func emptyTree(dir *os.Root, device uint64, depth int, remaining *int, last ...string) error {
-	if depth > maxRunTreeDepth {
-		return errors.New("run directory depth bound")
-	}
-	names, err := entries(dir, remaining)
-	if err != nil {
-		return err
-	}
-	slices.SortStableFunc(names, func(a, b string) int { return slices.Index(last, a) - slices.Index(last, b) })
-	for _, name := range names {
-		listed, err := dir.Lstat(name)
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		if stat, ok := listed.Sys().(*syscall.Stat_t); !ok || stat.Dev != device {
-			return errors.New("run directory crosses a filesystem")
-		}
-		if listed.IsDir() {
-			if err := emptyChild(dir, name, listed, device, depth, remaining); err != nil {
-				return err
-			}
-		}
-		if err := dir.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
-}
-
-func emptyChild(parent *os.Root, name string, listed os.FileInfo, device uint64, depth int, remaining *int) error {
-	child, err := parent.OpenRoot(name)
-	if err != nil {
-		return err
-	}
-	defer child.Close()
-	opened, err := child.Stat(".")
-	if err != nil || !os.SameFile(listed, opened) {
-		return errors.New("run directory entry changed")
-	}
-	return emptyTree(child, device, depth+1, remaining)
-}
-
-func entries(dir *os.Root, remaining *int) ([]string, error) {
-	listing, err := dir.Open(".")
-	if err != nil {
-		return nil, err
-	}
-	defer listing.Close()
-	var names []string
-	for {
-		part, err := listing.Readdirnames(1024)
-		if *remaining -= len(part); *remaining < 0 {
-			return nil, errors.New("run directory entry bound")
-		}
-		names = append(names, part...)
-		if errors.Is(err, io.EOF) {
-			return names, nil
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
+func runTree(device uint64, remaining *int) nativefs.Tree {
+	return nativefs.Tree{Subject: "run directory", Device: device, MaxDepth: maxRunTreeDepth, Entries: remaining}
 }
 
 // matching lists the entries of one parent that carry the runner's exact

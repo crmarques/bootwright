@@ -15,6 +15,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/nativefs"
 )
 
 func TestReadOrdersAndDeduplicatesAcquiredSources(t *testing.T) {
@@ -368,7 +369,7 @@ func TestReadCancellationAndEmptyUniverse(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	if _, err := readBounded(ctx, file, 101); !errors.Is(err, context.Canceled) {
+	if _, err := nativefs.ReadBounded(ctx, file, 101); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation before bounded read = %v", err)
 	}
 }
@@ -380,7 +381,7 @@ func TestReadBoundedNeverConsumesPastBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	data, err := readBounded(context.Background(), file, 17)
+	data, err := nativefs.ReadBounded(context.Background(), file, 17)
 	if err != nil || len(data) != 17 || !bytes.Equal(data, bytes.Repeat([]byte{'x'}, 17)) {
 		t.Fatalf("bounded read = %q, %v", data, err)
 	}

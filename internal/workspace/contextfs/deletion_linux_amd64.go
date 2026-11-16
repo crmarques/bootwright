@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"unsafe"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/nativefs"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -288,16 +288,8 @@ func unlinkVerified(parent *directory, name string, expected syscall.Stat_t, dir
 // unlinkAt removes one name beneath a held directory without following it: a
 // directory only when it is empty and directory is set.
 func unlinkAt(dir *directory, name string, directory bool) syscall.Errno {
-	pointer, err := syscall.BytePtrFromString(name)
-	if err != nil {
-		return syscall.EINVAL
-	}
-	flags := uintptr(0)
-	if directory {
-		flags = 0x200
-	}
-	_, _, errno := syscall.Syscall(syscall.SYS_UNLINKAT, dir.file.Fd(), uintptr(unsafe.Pointer(pointer)), flags)
-	runtime.KeepAlive(pointer)
+	errno := errnoOf(nativefs.Unlink(int(dir.file.Fd()), name, directory))
+	runtime.KeepAlive(dir.file)
 	return errno
 }
 

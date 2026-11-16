@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/nativefs"
 	"golang.org/x/sys/unix"
 )
 
@@ -77,7 +78,7 @@ func (f *heldFilesystem) readKernel(ctx context.Context, root *os.File, name str
 	if unix.Fstat(fd, &stat) != nil || stat.Mode&unix.S_IFMT != unix.S_IFREG || stat.Uid != f.view.owner || stat.Mode&0022 != 0 || f.filesystemType(file, "/proc/"+name) != unix.PROC_SUPER_MAGIC {
 		return nil, errEvidence
 	}
-	data, err := io.ReadAll(io.LimitReader(contextReader{ctx: ctx, reader: file}, maximum+1))
+	data, err := nativefs.ReadBounded(ctx, file, int(maximum)+1)
 	if err != nil || len(data) > int(maximum) {
 		return nil, errEvidence
 	}

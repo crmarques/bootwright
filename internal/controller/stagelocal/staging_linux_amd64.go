@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/nativefs"
 	"golang.org/x/sys/unix"
 )
 
@@ -263,7 +264,7 @@ func (p *stagingParent) create(kind string) (created, error) {
 	}
 	discard := func() (created, error) {
 		remaining := p.entries
-		if emptyStage(stage, stat.Dev, 0, &remaining, stageOwner, stageLock) == nil {
+		if nativefs.RemoveTree(stage, p.tree(stat.Dev, &remaining), stageOwner, stageLock) == nil {
 			_ = p.root.Remove(name)
 		}
 		lock.Close()
@@ -353,7 +354,7 @@ func (p *stagingParent) reap(name string, held os.FileInfo) (stageState, error) 
 		}
 	}
 	remaining := p.entries
-	if err := emptyStage(stage, stat.Dev, 0, &remaining, stageOwner, stageLock); err != nil {
+	if err := nativefs.RemoveTree(stage, p.tree(stat.Dev, &remaining), stageOwner, stageLock); err != nil {
 		return stageSkipped, err
 	}
 	if err := p.root.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -403,6 +404,10 @@ func (p *stagingParent) file(stage *os.Root, name string) (*os.File, os.FileInfo
 	return file, opened, true
 }
 
+func (p *stagingParent) tree(device uint64, remaining *int) nativefs.Tree {
+	return nativefs.Tree{Subject: "resolution stage", Device: device, MaxDepth: maxStageTreeDepth, Entries: remaining}
+}
+
 func statOf(info os.FileInfo, err error) (*syscall.Stat_t, bool) {
 	if err != nil {
 		return nil, false
@@ -430,75 +435,4 @@ func stageName(name string) bool {
 	kind, suffix, found := strings.Cut(name, "-")
 	length, known := suffixLengths[kind]
 	return found && known && len(suffix) == length && strings.Trim(suffix, "0123456789abcdef") == ""
-}
-
-// emptyStage removes everything beneath one verified stage. A link is removed
-// as itself and never followed, a directory is entered only through a handle
-// that is the entry listed, and an entry on another filesystem refuses rather
-// than being emptied. The last names go after every other entry, in order.
-func emptyStage(dir *os.Root, device uint64, depth int, remaining *int, last ...string) error {
-	if depth > maxStageTreeDepth {
-		return errors.New("resolution stage depth bound")
-	}
-	names, err := stageEntries(dir, remaining)
-	if err != nil {
-		return err
-	}
-	slices.SortStableFunc(names, func(a, b string) int { return slices.Index(last, a) - slices.Index(last, b) })
-	for _, name := range names {
-		listed, err := dir.Lstat(name)
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		if stat, ok := listed.Sys().(*syscall.Stat_t); !ok || stat.Dev != device {
-			return errors.New("resolution stage crosses a filesystem")
-		}
-		if listed.IsDir() {
-			if err := emptyStageChild(dir, name, listed, device, depth, remaining); err != nil {
-				return err
-			}
-		}
-		if err := dir.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
-}
-
-func emptyStageChild(parent *os.Root, name string, listed os.FileInfo, device uint64, depth int, remaining *int) error {
-	child, err := parent.OpenRoot(name)
-	if err != nil {
-		return err
-	}
-	defer child.Close()
-	opened, err := child.Stat(".")
-	if err != nil || !os.SameFile(listed, opened) {
-		return errors.New("resolution stage entry changed")
-	}
-	return emptyStage(child, device, depth+1, remaining)
-}
-
-func stageEntries(dir *os.Root, remaining *int) ([]string, error) {
-	listing, err := dir.Open(".")
-	if err != nil {
-		return nil, err
-	}
-	defer listing.Close()
-	var names []string
-	for {
-		part, err := listing.Readdirnames(1024)
-		if *remaining -= len(part); *remaining < 0 {
-			return nil, errors.New("resolution stage entry bound")
-		}
-		names = append(names, part...)
-		if errors.Is(err, io.EOF) {
-			return names, nil
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
 }

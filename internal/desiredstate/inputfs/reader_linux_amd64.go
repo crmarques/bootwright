@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,9 +14,10 @@ import (
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/nativefs"
 )
 
-const pathHandle = 0x200000
+const pathHandle = nativefs.PathOnly
 
 type discoveredFile struct {
 	path   string
@@ -158,7 +158,7 @@ func (r Reader) read(ctx context.Context, paths []string, directoryOnly bool) (d
 // the caller closes it only after the final re-walk.
 func (r Reader) begin(ctx context.Context, path string) (FileSession, error) {
 	if r.Files == nil {
-		return processFiles{}, nil
+		return nativefs.ProcessFiles{}, nil
 	}
 	session, err := r.Files.Begin(ctx)
 	if err != nil || session == nil {
@@ -173,7 +173,7 @@ func (r Reader) begin(ctx context.Context, path string) (FileSession, error) {
 // newDiscovery opens with this process's own credentials, as a Reader bound to
 // no opener does.
 func newDiscovery(ctx context.Context) (*discovery, error) {
-	return discoverThrough(ctx, processFiles{})
+	return discoverThrough(ctx, nativefs.ProcessFiles{})
 }
 
 // discoverThrough takes "/" from the session and records whether this process
@@ -185,7 +185,7 @@ func discoverThrough(ctx context.Context, session FileSession) (*discovery, erro
 		if canceled := ctx.Err(); canceled != nil {
 			return nil, canceled
 		}
-		if denied(err) {
+		if nativefs.Denied(err) {
 			return nil, openDenied(err, "/")
 		}
 		return nil, failure("input.read", "input root cannot be opened safely", "")
@@ -317,8 +317,8 @@ func (s *discovery) directory(path string, depth int) error {
 			}
 		}
 	}
-	after, err := statFile(file)
-	if err != nil || !sameStable(before, after) {
+	after, err := nativefs.Stat(file)
+	if err != nil || !nativefs.SameStable(before, after) {
 		return failure("input.read", "input directory changed during discovery", path)
 	}
 	s.directories[path] = before
@@ -360,7 +360,7 @@ func (s *discovery) candidate(path string, stat syscall.Stat_t, marker bool) err
 		collection = s.markers
 	}
 	if prior, exists := collection[path]; exists {
-		if !sameStable(prior.before, stat) {
+		if !nativefs.SameStable(prior.before, stat) {
 			return failure("input.read", "input changed during discovery", path)
 		}
 		return nil
@@ -427,18 +427,18 @@ func (s *discovery) readFile(candidate discoveredFile, maximum, remaining int, s
 		return nil, err
 	}
 	defer file.Close()
-	if before.Mode&syscall.S_IFMT != syscall.S_IFREG || before.Nlink != 1 || !sameStable(candidate.before, before) {
+	if before.Mode&syscall.S_IFMT != syscall.S_IFREG || before.Nlink != 1 || !nativefs.SameStable(candidate.before, before) {
 		return nil, failure("input.read", "input changed before reading", candidate.path)
 	}
 	if before.Size > int64(maximum) {
 		return nil, limit(singleName, maximum, candidate.path)
 	}
-	data, err := readBounded(s.ctx, file, min(maximum, remaining)+1)
+	data, err := nativefs.ReadBounded(s.ctx, file, min(maximum, remaining)+1)
 	if err != nil {
 		if s.ctx.Err() != nil {
 			return nil, s.ctx.Err()
 		}
-		if denied(err) {
+		if nativefs.Denied(err) {
 			return nil, readDenied(s.rootReads, candidate.path)
 		}
 		return nil, failure("input.read", "input bytes cannot be read safely", candidate.path)
@@ -449,8 +449,8 @@ func (s *discovery) readFile(candidate discoveredFile, maximum, remaining int, s
 	if len(data) > remaining {
 		return nil, limit(aggregateName, aggregate, candidate.path)
 	}
-	after, err := statFile(file)
-	if err != nil || !sameStable(before, after) || int64(len(data)) != after.Size {
+	after, err := nativefs.Stat(file)
+	if err != nil || !nativefs.SameStable(before, after) || int64(len(data)) != after.Size {
 		return nil, failure("input.read", "input changed while reading", candidate.path)
 	}
 	current, identity, err := s.openPath(candidate.path, pathHandle)
@@ -458,27 +458,8 @@ func (s *discovery) readFile(candidate discoveredFile, maximum, remaining int, s
 		return nil, err
 	}
 	defer current.Close()
-	if !sameStable(after, identity) {
+	if !nativefs.SameStable(after, identity) {
 		return nil, failure("input.read", "input was replaced while reading", candidate.path)
-	}
-	return data, nil
-}
-
-func readBounded(ctx context.Context, file *os.File, maximum int) ([]byte, error) {
-	data := make([]byte, 0, min(maximum, 32768))
-	buffer := make([]byte, min(maximum, 32768))
-	for len(data) < maximum {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		n, err := file.Read(buffer[:min(len(buffer), maximum-len(data))])
-		data = append(data, buffer[:n]...)
-		if errors.Is(err, io.EOF) {
-			return data, nil
-		}
-		if err != nil {
-			return nil, err
-		}
 	}
 	return data, nil
 }
@@ -577,7 +558,7 @@ func (s *discovery) prove(file *os.File, err error, path string) (*os.File, sysc
 		}
 		return nil, syscall.Stat_t{}, openFailure(err, path)
 	}
-	stat, err := statFile(file)
+	stat, err := nativefs.Stat(file)
 	if err != nil {
 		file.Close()
 		return nil, syscall.Stat_t{}, failure("input.read", "input handle cannot be verified", path)
@@ -591,7 +572,7 @@ func (s *discovery) enumerationFailure(err error, path string) error {
 	if canceled := s.ctx.Err(); canceled != nil {
 		return canceled
 	}
-	if denied(err) {
+	if nativefs.Denied(err) {
 		return readDenied(s.rootReads, path)
 	}
 	reason := "read error"
@@ -671,14 +652,14 @@ func openFailure(err error, path string) error {
 		return diagnostics.NewFailureWithRemediation("input.symlink", "input path is a symbolic link", path, realPathRemedy)
 	case errors.Is(err, syscall.ENOTDIR):
 		return diagnostics.NewFailureWithRemediation("input.not-directory", "a component of the input path is not a directory", path, "check the path")
-	case denied(err):
+	case nativefs.Denied(err):
 		return openDenied(err, path)
 	}
 	return failure("input.read", "input path cannot be opened safely", path)
 }
 
 func (s *discovery) rememberIdentity(path string, stat syscall.Stat_t) error {
-	if prior, exists := s.identities[path]; exists && !sameIdentity(prior, stat) {
+	if prior, exists := s.identities[path]; exists && !nativefs.SameIdentity(prior, stat) {
 		return failure("input.read", "input directory was replaced", path)
 	}
 	if err := s.checkDirectory(path, stat); err != nil {
@@ -689,10 +670,10 @@ func (s *discovery) rememberIdentity(path string, stat syscall.Stat_t) error {
 }
 
 func (s *discovery) checkDirectory(path string, stat syscall.Stat_t) error {
-	if prior, exists := s.directories[path]; exists && !sameStable(prior, stat) {
+	if prior, exists := s.directories[path]; exists && !nativefs.SameStable(prior, stat) {
 		return failure("input.read", "input directory changed after discovery", path)
 	}
-	if prior, exists := s.identities[path]; exists && !sameIdentity(prior, stat) {
+	if prior, exists := s.identities[path]; exists && !nativefs.SameIdentity(prior, stat) {
 		return failure("input.read", "input directory was replaced", path)
 	}
 	return nil
@@ -714,19 +695,10 @@ func (s *discovery) verifyDirectories() error {
 	return s.ctx.Err()
 }
 
-// deniedToRoot is what a session's failure reports when the denied open ran
-// with root's credentials.
-type deniedToRoot interface{ DeniedToRoot() bool }
-
-func denied(err error) bool {
-	return errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM)
-}
-
 // openDenied names who the session's open was denied to: root only when the
 // open ran as root, which a root invoking account alone does.
 func openDenied(err error, path string) error {
-	var root deniedToRoot
-	return readDenied(errors.As(err, &root) && root.DeniedToRoot(), path)
+	return readDenied(nativefs.DeniedToRoot(err), path)
 }
 
 func readDenied(root bool, path string) error {
@@ -736,42 +708,6 @@ func readDenied(root bool, path string) error {
 	}
 	return diagnostics.NewFailureWithRemediation("input.read", "the invoking account cannot read this input path (permission denied)", path,
 		"give the invoking account read access to it, or copy it to a directory that account can read")
-}
-
-// processFiles opens with this process's own credentials, for a Reader bound
-// to no opener.
-type processFiles struct{}
-
-func (processFiles) Root() (*os.File, error) {
-	fd, err := syscall.Open("/", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
-	if err != nil {
-		return nil, err
-	}
-	return os.NewFile(uintptr(fd), "/"), nil
-}
-
-func (processFiles) OpenAt(parent *os.File, name string, flags int) (*os.File, error) {
-	fd, err := syscall.Openat(int(parent.Fd()), name, flags|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
-	if err != nil {
-		return nil, err
-	}
-	return os.NewFile(uintptr(fd), name), nil
-}
-
-func (processFiles) Close() error { return nil }
-
-func statFile(file *os.File) (syscall.Stat_t, error) {
-	var stat syscall.Stat_t
-	err := syscall.Fstat(int(file.Fd()), &stat)
-	return stat, err
-}
-
-func sameIdentity(a, b syscall.Stat_t) bool {
-	return a.Dev == b.Dev && a.Ino == b.Ino && a.Mode == b.Mode
-}
-
-func sameStable(a, b syscall.Stat_t) bool {
-	return sameIdentity(a, b) && a.Nlink == b.Nlink && a.Size == b.Size && a.Mtim == b.Mtim && a.Ctim == b.Ctim
 }
 
 func yamlPath(path string) bool {

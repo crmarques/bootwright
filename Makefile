@@ -330,6 +330,7 @@ RACE_PACKAGES = ./internal/reconciliation/... ./internal/controller/privilege/..
 	./internal/machine/sshlocal \
 	./internal/nativeartifacts/comparisonlocal \
 	./internal/nativeexec \
+	./internal/nativefs \
 	./internal/substrate/kubevirt \
 	./internal/workspace/contextfs \
 	./internal/workspace/invokerfs \

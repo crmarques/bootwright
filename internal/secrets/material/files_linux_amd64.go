@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -16,12 +15,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/nativefs"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 const (
 	maxSecretPath = 4096
-	pathHandle    = 0x200000
+	pathHandle    = nativefs.PathOnly
 )
 
 type heldDirectory struct {
@@ -160,7 +160,7 @@ func readHeldParts(ctx context.Context, held []heldPart, code string, rootReads 
 			if canceled := ctx.Err(); canceled != nil {
 				return fail(canceled)
 			}
-			if denied(err) {
+			if nativefs.Denied(err) {
 				return fail(deniedFailure(code, rootReads, part.request.Path))
 			}
 			return fail(failure(code, "secret file bytes could not be read safely", part.request.Path))
@@ -242,11 +242,11 @@ func accountHome(ctx context.Context, code string) (string, error) {
 	}
 	file := os.NewFile(uintptr(fd), "/etc/passwd")
 	defer file.Close()
-	before, err := statSecretFile(file)
+	before, err := nativefs.Stat(file)
 	if err != nil || before.Mode&syscall.S_IFMT != syscall.S_IFREG || before.Size < 0 || before.Size > 1<<20 {
 		return "", failure(code, "local account database cannot be verified", "")
 	}
-	data, err := readWithLimit(ctx, file, (1<<20)+1)
+	data, err := nativefs.ReadBounded(ctx, file, (1<<20)+1)
 	if err != nil {
 		if canceled := ctx.Err(); canceled != nil {
 			return "", canceled
@@ -254,8 +254,8 @@ func accountHome(ctx context.Context, code string) (string, error) {
 		return "", failure(code, "local account database cannot be read safely", "")
 	}
 	defer clear(data)
-	after, err := statSecretFile(file)
-	if err != nil || len(data) > 1<<20 || !sameStableFile(before, after) {
+	after, err := nativefs.Stat(file)
+	if err != nil || len(data) > 1<<20 || !nativefs.SameStable(before, after) {
 		return "", failure(code, "local account database cannot be read safely", "")
 	}
 	uid := strconv.Itoa(os.Getuid())
@@ -280,7 +280,7 @@ func accountHome(ctx context.Context, code string) (string, error) {
 // above one, and that verify's fresh walk still needs.
 func (s *Service) begin(ctx context.Context, code string) (FileSession, error) {
 	if s.files == nil {
-		return processFiles{}, nil
+		return nativefs.ProcessFiles{}, nil
 	}
 	session, err := s.files.Begin(ctx)
 	if err != nil || session == nil {
@@ -331,7 +331,7 @@ func (s *secureFiles) openPart(request fileRequest, path string) (heldPart, erro
 					return heldPart{}, canceled
 				}
 				switch {
-				case denied(err):
+				case nativefs.Denied(err):
 					return heldPart{}, openDenied(s.failureCode, err, request.Path)
 				case errors.Is(err, syscall.ENOENT):
 					return heldPart{}, missingFile(s.failureCode, request.Path)
@@ -359,7 +359,7 @@ func (s *secureFiles) openPart(request fileRequest, path string) (heldPart, erro
 				return heldPart{}, canceled
 			}
 			switch {
-			case denied(err):
+			case nativefs.Denied(err):
 				return heldPart{}, openDenied(s.failureCode, err, request.Path)
 			case errors.Is(err, syscall.ENOENT):
 				return heldPart{}, missingFile(s.failureCode, request.Path)
@@ -386,18 +386,18 @@ func (s *secureFiles) verify(parts []heldPart) error {
 		if err := s.ctx.Err(); err != nil {
 			return err
 		}
-		after, err := statSecretFile(directory.file)
-		if err != nil || !sameFileIdentity(directory.before, after) {
+		after, err := nativefs.Stat(directory.file)
+		if err != nil || !nativefs.SameIdentity(directory.before, after) {
 			return failure(s.failureCode, "secret file directory changed during acquisition", path)
 		}
 	}
 	for _, part := range parts {
-		after, err := statSecretFile(part.file)
-		if err != nil || !sameStableFile(part.before, after) {
+		after, err := nativefs.Stat(part.file)
+		if err != nil || !nativefs.SameStable(part.before, after) {
 			return failure(s.failureCode, "secret file changed during acquisition", part.request.Path)
 		}
 		current, err := s.freshStat(part.path)
-		if err != nil || !sameStableFile(part.before, current) {
+		if err != nil || !nativefs.SameStable(part.before, current) {
 			if canceled := s.ctx.Err(); canceled != nil {
 				return canceled
 			}
@@ -427,7 +427,7 @@ func (s *secureFiles) freshStat(path string) (syscall.Stat_t, error) {
 		}
 		if index != len(parts)-1 {
 			original, exists := s.directories[current]
-			if !exists || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR || !sameFileIdentity(original.before, stat) {
+			if !exists || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR || !nativefs.SameIdentity(original.before, stat) {
 				file.Close()
 				return syscall.Stat_t{}, errors.New("directory changed")
 			}
@@ -435,7 +435,7 @@ func (s *secureFiles) freshStat(path string) (syscall.Stat_t, error) {
 		parent.Close()
 		parent = file
 	}
-	stat, err := statSecretFile(parent)
+	stat, err := nativefs.Stat(parent)
 	return stat, err
 }
 
@@ -451,7 +451,7 @@ func openSecretChild(session FileSession, parent *os.File, name string, flags in
 	if err != nil {
 		return nil, syscall.Stat_t{}, err
 	}
-	stat, err := statSecretFile(file)
+	stat, err := nativefs.Stat(file)
 	if err != nil {
 		file.Close()
 		return nil, syscall.Stat_t{}, err
@@ -459,19 +459,10 @@ func openSecretChild(session FileSession, parent *os.File, name string, flags in
 	return file, stat, nil
 }
 
-// deniedToRoot is what a session's failure reports when the denied open ran
-// with root's credentials.
-type deniedToRoot interface{ DeniedToRoot() bool }
-
-func denied(err error) bool {
-	return errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM)
-}
-
 // openDenied names who the session's open was denied to: root only when the
 // open ran as root, which a root invoking account alone does.
 func openDenied(code string, err error, path string) error {
-	var root deniedToRoot
-	return deniedFailure(code, errors.As(err, &root) && root.DeniedToRoot(), path)
+	return deniedFailure(code, nativefs.DeniedToRoot(err), path)
 }
 
 func deniedFailure(code string, root bool, path string) error {
@@ -482,28 +473,6 @@ func deniedFailure(code string, root bool, path string) error {
 	return diagnostics.NewFailureWithRemediation("secret."+code, "the invoking account cannot read this secret file or a directory above it (permission denied)", path,
 		"give the invoking account read access to it, or copy it to a directory that account can read")
 }
-
-// processFiles opens with this process's own credentials, for a Service bound
-// to no Files.
-type processFiles struct{}
-
-func (processFiles) Root() (*os.File, error) {
-	fd, err := syscall.Open("/", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
-	if err != nil {
-		return nil, err
-	}
-	return os.NewFile(uintptr(fd), "/"), nil
-}
-
-func (processFiles) OpenAt(parent *os.File, name string, flags int) (*os.File, error) {
-	fd, err := syscall.Openat(int(parent.Fd()), name, flags|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
-	if err != nil {
-		return nil, err
-	}
-	return os.NewFile(uintptr(fd), name), nil
-}
-
-func (processFiles) Close() error { return nil }
 
 // unsafeFile refuses a secret file by the first condition it fails, with that
 // condition's remedy. A file carrying a value, password, token or private key
@@ -555,55 +524,10 @@ func shellWord(path string) string {
 	return path
 }
 
-func statSecretFile(file *os.File) (syscall.Stat_t, error) {
-	var stat syscall.Stat_t
-	err := syscall.Fstat(int(file.Fd()), &stat)
-	return stat, err
-}
-
-func sameStableFile(left, right syscall.Stat_t) bool {
-	return sameFileIdentity(left, right) && left.Nlink == right.Nlink &&
-		left.Size == right.Size && left.Mtim == right.Mtim && left.Ctim == right.Ctim
-}
-
-func sameFileIdentity(left, right syscall.Stat_t) bool {
-	return left.Dev == right.Dev && left.Ino == right.Ino && left.Mode == right.Mode && left.Uid == right.Uid && left.Gid == right.Gid
-}
-
 func readSecretFileEncoded(ctx context.Context, file *os.File, encoding transportEncoding) ([]byte, error) {
 	maximum, valid := encoding.maximumBytes()
 	if !valid {
 		return nil, errors.New("invalid transport encoding")
 	}
-	return readWithLimit(ctx, file, maximum+1)
-}
-
-func readWithLimit(ctx context.Context, file *os.File, maximum int) ([]byte, error) {
-	data := make([]byte, 0, min(maximum, 32768))
-	buffer := make([]byte, min(maximum, 32768))
-	defer clear(buffer)
-	for len(data) < maximum {
-		if err := ctx.Err(); err != nil {
-			clear(data)
-			return nil, err
-		}
-		n, err := file.Read(buffer[:min(len(buffer), maximum-len(data))])
-		if n < 0 || n > min(len(buffer), maximum-len(data)) {
-			clear(data)
-			return nil, errors.New("invalid read count")
-		}
-		data = append(data, buffer[:n]...)
-		if errors.Is(err, io.EOF) {
-			return data, nil
-		}
-		if err != nil {
-			clear(data)
-			return nil, err
-		}
-		if n == 0 {
-			clear(data)
-			return nil, errors.New("file read failed")
-		}
-	}
-	return data, nil
+	return nativefs.ReadBounded(ctx, file, maximum+1)
 }

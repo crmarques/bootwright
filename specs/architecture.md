@@ -316,6 +316,7 @@ has one kind, and its role in `packageRoles`
 | Diagnostics | `internal/diagnostics` | The diagnostic and typed-failure vocabulary every layer emits; it imports nothing first-party. | technical |
 | Availability | `internal/availability` | The single unavailable-capability sentinel, `ErrNotImplemented`. | technical |
 | Adapter protocol | `internal/adapterprotocol` | The adapter result protocol's one decoder and the one runner core that starts, supervises, cancels and drains every adapter process; each runner adapter supplies its invocation and judges its records. It imports nothing first-party. | technical |
+| Native files | `internal/nativefs` | The one descriptor-relative file kit driven adapters share: an open that follows no link from `/` or beneath a held directory (`openat2`), the one-component open a file session issues, the identity and stable-file comparisons taken before and after an effect, the bounded read, the atomic publish with its directory sync and the verified removal of a private tree. Each adapter keeps its own policy (owner, mode, which links it trusts) and its own words; a read-only adapter names none of its mutating members. It imports nothing first-party. | technical |
 | Canonical JSON | `internal/canonicaljson` | The one closed decode, trailing-data rule, re-encode proof, sorted-object proof and encoded-size predictor every record and frozen request uses; each format keeps its bounds, line feed and words; it imports nothing first-party. | technical |
 
 In an application package no file but `contracts.go` declares an exported

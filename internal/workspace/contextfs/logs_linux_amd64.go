@@ -13,8 +13,8 @@ import (
 	"slices"
 	"strings"
 	"syscall"
-	"unsafe"
 
+	"github.com/crmarques/bootwright/internal/nativefs"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -188,21 +188,9 @@ func (s *Store) linkCurrent(ctx context.Context, dir *directory, id string) erro
 }
 
 func symlinkAt(target string, dir *directory, name string) error {
-	targetPointer, err := syscall.BytePtrFromString(target)
-	if err != nil {
-		return err
-	}
-	namePointer, err := syscall.BytePtrFromString(name)
-	if err != nil {
-		return err
-	}
-	_, _, errno := syscall.Syscall(syscall.SYS_SYMLINKAT, uintptr(unsafe.Pointer(targetPointer)), dir.file.Fd(), uintptr(unsafe.Pointer(namePointer)))
-	runtime.KeepAlive(targetPointer)
-	runtime.KeepAlive(namePointer)
-	if errno != 0 {
-		return errno
-	}
-	return nil
+	err := nativefs.Symlink(target, int(dir.file.Fd()), name)
+	runtime.KeepAlive(dir.file)
+	return err
 }
 
 type retainedLog struct {

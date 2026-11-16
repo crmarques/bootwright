@@ -13,9 +13,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/nativefs"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -101,14 +101,7 @@ func storeFailure(message string, cause error) error {
 	return &ioFailure{failure: contexts.StateErrorWithRemediation(text, remediation)}
 }
 
-const (
-	openat2Trap                   = 437
-	renameat2Trap                 = 316
-	syncfsTrap                    = 306
-	renameNoReplace               = 1
-	pathHandle                    = 0x200000
-	resolveBeneathNoLinksNoMounts = 0x08 | 0x04 | 0x02 | 0x01
-)
+const pathHandle = nativefs.PathOnly
 
 type directory struct {
 	file       *os.File
@@ -164,39 +157,16 @@ func openRelative(parent *directory, name string, flags int, mode uint32) (*os.F
 	return openWithin(parent, name, flags, mode)
 }
 
-// resolutionRetries bounds how often a resolution is re-attempted. The race it
-// answers is the width of one rename, so a handful of immediate attempts covers
-// it and a wedged tree still fails rather than spinning.
-const resolutionRetries = 16
-
-// retryResolution re-attempts a resolution the kernel refused with EAGAIN.
-// openat2 answers EAGAIN when a rename moved part of the path while it was
-// being resolved under RESOLVE_BENEATH: the kernel is asking for a retry, not
-// reporting an unsafe path. A caller that treats it as a refusal fails a whole
-// operation because a writer happened to be a millisecond early.
-func retryResolution(open func() (*os.File, error)) (*os.File, error) {
-	for attempt := 0; ; attempt++ {
-		file, err := open()
-		if !errors.Is(err, syscall.EAGAIN) || attempt == resolutionRetries {
-			return file, err
-		}
-	}
-}
-
 func openWithin(parent *directory, name string, flags int, mode uint32) (*os.File, error) {
-	pointer, err := syscall.BytePtrFromString(name)
-	if err != nil {
+	if strings.ContainsRune(name, 0) {
 		return nil, state("state path component is invalid")
 	}
-	how := struct{ Flags, Mode, Resolve uint64 }{uint64(flags | syscall.O_CLOEXEC | syscall.O_NOFOLLOW), uint64(mode), resolveBeneathNoLinksNoMounts}
-	return retryResolution(func() (*os.File, error) {
-		fd, _, errno := syscall.Syscall6(openat2Trap, parent.file.Fd(), uintptr(unsafe.Pointer(pointer)), uintptr(unsafe.Pointer(&how)), unsafe.Sizeof(how), 0, 0)
-		runtime.KeepAlive(pointer)
-		if errno != 0 {
-			return nil, errno
-		}
-		return os.NewFile(fd, filepath.Join(parent.path, name)), nil
-	})
+	fd, err := nativefs.OpenBeneath(int(parent.file.Fd()), name, flags, mode)
+	runtime.KeepAlive(parent.file)
+	if err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), filepath.Join(parent.path, name)), nil
 }
 
 func openDirectory(parent *directory, name string) (*directory, error) {
@@ -869,33 +839,30 @@ func renameNoReplaceAt(parent *directory, oldName, newName string) error {
 	if len(newName) == 0 || len(newName) > 255 || newName == "." || newName == ".." || strings.ContainsAny(newName, "/\x00") {
 		return state("immutable state name is invalid")
 	}
-	oldPointer, err := syscall.BytePtrFromString(oldName)
+	err := nativefs.RenameNoReplace(int(parent.file.Fd()), oldName, newName)
+	runtime.KeepAlive(parent.file)
 	if err != nil {
-		return state("staged immutable state name is invalid")
-	}
-	newPointer, err := syscall.BytePtrFromString(newName)
-	if err != nil {
-		return state("immutable state name is invalid")
-	}
-	_, _, errno := syscall.Syscall6(
-		renameat2Trap,
-		parent.file.Fd(), uintptr(unsafe.Pointer(oldPointer)),
-		parent.file.Fd(), uintptr(unsafe.Pointer(newPointer)),
-		renameNoReplace, 0,
-	)
-	runtime.KeepAlive(oldPointer)
-	runtime.KeepAlive(newPointer)
-	if errno != 0 {
-		return errno
+		return err
 	}
 	// Publication is complete once renameat2 succeeds. Callers verify the
 	// published entry and parent before reporting success.
 	return nil
 }
 
+func errnoOf(err error) syscall.Errno {
+	var errno syscall.Errno
+	if err == nil {
+		return 0
+	}
+	if errors.As(err, &errno) {
+		return errno
+	}
+	return syscall.EINVAL
+}
+
 func syncFilesystem(file *os.File) error {
-	if _, _, errno := syscall.Syscall(syncfsTrap, file.Fd(), 0, 0); errno != 0 {
-		return storeFailure("state filesystem durability could not be established", errno)
+	if err := nativefs.SyncFilesystem(int(file.Fd())); err != nil {
+		return storeFailure("state filesystem durability could not be established", err)
 	}
 	return nil
 }

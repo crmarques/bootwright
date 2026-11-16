@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/nativefs"
 	"github.com/crmarques/bootwright/internal/storage/preflight"
 	"golang.org/x/sys/unix"
 )
@@ -209,27 +210,7 @@ func openSafe(path string) (*os.File, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return nil, errors.New("capacity proof path is not absolute and clean")
 	}
-	descriptor, err := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return nil, err
-	}
-	if path == "/" {
-		return os.NewFile(uintptr(descriptor), path), nil
-	}
-	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	for i, part := range parts {
-		flags := unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_NONBLOCK
-		if i < len(parts)-1 {
-			flags |= unix.O_DIRECTORY
-		}
-		next, err := unix.Openat(descriptor, part, flags, 0)
-		unix.Close(descriptor)
-		if err != nil {
-			return nil, err
-		}
-		descriptor = next
-	}
-	return os.NewFile(uintptr(descriptor), path), nil
+	return nativefs.OpenNoFollow(path, unix.O_RDONLY|unix.O_NONBLOCK)
 }
 
 func readRootProof(path string, limit int64) ([]byte, error) {

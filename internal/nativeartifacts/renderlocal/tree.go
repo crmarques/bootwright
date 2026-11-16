@@ -74,19 +74,9 @@ func (f Files) pause(stage string) {
 }
 
 func (w *treeWriter) open() error {
-	existing, missing := w.directory, []string{}
-	for {
-		if _, err := os.Lstat(existing); err == nil {
-			break
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return refuse(w.directory+" cannot be inspected: "+err.Error(), "pass a directory this account can write")
-		}
-		parent := filepath.Dir(existing)
-		if parent == existing {
-			break
-		}
-		missing = append([]string{filepath.Base(existing)}, missing...)
-		existing = parent
+	existing, missing, err := splitExisting(w.directory)
+	if err != nil {
+		return refuse(w.directory+" cannot be inspected: "+err.Error(), "pass a directory this account can write")
 	}
 	name := ""
 	if len(missing) == 0 {

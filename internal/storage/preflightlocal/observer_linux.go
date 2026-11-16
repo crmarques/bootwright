@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/nativefs"
 	"github.com/crmarques/bootwright/internal/storage/preflight"
 	"golang.org/x/sys/unix"
 )
@@ -135,42 +136,21 @@ func filesystemOf(path string) (int64, string, error) {
 		return 0, "", errors.New("capacity write path is not absolute and clean")
 	}
 	for {
-		descriptor, err := openPathSafe(path)
+		file, err := nativefs.OpenNoFollow(path, unix.O_PATH)
 		if err == nil {
-			defer unix.Close(descriptor)
+			defer file.Close()
 			var info unix.Stat_t
-			if err := unix.Fstat(descriptor, &info); err != nil {
+			if err := unix.Fstat(int(file.Fd()), &info); err != nil {
 				return 0, "", err
 			}
 			if info.Mode&unix.S_IFMT == unix.S_IFLNK {
 				return 0, "", errors.New("capacity write path is a symbolic link")
 			}
-			return filesystemCapacity(descriptor)
+			return filesystemCapacity(int(file.Fd()))
 		}
 		if !os.IsNotExist(err) || path == "/" {
 			return 0, "", err
 		}
 		path = filepath.Dir(path)
 	}
-}
-
-func openPathSafe(path string) (int, error) {
-	descriptor, err := unix.Open("/", unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
-	if err != nil || path == "/" {
-		return descriptor, err
-	}
-	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	for i, part := range parts {
-		flags := unix.O_PATH | unix.O_NOFOLLOW | unix.O_CLOEXEC
-		if i < len(parts)-1 {
-			flags |= unix.O_DIRECTORY
-		}
-		next, err := unix.Openat(descriptor, part, flags, 0)
-		unix.Close(descriptor)
-		if err != nil {
-			return -1, err
-		}
-		descriptor = next
-	}
-	return descriptor, nil
 }

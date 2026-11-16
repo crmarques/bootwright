@@ -2,8 +2,6 @@ package renderlocal
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"io/fs"
 	"os"
@@ -11,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/nativefs"
 )
 
 type Files struct {
@@ -23,19 +22,9 @@ func (Files) Resolve(path string) (string, error) {
 	if err != nil {
 		return "", refuse("the path "+path+" cannot be resolved", "pass a path this account can reach")
 	}
-	existing, missing := absolute, []string{}
-	for {
-		if _, err := os.Lstat(existing); err == nil {
-			break
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return "", refuse("the path "+absolute+" cannot be inspected", "pass a path this account can reach")
-		}
-		parent := filepath.Dir(existing)
-		if parent == existing {
-			break
-		}
-		missing = append([]string{filepath.Base(existing)}, missing...)
-		existing = parent
+	existing, missing, err := splitExisting(absolute)
+	if err != nil {
+		return "", refuse("the path "+absolute+" cannot be inspected", "pass a path this account can reach")
 	}
 	real, err := filepath.EvalSymlinks(existing)
 	if err != nil {
@@ -87,42 +76,18 @@ func (f Files) Publish(ctx context.Context, directory, name string, data []byte,
 	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fail(target+" cannot be inspected: "+err.Error(), "pass a directory this account can write")
 	}
-	partial, handle, err := createPartial(root)
-	if err != nil {
-		return fail(name+" cannot be written in "+directory+": "+err.Error(), "pass a directory this account can write")
-	}
-	defer func() {
-		if !published {
-			handle.Close()
-			root.Remove(partial)
-		}
-	}()
-	for _, step := range []func() error{
-		func() error { _, err := handle.Write(data); return err },
-		func() error { return handle.Chmod(mode) },
-		handle.Sync,
-		handle.Close,
-		ctx.Err,
-	} {
-		if err := step(); err != nil {
-			if ctx.Err() != nil {
-				return "", ctx.Err()
-			}
-			return "", refuse(name+" cannot be written in "+directory+": "+err.Error(), "pass a directory this account can write")
-		}
-	}
-	if err := root.Rename(partial, name); err != nil {
+	err = nativefs.Publish(ctx, root, name, data, nativefs.Publication{Prefix: ".render-", Mode: mode})
+	var unsynced *nativefs.UnsyncedError
+	switch {
+	case errors.As(err, &unsynced):
+		published = true
+		return "", refuse(target+" was written but its directory could not be synced to disk: "+unsynced.Err.Error(), "repeat the command once the filesystem is healthy")
+	case err != nil && ctx.Err() != nil:
+		return "", ctx.Err()
+	case err != nil:
 		return fail(name+" cannot be written in "+directory+": "+err.Error(), "pass a directory this account can write")
 	}
 	published = true
-	synced, err := root.Open(".")
-	if err == nil {
-		err = synced.Sync()
-		synced.Close()
-	}
-	if err != nil {
-		return "", refuse(target+" was written but its directory could not be synced to disk: "+err.Error(), "repeat the command once the filesystem is healthy")
-	}
 	return target, nil
 }
 
@@ -140,34 +105,30 @@ func (f Files) unsafe(info fs.FileInfo) string {
 	return ""
 }
 
-func createPartial(root *os.Root) (string, *os.File, error) {
-	var last error
-	for range 8 {
-		var random [8]byte
-		if _, err := rand.Read(random[:]); err != nil {
-			return "", nil, err
+func splitExisting(path string) (string, []string, error) {
+	existing, missing := path, []string{}
+	for {
+		if _, err := os.Lstat(existing); err == nil {
+			return existing, missing, nil
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return existing, missing, err
 		}
-		name := ".render-" + hex.EncodeToString(random[:]) + ".part"
-		handle, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-		if err == nil {
-			return name, handle, nil
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return existing, missing, nil
 		}
-		last = err
-		if !errors.Is(err, fs.ErrExist) {
-			break
-		}
+		missing = append([]string{filepath.Base(existing)}, missing...)
+		existing = parent
 	}
-	return "", nil, last
 }
 
 func absent(directory string) []string {
+	existing, missing, _ := splitExisting(directory)
 	var made []string
-	for current := directory; ; current = filepath.Dir(current) {
-		if _, err := os.Lstat(current); err == nil || !errors.Is(err, fs.ErrNotExist) || filepath.Dir(current) == current {
-			return made
-		}
-		made = append(made, current)
+	for index := len(missing); index > 0; index-- {
+		made = append(made, filepath.Join(append([]string{existing}, missing[:index]...)...))
 	}
+	return made
 }
 
 func removeAll(made []string) {

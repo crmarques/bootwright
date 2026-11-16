@@ -5,6 +5,8 @@ package material
 import (
 	"context"
 	"os"
+
+	"github.com/crmarques/bootwright/internal/nativefs"
 )
 
 // Test helpers over the production readers: each fixes the arguments every
@@ -17,7 +19,7 @@ func resolveSecretPath(ctx context.Context, base, authored, code string) (string
 // newSecureFiles opens with this process's own credentials, as a Service bound
 // to no Files does.
 func newSecureFiles(ctx context.Context, code string) (*secureFiles, error) {
-	return secureFilesThrough(ctx, code, processFiles{})
+	return secureFilesThrough(ctx, code, nativefs.ProcessFiles{})
 }
 
 func readSecretFile(ctx context.Context, file *os.File) ([]byte, error) {

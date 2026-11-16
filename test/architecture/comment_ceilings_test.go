@@ -7,6 +7,7 @@ func commentLineCeilings() map[string]int {
 	return map[string]int{
 		"ansible": 14, "api/v1alpha1": 53, "cmd/bootwright": 208,
 		"internal/nativeexec":      0,
+		"internal/nativefs":        0,
 		"internal/acquisition":     9,
 		"internal/adapterprotocol": 132, "internal/addons": 6, "internal/addons/catalog": 0, "internal/addons/clusterobjects": 0, "internal/addons/clusterobjects/driver": 0, "internal/addons/instance": 0,
 		"internal/addons/packages": 2, "internal/containercluster/networking": 2,
@@ -22,7 +23,7 @@ func commentLineCeilings() map[string]int {
 		"internal/controller/stagelocal": 74, "internal/controller/venvlocal": 45,
 		"internal/desiredstate": 0, "internal/desiredstate/compilation": 52,
 		"internal/desiredstate/customplaybooks": 5, "internal/desiredstate/encoding": 2,
-		"internal/desiredstate/inputfs": 38, "internal/desiredstate/yamlstream": 1,
+		"internal/desiredstate/inputfs": 34, "internal/desiredstate/yamlstream": 1,
 		"internal/diagnostics": 2, "internal/environment": 6, "internal/environment/access": 0, "internal/environment/clusterpreflight": 0,
 		"internal/environment/inspection": 0, "internal/environment/preflight": 0,
 		"internal/infrastructureservices": 44, "internal/infrastructureservices/artifactserver": 182,
@@ -43,7 +44,7 @@ func commentLineCeilings() map[string]int {
 		"internal/secrets/secretstore/areacontract": 10, "internal/storage": 0, "internal/storage/cephcluster": 4, "internal/storage/ceph": 17, "internal/storage/preflight": 0,
 		"internal/storage/preflightlocal": 3, "internal/storage/rendering": 0, "internal/substrate": 291, "internal/substrate/baremetal": 103, "internal/substrate/kubevirt": 139,
 		"internal/substrate/libvirt": 319, "internal/trust": 62, "internal/trust/enrollment": 57,
-		"internal/workspace/contextfs": 856, "internal/workspace/contexts": 131,
+		"internal/workspace/contextfs": 848, "internal/workspace/contexts": 131,
 		"internal/workspace/invokerfs": 48, "internal/workspace/selectionfs": 32,
 	}
 }

@@ -1,10 +1,9 @@
-//go:build linux && amd64
+//go:build linux
 
-package contextfs
+package nativefs
 
 import (
 	"errors"
-	"os"
 	"syscall"
 	"testing"
 )
@@ -15,18 +14,18 @@ import (
 // that reported it failed whole operations at random.
 func TestAResolutionRacedByARenameIsRetried(t *testing.T) {
 	refusals := 0
-	file, err := retryResolution(func() (*os.File, error) {
+	fd, err := retry(func() (int, error) {
 		if refusals < 3 {
 			refusals++
-			return nil, syscall.EAGAIN
+			return -1, syscall.EAGAIN
 		}
-		return nil, nil
+		return 7, nil
 	})
 	if refusals != 3 {
 		t.Fatalf("the injected race did not fire: %d refusals", refusals)
 	}
-	if file != nil || err != nil {
-		t.Fatalf("a retried resolution did not return its own answer: %v %v", file, err)
+	if fd != 7 || err != nil {
+		t.Fatalf("a retried resolution did not return its own answer: %v %v", fd, err)
 	}
 }
 
@@ -34,9 +33,9 @@ func TestAResolutionRacedByARenameIsRetried(t *testing.T) {
 // of spinning forever.
 func TestAResolutionThatNeverSettlesStillFails(t *testing.T) {
 	attempts := 0
-	_, err := retryResolution(func() (*os.File, error) {
+	_, err := retry(func() (int, error) {
 		attempts++
-		return nil, syscall.EAGAIN
+		return -1, syscall.EAGAIN
 	})
 	if !errors.Is(err, syscall.EAGAIN) {
 		t.Fatalf("an unsettled resolution hid its refusal: %v", err)
@@ -50,9 +49,9 @@ func TestAResolutionThatNeverSettlesStillFails(t *testing.T) {
 func TestARefusalThatIsNotARaceIsReportedAtOnce(t *testing.T) {
 	for _, refusal := range []error{syscall.ENOENT, syscall.ELOOP, syscall.EXDEV, syscall.EACCES} {
 		attempts := 0
-		_, err := retryResolution(func() (*os.File, error) {
+		_, err := retry(func() (int, error) {
 			attempts++
-			return nil, refusal
+			return -1, refusal
 		})
 		if !errors.Is(err, refusal) || attempts != 1 {
 			t.Fatalf("%v was retried or rewritten: %d attempts, %v", refusal, attempts, err)

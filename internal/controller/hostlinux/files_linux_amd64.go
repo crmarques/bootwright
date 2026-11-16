@@ -4,11 +4,11 @@ package hostlinux
 
 import (
 	"context"
-	"io"
 	"os"
 	"path"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/nativefs"
 	"golang.org/x/sys/unix"
 )
 
@@ -177,7 +177,7 @@ func (f *heldFilesystem) read(ctx context.Context, name string, maximum int64) (
 	if before.Size < 0 || before.Size > maximum && f.filesystemType(file, name) != unix.SYSFS_MAGIC {
 		return nil, errEvidence
 	}
-	data, err := io.ReadAll(io.LimitReader(contextReader{ctx: ctx, reader: file}, maximum+1))
+	data, err := nativefs.ReadBounded(ctx, file, int(maximum)+1)
 	var after unix.Stat_t
 	if err != nil || len(data) > int(maximum) || unix.Fstat(int(file.Fd()), &after) != nil || !stable(before, after) {
 		return nil, errEvidence
@@ -187,16 +187,4 @@ func (f *heldFilesystem) read(ctx context.Context, name string, maximum int64) (
 
 func stable(before, after unix.Stat_t) bool {
 	return before.Dev == after.Dev && before.Ino == after.Ino && before.Mode == after.Mode && before.Uid == after.Uid && before.Gid == after.Gid && before.Nlink == after.Nlink && before.Size == after.Size && before.Mtim == after.Mtim && before.Ctim == after.Ctim
-}
-
-type contextReader struct {
-	ctx    context.Context
-	reader io.Reader
-}
-
-func (r contextReader) Read(data []byte) (int, error) {
-	if err := r.ctx.Err(); err != nil {
-		return 0, err
-	}
-	return r.reader.Read(data)
 }
