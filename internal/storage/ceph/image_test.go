@@ -310,7 +310,7 @@ func TestImageRequestGoldenIsTheAdapterCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGoldenFile(t, filepath.Join("..", "..", "..", "ansible", "collections", "ansible_collections", "bootwright", "core", "tests", "fixtures", "ceph-image-call.golden"), data, false)
+	matchesGolden(t, filepath.Join("..", "..", "..", "..", "ansible", "collections", "ansible_collections", "bootwright", "core", "tests", "fixtures", "ceph-image-call"), data, false)
 }
 
 func TestAFailedResolutionKeepsItsAdapterOutputInTheAttempt(t *testing.T) {

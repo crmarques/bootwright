@@ -15,27 +15,49 @@ import (
 // ./scripts/go test ./internal/infrastructureservices/mirrorfill -run Golden -update
 var update = flag.Bool("update", false, "rewrite testdata/*.golden from the current output")
 
-// matchesGolden compares one compact JSON document, which ends in no
-// whitespace, with testdata/<name>.golden, which holds it indented for review.
-// Indenting is lossless only for compact input, so the body must equal its
-// json.Compact form before its indented golden can stand for the exact bytes.
-func matchesGolden(t *testing.T, name string, data []byte) {
+// matchesGolden compares one compact JSON document with testdata/<name>.golden,
+// which holds it indented for review. A terminated format ends in exactly one
+// LF, which is stripped before the comparison; any other format ends in no
+// whitespace at all. Indenting is lossless only for compact input, so the body
+// must equal its json.Compact form before its indented golden can stand for
+// the exact bytes.
+func matchesGolden(t *testing.T, name string, data []byte, terminated bool) {
 	t.Helper()
-	if len(bytes.TrimRight(data, " \t\r\n")) != len(data) {
+	body := data
+	if terminated {
+		trimmed, found := bytes.CutSuffix(data, []byte("\n"))
+		if !found || bytes.HasSuffix(trimmed, []byte("\n")) {
+			t.Fatalf("%s: a terminated format ends in exactly one LF: %q", name, data[max(0, len(data)-16):])
+		}
+		body = trimmed
+	} else if len(bytes.TrimRight(data, " \t\r\n")) != len(data) {
 		t.Fatalf("%s: an unterminated format ends in no whitespace: %q", name, data[max(0, len(data)-16):])
 	}
 	var compact, indented bytes.Buffer
-	if err := json.Compact(&compact, data); err != nil {
+	if err := json.Compact(&compact, body); err != nil {
 		t.Fatalf("%s: the bytes are not one JSON document: %v", name, err)
 	}
-	if !bytes.Equal(compact.Bytes(), data) {
-		t.Fatalf("%s: the bytes are not compact JSON, so an indented golden cannot pin them:\n%s", name, data)
+	if !bytes.Equal(compact.Bytes(), body) {
+		t.Fatalf("%s: the bytes are not compact JSON, so an indented golden cannot pin them:\n%s", name, body)
 	}
-	if err := json.Indent(&indented, data, "", "  "); err != nil {
+	if err := json.Indent(&indented, body, "", "  "); err != nil {
 		t.Fatalf("%s: indenting: %v", name, err)
 	}
 	indented.WriteByte('\n')
-	text := indented.String()
+	matchesTextGolden(t, name, indented.Bytes())
+}
+
+// matchesTextGolden compares bytes that are not one compact JSON document, such
+// as JSON Lines, YAML or indented JSON, with testdata/<name>.golden byte for
+// byte. git diff --check refuses a line ending in a space or tab and a blank
+// line at the end of a file, so a golden holding either could never be
+// committed.
+func matchesTextGolden(t *testing.T, name string, data []byte) {
+	t.Helper()
+	text := string(data)
+	if text == "\n" || strings.HasSuffix(text, "\n\n") {
+		t.Fatalf("%s: the bytes end in a blank line, which git diff --check refuses", name)
+	}
 	for number, line := range strings.Split(text, "\n") {
 		if strings.TrimRight(line, " \t") != line {
 			t.Fatalf("%s: line %d ends in a space or tab, which git diff --check refuses", name, number+1)
@@ -46,7 +68,7 @@ func matchesGolden(t *testing.T, name string, data []byte) {
 		if err := os.MkdirAll("testdata", 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, indented.Bytes(), 0o644); err != nil {
+		if err := os.WriteFile(path, data, 0o644); err != nil {
 			t.Fatal(err)
 		}
 		return

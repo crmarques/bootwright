@@ -108,6 +108,6 @@ func TestPhysicalHostVariantsRequestGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "request-physical-host-variants", canonical)
+	matchesGolden(t, "request-physical-host-variants", canonical, false)
 	passesTheTemplateGuard(t, canonical)
 }

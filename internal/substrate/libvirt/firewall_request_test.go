@@ -21,7 +21,7 @@ func TestHostFirewallRequestAndDigestMatchGoldens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "request-host-firewall-ready", data)
+	matchesGolden(t, "request-host-firewall-ready", data, false)
 	if _, err := DecodeHostRequest(data); err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestHostFirewallRequestAndDigestMatchGoldens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "host-content-digest", digest)
+	matchesGolden(t, "host-content-digest", digest, false)
 }
 
 func TestFirewallBarrierSharesTheControllerUnitReservationNamespace(t *testing.T) {

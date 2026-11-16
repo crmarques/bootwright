@@ -53,5 +53,5 @@ func TestTwoClusterPlanSerializesInstallationsOnlyGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "plan-two-clusters", canonical)
+	matchesGolden(t, "plan-two-clusters", canonical, false)
 }

@@ -92,7 +92,7 @@ func TestAnySizeProjectionGolden(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			matchesGolden(t, "media-request-"+name, canonical)
+			matchesGolden(t, "media-request-"+name, canonical, false)
 			if _, err := DecodeMediaRequest(canonical); err != nil {
 				t.Fatal(err)
 			}

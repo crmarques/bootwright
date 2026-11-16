@@ -61,7 +61,7 @@ func TestAPhysicalFirmwareRequestFreezesEveryFieldInItsGolden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("freezing: %v", diagnostics.Of(err))
 	}
-	matchesGolden(t, "request-physical-firmware", canonical)
+	matchesGolden(t, "request-physical-firmware", canonical, false)
 	golden, err := os.ReadFile(filepath.Join("testdata", "request-physical-firmware.golden"))
 	if err != nil {
 		t.Fatal(err)

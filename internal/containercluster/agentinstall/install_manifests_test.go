@@ -30,7 +30,7 @@ func TestInstallNetworkManifestGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "install-network-manifest", data)
+	matchesGolden(t, "install-network-manifest", data, false)
 	original := MediaRequest{Version: mediaRequestVersion, Manifests: manifests}
 	before, _ := original.Canonical()
 	original.Manifests = nil
@@ -146,7 +146,7 @@ func TestTheImageMirrorReplacesTheNodesTimePool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "install-chrony-manifests", data)
+	matchesGolden(t, "install-chrony-manifests", data, false)
 	matchesYAMLGolden(t, "install-chrony-manifests-yaml", media.Manifests)
 	for index, role := range []string{"master", "worker"} {
 		m := media.Manifests[index]

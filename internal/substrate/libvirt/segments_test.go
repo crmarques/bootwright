@@ -30,7 +30,7 @@ func TestPerInterfaceLibvirtSegmentsAndMTURequestGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	matchesGolden(t, "request-machine-attachments-mtu", canonical)
+	matchesGolden(t, "request-machine-attachments-mtu", canonical, false)
 	if _, err := DecodeMachineRequest(canonical); err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -45,7 +45,7 @@ func TestIPv6LibvirtNetworkMTURequestGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	matchesGolden(t, "request-host-ipv6-mtu", canonical)
+	matchesGolden(t, "request-host-ipv6-mtu", canonical, false)
 	if _, err := DecodeHostRequest(canonical); err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}

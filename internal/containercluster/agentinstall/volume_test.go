@@ -32,7 +32,7 @@ func TestLogicalRootVolumeRequestsGoldenAndRuntimeBinding(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		matchesGolden(t, name, data)
+		matchesGolden(t, name, data, false)
 	}
 	proof := substrate.RootVolumeProof{StorageID: "RAID", VolumeID: "OS", WWN: "0x5000000000000042", SizeBytes: 8192}
 	pins := &pinsByName{pins: map[string]machine.HardwareIdentity{"metal-01": {UUID: "uuid-1", RootVolume: proof}}}

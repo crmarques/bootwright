@@ -261,7 +261,7 @@ func TestMirrorFilesRequestAndEvidenceGolden(t *testing.T) {
 	if err != nil || request.Egress.HTTPSProxy == "" || len(request.Egress.NoProxy) == 0 {
 		t.Fatalf("request = %+v, %v", request, err)
 	}
-	matchesGolden(t, "mirror-files-request", plan.Definitions[0].Request)
+	matchesGolden(t, "mirror-files-request", plan.Definitions[0].Request, false)
 	digest, err := reconciliation.RequestDigest(plan.Definitions[0])
 	if err != nil {
 		t.Fatal(err)
@@ -273,7 +273,7 @@ func TestMirrorFilesRequestAndEvidenceGolden(t *testing.T) {
 	if _, err := decodeFilesEvidence(evidence, digest); err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "mirror-files-evidence", evidence)
+	matchesGolden(t, "mirror-files-evidence", evidence, false)
 }
 
 // Every run of a fill is bounded by a deadline that covers each file's stalled

@@ -49,7 +49,7 @@ func TestPlacementGoldenFreezesLabelsTaintsAndTheInfraRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	matchesGolden(t, "install-request-placement", data)
+	matchesGolden(t, "install-request-placement", data, false)
 	if _, err := DecodeInstallRequest(data); err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -110,7 +110,7 @@ func TestInstallEvidenceGoldenProvesThePlacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	matchesGolden(t, "install-evidence-completed-placed", canonical)
+	matchesGolden(t, "install-evidence-completed-placed", canonical, false)
 	if err := ValidateInstallPresence(canonical, install, testDigest); err != nil {
 		t.Fatalf("the placed evidence was refused: %v", diagnostics.Of(err))
 	}

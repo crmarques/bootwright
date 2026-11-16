@@ -32,7 +32,7 @@ func TestLogicalRootVolumeKickstartGoldenAndMissingProofRefusal(t *testing.T) {
 		t.Fatal("installer lost unique NAA and exact-capacity proof")
 	}
 	data, _ := json.Marshal(map[string]string{"kickstart": rendered})
-	matchesGolden(t, "kickstart-physical-volume", data)
+	matchesGolden(t, "kickstart-physical-volume", data, false)
 	request := Request{Identity: Identity{Object: "server"}, Target: Target{Physical: true, Hardware: &Hardware{RootVolumeRef: &substrate.VolumeRef{Firmware: true}}}}
 	if _, err := New(nil).WithIdentities(volumePins{}).pinValues(lifecycle.Execution{}, request); err == nil {
 		t.Fatal("unproved target accepted")
@@ -60,7 +60,7 @@ func TestLogicalVolumeSelectorsReachFrozenRequestGolden(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		matchesGolden(t, "request-physical-"+name, data)
+		matchesGolden(t, "request-physical-"+name, data, false)
 		decoded, err := DecodeRequest(data)
 		if err != nil || decoded.Target.Hardware.RootVolumeRef == nil || !strings.Contains(decoded.Kickstart, VolumeWWNToken) {
 			t.Fatalf("volume request lost its binding: %v", err)

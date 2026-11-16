@@ -139,7 +139,7 @@ func TestSSDRequestAndPresenceGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "request-machine-ssd", canonical)
+	matchesGolden(t, "request-machine-ssd", canonical, false)
 	if _, err := DecodeMachineRequest(canonical); err != nil {
 		t.Fatal(err)
 	}
@@ -150,11 +150,11 @@ func TestSSDRequestAndPresenceGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "evidence-machine-ssd", data)
+	matchesGolden(t, "evidence-machine-ssd", data, false)
 	if err := ValidateMachinePresence(data, request, evidenceDigest); err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "machine-content-digest", encode(t, map[string]string{"digest": MachineContentDigest()}))
+	matchesGolden(t, "machine-content-digest", encode(t, map[string]string{"digest": MachineContentDigest()}), false)
 	legacy := mediaRequest(t, mediaDisk("ordinary", false))
 	data, _ = legacy.Canonical()
 	for _, key := range []string{"bus", "media", "rotationRate"} {
@@ -170,7 +170,7 @@ func TestHDDRequestAndPresenceGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "request-machine-hdd", data)
+	matchesGolden(t, "request-machine-hdd", data, false)
 	if _, err := DecodeMachineRequest(data); err != nil {
 		t.Fatal(err)
 	}

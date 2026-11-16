@@ -66,7 +66,7 @@ func TestPushedInstallerProjectionGolden(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertPushedInterfaceWiring(t, agent)
-			matchesGolden(t, name, []byte(encoded(t, map[string]any{"agentConfig": agent, "installConfig": install})))
+			matchesGolden(t, name, []byte(encoded(t, map[string]any{"agentConfig": agent, "installConfig": install})), false)
 		})
 	}
 }

@@ -79,7 +79,7 @@ func TestUnresolvedMachineObservationsMatchTheirGoldensAndNameWhy(t *testing.T) 
 		if err != nil {
 			t.Fatal(err)
 		}
-		matchesGolden(t, "machine-evidence-"+name, canonical)
+		matchesGolden(t, "machine-evidence-"+name, canonical, false)
 	}
 	host := "Machine hypervisor at 192.0.2.5"
 	for name, test := range map[string]struct {

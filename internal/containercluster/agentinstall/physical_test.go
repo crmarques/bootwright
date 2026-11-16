@@ -53,7 +53,7 @@ func TestPhysicalInstallRequestGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "request-install-physical", canonical)
+	matchesGolden(t, "request-install-physical", canonical, false)
 	if _, err := DecodeInstallRequest(canonical); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestPhysicalAgentSerialRootReachesTheFrozenNativeInputGolden(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "request-install-physical-serial", frozen)
+	matchesGolden(t, "request-install-physical-serial", frozen, false)
 	decodedInstall, err := DecodeInstallRequest(frozen)
 	if err != nil || !reflect.DeepEqual(decodedInstall.Nodes[0].Hardware.RootDisk, install.Nodes[0].Hardware.RootDisk) {
 		t.Fatalf("frozen root disk proof changed: %v", err)

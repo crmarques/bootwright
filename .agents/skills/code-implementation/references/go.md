@@ -76,7 +76,9 @@ in its file name, as `golden_linux_amd64_test.go` does. Put `Golden` in the
 test's name and regenerate one package at a time with
 `./scripts/go test ./<package> -run Golden -update`, then review the golden
 diff as code. A format's golden lands before or with its first change;
-`internal/reconciliation/operationstore/golden_test.go` is the model.
+`internal/reconciliation/operationstore/golden_test.go` is the model, and a
+`test/architecture` check refuses a package's helper that differs from it in
+more than its parameter names, except the exceptions that check lists.
 
 Use pinned repository entrypoints, always `./scripts/go` and never a bare `go`;
 never install an unreviewed latest tool to make a gate available. Iterate with

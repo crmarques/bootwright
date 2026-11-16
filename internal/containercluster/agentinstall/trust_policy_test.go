@@ -29,7 +29,7 @@ func TestTrustBundlePolicyProjectionGolden(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			matchesGolden(t, "trust-policy-"+policy, data)
+			matchesGolden(t, "trust-policy-"+policy, data, false)
 			if media.Version != "cluster-media-agent-v1" {
 				t.Fatal(media.Version)
 			}

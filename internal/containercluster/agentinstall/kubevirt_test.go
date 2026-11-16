@@ -128,8 +128,8 @@ func TestKubeVirtRequestsMatchTheirGoldens(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			matchesGolden(t, "media-request-"+name, mediaBytes)
-			matchesGolden(t, "install-request-"+name, installBytes)
+			matchesGolden(t, "media-request-"+name, mediaBytes, false)
+			matchesGolden(t, "install-request-"+name, installBytes, false)
 			if _, err := DecodeMediaRequest(mediaBytes); err != nil {
 				t.Fatal(diagnostics.Of(err))
 			}

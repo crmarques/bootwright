@@ -33,7 +33,7 @@ func TestInstallationProxyGolden(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			matchesGolden(t, "media-request-proxy-"+name, data)
+			matchesGolden(t, "media-request-proxy-"+name, data, false)
 			if _, err := DecodeMediaRequest(data); err != nil {
 				t.Fatal(err)
 			}
@@ -77,7 +77,7 @@ func TestBuildEgressUsesControllerChoice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "media-request-build-proxy", data)
+	matchesGolden(t, "media-request-build-proxy", data, false)
 }
 
 func TestAuthoredMachineNetworksReachInstallConfigAndNoProxy(t *testing.T) {

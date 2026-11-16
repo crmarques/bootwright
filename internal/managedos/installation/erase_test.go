@@ -36,13 +36,13 @@ func TestPhysicalEraseFrozenRequestAndReceiptGoldens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "erase-request-physical", canonical)
+	matchesGolden(t, "erase-request-physical", canonical, false)
 	if _, err := DecodeEraseRequest(canonical); err != nil {
 		t.Fatal(err)
 	}
 	receipt := eraseFixtureReceipt(request)
 	proof, _ := json.Marshal(EraseEvidence{Version: EraseImplementation, Request: receipt.Request, Prepared: true, Removed: true, Receipt: &receipt})
-	matchesGolden(t, "evidence-physical-erase", proof)
+	matchesGolden(t, "evidence-physical-erase", proof, false)
 	if err := eraseEvidence(proof, request, receipt.Request, true); err != nil {
 		t.Fatal(err)
 	}

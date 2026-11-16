@@ -46,7 +46,7 @@ func TestBondVLANAndAddresslessProjectionGolden(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			matchesGolden(t, "node-network-"+mode, data)
+			matchesGolden(t, "node-network-"+mode, data, false)
 		})
 	}
 }

@@ -251,7 +251,7 @@ func TestTheImageFillDoesNotPrecedeTheControllerStage(t *testing.T) {
 
 func TestMirrorImagesRequestAndEvidenceGolden(t *testing.T) {
 	plan := plannedImages(t, registryCatalog(), pinnedImages)
-	matchesGolden(t, "mirror-images-request", plan.Definitions[0].Request)
+	matchesGolden(t, "mirror-images-request", plan.Definitions[0].Request, false)
 	digest, err := reconciliation.RequestDigest(plan.Definitions[0])
 	if err != nil {
 		t.Fatal(err)
@@ -264,5 +264,5 @@ func TestMirrorImagesRequestAndEvidenceGolden(t *testing.T) {
 	if _, err := decodeImagesEvidence(evidence, digest); err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "mirror-images-evidence", evidence)
+	matchesGolden(t, "mirror-images-evidence", evidence, false)
 }

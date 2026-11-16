@@ -39,7 +39,7 @@ func TestDiskEncryptionGolden(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			matchesGolden(t, "media-request-encryption-"+name, data)
+			matchesGolden(t, "media-request-encryption-"+name, data, false)
 			if _, err := DecodeMediaRequest(data); err != nil {
 				t.Fatal(err)
 			}

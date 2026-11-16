@@ -24,22 +24,60 @@ var update = flag.Bool("update", false, "rewrite testdata/*.golden from the curr
 // plugin accepts only as 64 lowercase hexadecimal characters.
 const evidenceDigest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
-// matchesGolden compares canonical JSON bytes with testdata/<name>.golden,
-// which holds them indented for review. Indenting is lossless, so comparing
-// the indented form byte for byte compares the canonical bytes exactly.
-func matchesGolden(t *testing.T, name string, canonical []byte) {
+// matchesGolden compares one compact JSON document with testdata/<name>.golden,
+// which holds it indented for review. A terminated format ends in exactly one
+// LF, which is stripped before the comparison; any other format ends in no
+// whitespace at all. Indenting is lossless only for compact input, so the body
+// must equal its json.Compact form before its indented golden can stand for
+// the exact bytes.
+func matchesGolden(t *testing.T, name string, data []byte, terminated bool) {
 	t.Helper()
-	var indented bytes.Buffer
-	if err := json.Indent(&indented, canonical, "", "  "); err != nil {
-		t.Fatalf("%s: the canonical bytes are not JSON: %v", name, err)
+	body := data
+	if terminated {
+		trimmed, found := bytes.CutSuffix(data, []byte("\n"))
+		if !found || bytes.HasSuffix(trimmed, []byte("\n")) {
+			t.Fatalf("%s: a terminated format ends in exactly one LF: %q", name, data[max(0, len(data)-16):])
+		}
+		body = trimmed
+	} else if len(bytes.TrimRight(data, " \t\r\n")) != len(data) {
+		t.Fatalf("%s: an unterminated format ends in no whitespace: %q", name, data[max(0, len(data)-16):])
+	}
+	var compact, indented bytes.Buffer
+	if err := json.Compact(&compact, body); err != nil {
+		t.Fatalf("%s: the bytes are not one JSON document: %v", name, err)
+	}
+	if !bytes.Equal(compact.Bytes(), body) {
+		t.Fatalf("%s: the bytes are not compact JSON, so an indented golden cannot pin them:\n%s", name, body)
+	}
+	if err := json.Indent(&indented, body, "", "  "); err != nil {
+		t.Fatalf("%s: indenting: %v", name, err)
 	}
 	indented.WriteByte('\n')
+	matchesTextGolden(t, name, indented.Bytes())
+}
+
+// matchesTextGolden compares bytes that are not one compact JSON document, such
+// as JSON Lines, YAML or indented JSON, with testdata/<name>.golden byte for
+// byte. git diff --check refuses a line ending in a space or tab and a blank
+// line at the end of a file, so a golden holding either could never be
+// committed.
+func matchesTextGolden(t *testing.T, name string, data []byte) {
+	t.Helper()
+	text := string(data)
+	if text == "\n" || strings.HasSuffix(text, "\n\n") {
+		t.Fatalf("%s: the bytes end in a blank line, which git diff --check refuses", name)
+	}
+	for number, line := range strings.Split(text, "\n") {
+		if strings.TrimRight(line, " \t") != line {
+			t.Fatalf("%s: line %d ends in a space or tab, which git diff --check refuses", name, number+1)
+		}
+	}
 	path := filepath.Join("testdata", name+".golden")
 	if *update {
 		if err := os.MkdirAll("testdata", 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, indented.Bytes(), 0o644); err != nil {
+		if err := os.WriteFile(path, data, 0o644); err != nil {
 			t.Fatal(err)
 		}
 		return
@@ -48,14 +86,14 @@ func matchesGolden(t *testing.T, name string, canonical []byte) {
 	if err != nil {
 		t.Fatalf("%v; run with -update to write it", err)
 	}
-	if !bytes.Equal(want, indented.Bytes()) {
+	if string(want) != text {
 		t.Errorf("%s differs (-golden +got); rerun with -update if the change is intended:\n%s%s",
-			path, lineDiff(string(want), indented.String()), firstDifference(string(want), indented.String()))
+			path, lineDiff(string(want), text), firstDifference(string(want), text))
 	}
 }
 
 // firstDifference quotes both texts around the first byte they differ at,
-// which locates a change inside one long line.
+// which locates a change inside one long line such as an embedded document.
 func firstDifference(want, got string) string {
 	at := 0
 	for at < len(want) && at < len(got) && want[at] == got[at] {
@@ -176,7 +214,7 @@ func TestMachineEvidenceMatchesItsGoldens(t *testing.T) {
 			if err != nil {
 				t.Fatalf("encoding: %v", diagnostics.Of(err))
 			}
-			matchesGolden(t, "machine-evidence-"+name, canonical)
+			matchesGolden(t, "machine-evidence-"+name, canonical, false)
 			for validator, validate := range validators {
 				if err := validate(canonical); (err == nil) != (validator == test.accepts) {
 					t.Errorf("the %s validator read the %s evidence as %v", validator, name, diagnostics.Of(err))
@@ -297,7 +335,7 @@ func TestHostEvidenceMatchesItsGoldens(t *testing.T) {
 			if err != nil {
 				t.Fatalf("encoding: %v", diagnostics.Of(err))
 			}
-			matchesGolden(t, "host-evidence-"+name, canonical)
+			matchesGolden(t, "host-evidence-"+name, canonical, false)
 			for validator, validate := range validators {
 				if err := validate(canonical); (err == nil) != (validator == test.accepts) {
 					t.Errorf("the %s validator read the %s evidence as %v", validator, name, diagnostics.Of(err))

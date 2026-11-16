@@ -62,7 +62,7 @@ func TestThreeInstallationsHaveOneSharedPublication(t *testing.T) {
 
 func TestTreeRequestAndEvidenceGoldens(t *testing.T) {
 	execution, request := treeFixture(t)
-	matchesGolden(t, "tree-request", execution.Block.Request)
+	matchesGolden(t, "tree-request", execution.Block.Request, false)
 	if _, err := DecodeTreeRequest(execution.Block.Request); err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestTreeRequestAndEvidenceGoldens(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		matchesGolden(t, "tree-evidence-"+name, data)
+		matchesGolden(t, "tree-evidence-"+name, data, false)
 		if _, err := decodeTreeEvidence(data, execution.Block.RequestDigest); err != nil {
 			t.Fatal(err)
 		}

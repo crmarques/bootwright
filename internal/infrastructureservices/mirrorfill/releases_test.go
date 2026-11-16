@@ -314,7 +314,7 @@ func TestTheReleaseFillNamesEachRefusalAsItsClusters(t *testing.T) {
 
 func TestMirrorReleaseRequestAndEvidenceGolden(t *testing.T) {
 	plan := plannedReleases(t, registryCatalog(), clusterReleases(releaseDigest))
-	matchesGolden(t, "mirror-release-request", plan.Definitions[1].Request)
+	matchesGolden(t, "mirror-release-request", plan.Definitions[1].Request, false)
 	digest, err := reconciliation.RequestDigest(plan.Definitions[1])
 	if err != nil {
 		t.Fatal(err)
@@ -327,7 +327,7 @@ func TestMirrorReleaseRequestAndEvidenceGolden(t *testing.T) {
 	if _, err := decodeReleaseEvidence(evidence, digest); err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "mirror-release-evidence", evidence)
+	matchesGolden(t, "mirror-release-evidence", evidence, false)
 }
 
 // A cluster under the managed mirror with no pull secret, or whose release

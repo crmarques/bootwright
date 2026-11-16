@@ -254,12 +254,12 @@ func (s *scripted) Run(_ context.Context, request lifecycle.RunRequest) (lifecyc
 
 func TestMachineHardwareRequestAndEvidenceGolden(t *testing.T) {
 	block := servicesBlock(t)
-	matchesGolden(t, "machine-hardware-request", block.Request)
+	matchesGolden(t, "machine-hardware-request", block.Request, false)
 	evidence := evidenceOf(t, block.RequestDigest, "52:54:00:9a:1b:01")
 	if _, err := presence(evidence, block.RequestDigest); err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "machine-hardware-evidence", evidence)
+	matchesGolden(t, "machine-hardware-evidence", evidence, false)
 }
 
 func tiebreakerCatalog(fleet bool) api.Catalog {

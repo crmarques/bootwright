@@ -44,50 +44,36 @@ import (
 // ./scripts/go test ./internal/cli -run Golden -update
 var update = flag.Bool("update", false, "rewrite testdata/*.golden from the current output")
 
-// matchesGolden compares one JSON document with testdata/<name>.golden, which
-// holds it indented for review. A terminated document is a stream's whole
-// output, which the output contract ends with exactly one LF and no other. The
-// document must then be compact: indenting compact JSON is lossless, so
-// comparing the indented form byte for byte compares the bytes written.
+// matchesGolden compares one compact JSON document with testdata/<name>.golden,
+// which holds it indented for review. A terminated format ends in exactly one
+// LF, which is stripped before the comparison; any other format ends in no
+// whitespace at all. Indenting is lossless only for compact input, so the body
+// must equal its json.Compact form before its indented golden can stand for
+// the exact bytes.
 func matchesGolden(t *testing.T, name string, data []byte, terminated bool) {
 	t.Helper()
+	body := data
 	if terminated {
-		if bytes.Count(data, []byte("\n")) != 1 || !bytes.HasSuffix(data, []byte("\n")) {
-			t.Fatalf("%s: a JSON document must be followed by exactly one LF and hold no other: %q", name, data)
+		trimmed, found := bytes.CutSuffix(data, []byte("\n"))
+		if !found || bytes.HasSuffix(trimmed, []byte("\n")) {
+			t.Fatalf("%s: a terminated format ends in exactly one LF: %q", name, data[max(0, len(data)-16):])
 		}
-		data = data[:len(data)-1]
+		body = trimmed
+	} else if len(bytes.TrimRight(data, " \t\r\n")) != len(data) {
+		t.Fatalf("%s: an unterminated format ends in no whitespace: %q", name, data[max(0, len(data)-16):])
 	}
-	var compact bytes.Buffer
-	if err := json.Compact(&compact, data); err != nil {
-		t.Fatalf("%s: the output is not one JSON document: %v", name, err)
+	var compact, indented bytes.Buffer
+	if err := json.Compact(&compact, body); err != nil {
+		t.Fatalf("%s: the bytes are not one JSON document: %v", name, err)
 	}
-	if !bytes.Equal(compact.Bytes(), data) {
-		t.Fatalf("%s: the JSON is not compact, so no indented golden can prove its bytes; %s",
-			name, firstDifference(compact.String(), string(data)))
+	if !bytes.Equal(compact.Bytes(), body) {
+		t.Fatalf("%s: the bytes are not compact JSON, so an indented golden cannot pin them:\n%s", name, body)
 	}
-	var indented bytes.Buffer
-	if err := json.Indent(&indented, data, "", "  "); err != nil {
-		t.Fatalf("%s: %v", name, err)
+	if err := json.Indent(&indented, body, "", "  "); err != nil {
+		t.Fatalf("%s: indenting: %v", name, err)
 	}
 	indented.WriteByte('\n')
-	path := filepath.Join("testdata", name+".golden")
-	if *update {
-		if err := os.MkdirAll("testdata", 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, indented.Bytes(), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		return
-	}
-	want, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("%v; run with -update to write it", err)
-	}
-	if !bytes.Equal(want, indented.Bytes()) {
-		t.Errorf("%s differs (-golden +got); rerun with -update if the change is intended:\n%s%s",
-			path, lineDiff(string(want), indented.String()), firstDifference(string(want), indented.String()))
-	}
+	matchesTextGolden(t, name, indented.Bytes())
 }
 
 // matchesTextGolden compares text output with testdata/<name>.golden, which

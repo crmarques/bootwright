@@ -23,22 +23,60 @@ import (
 // ./scripts/go test ./internal/managedos/installation -run Golden -update
 var update = flag.Bool("update", false, "rewrite testdata/*.golden from the current output")
 
-// matchesGolden compares canonical JSON bytes with testdata/<name>.golden,
-// which holds them indented for review. Indenting is lossless, so comparing
-// the indented form byte for byte compares the canonical bytes exactly.
-func matchesGolden(t *testing.T, name string, canonical []byte) {
+// matchesGolden compares one compact JSON document with testdata/<name>.golden,
+// which holds it indented for review. A terminated format ends in exactly one
+// LF, which is stripped before the comparison; any other format ends in no
+// whitespace at all. Indenting is lossless only for compact input, so the body
+// must equal its json.Compact form before its indented golden can stand for
+// the exact bytes.
+func matchesGolden(t *testing.T, name string, data []byte, terminated bool) {
 	t.Helper()
-	var indented bytes.Buffer
-	if err := json.Indent(&indented, canonical, "", "  "); err != nil {
-		t.Fatalf("%s: the canonical bytes are not JSON: %v", name, err)
+	body := data
+	if terminated {
+		trimmed, found := bytes.CutSuffix(data, []byte("\n"))
+		if !found || bytes.HasSuffix(trimmed, []byte("\n")) {
+			t.Fatalf("%s: a terminated format ends in exactly one LF: %q", name, data[max(0, len(data)-16):])
+		}
+		body = trimmed
+	} else if len(bytes.TrimRight(data, " \t\r\n")) != len(data) {
+		t.Fatalf("%s: an unterminated format ends in no whitespace: %q", name, data[max(0, len(data)-16):])
+	}
+	var compact, indented bytes.Buffer
+	if err := json.Compact(&compact, body); err != nil {
+		t.Fatalf("%s: the bytes are not one JSON document: %v", name, err)
+	}
+	if !bytes.Equal(compact.Bytes(), body) {
+		t.Fatalf("%s: the bytes are not compact JSON, so an indented golden cannot pin them:\n%s", name, body)
+	}
+	if err := json.Indent(&indented, body, "", "  "); err != nil {
+		t.Fatalf("%s: indenting: %v", name, err)
 	}
 	indented.WriteByte('\n')
+	matchesTextGolden(t, name, indented.Bytes())
+}
+
+// matchesTextGolden compares bytes that are not one compact JSON document, such
+// as JSON Lines, YAML or indented JSON, with testdata/<name>.golden byte for
+// byte. git diff --check refuses a line ending in a space or tab and a blank
+// line at the end of a file, so a golden holding either could never be
+// committed.
+func matchesTextGolden(t *testing.T, name string, data []byte) {
+	t.Helper()
+	text := string(data)
+	if text == "\n" || strings.HasSuffix(text, "\n\n") {
+		t.Fatalf("%s: the bytes end in a blank line, which git diff --check refuses", name)
+	}
+	for number, line := range strings.Split(text, "\n") {
+		if strings.TrimRight(line, " \t") != line {
+			t.Fatalf("%s: line %d ends in a space or tab, which git diff --check refuses", name, number+1)
+		}
+	}
 	path := filepath.Join("testdata", name+".golden")
 	if *update {
 		if err := os.MkdirAll("testdata", 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, indented.Bytes(), 0o644); err != nil {
+		if err := os.WriteFile(path, data, 0o644); err != nil {
 			t.Fatal(err)
 		}
 		return
@@ -47,19 +85,9 @@ func matchesGolden(t *testing.T, name string, canonical []byte) {
 	if err != nil {
 		t.Fatalf("%v; run with -update to write it", err)
 	}
-	if !bytes.Equal(want, indented.Bytes()) {
+	if string(want) != text {
 		t.Errorf("%s differs (-golden +got); rerun with -update if the change is intended:\n%s%s",
-			path, lineDiff(string(want), indented.String()), firstDifference(string(want), indented.String()))
-	}
-}
-
-// passesTheTemplateGuard plans a frozen request through the guard every plan
-// applies, which refuses a template delimiter in any string Bootwright derives.
-func passesTheTemplateGuard(t *testing.T, canonical []byte) {
-	t.Helper()
-	definition := reconciliation.BlockDefinition{Kind: "Machine", Object: "rhel-01", Request: canonical}
-	if err := lifecycle.RefuseTemplateDelimiters(testContext, []reconciliation.BlockDefinition{definition}); err != nil {
-		t.Errorf("the plan guard refuses the request: %v", diagnostics.Of(err))
+			path, lineDiff(string(want), text), firstDifference(string(want), text))
 	}
 }
 
@@ -107,6 +135,16 @@ func lineDiff(want, got string) string {
 	return out.String()
 }
 
+// passesTheTemplateGuard plans a frozen request through the guard every plan
+// applies, which refuses a template delimiter in any string Bootwright derives.
+func passesTheTemplateGuard(t *testing.T, canonical []byte) {
+	t.Helper()
+	definition := reconciliation.BlockDefinition{Kind: "Machine", Object: "rhel-01", Request: canonical}
+	if err := lifecycle.RefuseTemplateDelimiters(testContext, []reconciliation.BlockDefinition{definition}); err != nil {
+		t.Errorf("the plan guard refuses the request: %v", diagnostics.Of(err))
+	}
+}
+
 // A physical installation that imports the server's certificate through a
 // controller anchored by its own bundle publishes its installer image only
 // beneath its private subtree, so it freezes no public image. It is pinned
@@ -152,7 +190,7 @@ func TestAPhysicalLiteralRequestReadsBackFromItsGolden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("freezing: %v", diagnostics.Of(err))
 	}
-	matchesGolden(t, "request-physical-literal", canonical)
+	matchesGolden(t, "request-physical-literal", canonical, false)
 	golden, err := os.ReadFile(filepath.Join("testdata", "request-physical-literal.golden"))
 	if err != nil {
 		t.Fatal(err)
@@ -217,7 +255,7 @@ func TestTheFrozenRequestsMatchTheirGoldens(t *testing.T) {
 			if err != nil {
 				t.Fatalf("freezing: %v", diagnostics.Of(err))
 			}
-			matchesGolden(t, "request-"+name, canonical)
+			matchesGolden(t, "request-"+name, canonical, false)
 			passesTheTemplateGuard(t, canonical)
 			if _, err := DecodeRequest(canonical); err != nil {
 				t.Fatalf("decoding: %v", diagnostics.Of(err))
@@ -320,7 +358,7 @@ func TestEvidenceMatchesItsGoldens(t *testing.T) {
 			if err != nil {
 				t.Fatalf("encoding: %v", diagnostics.Of(err))
 			}
-			matchesGolden(t, "evidence-"+name, canonical)
+			matchesGolden(t, "evidence-"+name, canonical, false)
 			if err := test.validate(canonical); err != nil {
 				t.Fatalf("the %s evidence was refused: %v", name, diagnostics.Of(err))
 			}

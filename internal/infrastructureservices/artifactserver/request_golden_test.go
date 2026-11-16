@@ -80,7 +80,7 @@ func TestArtifactServerRequestGoldensKeepTheirBytes(t *testing.T) {
 			api.NewObject(api.Secret, "mirror-pull", api.Value{}, api.MapValue(text("type", "usernamePassword"), text("source", "contextStore")))},
 	} {
 		t.Run(name, func(t *testing.T) {
-			matchesGolden(t, "request-"+name, requestGoldenOf(t, objects...))
+			matchesGolden(t, "request-"+name, requestGoldenOf(t, objects...), false)
 		})
 	}
 }

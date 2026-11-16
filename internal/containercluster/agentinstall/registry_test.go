@@ -35,7 +35,7 @@ func TestRegistryMirrorGolden(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			matchesGolden(t, "media-request-mirror-"+kind, canonical)
+			matchesGolden(t, "media-request-mirror-"+kind, canonical, false)
 			if _, err := DecodeMediaRequest(canonical); err != nil {
 				t.Fatal(err)
 			}
@@ -80,7 +80,7 @@ func TestTheEnvironmentsImageMirrorServesTheReleaseRepositories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "media-request-environment-mirror", canonical)
+	matchesGolden(t, "media-request-environment-mirror", canonical, false)
 	if media.RegistryMirror == nil || media.RegistryMirror.Host != "mirror.example.test" || !slices.Contains(media.SecretReferences(), "mirror-credentials") {
 		t.Fatalf("mirror = %+v, secrets %v", media.RegistryMirror, media.SecretReferences())
 	}

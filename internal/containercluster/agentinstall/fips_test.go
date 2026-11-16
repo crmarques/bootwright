@@ -32,7 +32,7 @@ func TestFIPSProjectionAndBoundEd25519RefuseBeforeNativeExecution(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "media-request-fips", canonical)
+	matchesGolden(t, "media-request-fips", canonical, false)
 	execution, _ := mediaExecution(t, testDigest)
 	execution.Block.Request = canonical
 	execution.LocateTool = func(_ context.Context, tool controllerscope.InstalledTool) (string, error) {

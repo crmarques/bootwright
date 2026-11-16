@@ -75,7 +75,7 @@ func TestATaggedManagedNetworkFreezesALegAndItsTrunk(t *testing.T) {
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	matchesGolden(t, "request-host-tagged", canonical)
+	matchesGolden(t, "request-host-tagged", canonical, false)
 	if decoded, err := DecodeHostRequest(canonical); err != nil || !slices.Equal(decoded.Legs, request.Legs) {
 		t.Fatalf("decoded = %+v (%v)", decoded, diagnostics.Of(err))
 	}
@@ -263,7 +263,7 @@ func TestTaggedHostEvidenceMatchesItsGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	matchesGolden(t, "host-evidence-tagged-completed", canonical)
+	matchesGolden(t, "host-evidence-tagged-completed", canonical, false)
 	if err := ValidateHostPresence(canonical, request, evidenceDigest); err != nil {
 		t.Fatalf("presence refused its golden: %v", diagnostics.Of(err))
 	}

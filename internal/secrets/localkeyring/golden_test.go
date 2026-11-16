@@ -44,12 +44,31 @@ func matchesGolden(t *testing.T, name string, data []byte, terminated bool) {
 		t.Fatalf("%s: indenting: %v", name, err)
 	}
 	indented.WriteByte('\n')
+	matchesTextGolden(t, name, indented.Bytes())
+}
+
+// matchesTextGolden compares bytes that are not one compact JSON document, such
+// as JSON Lines, YAML or indented JSON, with testdata/<name>.golden byte for
+// byte. git diff --check refuses a line ending in a space or tab and a blank
+// line at the end of a file, so a golden holding either could never be
+// committed.
+func matchesTextGolden(t *testing.T, name string, data []byte) {
+	t.Helper()
+	text := string(data)
+	if text == "\n" || strings.HasSuffix(text, "\n\n") {
+		t.Fatalf("%s: the bytes end in a blank line, which git diff --check refuses", name)
+	}
+	for number, line := range strings.Split(text, "\n") {
+		if strings.TrimRight(line, " \t") != line {
+			t.Fatalf("%s: line %d ends in a space or tab, which git diff --check refuses", name, number+1)
+		}
+	}
 	path := filepath.Join("testdata", name+".golden")
 	if *update {
 		if err := os.MkdirAll("testdata", 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(path, indented.Bytes(), 0o644); err != nil {
+		if err := os.WriteFile(path, data, 0o644); err != nil {
 			t.Fatal(err)
 		}
 		return
@@ -58,9 +77,9 @@ func matchesGolden(t *testing.T, name string, data []byte, terminated bool) {
 	if err != nil {
 		t.Fatalf("%v; run with -update to write it", err)
 	}
-	if got := indented.String(); string(want) != got {
+	if string(want) != text {
 		t.Errorf("%s differs (-golden +got); rerun with -update if the change is intended:\n%s%s",
-			path, lineDiff(string(want), got), firstDifference(string(want), got))
+			path, lineDiff(string(want), text), firstDifference(string(want), text))
 	}
 }
 
