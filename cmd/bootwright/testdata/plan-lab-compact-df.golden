@@ -23,6 +23,8 @@
     "stage": "controller",
     "dependencies": [],
     "impacts": [
+      "install-host-package binutils",
+      "install-host-package e2fsprogs",
       "install-host-package iputils",
       "install-host-package libvirt-client",
       "install-host-package libvirt-daemon",
@@ -34,6 +36,7 @@
       "install-host-package podman",
       "install-host-package qemu-img",
       "install-host-package qemu-kvm-core",
+      "install-host-package squashfs-tools",
       "install-host-package swtpm",
       "install-host-package swtpm-tools",
       "install-host-package xorriso",

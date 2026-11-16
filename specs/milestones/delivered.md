@@ -16054,3 +16054,18 @@ omits pre-run recovery/cleanup instructions and groups original and strict
 fixture teardown after verification, before final context and host cleanup.
 The delivering commit records focused
 documentation and shell syntax checks; no native replay is claimed.
+
+## X502 — Discovery SSH gate repairs
+
+### B1472
+
+A pre-existing defect that blocked the gates of [D274](backlog.md#d274)'s
+slices, taken at the owner's other session's request: three tests failed on
+main after the discovery SSH commits. The SSH runtime check reads the
+`Machine:` line of `readelf -h` case-insensitively, so its literal names no
+slice ID; the discovery boot's locked root shadow entry is classified as a
+transient literal and the removed certificate subject's classification is
+dropped; the `lab-compact-df` plan golden lists the installer-media host
+packages that [controller prerequisites](../controller.md) now install. No
+behavior, request or contract digest changes. The delivering commit records
+the three tests failing before and passing after.

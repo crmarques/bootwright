@@ -78,7 +78,8 @@ def read_file(image, path, native, maximum=MAX_COMPONENT, optional=False):
 def libraries(path, native):
     text = native([tool("readelf"), "-h", "-l", "-d", str(path)], limit=65536).decode("ascii")
     if (re.search(r"Class:\s+ELF64", text) is None or "little endian" not in text
-            or "Advanced Micro Devices X86-64" not in text or "(RPATH)" in text or "(RUNPATH)" in text):
+            or re.search(r"Machine:\s+Advanced Micro Devices x86-64$", text, re.I | re.M) is None
+            or "(RPATH)" in text or "(RUNPATH)" in text):
         raise ValueError("discovery SSH source ELF")
     interpreters = re.findall(r"\[Requesting program interpreter: ([^\]]+)\]", text)
     needed = re.findall(r"\(NEEDED\).*Shared library: \[([^\]]+)\]", text)
