@@ -156,16 +156,37 @@ func (t *transaction) Publish(ctx context.Context, name, environment string, sou
 		if err == nil {
 			err = t.store.syncDirectory(ctx, fresh)
 		}
-		fresh.file.Close()
 		if err != nil {
+			t.store.discardRevision(ctx, revisions, fresh, revision)
+			fresh.file.Close()
 			return "", safeError(err)
 		}
 		if err := t.store.syncDirectory(ctx, revisions); err != nil {
+			t.store.discardRevision(ctx, revisions, fresh, revision)
+			fresh.file.Close()
 			return "", err
 		}
+		fresh.file.Close()
 		return revision, nil
 	}
 	return "", state("input revision reservation exhausted its collision limit")
+}
+
+// discardRevision removes a revision this publication created and then failed
+// to complete. Nothing selects it yet, and only pristine contexts collect
+// unselected revisions, so it would otherwise hold its bytes and a revision
+// slot for good. It ignores cancellation, so a cancelled publication still
+// cleans up, and its own failure is ignored: the refusal that caused it is the
+// one to report.
+func (s *Store) discardRevision(ctx context.Context, revisions, fresh *directory, revision string) {
+	ctx = context.WithoutCancel(ctx)
+	remaining := desiredstate.MaxFiles + desiredstate.MaxMarkers + 1
+	if s.walkContextTree(ctx, fresh, "desired-state/revisions/"+revision, removeContextTree, &remaining) != nil {
+		return
+	}
+	if unlinkVerified(revisions, revision, fresh.identity, true) == nil {
+		_ = s.syncDirectory(ctx, revisions)
+	}
 }
 
 // Unchanged reports whether sources, with their Environment directory, freeze

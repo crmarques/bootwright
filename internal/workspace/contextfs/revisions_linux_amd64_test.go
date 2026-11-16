@@ -172,6 +172,58 @@ func TestInputCleanupPreservesProtectedRevisions(t *testing.T) {
 	}
 }
 
+func TestFailedPublicationRemovesItsRevision(t *testing.T) {
+	for _, target := range []struct {
+		point      string
+		occurrence int
+	}{
+		{"create-file", 1},
+		{"create-file", 2},
+		{"sync-file", 2},
+		{"sync-directory", 4},
+		{"sync-directory", 5},
+	} {
+		t.Run(fmt.Sprintf("%s-%d", target.point, target.occurrence), func(t *testing.T) {
+			store, sources := fixture(t)
+			record := publish(t, store, "example", sources)
+			writePrivate(t, filepath.Join(store.options.Root, "contexts", record.Name, "state", "mutation.json"), []byte("{\"version\":1,\"operation\":\"applied\",\"ownership\":\"retained\"}\n"))
+			before, err := os.ReadDir(revisionDirectory(store, record))
+			if err != nil {
+				t.Fatal(err)
+			}
+			created, seen, failed := false, 0, false
+			store.fail = func(point string) error {
+				if point == "mkdir" {
+					created = true
+				}
+				if !created || failed || point != target.point {
+					return nil
+				}
+				seen++
+				if seen == target.occurrence {
+					failed = true
+					return errors.New("synthetic publication failure")
+				}
+				return nil
+			}
+			sources.Files[0] = desiredstate.NewSourceFile(sources.Files[0].Path(), []byte("version: replacement\n"))
+			expectState(t, replaceInput(store, record, sources))
+			store.fail = nil
+			if !failed {
+				t.Fatal("publication failure was not injected")
+			}
+			after, err := os.ReadDir(revisionDirectory(store, record))
+			if err != nil || len(after) != len(before) || after[0].Name() != record.Revision {
+				t.Fatalf("failed publication kept a revision: before=%v after=%v err=%v", before, after, err)
+			}
+			if err := replaceInput(store, record, sources); err != nil {
+				t.Fatal(err)
+			}
+			requireSelectedInput(t, store, record, sources.Files[0].Bytes(), 2)
+		})
+	}
+}
+
 func TestInputCleanupRefusesReplacedRevision(t *testing.T) {
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
