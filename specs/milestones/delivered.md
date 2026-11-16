@@ -16193,3 +16193,21 @@ setup's frozen egress in the package dependency rule; the registry proxy test
 skips where its execution-closure dependency `urllib3` is absent, as in the
 ansible-test units environment, and still runs in the plain lane; two test
 lines satisfy the collection sanity rules. No behavior changes.
+
+## X507 — One native process runner
+
+### B1477
+
+Split from B1463 under [D274](backlog.md#d274) (audit 005 W2.1).
+`internal/nativeexec` runs a native executable as well as qualifying it: an
+absolute executable, only the environment the caller gives, the child in its
+own process group (or the terminal's foreground for an interactive client),
+a group kill on cancellation and after a failed exit, a wait bound for
+descendants that hold the pipes, bounded outputs that drain and flag overflow
+(or refuse it, where the caller asks), and one exit classification. hostdnf,
+hostowned, firewalllocal, both preflight resolvers, venvlocal, selectionfs,
+comparisonlocal and sshlocal run through it; the comparison tool and the
+interactive SSH session stay in the terminal's foreground so they can read it.
+An independent review found no blocking defect; its follow-ups (the group
+kill after a failed exit, foreground assertions, the race list) are applied.
+
