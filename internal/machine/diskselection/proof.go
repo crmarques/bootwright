@@ -69,7 +69,7 @@ func (p Proof) Validate() error {
 		return nil
 	}
 	if len(p.Inventoried) > MaxDisks || !slices.IsSorted(p.Inventoried) || len(slices.Compact(slices.Clone(p.Inventoried))) != len(p.Inventoried) ||
-		slices.ContainsFunc(p.Inventoried, func(s string) bool { return !serial.MatchString(s) }) || !slices.Contains(p.Inventoried, p.Selected.SerialNumber) {
+		slices.ContainsFunc(p.Inventoried, func(s string) bool { return !ValidSerial(s) }) || !slices.Contains(p.Inventoried, p.Selected.SerialNumber) {
 		return fmt.Errorf("inventory selection proof names an invalid BMC serial set")
 	}
 	return nil

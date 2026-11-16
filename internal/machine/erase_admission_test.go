@@ -46,6 +46,24 @@ func TestEraseAdmissionRetainsOmissionAndRequiresExplicitRootIdentity(t *testing
 	}
 }
 
+func TestEraseAdmissionRefusesASerialOutsideTheDiskIdentityGrammar(t *testing.T) {
+	machine, _ := fixture()
+	machine = rootDeclared(machine, "/dev/sda", api.MapValue())
+	machine = machine.WithSpec(machine.Spec().WithPath(api.StringValue("rhel"), "os", "installProfileRef"))
+	machine = machine.WithSpec(machine.Spec().WithPath(api.BoolValue(true), "substrate", "baremetal", "bmc", "tls", "verify").WithPath(api.StringValue("established"), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
+	target := m("deviceName", "/dev/sdb", "wwn", "naa.data", "serialNumber", "EXAMPLE-01").With("sizeBytes", api.IntegerValue("8192"))
+	for serial, admitted := range map[string]bool{"EXAMPLE-01": true, "Z1.2:3+4/5=6": true, "EXAMPLE 01": false, "EXAMPLE<01": false, `EXAMPLE"01`: false, strings.Repeat("A", 257): false} {
+		changed := machine.WithSpec(machine.Spec().WithPath(m("method", "metadataClear", "targets", list(target.With("serialNumber", api.StringValue(serial)))), "hardware", "eraseOnRemoval"))
+		issues := validateErase(changed, substrate.ArmBaremetal)
+		if admitted != (len(issues) == 0) {
+			t.Errorf("serial %q admitted %v, want %v: %+v", serial, len(issues) == 0, admitted, issues)
+		}
+		if !admitted && (len(issues) != 1 || issues[0].Field != "$.spec.hardware.eraseOnRemoval.targets[0].serialNumber") {
+			t.Errorf("serial %q issues = %+v", serial, issues)
+		}
+	}
+}
+
 func TestEraseAdmissionBoundsOnlyLogicalOverwriteTargetsTo896GiB(t *testing.T) {
 	machine, _ := fixture()
 	machine = rootDeclared(machine, "/dev/sda", api.MapValue())

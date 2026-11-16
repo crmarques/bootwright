@@ -630,8 +630,6 @@ var durableRootPath = regexp.MustCompile(`^/dev/disk/by-id/wwn-0x[0-9a-f]{16}(?:
 
 func durableRootDevice(path string) bool { return durableRootPath.MatchString(path) }
 
-var rootSerial = regexp.MustCompile(`^[A-Za-z0-9._:+/=-]{1,256}$`)
-
 func canonicalWWN(declared string) string {
 	return strings.TrimPrefix(strings.ToLower(declared), "0x")
 }
@@ -690,7 +688,7 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 		return "a managed-OS installation selects its root disk by deviceName on a virtual Machine or, on a physical Machine, by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares",
 			"remove " + strings.Join(uncarried, ", ") + " from " + machine.Identity()
 	}
-	if serial := hints.SerialNumber; serial != "" && !rootSerial.MatchString(serial) {
+	if serial := hints.SerialNumber; serial != "" && !diskselection.ValidSerial(serial) {
 		return "a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare",
 			"set spec.substrate.baremetal.rootDevice.serialNumber on " + machine.Identity() +
 				" to the disk's serial number, at most 256 ASCII letters, digits and ._:+/=- characters, or remove it"

@@ -7,6 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 )
 
 type ClearTarget struct {
@@ -66,10 +67,10 @@ func refusedClearTargets(input Installation) string {
 			return "the clear targets are not in deviceName and serialNumber order"
 		}
 		bySerial := target.DeviceName == "" && target.WWN == ""
-		if !bySerial && (!durableRootDevice(target.DeviceName) || "/dev/disk/by-id/wwn-"+target.WWN != target.DeviceName) || !rootSerial.MatchString(target.SerialNumber) {
+		if !bySerial && (!durableRootDevice(target.DeviceName) || "/dev/disk/by-id/wwn-"+target.WWN != target.DeviceName) || !diskselection.ValidSerial(target.SerialNumber) {
 			return "the clear target " + target.label() + " carries an identity its %pre cannot compare"
 		}
-		if target.SizeBytes < 4096 || target.SizeBytes > machineref.MaxClearBytes || target.SizeBytes%4096 != 0 ||
+		if !diskselection.ValidSize(target.SizeBytes) ||
 			!slices.Equal(target.Intervals, MetadataClearRegions(target.SizeBytes)) {
 			return "the clear target " + target.label() + " carries a size or intervals its %pre cannot clear"
 		}

@@ -13,9 +13,6 @@ const (
 	rootSerialPath = "$.spec.substrate.baremetal.rootDevice.serialNumber"
 )
 
-// ValidDiskSerial accepts the serial grammar the physical disk workers prove.
-func ValidDiskSerial(value string) bool { return clearSerial.MatchString(value) }
-
 func validateRootSize(o api.Object) []api.Issue {
 	size := substrate.MachineRootDeviceHints(o).SizeBytes
 	if size == "" {

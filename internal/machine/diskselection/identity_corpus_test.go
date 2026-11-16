@@ -42,15 +42,24 @@ func TestDiskIdentityValidationFollowsTheSharedCorpus(t *testing.T) {
 		if got := (DiskIdentity{SerialNumber: entry.Value, SizeBytes: 4096}).Validate() == nil; got != entry.Valid {
 			t.Errorf("serial %q: valid %v, corpus says %v", entry.Value, got, entry.Valid)
 		}
+		if got := ValidSerial(entry.Value); got != entry.Valid {
+			t.Errorf("ValidSerial(%q) = %v, corpus says %v", entry.Value, got, entry.Valid)
+		}
 	}
 	for _, entry := range corpus.Grammar.Sizes {
 		if got := (DiskIdentity{SerialNumber: "ZC1A2B3C", SizeBytes: entry.Bytes}).Validate() == nil; got != entry.Valid {
 			t.Errorf("size %d: valid %v, corpus says %v", entry.Bytes, got, entry.Valid)
 		}
+		if got := ValidSize(entry.Bytes); got != entry.Valid {
+			t.Errorf("ValidSize(%d) = %v, corpus says %v", entry.Bytes, got, entry.Valid)
+		}
 	}
 	for _, entry := range corpus.Grammar.WWNs {
 		if got := (DiskIdentity{WWN: entry.WWN, SizeBytes: 4096}).Validate() == nil; got != entry.Valid {
 			t.Errorf("wwn %q: valid %v, corpus says %v", entry.WWN, got, entry.Valid)
+		}
+		if got := ValidWWN(entry.WWN); got != entry.Valid {
+			t.Errorf("ValidWWN(%q) = %v, corpus says %v", entry.WWN, got, entry.Valid)
 		}
 	}
 }

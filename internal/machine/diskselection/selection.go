@@ -54,16 +54,22 @@ type Disk struct {
 	Hidden               bool   `json:"hidden"`
 }
 
-func validSize(n int64) bool { return n >= 4096 && n <= MaxBytes && n%4096 == 0 }
+func ValidSize(n int64) bool { return n >= 4096 && n <= MaxBytes && n%4096 == 0 }
+
+func ValidSerial(value string) bool { return serial.MatchString(value) }
+
+func ValidWWN(value string) bool {
+	return naa.MatchString(value) && strings.Trim(value[2:], "0") != ""
+}
 
 func (d DiskIdentity) Validate() error {
-	if !validSize(d.SizeBytes) || (d.WWN == "" && d.SerialNumber == "") {
+	if !ValidSize(d.SizeBytes) || (d.WWN == "" && d.SerialNumber == "") {
 		return fmt.Errorf("disk identity requires exact aligned capacity and a stable identifier")
 	}
-	if d.WWN != "" && (!naa.MatchString(d.WWN) || strings.Trim(d.WWN[2:], "0") == "") {
+	if d.WWN != "" && !ValidWWN(d.WWN) {
 		return fmt.Errorf("disk WWN is not a nonzero NAA identity")
 	}
-	if d.SerialNumber != "" && !serial.MatchString(d.SerialNumber) {
+	if d.SerialNumber != "" && !ValidSerial(d.SerialNumber) {
 		return fmt.Errorf("disk serial is outside the qualified grammar")
 	}
 	return nil
@@ -86,7 +92,7 @@ func (p Policy) Validate() error {
 	if m.ControllerPCIAddress != "" && !pci.MatchString(m.ControllerPCIAddress) {
 		return fmt.Errorf("controller PCI address predicate is invalid")
 	}
-	if (m.MinSizeBytes != 0 && !validSize(m.MinSizeBytes)) || (m.MaxSizeBytes != 0 && !validSize(m.MaxSizeBytes)) || (m.MaxSizeBytes != 0 && m.MinSizeBytes > m.MaxSizeBytes) {
+	if (m.MinSizeBytes != 0 && !ValidSize(m.MinSizeBytes)) || (m.MaxSizeBytes != 0 && !ValidSize(m.MaxSizeBytes)) || (m.MaxSizeBytes != 0 && m.MinSizeBytes > m.MaxSizeBytes) {
 		return fmt.Errorf("disk capacity range is invalid")
 	}
 	if len(p.Exclude) > MaxDisks {
@@ -114,7 +120,7 @@ func (d Disk) validate() error {
 	if d.WWN != "" || d.SerialNumber != "" {
 		return d.DiskIdentity.Validate()
 	}
-	if d.SizeBytes != 0 && !validSize(d.SizeBytes) {
+	if d.SizeBytes != 0 && !ValidSize(d.SizeBytes) {
 		return fmt.Errorf("inventory capacity is invalid")
 	}
 	return nil

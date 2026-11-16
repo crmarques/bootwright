@@ -6,6 +6,7 @@ import (
 	"time"
 
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -359,7 +360,7 @@ func validRootProof(hardware *Hardware) bool {
 		return hardware.RootDisk == nil && hardware.RootVolumeRef != nil && hardware.RootVolumeRef.Valid()
 	case "serialAndSize":
 		disk := hardware.RootDisk
-		return hardware.RootVolumeRef == nil && disk != nil && machineref.ValidDiskSerial(disk.SerialNumber) && disk.SizeBytes >= 4096 && disk.SizeBytes <= 64<<40 && disk.SizeBytes%4096 == 0
+		return hardware.RootVolumeRef == nil && disk != nil && diskselection.ValidSerial(disk.SerialNumber) && diskselection.ValidSize(disk.SizeBytes)
 	default:
 		return false
 	}

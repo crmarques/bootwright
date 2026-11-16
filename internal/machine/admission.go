@@ -9,6 +9,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -733,9 +734,9 @@ func AgentRootDeviceRefusal(o api.Object) (string, string) {
 			"declare only spec.substrate.baremetal.rootDevice.volumeRef or bootVolume on " + o.Identity() + ", without other root hints"
 	}
 	wwn := substrate.ValidRootWWN(hints.WWN)
-	serial := clearSerial.MatchString(hints.SerialNumber)
+	serial := diskselection.ValidSerial(hints.SerialNumber)
 	size, err := strconv.ParseInt(hints.SizeBytes, 10, 64)
-	sized := err == nil && size >= 4096 && size <= MaxClearBytes && size%4096 == 0
+	sized := err == nil && diskselection.ValidSize(size)
 	if !wwn && !(serial && sized) || hints.WWN != "" && !wwn || hints.SerialNumber != "" && !serial || hints.SizeBytes != "" && !(serial && sized) {
 		return "a physical agent installation requires a stable root selector: a wwn, serialNumber with exact sizeBytes, or a volumeRef or bootVolume logical volume",
 			RootFormsRemedy(" on " + o.Identity())

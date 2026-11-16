@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 )
 
 // RootDeviceHints are the root-device hints a Machine declares, each kept as
@@ -155,7 +156,7 @@ func (p RootVolumeProof) Ref() VolumeRef {
 	return VolumeRef{StorageID: p.StorageID, VolumeID: p.VolumeID}
 }
 func (p RootVolumeProof) Valid() bool {
-	return p.Ref().Valid() && volumeWWN.MatchString(p.WWN) && p.WWN != "0x0000000000000000" && p.WWN != "0x00000000000000000000000000000000" && p.SizeBytes >= 4096 && p.SizeBytes <= 64<<40 && p.SizeBytes%4096 == 0
+	return p.Ref().Valid() && diskselection.ValidWWN(p.WWN) && diskselection.ValidSize(p.SizeBytes)
 }
 
 func (r VolumeRef) Matches(p RootVolumeProof) bool {

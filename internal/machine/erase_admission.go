@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -47,16 +48,20 @@ func validateErase(o api.Object, variant string) []api.Issue {
 			}
 			value := target.Get(key).Text()
 			valid := value != "" && len(value) <= 256 && strings.TrimSpace(value) == value && !seen[slot][value]
-			for _, character := range value {
-				valid = valid && character >= 0x20 && character <= 0x7e
+			if key == "serialNumber" {
+				valid = valid && diskselection.ValidSerial(value)
+			} else {
+				for _, character := range value {
+					valid = valid && character >= 0x20 && character <= 0x7e
+				}
 			}
 			if !valid {
-				issues = append(issues, invariant(field+"."+key, "erase target identities must be nonempty, bounded printable ASCII and distinct", "provide the exact whole disk deviceName, live sysfs WWN and serial number for each target"))
+				issues = append(issues, invariant(field+"."+key, "erase target identities must be nonempty, bounded, distinct and, for a serial number, 1 to 256 ASCII letters, digits and ._:+/=- characters", "provide the exact whole disk deviceName, live sysfs WWN and serial number for each target"))
 			}
 			seen[slot][value] = true
 		}
 		size, err := strconv.ParseInt(target.Get("sizeBytes").Text(), 10, 64)
-		if err != nil || size < 4096 || size > 64*1024*1024*1024*1024 || size%4096 != 0 {
+		if err != nil || !diskselection.ValidSize(size) {
 			issues = append(issues, invariant(field+".sizeBytes", "erase size must be the exact capacity, aligned to 4096 bytes and at most 64 TiB", "set sizeBytes to the target's exact logical capacity"))
 		} else if method := target.Get("method").Text(); size > MaxLogicalOverwriteBytes && (method == "logicalOverwrite" || method == "" && policy.Get("method").Text() == "logicalOverwrite") {
 			issues = append(issues, invariant(field+".sizeBytes", "a logicalOverwrite target is at most 896 GiB, so its write and readback fit the four-hour erase deadline", "declare method metadataClear for this target, or a disk of at most 896 GiB"))

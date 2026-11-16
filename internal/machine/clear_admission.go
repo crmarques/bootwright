@@ -7,17 +7,13 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 const MaxClearTargets = 15
 
-const MaxClearBytes = 64 * 1024 * 1024 * 1024 * 1024
-
-var (
-	clearDevicePath = regexp.MustCompile(`^/dev/disk/by-id/wwn-0x([0-9a-f]{16}(?:[0-9a-f]{16})?)$`)
-	clearSerial     = regexp.MustCompile(`^[A-Za-z0-9._:+/=-]{1,256}$`)
-)
+var clearDevicePath = regexp.MustCompile(`^/dev/disk/by-id/wwn-0x([0-9a-f]{16}(?:[0-9a-f]{16})?)$`)
 
 func validateClear(o api.Object, physical bool) []api.Issue {
 	policy := o.Spec().Get("hardware", "clearOnInstall")
@@ -53,7 +49,7 @@ func validateClear(o api.Object, physical bool) []api.Issue {
 		if hex != nil && target.Has("wwn") && clearWWN(wwn) != hex[1] {
 			issues = append(issues, invariant(field+".wwn", "a clear target's wwn must be the WWN its deviceName names", "set wwn to 0x and the hexadecimal digits of the target's deviceName"))
 		}
-		if !clearSerial.MatchString(serial) {
+		if !diskselection.ValidSerial(serial) {
 			issues = append(issues, invariant(field+".serialNumber", "a clear target's serial number must be 1 to 256 ASCII letters, digits and ._:+/=- characters", "set serialNumber to the disk's serial number as its sysfs serial attribute or VPD page 0x80 reports it"))
 		}
 		for slot, value := range []string{device, clearWWN(wwn), serial} {
@@ -66,7 +62,7 @@ func validateClear(o api.Object, physical bool) []api.Issue {
 			issues = append(issues, invariant(field, "a clear target must not be the root device, by deviceName, wwn or serialNumber", "remove the root disk from spec.hardware.clearOnInstall.targets; the installation already clears it"))
 		}
 		size, err := strconv.ParseInt(target.Get("sizeBytes").Text(), 10, 64)
-		if err != nil || size < 4096 || size > MaxClearBytes || size%4096 != 0 {
+		if err != nil || !diskselection.ValidSize(size) {
 			issues = append(issues, invariant(field+".sizeBytes", "clear size must be the exact capacity, aligned to 4096 bytes and at most 64 TiB", "set sizeBytes to the target's exact logical capacity, as blockdev --getsize64 reports it"))
 		}
 	}

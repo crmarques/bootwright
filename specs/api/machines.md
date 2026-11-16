@@ -843,7 +843,7 @@ on removal; omission retains its disks.
 | `method` | string | yes | — | `logicalOverwrite` zeroes and reads back every byte; `metadataClear` only the regions that make a disk read as empty to native probes, which is not sanitization. |
 | `targets` | array | yes | — | 1 to 16 whole disks keyed by `serialNumber`; only listed disks are erased. |
 | `targets[].deviceName`, `wwn` | string | together or neither | — | The disk's exact path and the live sysfs WWN it reports, distinct across targets; omitted, the worker selects the one whole disk reporting `serialNumber` and `sizeBytes`. |
-| `targets[].serialNumber` | string | yes | — | The disk's live sysfs serial number, distinct across targets. |
+| `targets[].serialNumber` | string | yes | — | The disk's live sysfs serial number, distinct across targets: 1 to 256 ASCII letters, digits and `._:+/=-`, the one grammar of the [root forms](#bmc-and-root-device-shape) and of a clear target. |
 | `targets[].sizeBytes` | integer | yes | — | Exact logical capacity, a multiple of 4096 up to 64 TiB, and at most 896 GiB for a `logicalOverwrite` target. |
 | `targets[].method` | string | no | the policy's `method` | The same choice, for this disk only. |
 

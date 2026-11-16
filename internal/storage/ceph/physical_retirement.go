@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -112,16 +113,14 @@ func retirementDevice(device Device) bool {
 		return false
 	}
 	if serial, ok := substrate.SerialDevicePath(device.Path); ok {
-		return device.Serial == serial && device.WWN == "" && validEraseSize(device.SizeBytes)
+		return device.Serial == serial && device.WWN == "" && diskselection.ValidSize(device.SizeBytes)
 	}
 	return physicalWWN.MatchString(device.Path) && device.Path == "/dev/disk/by-id/wwn-"+device.WWN && device.Serial == "" && device.SizeBytes == 0
 }
 
-func validEraseSize(size int64) bool { return size >= 4096 && size <= 64<<40 }
-
 func validEraseTargets(targets []PhysicalEraseTarget) bool {
 	for i, target := range targets {
-		if target.Serial == "" || len(target.Serial) > 256 || !validEraseSize(target.SizeBytes) || len(target.WWN) > 256 || i > 0 && targets[i-1].Serial >= target.Serial {
+		if !diskselection.ValidSerial(target.Serial) || !diskselection.ValidSize(target.SizeBytes) || len(target.WWN) > 256 || i > 0 && targets[i-1].Serial >= target.Serial {
 			return false
 		}
 	}

@@ -10,6 +10,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -106,7 +107,7 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 			return request, refusal("api.value", "physical erase target names its disk by deviceName with its wwn, or by serialNumber and sizeBytes alone", "correct spec.hardware.eraseOnRemoval.targets")
 		}
 		bySerial := !value.Has("deviceName")
-		if !bySerial && !api.ValidLexical("device-path", target.DeviceName) || size < 4096 || size > 64*1024*1024*1024*1024 || size%4096 != 0 {
+		if !bySerial && !api.ValidLexical("device-path", target.DeviceName) || !diskselection.ValidSize(size) {
 			return request, refusal("api.value", "physical erase target needs a whole device path and a 4096-byte aligned exact capacity up to 64 TiB", "correct spec.hardware.eraseOnRemoval.targets")
 		}
 		if target.Method == EraseLogicalOverwrite && size > machineref.MaxLogicalOverwriteBytes {
@@ -118,6 +119,9 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 			}
 			if identity == "" || len(identity) > 256 || strings.TrimSpace(identity) != identity || strings.ContainsAny(identity, "\r\n\x00") || seen[index][identity] {
 				return request, refusal("api.value", "physical erase target identities must be nonempty, bounded and unique", "correct spec.hardware.eraseOnRemoval.targets")
+			}
+			if index == 2 && !diskselection.ValidSerial(identity) {
+				return request, refusal("api.value", "physical erase target serial numbers must be 1 to 256 ASCII letters, digits and ._:+/=- characters", "correct spec.hardware.eraseOnRemoval.targets")
 			}
 			seen[index][identity] = true
 		}

@@ -8,7 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -145,14 +145,14 @@ func RenderKickstart(input Installation) (string, error) {
 			rootSelectorRemedy(""))
 	}
 	if (input.RootWWN != "" || input.RootSerial != "" || input.RootSizeBytes != 0) && !input.Physical ||
-		input.RootSizeBytes != 0 && (input.RootSizeBytes < 4096 || input.RootSizeBytes > machineref.MaxClearBytes || input.RootSizeBytes%4096 != 0) ||
+		input.RootSizeBytes != 0 && !diskselection.ValidSize(input.RootSizeBytes) ||
 		input.RootWWN != "" && "/dev/disk/by-id/wwn-"+input.RootWWN != input.RootDevice ||
-		input.RootSerial != "" && !rootSerial.MatchString(input.RootSerial) {
+		input.RootSerial != "" && !diskselection.ValidSerial(input.RootSerial) {
 		return "", refusal("lifecycle.state", "the root disk WWN, serial number or size this installation freezes is not one its %pre can compare with the disk its deviceName names",
 			"plan the installation again with this release")
 	}
 	if len(input.InventoriedSerials) != 0 && (!serialRootInstallation(input) || !slices.Contains(input.InventoriedSerials, input.RootSerial) ||
-		slices.ContainsFunc(input.InventoriedSerials, func(s string) bool { return !rootSerial.MatchString(s) })) {
+		slices.ContainsFunc(input.InventoriedSerials, func(s string) bool { return !diskselection.ValidSerial(s) })) {
 		return "", refusal("lifecycle.state", "the BMC inventory serial set this installation freezes does not bound its serial-number root", "plan the installation again with this release")
 	}
 	if input.RootVolume && (!input.Physical || input.RootDevice != "" || input.RootSerial != "" || input.RootWWN != "" || input.RootSizeBytes != 0) {
