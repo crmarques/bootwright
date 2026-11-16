@@ -211,7 +211,7 @@ func (s Service) preparationAddition(ctx context.Context, view View, store recor
 	if incomplete, err := unfinishedOver(ctx, store, operation, frozen, states); err != nil {
 		return nil, err
 	} else if len(incomplete) != 0 {
-		return nil, failure("lifecycle.state", "preparation has incomplete effects", unfinishedApplyExits(view))
+		return nil, refusal(failure("lifecycle.state", "preparation has incomplete effects", unfinishedApplyExits(view)))
 	}
 	state, err := s.compile(ctx, view)
 	if err != nil {
@@ -221,16 +221,16 @@ func (s Service) preparationAddition(ctx context.Context, view View, store recor
 	if inputDrift(view, operation) != "" {
 		previous, _, ok := s.compiledBoth(ctx, view, operation)
 		if !ok {
-			return nil, failure("lifecycle.state", "the preparation input cannot be compared with its recorded revision", changeRemedy(view))
+			return nil, refusal(failure("lifecycle.state", "the preparation input cannot be compared with its recorded revision", changeRemedy(view)))
 		}
 		before = previous
 	}
 	if err := s.refuseUnsupported(state); err != nil {
-		return nil, err
+		return nil, refusal(err)
 	}
 	fresh, binding, err := s.planFrom(ctx, view, state)
 	if err != nil {
-		return nil, err
+		return nil, verdict(err)
 	}
 	chain, err := lineageOf(ctx, store, lineageMember{operation: operation, plan: frozen, states: states})
 	if err != nil {
@@ -242,7 +242,7 @@ func (s Service) preparationAddition(ctx context.Context, view View, store recor
 	}
 	delta := reconciliation.Compare(owned, fresh)
 	if first, changed := delta.First(); changed && first.Change != reconciliation.Added {
-		return nil, failure("lifecycle.state", fmt.Sprintf("preparation transition would change owned block %s", first.Block), changeRemedy(view))
+		return nil, refusal(failure("lifecycle.state", fmt.Sprintf("preparation transition would change owned block %s", first.Block), changeRemedy(view)))
 	}
 	if delta.Count(reconciliation.Added) == 0 {
 		return nil, nil
@@ -253,10 +253,10 @@ func (s Service) preparationAddition(ctx context.Context, view View, store recor
 	}
 	definition, found := s.preparationDefinition(scope.Kind)
 	if !found || !validPreparationDefinition(definition) || !definition.admitsCommand(scope.Command) {
-		return nil, failure("lifecycle.unsupported", "the preparation owner is not registered or is incomplete", "")
+		return nil, refusal(failure("lifecycle.unsupported", "the preparation owner is not registered or is incomplete", ""))
 	}
 	if err := definition.Advance(ctx, PreparationAdvance{AppliedEvidence: s.planInput(view, state, binding.controller).AppliedEvidence, Scope: *scope, Context: view.Identity(), State: state, Before: before, Owned: owned, Fresh: fresh}); err != nil {
-		return nil, err
+		return nil, verdict(err)
 	}
 	plans := make([]reconciliation.Plan, 0, len(chain))
 	for _, member := range chain {

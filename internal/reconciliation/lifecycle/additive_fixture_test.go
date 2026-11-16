@@ -23,9 +23,13 @@ type planningCapability struct {
 	reserves string
 	// admitFault fails the admission of an add-on block with a plain error.
 	admitFault error
+	planned    func()
 }
 
 func (c *planningCapability) Plan(ctx context.Context, input PlanInput) (CapabilityPlan, error) {
+	if c.planned != nil {
+		c.planned()
+	}
 	plan, err := c.testCapability.Plan(ctx, input)
 	if err != nil {
 		return plan, err

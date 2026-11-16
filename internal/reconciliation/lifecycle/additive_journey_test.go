@@ -11,6 +11,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
 func TestAContextAppliedWithoutPackagesGainsAnInstanceInASecondOperation(t *testing.T) {
@@ -470,6 +471,49 @@ func TestADiffReportsAnObservationFailureOfAnAdditionRatherThanNoAddition(t *tes
 	result, err := f.service.Diff(context.Background(), DiffRequest{ContextName: testContextName})
 	if !errors.Is(err, fault) {
 		t.Fatalf("diff = %+v (%v), want the failed observation returned rather than an input that adds nothing", result, err)
+	}
+}
+
+// unreadableOnceArmed fails the next read of one operation record once armed,
+// with the typed failure an unreadable record reports.
+type unreadableOnceArmed struct {
+	OperationStore
+	id    string
+	fault *armedFault
+}
+
+type armedFault struct{ armed, fired bool }
+
+func (s unreadableOnceArmed) ReadOperation(ctx context.Context, id string) (operationstore.Operation, error) {
+	if s.fault.armed && id == s.id {
+		s.fault.armed, s.fault.fired = false, true
+		return operationstore.Operation{}, failure("context.state", "the operation record "+id+" is unreadable", "restore the context store")
+	}
+	return s.OperationStore.ReadOperation(ctx, id)
+}
+
+func TestADiffReportsAnUnreadableLineageRecordOfAnAdditionRatherThanNoAddition(t *testing.T) {
+	f := newAdditiveFixture(t)
+	root := f.root(t)
+	f.publish("rev-2", addonBinding("cluster", "nmstate"))
+	if _, err := apply(f.harness); err != nil {
+		t.Fatal(err)
+	}
+	f.publish("rev-3", addonBinding("cluster", "nmstate", "metallb"))
+	fault := &armedFault{}
+	base := f.service.options.Operations
+	f.service.options.Operations = func(area, logs operationstore.Area) OperationStore {
+		return unreadableOnceArmed{OperationStore: base(area, logs), id: root.ID, fault: fault}
+	}
+	// diff plans the input once before it reads the addition, so the fault
+	// lands on the addition's own lineage read and on no other read of diff.
+	f.capability.planned = func() { fault.armed = !fault.fired }
+	result, err := f.service.Diff(context.Background(), DiffRequest{ContextName: testContextName})
+	if !fault.fired {
+		t.Fatal("no read of the root's operation record followed the planning of the input")
+	}
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "context.state" || !strings.Contains(reported[0].Message, root.ID) {
+		t.Fatalf("diff = %+v (%v), want the unreadable record reported rather than an input that adds nothing", result, err)
 	}
 }
 

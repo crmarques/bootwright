@@ -170,9 +170,9 @@ func (s Service) readDiff(ctx context.Context, view View, observed bool) (diffRe
 	}
 	read.input = inputState(view, read.operation, read.owning)
 	if read.input == diffChanged && read.operation.ID == read.owning.ID {
-		added, refused := s.additive(ctx, view, store, read.owning, read.owningPlan, read.owningStates, observed)
-		if refused != nil && len(diagnostics.Of(refused)) == 0 {
-			return diffRead{}, refused
+		added, err := s.addition(ctx, view, store, read.owning, read.owningPlan, read.owningStates, observed)
+		if err != nil && !isRefusal(err) {
+			return diffRead{}, err
 		}
 		read.adds = added != nil
 	}
