@@ -332,6 +332,7 @@ MANAGED = {
 }
 ARTIFACT = {
     "version": "artifact-server-nginx-v1",
+    "unit": "bootwright-lab-artifacts-media",
     "identity": {"context": "lab"},
     "contentRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/media",
 }

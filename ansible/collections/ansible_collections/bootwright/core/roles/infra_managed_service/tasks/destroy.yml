@@ -4,6 +4,9 @@
     that:
       - bootwright_managed_service_request.version == 'managed-service-v1'
       - bootwright_managed_service_request.implementation in infra_managed_service_implementations
+      - bootwright_managed_service_request.unit is string
+      - bootwright_managed_service_request.unit is match('^bootwright-[a-z0-9-]*[a-z0-9]$(?!\n)')
+      - bootwright_managed_service_request.unit.startswith('bootwright-' ~ bootwright_managed_service_request.identity.context ~ '-')
       - bootwright_managed_service_request.contentRoot.startswith('/var/lib/bootwright-hosted/')
       - bootwright_managed_service_request.contentRoot.split('/') | length == 8
       - bootwright_managed_service_request.contentRoot.split('/')[3] == 'bootwright-hosted'

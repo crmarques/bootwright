@@ -56,6 +56,25 @@ PLANTED = [
     ("lab", "/var/lib/bootwright-services/lab/services/{k}/{n}"),
     ("lab", "/var/lib/other-hosted/lab/services/{k}/{n}"),
 ]
+PLANTED_UNITS = [
+    "../../../etc/passwd",
+    "bootwright-lab-dns-../../resolver",
+    "bootwright-lab-dns/resolver",
+    "bootwright-lab-dns-resolver/..",
+    "bootwright-lab-dns-resolver.",
+    "bootwright-lab-dns.resolver",
+    "bootwright-lab-dns-resolver\n",
+    "bootwright-lab-dns-resolver ",
+    "bootwright-lab-dns-resolver;x",
+    "bootwright-lab-dns-Resolver",
+    "bootwright-lab-dns-resolver-",
+    "bootwright-",
+    "bootwright",
+    "bootwright-other-dns-resolver",
+    "lab-dns-resolver",
+    "",
+    "..",
+]
 DESTROYS = [
     ("infra_managed_service", "bootwright_managed_service", dict(MANAGED)),
     ("infra_artifact_server_nginx", "bootwright_artifact_server", dict(ARTIFACT, unit="bootwright-lab-artifact-server-media")),
@@ -74,6 +93,26 @@ def test_a_content_root_not_in_normal_form_refuses_before_any_removal(role, entr
     root = planted.format(p=PREFIX, k=kind, n=name)
     bad = dict(request_, contentRoot=root, identity={"context": context})
     assert not holds(validate, variables(prefix, bad)), root
+
+
+@pytest.mark.parametrize("unit", PLANTED_UNITS, ids=[repr(unit) for unit in PLANTED_UNITS])
+@pytest.mark.parametrize("role, entry, prefix, request_, kind, name", ENTRIES,
+                         ids=["managed apply", "managed destroy", "artifact destroy", "artifact apply"])
+def test_a_unit_outside_the_derived_grammar_refuses_before_any_effect(role, entry, prefix, request_, kind, name, unit):
+    validate = validate_of(load_tasks(role, entry))
+    assert not holds(validate, variables(prefix, dict(request_, unit=unit))), unit
+
+
+@pytest.mark.parametrize("role, entry, prefix, request_, kind, name", ENTRIES,
+                         ids=["managed apply", "managed destroy", "artifact destroy", "artifact apply"])
+def test_a_request_without_a_unit_refuses_before_any_effect(role, entry, prefix, request_, kind, name):
+    validate = validate_of(load_tasks(role, entry))
+    request = {key: value for key, value in request_.items() if key != "unit"}
+    try:
+        admitted = holds(validate, variables(prefix, request))
+    except Exception:
+        admitted = False
+    assert not admitted
 
 
 def role_variables(role, prefix, request_):
