@@ -1,14 +1,86 @@
 """Discovery progress uses the inherited channel without exposing native data."""
 
+# Exact native types are the regression: isinstance also accepts Ansible tags.
+# pylint: disable=unidiomatic-typecheck
+
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
 from ansible.plugins.action import ActionBase
+from ansible.parsing.dataloader import DataLoader
+from ansible.template import Templar, trust_as_template
 from ansible_collections.bootwright.core.plugins.action import managedos_disk_discovery as action
+from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
+from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_media as media
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_runtime as runtime
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_progress
+
+
+@pytest.mark.parametrize("operation", ["apply", "observe", "destroy"])
+def test_action_converts_templated_arguments_to_native_json_types(monkeypatch, operation):
+    arguments = {
+        "operation": operation, "digest": "a" * 64,
+        "request": {"bootMedia": {"size": 1 << 30}, "interfaces": [{"name": "install", "enabled": True}]},
+        "material": {"bindingBase64": "PRIVATE", "optional": None},
+    }
+    loader = DataLoader()
+    tagged = loader.load(canonical(arguments).decode("ascii"))
+    templated = Templar(loader=loader, variables={"frozen": tagged}).template(trust_as_template("{{ frozen }}"))
+    assert isinstance(templated["request"]["bootMedia"]["size"], int)
+    assert type(templated["request"]["bootMedia"]["size"]) is not int
+    with pytest.raises(ValueError, match="discovery source size bound"):
+        media.publication_bound(templated["request"]["bootMedia"]["size"])
+    monkeypatch.setattr(ActionBase, "run", lambda *args, **kwargs: {})
+
+    def execute(native, report):
+        assert native == arguments and canonical(native) == canonical(arguments)
+        assert type(native) is dict and type(native["operation"]) is str
+        assert type(native["request"]) is dict and type(native["request"]["interfaces"]) is list
+        assert type(native["request"]["interfaces"][0]["enabled"]) is bool
+        assert media.publication_bound(native["request"]["bootMedia"]["size"]) > 1 << 30
+        return {"changed": operation != "observe", "evidence": {"completed": True}}
+
+    monkeypatch.setattr(action, "execute", execute)
+    plugin = action.ActionModule.__new__(action.ActionModule)
+    plugin._task = SimpleNamespace(args=templated)
+    result = plugin.run(task_vars={})
+    assert result == {"changed": operation != "observe", "evidence": {"completed": True}, "_ansible_no_log": True}
+    assert canonical(templated) == canonical(arguments)
+
+
+@pytest.mark.parametrize("size", [True, False, None, "1073741824", 1.0, 0, -1, media.MAX_SOURCE + 1])
+def test_action_normalization_preserves_invalid_source_sizes(monkeypatch, size):
+    arguments = {"operation": "apply", "digest": "a" * 64, "request": {"bootMedia": {"size": size}}, "material": {}}
+    loader = DataLoader()
+    tagged = loader.load(canonical(arguments).decode("ascii"))
+    monkeypatch.setattr(ActionBase, "run", lambda *args, **kwargs: {})
+
+    def execute(native, report):
+        actual = native["request"]["bootMedia"]["size"]
+        assert type(actual) is type(size) and actual == size
+        with pytest.raises(ValueError, match="discovery source size bound"):
+            media.publication_bound(actual)
+        return {"failed": True, "discovery_failure": "source-size"}
+
+    monkeypatch.setattr(action, "execute", execute)
+    plugin = action.ActionModule.__new__(action.ActionModule)
+    plugin._task = SimpleNamespace(args=tagged)
+    result = plugin.run(task_vars={})
+    assert result == {"changed": False, "failed": True, "discovery_failure": "source-size", "_ansible_no_log": True}
+
+
+def test_action_refuses_non_json_material_before_native_execution(monkeypatch):
+    monkeypatch.setattr(ActionBase, "run", lambda *args, **kwargs: {})
+    execute = Mock()
+    monkeypatch.setattr(action, "execute", execute)
+    plugin = action.ActionModule.__new__(action.ActionModule)
+    plugin._task = SimpleNamespace(args={"operation": "apply", "request": {}, "digest": "a" * 64, "material": {"SECRET": object()}})
+    result = plugin.run(task_vars={})
+    assert result["failed"] and result["_ansible_no_log"]
+    assert "SECRET" not in repr(result) and "exception" not in result
+    execute.assert_not_called()
 
 
 def test_action_publishes_progress_during_the_call_not_after_its_result(monkeypatch):

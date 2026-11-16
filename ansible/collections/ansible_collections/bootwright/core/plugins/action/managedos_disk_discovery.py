@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
+
 from ansible.plugins.action import ActionBase
 from ansible_collections.bootwright.core.plugins.action import managedos_disk_discovery_protocol as protocol
 from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
+from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_progress as progress
 from ansible_collections.bootwright.core.plugins.module_utils.disk_discovery_runtime import execute, validate_arguments
 
@@ -28,7 +31,10 @@ class ActionModule(ActionBase):
         result.update(changed=False, _ansible_no_log=True)
         try:
             validate_arguments(self._task.args)
-            result.update(execute(self._task.args, report))
+            # Restore the module transport's JSON boundary: templated values
+            # carry Ansible tags, but native exact-type checks need JSON types.
+            arguments = json.loads(canonical(self._task.args))
+            result.update(execute(arguments, report))
         except Exception:
             # No exception text, material path or native answer crosses the
             # action boundary. The enclosing role presents bounded causes.
