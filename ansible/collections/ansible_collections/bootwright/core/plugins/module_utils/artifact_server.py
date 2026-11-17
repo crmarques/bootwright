@@ -1,4 +1,8 @@
-"""Bounded host observation and readiness proof for one managed artifact server."""
+"""Bounded host observation and readiness proof for one managed artifact server.
+
+The unit, container and content root are observed exactly as every managed
+service's are; only the listeners and their probe are the artifact server's.
+"""
 
 from __future__ import annotations
 
@@ -8,80 +12,6 @@ import socket
 import ssl
 
 from ansible_collections.bootwright.core.plugins.module_utils import host_sockets, infra_service
-
-SYSTEMCTL = "/usr/bin/systemctl"
-PODMAN = "/usr/bin/podman"
-
-MAX_OUTPUT = 4096
-MAX_STATUS = 128
-PROBE_REASON = 120
-PROBE_TIMEOUT = 5
-UNIT_STATES = ("active", "activating", "deactivating", "inactive", "failed")
-ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
-
-
-def probe_failure(error):
-    """Why a readiness probe did not answer, bounded to one line.
-
-    The exception class alone cannot tell a refused port from an address this
-    host does not hold, and those need opposite repairs, so the system's own
-    number and message are carried with it. A timeout is socket.timeout, which
-    Python 3.10 made TimeoutError but the 3.9 floor still names timeout, so it
-    is named TimeoutError on every interpreter.
-    """
-    name = "TimeoutError" if isinstance(error, socket.timeout) else type(error).__name__
-    number = getattr(error, "errno", None)
-    detail = getattr(error, "strerror", None) or str(error)
-    if number is not None:
-        return ("%s(%d): %s" % (name, number, detail))[:PROBE_REASON]
-    if detail:
-        return ("%s: %s" % (name, detail))[:PROBE_REASON]
-    return name
-
-
-def invoke(runner, argv):
-    """Run one pinned executable with an exact argument vector and no shell."""
-    if not argv or not os.path.isabs(argv[0]):
-        raise ValueError("executable")
-    code, out, _err = runner(argv, check_rc=False, environ_update=ENVIRONMENT)
-    return code, out[:MAX_OUTPUT].strip()
-
-
-def podman(runner, arguments):
-    """Run podman, reading a host that has none as holding no container.
-
-    Nothing installs podman on a Machine reached over SSH, where an apply
-    refuses before it is needed, so a removal or an observation there finds no
-    container instead of failing on the missing executable.
-    """
-    try:
-        code, out, _err = runner(
-            [PODMAN] + arguments, check_rc=False, environ_update=ENVIRONMENT, handle_exceptions=False
-        )
-    except FileNotFoundError:
-        return 127, ""
-    return code, out[:MAX_OUTPUT].strip()
-
-
-def unit_state(runner, unit_path, service):
-    """Report the unit's state; a unit with no definition is reported only while systemd still lists it failed, which a removal must take back."""
-    _code, shown = invoke(runner, [SYSTEMCTL, "show", "--property=ActiveState", "--value", service])
-    if not os.path.exists(unit_path):
-        return "failed" if shown == "failed" else ""
-    return shown if shown in UNIT_STATES else ""
-
-
-def container_image(runner, name):
-    """Report the exact image a running container was created from."""
-    code, output = podman(runner, ["inspect", "--type", "container", "--format", "{{.ImageName}}", name])
-    if code != 0 or not output:
-        return ""
-    return output.splitlines()[0].strip()
-
-
-def container_present(runner, name):
-    code, _output = podman(runner, ["container", "exists", name])
-    return code == 0
 
 
 def digest_file(path):
@@ -94,19 +24,6 @@ def digest_file(path):
     return digest.hexdigest()
 
 
-def status_line(sock, host):
-    request = b"GET / HTTP/1.0\r\nHost: " + host.encode("idna") + b"\r\nConnection: close\r\n\r\n"
-    sock.sendall(request)
-    data = bytearray()
-    while len(data) < MAX_STATUS and b"\n" not in data:
-        part = sock.recv(1)
-        if not part:
-            break
-        data.extend(part)
-    line = bytes(data).split(b"\r\n")[0].decode("ascii", "replace")
-    return "".join(c for c in line if 0x20 <= ord(c) < 0x7F)
-
-
 def probe(target):
     """Prove one listener answers, and for HTTPS which certificate it presents.
 
@@ -114,11 +31,11 @@ def probe(target):
     failure or an unproved outcome.
     """
     address, port, protocol = target["address"], int(target["port"]), target["protocol"]
-    with socket.create_connection((address, port), timeout=PROBE_TIMEOUT) as raw:
-        raw.settimeout(PROBE_TIMEOUT)
+    with socket.create_connection((address, port), timeout=infra_service.PROBE_TIMEOUT) as raw:
+        raw.settimeout(infra_service.PROBE_TIMEOUT)
         if protocol == "http":
             return {"address": address, "fingerprint": "", "name": target["name"], "port": port,
-                    "protocol": protocol, "status": status_line(raw, address)}
+                    "protocol": protocol, "status": infra_service.read_status_line(raw, address)}
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
@@ -126,7 +43,7 @@ def probe(target):
             presented = secured.getpeercert(binary_form=True) or b""
             fingerprint = hashlib.sha256(presented).hexdigest() if presented else ""
             return {"address": address, "fingerprint": fingerprint, "name": target["name"], "port": port,
-                    "protocol": protocol, "status": status_line(secured, address)}
+                    "protocol": protocol, "status": infra_service.read_status_line(secured, address)}
 
 
 def foreign(request, observation, read=None):
@@ -164,16 +81,9 @@ def probe_targets(request):
 
 def observe(runner, request):
     """Bounded read-only observation of everything this capability owns."""
-    unit_path = "/etc/containers/systemd/" + request["unit"] + ".container"
-    service = request["unit"] + ".service"
-    paths = [unit_path, request["contentRoot"] + "/config/nginx.conf"]
+    runs_from = [request["contentRoot"] + "/config/nginx.conf"]
     if any(listener["protocol"] == "https" for listener in request["listeners"]):
-        paths.extend(request["contentRoot"] + "/tls/" + name for name in ("server.crt", "server.key"))
-    return {
-        "startedAfterFiles": infra_service.started_after(runner, request["unit"], paths),
-        "unit": unit_state(runner, unit_path, service),
-        "unitDigest": digest_file(unit_path),
-        "container": container_image(runner, request["unit"]),
-        "containerPresent": container_present(runner, request["unit"]),
-        "contentRoot": os.path.isdir(request["contentRoot"]),
-    }
+        runs_from.extend(request["contentRoot"] + "/tls/" + name for name in ("server.crt", "server.key"))
+    observation = infra_service.observe(runner, request, runs_from)
+    observation["unitDigest"] = digest_file(infra_service.UNIT_DIRECTORY + request["unit"] + ".container")
+    return observation

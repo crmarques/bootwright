@@ -89,12 +89,11 @@ import time
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils.host_addresses import bind_address_assigned
-from ansible_collections.bootwright.core.plugins.module_utils.infra_service import command_runner
+from ansible_collections.bootwright.core.plugins.module_utils.infra_service import command_runner, probe_failure
 from ansible_collections.bootwright.core.plugins.module_utils.artifact_server import (
     foreign,
     observe,
     probe,
-    probe_failure,
     probe_targets,
 )
 

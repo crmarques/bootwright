@@ -10,13 +10,10 @@ from __future__ import annotations
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import (
-    artifact_server,
-    infra_service,
-)
+from ansible_collections.bootwright.core.plugins.module_utils import infra_service
 
 SERVICE = "bootwright-lab-dns-resolver.service"
-MODULES = (infra_service, artifact_server)
+MODULES = (infra_service,)
 
 
 def shows(module, value):
@@ -27,7 +24,7 @@ def shows(module, value):
     return runner
 
 
-@pytest.mark.parametrize("module", MODULES, ids=["infra_service", "artifact_server"])
+@pytest.mark.parametrize("module", MODULES, ids=["infra_service"])
 def test_a_removed_unit_still_listed_failed_is_observed(module, tmp_path):
     unit_path = str(tmp_path / "unit.container")
     assert module.unit_state(shows(module, "failed"), unit_path, SERVICE) == "failed"

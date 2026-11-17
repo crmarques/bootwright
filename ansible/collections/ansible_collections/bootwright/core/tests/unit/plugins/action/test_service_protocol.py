@@ -80,7 +80,7 @@ def test_a_present_service_with_a_silent_listener_publishes_what_it_found():
     digest = "1" * 64
     for evidence, answered in (
         (infra_service_protocol.presence(RUNNING, [], digest), "answers"),
-        (artifact_server_protocol.presence({}, RUNNING, [], digest), "listeners"),
+        (artifact_server_protocol.presence(RUNNING, [], digest), "listeners"),
     ):
         assert evidence["absent"] is False
         assert evidence[answered] == []
@@ -116,7 +116,7 @@ def test_a_managed_service_hands_a_foreign_listener_refusal(monkeypatch):
 def test_artifact_start_freshness_is_required_for_presence_but_not_removal():
     for fresh in (False, None):
         observation = dict(RUNNING, startedAfterFiles=fresh)
-        evidence = artifact_server_protocol.presence({}, observation, [], "1" * 64)
+        evidence = artifact_server_protocol.presence(observation, [], "1" * 64)
         assert evidence["postcondition"] is False
         assert evidence["startedAfterFiles"] is False
         assert artifact_server_protocol.unproved(observation) == ["startedAfterFiles"]

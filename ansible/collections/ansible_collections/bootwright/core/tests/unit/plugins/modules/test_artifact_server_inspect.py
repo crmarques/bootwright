@@ -25,10 +25,10 @@ IMAGE = "registry.example/nginx@sha256:" + "0" * 64
 def state_host(present):
     """podman on a host where the server's container is or is not present."""
     def run_command(_module, argv, check_rc=False, environ_update=None, handle_exceptions=True):
-        assert check_rc is False and environ_update == artifact_server.ENVIRONMENT
-        if argv[:3] == [artifact_server.PODMAN, "container", "exists"]:
+        assert check_rc is False and environ_update == infra_service.ENVIRONMENT
+        if argv[:3] == [infra_service.PODMAN, "container", "exists"]:
             return (0 if present else 1), "", ""
-        if argv[:2] == [artifact_server.PODMAN, "inspect"]:
+        if argv[:2] == [infra_service.PODMAN, "inspect"]:
             return (0, IMAGE + "\n", "") if present else (125, "", "no such container")
         raise AssertionError("unexpected command %r" % (argv,))
     return run_command
@@ -85,7 +85,7 @@ def server(tmp_path, port):
 ], ids=["active", "container present", "undefined", "failed"])
 def test_the_module_reports_a_listener_the_server_does_not_own(tmp_path, listener, monkeypatch, capsys, unit, present, foreign):
     request = server(tmp_path, listener)
-    monkeypatch.setattr(artifact_server, "unit_state", lambda _runner, _path, _service: unit)
+    monkeypatch.setattr(infra_service, "unit_state", lambda _runner, _path, _service: unit)
     bounded_host(monkeypatch, state_host(present))
     result = run({"request": request, "foreign": True}, capsys)
     assert result.get("failed") is not True
@@ -98,7 +98,7 @@ def test_an_unreadable_socket_table_fails_the_task(tmp_path, monkeypatch, capsys
     def unreadable(_path):
         raise error("table")
     monkeypatch.setattr(host_sockets, "table_lines", unreadable)
-    monkeypatch.setattr(artifact_server, "unit_state", lambda _runner, _path, _service: "")
+    monkeypatch.setattr(infra_service, "unit_state", lambda _runner, _path, _service: "")
     bounded_host(monkeypatch, state_host(False))
     result = run({"request": server(tmp_path, 8443), "foreign": True}, capsys)
     assert result["failed"] is True

@@ -9,12 +9,9 @@ from __future__ import annotations
 
 import socket
 
-from ansible_collections.bootwright.core.plugins.module_utils import (
-    artifact_server,
-    infra_service,
-)
+from ansible_collections.bootwright.core.plugins.module_utils import artifact_server, infra_service
 
-PROBES = (artifact_server.probe_failure, infra_service.probe_failure)
+PROBES = (infra_service.probe_failure,)
 
 
 def test_an_address_this_host_does_not_hold_is_named_as_such():
@@ -62,17 +59,12 @@ def test_a_timeout_reads_the_same_on_every_python():
 
 def test_a_reason_is_bounded():
     for probe_failure in PROBES:
-        assert len(probe_failure(OSError(99, "x" * 500))) == artifact_server.PROBE_REASON
+        assert len(probe_failure(OSError(99, "x" * 500))) == infra_service.PROBE_REASON
 
 
-# The two module_utils are deliberately parallel copies, and a helper that
-# drifts between them is exactly how a removed unit stayed `inactive` forever.
-def test_both_copies_answer_identically():
-    for error in (
-        OSError(99, "Cannot assign requested address"),
-        ConnectionRefusedError(111, "Connection refused"),
-        socket.timeout(),
-        ValueError("status line"),
-    ):
-        assert artifact_server.probe_failure(error) == infra_service.probe_failure(error)
-    assert artifact_server.PROBE_REASON == infra_service.PROBE_REASON
+# The artifact server reads its probe failures through the managed service's
+# one helper rather than a copy of it, which is how a removed unit once stayed
+# `inactive` forever.
+def test_the_artifact_server_holds_no_copy_of_the_probe_helpers():
+    for name in ("probe_failure", "invoke", "podman", "unit_state", "container_image", "container_present", "PROBE_REASON", "PODMAN"):
+        assert not hasattr(artifact_server, name), name

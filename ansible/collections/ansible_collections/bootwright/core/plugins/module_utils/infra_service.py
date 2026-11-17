@@ -176,19 +176,24 @@ def probe_targets(request):
     return sorted({endpoint["address"] for endpoint in request.get("endpoints", [])})
 
 
+def read_status_line(sock, host):
+    """Ask one listener for its root and read the bounded, printable status line it answers with."""
+    sock.sendall(b"GET / HTTP/1.0\r\nHost: " + host.encode("idna") + b"\r\nConnection: close\r\n\r\n")
+    data = bytearray()
+    while len(data) < MAX_STATUS and b"\n" not in data:
+        part = sock.recv(1)
+        if not part:
+            break
+        data.extend(part)
+    line = bytes(data).split(b"\r\n")[0].decode("ascii", "replace")
+    return "".join(c for c in line if 0x20 <= ord(c) < 0x7F)
+
+
 def probe_http(address, port):
     """Prove a proxy answers: any well-formed status line is a live listener."""
     with socket.create_connection((address, port), timeout=PROBE_TIMEOUT) as raw:
         raw.settimeout(PROBE_TIMEOUT)
-        raw.sendall(b"GET / HTTP/1.0\r\nHost: " + address.encode("idna") + b"\r\n\r\n")
-        data = bytearray()
-        while len(data) < MAX_STATUS and b"\n" not in data:
-            part = raw.recv(1)
-            if not part:
-                break
-            data.extend(part)
-    line = bytes(data).split(b"\r\n")[0].decode("ascii", "replace")
-    line = "".join(c for c in line if 0x20 <= ord(c) < 0x7F)
+        line = read_status_line(raw, address)
     if not line.startswith("HTTP/1."):
         raise ValueError("status line")
     return line

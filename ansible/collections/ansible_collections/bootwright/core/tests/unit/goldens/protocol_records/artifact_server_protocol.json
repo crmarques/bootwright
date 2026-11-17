@@ -146,8 +146,8 @@
               }
             ],
             "postcondition": true,
-            "startedAfterFiles": true,
             "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "startedAfterFiles": true,
             "unit": "active"
           }
         },
@@ -188,8 +188,8 @@
               }
             ],
             "postcondition": false,
-            "startedAfterFiles": true,
             "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "startedAfterFiles": true,
             "unit": "active"
           }
         },
@@ -209,12 +209,12 @@
           "outcome": "changed",
           "evidence": {
             "absent": true,
-            "startedAfterFiles": false,
             "container": "",
             "contentRoot": false,
             "listeners": [],
             "postcondition": true,
             "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "startedAfterFiles": false,
             "unit": ""
           }
         },
