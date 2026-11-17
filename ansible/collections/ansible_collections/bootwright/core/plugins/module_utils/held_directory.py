@@ -9,9 +9,11 @@ when the walk creates; otherwise a missing last component yields None when the
 caller admits absence, and refuses anywhere else. A walk that proves holds each
 component's identity (device, inode, owner, group, mode) and, after the caller
 is done, refuses when any name no longer names the directory it opened, or when
-an absent last component appeared. A link on the way refuses, unless the
-caller's follow rule admits it: the walk then hands back the link's resolved
-path, never opening its target. The Ceph native bundle ships this module, so it
+an absent last component appeared. Without a follow rule a link on the way is
+never opened: O_NOFOLLOW makes its open fail with the OSError the kernel gives
+(ELOOP or ENOTDIR), which reaches the caller unchanged. With a follow rule each
+component is examined first; a link the rule refuses raises Refused, and one it
+admits hands back its resolved path, never opening its target. The Ceph native bundle ships this module, so it
 imports only the standard library.
 """
 

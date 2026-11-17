@@ -46,4 +46,7 @@ def publish_at(held, name, data, mode, prefix):
         os.fsync(held)
     finally:
         if staged:
-            os.unlink(stage, dir_fd=held)
+            try:
+                os.unlink(stage, dir_fd=held)
+            except FileNotFoundError:
+                pass

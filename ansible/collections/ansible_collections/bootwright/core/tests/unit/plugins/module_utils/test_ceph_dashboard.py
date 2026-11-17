@@ -92,6 +92,8 @@ def dashboard(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ceph_native.os, "open", open_file)
     monkeypatch.setattr(ceph_native.os, "fstat", fstat)
+    # The tree reads as root's, so the worker runs as root: a file it creates is its own.
+    monkeypatch.setattr(ceph_native.os, "geteuid", lambda: 0)
     monkeypatch.setattr(ceph_native.os, "fchown", lambda fd, uid, gid: ceph_native.require(uid == gid == 0))
     state = SimpleNamespace(calls=[], modules=[], config={}, keys=[], users={}, unloaded=0, generated=0, redeploys=0, scheduled=False, polls=0,
                             settle=0, creates=0, create_code=0, lose_create=False, crypt=True, imports=0, containers=["a1" * 6, "b2" * 6],

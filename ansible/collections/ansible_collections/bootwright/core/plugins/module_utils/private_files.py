@@ -3,9 +3,9 @@
 A private file is a regular file with one link, owned by the effective user,
 with no group or other permission bits. The reader opens it once without
 following a link or blocking on a FIFO and reads at most its bound. The writer
-creates a new name only, never over another file, so the effective user owns
-it; it proves what it created and removes it when that proof or the write
-fails, so a refused write leaves no name behind.
+creates a new name only, never over another file, proves it created a regular
+file with one link that the effective user owns, and removes it when that proof
+or the write fails, so a refused write leaves no name behind.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ def write(path, data, mode=0o600):
     try:
         with os.fdopen(descriptor, "wb") as handle:
             info = os.fstat(handle.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size != 0:
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size != 0 or info.st_uid != os.geteuid():
                 raise Refused("private file")
             os.fchmod(handle.fileno(), mode)
             handle.write(data)

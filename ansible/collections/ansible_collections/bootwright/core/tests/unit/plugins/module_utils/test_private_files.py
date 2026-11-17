@@ -127,3 +127,11 @@ def test_a_fifo_refuses_without_blocking(tmp_path):
     os.mkfifo(path, 0o600)
     with pytest.raises(private_files.Refused):
         private_files.read(str(path), 64)
+
+
+def test_a_created_file_another_user_owns_refuses_and_is_removed(tmp_path):
+    path = tmp_path / "file"
+    with mock.patch.object(private_files.os, "geteuid", return_value=os.getuid() + 1):
+        with pytest.raises(private_files.Refused):
+            private_files.write(str(path), b"data")
+    assert list(tmp_path.iterdir()) == []

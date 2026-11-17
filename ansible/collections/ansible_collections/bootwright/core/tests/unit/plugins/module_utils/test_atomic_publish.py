@@ -89,3 +89,10 @@ def test_the_unit_and_keyfile_writers_that_synced_no_directory_now_sync_it(tmp_p
     assert calls == [False, True, False, True]
     keyfile = tmp_path / "connections" / ("bootwright-leg" + libvirt_nm_connections.SUFFIX)
     assert stat.S_IMODE(keyfile.stat().st_mode) == 0o600 and keyfile.read_bytes() == libvirt_nm_connections.keyfile(entry)
+
+
+def test_a_stage_already_gone_never_masks_the_original_failure(tmp_path):
+    with mock.patch.object(atomic_publish.os, "replace", side_effect=OSError("original")), \
+            mock.patch.object(atomic_publish.os, "unlink", side_effect=FileNotFoundError("stage")):
+        with pytest.raises(OSError, match="^original$"):
+            atomic_publish.publish(str(tmp_path), "unit", b"new", 0o644)

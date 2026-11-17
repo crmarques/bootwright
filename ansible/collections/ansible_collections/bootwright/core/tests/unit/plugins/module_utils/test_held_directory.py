@@ -139,3 +139,12 @@ def test_every_descriptor_closes(root):
         with held_directory.hold("/a/b", OWNERS):
             raise RuntimeError("fixture")
     assert set(os.listdir("/proc/self/fd")) == before
+
+
+def test_a_link_without_a_follow_rule_reaches_the_caller_as_the_kernel_error(root, tmp_path):
+    (tmp_path / "elsewhere").mkdir()
+    (root / "etc").symlink_to(tmp_path / "elsewhere")
+    with pytest.raises(OSError) as raised:
+        with held_directory.hold("/etc", OWNERS):
+            pass
+    assert not isinstance(raised.value, held_directory.Refused)
