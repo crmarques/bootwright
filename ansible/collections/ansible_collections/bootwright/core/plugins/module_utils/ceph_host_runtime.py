@@ -32,7 +32,8 @@ import time
 import uuid
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_host_route_probe as probe, ceph_native, ceph_native_observe as observe, ceph_tunnel, ceph_tunnel_custody as custody, ceph_pull_broker,
+    ceph_host_device_probe, ceph_host_image_probe, ceph_host_label_probe, ceph_host_route_probe as probe, ceph_native,
+    ceph_native_observe as observe, ceph_tunnel, ceph_tunnel_custody as custody, ceph_pull_broker,
     native_diagnostics, physical_erase_worker, physical_machine_identity, private_files, registry_auth,
 )
 
@@ -94,120 +95,6 @@ EXPECTED_CASES = {
 }
 UDEV_FIELDS = frozenset(("ID_VENDOR", "ID_MODEL", "ID_MODEL_ENC", "ID_SERIAL_SHORT", "ID_SCSI_SERIAL", "ID_SERIAL", "ID_WWN", "ID_WWN_WITH_EXTENSION"))
 Refusal = ceph_native.Refusal
-
-PROBE = r'''
-import base64, hashlib, json, os, pwd, stat, tempfile
-import asyncssh
-
-def file(path, payload=False):
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
-    with os.fdopen(fd, "rb") as handle:
-        before = os.fstat(handle.fileno())
-        if (not stat.S_ISREG(before.st_mode) or before.st_uid != 0 or
-                before.st_mode & 0o022 or before.st_nlink != 1 or not 0 < before.st_size <= 64 << 20):
-            raise ValueError("artifact")
-        digest, data, count = hashlib.sha256(), bytearray(), 0
-        while True:
-            chunk = handle.read(65536)
-            if not chunk:
-                break
-            count += len(chunk)
-            if count > before.st_size or payload and count > 2 << 20:
-                raise ValueError("artifact")
-            digest.update(chunk)
-            if payload:
-                data.extend(chunk)
-        fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
-        expected = tuple(getattr(before, key) for key in fields)
-        if count != before.st_size or any(tuple(getattr(info, key) for key in fields) != expected
-                                           for info in (os.fstat(handle.fileno()), os.stat(path, follow_symlinks=False))):
-            raise ValueError("artifact")
-        result = {"sha256": digest.hexdigest(), "bytes": count, "mode": stat.S_IMODE(before.st_mode),
-                  "uid": before.st_uid, "gid": before.st_gid}
-        return result, base64.b64encode(data).decode() if payload else None
-
-def collect():
-    account = pwd.getpwnam("ceph")
-    if account.pw_uid <= 0 or account.pw_uid != account.pw_gid or account.pw_uid >= 65536:
-        raise ValueError("account")
-    artifacts, payload = {}, None
-    paths = ("/usr/sbin/cephadm", "/usr/share/ceph/mgr/cephadm/ssh.py", "/usr/share/ceph/mgr/cephadm/module.py",
-             "/usr/share/ceph/mgr/cephadm/serve.py", "/usr/bin/ceph", "/usr/bin/ceph-authtool")
-    for path in paths:
-        artifact, body = file(path, payload=path == "/usr/sbin/cephadm")
-        artifacts[path] = artifact
-        if body is not None:
-            payload = body
-    with tempfile.TemporaryDirectory(prefix="bw-parser-", dir="/tmp") as directory:
-        path = directory + "/ssh_config"
-        with open(path, "x") as destination:
-            destination.write("Host *\n  ProxyCommand /bin/false\n")
-        options = asyncssh.SSHClientConnectionOptions(host="192.0.2.1", username="bootwright",
-                                                      client_keys=[], known_hosts=None, config=[path])
-        if options.proxy_command != ["/bin/false"]:
-            raise ValueError("parser")
-    policy_path = os.path.realpath("/etc/crypto-policies/back-ends/openssh.config")
-    if not policy_path.startswith(("/etc/crypto-policies/", "/usr/share/crypto-policies/")):
-        raise ValueError("policy")
-    fd = os.open(policy_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
-    with os.fdopen(fd, "rb") as handle:
-        info = os.fstat(handle.fileno())
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022 or info.st_size > 65536:
-            raise ValueError("policy")
-        policy = handle.read(65537)
-        if len(policy) != info.st_size or len(policy) > 65536:
-            raise ValueError("policy")
-        policy = policy.decode("ascii")
-    return {"version": "ceph-host-image-v1", "uid": os.getuid(), "gid": os.getgid(),
-            "cephUID": account.pw_uid, "cephGID": account.pw_gid, "machine": os.uname().machine,
-            "artifacts": artifacts, "cephadm": payload, "cryptoPolicy": policy}
-
-try:
-    print(json.dumps(collect(), sort_keys=True, separators=(",", ":")))
-except Exception:
-    raise SystemExit(1)
-'''
-
-LABEL_PROBE = r'''
-import json, os, stat
-path = "/run/bootwright-label/proof"
-fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-try:
-    info = os.fstat(fd)
-    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022 or info.st_nlink != 1:
-        raise ValueError("file")
-    if os.read(fd, 128) != b"bootwright-contained-public-label-probe-v1\n":
-        raise ValueError("bytes")
-    if not os.fstatvfs(fd).f_flag & os.ST_RDONLY:
-        raise ValueError("mount")
-    print(json.dumps({"read": True, "readOnly": True, "uid": os.getuid(), "gid": os.getgid()}))
-finally:
-    os.close(fd)
-'''
-
-DEVICE_PROBE = r'''
-import json,sys,types
-from ceph_volume.util.device import Device
-from ceph_volume.util import disk
-value=json.loads(sys.argv[1])
-if set(value)!={"path","environment"}:
-    raise AssertionError
-original=disk.UdevData
-class OriginalInput:
-    def __init__(self,path):
-        if path!=value["path"]:
-            raise AssertionError
-        self.environment=dict(value["environment"])
-try:
-    disk.UdevData=OriginalInput
-    identity=Device._get_device_id(types.SimpleNamespace(path=value["path"]))
-finally:
-    disk.UdevData=original
-if not isinstance(identity,str):
-    raise AssertionError
-print(json.dumps({"version":"ceph-host-device-id-v1","deviceID":identity,
-                  "dependencyInput":"ceph_volume.util.disk.UdevData.environment"},separators=(",",":")))
-'''
 
 
 def require(condition, reason="image-profile"):
@@ -734,7 +621,7 @@ class HostRuntime:
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
             try:
                 before = os.fstat(fd)
-                observed = self.contained(image_id, user, LABEL_PROBE, mounts=((shared, "/run/bootwright-label"),), limit=4096)
+                observed = self.contained(image_id, user, module_source(ceph_host_label_probe), mounts=((shared, "/run/bootwright-label"),), limit=4096)
                 require(isinstance(observed, dict) and set(observed) == {"read", "readOnly", "uid", "gid"})
                 require(observed["read"] is True and observed["readOnly"] is True and type(observed["uid"]) is int and type(observed["gid"]) is int)
                 require((observed["uid"], observed["gid"]) == tuple(user))
@@ -755,7 +642,7 @@ class HostRuntime:
         for user in ((0, 0), None):
             if user is None:
                 user = probes[0]["cephUID"], probes[0]["cephGID"]
-            probes.append(validate_probe(self.contained(image_id, user, PROBE), user))
+            probes.append(validate_probe(self.contained(image_id, user, module_source(ceph_host_image_probe)), user))
         require({key: value for key, value in probes[0].items() if key not in ("uid", "gid")} ==
                 {key: value for key, value in probes[1].items() if key not in ("uid", "gid")})
         return probes[0]
@@ -918,7 +805,7 @@ class HostRuntime:
             rows = []
             for device, observed, environment in inputs:
                 if existing is None:
-                    result = self.contained(profile["imageID"], (profile["uid"], profile["gid"]), DEVICE_PROBE,
+                    result = self.contained(profile["imageID"], (profile["uid"], profile["gid"]), module_source(ceph_host_device_probe),
                                             (canonical({"path": observed["path"], "environment": environment}).decode("ascii"),), limit=4096)
                     require(isinstance(result, dict) and set(result) == {"version", "deviceID", "dependencyInput"}, "device-identity")
                     require(result["version"] == "ceph-host-device-id-v1" and result["dependencyInput"] == "ceph_volume.util.disk.UdevData.environment",

@@ -27,6 +27,7 @@ RUNNER_OWNER = "plugins/module_utils/bounded_process.py"
 
 CANONICAL_EXCEPTIONS = {
     "plugins/module_utils/ceph_tunnel.py": "its source is the SSH proxy script, shipped alone and run as python3 -I",
+    "plugins/module_utils/ceph_host_image_probe.py": "its source runs alone inside the frozen Ceph image",
     "plugins/module_utils/ceph_host_route_probe.py": "its source runs alone inside the frozen Ceph image",
     "plugins/module_utils/ceph_native_worker.py": "the supervisor starts in a collection-free interpreter before the closed bundle exists",
     "plugins/module_utils/ceph_package_worker.py": "the supervisor starts in a collection-free interpreter before the closed bundle exists",
