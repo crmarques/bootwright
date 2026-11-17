@@ -498,40 +498,52 @@ func verifyMappings(ctx context.Context, root *directory, registry contexts.Regi
 // the one context a scoped deletion admits. Verification stays store-wide, so
 // any other damaged context still refuses, named.
 func verifyMappingsExcept(ctx context.Context, root *directory, registry contexts.Registry, skip string) error {
+	_, err := proveMappings(ctx, root, registry, skip, nil, nil)
+	return err
+}
+
+type provenMappings map[contexts.Record]int64
+
+func proveMappings(ctx context.Context, root *directory, registry contexts.Registry, skip string, proven provenMappings, leased map[string]*directory) (provenMappings, error) {
 	if _, err := readControllerStored(ctx, root, registry); err != nil {
-		return err
+		return nil, err
 	}
-	sizes := make([]int, len(registry.Contexts))
+	sizes := provenMappings{}
+	fresh := make([]bool, len(registry.Contexts))
 	total := int64(0)
 	for index, record := range registry.Contexts {
 		if err := ctx.Err(); err != nil {
-			return err
+			return nil, err
 		}
 		if record.Mode != contexts.Ready || record.Name == skip {
 			continue
 		}
-		size, err := verifyContextMapping(ctx, root, record)
-		if err != nil {
-			return err
+		size, known := proven[record]
+		if _, held := leased[record.Name]; !known || held {
+			var err error
+			if size, err = verifyContextMapping(ctx, root, record); err != nil {
+				return nil, err
+			}
+			fresh[index] = true
 		}
-		sizes[index] = int(size)
+		sizes[record] = size
 		total += size
 		if total > maxAllManifests {
-			return state("aggregate referenced manifest bytes exceed their limit")
+			return nil, state("aggregate referenced manifest bytes exceed their limit")
 		}
 	}
 	for index, record := range registry.Contexts {
-		if record.Mode != contexts.Ready || record.Revision == "" || record.Name == skip {
+		if !fresh[index] || record.Revision == "" {
 			continue
 		}
-		_, _, close, err := openManifestBounded(ctx, root, record, sizes[index])
+		_, _, close, err := openManifestBounded(ctx, root, record, int(sizes[record]))
 		if err != nil {
 			entry := "contexts/" + record.Name + "/desired-state/revisions/" + record.Revision + "/manifest.json"
-			return contextDamage(ctx, record.Name, entry, err, purgeRemediation(record.Name))
+			return nil, contextDamage(ctx, record.Name, entry, err, purgeRemediation(record.Name))
 		}
 		close()
 	}
-	return root.verify()
+	return sizes, root.verify()
 }
 
 // restoreStoreRemediation is the exit of damage a context's deletion cannot
@@ -896,7 +908,8 @@ func (s *Store) transactHeld(ctx context.Context, create, shared bool, inputs []
 			return safeError(err)
 		}
 	}
-	if err := verifyMappingsExcept(ctx, root, registry, scope); err != nil {
+	mappings, err := proveMappings(ctx, root, registry, scope, nil, nil)
+	if err != nil {
 		return safeError(err)
 	}
 	if !shared {
@@ -911,7 +924,7 @@ func (s *Store) transactHeld(ctx context.Context, create, shared bool, inputs []
 	if err != nil {
 		return safeError(err)
 	}
-	tx := &transaction{store: s, root: root, registry: registry, leases: make(map[string]*directory), evidence: make(map[string][]byte), shared: shared}
+	tx := &transaction{store: s, root: root, registry: registry, mappings: mappings, leases: make(map[string]*directory), evidence: make(map[string][]byte), shared: shared}
 	tx.expected = expected
 	defer tx.close()
 	if callback == nil {
@@ -928,6 +941,7 @@ type transaction struct {
 	root               *directory
 	container          *directory
 	registry           contexts.Registry
+	mappings           provenMappings
 	leases             map[string]*directory
 	evidence           map[string][]byte
 	indexes            map[string][]byte
@@ -1426,12 +1440,14 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 			return state("context mutation evidence changed before publication")
 		}
 	}
-	if err := verifyMappings(ctx, t.root, registry); err != nil {
+	mappings, err := proveMappings(ctx, t.root, registry, "", t.mappings, t.leases)
+	if err != nil {
 		return err
 	}
 	if err := t.save(ctx, registry); err != nil {
 		return err
 	}
+	t.mappings = mappings
 	t.committed = true
 	for _, record := range registry.Contexts {
 		if err := t.collectRevisions(ctx, record.Name); err != nil {
