@@ -406,6 +406,60 @@ func TestAdapterOutputPublishesTheWritesOfOneDelayAsOneAppend(t *testing.T) {
 	}
 }
 
+// An interrupted run closes its output with the run's own canceled context;
+// what the adapter printed before the interrupt still reaches disk, because
+// the output publishes beyond that cancellation.
+func TestAdapterOutputClosedUnderACanceledContextKeepsEveryByte(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	store, area := newStore(t)
+	target := "op-" + strings.Repeat("ab", 16) + "/blocks/one/attempt-000001.output"
+	output := store.OpenAdapterOutput(ctx, target)
+	output.delay = time.Hour
+	for range 3 {
+		if _, err := output.Write([]byte("ok: [rhel-01]\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cancel()
+	if err := output.Close(ctx); err != nil {
+		t.Fatalf("closing under a canceled context = %v", err)
+	}
+	if kept := published(area.logs, target); kept != strings.Repeat("ok: [rhel-01]\n", 3) {
+		t.Fatalf("an output closed under a canceled context kept %q", kept)
+	}
+}
+
+// A publication that fails leaves its bytes pending and the delay running
+// again, so a full buffer whose write failed still reaches disk once the area
+// accepts it, with no further write from the adapter.
+func TestAdapterOutputRetriesAFailedPublicationAfterItsDelay(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	target := "op-" + strings.Repeat("ab", 16) + "/blocks/one/attempt-000001.output"
+	output := store.OpenAdapterOutput(ctx, target)
+	output.delay = time.Millisecond
+	area.logs.mutex.Lock()
+	area.logs.fail["append "+target] = errors.New("no space")
+	area.logs.mutex.Unlock()
+	full := strings.Repeat("x", adapterOutputBatch)
+	if _, err := output.Write([]byte(full)); err != nil {
+		t.Fatal(err)
+	}
+	area.logs.mutex.Lock()
+	delete(area.logs.fail, "append "+target)
+	area.logs.mutex.Unlock()
+	deadline := time.Now().Add(10 * time.Second)
+	for published(area.logs, target) != full {
+		if time.Now().After(deadline) {
+			t.Fatalf("a failed publication was never retried: %d bytes on disk", len(published(area.logs, target)))
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := output.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func published(area *memoryArea, target string) string {
 	area.mutex.Lock()
 	defer area.mutex.Unlock()

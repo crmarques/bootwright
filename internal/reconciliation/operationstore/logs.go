@@ -153,7 +153,7 @@ func (o *AdapterOutput) Write(value []byte) (int, error) {
 	switch {
 	case len(o.pending) >= adapterOutputBatch:
 		o.stop()
-		_ = o.flush(o.ctx)
+		o.publish()
 	case len(o.pending) > 0 && o.timer == nil:
 		o.timer = time.AfterFunc(o.delay, o.flushPending)
 	}
@@ -165,7 +165,13 @@ func (o *AdapterOutput) flushPending() {
 	defer o.mutex.Unlock()
 	o.timer = nil
 	if !o.closed {
-		_ = o.flush(o.ctx)
+		o.publish()
+	}
+}
+
+func (o *AdapterOutput) publish() {
+	if o.flush(o.ctx) != nil && len(o.pending) > 0 && o.timer == nil {
+		o.timer = time.AfterFunc(o.delay, o.flushPending)
 	}
 }
 
@@ -176,8 +182,8 @@ func (o *AdapterOutput) stop() {
 	}
 }
 
-// Close publishes whatever the run left buffered under the caller's own live
-// context, because the one the run held may already be canceled.
+// Close publishes whatever the run left buffered, even under a canceled
+// context, because an interrupted run closes its output with that context.
 func (o *AdapterOutput) Close(ctx context.Context) error {
 	if o == nil {
 		return nil
@@ -207,6 +213,7 @@ func (o *AdapterOutput) flush(ctx context.Context) error {
 	if len(o.pending) == 0 {
 		return nil
 	}
+	ctx = context.WithoutCancel(ctx)
 	if o.store != nil {
 		taken, err := o.store.outputRoom(ctx, len(o.pending))
 		if err != nil {
