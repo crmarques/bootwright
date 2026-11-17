@@ -144,15 +144,15 @@ class PlanTest(unittest.TestCase):
     def test_an_ansible_input_outside_the_collection_runs_every_ansible_check(self):
         for path in focus.ANSIBLE_INPUTS:
             with self.subTest(path=path):
-                self.assertEqual(
-                    self.names([path])[-4:],
-                    [
-                        "ansible lint, unnarrowed",
-                        "ansible syntax, unnarrowed",
-                        "ansible sanity, unnarrowed",
-                        "units whole tree",
-                    ],
-                )
+                names = self.names([path])
+                for check in ("ansible lint, unnarrowed", "ansible syntax, unnarrowed",
+                              "ansible sanity, unnarrowed", "units whole tree"):
+                    self.assertIn(check, names)
+
+    def test_the_shared_acquire_helper_also_runs_the_harness_tests(self):
+        names = self.names(["scripts/tools/_acquire.py"])
+        self.assertIn("units whole tree", names)
+        self.assertTrue(any("harness" in name for name in names), names)
 
     def test_a_go_change_formats_vets_and_tests(self):
         self.assertEqual(

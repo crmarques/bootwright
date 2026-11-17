@@ -55,7 +55,7 @@ DOCS = (".agents/", ".claude/", "docs/", "specs/")
 # The Ansible harness's own tests, which no Go test runs; Go tests run the
 # other helper tests and quick-test selects them as readers of scripts/. They
 # import the harness's locked tools.
-HARNESS = ("scripts/tools/ansible_check.py", "scripts/tools/ansible_check_test.py")
+HARNESS = ("scripts/tools/ansible_check.py", "scripts/tools/ansible_check_test.py", "scripts/tools/_acquire.py")
 HARNESS_TESTS = '"$(./scripts/cache-dir)/ansible-check/venv/bin/python" -I -B scripts/tools/ansible_check_test.py'
 
 # The inputs every Ansible check reads beside the collection: its
