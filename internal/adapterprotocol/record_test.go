@@ -204,7 +204,7 @@ func TestDecodeHoldsEachPhaseToItsExactFields(t *testing.T) {
 }
 
 func read(input string, admission Admission) ([]Record, error) {
-	out := make(chan Record, 256)
+	out := make(chan Record, 8192)
 	err := Read(strings.NewReader(input), admission, nil, out)
 	close(out)
 	var records []Record
@@ -225,6 +225,19 @@ func TestReadIsBoundedInRecordsAndLength(t *testing.T) {
 		if _, err := read(strings.Repeat("{\"phase\":\"loaded\"}\n", bound.records+1), bound.admission); err == nil {
 			t.Fatalf("record %d was read", bound.records+1)
 		}
+	}
+	running := strings.Repeat(`{"group":"erase-1","phase":"group","progress":{"completed":1,"total":2},"status":"running"}`+"\n", 4096)
+	if records, err := read(strings.Repeat("{\"phase\":\"loaded\"}\n", 64)+running, Lifecycle); err != nil || len(records) != 64+4096 {
+		t.Fatalf("64 records and 4096 running groups read %d (%v)", len(records), err)
+	}
+	if _, err := read(running+`{"group":"erase-1","phase":"group","status":"running"}`+"\n", Lifecycle); err == nil {
+		t.Fatal("running group record 4097 was read")
+	}
+	if _, err := read(strings.Repeat(`{"group":"erase-1","phase":"group","status":"ok"}`+"\n", 65), Lifecycle); err == nil {
+		t.Fatal("a settled group record counted as running")
+	}
+	if _, err := read(`{"group":"erase-1","phase":"group","status":"running"}`+"\n", Controller); err == nil {
+		t.Fatal("the controller runner read a group record")
 	}
 	prefix, suffix := `{"evidence":{"a":"`, `"},"outcome":"changed","phase":"completed"}`
 	padded := func(length int) string {

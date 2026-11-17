@@ -28,15 +28,8 @@ REQUEST_VERSION = "physical-erase-v1"
 MEDIA = Path("/var/lib/bootwright/media")
 
 
-# A worker that never answers is unreachable once the RAM startup allowance
-# and a margin have passed since this await began, and one that answered is
-# once it then stays silent this long; ssh's exit 255 is a session that
-# reached no worker, any other exit an answer. Both are timed within this
-# call, which follows start: nothing is persisted, so a repeated await opens
-# a fresh bounded window and never inherits a stale clock.
-FIRST_ANSWER_SECONDS = 900 + 300
-SILENCE_SECONDS = 600
-# The closed failure classes of an unanswered session, read from ssh's own
+# ssh's exit 255 is a session that reached no worker, any other exit an
+# answer. The closed failure classes of an unanswered session, read from ssh's own
 # standard error, which never leaves this function.
 SESSION_CAUSES = (
     (b"Connection timed out", "timeout"),
@@ -374,37 +367,59 @@ class Controller:
         )
         return contact(argv, data)
 
-    def await_receipt(self):
+    def poll(self):
+        """One bounded snapshot of the wait for the RAM worker's receipt.
+
+        A durable or newly reported complete receipt is validated and kept,
+        and answers complete with it; a partial status of this request and
+        attempt answers partial with its progress; a session that reached no
+        worker answers unanswered with its closed failure class; any other
+        exit is an answer that reported nothing. A stopped worker and one of
+        another request or attempt refuse. The wait itself, its clock and
+        its worker-unreachable and receipt-timeout bounds belong to the
+        physical_erase_await action, which calls this once per round.
+        """
         self.load()
         existing = self.receipt()
         if existing:
-            return existing
-        began = time.monotonic()
-        deadline = began + self.request["deadlineSeconds"] + 900
-        answered, cause = None, "exit"
-        while time.monotonic() < deadline:
-            result = self.session("receipt")
-            now = time.monotonic()
-            if result.code is not None and result.code != 255:
-                answered = now
-            else:
-                cause = result.cause or cause
-                silent = now - (began if answered is None else answered)
-                if silent >= (FIRST_ANSWER_SECONDS if answered is None else SILENCE_SECONDS):
-                    raise redfish.Refused("worker-unreachable", "%s:%dmin" % (cause, silent // 60))
-            if result.code == 0 and result.stdout:
-                receipt = json.loads(result.stdout)
-                if receipt.get("state") == "complete":
-                    worker.validate_receipt(self.worker_request, receipt)
-                    write(self.root / "receipt.json", worker.canonical(receipt))
-                    os.fsync(self.lock)
-                    return receipt
-                if receipt.get("state") != "partial":
-                    raise worker.Refusal("worker-failed")
-                if receipt.get("request") != self.digest or receipt.get("originalAttempt") != self.worker_request["originalAttempt"]:
-                    raise worker.Refusal("foreign-worker")
-            time.sleep(5)
-        raise worker.Refusal("receipt-timeout")
+            return {"answer": "complete", "receipt": existing}
+        result = self.session("receipt")
+        if result.code is None or result.code == 255:
+            return {"answer": "unanswered", "cause": result.cause or "exit"}
+        if result.code != 0 or not result.stdout:
+            return {"answer": "answered"}
+        receipt = json.loads(result.stdout)
+        if receipt.get("state") == "complete":
+            worker.validate_receipt(self.worker_request, receipt)
+            write(self.root / "receipt.json", worker.canonical(receipt))
+            os.fsync(self.lock)
+            return {"answer": "complete", "receipt": receipt}
+        if receipt.get("state") != "partial":
+            raise worker.Refusal("worker-failed")
+        if receipt.get("request") != self.digest or receipt.get("originalAttempt") != self.worker_request["originalAttempt"]:
+            raise worker.Refusal("foreign-worker")
+        return {"answer": "partial", "progress": self.progress(receipt.get("progress"))}
+
+    def progress(self, reported):
+        """Each target's proved bytes, written plus read back, of twice its coverage, or None.
+
+        The worker's counts only report: a report that is not exactly one
+        written and one verified count per frozen target, each an integer
+        within that target's coverage, is ignored, and no count is ever
+        completion evidence.
+        """
+        targets = self.worker_request["targets"]
+        if not isinstance(reported, list) or len(reported) != len(targets):
+            return None
+        measured = []
+        for counts, target in zip(reported, targets):
+            size = worker.covered(target)
+            if not isinstance(counts, dict) or set(counts) != {"written", "verified"}:
+                return None
+            if not all(type(counts[kind]) is int and 0 <= counts[kind] <= size for kind in counts):  # pylint: disable=unidiomatic-typecheck
+                return None
+            measured.append({"completed": counts["written"] + counts["verified"], "total": 2 * size})
+        return measured
 
     def acknowledge(self):
         receipt = self.receipt()

@@ -141,7 +141,7 @@ class ControllerTests(unittest.TestCase):
             code=0, stdout=json.dumps({"state": "failed", "request": instance.digest, "originalAttempt": "remove/erase/1"}).encode()
         )
         with patch.object(controller.time, "sleep") as sleep, self.assertRaisesRegex(controller.worker.Refusal, "worker-failed"):
-            instance.await_receipt()
+            instance.poll()
         sleep.assert_not_called()
 
     def test_interrupted_final_cleanup_retries_without_keys_or_false_completion(self):
@@ -179,17 +179,18 @@ class ControllerTests(unittest.TestCase):
                 os.close(instance.lock)
 
 
-class UnreachableWorkerTests(unittest.TestCase):
-    """An await that no session answers refuses within its bound, never after the four-hour deadline."""
+class PollTests(unittest.TestCase):
+    """One poll is one bounded snapshot: the wait, its clock and its bounds belong to the physical_erase_await action."""
 
-    def awaiting(self, answers):
+    TARGETS = [{"deviceName": "/dev/sda", "method": "logicalOverwrite", "serialNumber": "s0", "sizeBytes": 8 * 1024**3, "wwn": "w0"},
+               {"method": "metadataClear", "serialNumber": "s1", "sizeBytes": 4 * 1024**4}]
+
+    def polling(self, *answers):
         import json
 
-        now = [0.0]
-        clock = SimpleNamespace(monotonic=lambda: now[0], sleep=lambda seconds: now.__setitem__(0, now[0] + seconds))
         instance = controller.Controller.__new__(controller.Controller)
         instance.digest = "a" * 64
-        instance.worker_request = {"originalAttempt": "remove/erase/1"}
+        instance.worker_request = {"originalAttempt": "remove/erase/1", "targets": self.TARGETS}
         instance.request = {"deadlineSeconds": 14400}
         instance.root = Path("/nonexistent")
         instance.lock = -1
@@ -198,40 +199,58 @@ class UnreachableWorkerTests(unittest.TestCase):
         stream = iter(answers)
 
         def session(command):
-            state = next(stream, None)
-            if state is None:
-                return controller.ssh.Outcome(255, b"", False, False, "refused")
-            return controller.ssh.Outcome(0, json.dumps({"state": state, "request": instance.digest, "originalAttempt": "remove/erase/1"}).encode(),
-                                          False, False, None)
+            answer = next(stream)
+            if isinstance(answer, controller.ssh.Outcome):
+                return answer
+            return controller.ssh.Outcome(0, json.dumps(answer).encode(), False, False, None)
 
         instance.session = session
-        return instance, clock, now
+        return instance
 
-    def test_a_worker_that_never_answers_refuses_after_the_startup_allowance(self):
-        instance, clock, now = self.awaiting([])
-        with patch.object(controller, "time", clock), self.assertRaises(controller.redfish.Refused) as caught:
-            instance.await_receipt()
-        self.assertEqual((str(caught.exception), caught.exception.detail), ("worker-unreachable", "refused:20min"))
-        self.assertGreaterEqual(now[0], controller.FIRST_ANSWER_SECONDS)
-        self.assertLess(now[0], controller.FIRST_ANSWER_SECONDS + 10)
+    def status(self, **changes):
+        return dict({"state": "partial", "request": "a" * 64, "originalAttempt": "remove/erase/1"}, **changes)
 
-    def test_a_worker_that_answered_and_went_silent_refuses_after_ten_minutes(self):
-        instance, clock, now = self.awaiting(["partial"] * 3)
-        with patch.object(controller, "time", clock), self.assertRaises(controller.redfish.Refused) as caught:
-            instance.await_receipt()
-        self.assertEqual((str(caught.exception), caught.exception.detail), ("worker-unreachable", "refused:10min"))
-        self.assertGreaterEqual(now[0], 10 + controller.SILENCE_SECONDS)
-        self.assertLess(now[0], 10 + controller.SILENCE_SECONDS + 10)
+    def test_a_partial_status_answers_each_targets_written_and_read_back_bytes_of_twice_its_coverage(self):
+        coverage = controller.worker.covered(self.TARGETS[1])
+        progress = [{"written": 8 * 1024**3, "verified": 1024**3}, {"written": 100, "verified": 0}]
+        answer = self.polling(self.status(progress=progress)).poll()
+        self.assertEqual(answer, {"answer": "partial", "progress": [{"completed": 9 * 1024**3, "total": 16 * 1024**3},
+                                                                    {"completed": 100, "total": 2 * coverage}]})
+        self.assertLess(coverage, self.TARGETS[1]["sizeBytes"], "a metadata clear's total is its merged regions, not the disk")
 
-    def test_a_transient_failure_between_answers_does_not_refuse(self):
-        instance, clock, _now = self.awaiting(["partial", None, "partial", "complete"])
-        with (
-            patch.object(controller, "time", clock),
-            patch.object(controller.worker, "validate_receipt"),
-            patch.object(controller, "write"),
-            patch.object(controller.os, "fsync"),
-        ):
-            self.assertEqual(instance.await_receipt()["state"], "complete")
+    def test_malformed_progress_is_ignored_and_never_refuses(self):
+        coverage = controller.worker.covered(self.TARGETS[1])
+        for reported in (None, "much", [], [{"written": 1, "verified": 0}], [{"written": 1, "verified": 0}, {"written": 1}],
+                         [{"written": 1, "verified": 0}, {"written": coverage + 1, "verified": 0}],
+                         [{"written": -1, "verified": 0}, {"written": 0, "verified": 0}],
+                         [{"written": True, "verified": 0}, {"written": 0, "verified": 0}],
+                         [{"written": 1.5, "verified": 0}, {"written": 0, "verified": 0}],
+                         [{"written": 1, "verified": 0, "extra": 1}, {"written": 0, "verified": 0}]):
+            with self.subTest(reported=reported):
+                self.assertEqual(self.polling(self.status(progress=reported)).poll(), {"answer": "partial", "progress": None})
+
+    def test_unanswered_and_answered_sessions_and_refusals(self):
+        unanswered = controller.ssh.Outcome(255, b"", False, False, "host-key")
+        self.assertEqual(self.polling(unanswered).poll(), {"answer": "unanswered", "cause": "host-key"})
+        self.assertEqual(self.polling(controller.ssh.Outcome(None, b"", False, True, None)).poll(), {"answer": "unanswered", "cause": "exit"})
+        self.assertEqual(self.polling(controller.ssh.Outcome(1, b"", False, False, None)).poll(), {"answer": "answered"})
+        self.assertEqual(self.polling(controller.ssh.Outcome(0, b"", False, False, None)).poll(), {"answer": "answered"})
+        with self.assertRaisesRegex(controller.worker.Refusal, "foreign-worker"):
+            self.polling(self.status(originalAttempt="remove-0/erase/1", progress=[])).poll()
+        with self.assertRaisesRegex(controller.worker.Refusal, "worker-failed"):
+            self.polling(self.status(state="failed")).poll()
+
+    def test_a_complete_receipt_is_validated_and_kept_before_it_is_answered(self):
+        receipt = {"state": "complete", "request": "a" * 64}
+        instance = self.polling(receipt)
+        with patch.object(controller.worker, "validate_receipt") as validate, patch.object(controller, "write") as write, \
+                patch.object(controller.os, "fsync"):
+            self.assertEqual(instance.poll(), {"answer": "complete", "receipt": receipt})
+        validate.assert_called_once_with(instance.worker_request, receipt)
+        self.assertEqual(write.call_args.args[0], instance.root / "receipt.json")
+        kept = self.polling()
+        kept.receipt = lambda: receipt
+        self.assertEqual(kept.poll(), {"answer": "complete", "receipt": receipt})
 
     def test_an_unanswered_session_is_classified_without_its_output(self):
         refused = b"ssh: connect to host 192.0.2.10 port 22: Connection refused\r\n"

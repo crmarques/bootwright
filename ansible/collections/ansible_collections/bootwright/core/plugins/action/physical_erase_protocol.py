@@ -28,7 +28,7 @@ CAPABILITY = adapter_protocol.Capability(
     "physical erase",
     "physical erase evidence could not be published",
     completion,
-    phases=("loaded", "prepared", "refused", "completed"),
+    phases=adapter_protocol.PREPARING_PHASES,
     refusals=REFUSALS,
     detail=True,
     preparation=lambda args: args["receipt"],

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -244,6 +245,15 @@ func TestPhysicalEraseOrdersAfterClaimAndBeforeInstallation(t *testing.T) {
 	if err != nil || !slices.Contains(removal.Consumes, reconciliation.AuthorizationDataLoss) {
 		t.Fatal("erase did not require data-loss")
 	}
+	if len(removal.Groups) != len(frozen.Targets) || removal.Groups[0].ID != "erase-1" || removal.Groups[0].Description != "zero and read back "+eraseTargetName(frozen.Targets[0]) {
+		t.Fatalf("erase removal groups %+v, want one per frozen target", removal.Groups)
+	}
+	definition := plan.Blocks[erasure].BlockDefinition
+	definition.Description, definition.Impacts, definition.Groups, definition.Consumes = removal.Description, removal.Impacts, removal.Groups, removal.Consumes
+	definition.Requires, definition.Dependencies, definition.Prerequisites = nil, nil, nil
+	if _, err := reconciliation.NewPlan(reconciliation.Destroy, []reconciliation.BlockDefinition{definition}); err != nil {
+		t.Fatalf("a removal plan of the declared groups is refused: %v", diagnostics.Of(err))
+	}
 }
 
 type retiringPolicy struct{ family string }
@@ -340,6 +350,12 @@ func TestPhysicalEraseResolvesEachTargetMethodAndProvesItsExactCoverage(t *testi
 			verbs := map[string]string{EraseLogicalOverwrite: "logical-overwrite ", EraseMetadataClear: "metadata-clear "}
 			if err != nil || !slices.Equal(removal.Impacts, []string{"boot-offline-erase " + machine.Name(), "enable-bmc-media-verification " + machine.Name() + " (BMC-wide; retained)", verbs[test.root] + root, verbs[test.data] + data}) {
 				t.Fatalf("removal impacts %v, %v", removal.Impacts, err)
+			}
+			labels := map[string]string{EraseLogicalOverwrite: "zero and read back ", EraseMetadataClear: "clear the metadata of "}
+			groups := []reconciliation.Group{{ID: "erase-1", Description: labels[test.root] + root, Machines: []string{machine.Name()}},
+				{ID: "erase-2", Description: labels[test.data] + data, Machines: []string{machine.Name()}}}
+			if !reflect.DeepEqual(removal.Groups, groups) {
+				t.Fatalf("removal groups %+v, want %+v", removal.Groups, groups)
 			}
 			digest := strings.Repeat("a", 64)
 			receipt := EraseReceipt{Version: EraseImplementation, State: "complete", OriginalAttempt: "original/1", Request: digest, UUID: "example-uuid", MACs: []string{"52:54:00:9a:1b:01"}}

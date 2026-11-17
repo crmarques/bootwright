@@ -102,6 +102,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			definition.Description = eraseDescription + machine.Name()
 			definition.Consumes = []string{reconciliation.AuthorizationDataLoss}
 			definition.Impacts = eraseImpacts(request)
+			definition.Groups = eraseGroups(request)
 		}
 		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, install.SecretReferences()...)
@@ -123,7 +124,20 @@ func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (li
 	if err != nil {
 		return lifecycle.Removal{}, err
 	}
-	return lifecycle.Removal{Description: eraseDescription + request.Install.Identity.Object, Impacts: eraseImpacts(request), Consumes: []string{reconciliation.AuthorizationDataLoss}}, nil
+	return lifecycle.Removal{Description: eraseDescription + request.Install.Identity.Object, Impacts: eraseImpacts(request), Groups: eraseGroups(request), Consumes: []string{reconciliation.AuthorizationDataLoss}}, nil
+}
+
+func eraseGroups(request EraseRequest) []reconciliation.Group {
+	machines := []string{request.Install.Identity.Object}
+	groups := make([]reconciliation.Group, 0, len(request.Targets))
+	for index, target := range request.Targets {
+		description := "zero and read back " + eraseTargetName(target)
+		if target.Method == EraseMetadataClear {
+			description = "clear the metadata of " + eraseTargetName(target)
+		}
+		groups = append(groups, reconciliation.Group{ID: "erase-" + strconv.Itoa(index+1), Description: description, Machines: machines})
+	}
+	return groups
 }
 
 const eraseDescription = "overwrite and read back the declared physical disks of "

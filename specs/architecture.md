@@ -1127,7 +1127,10 @@ once a minute per group and at each five percent step. It never counts toward
 a group's or a block's completion and is never evidence; the engine alone
 decides whether an effect happened. The collection's shared dispatch leaves out
 a `progress` the decoder would refuse, so progress never fails the effect it
-describes, and a record that still carries one breaks the protocol. The member
+describes, and a record that still carries one breaks the protocol. A `running`
+`group` record counts toward its own bound of 4096 per run instead of the
+lifecycle runner's 64 records, so a wait of hours can report each group about
+once a minute. The member
 is additive and moves no capability's request, evidence or effect pin.
 
 A lifecycle `completed` record may carry `warnings`, a nonempty array of at

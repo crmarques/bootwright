@@ -45,6 +45,7 @@ EFFECTS = {
     "cluster_objects_write": "Engine",
     "substrate_kubevirt_api": "connect",
     "substrate_kubevirt_access": "Client",
+    "physical_erase_await": "wait",
 }
 
 

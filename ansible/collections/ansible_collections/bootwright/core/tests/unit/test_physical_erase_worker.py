@@ -551,7 +551,7 @@ class ConcurrentEraseTests(unittest.TestCase):
         self.assertIsInstance(result, worker.Refusal)
         self.assertEqual(str(result), "deadline")
         self.assertTrue(all("flush" not in disk.events for disk in disks.values()))
-        self.assertEqual(len(atomic.call_args_list), 1)
+        self.assertEqual({call.args[1]["state"] for call in atomic.call_args_list}, {"partial"})
 
     def test_the_system_proof_runs_at_most_once_per_second_across_disks(self):
         import threading
@@ -588,6 +588,96 @@ class ConcurrentEraseTests(unittest.TestCase):
         pace.stop.set()
         with self.assertRaisesRegex(worker.Refusal, "stopped"):
             pace.checkpoint()
+
+    def test_each_targets_written_and_verified_bytes_are_counted_under_concurrency_and_published_on_the_pace(self):
+        import threading
+
+        request = dict(self.request((16 * worker.CHUNK, 8 * worker.CHUNK, 4 * worker.CHUNK)), deadlineSeconds=14400)
+        disks = self.disks(request)
+        now, lock = [0.0], threading.Lock()
+
+        def clock():
+            with lock:
+                now[0] += 0.5
+                return now[0]
+
+        result, atomic = self.run_erase(request, disks, clock=clock)
+        self.assertNotIsInstance(result, worker.Refusal)
+        written = [call.args[1] for call in atomic.call_args_list]
+        self.assertEqual(written[0], {"state": "partial", "request": "a" * 64, "originalAttempt": "remove/erase/1",
+                                      "progress": [{"written": 0, "verified": 0}] * 3})
+        partial = written[1:-1]
+        self.assertGreater(len(partial), 1)
+        self.assertEqual(written[-1]["state"], "complete")
+        for status in partial:
+            self.assertEqual(set(status), {"state", "request", "originalAttempt", "progress"})
+            for counts, target in zip(status["progress"], request["targets"]):
+                self.assertLessEqual(counts["verified"], counts["written"])
+                self.assertLessEqual(counts["written"], target["sizeBytes"])
+        for earlier, later in zip(partial, partial[1:]):
+            for before, after in zip(earlier["progress"], later["progress"]):
+                self.assertLessEqual(before["written"] + before["verified"], after["written"] + after["verified"])
+
+    def test_concurrent_counts_lose_no_chunk_and_one_writer_publishes_at_a_time(self):
+        import threading
+
+        request = self.request((4 * worker.CHUNK,) * 4)
+        pace = worker.Pace(request, lambda _: None, clock=lambda: 0.0)
+        writers, overlap, guard = [0], [], threading.Lock()
+
+        def publish(value):
+            with guard:
+                writers[0] += 1
+                overlap.append(writers[0])
+            with guard:
+                writers[0] -= 1
+
+        pace.publish = publish
+
+        def count(index):
+            for unused in range(1000):
+                pace.advance(index % 4, "written" if index < 4 else "verified", 3)
+                pace.report()
+
+        threads = [threading.Thread(target=count, args=(index,)) for index in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(pace.status()["progress"], [{"written": 3000, "verified": 3000}] * 4)
+        self.assertEqual(max(overlap), 1)
+        self.assertEqual(len(overlap), 1, "a clock that never moves publishes once")
+
+    def test_a_progress_write_that_fails_only_skips_that_report(self):
+        request = self.request()
+        now = [0.0]
+        pace = worker.Pace(request, lambda _: None, clock=lambda: now[0])
+        attempts = []
+
+        def publish(value):
+            attempts.append(value)
+            raise OSError("no space left")
+
+        pace.publish = publish
+        pace.checkpoint()
+        now[0] = worker.PROGRESS_SECONDS
+        pace.checkpoint()
+        self.assertEqual(len(attempts), 2)
+
+    def test_the_status_stays_within_the_receipt_server_bound_at_sixteen_targets(self):
+        import json
+
+        size = 64 * 1024**4
+        targets = [{"deviceName": "/dev/disk/by-id/" + "d" * 200 + str(index), "method": "metadataClear", "wwn": "w" * 256,
+                    "serialNumber": "s" * 250 + str(index), "sizeBytes": size} for index in range(16)]
+        request = dict(EraseBoundaryTests().request(), originalAttempt="op-" + "f" * 32 + "/physical-erase-" + "m" * 200 + "/99", targets=targets)
+        pace = worker.Pace(request, lambda _: None, clock=lambda: 0.0)
+        for index in range(16):
+            pace.advance(index, "written", 2**63 - 1)
+            pace.advance(index, "verified", 2**63 - 1)
+        data = worker.canonical(pace.status())
+        self.assertLessEqual(len(data), 32768)
+        self.assertEqual(len(json.loads(data)["progress"]), 16)
 
     def test_a_logical_overwrite_target_is_at_most_896_gib(self):
         request = EraseBoundaryTests().request()
@@ -652,7 +742,7 @@ class PacedUsageScanTests(unittest.TestCase):
         self.assertIsInstance(result, worker.Refusal)
         self.assertEqual(str(result), "disk-mounted")
         self.assertTrue(all("flush" not in disk.events and disk.events[-1] == "close" for disk in disks.values()))
-        self.assertEqual([call.args[1]["state"] for call in atomic.call_args_list], ["partial"])
+        self.assertEqual({call.args[1]["state"] for call in atomic.call_args_list}, {"partial"})
 
 
 class BlockDiskBufferTests(unittest.TestCase):

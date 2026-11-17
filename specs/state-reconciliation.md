@@ -2696,7 +2696,12 @@ worker refuses promptly. A worker no session reaches refuses
 `worker-unreachable` once none has answered within the 900-second RAM startup
 allowance plus 300 seconds of the wait's start, or once an answering worker
 stays unanswered for 600 seconds; both are timed within one wait, so a repeated
-wait starts its own bound. The operator powers off the Machine before
+wait starts its own bound. While it waits, the run reports each target's written
+plus read-back bytes of twice its coverage as that target's group
+[progress](architecture.md#adapter-warnings-and-group-progress), from
+the worker's partial status at most every ten seconds, and a worker no session
+reaches as `waiting for the erase worker at <address>, no answer for <n> min
+(<class>)`; a malformed count is ignored and no count is completion evidence. The operator powers off the Machine before
 running the destroy again, whose fresh boot repeats every target's frozen method and
 readback after rechecking every identity. A completed durable receipt is replayed.
 Without a receipt, another boot must

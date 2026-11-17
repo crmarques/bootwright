@@ -200,6 +200,8 @@ def test_every_physical_erase_effect_phase_is_followed_by_its_named_refusal():
         tasks = role_tasks.flatten(load(ROLES / "physical_erase/tasks" / name))
         for index, task in enumerate(tasks):
             arguments = task.get("bootwright.core.physical_erase")
+            if isinstance(task.get("bootwright.core.physical_erase_await"), dict):
+                arguments = dict(task["bootwright.core.physical_erase_await"], phase="poll")
             if not isinstance(arguments, dict) or arguments["phase"] in ("observe", "build"):
                 continue
             register = task.get("register")
@@ -209,7 +211,7 @@ def test_every_physical_erase_effect_phase_is_followed_by_its_named_refusal():
             assert following["vars"] == {"physical_erase_refused": "{{ " + register + " }}"}
             assert following["when"] == register + ".refused is defined"
             seen.add(arguments["phase"])
-    assert seen == {"prepare", "start", "await", "ack", "stop-proof", "finish"}
+    assert seen == {"prepare", "start", "poll", "ack", "stop-proof", "finish"}
     named, stop = load(ROLES / "physical_erase/tasks/refused.yml")
     assert named["bootwright.core.physical_erase_protocol"]["phase"] == "refused" and named["no_log"] is True
     assert "no_log" not in stop and set(REFERENCE.findall(stop["ansible.builtin.fail"]["msg"])) & {"material", "detail", "private", "url"} == set()

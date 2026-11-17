@@ -16,7 +16,9 @@ options:
     required: true
     choices:
       - loaded
+      - group
       - prepared
+      - refused
       - completed
   digest:
     description: Frozen request digest.

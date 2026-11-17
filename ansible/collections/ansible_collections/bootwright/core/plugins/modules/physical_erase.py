@@ -20,7 +20,7 @@ options:
       - prepare
       - build
       - start
-      - await
+      - poll
       - ack
       - stop-proof
       - finish
@@ -50,6 +50,23 @@ EXAMPLES = r"""
   no_log: true
 """
 RETURN = r"""
+answer:
+  description: What one poll of the RAM worker found, C(complete), C(partial), C(answered) or C(unanswered).
+  returned: when polled
+  type: str
+receipt:
+  description: The complete receipt, once recorded.
+  returned: when polled complete
+  type: dict
+progress:
+  description: Each target's written plus read-back bytes and twice its coverage, or null when the worker's report is malformed.
+  returned: when polled partial
+  type: list
+  elements: dict
+cause:
+  description: The closed failure class of a session that reached no worker.
+  returned: when polled unanswered
+  type: str
 evidence:
   description: Bounded erase evidence.
   returned: when observed or finished
@@ -76,7 +93,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import physical_er
 UNPROVED = "physical erase did not prove its bounded custody or receipt contract"
 # The phases that act on custody, the RAM worker or the management controller,
 # and of them those that reach the controller.
-EFFECT_PHASES = ("prepare", "start", "await", "ack", "stop-proof", "finish")
+EFFECT_PHASES = ("prepare", "start", "poll", "ack", "stop-proof", "finish")
 CONTROLLED = ("start", "stop-proof")
 # Each internal refusal the runner names, by the closed code its diagnostic
 # carries; the custody drift codes share one code and one remedy.
@@ -100,7 +117,7 @@ NAMED.update({
 def main():
     module = AnsibleModule(
         argument_spec={
-            "phase": {"type": "str", "required": True, "choices": ["prepare", "build", "start", "await", "ack", "stop-proof", "finish", "observe"]},
+            "phase": {"type": "str", "required": True, "choices": ["prepare", "build", "start", "poll", "ack", "stop-proof", "finish", "observe"]},
             "request": {"type": "dict", "required": True},
             "digest": {"type": "str", "required": True},
             "material": {"type": "dict", "required": True, "no_log": True},
@@ -119,8 +136,8 @@ def main():
         if phase in ("start", "stop-proof"):
             controller.control(phase)
             module.exit_json(changed=True)
-        if phase == "await":
-            module.exit_json(changed=True, receipt=controller.await_receipt())
+        if phase == "poll":
+            module.exit_json(changed=True, **controller.poll())
         if phase == "ack":
             module.exit_json(changed=controller.acknowledge())
         receipt = controller.receipt()

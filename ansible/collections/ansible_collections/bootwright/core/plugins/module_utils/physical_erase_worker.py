@@ -93,8 +93,8 @@ def covered(target):
     return sum(end - start for start, end in regions(target))
 
 
-def chunks(disk, expected, checkpoint, spans, step):
-    """Recheck the run and the disk's identity before each chunk, then let step act on it."""
+def chunks(disk, expected, checkpoint, spans, step, advance=lambda count: None):
+    """Recheck the run and the disk's identity before each chunk, let step act on it, then count it."""
     total = 0
     for start, end in spans:
         offset = start
@@ -103,13 +103,18 @@ def chunks(disk, expected, checkpoint, spans, step):
             disk.identify(expected)
             count = min(CHUNK, end - offset)
             step(offset, count)
+            advance(count)
             offset += count
             total += count
     return total
 
 
-def overwrite(disk, expected, checkpoint):
-    """Zero, flush and independently read back every byte of the method's regions through one handle."""
+def overwrite(disk, expected, checkpoint, advance=lambda kind, count: None):
+    """Zero, flush and independently read back every byte of the method's regions through one handle.
+
+    advance hears each chunk once it was written or read back and matched, as
+    "written" or "verified"; it only reports progress and proves nothing.
+    """
     disk.prove(expected)
     checkpoint()
     spans = regions(expected)
@@ -123,9 +128,9 @@ def overwrite(disk, expected, checkpoint):
         if disk.read(offset, count) != zero[:count]:
             raise Refusal("readback")
 
-    written = chunks(disk, expected, checkpoint, spans, write)
+    written = chunks(disk, expected, checkpoint, spans, write, lambda count: advance("written", count))
     disk.flush()
-    verified = chunks(disk, expected, checkpoint, spans, read)
+    verified = chunks(disk, expected, checkpoint, spans, read, lambda count: advance("verified", count))
     disk.prove(expected)
     return {"written": written, "verified": verified}
 
@@ -582,8 +587,17 @@ def atomic(path, value):
         os.close(parent)
 
 
+PROGRESS_SECONDS = 10.0
+
+
 class Pace:
-    """One deadline, a shared stop, and the system proof and usage scan at most once per interval across every disk."""
+    """One deadline, a shared stop, and the system proof and usage scan at most once per interval across every disk.
+
+    It also counts each target's written and read-back bytes and, once
+    publish is set, hands publish the partial status carrying them at most
+    once per PROGRESS_SECONDS. The counts only report progress: the receipt
+    alone, built from each disk's own result, is completion evidence.
+    """
 
     def __init__(self, request, prove_hardware, clock=time.monotonic, interval=1.0, scan=lambda: None):
         self.request, self.prove_hardware, self.clock, self.interval, self.scan = request, prove_hardware, clock, interval, scan
@@ -591,6 +605,37 @@ class Pace:
         self.lock = threading.Lock()
         self.stop = threading.Event()
         self.proved = None
+        self.counting = threading.Lock()
+        self.counts = [{"written": 0, "verified": 0} for unused in request["targets"]]
+        self.publishing = threading.Lock()
+        self.publish = None
+        self.published = None
+
+    def advance(self, index, kind, count):
+        with self.counting:
+            self.counts[index][kind] += count
+
+    def status(self):
+        """The partial status: this request, its original attempt and every target's counts."""
+        with self.counting:
+            progress = [dict(counts) for counts in self.counts]
+        return {"state": "partial", "request": self.request["request"], "originalAttempt": self.request["originalAttempt"], "progress": progress}
+
+    def report(self):
+        """Publish the partial status when it is due; one writer at a time, and a failed write only skips it."""
+        if self.publish is None or not self.publishing.acquire(blocking=False):
+            return
+        try:
+            now = self.clock()
+            if self.published is not None and now - self.published < PROGRESS_SECONDS:
+                return
+            self.published = now
+            try:
+                self.publish(self.status())
+            except (OSError, Refusal):
+                pass
+        finally:
+            self.publishing.release()
 
     def prove(self, due=True):
         if self.clock() >= self.deadline:
@@ -605,6 +650,7 @@ class Pace:
         if self.stop.is_set():
             raise Refusal("stopped")
         self.prove(due=False)
+        self.report()
 
 
 def concurrently(disks, targets, pace, run=overwrite):
@@ -613,7 +659,7 @@ def concurrently(disks, targets, pace, run=overwrite):
 
     def work(index):
         try:
-            results[index] = run(disks[index], targets[index], pace.checkpoint)
+            results[index] = run(disks[index], targets[index], pace.checkpoint, lambda kind, count: pace.advance(index, kind, count))
         except BaseException as error:
             with guard:
                 failures.append(error)
@@ -660,7 +706,9 @@ def execute(request, directory, opener=BlockDisk, prove_hardware=hardware, relea
             disk.prove(target)
             if selects_root(lambda disk=disk: disk.sys, target, request["root"]):
                 raise Refusal("root-target-unrecognised")
-        atomic(Path(directory) / "status.json", {"state": "partial", "request": request["request"], "originalAttempt": request["originalAttempt"]})
+        status = Path(directory) / "status.json"
+        atomic(status, pace.status())
+        pace.published, pace.publish = clock(), lambda value: atomic(status, value)
         # The exclusive holds already refuse new mounts and dm or md claims, so
         # the usage scan of every disk shares the paced system proof.
         pace.scan = lambda: scan(disks)
@@ -668,7 +716,7 @@ def execute(request, directory, opener=BlockDisk, prove_hardware=hardware, relea
         coverage = concurrently(disks, request["targets"], pace)
         pace.prove()
         result = receipt_for(request, coverage)
-        atomic(Path(directory) / "status.json", result)
+        atomic(status, result)
         return result
     finally:
         for disk in disks:

@@ -52,8 +52,7 @@
           when: physical_erase_prepared.receipt is none and not (physical_erase_prepared.running | bool)
 
         - name: Wait for every target byte to be overwritten and independently read back
-          bootwright.core.physical_erase:
-            phase: await
+          bootwright.core.physical_erase_await:
             request: '{{ bootwright_physical_erase_request }}'
             digest: '{{ bootwright_physical_erase_digest }}'
             material: '{{ bootwright_physical_erase_material }}'

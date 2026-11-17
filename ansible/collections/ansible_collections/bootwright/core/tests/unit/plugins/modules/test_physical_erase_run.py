@@ -26,7 +26,7 @@ def stubbed_controller(tmp_path, monkeypatch):
 
     The controller's records are read as plain files, since the real read
     demands root's ownership. `receipt` is what receipt() returns, or the exception it raises, and
-    `await_error` is the exception await_receipt() raises.
+    `await_error` is the exception poll() raises.
     """
     state = {"calls": [], "closed": 0, "root": tmp_path, "receipt": None, "await_error": None, "created": None}
 
@@ -47,11 +47,11 @@ def stubbed_controller(tmp_path, monkeypatch):
         def control(self, phase):
             state["calls"].append(phase)
 
-        def await_receipt(self):
-            state["calls"].append("await")
+        def poll(self):
+            state["calls"].append("poll")
             if state["await_error"]:
                 raise state["await_error"]  # pylint: disable=raising-bad-type
-            return RECEIPT
+            return {"answer": "complete", "receipt": RECEIPT}
 
         def acknowledge(self):
             state["calls"].append("ack")
@@ -90,9 +90,10 @@ def test_each_phase_drives_the_controller_and_the_controller_is_closed_after_eve
     assert prepared["changed"] is True and prepared["evidence"] == {"prepared": True} and controller["created"] is True
     for phase in ("build", "start", "stop-proof"):
         assert run_module(module, arguments(phase))["changed"] is True
-    assert run_module(module, arguments("await"))["receipt"] == RECEIPT
+    polled = run_module(module, arguments("poll"))
+    assert polled["answer"] == "complete" and polled["receipt"] == RECEIPT
     assert run_module(module, arguments("ack"))["changed"] is True
-    assert controller["calls"] == ["prepare", "build", "start", "stop-proof", "await", "ack"]
+    assert controller["calls"] == ["prepare", "build", "start", "stop-proof", "poll", "ack"]
     assert controller["closed"] == 6 and controller["created"] is False
 
 
@@ -138,7 +139,7 @@ def test_a_custody_that_was_never_prepared_observes_as_unprepared_and_fails_ever
 
 def test_a_worker_that_stopped_without_a_receipt_returns_its_named_refusal(controller, run_module):
     controller["await_error"] = worker.Refusal("worker-failed")
-    result = run_module(module, arguments("await"))
+    result = run_module(module, arguments("poll"))
     assert "failed" not in result and result["refused"] == "worker-failed" and result["detail"] == "" and result["controller"] == ""
     assert controller["closed"] == 1
 

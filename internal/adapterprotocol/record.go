@@ -72,6 +72,7 @@ const (
 	MaxNativeCoordinate  = 512
 	MaxNativeCause       = 1024
 	maxLifecycleRecords  = 64
+	maxLifecycleRunning  = 4096
 	maxControllerRecords = 132
 	MaxWarnings          = 16
 	MaxWarningMessage    = 1024
@@ -86,6 +87,13 @@ func (a Admission) Records() int {
 		return maxLifecycleRecords
 	case Controller:
 		return maxControllerRecords
+	}
+	return 0
+}
+
+func (a Admission) Running() int {
+	if a == Lifecycle {
+		return maxLifecycleRunning
 	}
 	return 0
 }
@@ -128,13 +136,19 @@ func Read(reader io.Reader, admission Admission, shape func(Record) error, out c
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 4096), MaxLine)
 	scanner.Split(lines)
-	for count := 0; scanner.Scan(); count++ {
-		if count >= admission.Records() {
-			return errLimit
-		}
+	count, running := 0, 0
+	for scanner.Scan() {
 		record, err := Decode(scanner.Bytes(), admission)
 		if err != nil {
 			return err
+		}
+		if record.Phase == "group" && record.Status == "running" {
+			running++
+		} else {
+			count++
+		}
+		if count > admission.Records() || running > admission.Running() {
+			return errLimit
 		}
 		if shape != nil {
 			if err := shape(record); err != nil {

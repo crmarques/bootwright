@@ -48,6 +48,7 @@ PLUGIN_MISFITS = {
     "cluster_objects_write": "invoked by a role that is itself a misfit",
     "infra_service_protocol": "invoked by a role that is itself a misfit",
     "managedos_install_protocol": "invoked by a role that is itself a misfit",
+    "physical_erase_await": "invoked by a role that is itself a misfit",
     "physical_erase_protocol": "invoked by a role that is itself a misfit",
     "substrate_host_protocol": "omits the libvirt implementation of the role that invokes it",
     "substrate_physical_protocol": "omits the baremetal implementation of the role that invokes it",
