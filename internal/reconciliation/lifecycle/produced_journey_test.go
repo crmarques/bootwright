@@ -188,6 +188,7 @@ func failedPublicationJourney(t *testing.T) (*lifecycle.CapabilityJourney, *inst
 // it. An installation the observation does not prove complete is resolved by
 // the removal's own check (D119), which captures nothing.
 func TestAnAgentInstallWhosePublicationFailedIsCapturedBeforeItsRemoval(t *testing.T) {
+	t.Parallel()
 	block := agentinstall.InstallBlockID(installedCluster)
 	access := []string{block + "/" + agentinstall.KubeconfigOutput + "=" + adminAccess}
 	for _, tc := range []struct {

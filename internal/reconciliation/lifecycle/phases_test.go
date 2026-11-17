@@ -46,6 +46,7 @@ func requireFired(t *testing.T, err error) {
 }
 
 func TestPhasesMatchRecomputation(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		arrange    func(*testing.T) *harness
 		fresh      bool
@@ -189,6 +190,7 @@ func requireRetiredAsFrozen(t *testing.T, h *harness) {
 }
 
 func TestPhasesAfterAFinalization(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := onlineHarness(t, false)
 	completeApply(t, h)
@@ -215,6 +217,7 @@ func TestPhasesAfterAFinalization(t *testing.T) {
 }
 
 func TestReplacementObservesTheReplacedRemovalWithItsOwnPhases(t *testing.T) {
+	t.Parallel()
 	h, c := retiringHarness(t, hostedDefinitions(stagedDefinition("other", reconciliation.StageClusters, "installation")), []string{"rhel-01"})
 	completeApply(t, h)
 	h.service.options.Concurrency = 1

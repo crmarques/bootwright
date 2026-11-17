@@ -65,6 +65,7 @@ func automaticHarness(t *testing.T) *harness {
 	return h
 }
 func TestAutomaticPreparationPreviewAndControllerStageHaveNoInventoryEffects(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := automaticHarness(t)
 	preview, err := h.service.Plan(ctx, PlanRequest{ContextName: testContextName, Stages: []string{"controller"}})
@@ -104,6 +105,7 @@ func TestAutomaticPreparationPreviewAndControllerStageHaveNoInventoryEffects(t *
 	}
 }
 func TestAutomaticPreparationRejectsFutureAuthorizationAndUntilBeforeEffects(t *testing.T) {
+	t.Parallel()
 	for _, r := range []ApplyRequest{{Authorizations: []string{"data-loss"}}, {Authorizations: []string{"data-loss=0123456789abcdef"}, Unattended: true}, {Until: "example.package"}} {
 		h := automaticHarness(t)
 		r.ContextName = testContextName
@@ -117,6 +119,7 @@ func TestAutomaticPreparationRejectsFutureAuthorizationAndUntilBeforeEffects(t *
 	}
 }
 func TestAutomaticPreparationRequiresConfirmationAndResumesFrozenScope(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := automaticHarness(t)
 	h.confirmer.decline = true

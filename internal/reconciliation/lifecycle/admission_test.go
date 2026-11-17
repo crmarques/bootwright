@@ -11,6 +11,7 @@ import (
 )
 
 func TestApplyAdmissionRefusesBeforeClaimBindingAndNativeEffects(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	refused := errors.New("capacity unknown")
 	calls := 0
@@ -52,6 +53,7 @@ func TestApplyAdmissionRefusesBeforeClaimBindingAndNativeEffects(t *testing.T) {
 }
 
 func TestApplyRechecksAdmissionUnderTheExclusiveTransaction(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	refused := errors.New("capacity changed")
 	calls := 0
@@ -75,6 +77,7 @@ func TestApplyRechecksAdmissionUnderTheExclusiveTransaction(t *testing.T) {
 }
 
 func TestApplyAdmissionReceivesOnlyTheBlocksTheTransitionMayStart(t *testing.T) {
+	t.Parallel()
 	alpha := definition("alpha")
 	bravo := definition("bravo")
 	bravo.Stage = reconciliation.StageMachines

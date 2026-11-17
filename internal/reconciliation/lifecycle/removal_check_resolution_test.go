@@ -30,6 +30,7 @@ func unknownApply(t *testing.T, h *harness) {
 // the apply's block as failed, never done, and the removal then registers and
 // takes the block back.
 func TestARemovalResolvesAnUnknownApplyBlockByTheRemovalsCheck(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		observed reconciliation.EffectState
 		recorded reconciliation.EffectState
@@ -68,6 +69,7 @@ func TestARemovalResolvesAnUnknownApplyBlockByTheRemovalsCheck(t *testing.T) {
 // own check can read as this context's own leaves the apply's block unknown,
 // and the removal refuses, registering nothing.
 func TestARemovalLeavesAnUnreadableApplyBlockUnknownAndRegistersNothing(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	unknownApply(t, h)
 	applied := currentOperation(t, h)
@@ -91,6 +93,7 @@ func TestARemovalLeavesAnUnreadableApplyBlockUnknownAndRegistersNothing(t *testi
 // removal's to take back, so a removal refused over another block it could not
 // prove reports only that block, never the apply's remedy for the proved one.
 func TestARefusedRemovalReportsOnlyTheBlocksItsCheckCouldNotProve(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo")})
 	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeChanged}, "bravo": {Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
@@ -127,6 +130,7 @@ func (removalReader) Unresolved(verb reconciliation.Verb, block reconciliation.B
 // reading, and status, which reads the apply's block for the apply first,
 // falls back to that same reading, so both name one reason and remedy.
 func TestAnApplyBlockTheRemovalLeftUnknownIsExplainedByTheRemovalsReading(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	h.service.capabilities = testResolver{capability: removalReader{h.capability}}
 	unknownApply(t, h)
@@ -154,6 +158,7 @@ func (bothVerbsReader) Unresolved(verb reconciliation.Verb, block reconciliation
 // unknown, in its refusal and in status, and the apply's own continuation for
 // the apply.
 func TestAResolutionIsExplainedForTheVerbThatRecordedIt(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		run  func(h *harness) error
@@ -191,6 +196,7 @@ func TestAResolutionIsExplainedForTheVerbThatRecordedIt(t *testing.T) {
 // block completed resolves it done (D123), never asking the removal's check,
 // and the removal then takes the block back as any completed apply's.
 func TestARemovalResolvesAnApplyBlockItsApplyObservationProvesDone(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	unknownApply(t, h)
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
@@ -213,6 +219,7 @@ func TestARemovalResolvesAnApplyBlockItsApplyObservationProvesDone(t *testing.T)
 // A continuation of an unknown apply still resolves its block by the apply's
 // own check.
 func TestAContinuationOfAnUnknownApplyStillResolvesByTheApplysCheck(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	unknownApply(t, h)
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}

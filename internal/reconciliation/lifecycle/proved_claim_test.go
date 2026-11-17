@@ -17,6 +17,7 @@ import (
 // would insert media, never runs. Without a holder the claim lands beside the
 // plan's own reservations, and the dependent block runs.
 func TestAProvedClaimIsTakenBeforeItsDependentStarts(t *testing.T) {
+	t.Parallel()
 	system := "bmc-system:4c4c4544-0042-3510-8052-b4c04f4d4e31"
 	for name, holder := range map[string]string{"held by another context": "first", "unheld": ""} {
 		t.Run(name, func(t *testing.T) {
@@ -54,6 +55,7 @@ func TestAProvedClaimIsTakenBeforeItsDependentStarts(t *testing.T) {
 // bmc-system: and bmc-mac: keys onto the planned reservation of the same kind
 // and service, and nothing another context or another service holds.
 func TestKeepProvedCarriesOnlyTheOwnProvedSystemKey(t *testing.T) {
+	t.Parallel()
 	planned := []prerequisites.HostReservation{{Context: "lab", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:a:443/1"}}}
 	held := []prerequisites.HostReservation{
 		{Context: "lab", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc-system:u1", "bmc:a:443/1", "bmc-mac:52:54:00:9a:1b:01"}},
@@ -71,6 +73,7 @@ func TestKeepProvedCarriesOnlyTheOwnProvedSystemKey(t *testing.T) {
 // apply keeps the bmc-mac: keys its own held claim proved, and publishes no
 // claim of a server it has not read yet rather than an empty one (D257 (2)).
 func TestKeepProvedKeepsAnSSHServerClaimAndPublishesNoEmptyOne(t *testing.T) {
+	t.Parallel()
 	planned := []prerequisites.HostReservation{
 		{Context: "lab", Kind: "machine-hardware", Service: "mirror"},
 		{Context: "lab", Kind: "machine-hardware", Service: "services"},

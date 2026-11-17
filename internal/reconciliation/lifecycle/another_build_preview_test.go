@@ -48,6 +48,7 @@ func namesBuild(got *AnotherBuild, registeredBy string, steps ...int) bool {
 // runs: those not done, and with a stage selection those it does not leave
 // out. The apply's confirmation shows the very same.
 func TestAContinuationUnderAnotherBuildNamesTheStepsThisBuildRuns(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, build := range otherBuilds() {
 		for _, test := range []struct {
@@ -97,6 +98,7 @@ func destroyConfirmationOf(t *testing.T, h *harness) PlanResult {
 // fresh removal that supersedes an incomplete apply begins under this build
 // and names none.
 func TestARemovalUnderAnotherBuildNamesTheBuildThatRegisteredIt(t *testing.T) {
+	t.Parallel()
 	for _, build := range otherBuilds() {
 		t.Run(build.name+" continuation", func(t *testing.T) {
 			h := newHarness(t, "artifact-server-lab")
@@ -125,6 +127,7 @@ func TestARemovalUnderAnotherBuildNamesTheBuildThatRegisteredIt(t *testing.T) {
 // that registered it, not a preview whose proof refuses, not one that only
 // completes a finalization, and not a plan that begins an operation.
 func TestAPreviewNamesNoOtherBuildWhereNoContinuationRunsUnderOne(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	preview := func(t *testing.T, h *harness) *PlanResult {
 		t.Helper()
@@ -189,6 +192,7 @@ func TestAPreviewNamesNoOtherBuildWhereNoContinuationRunsUnderOne(t *testing.T) 
 // A continuation whose steps all are done or left out by the stage selection
 // runs nothing under the build in hand, so it names none.
 func TestAPreviewNamesNoOtherBuildWhenNoStepRunsUnderIt(t *testing.T) {
+	t.Parallel()
 	steps := []PlanStep{{State: string(reconciliation.BlockDone)}, {State: string(reconciliation.BlockPending), Selection: StepNotSelected}}
 	if got := anotherBuildOf(operationstore.Operation{}, steps); got != nil {
 		t.Fatalf("a continuation with nothing to run named %+v", got)
@@ -198,6 +202,7 @@ func TestAPreviewNamesNoOtherBuildWhenNoStepRunsUnderIt(t *testing.T) {
 // Status says whether the build in hand is another build than the one that
 // registered the operation.
 func TestStatusSaysWhetherAnotherBuildRegisteredTheOperation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	statusOf := func(t *testing.T, h *harness) *LifecycleSummary {
 		t.Helper()

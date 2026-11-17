@@ -55,6 +55,7 @@ const anotherHostRemedy = "run on the host this controller state belongs to, or 
 // on a host the controller state does not record it refuses, presenting no
 // plan, asking nothing and touching nothing.
 func TestAFreshDestroyOnAnotherHostRefusesBeforeAnyEffect(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	completeApply(t, h)
 	anotherHost(t, h)
@@ -64,6 +65,7 @@ func TestAFreshDestroyOnAnotherHostRefusesBeforeAnyEffect(t *testing.T) {
 // A fresh removal that supersedes an incomplete apply is held to the same
 // proof, before it resolves any of that apply's blocks.
 func TestAFreshDestroySupersedingAnIncompleteApplyOnAnotherHostRefuses(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	failedApply(t, h)
 	anotherHost(t, h)
@@ -73,6 +75,7 @@ func TestAFreshDestroySupersedingAnIncompleteApplyOnAnotherHostRefuses(t *testin
 // A binding the controller state records for the context that names another
 // host refuses the removal too.
 func TestAFreshDestroyWhoseBindingNamesAnotherHostRefuses(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	completeApply(t, h)
 	h.workspace.controller.State.Bindings[0].HostDigest = strings.Repeat("0", 64)
@@ -82,6 +85,7 @@ func TestAFreshDestroyWhoseBindingNamesAnotherHostRefuses(t *testing.T) {
 // Setup that has not completed on this host refuses the removal, naming the
 // setup that resolves it.
 func TestAFreshDestroyOverIncompleteSetupRefuses(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	failedApply(t, h)
 	h.workspace.controller.Prepared = false
@@ -92,6 +96,7 @@ func TestAFreshDestroyOverIncompleteSetupRefuses(t *testing.T) {
 // host is proved: no apply can bind it while it holds an incomplete operation,
 // and the removal is its exit.
 func TestAFreshDestroyOverAnUnboundContextVerifiesTheHostAndRemoves(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	failedApply(t, h)
 	h.workspace.controller.State.Bindings = nil
@@ -104,6 +109,7 @@ func TestAFreshDestroyOverAnUnboundContextVerifiesTheHostAndRemoves(t *testing.T
 // The remedy an unbound failed apply names is a removal that runs, and the
 // apply after it binds the context again.
 func TestTheUnboundContinuationsRemedyNamesADestroyThatRuns(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	failedApply(t, h)
@@ -130,6 +136,7 @@ func TestTheUnboundContinuationsRemedyNamesADestroyThatRuns(t *testing.T) {
 // lock is taken, refuses the removal with that proof's own diagnostic before
 // anything is resolved, probed, registered or removed.
 func TestAFreshDestroyReprovesItsHostUnderTheExclusiveLock(t *testing.T) {
+	t.Parallel()
 	moves := []struct {
 		name, code, message, remediation string
 		move                             func(*testing.T, *harness)

@@ -52,18 +52,21 @@ func applyRefusedWith(t *testing.T, f diffFixture, message, remedy string) {
 }
 
 func TestAChangedInputOverACompletedApplyNamesWhatChanged(t *testing.T) {
+	t.Parallel()
 	f := appliedOver(t, diffState(pool("a", "3"), storageClient("c")))
 	f.publish("rev-2", "kind: Environment\n# edited\n", diffState(pool("a", "2"), pool("b", "3")))
 	applyRefusedWith(t, f, changedMessage+": it adds CephPool/b, changes CephPool/a (spec.replicated.size) and removes CephClient/c", namedRemedy)
 }
 
 func TestANamedChangeIsBoundedToFiveObjects(t *testing.T) {
+	t.Parallel()
 	f := appliedOver(t, diffState())
 	f.publish("rev-2", "kind: Environment\n# edited\n", diffState(servers("v1", "s1", "s2", "s3", "s4", "s5", "s6", "s7")...))
 	applyRefusedWith(t, f, changedMessage+": it adds ArtifactServer/s1, ArtifactServer/s2, ArtifactServer/s3, ArtifactServer/s4, ArtifactServer/s5, and 2 more objects", namedRemedy)
 }
 
 func TestANamedChangeNamesAtMostThreeFieldsOfAnObject(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		fields []string
 		want   string
@@ -87,18 +90,21 @@ func TestANamedChangeNamesAtMostThreeFieldsOfAnObject(t *testing.T) {
 }
 
 func TestABytesOnlyEditStillRefusesAndSaysSo(t *testing.T) {
+	t.Parallel()
 	f := appliedOver(t, diffState(pool("a", "3")))
 	f.publish("rev-2", "kind: Environment\n# a comment\n", diffState(pool("a", "3")))
 	applyRefusedWith(t, f, changedMessage+": its bytes changed, but it declares the same objects", namedRemedy)
 }
 
 func TestRestoredBytesUnderANewRevisionStillRefuseAndSaySo(t *testing.T) {
+	t.Parallel()
 	f := appliedOver(t, diffState(pool("a", "3")))
 	f.update("rev-2", f.workspace.inputs)
 	applyRefusedWith(t, f, changedMessage+": its input revision changed, though its bytes repeat the ones this apply froze", namedRemedy)
 }
 
 func TestAnUnreadableFrozenRevisionRefusesWithTheGeneralMessage(t *testing.T) {
+	t.Parallel()
 	for name, lose := range map[string]func(diffFixture){
 		"a collected revision": func(f diffFixture) { delete(f.workspace.revisions, testRevision) },
 		"moved bytes": func(f diffFixture) {
@@ -115,6 +121,7 @@ func TestAnUnreadableFrozenRevisionRefusesWithTheGeneralMessage(t *testing.T) {
 }
 
 func TestAnUncompilableEditRefusesWithTheGeneralMessage(t *testing.T) {
+	t.Parallel()
 	t.Run("the edit", func(t *testing.T) {
 		f := appliedOver(t, diffState(pool("a", "3")))
 		f.publish("rev-2", "kind: Environment\n# edited\n", nil)
@@ -163,6 +170,7 @@ func requireContinuationRefusal(t *testing.T, h *harness, message string) {
 }
 
 func TestAContinuationUnderAnotherRevisionRefusesWithItsMessage(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	failedApply(t, h)
 	h.update("rev-2", h.workspace.inputs)
@@ -170,6 +178,7 @@ func TestAContinuationUnderAnotherRevisionRefusesWithItsMessage(t *testing.T) {
 }
 
 func TestAContinuationUnderOtherBytesRefusesWithItsMessage(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	failedApply(t, h)
 	h.workspace.inputs = diffSources("kind: Environment\n# edited\n")
@@ -177,6 +186,7 @@ func TestAContinuationUnderOtherBytesRefusesWithItsMessage(t *testing.T) {
 }
 
 func TestEveryChangedInputOverACompletedApplyRefuses(t *testing.T) {
+	t.Parallel()
 	cases := stateMachineRows()["apply done"].cases
 	for name, want := range map[string]string{
 		"a completed apply under an input that adds an object":                              changedMessage + ": it adds ArtifactServer/delta",
@@ -204,6 +214,7 @@ func TestEveryChangedInputOverACompletedApplyRefuses(t *testing.T) {
 }
 
 func TestACanceledNamingReturnsTheCancellation(t *testing.T) {
+	t.Parallel()
 	f := appliedOver(t, diffState(pool("a", "3")))
 	f.publish("rev-2", "kind: Environment\n# edited\n", diffState(pool("a", "2")))
 	operation, _ := durableOperation(t, f.harness)

@@ -306,6 +306,7 @@ func holdFleetSecrets(journey *lifecycle.CapabilityJourney) {
 }
 
 func TestACephClusterRetiresWithEveryHostItRunsOnWithoutContactingThem(t *testing.T) {
+	t.Parallel()
 	journey, runner, machines := fleetJourney(t, false)
 	destroy := lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, Authorizations: []string{reconciliation.AuthorizationDataLoss}, SkipConfirmation: true}
 	preview, err := journey.Service.Plan(context.Background(), lifecycle.PlanRequest{ContextName: lifecycle.JourneyContext})
@@ -351,6 +352,7 @@ func TestACephClusterRetiresWithEveryHostItRunsOnWithoutContactingThem(t *testin
 }
 
 func TestACephClusterWhoseHostsSurviveNamesItsOwnRemedy(t *testing.T) {
+	t.Parallel()
 	journey, runner, machines := fleetJourney(t, true)
 	destroy := lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, Authorizations: []string{reconciliation.AuthorizationDataLoss}, SkipConfirmation: true}
 	for _, running := range []bool{true, false} {

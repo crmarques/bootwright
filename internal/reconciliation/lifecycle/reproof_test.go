@@ -134,6 +134,7 @@ func requireReplacedOperationMoved(t *testing.T, err error) {
 // plan, a removal refuses as it does over any operation that moved, and
 // neither performs anything.
 func TestATransitionRefusesWhenItsFrozenPlanChangedBeforeMutation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	replaced := func(t *testing.T, h *harness, id string) func() {
 		return func() {
@@ -171,6 +172,7 @@ func TestATransitionRefusesWhenItsFrozenPlanChangedBeforeMutation(t *testing.T) 
 // keeps it one, so neither its continuation nor its removal mistakes the
 // record it planned from for another.
 func TestATransitionRefusesWhenTheOperationRecordChangedBeforeMutation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for name, test := range map[string]struct {
 		prepare func(*testing.T, *harness) (string, reconciliation.OperationState)
@@ -272,6 +274,7 @@ func TestATransitionRefusesWhenTheOperationRecordChangedBeforeMutation(t *testin
 // planned before it re-proves that count and refuses rather than retry the
 // block once more.
 func TestAContinuationRefusesWhenABlockWasRetriedBeforeMutation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const block = "artifact-server-lab"
 	for name, test := range map[string]struct {
@@ -330,6 +333,7 @@ func TestAContinuationRefusesWhenABlockWasRetriedBeforeMutation(t *testing.T) {
 // for one: status, the preview, capability evidence and both verbs refuse,
 // opening no transaction and writing nothing.
 func TestAFrozenPlanItsOperationDidNotRecordRefusesEveryReader(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "artifact-server-lab")
 	continued := failApply(t, h, "artifact-server-lab")

@@ -135,6 +135,7 @@ func lineDiff(want, got string) string {
 // does work, so its bytes are pinned over one descriptor and one add-on marker
 // read through the view a transaction presents.
 func TestInputDigestMatchesItsGolden(t *testing.T) {
+	t.Parallel()
 	workspace := &testWorkspace{
 		logArea: newArea(), revision: testRevision,
 		inputs: desiredstate.Sources{
@@ -157,6 +158,7 @@ func TestInputDigestMatchesItsGolden(t *testing.T) {
 }
 
 func TestDigestOfMatchesTheViewDigest(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	frozen := h.workspace.inputs
 	frozenDigest := inputDigest(h.workspace.view())

@@ -18,6 +18,7 @@ import (
 // request carries exactly that deadline, or none when the invocation states
 // none, so the runner keeps its default.
 func TestRunForCarriesTheInvocationsDeadline(t *testing.T) {
+	t.Parallel()
 	for _, deadline := range []time.Duration{0, 3*time.Hour + 5*time.Minute} {
 		if got := RunFor(Execution{}, Invocation{Deadline: deadline}).Deadline; got != deadline {
 			t.Fatalf("an invocation stating %s produced a request stating %s", deadline, got)
@@ -31,6 +32,7 @@ func TestRunForCarriesTheInvocationsDeadline(t *testing.T) {
 // execution that names no attempt of a block, as a quiescence probe does,
 // points beside the attempt's log.
 func TestAFailedAttemptNamesItsBlockAndOutputFile(t *testing.T) {
+	t.Parallel()
 	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "os-install-rhel-01"}}
 	const retained = "read the adapter output retained beside this attempt's log"
 	for _, test := range []struct {
@@ -54,6 +56,7 @@ func TestAFailedAttemptNamesItsBlockAndOutputFile(t *testing.T) {
 // each with the diagnostic it gave, and a later change to the capability's map
 // changes nothing the run already holds.
 func TestRunForCarriesTheRefusalsTheCapabilityRemedies(t *testing.T) {
+	t.Parallel()
 	running := errors.New("Machine/rhel-01 is running")
 	refusals := map[string]error{"machine-running": running}
 	request := RunFor(Execution{}, Invocation{Refusals: refusals})
@@ -73,6 +76,7 @@ func TestRunForCarriesTheRefusalsTheCapabilityRemedies(t *testing.T) {
 // like the capability's. The lent parts are the operation's own bytes, so
 // clearing the binding's material clears them and no copy is left behind.
 func TestRunForLendsOnlyThePartsItsMaterialFilesName(t *testing.T) {
+	t.Parallel()
 	bound := map[string]secrets.Material{
 		"serving": secrets.NewMaterial(map[secrets.Part][]byte{
 			secrets.CertificatePart: []byte("CERTIFICATE"), secrets.PrivateKeyPart: []byte("SERVING KEY"),
@@ -108,6 +112,7 @@ func TestRunForLendsOnlyThePartsItsMaterialFilesName(t *testing.T) {
 // execution's attempt and resolution numbers alone, so no call site can
 // forget either mark.
 func TestRunForDerivesReadOnlyAndUnrecorded(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name                 string
 		execution            Execution
@@ -146,6 +151,7 @@ func (c *keepingCapability) Keep(_ context.Context, execution Execution) ([]Prod
 // its target, and every resolution, quiescence probe and keep reaches it
 // read-only.
 func TestEveryExecutionDeclaresItsReadOnlyness(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "install")
 	capability := &keepingCapability{testCapability: h.capability}
 	h.service.capabilities = testResolver{capability: capability}
@@ -179,6 +185,7 @@ func TestEveryExecutionDeclaresItsReadOnlyness(t *testing.T) {
 }
 
 func TestNativeErrorAdmissionRequiresTheInvocationsExplicitOptIn(t *testing.T) {
+	t.Parallel()
 	if RunFor(Execution{}, Invocation{}).NativeErrors {
 		t.Fatal("native prose enabled by default")
 	}

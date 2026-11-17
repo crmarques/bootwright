@@ -66,6 +66,7 @@ func compactJourney(t *testing.T) (*lifecycle.CapabilityJourney, *compactInstall
 }
 
 func TestCompactClusterContinuesAnInterruptedBootAfterResolvingMixedNodes(t *testing.T) {
+	t.Parallel()
 	journey, adapter, block := compactJourney(t)
 	apply := lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}
 	if _, err := journey.Service.Apply(context.Background(), apply); err == nil {
@@ -88,6 +89,7 @@ func TestCompactClusterContinuesAnInterruptedBootAfterResolvingMixedNodes(t *tes
 }
 
 func TestCompactClusterUnknownWithForeignMediaRemainsUnresolved(t *testing.T) {
+	t.Parallel()
 	journey, adapter, _ := compactJourney(t)
 	apply := lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}
 	if _, err := journey.Service.Apply(context.Background(), apply); err == nil {

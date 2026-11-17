@@ -130,6 +130,7 @@ const alphaNeverStarted = "runtime.internal: the attempt of the block alpha coul
 // names the start that failed without the store's own words. Repeating the
 // operation once the store takes the record continues it.
 func TestAnAttemptTheStoreWillNotStartEndsTheInvocation(t *testing.T) {
+	t.Parallel()
 	type returned struct {
 		result *OperationResult
 		err    error
@@ -247,6 +248,7 @@ func TestAnAttemptTheStoreWillNotStartEndsTheInvocation(t *testing.T) {
 // as its record still says, and so leaves the operation failed rather than
 // running or paused over a block the scheduler believed pending.
 func TestARetryTheStoreWillNotStartLeavesItsBlockFailed(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeFailed}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -281,6 +283,7 @@ func TestARetryTheStoreWillNotStartLeavesItsBlockFailed(t *testing.T) {
 // it moves nothing: the block keeps its pending record and the operation is
 // not recorded failed over a block that never failed.
 func TestAnAttemptWithoutItsCapabilityMovesNothing(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	refuseStart(h, "alpha", 1)
 	ctx, counter := counted(t, h)
@@ -305,6 +308,7 @@ func TestAnAttemptWithoutItsCapabilityMovesNothing(t *testing.T) {
 // A block this invocation already worked is never admitted again, even when
 // it is still pending: that is an attempt that never started.
 func TestAWorkedPendingBlockIsNotAdmittedAgain(t *testing.T) {
+	t.Parallel()
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo")})
 	if err != nil {
 		t.Fatal(err)
@@ -325,6 +329,7 @@ func TestAWorkedPendingBlockIsNotAdmittedAgain(t *testing.T) {
 // without its own words, beside the diagnostics other blocks reported, in plan
 // order; a cancellation is left for the boundary that recognizes it.
 func TestTheCauseKeepsAFailureThatCarriesNoDiagnostic(t *testing.T) {
+	t.Parallel()
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{
 		definition("alpha"), definition("bravo"), definition("charlie"), definition("delta"),
 	})

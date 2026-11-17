@@ -73,6 +73,7 @@ func noCluster(result lifecycle.RunResult) lifecycle.RunResult {
 // operation keeps naming the build that registered it, while every attempt
 // and resolution names the build that ran it.
 func TestACephClusterLeftUnknownContinuesUnderARebuiltBinary(t *testing.T) {
+	t.Parallel()
 	const cluster, pool, client = "ceph-cluster-example", "ceph-pool-volumes", "ceph-client-consumer"
 	rebuilt := lifecycle.Executable{Version: "devel", Commit: "1234567"}
 	automation := strings.Repeat("9", 64)

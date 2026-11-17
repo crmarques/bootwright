@@ -101,6 +101,7 @@ func placedDeclaration() api.Object {
 // hand afterwards is what diff --observe reports, through an observation
 // outside any operation that declares no output, while nothing restores it.
 func TestNodePlacementContinuesByReadingAndDriftIsReportedNotRepaired(t *testing.T) {
+	t.Parallel()
 	request := placedRequest()
 	canonical, err := request.Canonical()
 	if err != nil {

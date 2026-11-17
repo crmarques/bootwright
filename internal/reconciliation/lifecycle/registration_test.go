@@ -147,6 +147,7 @@ func reservationOf(service string) []prerequisites.HostReservation {
 // evidence before its first effect, so nothing it holds is ever covered by
 // evidence that lets the context be updated or deleted.
 func TestEvidenceProtectsTheContextBeforeItBindsOrReserves(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	h.capability.reservations = reservationOf("alpha")
 	j := journaled(h)
@@ -176,6 +177,7 @@ func TestEvidenceProtectsTheContextBeforeItBindsOrReserves(t *testing.T) {
 // that index, and a registered removal must never run under evidence that lets
 // the context be updated.
 func TestARemovalRaisesItsEvidenceBeforeItRegisters(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
@@ -199,6 +201,7 @@ func TestARemovalRaisesItsEvidenceBeforeItRegisters(t *testing.T) {
 // when the apply binds its Secrets, and the operation it registers is that
 // directory's.
 func TestAFreshApplyClaimsItsOperationBeforeItBinds(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	var raising, claimed []string
 	filled, raised := false, false
@@ -238,6 +241,7 @@ func TestAFreshApplyClaimsItsOperationBeforeItBinds(t *testing.T) {
 // alone, so the failure is the only one reported. Either way the evidence
 // reads pristine again, so the apply's empty claim is reclaimed.
 func TestAFailedEvidencePublicationBindsNothing(t *testing.T) {
+	t.Parallel()
 	refused := failure("lifecycle.state", "the evidence could not be published", "restore the context store")
 	for name, landed := range map[string]bool{"refused before it landed": false, "failed after it landed": true} {
 		t.Run(name, func(t *testing.T) {
@@ -270,6 +274,7 @@ func TestAFailedEvidencePublicationBindsNothing(t *testing.T) {
 // the running evidence, restored to what the index implies once read again,
 // which for a removal is its apply's state as its own resolutions left it.
 func TestARegistrationThatProvablyFailedRestoresTheEvidence(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	removal := "op-" + strings.Repeat("02", 16)
 	t.Run("a first apply", func(t *testing.T) {
@@ -337,6 +342,7 @@ func TestARegistrationThatProvablyFailedRestoresTheEvidence(t *testing.T) {
 // is released and the evidence restored, so the interruption leaves nothing
 // running on disk.
 func TestAnApplyInterruptedBeforeItRegistersGivesBackWhatItRaised(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	h := newHarness(t, "alpha")
@@ -358,6 +364,7 @@ func TestAnApplyInterruptedBeforeItRegistersGivesBackWhatItRaised(t *testing.T) 
 // A restoration that fails is reported after the failure that caused it, so
 // the owner learns that the running evidence stayed raised.
 func TestAFailedRestorationIsReportedBesideItsCause(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	h.binder.kill = func(point string) error {
 		if point != "publish secret binding" {
@@ -382,6 +389,7 @@ func TestAFailedRestorationIsReportedBesideItsCause(t *testing.T) {
 // being deleted; the binding it created is still released. The next destroy
 // releases the reservations and publishes pristine evidence.
 func TestAFailedRegistrationWithReservationsKeepsItsEvidence(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	h.capability.reservations = reservationOf("alpha")
@@ -411,6 +419,7 @@ func TestAFailedRegistrationWithReservationsKeepsItsEvidence(t *testing.T) {
 // nothing is collected, and the next apply continues that operation with the
 // binding it registered.
 func TestARegistrationThatMayHaveHappenedKeepsItsBinding(t *testing.T) {
+	t.Parallel()
 	for name, unreadable := range map[string]bool{"an index that names it": false, "an index that cannot be read back": true} {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
@@ -479,6 +488,7 @@ func registeredAndInterrupted(t *testing.T, h *harness) {
 // registered operation left under pristine evidence, as an interruption before
 // X18 left it, never runs a block the evidence does not protect.
 func TestAContinuationProjectsBeforeItsFirstEffect(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	registeredAndInterrupted(t, h)
 	h.workspace.evidence = killPristine(t)
@@ -495,6 +505,7 @@ func TestAContinuationProjectsBeforeItsFirstEffect(t *testing.T) {
 
 // Evidence that already reads running is not published again.
 func TestAProjectionThatAlreadyHoldsIsSkipped(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	registeredAndInterrupted(t, h)
 	j := journaled(h)
@@ -513,6 +524,7 @@ func TestAProjectionThatAlreadyHoldsIsSkipped(t *testing.T) {
 // index, or once a completed removal published pristine evidence. A binding
 // the invocation owns, and one issued after it read the bindings, are kept.
 func TestTheNextRegistrationReleasesBindingsNoOperationNames(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	t.Run("an apply", func(t *testing.T) {
 		h := newHarness(t, "alpha")
@@ -587,6 +599,7 @@ func TestTheNextRegistrationReleasesBindingsNoOperationNames(t *testing.T) {
 // plan or asking for confirmation, and settles. Its pristine evidence reclaims
 // the claim that registration left, which holds nothing.
 func TestADestroyReleasesWhatAnInterruptedRegistrationLeft(t *testing.T) {
+	t.Parallel()
 	pristine := killPristine(t)
 	running := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
 	for name, test := range map[string]struct {
@@ -637,6 +650,7 @@ func TestADestroyReleasesWhatAnInterruptedRegistrationLeft(t *testing.T) {
 // from: evidence a fresh apply raised in between belongs to that apply, so the
 // destroy refuses and releases nothing.
 func TestADestroyReleaseRefusesWhenTheEvidenceMovedBeforeIt(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	h.workspace.reservations = reservationOf("alpha")
 	stranded := strand(t, h)
@@ -657,6 +671,7 @@ func TestADestroyReleaseRefusesWhenTheEvidenceMovedBeforeIt(t *testing.T) {
 // the same running evidence and no block record, and that evidence is its
 // operation's, so the destroy refuses and lowers nothing.
 func TestADestroyReleaseRefusesWhenAnOperationRegisteredBeforeIt(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	running := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
 	h.workspace.evidence = slices.Clone(running)
@@ -693,6 +708,7 @@ func requireRefusedRegistration(t *testing.T, h *harness, current string, applie
 // later claim makes the earlier apply refuse and leave the evidence to it, so
 // the later one gives the evidence back although it found it already raised.
 func TestConcurrentFreshAppliesThatBothFailLeaveNothingRaised(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	start := h.workspace.mutations
@@ -768,6 +784,7 @@ func (a claimFaultArea) Entries(ctx context.Context, target string) ([]operation
 // hold nothing. An apply the failed claim provably left alone keeps its
 // evidence and registers.
 func TestAFreshApplyWhoseClaimFailedRestoresTheEvidenceItsDirectoryMayHold(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	first, second := "op-"+strings.Repeat("01", 16), "op-"+strings.Repeat("02", 16)
 	for _, row := range []struct {
@@ -840,6 +857,7 @@ func TestAFreshApplyWhoseClaimFailedRestoresTheEvidenceItsDirectoryMayHold(t *te
 // what its records name, and a destroy over what an interrupted registration
 // left still releases its reservations and evidence.
 func TestABindingListingThatFailsBlocksNothing(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
@@ -863,6 +881,7 @@ func TestABindingListingThatFailsBlocksNothing(t *testing.T) {
 // raised. The apply refuses at its registration, registering nothing over the
 // released binding.
 func TestAnApplyWhoseBindingAnUnclaimedReleaseTookRefuses(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	start := h.workspace.mutations
@@ -887,6 +906,7 @@ func TestAnApplyWhoseBindingAnUnclaimedReleaseTookRefuses(t *testing.T) {
 // same bytes the release lowered. Only the directory it claims tells the two
 // apart, so the apply refuses on that claim and leaves the evidence to it.
 func TestAnApplyRefusesWhenAnotherClaimRaisedTheEvidenceAgain(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	running := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
@@ -918,6 +938,7 @@ func TestAnApplyRefusesWhenAnotherClaimRaisedTheEvidenceAgain(t *testing.T) {
 // directories themselves, so it refuses on the newer claims rather than
 // register over the released binding.
 func TestAnApplyRefusesWhenReclaimsAndNewerClaimsKeepTheCount(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	store := operationstore.New(h.workspace.area, h.workspace.logArea, killClock)
@@ -959,6 +980,7 @@ func TestAnApplyRefusesWhenReclaimsAndNewerClaimsKeepTheCount(t *testing.T) {
 // nothing toward the retained-operation bound: with the context two
 // operations short of it, an apply and its removal still register after them.
 func TestRefusedFreshAppliesReclaimTheirClaims(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
@@ -996,6 +1018,7 @@ func TestRefusedFreshAppliesReclaimTheirClaims(t *testing.T) {
 // Secret or runs a block, and leaves no directory. With one retained entry
 // fewer, the same apply claims, registers and completes.
 func TestAFreshApplyRefusesAtItsClaimWhenTheAreaCannotHoldItsFirstPass(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("alpha")})
@@ -1032,6 +1055,7 @@ func TestAFreshApplyRefusesAtItsClaimWhenTheAreaCannotHoldItsFirstPass(t *testin
 // admitted with for its removal's pass is shown by
 // TestTheRemovalOfAnApplyLargerThanTheReserveRegistersAtTheLine.
 func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheLine(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("alpha")})
@@ -1066,6 +1090,7 @@ func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheLine(t *testing.T) {
 // removal registers and completes beside what the apply left even when the
 // apply was admitted with no entry to spare.
 func TestTheRemovalOfTheLargestApplyRegistersAtTheLine(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	blocks := make([]string, reconciliation.MaxBlocks)
 	definitions := make([]reconciliation.BlockDefinition, len(blocks))
@@ -1119,6 +1144,7 @@ func TestTheRemovalOfTheLargestApplyRegistersAtTheLine(t *testing.T) {
 // that removal, and the removal then registers and completes under the
 // area's entry bound.
 func TestApplyRetriesNeverTakeTheRemovalReserve(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	area := h.workspace.area
@@ -1181,6 +1207,7 @@ func TestApplyRetriesNeverTakeTheRemovalReserve(t *testing.T) {
 // refuses before its effect naming the destroy, and the removal then
 // registers and completes.
 func TestApplyRetriesNeverTakeTheRemovalByteReserve(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	area := h.workspace.area
@@ -1226,6 +1253,7 @@ func TestApplyRetriesNeverTakeTheRemovalByteReserve(t *testing.T) {
 // anything, naming the destroy; the destroy then
 // resolves the unknown block, registers and completes in what was kept.
 func TestARemovalResolvesWhatTheApplyLeftUnknownWithinTheReserve(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha", "beta")
 	area := h.workspace.area
@@ -1288,6 +1316,7 @@ func TestARemovalResolvesWhatTheApplyLeftUnknownWithinTheReserve(t *testing.T) {
 // refuse before one would take them, and from the last destroy admitted, a
 // target that answers is resolved, and the removal registers and completes.
 func TestRepeatedDestroysOverAnUnknownBlockKeepTheRegistration(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	area := h.workspace.area
@@ -1346,6 +1375,7 @@ func TestRepeatedDestroysOverAnUnknownBlockKeepTheRegistration(t *testing.T) {
 // running, with no log fault. The next invocation restores the operation log,
 // which adds nothing either, and once the area has room it resolves the block.
 func TestAnAttemptThatMeetsTheEntryBoundLeavesItsBlockResolvable(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	area := h.workspace.area
@@ -1398,6 +1428,7 @@ func TestAnAttemptThatMeetsTheEntryBoundLeavesItsBlockResolvable(t *testing.T) {
 // was: its evidence, its binding and its effects, with no directory added.
 // With one entry more free, the same destroy registers and completes.
 func TestARemovalTheAreaCannotHoldRefusesAtItsRegistration(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	if err := killInvoke(ctx, h.service, reconciliation.Apply); err != nil {
@@ -1440,6 +1471,7 @@ func TestARemovalTheAreaCannotHoldRefusesAtItsRegistration(t *testing.T) {
 // directory. Two short, it registers and completes, and its removal then
 // registers and completes at the bound.
 func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheDirectoryBound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	for index := range operationstore.MaxOperations - 1 {
@@ -1481,6 +1513,7 @@ func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheDirectoryBound(t *testing
 // whose adapter prints all an attempt keeps, each time, keeps all of it in the
 // log area and none in the records, and the apply and its removal complete.
 func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheByteBound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	blocks := []string{"alpha", "bravo", "charlie", "delta", "echo"}
 	definitions := make([]reconciliation.BlockDefinition, len(blocks))
@@ -1556,6 +1589,7 @@ func areaEntries(area *memoryArea, target string) int {
 // removal, only its own directory is left beside those retained once it
 // registers, and that removal registers.
 func TestARegistrationReclaimsWhatRefusedAppliesKeptBesideAnUnownedReservation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	running := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
@@ -1595,6 +1629,7 @@ func TestARegistrationReclaimsWhatRefusedAppliesKeptBesideAnUnownedReservation(t
 // pristine and takes the apply's binding. The apply refuses at its
 // registration rather than register over that binding.
 func TestAnApplyOverACompletedDestroyRefusesWhenAFinalizationTookItsBinding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
@@ -1629,6 +1664,7 @@ func TestAnApplyOverACompletedDestroyRefusesWhenAFinalizationTookItsBinding(t *t
 // failed there, and the binding it registers must still be held. A fresh
 // removal whose publication failed keeps a stranded binding for the next one.
 func TestARemovalWhosePublicationFailedCollectsNothing(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	unpublished := errors.New("the evidence could not be published")
 	t.Run("a finalization under an apply in flight", func(t *testing.T) {
@@ -1707,6 +1743,7 @@ func (tx pristineFailing) PublishEvidence(ctx context.Context, data []byte) erro
 // is deleting the context, which acknowledges orphans unless the evidence is
 // pristine.
 func TestADestroyOverUnindexedRecordsRefuses(t *testing.T) {
+	t.Parallel()
 	lost := "op-" + strings.Repeat("0a", 16)
 	for name, test := range map[string]struct {
 		verb     reconciliation.Verb
@@ -1762,6 +1799,7 @@ func TestADestroyOverUnindexedRecordsRefuses(t *testing.T) {
 // It releases what it listed before it read that evidence, so a binding issued
 // after the listing, as a bounded run's is, stays.
 func TestADestroyOverOnlyAStrandedBindingSettlesAndReleasesIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for name, removed := range map[string]bool{"no operation": false, "a completed removal": true} {
 		t.Run(name, func(t *testing.T) {
@@ -1793,6 +1831,7 @@ func TestADestroyOverOnlyAStrandedBindingSettlesAndReleasesIt(t *testing.T) {
 // of its own and still reports only that it settled. With nothing left to
 // reclaim, the next one opens no transaction.
 func TestADestroyThatSettlesBesideAnIdleClaimReclaimsIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for name, removed := range map[string]bool{"no operation": false, "a completed removal": true} {
 		t.Run(name, func(t *testing.T) {
@@ -1827,6 +1866,7 @@ func TestADestroyThatSettlesBesideAnIdleClaimReclaimsIt(t *testing.T) {
 // destroy's decision and that transaction makes every claim a proof again, so
 // the destroy keeps them all and changes nothing.
 func TestADestroyThatSettlesKeepsIdleClaimsUnderEvidenceRaisedSince(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	store := operationstore.New(h.workspace.area, h.workspace.logArea, killClock)
@@ -1856,6 +1896,7 @@ func TestADestroyThatSettlesKeepsIdleClaimsUnderEvidenceRaisedSince(t *testing.T
 // that decision and before the destroy settles names its own binding, which
 // its removal reopens, so the settling destroy leaves that binding bound.
 func TestADestroyThatSettlesKeepsTheBindingOfAnApplyRegisteredAfterItDecided(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for name, removed := range map[string]bool{"no operation": false, "a completed removal": true} {
 		t.Run(name, func(t *testing.T) {
@@ -1927,6 +1968,7 @@ func (b *listedThen) Bindings(ctx context.Context, request custody.BindingsReque
 // status reads for what that attempt did, while a fresh removal over an apply
 // replaces no removal and names none.
 func TestAReplacementRecordsTheRemovalItReplaces(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha", "beta")
 	applied := completeApply(t, h)
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}

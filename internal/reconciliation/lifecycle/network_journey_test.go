@@ -112,6 +112,7 @@ func networkJourney(t *testing.T) (*lifecycle.CapabilityJourney, *networkAdapter
 }
 
 func TestClusterNetworkContinuesLostOutcomeAndSettledApplyIsOffline(t *testing.T) {
+	t.Parallel()
 	journey, adapter, block := networkJourney(t)
 	adapter.lost = true
 	apply := lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}
@@ -140,6 +141,7 @@ func TestClusterNetworkContinuesLostOutcomeAndSettledApplyIsOffline(t *testing.T
 	}
 }
 func TestClusterNetworkUnknownRetiresWithoutAPI(t *testing.T) {
+	t.Parallel()
 	journey, adapter, _ := networkJourney(t)
 	adapter.lost = true
 	if _, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}); err == nil {
@@ -154,6 +156,7 @@ func TestClusterNetworkUnknownRetiresWithoutAPI(t *testing.T) {
 	}
 }
 func TestClusterNetworkReadinessAndForeignOwnershipStayUnresolved(t *testing.T) {
+	t.Parallel()
 	for _, foreign := range []bool{false, true} {
 		t.Run(map[bool]string{false: "not ready", true: "foreign"}[foreign], func(t *testing.T) {
 			journey, adapter, block := networkJourney(t)

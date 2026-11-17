@@ -135,6 +135,7 @@ func sameObject(first, second *api.Object) bool {
 }
 
 func TestDiffWithNoOperationReadsEveryObjectAbsent(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha")
 	result := f.diff(t)
 	if result.Operation.ID != "" || result.Operation.Applied != "" || result.Input != "none" || result.Plan.State != "none" {
@@ -154,6 +155,7 @@ func TestDiffWithNoOperationReadsEveryObjectAbsent(t *testing.T) {
 }
 
 func TestDiffOfACompletedApplyOverUnchangedInputShowsNoDifference(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha", "bravo")
 	operation := f.apply(t)
 	result := f.diff(t)
@@ -174,6 +176,7 @@ func TestDiffOfACompletedApplyOverUnchangedInputShowsNoDifference(t *testing.T) 
 }
 
 func TestDiffNamesAddedChangedAndRemovedObjects(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha", "bravo", "charlie")
 	operation := f.apply(t)
 	changed := definition("bravo")
@@ -203,6 +206,7 @@ func TestDiffNamesAddedChangedAndRemovedObjects(t *testing.T) {
 }
 
 func TestDiffOfABytesOnlyEditShowsNoObjectDifference(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha")
 	f.apply(t)
 	f.publish("rev-22222222222222222222222222222222", "kind: Environment\n# a comment\n", diffState(servers("v1", "alpha")...))
@@ -218,6 +222,7 @@ func TestDiffOfABytesOnlyEditShowsNoObjectDifference(t *testing.T) {
 }
 
 func TestDiffOfAFailedApplyReadsItsFailedObjectUnknown(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha", "bravo")
 	f.capability.errorFor = map[string]error{"bravo": errors.New("the server did not start")}
 	if _, err := f.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -235,6 +240,7 @@ func TestDiffOfAFailedApplyReadsItsFailedObjectUnknown(t *testing.T) {
 }
 
 func TestDiffOfAnIncompleteRemovalReadsTakenBackObjectsAbsent(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha", "bravo")
 	applied := f.apply(t)
 	f.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeFailed}}
@@ -260,6 +266,7 @@ func TestDiffOfAnIncompleteRemovalReadsTakenBackObjectsAbsent(t *testing.T) {
 }
 
 func TestDiffOfACompletedDestroyReadsEverythingAbsent(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha", "bravo")
 	f.apply(t)
 	removal := f.destroy(t)
@@ -275,6 +282,7 @@ func TestDiffOfACompletedDestroyReadsEverythingAbsent(t *testing.T) {
 }
 
 func TestDiffOfAnUnreadableFrozenRevisionReadsAppliedObjectsUnknown(t *testing.T) {
+	t.Parallel()
 	for name, lose := range map[string]func(f diffFixture){
 		"a missing revision": func(f diffFixture) { delete(f.workspace.revisions, testRevision) },
 		"a digest mismatch": func(f diffFixture) {
@@ -301,6 +309,7 @@ func TestDiffOfAnUnreadableFrozenRevisionReadsAppliedObjectsUnknown(t *testing.T
 }
 
 func TestDiffUnderAnotherBuildListsTheBlocksItPlansDifferently(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha", "bravo")
 	f.apply(t)
 	if result := f.diff(t); len(result.Plan.Rebuilt) != 0 {
@@ -319,6 +328,7 @@ func TestDiffUnderAnotherBuildListsTheBlocksItPlansDifferently(t *testing.T) {
 }
 
 func TestDiffOfAnUncompilableSelectedRevisionRefuses(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha")
 	f.apply(t)
 	sources := diffSources("kind: Environment\nbroken: [\n")
@@ -337,6 +347,7 @@ func (leasedWorkspace) ReadLifecycle(context.Context, string, func(View) error) 
 }
 
 func TestDiffRefusesWhileAnOperationHoldsTheContext(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha")
 	f.service.workspace = leasedWorkspace{Workspace: f.workspace}
 	result, err := f.service.Diff(context.Background(), DiffRequest{ContextName: "lab"})
@@ -366,6 +377,7 @@ func (b *countingBinder) Reopen(ctx context.Context, request custody.BindingRequ
 }
 
 func TestDiffWritesNothing(t *testing.T) {
+	t.Parallel()
 	scenarios := map[string]func(t *testing.T, f diffFixture){
 		"no operation":      func(*testing.T, diffFixture) {},
 		"a completed apply": func(t *testing.T, f diffFixture) { f.apply(t) },
@@ -415,6 +427,7 @@ func TestDiffWritesNothing(t *testing.T) {
 }
 
 func TestDiffOrdersObjectsByKindThenName(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "zulu", "alpha")
 	tls := api.NewObject(api.Secret, "tls", api.Value{}, api.MapValue(api.FieldValue{Name: "type", Value: api.StringValue("tls")}))
 	f.compiler.states[digestOf(f.workspace.inputs)] = diffState(serverObject("zulu", "v1"), tls, serverObject("alpha", "v1"))
@@ -428,6 +441,7 @@ func TestDiffOrdersObjectsByKindThenName(t *testing.T) {
 }
 
 func TestCanonicalOrdersNamedListsAndDropsAbsentFields(t *testing.T) {
+	t.Parallel()
 	site := func(name, description string) api.Value {
 		return api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(name)}, api.FieldValue{Name: "description", Value: api.StringValue(description)})
 	}
@@ -451,6 +465,7 @@ func TestCanonicalOrdersNamedListsAndDropsAbsentFields(t *testing.T) {
 }
 
 func TestADoneObjectTheAppliedRevisionDoesNotDeclareReadsUnknown(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha", "bravo")
 	operation := f.apply(t)
 	f.publish("rev-33333333333333333333333333333333", "kind: Environment\nrevised: true\n", diffState(servers("v1", "alpha", "bravo")...))
@@ -506,6 +521,7 @@ func newCarryingHarness(t *testing.T) diffFixture {
 // realizes it, so its row reads that block's realization, plan change and
 // blocks rather than the applied revision's declaration alone.
 func TestACarriedObjectReadsTheBlocksThatRealizeIt(t *testing.T) {
+	t.Parallel()
 	for name, failing := range map[string]string{"pending": "alpha", "failed": "bravo", "done": ""} {
 		t.Run(name, func(t *testing.T) {
 			f := newCarryingHarness(t)

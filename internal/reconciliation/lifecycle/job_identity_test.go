@@ -12,6 +12,7 @@ import (
 // what it is doing. RunFor carries them from the attempt it authorizes, and
 // every attempt the engine makes names the context it runs for.
 func TestRunForCarriesTheContextBlockAndDescription(t *testing.T) {
+	t.Parallel()
 	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: "artifact-server-lab", Description: "serve artifact-server-lab"}}
 	request := RunFor(Execution{Context: "lab", Block: block}, Invocation{})
 	if request.Context != "lab" || request.Block != "artifact-server-lab" || request.Description != "serve artifact-server-lab" {
@@ -45,6 +46,7 @@ func (c *probeRecorder) Quiescent(ctx context.Context, probe Probe) (Quiescence,
 // A quiescence probe runs an adapter before any operation exists, so it names
 // its context as an attempt does, and the execution it presents carries it.
 func TestAProbeCarriesItsContext(t *testing.T) {
+	t.Parallel()
 	if got := (Probe{Context: "lab"}).Execution().Context; got != "lab" {
 		t.Fatalf("a probe's execution names context %q", got)
 	}

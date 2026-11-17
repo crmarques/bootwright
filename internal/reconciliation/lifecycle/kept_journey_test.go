@@ -274,6 +274,7 @@ func keptJourney(t *testing.T) (*lifecycle.CapabilityJourney, *keptHost) {
 // then is the work area removed (D124). The entry stays while the removal has
 // not completed, and a completed removal withdraws it as it withdraws any.
 func TestAKeptKubeconfigMovesIntoCustodyBeforeItsWorkAreaIsRemoved(t *testing.T) {
+	t.Parallel()
 	entry := agentinstall.InstallBlockID(installedCluster) + "/" + agentinstall.KubeconfigOutput + " (unproved)=" + adminAccess
 	removal := []string{"install:observe", "install:observe-removal", "install:destroy", "media:keep", "media:destroy"}
 	for _, tc := range []struct {
@@ -320,6 +321,7 @@ func TestAKeptKubeconfigMovesIntoCustodyBeforeItsWorkAreaIsRemoved(t *testing.T)
 // A work area that keeps no kubeconfig hands over nothing: custody stays empty
 // and the removal logs no copy kept, because none was.
 func TestAWorkAreaKeepingNothingLogsNoKeptCopy(t *testing.T) {
+	t.Parallel()
 	journey, host := keptJourney(t)
 	host.set(func(h *keptHost) { h.kept = "" })
 	result, err := journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
@@ -342,6 +344,7 @@ func TestAWorkAreaKeepingNothingLogsNoKeptCopy(t *testing.T) {
 // it, so it resolves the stopped removal, keeps nothing more and, in the same
 // invocation, removes the work area.
 func TestAKeptKubeconfigStoppedBetweenTheMoveAndTheRemovalIsInBothPlaces(t *testing.T) {
+	t.Parallel()
 	journey, host := keptJourney(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -374,6 +377,7 @@ func TestAKeptKubeconfigStoppedBetweenTheMoveAndTheRemovalIsInBothPlaces(t *test
 // Custody that already holds the installation's proved kubeconfig keeps it:
 // the media removal reads nothing for custody and deletes the work area.
 func TestAProvedKubeconfigIsNotKeptAgainBeforeTheWorkAreaIsRemoved(t *testing.T) {
+	t.Parallel()
 	journey, host := keptJourney(t)
 	host.set(func(h *keptHost) { h.poweredOff = false })
 	result, err := journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
@@ -393,6 +397,7 @@ func TestAProvedKubeconfigIsNotKeptAgainBeforeTheWorkAreaIsRemoved(t *testing.T)
 // deletes anything: the block records a failed removal and the copy stays in
 // the work area, never in neither place.
 func TestARefusedKeepLeavesTheWorkAreaInPlace(t *testing.T) {
+	t.Parallel()
 	journey, host := keptJourney(t)
 	journey.FailPublication(secretstore.Failure("store.conflict", "secret publication was not committed"))
 	result, err := journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})

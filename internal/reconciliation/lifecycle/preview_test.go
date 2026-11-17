@@ -32,6 +32,7 @@ import (
 // registers anything, with the same code, message and remedy. Either way the
 // preview writes, binds and locks nothing a read does not.
 func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
+	t.Parallel()
 	controlled := append([]reconciliation.BlockDefinition{
 		stagedDefinition("controller-prerequisites", reconciliation.StageController),
 	}, nestedDefinitions()...)
@@ -143,6 +144,7 @@ func conflictingSockets() []prerequisites.HostReservation {
 // refused while the context plans, naming both and the socket each claims,
 // rather than failing at run time when the second one starts listening.
 func TestAPlanWhoseOwnSocketsConflictNamesBoth(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.capability.reservations = conflictingSockets()
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
@@ -235,6 +237,7 @@ func withControllerAddress() *compilation.State {
 // their blocks' conflicting sockets refuse while the context plans, naming
 // that host and both Machines, as they would under one Machine's name.
 func TestTwoMachinesReachingOneSSHHostConflictThere(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.capability.sshClaims = sshSockets("services", "alias")
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
@@ -252,6 +255,7 @@ func TestTwoMachinesReachingOneSSHHostConflictThere(t *testing.T) {
 // another such Machine's also claim refuses while the context plans, naming
 // the controller and each Machine that reaches it.
 func TestAMachineReachingTheControllerConflictsThere(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		reservations []prerequisites.HostReservation
 		claims       []SSHReservation
@@ -289,6 +293,7 @@ func TestAMachineReachingTheControllerConflictsThere(t *testing.T) {
 // claims and that host, and a plan with conflicts on two hosts names the first
 // host in name order.
 func TestAPlanWhoseOwnSocketsConflictOnAnSSHHostNamesTheHost(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.capability.sshClaims = append(sshSockets("storage", "storage"), sshSockets("services", "services")...)
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
@@ -306,6 +311,7 @@ func TestAPlanWhoseOwnSocketsConflictOnAnSSHHostNamesTheHost(t *testing.T) {
 // SSH host conflict there, and a claim on an SSH host that is the controller
 // as the controller's own.
 func TestAnApplyPublishesItsSSHClaimsQualifiedByTheirHost(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.service.compiler = testCompiler{state: withControllerAddress()}
 	h.capability.reservations = reservationOf("alpha")
@@ -333,6 +339,7 @@ func TestAnApplyPublishesItsSSHClaimsQualifiedByTheirHost(t *testing.T) {
 // A qualified key that would pass the record's key bound refuses while the
 // context plans, naming the Machine whose address makes it long.
 func TestAnSSHAddressTooLongToQualifyItsClaimsRefuses(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	long := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + ".example"
 	h.capability.sshClaims = []SSHReservation{{Machine: "services", Address: long, Port: 22,
@@ -346,6 +353,7 @@ func TestAnSSHAddressTooLongToQualifyItsClaimsRefuses(t *testing.T) {
 // A host-key qualified key that would pass the record's key bound refuses while
 // the context plans, naming the claim and the Machine it is placed on.
 func TestAClaimTooLongToKeyByItsHostKeyRefuses(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.capability.sshClaims = []SSHReservation{sshClaim("services", prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma",
 		Keys: []string{"path:/srv/" + strings.Repeat("d", 256-machine.SSHHostKeyQualifierBytes-len("path:/srv/")+1)}})}
@@ -360,6 +368,7 @@ func TestAClaimTooLongToKeyByItsHostKeyRefuses(t *testing.T) {
 // published, so a known-hosts Secret that binds no readable key for the
 // address refuses the apply before anything is reserved or registered (B844).
 func TestAnSSHClaimWhosePinnedHostKeyCannotBeReadRefusesBeforeItIsPublished(t *testing.T) {
+	t.Parallel()
 	for name, material := range map[string]secrets.Material{
 		"no material":  secrets.NewMaterial(nil),
 		"another host": secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("192.0.2.99 ssh-ed25519 " + testHostKey(1) + "\n")}),
@@ -399,6 +408,7 @@ func (k controllerKeys) SSHHostKeys(context.Context) ([]trust.HostKey, error) {
 // reserved or registered, naming the declared addresses. A controller with no
 // readable sshd key refuses nothing.
 func TestTheControllerReachedByAnUndeclaredAddressRefusesBeforeReservation(t *testing.T) {
+	t.Parallel()
 	claim := prerequisites.HostReservation{Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"socket:192.0.2.1:123"}}
 	for name, tc := range map[string]struct {
 		machine string
@@ -447,6 +457,7 @@ func TestTheControllerReachedByAnUndeclaredAddressRefusesBeforeReservation(t *te
 // A completed destroy leaves the context where the next plan is fresh again,
 // so the preview it offers is the same decision the next apply takes.
 func TestAFreshPlanAfterADestroyRefusesAsItsApplyDoes(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -523,6 +534,7 @@ type previewRow struct {
 // completes an interrupted finalization and settles; and otherwise it shows the
 // very plan that verb then presents. It writes, binds and locks nothing.
 func TestEveryPreviewDecidesAsItsVerbDoes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, row := range previewRows(ctx) {
 		t.Run(row.name, func(t *testing.T) {
@@ -730,6 +742,7 @@ func twoMachines() []reconciliation.BlockDefinition {
 // beside every ready block that waits on none of them, and the set the preview
 // marks is the set that apply then works.
 func TestAStagePreviewMarksWhatTheNextApplyAdmits(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	failed := map[string]error{"os-install-rhel-01": errors.New("the installation failed")}
 	cases := []struct {
@@ -848,6 +861,7 @@ func TestAStagePreviewMarksWhatTheNextApplyAdmits(t *testing.T) {
 // selection, over a completed apply and over a failed destroy alike, and
 // writes nothing.
 func TestADestroyPreviewRefusesAStageSelection(t *testing.T) {
+	t.Parallel()
 	for name, prepare := range map[string]func(t *testing.T, h *harness){
 		"a completed apply": func(t *testing.T, h *harness) { completeApply(t, h) },
 		"a failed destroy": func(t *testing.T, h *harness) {

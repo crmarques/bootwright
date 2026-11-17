@@ -11,6 +11,7 @@ import (
 )
 
 func TestPublicInspectionReportsUnknownWithoutBlockingPurePreview(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	calls := 0
 	h.service.options.PlanInspection = func(_ context.Context, name string, _ api.Catalog, full reconciliation.Plan, starting []reconciliation.Block) ([]PlanCheck, error) {
@@ -30,6 +31,7 @@ func TestPublicInspectionReportsUnknownWithoutBlockingPurePreview(t *testing.T) 
 }
 
 func TestListenerAdmissionRefusesBeforeRegistrationAndRechecksExclusive(t *testing.T) {
+	t.Parallel()
 	for _, reject := range []int{1, 2} {
 		h := newHarness(t, "artifact-server-lab")
 		calls := 0
@@ -55,6 +57,7 @@ func TestListenerAdmissionRefusesBeforeRegistrationAndRechecksExclusive(t *testi
 }
 
 func TestBlockAdmissionRefusesBeforeTheEffectAndCanBeRetried(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	refused := failure("preflight.failed", "live prerequisite disappeared", "restore the prerequisite and retry")
 	calls := 0

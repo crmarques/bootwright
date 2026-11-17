@@ -17,6 +17,7 @@ import (
 // account for earns it; a failure it watched the adapter reach leaves the block
 // failed, which the capability's own idempotent path retries.
 func TestOnlyAnUnaccountedAdapterFailureLeavesTheBlockUnknown(t *testing.T) {
+	t.Parallel()
 	for name, err := range map[string]error{
 		"adapter did not complete": diagnostics.NewFailure("lifecycle.state", "the adapter operation did not complete", ""),
 		"bound secret missing":     diagnostics.NewFailure("secret.store", "a bound Secret is not available", ""),
@@ -47,6 +48,7 @@ func TestOnlyAnUnaccountedAdapterFailureLeavesTheBlockUnknown(t *testing.T) {
 // The engine's own transition table is what makes the distinction matter: a
 // failed block is the operation's retry candidate, an unknown block stops it.
 func TestTheTransitionTableRetriesFailedAndStopsAtUnknown(t *testing.T) {
+	t.Parallel()
 	_, failed, err := reconciliation.AttemptTransition(reconciliation.OutcomeFailed)
 	if err != nil || failed != reconciliation.BlockFailed {
 		t.Fatalf("failed attempt = %q (%v)", failed, err)
@@ -61,6 +63,7 @@ func TestTheTransitionTableRetriesFailedAndStopsAtUnknown(t *testing.T) {
 // a recovery instruction, so naming `destroy` after a successful apply read as
 // an instruction to tear down what had just been built.
 func TestACompletedOperationCallsForNothing(t *testing.T) {
+	t.Parallel()
 	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
 		if action := nextActionOver(verb, reconciliation.OperationDone, reconciliation.BlockDone); action != "none" {
 			t.Fatalf("a done %s asks for %q", verb, action)
@@ -75,6 +78,7 @@ func TestACompletedOperationCallsForNothing(t *testing.T) {
 // removal that replaces it, and one whose blocks are all done the
 // finalization that completes it.
 func TestAnIncompleteOperationStillNamesItsContinuation(t *testing.T) {
+	t.Parallel()
 	for _, row := range []struct {
 		verb     reconciliation.Verb
 		state    reconciliation.OperationState
@@ -118,6 +122,7 @@ func nextActionOver(verb reconciliation.Verb, state reconciliation.OperationStat
 // requires: a continuation or resolution the whole frozen plan's, a
 // replacement those of the blocks it retains, and a finalization none.
 func TestANextStepIsACommandAnOperatorCanRun(t *testing.T) {
+	t.Parallel()
 	frozen := func(verb reconciliation.Verb) reconciliation.Plan {
 		return reconciliation.Plan{Verb: verb, Blocks: []reconciliation.Block{
 			{BlockDefinition: reconciliation.BlockDefinition{ID: "alpha", Consumes: []string{"data-loss"}}},
@@ -169,6 +174,7 @@ func TestANextStepIsACommandAnOperatorCanRun(t *testing.T) {
 // fresh removal that replaces it, and an unknown apply both its resolution
 // and the removal that takes back what it started.
 func TestTerminalRemediesNameTheExactCommand(t *testing.T) {
+	t.Parallel()
 	for name, test := range map[string]struct {
 		arrange func(*testing.T, *harness)
 		verb    reconciliation.Verb
@@ -234,6 +240,7 @@ func TestTerminalRemediesNameTheExactCommand(t *testing.T) {
 // the block its resolution leaves failed and reports the retry's own result in
 // its place, so the remedy is read from one that stops at its resolution.
 func TestAResolutionRemedyNamesTheCommandThatTakesItOn(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, test := range []struct {
 		verb    reconciliation.Verb

@@ -19,6 +19,7 @@ import (
 // registers, and the apply's own record stays done, so a removal that stops
 // still covers the whole plan.
 func TestADestroyAfterACompletedApplyWithABlockNotDoneTakesBackItsWholePlan(t *testing.T) {
+	t.Parallel()
 	for name, test := range map[string]struct {
 		lost      []string
 		rewritten map[string]reconciliation.BlockState
@@ -80,6 +81,7 @@ func TestADestroyAfterACompletedApplyWithABlockNotDoneTakesBackItsWholePlan(t *t
 // covers its whole frozen plan rather than only what a failed or unknown
 // apply's records show started.
 func TestAnUnresolvedCompletedApplyKeepsItsRecordDone(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha", "bravo", "charlie")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -103,6 +105,7 @@ func TestAnUnresolvedCompletedApplyKeepsItsRecordDone(t *testing.T) {
 // that, so the repeat refuses instead of reporting the input applied, names
 // every such block, and settles, registers, locks and binds nothing.
 func TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses(t *testing.T) {
+	t.Parallel()
 	for name, test := range map[string]struct {
 		lost       []string
 		rewritten  map[string]reconciliation.BlockState
@@ -169,6 +172,7 @@ func TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses(t *testing.T)
 // of the frozen plan is done, so the removal takes back each one and releases
 // the binding its apply froze.
 func TestADestroyAfterAnIntactCompletedApplyRemovesEveryBlock(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha", "bravo", "charlie")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -194,6 +198,7 @@ func TestADestroyAfterAnIntactCompletedApplyRemovesEveryBlock(t *testing.T) {
 // from the ownership a superseding removal keeps reporting, nor from the
 // realizations status reads, nor from the objects a lost frozen binding names.
 func TestOwnershipViewsOfACompletedApplyCoverABlockWhoseRecordIsLost(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	identities := []string{"ArtifactServer/alpha", "ArtifactServer/bravo", "ArtifactServer/charlie"}
 	t.Run("a superseding removal", func(t *testing.T) {

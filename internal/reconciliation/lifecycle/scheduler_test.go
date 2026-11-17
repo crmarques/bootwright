@@ -150,6 +150,7 @@ func scheduled(t *testing.T, bound int, definitions ...reconciliation.BlockDefin
 // Blocks the graph does not order run together, and never more of them than
 // the executable's bound allows however many the plan admits.
 func TestIndependentBlocksRunTogetherWithinTheBound(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 3, definition("alpha"), definition("bravo"), definition("charlie"),
 		definition("delta"), definition("echo"))
 	watch := newOverlap(5)
@@ -179,6 +180,7 @@ func TestIndependentBlocksRunTogetherWithinTheBound(t *testing.T) {
 // A block never starts before every block it waits for is durably done, and
 // the blocks released by one of them start together.
 func TestADependentWaitsWhileItsSiblingsRunTogether(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 4, definition("alpha"), dependent("bravo", "alpha"),
 		dependent("charlie", "alpha"), dependent("delta", "bravo"))
 	watch := newOverlap(4)
@@ -214,6 +216,7 @@ func TestADependentWaitsWhileItsSiblingsRunTogether(t *testing.T) {
 // independent the graph says they are, while a block naming none runs beside
 // either of them.
 func TestBlocksNamingOneResourceNeverRunTogether(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 4, exclusive("alpha", "path:/srv/tree"), exclusive("bravo", "path:/srv/tree"),
 		definition("charlie"))
 	watch := newOverlap(3)
@@ -246,6 +249,7 @@ func TestBlocksNamingOneResourceNeverRunTogether(t *testing.T) {
 // record what they proved: cancelling them would turn proved outcomes into
 // unproved ones. The result names every block that failed, in plan order.
 func TestAFailureStopsAdmissionAndKeepsEveryFailedBlock(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 4, definition("alpha"), definition("bravo"), definition("charlie"),
 		dependent("delta", "alpha"))
 	h.capability.errorFor = map[string]error{
@@ -290,6 +294,7 @@ func TestAFailureStopsAdmissionAndKeepsEveryFailedBlock(t *testing.T) {
 // every block that started records the outcome it reached rather than being
 // abandoned with no durable answer.
 func TestAnInterruptAdmitsNothingAndWaitsForWhatIsRunning(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 2, definition("alpha"), definition("bravo"), definition("charlie"),
 		definition("delta"))
 	watch := newOverlap(4)
@@ -332,6 +337,7 @@ func TestAnInterruptAdmitsNothingAndWaitsForWhatIsRunning(t *testing.T) {
 // An unproved effect is observed before anything else, and nothing starts,
 // retries or is removed beside it but another observation.
 func TestUnprovedEffectsAreObservedBeforeAnythingElseStarts(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 4, definition("alpha"), definition("bravo"), dependent("charlie", "alpha"))
 	h.capability.outcomeFor = map[string]Result{
 		"alpha": {Outcome: reconciliation.OutcomeUnknown},
@@ -376,6 +382,7 @@ func TestUnprovedEffectsAreObservedBeforeAnythingElseStarts(t *testing.T) {
 // first attempt. A block this invocation failed is not retried by the same
 // invocation that failed it.
 func TestAFailedBlockIsRetriedBeforeItsDependentsAndOnlyOncePerInvocation(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 4, definition("alpha"), dependent("bravo", "alpha"), dependent("charlie", "alpha"))
 	h.capability.errorFor = map[string]error{"alpha": errors.New("alpha could not be served")}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -417,6 +424,7 @@ func TestAFailedBlockIsRetriedBeforeItsDependentsAndOnlyOncePerInvocation(t *tes
 // beside them; a dependent of a failed block waits for that block's retry
 // alone (D144).
 func TestIndependentFailedBlocksAreRetriedTogether(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 3, definition("alpha"), definition("bravo"), definition("charlie"),
 		definition("delta"), dependent("echo", "alpha"))
 	h.capability.errorFor = map[string]error{
@@ -460,6 +468,7 @@ func TestIndependentFailedBlocksAreRetriedTogether(t *testing.T) {
 // that admits no failed block refuses before any effect and names the apply
 // whose selection adds the stage of the first one.
 func TestAFailedBlockOutsideTheSelectionIsNeverRetried(t *testing.T) {
+	t.Parallel()
 	first := definition("alpha")
 	first.Stage = reconciliation.StageInfrastructureServices
 	second := definition("bravo")
@@ -509,6 +518,7 @@ func TestAFailedBlockOutsideTheSelectionIsNeverRetried(t *testing.T) {
 // and a failure admits no further first attempt, so the states are given to
 // admission directly.
 func TestFailedBlocksNamingOneResourceAreRetriedOneAtATime(t *testing.T) {
+	t.Parallel()
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{
 		exclusive("alpha", "path:/srv/tree"), exclusive("bravo", "path:/srv/tree"), definition("charlie"),
 		dependent("delta", "charlie"),
@@ -550,6 +560,7 @@ func TestFailedBlocksNamingOneResourceAreRetriedOneAtATime(t *testing.T) {
 // retry or first attempt starts beside its observation; once it is proved, the
 // failed blocks are retried together with the pending block beside them.
 func TestAnUnprovedEffectIsResolvedBeforeAnyRetry(t *testing.T) {
+	t.Parallel()
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{
 		definition("alpha"), definition("bravo"), definition("charlie"), definition("delta"),
 	})
@@ -588,6 +599,7 @@ func TestAnUnprovedEffectIsResolvedBeforeAnyRetry(t *testing.T) {
 // does not depend on which block completes first: the retry's dependent and
 // the dependent of a pending block both start in either order.
 func TestAdmissionAfterARetryDoesNotDependOnCompletionOrder(t *testing.T) {
+	t.Parallel()
 	staged := func(definition reconciliation.BlockDefinition, stage reconciliation.Stage) reconciliation.BlockDefinition {
 		definition.Stage = stage
 		return definition
@@ -639,6 +651,7 @@ func TestAdmissionAfterARetryDoesNotDependOnCompletionOrder(t *testing.T) {
 // A stage selection still pauses at its boundary when blocks run together: the
 // operation stops because nothing more may start, which is resumable.
 func TestAStageBoundaryPausesWhileBlocksRunTogether(t *testing.T) {
+	t.Parallel()
 	first := definition("alpha")
 	first.Stage = reconciliation.StageInfrastructureServices
 	second := definition("bravo")
@@ -666,6 +679,7 @@ func TestAStageBoundaryPausesWhileBlocksRunTogether(t *testing.T) {
 // step's predecessors by their place in the list, and how many rounds the
 // plan's own shape needs, beside how many blocks this build starts at once.
 func TestPlanPreviewNamesPredecessorsAndWaves(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 4, definition("alpha"), definition("zulu"),
 		dependent("bravo", "alpha", "zulu"), dependent("charlie", "bravo"))
 	result, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
@@ -707,6 +721,7 @@ type plannedPlace struct {
 // retry instead of reporting a failure the invocation is about to repair, and
 // the retry's success leaves no diagnostic behind.
 func TestABlockItsResolutionLeavesFailedIsRetriedByTheSameApply(t *testing.T) {
+	t.Parallel()
 	for name, effect := range map[string]reconciliation.EffectState{
 		"no effect": reconciliation.EffectNoEffect,
 		"partial":   reconciliation.EffectPartial,
@@ -756,6 +771,7 @@ func TestABlockItsResolutionLeavesFailedIsRetriedByTheSameApply(t *testing.T) {
 // first attempt, its own error is the diagnostic in place of the resolution's,
 // and the next invocation retries the block again.
 func TestARetryAfterAResolutionThatFailsAgainStopsFirstAttempts(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 4, definition("alpha"), dependent("bravo", "alpha"))
 	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -792,6 +808,7 @@ func TestARetryAfterAResolutionThatFailsAgainStopsFirstAttempts(t *testing.T) {
 // stage the selection leaves out stays failed with the remedy that names the
 // command taking it on, and its row reports the failure.
 func TestABlockAResolutionLeavesFailedOutsideTheSelectionIsNotRetried(t *testing.T) {
+	t.Parallel()
 	first := definition("alpha")
 	first.Stage = reconciliation.StageInfrastructureServices
 	second := definition("bravo")
@@ -830,6 +847,7 @@ func TestABlockAResolutionLeavesFailedOutsideTheSelectionIsNotRetried(t *testing
 // with the state it keeps, so no row stays running. One that started has its
 // own terminal row, and one whose attempt could not start has none.
 func TestAnAnnouncedRetryThatNeverStartsIsSettledFailed(t *testing.T) {
+	t.Parallel()
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("alpha")})
 	if err != nil {
 		t.Fatal(err)
@@ -868,6 +886,7 @@ func TestAnAnnouncedRetryThatNeverStartsIsSettledFailed(t *testing.T) {
 // the invocation has observed, or whose own attempt left it unproved, is not
 // admitted for resolution again.
 func TestAFailedResolutionIsRetriedButAFailedAttemptIsNot(t *testing.T) {
+	t.Parallel()
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{
 		definition("alpha"), definition("bravo"),
 	})
@@ -904,6 +923,7 @@ func TestAFailedResolutionIsRetriedButAFailedAttemptIsNot(t *testing.T) {
 const heldInstallationWindow = time.Second
 
 func TestClusterInstallationsSerializeWhileMediaBuildsOverlap(t *testing.T) {
+	t.Parallel()
 	first := dependent("cluster-install-alpha", "cluster-media-alpha")
 	second := dependent("cluster-install-bravo", "cluster-media-bravo")
 	first.Exclusive, second.Exclusive = []string{"container-cluster-install"}, []string{"container-cluster-install"}

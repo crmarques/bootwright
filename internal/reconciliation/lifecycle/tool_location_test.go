@@ -100,6 +100,7 @@ func executionOf(t *testing.T, h *harness, block string, resolution bool) Execut
 // evidence and what that block proved, so it runs what its own context's stage
 // installed.
 func TestAnAttemptLocatesItsClientsThroughTheControllerStage(t *testing.T) {
+	t.Parallel()
 	h, locator := stagedToolHarness(t)
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -112,6 +113,7 @@ func TestAnAttemptLocatesItsClientsThroughTheControllerStage(t *testing.T) {
 // A resolution is handed the same lookup, because an observation runs the
 // same clients its attempt ran.
 func TestAResolutionLocatesItsClientsThroughTheControllerStage(t *testing.T) {
+	t.Parallel()
 	h, locator := stagedToolHarness(t)
 	h.capability.outcomeFor["artifacts"] = Result{Outcome: reconciliation.OutcomeUnknown}
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"ok":true}`)}}
@@ -130,6 +132,7 @@ func TestAResolutionLocatesItsClientsThroughTheControllerStage(t *testing.T) {
 // from what that block proved in the apply it takes back, never from the
 // removal's own record of the stage, which retains and proves no closure.
 func TestARemovalLocatesItsClientsThroughWhatTheStageProvedInItsApply(t *testing.T) {
+	t.Parallel()
 	h, locator := stagedToolHarness(t)
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -145,6 +148,7 @@ func TestARemovalLocatesItsClientsThroughWhatTheStageProvedInItsApply(t *testing
 // A plan without a controller stage installed nothing to run, and a stage
 // whose capability cannot answer is not a place to search instead.
 func TestALookupWithoutAnAnsweringControllerStageRefuses(t *testing.T) {
+	t.Parallel()
 	cases := map[string]struct {
 		harness     func(*testing.T) *harness
 		code        string

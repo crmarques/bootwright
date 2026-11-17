@@ -40,6 +40,7 @@ func (f diffFixture) projecting(t *testing.T, paths []ProjectedPath, project fun
 }
 
 func TestDiffComparesEachSideAsAuthoredInItsFile(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha")
 	authored := []api.Object{tlsServer("alpha", "v1")}
 	effective := []api.Object{tlsServer("alpha", "v1", text("minVersion", "TLSv1.2"))}
@@ -58,6 +59,7 @@ func TestDiffComparesEachSideAsAuthoredInItsFile(t *testing.T) {
 }
 
 func TestAnObservationOverlaysTheAppliedObject(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha", "bravo", "charlie")
 	listened := api.NewObject(api.ArtifactServer, "charlie", api.Value{}, api.MapValue(text("image", "v1"),
 		field("listeners", api.ListValue(listener("http", "http", "80"), listener("https", "https", "443")))))
@@ -130,6 +132,7 @@ func splitFixture(t *testing.T, applied string, versions map[string]string, extr
 }
 
 func TestHoldersThatReadASharedObjectDifferentlySplitIt(t *testing.T) {
+	t.Parallel()
 	_, result := splitFixture(t, "9.4", map[string]string{"alpha": "9.4", "bravo": "9.6", "charlie": "9.4"})
 	rhel, copied := objectOf(t, result, api.MachineInstallProfile, "rhel"), objectOf(t, result, api.MachineInstallProfile, "rhel-rhel-02")
 	if rhel.Real.Object.Spec().Get("os", "version").Text() != "9.4" || rhel.Real.Discovered || len(rhel.Real.Notes) != 0 {
@@ -148,6 +151,7 @@ func TestHoldersThatReadASharedObjectDifferentlySplitIt(t *testing.T) {
 }
 
 func TestAHolderObservingNoDisputedFieldKeepsTheObject(t *testing.T) {
+	t.Parallel()
 	_, result := splitFixture(t, "9.4", map[string]string{"alpha": "9.4", "bravo": "9.6", "charlie": "unread"})
 	var copies []string
 	for _, object := range result.Objects {
@@ -166,6 +170,7 @@ func TestAHolderObservingNoDisputedFieldKeepsTheObject(t *testing.T) {
 }
 
 func TestADiscoveredFileNameIsOnePathElement(t *testing.T) {
+	t.Parallel()
 	names := claimedNames{names: map[string]bool{}, paths: map[string][]string{}}
 	for _, base := range []string{"../x", "a/b", `a\b`, "..", ".", ""} {
 		if path := names.place("servers", base, "ArtifactServer/x"); path != "" {
@@ -178,6 +183,7 @@ func TestADiscoveredFileNameIsOnePathElement(t *testing.T) {
 }
 
 func TestWithoutAnAppliedGroupTheLargestKeepsTheObjectAndTakenNamesMoveOn(t *testing.T) {
+	t.Parallel()
 	_, result := splitFixture(t, "9.2", map[string]string{"alpha": "9.6", "bravo": "9.4", "charlie": "9.6"}, installProfile("rhel-rhel-02", "9.0"))
 	rhel, copied := objectOf(t, result, api.MachineInstallProfile, "rhel"), objectOf(t, result, api.MachineInstallProfile, "rhel-rhel-02-2")
 	if rhel.Real.Object.Spec().Get("os", "version").Text() != "9.6" || copied.Real.Object.Spec().Get("os", "version").Text() != "9.4" ||
@@ -195,6 +201,7 @@ func TestWithoutAnAppliedGroupTheLargestKeepsTheObjectAndTakenNamesMoveOn(t *tes
 }
 
 func TestAHolderMustBeAppliedAndReferenceTheProjectedKind(t *testing.T) {
+	t.Parallel()
 	for name, tt := range map[string]struct {
 		holder ProjectionHolder
 		reason string
@@ -229,6 +236,7 @@ type discoveringCapability struct {
 func (d discoveringCapability) Discovers() []api.Kind { return d.kinds }
 
 func TestADiscoveredObjectIsUnmanagedBesideARemovedOne(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha", "bravo")
 	paths := map[string]string{"ArtifactServer/alpha": "servers/alpha.yaml", "ArtifactServer/bravo": "servers/bravo.yaml", "Environment/lab": "servers/artifactserver-zulu.yaml"}
 	f.compiler.states[digestOf(f.workspace.inputs)] = filedState(servers("v1", "alpha", "bravo"), servers("v1", "alpha", "bravo"), paths)
@@ -258,6 +266,7 @@ func TestADiscoveredObjectIsUnmanagedBesideARemovedOne(t *testing.T) {
 }
 
 func TestDiffCarriesTheMarkersOfBothRevisions(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha")
 	marked := func(text, marker string) desiredstate.Sources {
 		sources := diffSources(text)

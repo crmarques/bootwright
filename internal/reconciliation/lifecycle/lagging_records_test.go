@@ -55,6 +55,7 @@ func laggingApply(t *testing.T) (*harness, string) {
 // over any completed apply. Status offers that apply and the destroy that
 // replaces it, and names no contradiction.
 func TestAFailedApplyWhoseBlocksAreAllDoneIsFinalizedByTheApply(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	t.Run("status and plan name the apply that finalizes it", func(t *testing.T) {
 		h, applied := laggingApply(t)
@@ -117,6 +118,7 @@ func TestAFailedApplyWhoseBlocksAreAllDoneIsFinalizedByTheApply(t *testing.T) {
 // writes nothing; confirmed, it removes every block, releases what the apply
 // held and leaves the apply's own record failed for audit.
 func TestAFailedApplyWhoseBlocksAreAllDoneIsReplacedByARemovalOfItsWholePlan(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, applied := laggingApply(t)
 	h.capability.destroys, h.capability.observes = nil, nil
@@ -320,6 +322,7 @@ func withoutIdentities(data []byte) []byte {
 // apply whose blocks are all done is finalized by its apply and replaced by
 // its destroy, and status offers both.
 func TestTheRecordStatesBothVerbsRefusedMatchTheirGoldens(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	removed := func(blocks ...string) func(*testing.T) *harness {
 		return func(t *testing.T) *harness {

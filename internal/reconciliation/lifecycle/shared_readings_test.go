@@ -10,6 +10,7 @@ import (
 )
 
 func TestASharedReadingRunsOncePerKeyWhileEveryCallerWaitsForIt(t *testing.T) {
+	t.Parallel()
 	shared := NewSharedReadings()
 	var reads atomic.Int32
 	release := make(chan struct{})
@@ -50,6 +51,7 @@ func TestASharedReadingRunsOncePerKeyWhileEveryCallerWaitsForIt(t *testing.T) {
 }
 
 func TestAFailedSharedReadingStaysFailedForEveryLaterCaller(t *testing.T) {
+	t.Parallel()
 	shared := NewSharedReadings()
 	refused := errors.New("refused")
 	reads := 0
@@ -71,6 +73,7 @@ func TestAFailedSharedReadingStaysFailedForEveryLaterCaller(t *testing.T) {
 }
 
 func TestACanceledCallerStopsWaitingWhileTheReadingFinishes(t *testing.T) {
+	t.Parallel()
 	shared := NewSharedReadings()
 	started, release := make(chan struct{}), make(chan struct{})
 	done := make(chan []byte)

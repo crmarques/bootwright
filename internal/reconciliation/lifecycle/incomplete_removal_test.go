@@ -97,6 +97,7 @@ func killResolution(t *testing.T, h *harness, state reconciliation.BlockState) {
 // removal refuses instead, naming each one, and leaves every record and
 // binding as it was.
 func TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses(t *testing.T) {
+	t.Parallel()
 	failed := map[string]Result{"charlie": {Outcome: reconciliation.OutcomeFailed}}
 	for name, test := range map[string]struct {
 		arrange   func(*testing.T, *harness)
@@ -218,6 +219,7 @@ func TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses(t *testing.T
 // after a resolution never leaves the apply failed beside no block that
 // accounts for it.
 func TestAnIncompleteApplyWithoutAContradictionIsStillRemovable(t *testing.T) {
+	t.Parallel()
 	unknown := map[string]Result{"bravo": {Outcome: reconciliation.OutcomeUnknown}}
 	for name, test := range map[string]struct {
 		arrange   func(*testing.T, *harness)
@@ -394,6 +396,7 @@ func TestAnIncompleteApplyWithoutAContradictionIsStillRemovable(t *testing.T) {
 // block, never failed beside no failed block, and status names no
 // contradiction; the next continuation resolves the block first.
 func TestAStartThatLandsThenFailsRecordsTheOperationFromItsBlockRecords(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, chainedDefinitions())
 	failRetryStart(t, h)
 	operation, states := durableOperation(t, h)

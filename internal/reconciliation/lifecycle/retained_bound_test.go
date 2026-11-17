@@ -123,6 +123,7 @@ func refusedAtTheBound(t *testing.T, h *harness, verb reconciliation.Verb, remed
 // claim that holds nothing, the destroy that reclaims it; and otherwise, a
 // removal's included, the deletion the guard admits followed by a fresh init.
 func TestTheRetainedOperationRefusalsMatchTheirGolden(t *testing.T) {
+	t.Parallel()
 	reports := map[string]verbReport{}
 	for name, refused := range boundStates() {
 		h := refused.arrange(t)
@@ -140,6 +141,7 @@ func TestTheRetainedOperationRefusalsMatchTheirGolden(t *testing.T) {
 // either verb, that deletion, which cannot list what it abandons, and the
 // init after it, never a destroy.
 func TestTheRetainedOperationExitOverUnreadableEvidenceNamesTheAcknowledgedDeletion(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	h.workspace.evidence = []byte(`{`)
 	view := h.workspace.view()
@@ -199,6 +201,7 @@ func requireApplied(t *testing.T, h *harness) {
 // the deletion that abandons what the context owns, which the guard admits
 // only with that acknowledgement, and the context created again applies.
 func TestEachRetainedOperationExitLeadsOutOfTheBound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	cases := boundStates()
 	t.Run("the destroy beside running evidence, then the deletion", func(t *testing.T) {

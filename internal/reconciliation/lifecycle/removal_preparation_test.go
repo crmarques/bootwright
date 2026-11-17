@@ -43,6 +43,7 @@ func (r *removalRecorder) ObserveRemoval(ctx context.Context, execution Executio
 }
 
 func TestRemovalReceiptIsDurableBeforeContinuationAndReadOnlyOnResolution(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	r := &removalRecorder{testCapability: h.capability}
 	h.service.capabilities = testResolver{capability: r}
@@ -87,6 +88,7 @@ func TestRemovalReceiptIsDurableBeforeContinuationAndReadOnlyOnResolution(t *tes
 }
 
 func TestRemovalProofsLendOnlyCompletedTransitiveDependenciesPairedWithApply(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), dependent("bravo", "alpha"), dependent("charlie", "bravo"), definition("sibling")})
 	h.capability.outcomeFor = map[string]Result{}
 	for _, id := range []string{"alpha", "bravo", "charlie", "sibling"} {
@@ -123,6 +125,7 @@ func TestRemovalProofsLendOnlyCompletedTransitiveDependenciesPairedWithApply(t *
 }
 
 func TestOriginalRemovalDependentsIncludesPositivelyPendingDescendants(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), dependent("bravo", "alpha"), dependent("charlie", "bravo"), definition("sibling")})
 	h.capability.errorFor = map[string]error{"bravo": errors.New("stopped before charlie")}
 	if err := applyOnce(h); err == nil {

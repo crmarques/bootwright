@@ -41,6 +41,7 @@ func blockIDs(plan reconciliation.Plan) []string {
 }
 
 func TestOneDestroyTakesTheWholeLineageBackTheAddedBlockFirst(t *testing.T) {
+	t.Parallel()
 	h, f := completedLineage(t)
 	f.h.binder.lost = []string{f.head.Bindings[0]}
 	result, err := destroy(h)
@@ -76,6 +77,7 @@ func TestOneDestroyTakesTheWholeLineageBackTheAddedBlockFirst(t *testing.T) {
 }
 
 func TestADestroyOfALineageOfOneIsTheDestroyItWas(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha", "beta")
 	completeApply(t, h)
 	root, _ := durableOperation(t, h)
@@ -92,6 +94,7 @@ func TestADestroyOfALineageOfOneIsTheDestroyItWas(t *testing.T) {
 }
 
 func TestAFailedLineageRemovalIsReplacedOverWhatItHasNotRemoved(t *testing.T) {
+	t.Parallel()
 	h, f := completedLineage(t)
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
 	if _, err := destroy(h); err == nil {
@@ -125,6 +128,7 @@ func TestAFailedLineageRemovalIsReplacedOverWhatItHasNotRemoved(t *testing.T) {
 }
 
 func TestAReplacementOnlyRemovesWhatTheFailedLineageRemovalLeft(t *testing.T) {
+	t.Parallel()
 	h, f := completedLineage(t)
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeFailed}}
 	if _, err := destroy(h); err == nil {
@@ -151,6 +155,7 @@ func TestAReplacementOnlyRemovesWhatTheFailedLineageRemovalLeft(t *testing.T) {
 }
 
 func TestAnInterruptedLineageRemovalIsContinuedAndReleasesEveryBinding(t *testing.T) {
+	t.Parallel()
 	h, f := completedLineage(t)
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := destroy(h); err == nil {
@@ -178,6 +183,7 @@ func TestAnInterruptedLineageRemovalIsContinuedAndReleasesEveryBinding(t *testin
 }
 
 func TestARemovalResolvesAPredecessorsUnprovedBlockIntoThePredecessorsRecords(t *testing.T) {
+	t.Parallel()
 	h, f := completedLineage(t)
 	rewriteState(t, h, path.Join(f.root.ID, "blocks", "producer-a", "state.json"), string(reconciliation.BlockRunning))
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
@@ -204,6 +210,7 @@ func TestARemovalResolvesAPredecessorsUnprovedBlockIntoThePredecessorsRecords(t 
 }
 
 func TestAnUnprovedPredecessorBlockThatCannotBeResolvedRefusesTheWholeRemoval(t *testing.T) {
+	t.Parallel()
 	h, f := completedLineage(t)
 	rewriteState(t, h, path.Join(f.root.ID, "blocks", "producer-a", "state.json"), string(reconciliation.BlockUnknown))
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectUnknown}}
@@ -221,6 +228,7 @@ func TestAnUnprovedPredecessorBlockThatCannotBeResolvedRefusesTheWholeRemoval(t 
 }
 
 func TestALostPredecessorRecordRefusesTheRemovalBeforeAnythingRuns(t *testing.T) {
+	t.Parallel()
 	h, f := completedLineage(t)
 	h.workspace.area.mutex.Lock()
 	delete(h.workspace.area.files, path.Join(f.root.ID, "operation.json"))
@@ -235,6 +243,7 @@ func TestALostPredecessorRecordRefusesTheRemovalBeforeAnythingRuns(t *testing.T)
 }
 
 func TestARemovalReopensTheRootsBindingNotTheHeads(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, f := completedLineage(t)
 	scope, err := removalOver(ctx, f.store, f.head, f.headPlan, completedOwnership(f.headPlan))
@@ -268,6 +277,7 @@ func TestARemovalReopensTheRootsBindingNotTheHeads(t *testing.T) {
 }
 
 func TestARebindDuringALineageRemovalNamesOnlyWhatTheRootBindingHolds(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, f := completedLineage(t)
 	h.binder.versions = map[string]string{"shared": "v2", "head-only": "v2"}
@@ -291,6 +301,7 @@ func TestARebindDuringALineageRemovalNamesOnlyWhatTheRootBindingHolds(t *testing
 }
 
 func TestAnAdditiveAttemptIsAdmittedBeneathTheReserveOfItsWholeLineageRemoval(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, f := completedLineage(t)
 	release, err := f.store.AdmitAttempt(ctx, f.head, f.headPlan, "consumer", false)
@@ -306,6 +317,7 @@ func TestAnAdditiveAttemptIsAdmittedBeneathTheReserveOfItsWholeLineageRemoval(t 
 }
 
 func TestEvidenceUnderAnAdditiveHeadIsReadFromEachBlocksOwner(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := completedLineage(t)
 	rootProof, err := h.service.Evidence(ctx, testContextName, "ArtifactServer", "producer-a")
@@ -326,6 +338,7 @@ func TestEvidenceUnderAnAdditiveHeadIsReadFromEachBlocksOwner(t *testing.T) {
 // carrying that apply's frozen block, while the current-operation evidence
 // stays the removal's own.
 func TestAppliedEvidenceUnderACurrentLineageRemovalIsEachBlocksApply(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, f := completedLineage(t)
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
@@ -358,6 +371,7 @@ func TestAppliedEvidenceUnderACurrentLineageRemovalIsEachBlocksApply(t *testing.
 // operation, while its applied evidence is still its apply's done block: that
 // absence is what tells a consumer the object was removed.
 func TestAppliedEvidenceUnderAReplacementDestroyIsTheApplysForWhatItNoLongerNames(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, f := completedLineage(t)
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeFailed}, {Outcome: reconciliation.OutcomeFailed}}
@@ -384,6 +398,7 @@ func TestAppliedEvidenceUnderAReplacementDestroyIsTheApplysForWhatItNoLongerName
 // A removal whose source apply cannot be read refuses the applied evidence
 // rather than reading nothing, so no consumer acts unpinned on that reading.
 func TestAppliedEvidenceUnderARemovalWhoseApplyIsLostRefuses(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, root := range []bool{false, true} {
 		h, f := completedLineage(t)
@@ -405,6 +420,7 @@ func TestAppliedEvidenceUnderARemovalWhoseApplyIsLostRefuses(t *testing.T) {
 }
 
 func TestADestroyNamingAnythingButAnApplyAsItsSourceRefuses(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, f := completedLineage(t)
 	other := f.root
@@ -434,6 +450,7 @@ func (s *sourceStore) ReadOperation(ctx context.Context, id string) (operationst
 }
 
 func TestAPlanOfAnAdditiveApplyWarnsOverTheRemovalOfItsWholeLineage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "producer-a")
 	f := newLineageFixture(t, h, consumerDefinition())
@@ -455,6 +472,7 @@ func TestAPlanOfAnAdditiveApplyWarnsOverTheRemovalOfItsWholeLineage(t *testing.T
 }
 
 func TestTheFrozenStorageBlocksListEveryPlanOfTheLineage(t *testing.T) {
+	t.Parallel()
 	r := newStorageRowsHarness(t)
 	added := storageBlock("pool-meta", api.CephPool, "meta")
 	added.Dependencies = []string{"cluster-ceph"}

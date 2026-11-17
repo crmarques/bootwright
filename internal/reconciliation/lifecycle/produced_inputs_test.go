@@ -101,6 +101,7 @@ func lendingHarness(t *testing.T) (*harness, *lendingCapability) {
 }
 
 func TestProducedInputsLendSeveralProducersAcrossApplyAndRemoval(t *testing.T) {
+	t.Parallel()
 	h, c := lendingHarness(t)
 	if _, err := apply(h); err != nil {
 		t.Fatal(err)
@@ -131,6 +132,7 @@ func TestProducedInputsLendSeveralProducersAcrossApplyAndRemoval(t *testing.T) {
 }
 
 func TestProducedInputLenderRefusesMissingUnprovedUndeclaredAndExpired(t *testing.T) {
+	t.Parallel()
 	h, c := lendingHarness(t)
 	definitions := h.capability.definitions
 	block := reconciliation.Block{BlockDefinition: definitions[2]}
@@ -170,6 +172,7 @@ func materialText(material secrets.Material) string {
 }
 
 func TestProducedInputContinuationReopensAndWithholdsEachUnprovedEntry(t *testing.T) {
+	t.Parallel()
 	for _, entry := range []string{"", "producer-a/access", "producer-b/access", "missing"} {
 		t.Run(entry, func(t *testing.T) {
 			h, c := lendingHarness(t)
@@ -218,6 +221,7 @@ func (h evidenceHistory) LastResolution(_ context.Context, _ string, _ string, n
 	return attempt, found, nil
 }
 func TestPreviousEvidenceSkipsNullAndRunningRecords(t *testing.T) {
+	t.Parallel()
 	for _, empty := range []string{"", "null"} {
 		history := evidenceHistory{attempts: []operationstore.Attempt{{Phase: "observed", Evidence: []byte(`{"receipt":"uid"}`)}, {Phase: "observed", Evidence: []byte(empty)}, {Phase: "running"}}, resolutions: map[int]operationstore.Attempt{1: {Phase: "running"}, 2: {Phase: "observed", Evidence: []byte(empty)}}}
 		got, err := previousBlockEvidence(context.Background(), history, "operation", "block")
@@ -242,6 +246,7 @@ func (r multiKindLendingResolver) Resolve(kind, implementation string) (Capabili
 	return r.testResolver.Resolve(kind, implementation)
 }
 func TestProducedInputsLendAcrossProducerKinds(t *testing.T) {
+	t.Parallel()
 	h, c := lendingHarness(t)
 	h.capability.definitions[1].Kind = "CephConsumer"
 	c.references["consumer"][1].Kind = "CephConsumer"

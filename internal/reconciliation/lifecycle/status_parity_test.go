@@ -72,6 +72,7 @@ func stepWithoutTokens(step string) string {
 // other refusal leaves a step. Every step status offers must be derived, and
 // every derived step must be offered.
 func TestStatusStepsAreExactlyWhatTheVerbsDecisionsDerive(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	failed := map[string]Result{"charlie": {Outcome: reconciliation.OutcomeFailed}}
 	chained := func(arrange func(*testing.T, *harness)) func(*testing.T) *harness {

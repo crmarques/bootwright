@@ -20,6 +20,7 @@ func libvirtSpec(profiles ...api.Value) api.Value {
 }
 
 func TestMergeUnionsAndExcludesConflicts(t *testing.T) {
+	t.Parallel()
 	shape := api.Schema(api.InfraProvider)
 	first := libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("100"))))
 	second := libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("80")), field("dataDisks", api.ListValue())), profile("sno", field("diskGiB", api.IntegerValue("120"))))
@@ -49,6 +50,7 @@ func TestMergeUnionsAndExcludesConflicts(t *testing.T) {
 }
 
 func TestOverlayReplacesOnlyWhatDiffersFromTheEffectiveValue(t *testing.T) {
+	t.Parallel()
 	shape := api.Schema(api.InfraProvider)
 	authored := api.MapValue(field("libvirt", api.MapValue(
 		field("uri", api.StringValue("qemu:///system")),
@@ -78,6 +80,7 @@ func TestOverlayReplacesOnlyWhatDiffersFromTheEffectiveValue(t *testing.T) {
 }
 
 func TestOverlayKeepsADefaultedFieldAbsentUnlessItsObservedValueDiffers(t *testing.T) {
+	t.Parallel()
 	shape := api.Schema(api.InfraProvider)
 	authored := libvirtSpec(profile("rhel"))
 	effective := libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("120"))))
@@ -91,6 +94,7 @@ func TestOverlayKeepsADefaultedFieldAbsentUnlessItsObservedValueDiffers(t *testi
 }
 
 func TestOverlayKeepsUnobservedOuterItemsAndHoldsObservedInnerLists(t *testing.T) {
+	t.Parallel()
 	shape := api.Schema(api.InfraProvider)
 	disk := func(name, size string) api.Value {
 		return api.MapValue(field("name", api.StringValue(name)), field("sizeGiB", api.IntegerValue(size)))
@@ -125,6 +129,7 @@ func TestOverlayKeepsUnobservedOuterItemsAndHoldsObservedInnerLists(t *testing.T
 }
 
 func TestClaimedPathsGeneralizeNamedItemsThatValueAtAddressesByKey(t *testing.T) {
+	t.Parallel()
 	shape := api.Schema(api.InfraProvider)
 	value := libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("80")), field("dataDisks", api.ListValue(profile("data1", field("sizeGiB", api.IntegerValue("50")))))), profile("sno"))
 	if got, want := claimedPaths(value, shape, "spec"), []string{
@@ -152,6 +157,7 @@ func TestClaimedPathsGeneralizeNamedItemsThatValueAtAddressesByKey(t *testing.T)
 // after it was applied shows as a difference rather than as a field left
 // uncompared.
 func TestAFreeMapIsClaimedAndComparedWhole(t *testing.T) {
+	t.Parallel()
 	shape := api.Schema(api.OpenShiftCluster)
 	labels := func(fields ...api.FieldValue) api.Value {
 		return api.MapValue(field("nodes", api.ListValue(api.MapValue(field("name", api.StringValue("worker-0")), field("labels", api.MapValue(fields...))))))
@@ -173,6 +179,7 @@ func TestAFreeMapIsClaimedAndComparedWhole(t *testing.T) {
 }
 
 func TestTaintComparisonCanonicalizesOnlyItsKeyAndEffect(t *testing.T) {
+	t.Parallel()
 	taint := func(key, effect, value string) api.Value {
 		return api.MapValue(field("key", api.StringValue(key)), field("effect", api.StringValue(effect)), field("value", api.StringValue(value)))
 	}

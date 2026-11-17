@@ -10,6 +10,7 @@ import (
 )
 
 func TestCompactRemovalNamesEveryMachineToStopBeforeRemovingAnyEffect(t *testing.T) {
+	t.Parallel()
 	names := []string{"compact-01", "compact-02", "compact-03"}
 	var definitions []reconciliation.BlockDefinition
 	for _, name := range names {

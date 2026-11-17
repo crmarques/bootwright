@@ -20,6 +20,7 @@ func verdictObject(labels api.Value, fields ...api.FieldValue) *api.Object {
 }
 
 func TestJudgeMatchesTheEncodedDocumentComparison(t *testing.T) {
+	t.Parallel()
 	pool := api.FieldValue{Name: "poolRef", Value: api.StringValue("rbd-data")}
 	access := api.FieldValue{Name: "access", Value: api.StringValue("readWrite")}
 	cases := []struct {
@@ -44,6 +45,7 @@ func TestJudgeMatchesTheEncodedDocumentComparison(t *testing.T) {
 }
 
 func TestDiffDecidesDifferenceFromEncodedBytes(t *testing.T) {
+	t.Parallel()
 	client := verdictClient("readWrite")
 	same := verdictClient("readWrite")
 	other := verdictClient("readOnly")
@@ -74,6 +76,7 @@ func TestDiffDecidesDifferenceFromEncodedBytes(t *testing.T) {
 }
 
 func TestJudgeSummarizesAndDecidesWhetherTheStateDiffers(t *testing.T) {
+	t.Parallel()
 	client := verdictClient("readWrite")
 	result := &DiffResult{Observed: true, Objects: []ObjectDiff{
 		{Desired: client, Real: RealSide{Source: "applied", State: "present", Object: verdictClient("readWrite")}},

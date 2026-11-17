@@ -70,6 +70,7 @@ var inconclusive = Observation{Effect: reconciliation.EffectInconclusive, Eviden
 // one from a capability that declares no replay rules stays unknown the same
 // way (Q65, D183).
 func TestAnUnprovedRemovalObservationIsNeverNoEffect(t *testing.T) {
+	t.Parallel()
 	for name, observe := range map[string]func(*testCapability){
 		"forbidden":    func(c *testCapability) { c.observeErr = errors.New("HTTP 403 forbidden") },
 		"disconnected": func(c *testCapability) { c.observeErr = context.DeadlineExceeded },
@@ -108,6 +109,7 @@ func TestAnUnprovedRemovalObservationIsNeverNoEffect(t *testing.T) {
 // removing, and performs nothing over a second inconclusive read, after which
 // every later resolution stays unknown.
 func TestAnInconclusiveReplaySafeRemovalIsRetriedOnceAfterARead(t *testing.T) {
+	t.Parallel()
 	cases := map[string]struct {
 		reread  Observation
 		removed bool

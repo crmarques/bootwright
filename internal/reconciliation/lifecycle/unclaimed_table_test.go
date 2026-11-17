@@ -55,6 +55,7 @@ type unclaimedCase struct {
 // with exactly its reason and remedy, an input of the same kind is never
 // refused, and a row added or removed on either side fails here.
 func TestUnclaimedObjectTableMatchesTheEngine(t *testing.T) {
+	t.Parallel()
 	managed := func(kind api.Kind, name, management string) api.Object {
 		return api.NewObject(kind, name, api.Value{}, api.MapValue(api.FieldValue{Name: "management", Value: api.StringValue(management)}))
 	}

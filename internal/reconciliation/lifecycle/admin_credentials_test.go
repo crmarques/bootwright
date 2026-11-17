@@ -78,6 +78,7 @@ func adminHarness(t *testing.T) (*harness, *credentialCapability) {
 }
 
 func TestAdminCredentialUpdateReusesCandidateAfterLostReplyAndPublicationFailure(t *testing.T) {
+	t.Parallel()
 	for _, failure := range []string{"remote", "publication"} {
 		t.Run(failure, func(t *testing.T) {
 			h, capability := adminHarness(t)
@@ -122,6 +123,7 @@ func TestAdminCredentialUpdateReusesCandidateAfterLostReplyAndPublicationFailure
 }
 
 func TestAdminCredentialUpdateRefusesBeforeAnApplyOrForAnUnknownCluster(t *testing.T) {
+	t.Parallel()
 	h, capability := adminHarness(t)
 	for _, name := range []string{"edge", "missing"} {
 		if result, err := h.service.UpdateAdminCredentials(context.Background(), UpdateAdminCredentialsRequest{Name: name}); err == nil || result != nil {
@@ -136,6 +138,7 @@ func TestAdminCredentialUpdateRefusesBeforeAnApplyOrForAnUnknownCluster(t *testi
 func (c *credentialCapability) AdminCredentialMayBeMissing() bool { return !c.strict }
 
 func TestAdminCredentialUpdateReportsAFailedOrCancelledCustodyReadAsItself(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name string
 		err  error
@@ -163,6 +166,7 @@ func TestAdminCredentialUpdateReportsAFailedOrCancelledCustodyReadAsItself(t *te
 }
 
 func TestAdministratorPasswordRefusesIncompleteOrCorruptUpdates(t *testing.T) {
+	t.Parallel()
 	h, _ := adminHarness(t)
 	key := "credential-cluster/admin-password"
 	h.binder.produced = map[string]string{key: "synthetic-password-000000000000001"}

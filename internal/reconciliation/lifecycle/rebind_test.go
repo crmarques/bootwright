@@ -65,6 +65,7 @@ func destroyWith(h *harness, authorizations ...string) error {
 // removal, which proves what it takes back, and releases both versions once
 // it completes. The apply's binding is never rewritten.
 func TestARotatedAccessCredentialIsRemovedOnlyThroughTheRebindExit(t *testing.T) {
+	t.Parallel()
 	h, seen := rotatedHarness(t, []string{"bmc"})
 	applied, _ := durableOperation(t, h)
 	if err := destroyWith(h); err == nil {
@@ -107,6 +108,7 @@ func TestARotatedAccessCredentialIsRemovedOnlyThroughTheRebindExit(t *testing.T)
 // into its own operation's record, so every later attempt and its removal
 // reopen it.
 func TestAContinuationRecordsTheRebindInItsOperation(t *testing.T) {
+	t.Parallel()
 	alpha := definition("alpha")
 	alpha.Request = json.RawMessage(`{"credentialsRef":"bmc","name":"alpha"}`)
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{alpha})
@@ -140,6 +142,7 @@ func TestAContinuationRecordsTheRebindInItsOperation(t *testing.T) {
 // its current version, a plan that reopens no binding and a malformed token
 // each refuse before anything is confirmed, rebound, bound or registered.
 func TestTheRebindExitRefusesAnythingButARotatedAccessCredential(t *testing.T) {
+	t.Parallel()
 	cases := map[string]struct {
 		access         []string
 		rotate         bool
@@ -200,6 +203,7 @@ func TestTheRebindExitRefusesAnythingButARotatedAccessCredential(t *testing.T) {
 // string equal to the Secret's name in a member the capability does not report
 // as a reference is no use of it.
 func TestAnUnreportedRequestStringIsNoUseOfTheSecret(t *testing.T) {
+	t.Parallel()
 	alpha := definition("alpha")
 	alpha.Request = json.RawMessage(`{"credentialsRef":"other","name":"bmc"}`)
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{alpha})
@@ -228,6 +232,7 @@ type secretBlind struct{ Capability }
 // A block whose capability cannot name the Secrets it references refuses the
 // rebind, naming the step, before anything is rebound or confirmed.
 func TestARebindRefusesABlockWhoseCapabilityCannotNameItsSecrets(t *testing.T) {
+	t.Parallel()
 	h, _ := rotatedHarness(t, []string{"bmc"})
 	h.service.capabilities = blindResolver{h.service.capabilities}
 	err := destroyWith(h, RebindAuthorization+"bmc")

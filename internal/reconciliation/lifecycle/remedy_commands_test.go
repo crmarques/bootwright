@@ -16,6 +16,7 @@ import (
 // the command that carries the run again, while a plan's refusal keeps its
 // own text, which ends with the plan.
 func TestABoundedRefusalNamesAReservedKeyAndItsRetry(t *testing.T) {
+	t.Parallel()
 	definitions := []reconciliation.BlockDefinition{{Kind: "Machine", Object: "metal", Request: []byte(`{"a":{"__ansible_unsafe":1}}`)}}
 	const retry = "bootwright machine stop --context lab --name metal"
 	reported := diagnostics.Of(RefuseBoundedTemplateDelimiters("lab", retry, definitions))
@@ -42,6 +43,7 @@ func authorizedApply(h *harness) error {
 // so status's remedy names that exact apply, with its context and the tokens
 // its frozen plan consumes.
 func TestAnUnobservedBlockNamesTheCommandThatObservesIt(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha")})
 	shown := shownBinding(t, h, "lab")
 	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeUnknown}}
@@ -57,6 +59,7 @@ func TestAnUnobservedBlockNamesTheCommandThatObservesIt(t *testing.T) {
 // A resolution that leaves an apply's block unknown names the exact apply that
 // observes it again.
 func TestAnUnresolvedBlockNamesItsExactRetry(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha")})
 	shown := shownBinding(t, h, "lab")
 	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeUnknown}}
@@ -84,6 +87,7 @@ func TestAnUnresolvedBlockNamesItsExactRetry(t *testing.T) {
 // block's carries the apply and every token its frozen plan consumes, and a
 // resolution and a destroy attempt carry none.
 func TestAStageAttemptCarriesItsContinuation(t *testing.T) {
+	t.Parallel()
 	stage := destructive("clients")
 	stage.Stage = reconciliation.StageController
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{stage})
@@ -114,6 +118,7 @@ func TestAStageAttemptCarriesItsContinuation(t *testing.T) {
 // before the stage capability runs, so only the lifecycle can name the stage
 // command that settles it, with the context.
 func TestAStageBlockRefusedOnEntryNamesTheStageCommand(t *testing.T) {
+	t.Parallel()
 	failure := &prerequisites.ScopedFailure{Code: "controller.state", Message: "the controller runtime for this build (lock 0123456789ab, Python cp312) is not prepared", Correction: "Run bootwright controller install", Command: "repeat this command"}
 	for _, test := range []struct {
 		name  string
@@ -138,6 +143,7 @@ func TestAStageBlockRefusedOnEntryNamesTheStageCommand(t *testing.T) {
 // apply's unknown controller stage block, and that refusal names the stage
 // command too, because the observation it refused is the apply's own.
 func TestAStageResolutionRefusedOnEntryNamesTheStageCommand(t *testing.T) {
+	t.Parallel()
 	failure := &prerequisites.ScopedFailure{Code: "controller.state", Message: "the controller runtime for this build (lock 0123456789ab, Python cp312) is not prepared", Correction: "Run bootwright controller install", Command: "repeat this command"}
 	block := destructive("clients")
 	block.Stage = reconciliation.StageController
@@ -159,6 +165,7 @@ func TestAStageResolutionRefusedOnEntryNamesTheStageCommand(t *testing.T) {
 // entry keeps the failure's own remedy: an incomplete destroy refuses the
 // stage apply, so naming it would name a command that cannot run.
 func TestADestroyRefusedOnAStageBlockEntryKeepsItsOwnRemedy(t *testing.T) {
+	t.Parallel()
 	failure := &prerequisites.ScopedFailure{Code: "controller.state", Message: "the controller runtime for this build (lock 0123456789ab, Python cp312) is not prepared", Correction: "Run bootwright controller install", Command: "repeat this command"}
 	block := destructive("clients")
 	block.Stage = reconciliation.StageController
@@ -195,6 +202,7 @@ func (g *admittingThenRefusingGuard) WithPython(_ context.Context, _ prerequisit
 // and the comparison, each built by contextCommand; cmd/bootwright parses each
 // against the catalog (TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses).
 func TestANamedChangeRemedyNamesOnlyContextCommands(t *testing.T) {
+	t.Parallel()
 	f := appliedOver(t, diffState(pool("a", "3")))
 	f.publish("rev-2", "kind: Environment\n# edited\n", diffState(pool("a", "2")))
 	_, err := f.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})

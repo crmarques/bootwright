@@ -39,6 +39,7 @@ func appliedWithRunning(t *testing.T, running ...string) (*harness, string) {
 // root, a block whose attempt retained nothing yet naming the file it will
 // write, and a block that is not running or an attempt it is not on never.
 func TestStatusListsEachRunningBlocksNewestOutputFromRecords(t *testing.T) {
+	t.Parallel()
 	h, _ := appliedWithRunning(t)
 	idle, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
 	if err != nil {
@@ -72,6 +73,7 @@ func TestStatusListsEachRunningBlocksNewestOutputFromRecords(t *testing.T) {
 // Status names what the records and the log area hold and proves nothing about
 // any process: listing a running block reads, writes and runs nothing.
 func TestStatusLiveReadsNoHost(t *testing.T) {
+	t.Parallel()
 	h, operation := appliedWithRunning(t, "alpha")
 	retainOutput(t, h, operation, "alpha", "attempt-000001.output", "partial")
 	before := countWrites(h)
@@ -101,6 +103,7 @@ func (p *pathsSource) Paths(_ context.Context, name string) ([]ContextPath, []di
 // request asks for them, in the order the port gave them, and a build wired
 // with no source for them refuses rather than answering an empty list.
 func TestStatusPathsOnlyWhenAsked(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	source := &pathsSource{paths: []ContextPath{
@@ -142,6 +145,7 @@ func TestStatusPathsOnlyWhenAsked(t *testing.T) {
 // An operation names where it writes as the path, the context and the
 // operation, and no run: it is told once, before its first effect.
 func TestProgressNamesTheOperationContextAndRun(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	progress := &testProgress{rowsAtLocation: -1}
 	h.service.options.Progress = progress

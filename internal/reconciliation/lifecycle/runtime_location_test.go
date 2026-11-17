@@ -43,6 +43,7 @@ func requireSetupRefusal(t *testing.T, err error, message string) {
 // blocks every launch until setup runs again, whatever the receipt it may
 // still hold says; the refusal names both exits.
 func TestAPendingSetupBlocksALaunch(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	view := completedSetup("3.14", "3.14.8")
 	view.State.Pending = &prerequisites.PendingSetup{ID: "install-000042", Actions: []string{"runtime"}}
@@ -61,6 +62,7 @@ func TestAPendingSetupBlocksALaunch(t *testing.T) {
 // A setup record another build wrote, and a host no setup completed on, both
 // refuse every launch with the setup that heals them.
 func TestALaunchWithoutAReceiptRefusesWithSetup(t *testing.T) {
+	t.Parallel()
 	for name, test := range map[string]struct {
 		view    prerequisites.SetupView
 		message string
@@ -81,6 +83,7 @@ func TestALaunchWithoutAReceiptRefusesWithSetup(t *testing.T) {
 // until setup runs, refuses naming that lock and the receipt's ABI before it
 // registers anything.
 func TestAMissingRuntimeRefusesNamingTheBuildsLock(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.guard.unpublished = true
 	launchRefused(t, h, "the controller runtime for this build (lock 444444444444, Python 3.14) is not prepared")
@@ -92,6 +95,7 @@ func TestAMissingRuntimeRefusesNamingTheBuildsLock(t *testing.T) {
 // A runtime retired between its location and its launch refuses that launch
 // with the same remedy, before the bounded run's call.
 func TestARuntimeGoneAtLaunchRefusesWithSetup(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.service.guard = vanishingGuard{}
 	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName}, func(context.Context, Runtime) error {
@@ -142,6 +146,7 @@ func withRebuilder(h *harness, refusal error) *cacheRebuilder {
 // A launch whose runtime directory is gone rebuilds it from the wheel cache,
 // once and without asking, and then runs as if setup had never lost it.
 func TestAMissingRuntimeIsRebuiltFromCachedWheels(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	rebuilder := withRebuilder(h, nil)
 	if _, err := apply(h); err != nil {
@@ -160,6 +165,7 @@ func TestAMissingRuntimeIsRebuiltFromCachedWheels(t *testing.T) {
 // Only a wheel the cache lacks needs the network, which is setup's to use:
 // the launch refuses naming setup before it registers anything.
 func TestAMissingWheelRefusesWithRunSetup(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	withRebuilder(h, prerequisites.ErrRuntimeWheelMissing)
 	launchRefused(t, h, "the controller runtime for this build (lock 444444444444, Python 3.14) is not prepared")
@@ -171,6 +177,7 @@ func TestAMissingWheelRefusesWithRunSetup(t *testing.T) {
 // A rebuild that fails once every wheel is cached names that failure and
 // still points at setup, which repeats the build with its own diagnostics.
 func TestAFailedRebuildRefusesWithRunSetup(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	withRebuilder(h, errors.Join(prerequisites.ErrRuntimeRebuildFailed, &prerequisites.ScopedFailure{
 		Message: "pip could not install the locked wheels from the cache", Correction: "Restore the host's Python interpreter and the locked controller wheels",
@@ -185,6 +192,7 @@ func TestAFailedRebuildRefusesWithRunSetup(t *testing.T) {
 
 // Status changes nothing, so it never rebuilds; it offers setup instead.
 func TestStatusNeverRebuildsAMissingRuntime(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	rebuilder := withRebuilder(h, nil)
 	if _, err := h.service.Status(context.Background(), StatusRequest{ContextName: testContextName}); err != nil {
@@ -199,6 +207,7 @@ func TestStatusNeverRebuildsAMissingRuntime(t *testing.T) {
 // rebuilds it from the cache once, before it presents its plan, and then
 // continues the operation it registered.
 func TestAContinuationRebuildsAMissingRuntime(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		verb  reconciliation.Verb
 		start func(*testing.T, *harness)
@@ -235,6 +244,7 @@ func TestAContinuationRebuildsAMissingRuntime(t *testing.T) {
 // preview of that continuation: the continuation rebuilds it, or refuses with
 // setup when the cache lacks a wheel.
 func TestAnApplyOverARemovalWithAMissingRuntimeNamesItsContinuation(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name    string
 		refusal error
@@ -273,6 +283,7 @@ func TestAnApplyOverARemovalWithAMissingRuntimeNamesItsContinuation(t *testing.T
 // A continuation whose missing runtime the cache cannot rebuild refuses with
 // setup before it presents anything.
 func TestAContinuationMissingAWheelRefusesWithRunSetup(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	failedApply(t, h)
 	withRebuilder(h, prerequisites.ErrRuntimeWheelMissing)
@@ -283,6 +294,7 @@ func TestAContinuationMissingAWheelRefusesWithRunSetup(t *testing.T) {
 // A continuation under another closure refuses with that closure's exit
 // without rebuilding this build's missing runtime, which it could not use.
 func TestAContinuationUnderAnotherClosureRebuildsNothing(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	failedApply(t, h)
 	h.service.options.Lock = movedLock
@@ -299,6 +311,7 @@ func TestAContinuationUnderAnotherClosureRebuildsNothing(t *testing.T) {
 // whose wheel the cache lacks refuses naming setup before it observes anything;
 // status, which reads records only, rebuilds nothing.
 func TestAnObservedDiffRebuildsAMissingRuntimeOrRefusesWithSetup(t *testing.T) {
+	t.Parallel()
 	t.Run("rebuilt", func(t *testing.T) {
 		f, _, _ := observedFixture(t, "alpha")
 		launched := f.guard.entered()

@@ -69,6 +69,7 @@ func unresolvedStatus(t *testing.T, service Service) (string, Unresolved) {
 // the host. Once the operator removes the foreign object or restores the host,
 // one removal resolves b and removes everything the apply started.
 func TestAnUnresolvableRemovalKilledAtAnyWriteRefusesAgainUntilItsTargetIsRestored(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pristine := killPristine(t)
 	for name, test := range map[string]struct {

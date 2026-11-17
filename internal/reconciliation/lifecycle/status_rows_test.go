@@ -147,6 +147,7 @@ func (r *rowsHarness) rows(t *testing.T, refused ...Refusal) map[string]Realizat
 // and a cluster or managed service its capability refuses are unsupported,
 // and the rest pending.
 func TestStatusRowsReadTheOperationsVerb(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	destroy := func(t *testing.T, h *rowsHarness, outcomes ...reconciliation.Outcome) {
 		t.Helper()
@@ -346,6 +347,7 @@ func TestStatusRowsReadTheOperationsVerb(t *testing.T) {
 // nearest removal it replaces did to it, or what the apply proved when none of
 // them touched it.
 func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
+	t.Parallel()
 	failRemoval := func(t *testing.T, h *rowsHarness, outcomes ...reconciliation.Outcome) {
 		t.Helper()
 		h.capability.outcomes = nil
@@ -496,6 +498,7 @@ func requireReached(t *testing.T, h *harness, state reconciliation.OperationStat
 // keyring read. A completed removal whose release failed still holds its
 // binding.
 func TestStatusCountsBindings(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, row := range []struct {
 		name     string

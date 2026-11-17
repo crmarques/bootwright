@@ -96,6 +96,7 @@ func applyOnce(h *harness) error {
 // never recorded an outcome is handed what that resolution observed, because
 // the resolution, not the attempt, is what proved it.
 func TestAnApplyAttemptReceivesWhatItsDependenciesProved(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		definition("alpha"), definition("bravo"), definition("delta"), dependent("charlie", "alpha", "delta"),
 	})
@@ -148,6 +149,7 @@ func TestAnApplyAttemptReceivesWhatItsDependenciesProved(t *testing.T) {
 // the blocks it removes before, which prove their absence rather than anything
 // its effect relies on, so neither is handed any.
 func TestOnlyAnApplyAttemptReceivesProvedEvidence(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), dependent("charlie", "alpha")})
 	recorder := recordingProof(h)
 	recorded := interruptCompletion(h, "charlie")
@@ -186,6 +188,7 @@ func TestOnlyAnApplyAttemptReceivesProvedEvidence(t *testing.T) {
 // attempt record cannot be read, the dependent never runs without that proof
 // and never starts: it records no attempt and keeps the pending state it had.
 func TestAnUnreadableDependencyProofStartsNoAttempt(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), dependent("charlie", "alpha")})
 	recorder := recordingProof(h)
 	h.capability.outcomeFor = map[string]Result{

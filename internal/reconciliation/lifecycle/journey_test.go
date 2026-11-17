@@ -1875,6 +1875,7 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 }
 
 func TestFreshApplyRegistersExecutesAndProjectsEvidence(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err != nil || result == nil {
@@ -1912,6 +1913,7 @@ func TestFreshApplyRegistersExecutesAndProjectsEvidence(t *testing.T) {
 // what records this context against it. A later apply revalidates exactly that
 // relationship instead of publishing another one.
 func TestFirstApplyBindsTheContextToItsControllerHost(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.workspace.controller.State.Bindings = nil
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
@@ -1939,6 +1941,7 @@ func TestFirstApplyBindsTheContextToItsControllerHost(t *testing.T) {
 // A context already bound to another controller Machine is never silently
 // rebound, and the refusal happens before the operation registers.
 func TestApplyRefusesToRebindAnEstablishedContext(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.workspace.controller.State.Bindings = []prerequisites.ControllerBinding{
 		{Context: testContextName, Machine: "replacement", HostDigest: h.workspace.controller.State.Bindings[0].HostDigest},
@@ -1955,6 +1958,7 @@ func TestApplyRefusesToRebindAnEstablishedContext(t *testing.T) {
 // An unprepared host refuses before any effect and names setup, because no
 // context can claim a host that has none of the shared prerequisites.
 func TestApplyRefusesAnUnpreparedControllerHost(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.workspace.controller.Prepared = false
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
@@ -2007,6 +2011,7 @@ func (p *testProgress) reported() []string {
 // Progress names each block by its description and each group by the frozen
 // plan's own description of it, so the operator never reads an identifier.
 func TestProgressNamesBlocksAndGroupsFromTheFrozenPlan(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	progress := &testProgress{}
 	h.service.options.Progress = progress
@@ -2025,6 +2030,7 @@ func TestProgressNamesBlocksAndGroupsFromTheFrozenPlan(t *testing.T) {
 }
 
 func TestDeclinedConfirmationRegistersNothing(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.confirmer.decline = true
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab"}); err == nil {
@@ -2046,6 +2052,7 @@ func TestDeclinedConfirmationRegistersNothing(t *testing.T) {
 }
 
 func TestAuthorizationTokenAndBorrowedCredentialsRefuseBeforeAnyRead(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", Authorizations: []string{"data-loss"}, SkipConfirmation: true})
 	if code := firstCode(err); code != "lifecycle.authorization" {
@@ -2070,6 +2077,7 @@ func TestAuthorizationTokenAndBorrowedCredentialsRefuseBeforeAnyRead(t *testing.
 // names no remedy directs the operator to the object itself, and a refusal of
 // one field carries that field's path.
 func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	cluster := Refusal{
 		Kind: "OpenShiftCluster", Name: "sno",
@@ -2102,6 +2110,7 @@ func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
 // An object of a kind no capability claims is refused by the engine itself,
 // naming the object, that no capability realizes it, and the supported shape.
 func TestAnUnclaimedObjectRefusesNamingItsReasonAndRemedy(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.service.compiler = testCompiler{state: withEnabledPlaybook()}
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
@@ -2120,6 +2129,7 @@ func TestAnUnclaimedObjectRefusesNamingItsReasonAndRemedy(t *testing.T) {
 // effect, so a script may repeat the verb, and the destroy that follows still
 // removes exactly what the first apply created.
 func TestAppliedContextRepeatsWithoutEffectAndDestroysInstead(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	first, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err != nil {
@@ -2170,6 +2180,7 @@ func TestAppliedContextRepeatsWithoutEffectAndDestroysInstead(t *testing.T) {
 // A context that owns nothing is already in the state a removal would leave
 // it in, so the verb succeeds having done nothing rather than refusing.
 func TestDestroyWithNothingOwnedSucceedsWithoutEffects(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err != nil {
@@ -2191,6 +2202,7 @@ func TestDestroyWithNothingOwnedSucceedsWithoutEffects(t *testing.T) {
 
 // A completed removal leaves nothing to remove, so repeating it settles too.
 func TestDestroyOverACompletedDestroySucceedsWithoutEffects(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -2212,6 +2224,7 @@ func TestDestroyOverACompletedDestroySucceedsWithoutEffects(t *testing.T) {
 // until what it owns is removed: a changed input names the destroy it needs
 // rather than being silently realized over the old one.
 func TestApplyOverACompletedApplyWithChangedInputRefuses(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -2229,6 +2242,7 @@ func TestApplyOverACompletedApplyWithChangedInputRefuses(t *testing.T) {
 }
 
 func TestFailedBlockLeavesTheOperationContinuable(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
 	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
@@ -2255,6 +2269,7 @@ func TestFailedBlockLeavesTheOperationContinuable(t *testing.T) {
 // A resolution is not an attempt: a block the live evidence proves unfinished
 // is retried by the same invocation, and one it leaves unknown is not.
 func TestUnknownOutcomeIsResolvedFromLiveEvidence(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		effect  reconciliation.EffectState
 		state   string
@@ -2297,6 +2312,7 @@ func TestUnknownOutcomeIsResolvedFromLiveEvidence(t *testing.T) {
 // unresolved diagnosis sends them to restore a target that was already
 // reachable, and repeating the operation reproduces the same silence.
 func TestAnObservationThatNeverRanReportsWhy(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -2331,6 +2347,7 @@ func TestAnObservationThatNeverRanReportsWhy(t *testing.T) {
 // removal and no deletion, so the context would have nowhere to go. The
 // invocation that resolved it retries it, so one repetition is enough.
 func TestAPartlyRealizedBlockIsConvergedByTheOperationThatResolvesIt(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -2349,6 +2366,7 @@ func TestAPartlyRealizedBlockIsConvergedByTheOperationThatResolvesIt(t *testing.
 // A partial resolution whose retry fails again leaves the block failed with the
 // retry's own error as the way on, and the repetition retries it again.
 func TestAPartlyRealizedBlockWhoseRetryFailsIsConvergedByRepeatingTheOperation(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -2377,6 +2395,7 @@ func TestAPartlyRealizedBlockWhoseRetryFailsIsConvergedByRepeatingTheOperation(t
 // fresh destroy while an unknown one admits nothing at all. The resolving
 // apply's own retry fails here, so the block is still there to take back.
 func TestAPartlyRealizedBlockIsAlsoRemovable(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -2402,6 +2421,7 @@ func TestAPartlyRealizedBlockIsAlsoRemovable(t *testing.T) {
 // An interrupted removal is converged the same way, so a partial resolution is
 // not an apply-only road out: the destroy that resolves it retries it.
 func TestAPartlyRemovedBlockIsConvergedByTheRemovalThatResolvesIt(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -2426,6 +2446,7 @@ func TestAPartlyRemovedBlockIsConvergedByTheRemovalThatResolvesIt(t *testing.T) 
 // removal once before the log location and again after it, so an operator read
 // every step twice and the second reading was the only real one.
 func TestTheQuiescenceGateReportsOneCheckAheadOfEveryEffect(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -2457,6 +2478,7 @@ func TestTheQuiescenceGateReportsOneCheckAheadOfEveryEffect(t *testing.T) {
 // why the removal stopped, and a probe that never answered leaves the gate
 // with no outcome to claim.
 func TestTheQuiescenceGateClosesWithWhatItProved(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		arrange func(*harness)
 		want    string
@@ -2498,6 +2520,7 @@ func TestTheQuiescenceGateClosesWithWhatItProved(t *testing.T) {
 // should never have started. Nothing is registered until every owned asset is
 // proved idle.
 func TestFreshDestroyRefusesLiveStateBeforeRegistering(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -2534,6 +2557,7 @@ func TestFreshDestroyRefusesLiveStateBeforeRegistering(t *testing.T) {
 // Every block is probed, so an operator is told everything to stop rather than
 // discovering the next obstacle each time they repeat the command.
 func TestFreshDestroyProbesEveryBlockAndNamesEachLiveOne(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -2557,6 +2581,7 @@ func TestFreshDestroyProbesEveryBlockAndNamesEachLiveOne(t *testing.T) {
 // The probes are independent reads, so two slow ones run at once: each waits
 // for the other to start, which a probe-at-a-time gate never lets happen.
 func TestFreshDestroyProbesIndependentBlocksAtOnce(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -2607,6 +2632,7 @@ func (c *checkEvents) ReportLogLocation(context.Context, LogLocation) {}
 // The gate's row advances as each probe settles, whichever finishes first, so
 // probes running at once still count up to every block before it closes.
 func TestTheQuiescenceGateCountsEachProbeAsItSettles(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab", "machine-rhel-01", "machine-rhel-02")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -2636,6 +2662,7 @@ func TestTheQuiescenceGateCountsEachProbeAsItSettles(t *testing.T) {
 
 // An environment that cannot prove it is idle is never assumed to be.
 func TestUnprovedActivityCountsAsLive(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -2652,6 +2679,7 @@ func TestUnprovedActivityCountsAsLive(t *testing.T) {
 // A removal that supersedes a failed one is a fresh removal, so it is gated
 // exactly like any other: repairing an adapter never buys a way past the gate.
 func TestASupersedingRemovalIsGatedToo(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeFailed}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -2670,6 +2698,7 @@ func TestASupersedingRemovalIsGatedToo(t *testing.T) {
 // exists, its effects were authorized when it registered, and each one
 // revalidates in the adapter that performs it.
 func TestContinuedDestroyIsNotGatedBeforeRegistration(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -2692,6 +2721,7 @@ func TestContinuedDestroyIsNotGatedBeforeRegistration(t *testing.T) {
 }
 
 func TestContinuationRefusesDriftedInputExecutableOrHost(t *testing.T) {
+	t.Parallel()
 	for name, corrupt := range map[string]func(*harness){
 		"changed automation and block": func(h *harness) {
 			h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
@@ -2729,6 +2759,7 @@ func TestContinuationRefusesDriftedInputExecutableOrHost(t *testing.T) {
 }
 
 func TestMissingImplementationRefusesTheBlock(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -2744,6 +2775,7 @@ func TestMissingImplementationRefusesTheBlock(t *testing.T) {
 // invocation that met it: a later invocation starts nothing until it has
 // proved the boundary writable again, and only that proof clears the fault.
 func TestRequiredLogFaultStopsTheOperation(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	operationLog := "append " + path.Join("op-"+strings.Repeat("01", 16), "operation.jsonl")
 	h.workspace.logArea.fail[operationLog] = errors.New("no space")
@@ -2780,6 +2812,7 @@ func TestRequiredLogFaultStopsTheOperation(t *testing.T) {
 // The first required-log failure latches: it requests cancellation of the work
 // in flight and records the fault, and every later failure reports that fault.
 func TestALogFaultLatchesCancellationAndItsRecord(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -2803,6 +2836,7 @@ func TestALogFaultLatchesCancellationAndItsRecord(t *testing.T) {
 // A fault the latch could not write when it met it is still recorded as the
 // operation settles, so the record never depends on that one write.
 func TestALogFaultTheLatchCouldNotRecordIsRecordedAsTheOperationSettles(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	operation := "op-" + strings.Repeat("01", 16)
 	record := "replace " + path.Join(operation, "operation.json")
@@ -2844,6 +2878,7 @@ func failDuring(h *harness, target string) func(string) {
 // completed. A typed failure it could not log proves less than completion, so
 // it is recorded unknown for an observation to resolve.
 func TestAFailedAttemptLogStopsTheInvocationAndLeavesTheAttemptUnknown(t *testing.T) {
+	t.Parallel()
 	attemptLog := path.Join("op-"+strings.Repeat("01", 16), "blocks", "alpha", "attempt-000001.jsonl")
 	for name, tc := range map[string]struct {
 		arrange   func(*harness)
@@ -2894,6 +2929,7 @@ func TestAFailedAttemptLogStopsTheInvocationAndLeavesTheAttemptUnknown(t *testin
 // the operation as they were; the resolution identity it allocated is never
 // reused.
 func TestAResolutionWithoutItsLogsObservesNothing(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -2933,6 +2969,7 @@ func TestAResolutionWithoutItsLogsObservesNothing(t *testing.T) {
 // when its log fails, but the fault refuses the removal before it registers,
 // and a later removal restores the boundary before it proceeds.
 func TestALogFaultDuringARemovalsResolutionRefusesTheRemoval(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -2966,6 +3003,7 @@ func TestALogFaultDuringARemovalsResolutionRefusesTheRemoval(t *testing.T) {
 // still releases what it no longer needs, and the next apply restores its
 // boundary before it registers anything.
 func TestAFreshApplyRestoresTheBoundaryACompletedRemovalFaulted(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -3005,6 +3043,7 @@ func TestAFreshApplyRestoresTheBoundaryACompletedRemovalFaulted(t *testing.T) {
 // nothing and leaves the fault where it was, even when every effect of that
 // operation is already proved.
 func TestARemovalOverAnUnrestoredBoundaryStartsNothing(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -3038,6 +3077,7 @@ func TestARemovalOverAnUnrestoredBoundaryStartsNothing(t *testing.T) {
 // starts nothing, even for an operation that is already running and so needs
 // no other write before its next block.
 func TestARestorationWhoseClearFailsStartsNothing(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo")})
 	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeChanged}}
 	operation := "op-" + strings.Repeat("01", 16)
@@ -3076,6 +3116,7 @@ func (c *loggingCapability) Apply(ctx context.Context, execution Execution) (Res
 // any other: one the attempt log cannot keep latches the fault and cancels the
 // run that made it, rather than letting it go on changing the host unlogged.
 func TestALogRecordTheAttemptLogCannotKeepCancelsTheRun(t *testing.T) {
+	t.Parallel()
 	const block = "artifact-server-lab"
 	h := newHarness(t, block)
 	canceled := false
@@ -3103,6 +3144,7 @@ func TestALogRecordTheAttemptLogCannotKeepCancelsTheRun(t *testing.T) {
 // so a reader never mistakes it for a complete one, and a marker that cannot be
 // written is a log fault like any other write.
 func TestALogThatCannotBeFinalizedIsALogFault(t *testing.T) {
+	t.Parallel()
 	const block = "artifact-server-lab"
 	h := newHarness(t, block)
 	detail := strings.Repeat("x", 512)
@@ -3132,6 +3174,7 @@ func TestALogThatCannotBeFinalizedIsALogFault(t *testing.T) {
 // A log is recorded rather than performed, so an interrupt reaches none of its
 // writes and is never a log fault.
 func TestAnInterruptIsNotALogFault(t *testing.T) {
+	t.Parallel()
 	store := operationstore.New(newArea(), newArea(), (&testClock{moment: time.Date(2026, 9, 13, 0, 0, 0, 0, time.UTC)}).Now)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -3180,6 +3223,7 @@ func durableOperation(t *testing.T, h *harness) (operationstore.Operation, map[s
 // running block, whether a continuation or a removal tried and whatever step
 // stopped it. Only a resolution log that cannot be created is a log fault.
 func TestAResolutionThatCannotStartLeavesTheOperationUnchanged(t *testing.T) {
+	t.Parallel()
 	const block = "artifact-server-lab"
 	repeats := map[string]func(*harness) error{
 		"continuation": func(h *harness) error {
@@ -3250,6 +3294,7 @@ func TestAResolutionThatCannotStartLeavesTheOperationUnchanged(t *testing.T) {
 // back: the removal completes without an effect or a probe and leaves the
 // context at rest, from which a fresh apply starts.
 func TestADestroyOverAnApplyThatStartedNothingCompletes(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	refuseStart(h, "artifact-server-lab", 1)
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -3290,6 +3335,7 @@ func TestADestroyOverAnApplyThatStartedNothingCompletes(t *testing.T) {
 // before it registers, reaches a host, or releases the material the effects
 // still on that host need.
 func TestARemovalOverRecordsThatContradictThemselvesRefuses(t *testing.T) {
+	t.Parallel()
 	const block = "artifact-server-lab"
 	for name, arrange := range map[string]func(*testing.T, *harness){
 		"a failed apply that records no started block": func(t *testing.T, h *harness) {
@@ -3323,6 +3369,7 @@ func TestARemovalOverRecordsThatContradictThemselvesRefuses(t *testing.T) {
 }
 
 func TestPlanPreviewsWithoutWritingAnything(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	result, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
 	if err != nil || result.Receipt.State != "preview" || result.Receipt.Next != "apply" || result.Receipt.Operation != "none" {
@@ -3344,6 +3391,7 @@ func TestPlanPreviewsWithoutWritingAnything(t *testing.T) {
 }
 
 func TestStatusReportsDurableStateWithoutProbing(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	before, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
 	if err != nil || before.Lifecycle != nil {
@@ -3376,6 +3424,7 @@ func TestStatusReportsDurableStateWithoutProbing(t *testing.T) {
 // operation log area's own place under it leads every path, in the apply's
 // result and in status alike.
 func TestAnOperationNamesItsLogsRelativeToTheLogRoot(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err != nil {
@@ -3402,6 +3451,7 @@ func TestAnOperationNamesItsLogsRelativeToTheLogRoot(t *testing.T) {
 // first apply publishes is pending while the context holds no operation, and
 // not-ready once one exists without it.
 func TestStatusSetupChecksUseTheReadinessVocabulary(t *testing.T) {
+	t.Parallel()
 	for name, test := range map[string]struct {
 		applied         bool
 		prepare         func(*prerequisites.StorageView)
@@ -3447,6 +3497,7 @@ func TestStatusSetupChecksUseTheReadinessVocabulary(t *testing.T) {
 // A block retried by another invocation that failed again reads the state it
 // found, so status reports the attempts its record counts.
 func TestStatusReportsEachBlocksAttempts(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomeFor = map[string]Result{"artifact-server-lab": {Outcome: reconciliation.OutcomeFailed}}
 	for attempt := range 2 {
@@ -3465,6 +3516,7 @@ func TestStatusReportsEachBlocksAttempts(t *testing.T) {
 }
 
 func TestEmptyCurrentSelectionRefuses(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.service.options.Selection = func(context.Context) (string, error) { return "", nil }
 	if _, err := h.service.Plan(context.Background(), PlanRequest{}); firstCode(err) != "context.state" {
@@ -3473,6 +3525,7 @@ func TestEmptyCurrentSelectionRefuses(t *testing.T) {
 }
 
 func TestCancellationBeforeAnyEffectRegistersNothing(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -3490,6 +3543,7 @@ func TestCancellationBeforeAnyEffectRegistersNothing(t *testing.T) {
 // the interrupt does not reach, because a durable `running` block stays
 // unproved until a later observation resolves it.
 func TestAnInterruptedBlockIsRecordedUnknown(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	ctx, cancel := context.WithCancel(context.Background())
 	h.capability.hold = func(string) { cancel() }
@@ -3540,6 +3594,7 @@ func TestAnInterruptedBlockIsRecordedUnknown(t *testing.T) {
 // Two blocks in flight both lose their outcome to one interrupt, so both are
 // recorded rather than only the one whose goroutine noticed first.
 func TestEveryInterruptedBlockIsRecordedUnknown(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo")})
 	h.service.options.Concurrency = 2
 	ctx, cancel := context.WithCancel(context.Background())
@@ -3572,6 +3627,7 @@ func TestEveryInterruptedBlockIsRecordedUnknown(t *testing.T) {
 // it already was; what must not survive is a resolution record still claiming
 // to be running, because the next resolution is allocated against it.
 func TestAnInterruptedResolutionIsRecordedUnknown(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomeFor = map[string]Result{"artifact-server-lab": {Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -3615,6 +3671,7 @@ func resolutionRecord(h *harness, block string) string {
 }
 
 func TestBlocksExecuteInFrozenOrderAndSkipDoneWork(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha", "bravo")
 	h.capability.outcomes = []Result{
 		{Outcome: reconciliation.OutcomeChanged, Evidence: json.RawMessage(`{"ok":true}`)},
@@ -3635,6 +3692,7 @@ func TestBlocksExecuteInFrozenOrderAndSkipDoneWork(t *testing.T) {
 }
 
 func TestOperationRecordsSurviveAnInterruptedRegistration(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.workspace.area.fail["replace index.json"] = errors.New("interrupted")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -3684,6 +3742,7 @@ func nestedDefinitions() []reconciliation.BlockDefinition {
 }
 
 func TestStagedApplyPausesAtTheStageBoundary(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	result, err := h.service.Apply(context.Background(), ApplyRequest{
 		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"},
@@ -3710,6 +3769,7 @@ func TestStagedApplyPausesAtTheStageBoundary(t *testing.T) {
 // A stage selection gates which blocks start; it never narrows the frozen plan,
 // so a block whose dependency belongs to an unselected stage simply waits.
 func TestStagedApplyDefersBlocksBehindUnselectedStages(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
 		ContextName: "lab", SkipConfirmation: true, Stages: []string{"substrates"},
@@ -3740,6 +3800,7 @@ func TestStagedApplyDefersBlocksBehindUnselectedStages(t *testing.T) {
 }
 
 func TestContinuationAcceptsAWiderStageSetAndCompletes(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
 		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"},
@@ -3763,6 +3824,7 @@ func TestContinuationAcceptsAWiderStageSetAndCompletes(t *testing.T) {
 // A pause owns exactly what it completed, so its removal covers those blocks
 // and nothing the operation never started.
 func TestDestroyFromAPausedApplyRemovesOnlyDoneBlocks(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
 		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services", "substrates"},
@@ -3784,6 +3846,7 @@ func TestDestroyFromAPausedApplyRemovesOnlyDoneBlocks(t *testing.T) {
 // A failed block was permitted to change its target, so the context owns it.
 // A removal covers every block the apply started and nothing it never did.
 func TestDestroyOverAFailedApplyRemovesEveryStartedBlock(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.capability.outcomes = []Result{
 		{Outcome: reconciliation.OutcomeChanged},
@@ -3812,6 +3875,7 @@ func TestDestroyOverAFailedApplyRemovesEveryStartedBlock(t *testing.T) {
 
 // A new planner default leaves the old request executable and removable.
 func TestAPlannerDefaultChangeLeavesAFailedApplyContinuableAndDestroyable(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -3843,6 +3907,7 @@ func TestAPlannerDefaultChangeLeavesAFailedApplyContinuableAndDestroyable(t *tes
 // what it never proved gone. Both removals inherit the apply's own binding
 // rather than minting one, so the replacement releases exactly that.
 func TestDestroyOverAFailedDestroyCoversOnlyWhatRemains(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.capability.secrets = []string{"lab-bmc-credentials"}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
@@ -3872,6 +3937,7 @@ func TestDestroyOverAFailedDestroyCoversOnlyWhatRemains(t *testing.T) {
 // An effect no observation can prove still admits no removal, because nothing
 // says what it owns. The removal proves what it can and registers nothing.
 func TestDestroyOverAnUnprovableBlockRefusesBeforeRegistration(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomeFor = map[string]Result{"artifact-server-lab": {Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -3912,6 +3978,7 @@ func TestDestroyOverAnUnprovableBlockRefusesBeforeRegistration(t *testing.T) {
 // own check of what it takes back (D119), which reads an owned target as such
 // and a target never created as absent.
 func TestDestroyOverAnInterruptedApplyResolvesThenRemoves(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		effect  reconciliation.EffectState
@@ -3961,6 +4028,7 @@ func TestDestroyOverAnInterruptedApplyResolvesThenRemoves(t *testing.T) {
 // an unproved effect and not work in progress. A removal resolves it exactly as
 // it resolves one the interrupt recorded.
 func TestDestroyOverADeadExecutorResolvesTheRunningBlock(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	ctx, cancel := context.WithCancel(context.Background())
 	h.capability.hold = func(string) { cancel() }
@@ -3989,6 +4057,7 @@ func TestDestroyOverADeadExecutorResolvesTheRunningBlock(t *testing.T) {
 // A removal observes only what is unproved. An apply stopped with nothing in
 // flight is removed without reaching the host to ask about it.
 func TestDestroyOverAnIncompleteApplyWithNothingUnprovedObservesNothing(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.capability.outcomeFor = map[string]Result{"provider-metal": {Outcome: reconciliation.OutcomeChanged}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
@@ -4022,6 +4091,7 @@ func TestDestroyOverAnIncompleteApplyWithNothingUnprovedObservesNothing(t *testi
 // first and then refuses because what it would take back is in use. The proof
 // is durable, so repeating the removal does not observe the same effect again.
 func TestDestroyOverAnInterruptedApplyIsStillGated(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomeFor = map[string]Result{"artifact-server-lab": {Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -4056,6 +4126,7 @@ func TestDestroyOverAnInterruptedApplyIsStillGated(t *testing.T) {
 // exclusive one. An operation that moved in between invalidates the frozen plan
 // waiting to register, so the removal refuses instead of applying it.
 func TestDestroyRefusesWhenTheOperationItReplacesMoved(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomeFor = map[string]Result{"artifact-server-lab": {Outcome: reconciliation.OutcomeFailed}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -4082,6 +4153,7 @@ func TestDestroyRefusesWhenTheOperationItReplacesMoved(t *testing.T) {
 // invocation completed in between supersedes the operation it would continue,
 // so it refuses rather than resume work that removal already took back.
 func TestContinuationRefusesWhenTheContextChangedBeforeMutation(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomeFor = map[string]Result{"artifact-server-lab": {Outcome: reconciliation.OutcomeFailed}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -4118,6 +4190,7 @@ func TestContinuationRefusesWhenTheContextChangedBeforeMutation(t *testing.T) {
 // invocation registered in between now holds the context, and registering this
 // one over it would leave that operation's effects owned by nothing.
 func TestFreshApplyRefusesWhenTheContextChangedBeforeMutation(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	applied := ""
 	h.workspace.beforeMutation = func() {
@@ -4155,6 +4228,7 @@ func TestFreshApplyRefusesWhenTheContextChangedBeforeMutation(t *testing.T) {
 // the same operation in between leaves it failed again, but at another block,
 // so the retry this command presented is no longer the one it would run.
 func TestContinuationRefusesWhenTheBlockStatesChangedBeforeMutation(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha", "bravo")
 	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeFailed}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -4192,6 +4266,7 @@ func TestContinuationRefusesWhenTheBlockStatesChangedBeforeMutation(t *testing.T
 // published in between is input that plan was never compiled from, so the
 // apply refuses rather than register it under the new revision and digest.
 func TestFreshApplyRefusesWhenTheInputChangedBeforeMutation(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	published := "rev-fedcba9876543210fedcba9876543210"
 	h.workspace.beforeMutation = func() {
@@ -4227,6 +4302,7 @@ func TestFreshApplyRefusesWhenTheInputChangedBeforeMutation(t *testing.T) {
 
 // An incomplete removal is continued, never replaced by an apply.
 func TestApplyOverAnIncompleteDestroyStillRefuses(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -4311,6 +4387,7 @@ func rewriteState(t *testing.T, h *harness, target, state string) {
 }
 
 func TestStageSelectionWithNothingStartableRefuses(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	_, err := h.service.Apply(context.Background(), ApplyRequest{
 		ContextName: "lab", SkipConfirmation: true, Stages: []string{"clusters"},
@@ -4339,6 +4416,7 @@ func TestStageSelectionWithNothingStartableRefuses(t *testing.T) {
 }
 
 func TestFailedBlockOutsideTheSelectionRefusesRetry(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
@@ -4360,6 +4438,7 @@ func TestFailedBlockOutsideTheSelectionRefusesRetry(t *testing.T) {
 // consumes: run exactly as named, fresh, as a continuation or as the retry of
 // a failed block, it starts the work instead of refusing for an authorization.
 func TestAStageRefusalNamesAnApplyThatPassesAuthorization(t *testing.T) {
+	t.Parallel()
 	install := stagedDefinition("install", reconciliation.StageMachines, "artifacts")
 	install.Consumes = []string{reconciliation.AuthorizationDataLoss}
 	definitions := []reconciliation.BlockDefinition{stagedDefinition("artifacts", reconciliation.StageInfrastructureServices), install}
@@ -4406,6 +4485,7 @@ func TestAStageRefusalNamesAnApplyThatPassesAuthorization(t *testing.T) {
 // Resolution is read-only, so an unproved effect is observed whatever stages
 // the invocation selects; nothing else may start until it is resolved.
 func TestUnknownBlockIsResolvedRegardlessOfStage(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
@@ -4432,6 +4512,7 @@ func TestUnknownBlockIsResolvedRegardlessOfStage(t *testing.T) {
 }
 
 func TestPlanPreviewMarksStartDeferredAndNotSelected(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	result, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab", Stages: []string{"substrates"}})
 	if err != nil {
@@ -4460,6 +4541,7 @@ func TestPlanPreviewMarksStartDeferredAndNotSelected(t *testing.T) {
 // Every plan block needs a resolved capability, so an object of a kind no
 // capability claims refuses the whole operation before it registers.
 func TestUnclaimedKindsRefuseBeforeRegistration(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	catalog := api.NewCatalog([]api.Object{
 		api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(
@@ -4510,6 +4592,7 @@ func TestUnclaimedKindsRefuseBeforeRegistration(t *testing.T) {
 // runs, so the engine makes each of them wait for it. The edge is a real block
 // dependency, frozen with the plan, not a rule about stage order.
 func TestControllerBlockPrecedesEveryOtherBlock(t *testing.T) {
+	t.Parallel()
 	definitions := append([]reconciliation.BlockDefinition{
 		stagedDefinition("controller-prerequisites", reconciliation.StageController),
 	}, nestedDefinitions()...)
@@ -4525,6 +4608,7 @@ func TestControllerBlockPrecedesEveryOtherBlock(t *testing.T) {
 // Selecting only a later stage therefore starts nothing at all, and the refusal
 // names the stage that would unblock the operation.
 func TestSelectingALaterStageWaitsForTheControllerBlock(t *testing.T) {
+	t.Parallel()
 	definitions := append([]reconciliation.BlockDefinition{
 		stagedDefinition("controller-prerequisites", reconciliation.StageController),
 	}, nestedDefinitions()...)
@@ -4543,6 +4627,7 @@ func TestSelectingALaterStageWaitsForTheControllerBlock(t *testing.T) {
 // A plan without a controller block keeps exactly the dependencies its
 // capabilities declared.
 func TestPlanWithoutAControllerBlockGainsNoDependency(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	result, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
 	if err != nil {
@@ -4562,6 +4647,7 @@ func TestPlanWithoutAControllerBlockGainsNoDependency(t *testing.T) {
 // it. Releasing it when an effect fails would strand the operation: every
 // continuation reopens that exact binding.
 func TestFailedExecutionKeepsItsBindingAndFailedRegistrationReleasesIt(t *testing.T) {
+	t.Parallel()
 	failed := newHarness(t, "artifact-server-lab")
 	failed.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
 	if _, err := failed.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -4584,6 +4670,7 @@ func TestFailedExecutionKeepsItsBindingAndFailedRegistrationReleasesIt(t *testin
 // The terminal state alone says only that the operation did not complete. A
 // block that refused for a nameable reason must carry that reason out with it.
 func TestFailedBlockReportsItsOwnCauseBesideTheTerminalState(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.applyErr = diagnostics.NewFailureWithRemediation(
 		"secret.part", "the serving certificate does not cover every address its HTTPS endpoints answer on",
@@ -4610,6 +4697,7 @@ func TestFailedBlockReportsItsOwnCauseBesideTheTerminalState(t *testing.T) {
 // the durable identity record, the before-state publication and the native
 // package lock it has to hand back before its own transaction.
 func TestControllerBlockReceivesItsPublicationBoundary(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		stagedDefinition("controller-prerequisites", reconciliation.StageController),
 	})
@@ -4654,6 +4742,7 @@ func TestControllerBlockReceivesItsPublicationBoundary(t *testing.T) {
 // Every block outside the controller stage receives no publication boundary at
 // all, so one capability's specifics cannot reach another's attempt.
 func TestOnlyTheControllerBlockReceivesThePublicationBoundary(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		stagedDefinition("artifact-server-lab", reconciliation.StageInfrastructureServices),
 	})
@@ -4671,6 +4760,7 @@ func TestOnlyTheControllerBlockReceivesThePublicationBoundary(t *testing.T) {
 // An observation is read-only. It may never authorize a host effect, so the
 // before-state publication that precedes one is refused during a resolution.
 func TestObservationCannotAuthorizeAHostEffect(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		stagedDefinition("controller-prerequisites", reconciliation.StageController),
 	})
@@ -4698,6 +4788,7 @@ func TestObservationCannotAuthorizeAHostEffect(t *testing.T) {
 // one does, and its attempt log names the file and what it holds. Nothing about
 // that retention reaches the outcome the operation records.
 func TestASucceededAttemptRetainsWhatItsAdapterPrinted(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	if err != nil {
@@ -4730,6 +4821,7 @@ func TestASucceededAttemptRetainsWhatItsAdapterPrinted(t *testing.T) {
 // Completion is measured against what the block froze, so a group the plan
 // never declared cannot push a step past the work it declared.
 func TestOnlyDeclaredGroupsAdvanceCompletion(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	var reported []ProgressEvent
 	h.service.options.Progress = progressFunc(func(_ context.Context, event ProgressEvent) {
@@ -4762,6 +4854,7 @@ func (progressFunc) ReportLogLocation(context.Context, LogLocation) {}
 // The log location is named before the first effect runs, because an operator
 // who reads it afterwards cannot follow the work it was written for.
 func TestLogLocationIsNamedBeforeTheFirstEffect(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	progress := &testProgress{rowsAtLocation: -1}
 	h.service.options.Progress = progress
@@ -4785,6 +4878,7 @@ func TestLogLocationIsNamedBeforeTheFirstEffect(t *testing.T) {
 // the operation locates it once before it registers rather than once per
 // block, and every block launches that one runtime.
 func TestAnOperationLocatesItsRuntimeOnce(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab", "artifact-server-spare")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -4800,6 +4894,7 @@ func TestAnOperationLocatesItsRuntimeOnce(t *testing.T) {
 // A removal proves what it is about to take back and then takes it back, both
 // in the one runtime it located however many blocks it covers.
 func TestARemovalLocatesItsRuntimeOnce(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo")})
 	h.service.options.Concurrency = 2
 	h.capability.outcomeFor = map[string]Result{
@@ -4824,6 +4919,7 @@ func TestARemovalLocatesItsRuntimeOnce(t *testing.T) {
 }
 
 func TestApplyResultsDescribeDurableAttemptsAndOutcomes(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}, {Outcome: reconciliation.OutcomeChanged}}
 	_, _ = h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
@@ -4844,6 +4940,7 @@ func TestApplyResultsDescribeDurableAttemptsAndOutcomes(t *testing.T) {
 }
 
 func TestUnknownApplyResultNamesItsRecovery(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true})

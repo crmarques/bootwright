@@ -85,6 +85,7 @@ func unindexedDirectory(id string) string {
 // each of them as both refusals do. Both refusals name deleting the context as
 // the exit, acknowledging orphans only beside evidence that is not pristine.
 func TestAVerbOverALostIndexRefusesAndStatusNamesWhatNoIndexAccountsFor(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for name, test := range map[string]struct {
 		arrange func(*testing.T, *harness) []string
@@ -130,6 +131,7 @@ func TestAVerbOverALostIndexRefusesAndStatusNamesWhatNoIndexAccountsFor(t *testi
 // left pristine evidence, a plain deletion of the context as the exit, and
 // status names the block too.
 func TestACompletedDestroyHoldingABlockNotDoneRefusesEitherVerb(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha", "bravo")
 	completeApply(t, h)
 	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
@@ -153,6 +155,7 @@ func TestACompletedDestroyHoldingABlockNotDoneRefusesEitherVerb(t *testing.T) {
 // ready context's store reads an absent file, is named absent or empty rather
 // than an unrecognized record.
 func TestTheDeletionARefusalNamesIsTheOneTheGuardAdmits(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	unrecognized := "the mutation evidence reads an unrecognized record"
 	for name, test := range map[string]struct{ evidence, remedy, entry string }{
@@ -269,6 +272,7 @@ func requireRemovalRecords(t *testing.T, h *harness, removal string, state recon
 // pristine evidence, and then settles; an apply still refuses the incomplete
 // destroy.
 func TestAFailedRemovalWhoseBlocksAreAllDoneIsFinalizedByTheDestroy(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, removal := failedRemovalWithEveryBlockDone(t)
 	requireStatusNames(t, h)
@@ -299,6 +303,7 @@ func TestAFailedRemovalWhoseBlocksAreAllDoneIsFinalizedByTheDestroy(t *testing.T
 // would refuse only after the operation was marked running, including a first
 // start interrupted as an attempt beside no block record.
 func TestAContinuationOverContradictedRecordsRefusesBeforeItMarksItsOperation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for name, test := range map[string]struct {
 		arrange func(*testing.T, *harness) string
@@ -382,6 +387,7 @@ func TestAContinuationOverContradictedRecordsRefusesBeforeItMarksItsOperation(t 
 // cannot mask a failed block whose whole directory was lost. A removal refuses
 // each, and status names it.
 func TestARemovalRefusesADependencyNotDoneAndARunningBlockThatMasksALostFailure(t *testing.T) {
+	t.Parallel()
 	failed := map[string]Result{"charlie": {Outcome: reconciliation.OutcomeFailed}}
 	rewritten := func(state reconciliation.BlockState) func(*testing.T, *harness) {
 		return func(t *testing.T, h *harness) {
@@ -436,6 +442,7 @@ func TestARemovalRefusesADependencyNotDoneAndARunningBlockThatMasksALostFailure(
 // says so owns nothing its removal could take back. The removal refuses, and
 // status names the operation it refuses over beside what else it contradicts.
 func TestStatusNamesAnIncompleteApplyThatRecordsNoStartedBlock(t *testing.T) {
+	t.Parallel()
 	for name, test := range map[string]struct {
 		outcome reconciliation.Outcome
 		named   []string
@@ -460,6 +467,7 @@ func TestStatusNamesAnIncompleteApplyThatRecordsNoStartedBlock(t *testing.T) {
 // is continued, which reads every record, so its lost record is still named
 // and nothing is offered.
 func TestAFailedDestroysLostRecordIsNoContradiction(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, test := range []struct {
 		state          reconciliation.OperationState

@@ -409,6 +409,7 @@ func positionOf(t *testing.T, calls []string, call string) int {
 // the host, then pauses for the host's Machines, which stop after online
 // cleanup; once the operator stops them, the same removal completes.
 func TestANestedClusterIsAppliedOnAHostThisContextBuildsAndDestroyedFirst(t *testing.T) {
+	t.Parallel()
 	journey, host, domains := nestedClusterJourney(t, false)
 	host.failAt = "boot"
 	apply := lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}
@@ -508,6 +509,7 @@ func TestANestedClusterIsAppliedOnAHostThisContextBuildsAndDestroyedFirst(t *tes
 // A host the lend cannot reach leaves the child's proof unknown, never
 // absent, and no Machine is touched.
 func TestAnUnreachableHostLeavesTheNestedProviderUnknown(t *testing.T) {
+	t.Parallel()
 	journey, host, _ := nestedClusterJourney(t, false)
 	host.unreachable = true
 	holdNestedSecrets(journey)
@@ -528,6 +530,7 @@ func TestAnUnreachableHostLeavesTheNestedProviderUnknown(t *testing.T) {
 // removal of the stopped child, the proof and the host's claims completes in
 // one invocation while the host keeps answering.
 func TestANestedClusterOnABareMetalHostIsDestroyedInOneRemoval(t *testing.T) {
+	t.Parallel()
 	journey, host, domains := nestedClusterJourney(t, true)
 	holdNestedSecrets(journey)
 	if _, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}); err != nil {

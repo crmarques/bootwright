@@ -59,6 +59,7 @@ func (w *throttleWatch) highestHolders() int {
 }
 
 func TestAThrottleBoundsItsHoldersWhileUnthrottledBlocksFillTheBound(t *testing.T) {
+	t.Parallel()
 	members := []string{"pool-a", "pool-b", "pool-c", "pool-d", "pool-e", "pool-f"}
 	definitions := []reconciliation.BlockDefinition{definition("host-a"), definition("host-b"), definition("host-c")}
 	for _, member := range members {
@@ -91,6 +92,7 @@ func TestAThrottleBoundsItsHoldersWhileUnthrottledBlocksFillTheBound(t *testing.
 }
 
 func TestAnExclusiveClaimStillAdmitsOneHolderInsideAThrottle(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 8, throttled("settings", "ceph/example", "ceph/example"), throttled("unit-a", "ceph/example", "ceph/example"),
 		throttled("unit-b", "ceph/example", "ceph/example"), throttled("pool-a", "ceph/example"), throttled("pool-b", "ceph/example"))
 	h.service.options.Throttle = 3
@@ -119,6 +121,7 @@ func TestAnExclusiveClaimStillAdmitsOneHolderInsideAThrottle(t *testing.T) {
 }
 
 func TestAThrottleDrainsOnAFailureAndACancellation(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 8, throttled("pool-a", "ceph/example"), throttled("pool-b", "ceph/example"), throttled("pool-c", "ceph/example"))
 	h.service.options.Throttle = 1
 	h.capability.errorFor = map[string]error{"pool-a": diagnostics.NewFailure("lifecycle.state", "pool-a could not be served", "")}

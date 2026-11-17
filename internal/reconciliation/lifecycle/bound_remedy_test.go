@@ -65,6 +65,7 @@ func noBareAuthorization(t *testing.T, text string) {
 // the digest the plan printed, with the selection and acknowledgements it
 // carries, and that command run as named completes (Q117).
 func TestAMissingConfirmerNamesTheBoundRepeat(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts")})
 	shown := shownBinding(t, h, "lab")

@@ -190,6 +190,7 @@ func evidenceBytes(t *testing.T, verb reconciliation.Verb, state reconciliation.
 // consumes and without a confirmation, releases what remains and publishes
 // pristine, presenting nothing and reaching no host.
 func TestAnInterruptedRemovalFinalizationIsCompletedByTheNextDestroy(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pristine := killPristine(t)
 	for _, point := range []string{"release reservations#1", "release secret binding#1", "publish evidence#2"} {
@@ -222,6 +223,7 @@ func TestAnInterruptedRemovalFinalizationIsCompletedByTheNextDestroy(t *testing.
 // host. Its pristine publication reclaims the claim the killed apply left,
 // which holds nothing, and keeps every operation directory that holds records.
 func TestAReservationHeldBesideACompletedRemovalIsReleasedByTheNextDestroy(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pristine := killPristine(t)
 	run := killedAt(ctx, t, []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy}, reconciliation.Apply, "write <op>/plan.json#1")
@@ -285,6 +287,7 @@ func interruptOnceDone(t *testing.T, service *Service) context.Context {
 // pristine evidence, whether it ran the removal or finalized one an earlier
 // invocation left running, so the next destroy has nothing left to finish.
 func TestADestroyInterruptedOnceItsRemovalReadsDoneStillFinishesIt(t *testing.T) {
+	t.Parallel()
 	pristine := killPristine(t)
 	t.Run("the removal it ran", func(t *testing.T) {
 		h := newHarness(t, "alpha")
@@ -334,6 +337,7 @@ func TestADestroyInterruptedOnceItsRemovalReadsDoneStillFinishesIt(t *testing.T)
 // and once it can release, the next destroy finishes it; neither needs the
 // token or a confirmation.
 func TestARemovalWhoseBindingReleaseFailsReportsIncompleteFinalization(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for name, faulted := range map[string]bool{"alone": false, "beside a log fault": true} {
 		t.Run(name, func(t *testing.T) {
@@ -406,6 +410,7 @@ func requireIncompleteRemoval(t *testing.T, reported []diagnostics.Diagnostic, e
 // finalized by the repeated apply, which then settles without the token its
 // plan consumes and without a confirmation.
 func TestAnInterruptedApplyFinalizationIsCompletedByTheRepeatedApply(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for name, left := range map[string]reconciliation.OperationState{
 		"pending evidence": reconciliation.OperationRunning,
@@ -440,6 +445,7 @@ func TestAnInterruptedApplyFinalizationIsCompletedByTheRepeatedApply(t *testing.
 // its own decision: an apply refuses an incomplete destroy and a destroy
 // supersedes an incomplete apply with a presented removal.
 func TestARunningOperationWhoseBlocksAreAllDoneIsFinalized(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	applied := []reconciliation.Verb{reconciliation.Apply}
 	t.Run("an apply over its running apply settles", func(t *testing.T) {
@@ -551,6 +557,7 @@ func requireRunningWithEveryBlockDone(t *testing.T, run killedRun, verb reconcil
 // other verb keeps its own decision: a destroy supersedes the apply with a
 // presented removal and an apply refuses the destroy.
 func TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	t.Run("an apply over its unknown apply settles", func(t *testing.T) {
 		h := unknownApplyWithEveryBlockDone(t)
@@ -699,6 +706,7 @@ func requireRecordedWithEveryBlockDone(t *testing.T, h *harness, verb reconcilia
 // finishes it before it presents its own plan, so the plan an operator
 // confirms is taken over a context already at rest.
 func TestAFreshApplyOverAnUnfinalizedRemovalFinishesItFirst(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pristine := killPristine(t)
 	run := killedAt(ctx, t, []reconciliation.Verb{reconciliation.Apply}, reconciliation.Destroy, "release secret binding#1")
@@ -742,6 +750,7 @@ func (w forgetfulWorkspace) MutateLifecycle(ctx context.Context, name string, ca
 // A finalization after which the context still needs one refuses rather than
 // finalizing again or going on to authorize, present or run anything.
 func TestAFinalizationThatLeavesAnotherBehindRefuses(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha")})
 	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true}); err != nil {
@@ -770,6 +779,7 @@ func TestAFinalizationThatLeavesAnotherBehindRefuses(t *testing.T) {
 // were decided from, so another invocation's work in between is never
 // overwritten with a projection of what the context no longer holds.
 func TestAFinalizationRefusesWhenTheContextChangedBeforeIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	t.Run("an apply's finalization over a context another destroy removed", func(t *testing.T) {
 		h := newHarness(t, "alpha")
@@ -831,6 +841,7 @@ func TestAFinalizationRefusesWhenTheContextChangedBeforeIt(t *testing.T) {
 // such records, and so does a completed removal rather than settle, both
 // leaving the evidence, the bindings and every record exactly as they were.
 func TestNoFinalizationOverContradictedRecords(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for name, test := range map[string]struct {
 		prepare []reconciliation.Verb
@@ -880,6 +891,7 @@ func TestNoFinalizationOverContradictedRecords(t *testing.T) {
 // state under the shared lock only: it opens no transaction, whichever verb it
 // is, even while its completed apply holds reservations.
 func TestASettledVerbWithCompleteFinalizationOpensNoTransaction(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	h.capability.reservations = []prerequisites.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: "alpha", Keys: []string{"socket:192.0.2.1:8443"}}}
@@ -905,6 +917,7 @@ func TestASettledVerbWithCompleteFinalizationOpensNoTransaction(t *testing.T) {
 }
 
 func TestADecisionOverAFinalizationDueRefusesWithoutEffect(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newPlannedHarness(t, chainedDefinitions())
 	completeApply(t, h)

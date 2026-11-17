@@ -170,6 +170,7 @@ func setRunning(machines *fleetMachines, running bool) {
 }
 
 func TestRegisteredInstallationUnregistersBeforeItsMachineStops(t *testing.T) {
+	t.Parallel()
 	destroy := lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}
 	stop := "bootwright machine stop --context " + lifecycle.JourneyContext + " --name rhel-01"
 	t.Run("registered", func(t *testing.T) {
@@ -215,6 +216,7 @@ func TestRegisteredInstallationUnregistersBeforeItsMachineStops(t *testing.T) {
 const unreachableMessage = "the apply of Machine/rhel-01 proved its install marker before it registered, and Machine/rhel-01 did not answer through its identity channel or its pinned connection, so its subscription registration cannot be read and was not removed"
 
 func TestUnreadableProvedRegistrationRefusesBeforeAnyInverse(t *testing.T) {
+	t.Parallel()
 	journey, runner, machines := installationJourney(t, "request-lab-rhel-registered.golden")
 	setRunning(machines, false)
 	probes := runner.probed.probed()
@@ -231,6 +233,7 @@ func TestUnreadableProvedRegistrationRefusesBeforeAnyInverse(t *testing.T) {
 }
 
 func TestNeverRegisteredInstallationIsDestroyedWithoutTheGuest(t *testing.T) {
+	t.Parallel()
 	journey, runner, machines := boundInstallation(t, "request-lab-rhel-registered.golden", true, "rhel-01")
 	if _, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}); err == nil {
 		t.Fatal("an apply that failed before its marker proof completed")
@@ -250,6 +253,7 @@ func TestNeverRegisteredInstallationIsDestroyedWithoutTheGuest(t *testing.T) {
 }
 
 func TestUnregisteredFlagLetsTheRerunProceed(t *testing.T) {
+	t.Parallel()
 	journey, runner, machines := installationJourney(t, "request-lab-rhel-registered.golden")
 	setRunning(machines, false)
 	destroy := lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}
@@ -272,6 +276,7 @@ func TestUnregisteredFlagLetsTheRerunProceed(t *testing.T) {
 }
 
 func TestPrintedNextStepsCompleteTheManualUnregistrationWhenTheMachineRemovalLosesData(t *testing.T) {
+	t.Parallel()
 	journey, runner, machines := installationJourney(t, "request-lab-rhel-registered.golden")
 	machines.consumes = []string{"data-loss"}
 	setRunning(machines, false)
@@ -324,6 +329,7 @@ func destroyCommand(t *testing.T, command string) lifecycle.DestroyRequest {
 }
 
 func TestUnregisteredFlagRefusesAMachineThePlanDoesNotUnregister(t *testing.T) {
+	t.Parallel()
 	for name, golden := range map[string]string{"registered": "request-lab-rhel-registered.golden", "not registered": "request-lab-rhel.golden"} {
 		t.Run(name, func(t *testing.T) {
 			journey, runner, machines := installationJourney(t, golden)
@@ -350,6 +356,7 @@ func TestUnregisteredFlagRefusesAMachineThePlanDoesNotUnregister(t *testing.T) {
 }
 
 func TestUnregisteredFlagReleasesOnlyTheNamedMachine(t *testing.T) {
+	t.Parallel()
 	journey, runner, _ := boundInstallation(t, "request-lab-rhel-registered.golden", false, "rhel-01", "rhel-02")
 	if _, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}); err != nil {
 		t.Fatalf("the apply = %+v (%v)", diagnostics.Of(err), err)

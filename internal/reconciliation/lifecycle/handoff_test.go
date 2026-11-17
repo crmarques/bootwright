@@ -12,6 +12,7 @@ import (
 )
 
 func TestSettledApplyRestoresALatchedLogFault(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	id := completeApply(t, h)
 	changeOperation(t, h, id, func(record *operationstore.Operation) { record.LogFault = true })
@@ -40,6 +41,7 @@ func TestSettledApplyRestoresALatchedLogFault(t *testing.T) {
 }
 
 func TestSettledLogRestorationReprovesItsRecords(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	id := completeApply(t, h)
 	changeOperation(t, h, id, func(record *operationstore.Operation) { record.LogFault = true })
@@ -53,6 +55,7 @@ func TestSettledLogRestorationReprovesItsRecords(t *testing.T) {
 }
 
 func TestSettledLogRestorationReprovesItsInputInItsTransaction(t *testing.T) {
+	t.Parallel()
 	for name, change := range map[string]func(f diffFixture){
 		"a new revision of the same bytes": func(f diffFixture) { f.update("rev-2", f.workspace.inputs) },
 		"edited bytes": func(f diffFixture) {
@@ -74,6 +77,7 @@ func TestSettledLogRestorationReprovesItsInputInItsTransaction(t *testing.T) {
 }
 
 func TestSettledLogRestorationRequiresADurableClear(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	id := completeApply(t, h)
 	changeOperation(t, h, id, func(record *operationstore.Operation) { record.LogFault = true })
@@ -87,6 +91,7 @@ func TestSettledLogRestorationRequiresADurableClear(t *testing.T) {
 }
 
 func TestStatusHandoffReadsRecordsWithoutWriting(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		arrange func(*testing.T, *harness)

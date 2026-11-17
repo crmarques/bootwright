@@ -53,6 +53,7 @@ func helmMinimum(t *testing.T) string {
 }
 
 func TestStatusAndDiffReportAClientTheCompletedApplyProvedBelowTheMinimum(t *testing.T) {
+	t.Parallel()
 	h := appliedClientsHarness(t, "3.14.0")
 	minimum := helmMinimum(t)
 	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: testContextName})
@@ -86,6 +87,7 @@ func TestStatusAndDiffReportAClientTheCompletedApplyProvedBelowTheMinimum(t *tes
 }
 
 func TestStatusAndDiffReportNothingForAClientProvedAtTheMinimum(t *testing.T) {
+	t.Parallel()
 	h := appliedClientsHarness(t, helmMinimum(t))
 	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: testContextName})
 	if err != nil {

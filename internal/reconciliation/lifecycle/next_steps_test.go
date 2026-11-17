@@ -19,6 +19,7 @@ import (
 // status names. Each verb status leaves out refuses lifecycle.state before it
 // presents or writes anything, and so does a plan previewing that verb.
 func TestStatusOffersOnlyTheVerbsTheRecordsAllow(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	failed := map[string]Result{"charlie": {Outcome: reconciliation.OutcomeFailed}}
 	for _, row := range []struct {
@@ -157,6 +158,7 @@ func TestStatusOffersOnlyTheVerbsTheRecordsAllow(t *testing.T) {
 // plan names its own tokens, so the first apply and a removal offered beside
 // an incomplete apply carry none.
 func TestNextStepsCarryTheContextAndTheTokensTheirDecisionNeeds(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	authorized := []string{reconciliation.AuthorizationDataLoss}
 	applied := func(outcomes map[string]Result, stages ...string) func(*testing.T, *harness) {
@@ -267,6 +269,7 @@ func completeRemoval(t *testing.T, h *harness) {
 // over a completed removal holding a block that is not done, and over a lost
 // frozen binding.
 func TestStatusOffersTheDeletionItsRefusalNames(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for name, arrange := range map[string]func(*testing.T) *harness{
 		"a lost index beside protected evidence": func(t *testing.T) *harness {
@@ -352,6 +355,7 @@ func containsCommand(text, command string) bool {
 // verb decides; each verb setup replaces refuses naming setup, before any
 // effect.
 func TestStatusOffersSetupWhereSetupGatesTheVerb(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	failedReceipt := func(h *harness) { h.workspace.controller.Prepared = false }
 	for _, row := range []struct {
@@ -538,6 +542,7 @@ func requirePreviewDecidesIfOffered(t *testing.T, h *harness, verb reconciliatio
 // records; and an operation whose blocks are all done is finalized by its own
 // verb rather than resolved or replaced.
 func TestStatusAndPlanNameTheSameNextAction(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	unknownApply := func(t *testing.T, state reconciliation.OperationState) *harness {
 		h := newHarness(t, "alpha")

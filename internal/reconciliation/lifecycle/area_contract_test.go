@@ -8,6 +8,7 @@ import (
 )
 
 func TestJourneyAreaHonoursTheAreaContract(t *testing.T) {
+	t.Parallel()
 	areacontract.Verify(t, func(t *testing.T, use func(operationstore.Area)) {
 		use(newArea())
 	})

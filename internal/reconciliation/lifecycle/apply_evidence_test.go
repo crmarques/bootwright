@@ -20,6 +20,7 @@ func (r originalProofRecorder) Quiescent(ctx context.Context, probe Probe) (Quie
 }
 
 func TestOriginalApplyDependenciesSurviveResolutionAndRemoval(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		definition("alpha"), dependent("bravo", "alpha"), dependent("charlie", "bravo"), definition("unrelated"),
 	})
@@ -80,6 +81,7 @@ func assertOriginalDependencies(t *testing.T, call handedProof, operation string
 }
 
 func TestOriginalApplyFactsCarryDetachedFrozenRequests(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), dependent("bravo", "alpha")})
 	recorder := recordingProof(h)
 	if err := applyOnce(h); err != nil {
@@ -102,6 +104,7 @@ func TestOriginalApplyFactsCarryDetachedFrozenRequests(t *testing.T) {
 }
 
 func TestUnreadableOriginalTransitiveProofStartsNoAttempt(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		definition("alpha"), dependent("bravo", "alpha"), dependent("charlie", "bravo"),
 	})

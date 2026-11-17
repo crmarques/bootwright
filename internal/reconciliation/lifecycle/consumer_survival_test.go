@@ -122,6 +122,7 @@ func arrangedPreview(t *testing.T, h *harness, c *consumingTestCapability, arran
 // the capability admits every block, and the apply plan warns of exactly that
 // consumer.
 func TestRetirementRefusesBeforeRegistrationWhileAConsumerSurvives(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		arrange  func(*consumingTestCapability, deletingMachine)
 		consumer string
@@ -168,6 +169,7 @@ func TestRetirementRefusesBeforeRegistrationWhileAConsumerSurvives(t *testing.T)
 }
 
 func TestRetirementProceedsWhenTheConsumerLeavesWithItsNodes(t *testing.T) {
+	t.Parallel()
 	h, capability, machines := consumerHarness(t)
 	if warnings, err := arrangedPreview(t, h, capability, func(*consumingTestCapability, deletingMachine) {}, machines); err != nil || len(warnings) != 0 {
 		t.Fatalf("a leaving consumer warned: %+v (%v)", warnings, err)
@@ -188,6 +190,7 @@ func TestRetirementProceedsWhenTheConsumerLeavesWithItsNodes(t *testing.T) {
 // its provider online: the hosts' stop proof cannot stand in for a consumer
 // still running when the provider is removed.
 func TestALeavingConsumerWhoseNodesWaitUnretiresItsProvider(t *testing.T) {
+	t.Parallel()
 	h, capability, _ := consumerHarness(t)
 	completeApply(t, h)
 	consumed(capability)
@@ -207,6 +210,7 @@ func TestALeavingConsumerWhoseNodesWaitUnretiresItsProvider(t *testing.T) {
 // A consumer whose block started but never completed is still taken back by
 // the removal, so it still makes the removal refuse while it survives.
 func TestAConsumerThatNeverCompletedStillRefusesRetirement(t *testing.T) {
+	t.Parallel()
 	h, capability, machines := consumerHarness(t)
 	h.capability.outcomeFor = map[string]Result{"consumer": {Outcome: reconciliation.OutcomeFailed}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {

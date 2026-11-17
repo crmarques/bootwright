@@ -45,6 +45,7 @@ func destructive(id string) reconciliation.BlockDefinition {
 // read and the exact command that passes, before the prompt and before
 // anything is written.
 func TestAPlanThatConsumesAnAuthorizationRefusesWithoutIt(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts")})
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab"})
 	reported := diagnostics.Of(err)
@@ -76,6 +77,7 @@ func TestAPlanThatConsumesAnAuthorizationRefusesWithoutIt(t *testing.T) {
 // naming the command without it, and a selection is kept in the command a
 // refusal names.
 func TestAPlanMarksTheStepsAnAuthorizationAcknowledges(t *testing.T) {
+	t.Parallel()
 	network := stagedDefinition("network", reconciliation.StageSubstrates, "artifacts")
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts"), network})
 	preview, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
@@ -115,6 +117,7 @@ func TestAPlanMarksTheStepsAnAuthorizationAcknowledges(t *testing.T) {
 // apply consumes the token again, because it is the destroy's own consequence
 // the operator is acknowledging.
 func TestEachMutationOfADestructivePlanIsAuthorizedOnItsOwn(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts"), definition("network")})
 	// Removing this block is destructive in its own right, which is what its
 	// capability says when the removal is planned from the frozen block.
@@ -140,6 +143,7 @@ func TestEachMutationOfADestructivePlanIsAuthorizedOnItsOwn(t *testing.T) {
 // implementations of one kind runs each block against its own capability and
 // never against the other.
 func TestBlocksRunAgainstTheImplementationThatPlannedThem(t *testing.T) {
+	t.Parallel()
 	primary := definition("primary")
 	secondary := definition("secondary")
 	secondary.Implementation = "artifact-server-caddy-v1"
@@ -162,6 +166,7 @@ func TestBlocksRunAgainstTheImplementationThatPlannedThem(t *testing.T) {
 // A kind this build binds no implementation for is named before registration,
 // so an operation never applies part of a graph it cannot realize.
 func TestAKindWithNoBindingIsNamedBeforeRegistration(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("artifacts")})
 	h.service.capabilities = boundResolver{}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
@@ -185,6 +190,7 @@ func (pipedConfirmer) Interactive() bool { return false }
 // not; each refusal comes before confirmation and registration. The plan's
 // preview carries the bound form.
 func TestAnUnattendedAuthorizationIsBoundToTheStepsItAuthorizes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts")})
 	preview, err := h.service.Plan(ctx, PlanRequest{ContextName: "lab"})

@@ -273,6 +273,7 @@ func retirementOf(t *testing.T, journey *lifecycle.CapabilityJourney, block stri
 // surviving-host rule, only the cluster block reaches the tiebreaker, and the
 // cluster records its retirement only once the footprint there is absent.
 func TestAStretchClusterWithAProvidedTiebreakerRetiresWithItsConsumerOrReplication(t *testing.T) {
+	t.Parallel()
 	for name, replication := range map[string]bool{"consumer": false, "replication": true} {
 		t.Run(name, func(t *testing.T) {
 			journey, runner, machines, dependent := tiebreakerConsumerJourney(t, replication, "")
@@ -326,6 +327,7 @@ func TestAStretchClusterWithAProvidedTiebreakerRetiresWithItsConsumerOrReplicati
 // consumer or the replication; that their bindings keep every installed host
 // is TestTheConsumerAndReplicationBindingsLeaveOutOnlyTheProvidedTiebreaker's.
 func TestASurvivingInstalledHostStillRefusesTheConsumerAndReplication(t *testing.T) {
+	t.Parallel()
 	for name, replication := range map[string]bool{"consumer": false, "replication": true} {
 		t.Run(name, func(t *testing.T) {
 			journey, runner, machines, _ := tiebreakerConsumerJourney(t, replication, "node-4")

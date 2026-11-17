@@ -60,6 +60,7 @@ func requestPreparation() PrepareRequest {
 }
 
 func TestPreparationCompletesBeforeOrdinaryApplyCanAppendInstallation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := prepareHarness(t, "inventory")
 	first, err := h.service.Prepare(ctx, requestPreparation())
@@ -86,6 +87,7 @@ func TestPreparationCompletesBeforeOrdinaryApplyCanAppendInstallation(t *testing
 }
 
 func TestIncompletePreparationCannotBecomeOrdinaryApply(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := prepareHarness(t, "inventory")
 	h.capability.applyErr = errors.New("fixture interruption")
@@ -111,6 +113,7 @@ func TestIncompletePreparationCannotBecomeOrdinaryApply(t *testing.T) {
 }
 
 func TestPreparationRetainsUnselectedExistingOwnership(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := prepareHarness(t, "existing")
 	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
@@ -136,6 +139,7 @@ func TestPreparationRetainsUnselectedExistingOwnership(t *testing.T) {
 }
 
 func TestPreparationRefusesDestructiveWorkBeforeEffects(t *testing.T) {
+	t.Parallel()
 	h := prepareHarness(t, "inventory")
 	h.capability.definitions[0].Consumes = []string{"data-loss"}
 	if _, err := h.service.Prepare(context.Background(), requestPreparation()); err == nil {
@@ -147,6 +151,7 @@ func TestPreparationRefusesDestructiveWorkBeforeEffects(t *testing.T) {
 }
 
 func TestPreparationAdditionAcquiresAndRetainsReservations(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := prepareHarness(t, "existing")
 	h.capability.reservations = reservationOf("alpha")
@@ -167,6 +172,7 @@ func TestPreparationAdditionAcquiresAndRetainsReservations(t *testing.T) {
 }
 
 func TestPreparationAdditionRefusesIncompleteOwner(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := prepareHarness(t, "inventory")
 	if _, err := h.service.Prepare(ctx, requestPreparation()); err != nil {
@@ -199,6 +205,7 @@ func (tx conflictingPreparationTransaction) Reserve(ctx context.Context, claims 
 }
 
 func TestPreparationAdditionRefusesForeignReservationBeforeEffects(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := prepareHarness(t, "existing")
 	h.capability.reservations = reservationOf("alpha")

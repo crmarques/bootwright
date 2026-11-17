@@ -11,6 +11,7 @@ import (
 // infrastructure services names: an external service and an object of any
 // other kind are left out whatever they author.
 func TestStatusSummarizesOnlyManagedServices(t *testing.T) {
+	t.Parallel()
 	object := func(kind api.Kind, name string, fields ...string) api.Object {
 		spec := []api.FieldValue{}
 		for index := 0; index+1 < len(fields); index += 2 {

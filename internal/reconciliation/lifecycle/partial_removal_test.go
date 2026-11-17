@@ -16,6 +16,7 @@ import (
 // the blocks removed and those not yet run, while an object whose every block
 // is gone reads pending and absent.
 func TestADestroyPausedAtTheOnlineBoundaryReadsAPartlyRemovedObjectUnknown(t *testing.T) {
+	t.Parallel()
 	definitions := []reconciliation.BlockDefinition{
 		stagedDefinition("host", reconciliation.StageSubstrates),
 		stagedDefinition("machine", reconciliation.StageMachines, "host"),

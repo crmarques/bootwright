@@ -7,6 +7,7 @@ import "testing"
 // run of that attempt carries, or, when the next command depends on what the
 // whole run settles, status's next command.
 func TestABindingRefusalNamesTheCommandThatReopensIt(t *testing.T) {
+	t.Parallel()
 	const continuation = "bootwright apply --context lab --authorize data-loss"
 	if got, want := ReopenBindings("lab", continuation), "repeat "+continuation+", which reopens this operation's Secret bindings"; got != want {
 		t.Fatalf("ReopenBindings = %q, want %q", got, want)

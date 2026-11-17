@@ -19,6 +19,7 @@ import (
 // completed resolves done (D123); only one that does not falls back to the
 // removal's own check (D119).
 func TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves(t *testing.T) {
+	t.Parallel()
 	const block = "artifact-server-lab"
 	ctx := context.Background()
 	apply := ApplyRequest{ContextName: "lab", SkipConfirmation: true}

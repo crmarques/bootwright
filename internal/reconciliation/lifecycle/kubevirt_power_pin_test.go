@@ -15,6 +15,7 @@ import (
 // apply that completed its machine block, which carries the frozen request the
 // pin names the VirtualMachine by.
 func TestAKubeVirtMachinesPowerPinIsReadFromItsApplysEvidence(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	journey, host := kubevirtClusterJourney(t)
 	holdKubevirtSecrets(journey)
@@ -39,6 +40,7 @@ func TestAKubeVirtMachinesPowerPinIsReadFromItsApplysEvidence(t *testing.T) {
 // while a destroy that takes that apply back is current, before and after
 // that destroy removed the VirtualMachine.
 func TestAKubeVirtMachinesPowerPinIsTheApplysWhileADestroyIsCurrent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	journey, host := kubevirtClusterJourney(t)
 	holdKubevirtSecrets(journey)

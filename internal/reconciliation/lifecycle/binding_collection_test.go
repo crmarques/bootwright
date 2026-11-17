@@ -71,6 +71,7 @@ func requireTheLaterBindingKept(ctx context.Context, t *testing.T, run killedRun
 // binds and completes after that release publishes pristine evidence and before
 // it collects keeps its binding.
 func TestAnUnclaimedReleaseCollectsOnlyTheBindingsItReadFirst(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	run := killedAt(ctx, t, nil, reconciliation.Apply, "replace index.json#1")
 	w := run.snapshot.workspace
@@ -90,6 +91,7 @@ func TestAnUnclaimedReleaseCollectsOnlyTheBindingsItReadFirst(t *testing.T) {
 // finalization publishes pristine evidence and before it collects keeps its
 // binding. The apply that finalized the removal then settles over it.
 func TestAFinalizationCollectsOnlyTheBindingsItReadFirst(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	point := "publish evidence#2"
 	run := killedAt(ctx, t, []reconciliation.Verb{reconciliation.Apply}, reconciliation.Destroy, point)

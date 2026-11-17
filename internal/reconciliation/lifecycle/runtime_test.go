@@ -19,6 +19,7 @@ import (
 // Ownership answers what the current operation proved. Nothing is proved before
 // one exists, and a plan that never ran owns nothing yet.
 func TestOwnershipReportsOnlyWhatTheCurrentOperationProved(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	owned, err := h.service.Ownership(context.Background(), testContextName)
 	if err != nil {
@@ -46,6 +47,7 @@ func TestOwnershipReportsOnlyWhatTheCurrentOperationProved(t *testing.T) {
 // Several blocks may realize one object. The reported state is the one an
 // operator must act on, never the most favorable of them.
 func TestOwnershipReportsTheLeastSettledBlockOfOneObject(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name   string
 		states []string
@@ -103,6 +105,7 @@ func requireReadWithoutBinding(t *testing.T, h *harness, lent secrets.Material) 
 // material it names in one keyring session, binding nothing, whether or not
 // the call succeeds; what it was lent is cleared once the call returns.
 func TestABoundedRunReadsItsMaterialWithoutBinding(t *testing.T) {
+	t.Parallel()
 	for name, outcome := range map[string]error{"a call that succeeds": nil, "a call that fails": errors.New("the controller did not answer")} {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t)
@@ -149,6 +152,7 @@ func (b *currentReadThen) ReadCurrent(ctx context.Context, request custody.ReadC
 // because the run binds nothing. The operation keeps its own binding, nothing
 // is released, and the run still has its material.
 func TestARegistrationRacingABoundedRunCollectsNothingOfIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	raced := &currentReadThen{testBinder: h.binder}
@@ -184,6 +188,7 @@ func TestARegistrationRacingABoundedRunCollectsNothingOfIt(t *testing.T) {
 // drives exclusively. Its own context's claims, and a shared key it drives
 // shared, let it run (REC-10).
 func TestABoundedRunRefusesAMachineAnotherContextHolds(t *testing.T) {
+	t.Parallel()
 	drive := Drive{Kind: "substrate-physical", Object: "metal", Keys: []string{"bmc:bmc.example.test:443/1", "bmc-mac:52:54:00:9a:1b:01"}}
 	shared := Drive{Kind: "substrate-machine-bmc", Object: "guest", Keys: []string{"bmc:192.0.2.10:8000/1"}, Shared: true}
 	for name, test := range map[string]struct {
@@ -227,6 +232,7 @@ func TestABoundedRunRefusesAMachineAnotherContextHolds(t *testing.T) {
 // it. The file exists before the adapter runs, and what the adapter printed is
 // on disk once the call returns.
 func TestWithRuntimeRetainsWhatItsAdapterPrinted(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	const file = "run-000001.output"
 	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName, RetainOutput: true},
@@ -264,6 +270,7 @@ func TestWithRuntimeRetainsWhatItsAdapterPrinted(t *testing.T) {
 // A run opens its file through the run view, which makes room among the runs
 // the area keeps, exactly once, and the runs after it take the next numbers.
 func TestWithRuntimeOpensItsRunThroughTheRunView(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	for range 2 {
 		if err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName, RetainOutput: true},
@@ -279,6 +286,7 @@ func TestWithRuntimeOpensItsRunThroughTheRunView(t *testing.T) {
 // A run whose runtime is refused admission never reaches its adapter, and no
 // result names a file for it, so it keeps none: the run area stays empty.
 func TestARunRefusedAdmissionRetainsNothing(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	refusal := errors.New("a native package transaction prevents coherent dependency execution")
 	h.service.guard = refusingGuard{refusal}
@@ -301,6 +309,7 @@ func TestARunRefusedAdmissionRetainsNothing(t *testing.T) {
 // adapter is handed nothing to write into, nothing is named for it, and the
 // run area stays empty.
 func TestARunThatRetainsNoOutputLeavesNoRunFile(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	called := false
 	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName},
@@ -326,6 +335,7 @@ func TestARunThatRetainsNoOutputLeavesNoRunFile(t *testing.T) {
 // and the run view leaves no file it made, whether the file failed once it
 // existed or an interrupt stopped the run before it opened one.
 func TestARunWhoseOutputCannotBeKeptLeavesNoFile(t *testing.T) {
+	t.Parallel()
 	injected := errors.New("the retained output could not be created")
 	for _, test := range []struct {
 		name string
@@ -371,6 +381,7 @@ func (g refusingGuard) WithPython(context.Context, prerequisites.Runtime, func(p
 // A bounded operation is not a lifecycle operation: it registers nothing, so it
 // can never claim, continue or release ownership of anything.
 func TestWithRuntimeRegistersNoOperation(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName},
 		func(context.Context, Runtime) error { return nil }); err != nil {
@@ -397,6 +408,7 @@ func TestWithRuntimeRegistersNoOperation(t *testing.T) {
 // current plan, and without the apply this removal takes back it would read as
 // an object nothing ever realized.
 func TestOwnershipKeepsReportingWhatAnEarlierRemovalReleased(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -431,6 +443,7 @@ func TestOwnershipKeepsReportingWhatAnEarlierRemovalReleased(t *testing.T) {
 // removal takes back names every object it owns, so the block states of the
 // removal itself must still decide what an operator has to act on.
 func TestOwnershipReportsARemovalBlockThatStillNeedsAnOperator(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -461,6 +474,7 @@ func TestOwnershipReportsARemovalBlockThatStillNeedsAnOperator(t *testing.T) {
 // during a machine power command does, still clears what the run was lent,
 // and the run bound nothing to give back.
 func TestABoundedRunCancelledInsideItsCallKeepsNoMaterial(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	h.binder.material["artifact-server-tls"] = servingMaterial()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -481,6 +495,7 @@ func TestABoundedRunCancelledInsideItsCallKeepsNoMaterial(t *testing.T) {
 // The same holds for a bounded consumer, such as rsh or exec, which reads its
 // material without a runtime.
 func TestABoundedConsumerCancelledInsideItsCallKeepsNoMaterial(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	h.binder.material["artifact-server-tls"] = servingMaterial()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -512,6 +527,7 @@ func (b cancelledRead) ReadCurrent(ctx context.Context, request custody.ReadCurr
 // An interrupt that ends the read reports the cancellation and runs nothing,
 // and the consumer bound nothing to give back.
 func TestABoundedConsumerCancelledWhileReadingRunsNothing(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

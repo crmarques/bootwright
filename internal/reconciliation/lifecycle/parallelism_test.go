@@ -9,6 +9,7 @@ import (
 )
 
 func TestInvocationParallelismBoundsApplyAndDestroy(t *testing.T) {
+	t.Parallel()
 	for _, verb := range []string{"apply", "destroy"} {
 		for _, limit := range []int{0, 1, 12} {
 			t.Run(fmt.Sprintf("%s/%d", verb, limit), func(t *testing.T) {
@@ -60,6 +61,7 @@ func TestInvocationParallelismBoundsApplyAndDestroy(t *testing.T) {
 }
 
 func TestNegativeParallelismRefusesBeforeLifecycleAccess(t *testing.T) {
+	t.Parallel()
 	var service Service
 	_, applyErr := service.Apply(t.Context(), ApplyRequest{Parallelism: -1})
 	_, destroyErr := service.Destroy(t.Context(), DestroyRequest{Parallelism: -1})
@@ -72,6 +74,7 @@ func TestNegativeParallelismRefusesBeforeLifecycleAccess(t *testing.T) {
 }
 
 func TestContinuationCanChangeParallelismWithoutChangingThePlan(t *testing.T) {
+	t.Parallel()
 	first := definition("first")
 	first.Stage = reconciliation.StageInfrastructureServices
 	definitions := []reconciliation.BlockDefinition{first}
@@ -109,6 +112,7 @@ func TestContinuationCanChangeParallelismWithoutChangingThePlan(t *testing.T) {
 }
 
 func TestParallelismOverrideKeepsThrottleAndExclusiveClaims(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 0, throttled("alpha", "group", "shared"), throttled("bravo", "group", "shared"), throttled("charlie", "group"), definition("independent"))
 	h.service.options.Throttle = 2
 	watch := watchThrottle(4, "alpha", "bravo", "charlie")

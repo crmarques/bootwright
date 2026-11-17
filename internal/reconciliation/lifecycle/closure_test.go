@@ -116,6 +116,7 @@ func unknownRemoval(t *testing.T, h *harness) {
 // runtime in hand: a removal registered by a build with another lock records
 // that lock's closure, and launches that lock's runtime.
 func TestARegistrationFreezesTheRuntimesExecutionClosure(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := apply(h); err != nil {
 		t.Fatal(err)
@@ -143,6 +144,7 @@ func TestARegistrationFreezesTheRuntimesExecutionClosure(t *testing.T) {
 // does, continues an operation another build registered: the closure is the
 // lock and the ABI, never the build.
 func TestASameLockRebuildContinuesALiveOperation(t *testing.T) {
+	t.Parallel()
 	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
 		t.Run(string(verb), func(t *testing.T) {
 			h := newHarness(t, "artifact-server-lab")
@@ -169,6 +171,7 @@ func TestASameLockRebuildContinuesALiveOperation(t *testing.T) {
 // the interpreter's path and ABI as they were: the receipt's full version
 // moves, the closure does not, and the operation continues.
 func TestAPythonZStreamUpdateContinues(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	failedApply(t, h)
 	registered, _ := durableOperation(t, h)
@@ -187,6 +190,7 @@ func TestAPythonZStreamUpdateContinues(t *testing.T) {
 // the removal that takes back what it owns; restoring the
 // lock the operation registered under continues it.
 func TestALockChangeRefusesContinuationNamingTheKeptRuntime(t *testing.T) {
+	t.Parallel()
 	const kept = "run the controller install of bootwright devel (abcdef1), which restores its runtime (Python 3.14, ansible-core 2.21.5) from the wheels it carries, then continue it with that build"
 	for _, change := range []struct {
 		name    string
@@ -240,6 +244,7 @@ func continued(h *harness, verb reconciliation.Verb) (*OperationResult, error) {
 // rather than losing the build that registered the operation. A record naming
 // neither names the record itself.
 func TestARecordWithOnlyACommitNamesDevelAndTheCommit(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, test := range []struct {
 		executable Executable
@@ -276,6 +281,7 @@ func TestARecordWithOnlyACommitNamesDevelAndTheCommit(t *testing.T) {
 // registration that landed refuses its continuation with no effect, and one
 // that did not is a fresh apply again, registering the moved closure.
 func TestARegistrationKilledAtEachWriteReplaysUnderItsClosure(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, test := range []struct {
 		point      string

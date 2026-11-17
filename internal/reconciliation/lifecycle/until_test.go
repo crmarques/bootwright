@@ -29,6 +29,7 @@ func untilDefinitions() []reconciliation.BlockDefinition {
 // --until starts only the named add-on instance and what it requires, pauses,
 // and a later apply without it continues the same operation to completion.
 func TestApplyUntilAnAddOnPausesAndALaterApplyResumes(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, untilDefinitions())
 	preview, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab", Until: "lab.second"})
 	if err != nil {
@@ -69,6 +70,7 @@ func TestApplyUntilAnAddOnPausesAndALaterApplyResumes(t *testing.T) {
 }
 
 func TestApplyUntilRefusesBeforeAnyEffect(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, until, message, remedy string
 		stages                       []string
@@ -96,6 +98,7 @@ func TestApplyUntilRefusesBeforeAnyEffect(t *testing.T) {
 // A failed block the named instance requires, in a stage the selection
 // leaves out, is retried by widening --stage and keeping --until.
 func TestApplyUntilWidensTheStageOfAFailedBlockItRequires(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, untilDefinitions())
 	failApply(t, h, "cluster")
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: []string{"add-ons"}, Until: "lab.second"})

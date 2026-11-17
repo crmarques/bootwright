@@ -9,6 +9,7 @@ import (
 // context list reads the operation a context has not completed, with the
 // build that registered it, and nothing once that operation completed.
 func TestReadUnfinishedNamesTheRegisteringBuild(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	h.service.options.Executable = Executable{Version: "0.4.0", Commit: "abcdef1"}

@@ -23,6 +23,7 @@ func installedPlacement() machineref.Placement {
 // attempt's dependencies proved; every other arm is left as it is, and an
 // unbound reader or a refused proof lends nothing.
 func TestAnInstalledPlacementIsPinnedToTheHostKeyItsInstallationProved(t *testing.T) {
+	t.Parallel()
 	original, attempt := []BlockEvidence{{Object: "original"}}, []BlockEvidence{{Object: "attempt"}}
 	var read []BlockEvidence
 	proved := func(proofs []BlockEvidence, machine, address string) (trust.HostKey, error) {
@@ -70,6 +71,7 @@ func TestAnInstalledPlacementIsPinnedToTheHostKeyItsInstallationProved(t *testin
 // A claim on a Machine this context installs is qualified by its SSH address
 // and port alone, because its host key exists only once it is installed.
 func TestAnInstalledHostsClaimsAreQualifiedByItsAddressAlone(t *testing.T) {
+	t.Parallel()
 	catalog := api.NewCatalog([]api.Object{api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue())})
 	reservation := prerequisites.HostReservation{Context: "lab", Kind: "artifact-server", Service: "mirror", Keys: []string{"unit:bootwright-lab-artifacts-mirror"}}
 	published, keyed, err := publishedSSHClaims(catalog, "controller", []SSHReservation{{Machine: "mirror", Address: "198.51.100.20", Port: 22, Installed: true, Reservation: reservation}})

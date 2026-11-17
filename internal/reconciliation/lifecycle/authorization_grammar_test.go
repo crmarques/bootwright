@@ -8,6 +8,7 @@ import (
 )
 
 func TestValidAuthorizationsGrammar(t *testing.T) {
+	t.Parallel()
 	digest := AuthorizationDigest(reconciliation.Plan{}, reconciliation.AuthorizationDataLoss)
 	for tokens, want := range map[string]bool{
 		"":                              true,
@@ -38,6 +39,7 @@ func TestValidAuthorizationsGrammar(t *testing.T) {
 }
 
 func TestTheAuthorizationDigestIsAdmittedByTheGrammar(t *testing.T) {
+	t.Parallel()
 	digest := AuthorizationDigest(reconciliation.Plan{}, reconciliation.AuthorizationDataLoss)
 	if len(digest) != authorizationDigestLength || !ValidAuthorizations([]string{"data-loss=" + digest}) {
 		t.Fatalf("the digest %q is not admitted by the --authorize grammar", digest)

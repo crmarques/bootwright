@@ -25,6 +25,7 @@ func occurrences(values []string, value string) int {
 }
 
 func TestPreStopRemovalRunsBeforeTheStopProof(t *testing.T) {
+	t.Parallel()
 	h, capability := preStopHarness(t, false)
 	completeApply(t, h)
 	h.capability.quiescence = map[string]Quiescence{"machine": {State: Live, Reason: "its domain is running", Stop: preStopMachineStop}}
@@ -63,6 +64,7 @@ func TestPreStopRemovalRunsBeforeTheStopProof(t *testing.T) {
 }
 
 func TestPreStopRemovalKeepsHostBoundRetirement(t *testing.T) {
+	t.Parallel()
 	h, capability := retiringHarness(t, hostedDefinitions(), []string{"rhel-01"})
 	capability.preStop = map[string]bool{"installation": true}
 	completeApply(t, h)
@@ -95,6 +97,7 @@ func TestPreStopRemovalKeepsHostBoundRetirement(t *testing.T) {
 }
 
 func TestPreStopRemovalCrashOnBothSidesOfTheStopBoundary(t *testing.T) {
+	t.Parallel()
 	t.Run("before its durable completion", func(t *testing.T) {
 		h, _ := preStopHarness(t, false)
 		completeApply(t, h)
@@ -136,6 +139,7 @@ func TestPreStopRemovalCrashOnBothSidesOfTheStopBoundary(t *testing.T) {
 }
 
 func TestPreStopRemovalKeepsUnrelatedMachinesStopFirst(t *testing.T) {
+	t.Parallel()
 	h, _ := preStopHarness(t, true)
 	completeApply(t, h)
 	before, _ := durableOperation(t, h)
@@ -152,6 +156,7 @@ func TestPreStopRemovalKeepsUnrelatedMachinesStopFirst(t *testing.T) {
 }
 
 func TestPreStopRemovalFailureEndsTheRemoval(t *testing.T) {
+	t.Parallel()
 	h, _ := preStopHarness(t, false)
 	completeApply(t, h)
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
@@ -162,6 +167,7 @@ func TestPreStopRemovalFailureEndsTheRemoval(t *testing.T) {
 }
 
 func TestPreStopRemovalRetriesAResolvedFailedInverse(t *testing.T) {
+	t.Parallel()
 	h, _ := preStopHarness(t, false)
 	completeApply(t, h)
 	h.capability.quiescence = map[string]Quiescence{"machine": {State: Live, Reason: "running", Stop: preStopMachineStop}}
@@ -180,6 +186,7 @@ func TestPreStopRemovalRetriesAResolvedFailedInverse(t *testing.T) {
 }
 
 func TestPreStopRemovalLeavesOnlineDeferredMachinesToTheOnlineBoundary(t *testing.T) {
+	t.Parallel()
 	h, capability := onlineHarness(t, false)
 	capability.preStop = map[string]bool{"installation": true}
 	h.capability.outcomeFor = map[string]Result{"storage": changedWithKubeconfig()}
@@ -219,6 +226,7 @@ func preStopPairHarness(t *testing.T) (*harness, *onlineTestCapability) {
 }
 
 func TestPreStopRemovalNeverRepeatsACompletedInverseBesideARetriedOne(t *testing.T) {
+	t.Parallel()
 	h, _ := preStopPairHarness(t)
 	completeApply(t, h)
 	h.capability.quiescence = map[string]Quiescence{"machine": {State: Live, Reason: "running", Stop: preStopMachineStop}}

@@ -24,6 +24,7 @@ func splitDefinitions() []reconciliation.BlockDefinition {
 // mirror's server and its fill, then the clients read from it, then every
 // other block, which waits for both controller blocks.
 func TestASplitControllerStageOrdersTheMirrorBetweenItsBlocks(t *testing.T) {
+	t.Parallel()
 	resolved, err := reconciliation.ResolveRequirements(splitDefinitions())
 	if err != nil {
 		t.Fatal(err)
@@ -61,6 +62,7 @@ func TestASplitControllerStageOrdersTheMirrorBetweenItsBlocks(t *testing.T) {
 // The second controller block still refuses a block it waits for that needs
 // the stage's clients, naming itself and that block.
 func TestASplitControllerStageWaitingForWorkThatNeedsItsClientsRefuses(t *testing.T) {
+	t.Parallel()
 	definitions := splitDefinitions()
 	definitions[2].Dependencies = []string{"machine-guest"}
 	resolved, err := reconciliation.ResolveRequirements(definitions)
@@ -107,6 +109,7 @@ func (l splitLocator) Apply(ctx context.Context, execution Execution) (Result, e
 // published it, and a client neither block holds refuses with the last one's
 // refusal.
 func TestALookupFindsAToolInEitherControllerBlock(t *testing.T) {
+	t.Parallel()
 	kubectl := controller.InstalledTool{Kind: "kubectl", Compatibility: "kubernetes", Version: "1.37.2", Executable: "kubectl"}
 	absent := controller.InstalledTool{Kind: "helm", Compatibility: "kubernetes", Version: "4.3.1", Executable: "helm"}
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
@@ -140,6 +143,7 @@ func TestALookupFindsAToolInEitherControllerBlock(t *testing.T) {
 // the order a capability lists them, so a split stage listed clients first
 // still runs its host packages before the mirror and the clients after it.
 func TestASplitControllerStageListedInReverseKeepsItsOrder(t *testing.T) {
+	t.Parallel()
 	definitions := splitDefinitions()
 	definitions[1].Dependencies = []string{"controller-prerequisites"}
 	definitions[0], definitions[1] = definitions[1], definitions[0]
@@ -171,6 +175,7 @@ func TestASplitControllerStageListedInReverseKeepsItsOrder(t *testing.T) {
 // mirror's server that the host packages block itself waits for would run
 // before the packages it needs, so the plan refuses.
 func TestAPrecursorOfALaterControllerBlockMustWaitForAnEarlierOne(t *testing.T) {
+	t.Parallel()
 	definitions := splitDefinitions()
 	definitions[0].Requires = []reconciliation.ObjectRef{{Kind: "ArtifactServer", Object: "mirror", Family: "managed-service"}}
 	resolved, err := reconciliation.ResolveRequirements(definitions)

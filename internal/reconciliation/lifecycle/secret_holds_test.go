@@ -15,6 +15,7 @@ import (
 // reference other than an access credential they present, under the binding
 // its operation names, and a context at rest is no registration.
 func TestSecretHoldsNameTheEffectMaterialACompletedApplyBound(t *testing.T) {
+	t.Parallel()
 	alpha := definition("alpha")
 	alpha.Request = json.RawMessage(`{"credentialsRef":"bmc","name":"alpha","passphraseRef":"passphrase"}`)
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{alpha})
@@ -40,6 +41,7 @@ func TestSecretHoldsNameTheEffectMaterialACompletedApplyBound(t *testing.T) {
 // are replaced freely, and a reference a capability leaves unclassified is
 // held as effect material.
 func TestSecretHoldsCoverEffectMaterialAlone(t *testing.T) {
+	t.Parallel()
 	cases := map[string]struct {
 		unclassified []string
 		held         []string

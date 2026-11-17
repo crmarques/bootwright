@@ -14,6 +14,7 @@ import (
 )
 
 func TestEvidenceReportsWhatACompletedAttemptProved(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
@@ -41,6 +42,7 @@ func TestEvidenceReportsWhatACompletedAttemptProved(t *testing.T) {
 // An object no frozen block names has no entry: the absence of a record is not
 // evidence that nothing was realized.
 func TestEvidenceReportsNothingForAnObjectNoBlockNames(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
@@ -58,6 +60,7 @@ func TestEvidenceReportsNothingForAnObjectNoBlockNames(t *testing.T) {
 }
 
 func TestEvidenceReportsNothingBeforeAnOperationExists(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	found, err := h.service.Evidence(context.Background(), "lab", "ArtifactServer", "artifact-server-lab")
 	if err != nil || len(found) != 0 {
@@ -68,6 +71,7 @@ func TestEvidenceReportsNothingBeforeAnOperationExists(t *testing.T) {
 // A block whose last attempt failed still carries what that attempt observed,
 // and reports the state an operator must act on rather than a settled one.
 func TestEvidenceCarriesAFailedAttemptWithItsState(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed, Evidence: json.RawMessage(`{"ok":false}`)}}
@@ -103,6 +107,7 @@ func settlingResolution(t *testing.T, h *harness, block string) operationstore.A
 // resolution, not the attempt, is what proved the block. Only a completion
 // whose outcome the capability could not tell reads back changed.
 func TestEvidenceReportsWhatAResolutionProved(t *testing.T) {
+	t.Parallel()
 	const block = "artifact-server-lab"
 	for name, tc := range map[string]struct {
 		interrupt bool
@@ -155,6 +160,7 @@ func TestEvidenceReportsWhatAResolutionProved(t *testing.T) {
 // an operator must act on, and one whose completion was never recorded carries
 // nothing rather than the bytes of the resolution before it.
 func TestEvidenceOfAResolutionStillRunningIsNone(t *testing.T) {
+	t.Parallel()
 	const block = "artifact-server-lab"
 	ctx := context.Background()
 	h := newHarness(t, block)
@@ -186,6 +192,7 @@ func TestEvidenceOfAResolutionStillRunningIsNone(t *testing.T) {
 }
 
 func TestEvidenceRefusesAnUnnamedObject(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if _, err := h.service.Evidence(context.Background(), "lab", "", "artifact-server-lab"); err == nil {
 		t.Fatal("an unnamed kind was accepted")
@@ -198,6 +205,7 @@ func TestEvidenceRefusesAnUnnamedObject(t *testing.T) {
 // A bounded consumer reads exactly the Secrets it names in one keyring session
 // and binds nothing, and what it was lent is cleared once it returns.
 func TestWithMaterialReadsExactlyTheRequestedSecretsAndClearsThem(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "artifact-server-lab")
 	h.binder.material["artifact-server-tls"] = servingMaterial()
@@ -222,6 +230,7 @@ func TestWithMaterialReadsExactlyTheRequestedSecretsAndClearsThem(t *testing.T) 
 }
 
 func TestWithMaterialClearsWhatItReadWhenTheConsumerFails(t *testing.T) {
+	t.Parallel()
 	refused := errors.New("refused")
 	h := newHarness(t, "artifact-server-lab")
 	h.binder.material["artifact-server-tls"] = servingMaterial()
@@ -239,6 +248,7 @@ func TestWithMaterialClearsWhatItReadWhenTheConsumerFails(t *testing.T) {
 }
 
 func TestWithMaterialReadsNothingWhenNothingIsRequested(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	called := false
 	err := h.service.WithMaterial(context.Background(), MaterialRequest{ContextName: "lab"},
@@ -258,6 +268,7 @@ func TestWithMaterialReadsNothingWhenNothingIsRequested(t *testing.T) {
 }
 
 func TestWithMaterialRefusesARequestCarryingNoConsumer(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	if err := h.service.WithMaterial(context.Background(), MaterialRequest{ContextName: "lab"}, nil); err == nil {
 		t.Fatal("a request with no consumer was accepted")

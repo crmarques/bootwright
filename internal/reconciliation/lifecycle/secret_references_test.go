@@ -23,6 +23,7 @@ func (c overbindingCapability) Plan(ctx context.Context, input PlanInput) (Capab
 }
 
 func TestACapabilityThatBindsASecretNoBlockNamesRefusesToPlan(t *testing.T) {
+	t.Parallel()
 	named := &testCapability{definitions: []reconciliation.BlockDefinition{definition("alpha"), definition("beta")}, secrets: []string{"artifact-server-tls"}}
 	for name, tc := range map[string]struct {
 		capability Capability
@@ -52,6 +53,7 @@ func TestACapabilityThatBindsASecretNoBlockNamesRefusesToPlan(t *testing.T) {
 }
 
 func TestPlanningRefusesACapabilityThatBindsASecretNoBlockNames(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	if _, err := h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName}); err != nil {
 		t.Fatalf("a capability naming what it binds does not plan: %v", diagnostics.Of(err))

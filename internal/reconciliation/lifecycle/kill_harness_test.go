@@ -987,6 +987,7 @@ type killOutcome struct {
 // block started under pristine evidence and no effect beyond its recorded
 // attempts. What fails today is ledgered in killLedger and not fixed here.
 func TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	pristine := killPristine(t)
 	ledger := killLedger()
@@ -1014,6 +1015,7 @@ func TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry(t *testin
 // their journeys, so the harness kills at each of them rather than only
 // around them.
 func TestTheKillHarnessReachesTheCustodyPublications(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for journey, point := range map[string]string{"a": "publish produced material#1", "b": "withdraw produced material#1"} {
 		index := slices.IndexFunc(killJourneys(), func(candidate killJourney) bool { return candidate.name == journey })

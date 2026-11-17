@@ -23,6 +23,7 @@ func moved(id string) reconciliation.BlockDefinition {
 // A removal is planned from the plan its apply froze, so a build whose
 // derivation has moved since still removes exactly the effects that exist.
 func TestARemovalPlansTheBlocksItsApplyFrozeAndNotWhatThisBuildDerives(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("artifacts"), definition("network")})
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -77,6 +78,7 @@ func TestARemovalPlansTheBlocksItsApplyFrozeAndNotWhatThisBuildDerives(t *testin
 // unknown by one build is resolved by a later build whose derivation moved,
 // under the digest its apply froze, and the operation it continues is its own.
 func TestAContinuedRemovalKeepsTheContentDigestItsApplyFroze(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("artifacts")})
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -113,6 +115,7 @@ func TestAContinuedRemovalKeepsTheContentDigestItsApplyFroze(t *testing.T) {
 // The words and impacts of a removal come from its capability reading the
 // frozen request, so a plan describes removing rather than creating.
 func TestARemovalIsPlannedInTheWordsOfWhatItRemoves(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("artifacts")})
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -136,6 +139,7 @@ func TestARemovalIsPlannedInTheWordsOfWhatItRemoves(t *testing.T) {
 // what a removal consumes is what removing it costs, which for an installation
 // that retains the installed system is nothing.
 func TestARemovalConsumesWhatRemovingCostsRatherThanWhatItsApplyAcknowledged(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts")})
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
 		ContextName: "lab", Authorizations: []string{"data-loss"}, SkipConfirmation: true,
@@ -154,6 +158,7 @@ func TestARemovalConsumesWhatRemovingCostsRatherThanWhatItsApplyAcknowledged(t *
 // A frozen request older than the version its capability reads refuses before
 // anything is registered, naming the block and the executable that wrote it.
 func TestARemovalRefusesAFrozenRequestNoCapabilityCanRead(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("artifacts")})
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -185,6 +190,7 @@ func TestARemovalRefusesAFrozenRequestNoCapabilityCanRead(t *testing.T) {
 // An implementation this executable no longer provides refuses the same way: a
 // removal it cannot run is never planned as though it could.
 func TestARemovalRefusesAnImplementationThisExecutableNoLongerProvides(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("artifacts")})
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -208,6 +214,7 @@ func TestARemovalRefusesAnImplementationThisExecutableNoLongerProvides(t *testin
 // A removal presents the material that created what it removes: it reopens the
 // binding its apply froze rather than binding what the declarations name now.
 func TestARemovalReopensTheBindingItsApplyFroze(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("artifacts")})
 	h.capability.secrets = []string{"artifact-server-tls"}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
@@ -231,6 +238,7 @@ func TestARemovalReopensTheBindingItsApplyFroze(t *testing.T) {
 // An unreadable block is refused even when every other block reads, because a
 // removal covers the whole owned set or none of it.
 func TestOneUnreadableBlockRefusesTheWholeRemoval(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("artifacts"), definition("network")})
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatalf("apply: %v", err)
@@ -299,6 +307,7 @@ func (r *orderRecorder) ReportLogLocation(context.Context, LogLocation) { r.note
 // registration, so a Machine found running after the prompt refuses with
 // nothing registered and no effect.
 func TestDestroyConfirmsBeforeItsLockHoldingProofsAndRefusesBeforeRegistration(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
@@ -346,6 +355,7 @@ func (probingCapability) ProbesQuiescence() bool { return true }
 // A capability whose quiescence is derived is not named, and an apply's plan
 // names none.
 func TestADestroyPlanNamesTheMachinesToStop(t *testing.T) {
+	t.Parallel()
 	machine := definition("machine-rhel-01")
 	machine.Kind, machine.Object, machine.Implementation = "Machine", "rhel-01", "machine-test-v1"
 	h := newPlannedHarness(t, nil)

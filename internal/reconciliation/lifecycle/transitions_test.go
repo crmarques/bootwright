@@ -8,6 +8,7 @@ import (
 )
 
 func TestClassifyTransitionKinds(t *testing.T) {
+	t.Parallel()
 	const (
 		apply   = reconciliation.Apply
 		destroy = reconciliation.Destroy
@@ -80,6 +81,7 @@ func TestClassifyTransitionKinds(t *testing.T) {
 }
 
 func TestSupersedableIsTheReplacementClassification(t *testing.T) {
+	t.Parallel()
 	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
 		for _, state := range []reconciliation.OperationState{
 			reconciliation.OperationRunning, reconciliation.OperationPaused, reconciliation.OperationFailed,

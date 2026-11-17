@@ -14,6 +14,7 @@ func operationPlanAllowances() map[string]string {
 }
 
 func TestOperationPlanHoldsNoHandles(t *testing.T) {
+	t.Parallel()
 	forbidden := map[reflect.Type]string{
 		reflect.TypeFor[Transaction]():    "Transaction",
 		reflect.TypeFor[OperationStore](): "OperationStore",

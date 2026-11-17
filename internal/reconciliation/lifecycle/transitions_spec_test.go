@@ -31,6 +31,7 @@ const (
 // vocabulary, or for the state machine every durable state the test knows, so
 // a row added, removed or changed on either side fails here.
 func TestTransitionTablesMatchSpec(t *testing.T) {
+	t.Parallel()
 	data, err := os.ReadFile(transitionSpec)
 	if err != nil {
 		t.Fatal(err)
@@ -354,6 +355,7 @@ var admittedApply = map[string][]string{
 // same apply, a settle, an add, or a refusal, each in its own rows. A new
 // scenario edits this test, the row and the code together.
 func TestApplyAdmitsOnlyTheFourScenarios(t *testing.T) {
+	t.Parallel()
 	for row, known := range stateMachineRows() {
 		for name, test := range known.cases {
 			rows, admitted := admittedApply[test.apply]

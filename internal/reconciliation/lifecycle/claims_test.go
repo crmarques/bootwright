@@ -46,6 +46,7 @@ func claimingCapability(implementation string, machines ...string) *testCapabili
 // capabilities planning blocks for one object, and alternatives selecting
 // disjoint objects, are no conflict.
 func TestAnObjectTwoImplementationsClaimRefusesBeforeRegistration(t *testing.T) {
+	t.Parallel()
 	bindings := claimResolver{}.Bindings()
 	h := newHarness(t)
 	h.service.capabilities = claimResolver{
@@ -82,6 +83,7 @@ func TestAnObjectTwoImplementationsClaimRefusesBeforeRegistration(t *testing.T) 
 // family's block, and a capability that names a family other than its own
 // binding's refuses before registration.
 func TestABlockCarriesItsBindingsFamilyAndNoOther(t *testing.T) {
+	t.Parallel()
 	bindings := claimResolver{}.Bindings()
 	install := claimingCapability("os-install-v1", "node-a")
 	install.definitions[0].Requires = []reconciliation.ObjectRef{{Kind: "Machine", Object: "node-a", Family: "substrate-machine"}}

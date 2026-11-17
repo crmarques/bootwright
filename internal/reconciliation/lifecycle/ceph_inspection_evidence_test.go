@@ -19,6 +19,7 @@ import (
 // reported from the evidence the lifecycle read hands it, beside the
 // cluster's own.
 func TestCephInspectionReportsTheHostSpecializationsTheLifecycleEvidenceCarries(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	define := func(id, implementation string) reconciliation.BlockDefinition {
 		return reconciliation.BlockDefinition{

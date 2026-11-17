@@ -44,6 +44,7 @@ func refusedUnconfirmed(t *testing.T, h *harness, verb reconciliation.Verb) pres
 // presents nothing and asks nothing, and refuses with the re-proof's own
 // diagnostic.
 func TestARefusedContinuationPresentsNoPlan(t *testing.T) {
+	t.Parallel()
 	for _, row := range refusedContinuations() {
 		t.Run(row.name, func(t *testing.T) {
 			report := refusedUnconfirmed(t, row.arrange(t), row.verb)
@@ -62,6 +63,7 @@ func TestARefusedContinuationPresentsNoPlan(t *testing.T) {
 // proof refuses, the apply names the exit the refusal names, followed by that
 // refusal.
 func TestAnApplyOverARefusedRemovalNamesTheRefusalsExit(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	rows := []refusedContinuation{}
 	for _, row := range refusedContinuations() {
@@ -127,6 +129,7 @@ func withoutReceipt(arrange func(*testing.T, *harness)) func(*testing.T) *harnes
 // register, the removal beside an incomplete apply included, and each verb it
 // replaces refuses naming setup.
 func TestStatusOffersSetupWhenNoRuntimeIsLocated(t *testing.T) {
+	t.Parallel()
 	for name, row := range map[string]struct {
 		arrange func(*testing.T) *harness
 		gated   []reconciliation.Verb
@@ -151,6 +154,7 @@ func TestStatusOffersSetupWhenNoRuntimeIsLocated(t *testing.T) {
 // the refused fresh removal that present nothing, and status over a host
 // whose setup record holds no receipt.
 func TestContinuationProofsMatchTheirGolden(t *testing.T) {
+	t.Parallel()
 	unboundRemoval := refusedContinuations()[1]
 	unboundApply := refusedContinuations()[0]
 	onAnotherHost := func(t *testing.T) *harness {

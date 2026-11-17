@@ -32,6 +32,7 @@ func previewEffects(h *harness) []int {
 }
 
 func TestDiscoveryPreviewNeverExecutesOrConfirmsAnyPreparationState(t *testing.T) {
+	t.Parallel()
 	for _, phase := range []string{"fresh", "paused", "unknown", "prepared", "manual", "manual-only"} {
 		t.Run(phase, func(t *testing.T) {
 			ctx := context.Background()

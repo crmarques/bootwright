@@ -97,6 +97,7 @@ func refusedContinuations() []refusedContinuation {
 // otherwise nothing. Each offered verb decides, and the refused continuation
 // refuses unchanged before any effect.
 func TestStatusOffersOnlyTheContinuationItsProofsAdmit(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, row := range refusedContinuations() {
 		t.Run(row.name, func(t *testing.T) {
@@ -140,6 +141,7 @@ func requireContinuationRefuses(t *testing.T, h *harness, row refusedContinuatio
 // removal whose binding is gone, have a golden of what status, a plan preview and both
 // verbs report over them.
 func TestARefusedContinuationMatchesItsGolden(t *testing.T) {
+	t.Parallel()
 	reports := map[string]recordStateReport{}
 	for _, row := range refusedContinuations()[:3] {
 		reports[row.name] = reportOver(t, row.arrange)

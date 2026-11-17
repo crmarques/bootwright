@@ -56,6 +56,7 @@ func reservedKeyRefusal(kind, name, key, where string) diagnostics.Diagnostic {
 // plan says why as apply does, one diagnostic per block, naming the object, the
 // first field holding one, how many more do and the remedy.
 func TestAPlanRefusesARequestHoldingATemplateDelimiter(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name        string
 		definitions []reconciliation.BlockDefinition
@@ -123,6 +124,7 @@ func TestAPlanRefusesARequestHoldingATemplateDelimiter(t *testing.T) {
 // The controller prerequisites block runs through the controller's own Ansible
 // with its request read the same way, so its stage earns it no exemption.
 func TestTheControllerPrerequisitesBlockIsScannedLikeEveryOther(t *testing.T) {
+	t.Parallel()
 	prerequisite := requesting("controller-prerequisites", "lab", `{"egress":{"noProxy":["{{ 7*6 }}"]}}`)
 	prerequisite.Stage, prerequisite.Kind = reconciliation.StageController, string(api.Environment)
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{prerequisite, definition("alpha")})
@@ -139,6 +141,7 @@ func TestTheControllerPrerequisitesBlockIsScannedLikeEveryOther(t *testing.T) {
 // merely starts as they do, which an open document such as NMState may carry,
 // plans.
 func TestARequestWithoutATemplateDelimiterPlans(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		requesting("alpha", "alpha", `{"nmstate":{"__ANSIBLE_TYPE":"x","__ansible":"x","__ansible_note":"x","__ansible_unsafe_":"x","_ansible_vault":"x"},`+
 			`"values":["{","{x}","${HOME}","%}","#}","}}","{ {","{}"],"}}":"%}"}`),

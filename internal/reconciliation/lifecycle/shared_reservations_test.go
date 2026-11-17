@@ -16,6 +16,7 @@ func sharedMedia(keys ...string) prerequisites.HostReservation {
 }
 
 func TestSharedReservationsUniteKeysWithoutChangingContributions(t *testing.T) {
+	t.Parallel()
 	for _, reverse := range []bool{false, true} {
 		claims := []prerequisites.HostReservation{
 			sharedMedia("media:boot.iso"),
@@ -44,6 +45,7 @@ func TestSharedReservationsUniteKeysWithoutChangingContributions(t *testing.T) {
 }
 
 func TestSharedReservationsRefuseConflictingIdentityMetadataBeforeEffects(t *testing.T) {
+	t.Parallel()
 	for _, field := range []string{"exclusive", "mixed", "object kind", "releasing"} {
 		t.Run(field, func(t *testing.T) {
 			claims := []prerequisites.HostReservation{sharedMedia("media:boot.iso"), sharedMedia("media:dvd.iso")}
@@ -77,6 +79,7 @@ func TestSharedReservationsRefuseConflictingIdentityMetadataBeforeEffects(t *tes
 }
 
 func TestPreparationAdvancesWithOneSharedMediaReservation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := prepareHarness(t, "inventory")
 	h.capability.reservations = []prerequisites.HostReservation{sharedMedia("media:boot.iso")}
@@ -99,6 +102,7 @@ func TestPreparationAdvancesWithOneSharedMediaReservation(t *testing.T) {
 }
 
 func TestSharedReservationsKeepEverySSHHostQualifierAfterComposition(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.service.compiler = testCompiler{state: withControllerAddress()}
 	h.capability.reservations = []prerequisites.HostReservation{sharedMedia("media:boot.iso"), sharedMedia("media:dvd.iso")}
@@ -120,6 +124,7 @@ func TestSharedReservationsKeepEverySSHHostQualifierAfterComposition(t *testing.
 }
 
 func TestSharedReservationsPreserveContextAndMetadataAndBoundTheUnion(t *testing.T) {
+	t.Parallel()
 	claim := sharedMedia("media:boot.iso")
 	claim.ObjectKind, claim.Releasing = "Machine", true
 	other := claim

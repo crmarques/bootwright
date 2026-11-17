@@ -39,6 +39,7 @@ func readinessStatus(t *testing.T, h *harness, probe *readinessProbe) *StatusRes
 }
 
 func TestStatusNamesWhatPlanAndApplyWouldStopOnAheadOfThem(t *testing.T) {
+	t.Parallel()
 	plan, apply := contextCommand(testContextName, "plan"), contextCommand(testContextName, "apply")
 	for name, gaps := range map[string][]ReadinessGap{
 		"a missing Secret": {missingSecret},
@@ -66,6 +67,7 @@ func TestStatusNamesWhatPlanAndApplyWouldStopOnAheadOfThem(t *testing.T) {
 }
 
 func TestStatusAddsNothingWhenNothingIsMissingOrTheReadFails(t *testing.T) {
+	t.Parallel()
 	plan, apply := contextCommand(testContextName, "plan"), contextCommand(testContextName, "apply")
 	for name, probe := range map[string]*readinessProbe{
 		"none missing":      {},
@@ -81,6 +83,7 @@ func TestStatusAddsNothingWhenNothingIsMissingOrTheReadFails(t *testing.T) {
 }
 
 func TestStatusNamesNoReadinessOverAnOperationOrBeforeSetup(t *testing.T) {
+	t.Parallel()
 	for name, arrange := range map[string]func(*testing.T) *harness{
 		"a completed apply": func(t *testing.T) *harness {
 			h := newHarness(t, "alpha")

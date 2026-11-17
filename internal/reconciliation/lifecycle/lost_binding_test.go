@@ -161,6 +161,7 @@ func (b *countedReopens) Reopen(ctx context.Context, request custody.BindingRequ
 // binding. Status then offers the orphan-acknowledged deletion alone, because
 // the removal that follows a completed apply reopens the binding.
 func TestStatusOffersTheFinalizingApplyBeforeTheDeletionOfALostBinding(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	exit := "bootwright context delete --name lab --purge --allow-orphans"
 	h := lostBindingStates()["a failed apply whose blocks are all done"](t)
@@ -187,6 +188,7 @@ func TestStatusOffersTheFinalizingApplyBeforeTheDeletionOfALostBinding(t *testin
 // binding as lost, names it in the reopen's words and offers the deletion. Any
 // other listing failure proves nothing, and status names nothing.
 func TestStatusReadsAListingThatFailsAsTheReopenWould(t *testing.T) {
+	t.Parallel()
 	for name, test := range map[string]struct {
 		code, message string
 		lost          bool
@@ -223,6 +225,7 @@ func TestStatusReadsAListingThatFailsAsTheReopenWould(t *testing.T) {
 // binding, or writes a record, and a retry refuses identically. Restoring the
 // keyring is one exit: the same verb then goes on.
 func TestALostFrozenBindingRefusesEveryContinuationAndRemovalBeforeAnyEffect(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	reopens := map[string][]reconciliation.Verb{
 		"a failed apply":                           {reconciliation.Apply, reconciliation.Destroy},
@@ -298,6 +301,7 @@ func TestALostFrozenBindingRefusesEveryContinuationAndRemovalBeforeAnyEffect(t *
 // reopened it refuses at that reopen, the same way and still before any
 // effect.
 func TestABindingLostAfterItWasListedRefusesAtItsReopen(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := lostBindingStates()["a failed apply"](t)
 	h.service.binder = &listedThen{testBinder: h.binder, then: func() { h.binder.lost = []string{"bind-1"} }}
@@ -318,6 +322,7 @@ func TestABindingLostAfterItWasListedRefusesAtItsReopen(t *testing.T) {
 // operation names, so a removal decided before another one completed and
 // released that binding reports the change rather than a lost binding.
 func TestABindingAnotherRemovalReleasedSinceTheDecisionReportsTheChange(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	completeApply(t, h)
@@ -341,6 +346,7 @@ func TestABindingAnotherRemovalReleasedSinceTheDecisionReportsTheChange(t *testi
 // the removal done, releases its reservation and publishes pristine evidence
 // without a confirmation or a presented plan, and a repeated destroy settles.
 func TestALostBindingLeavesARemovalWhoseBlocksAreAllDoneToItsDestroy(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for state, arrange := range finalizedRemovalStates() {
 		t.Run(state, func(t *testing.T) {
@@ -384,6 +390,7 @@ func TestALostBindingLeavesARemovalWhoseBlocksAreAllDoneToItsDestroy(t *testing.
 // listing itself fails as that reopen would. A removal whose blocks are all
 // done is left to the destroy that finalizes it.
 func TestALostFrozenBindingMatchesItsGolden(t *testing.T) {
+	t.Parallel()
 	variants := map[string]func(*testing.T) *harness{}
 	for _, states := range []map[string]func(*testing.T) *harness{lostBindingStates(), finalizedRemovalStates()} {
 		for state, arrange := range states {

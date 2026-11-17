@@ -429,6 +429,7 @@ func holdKubevirtSecrets(journey *lifecycle.CapabilityJourney) {
 // operator stops the nodes the destroy proves every VirtualMachine,
 // DataVolume and claim absent.
 func TestAKubeVirtClusterIsPushedBootedReleasedContinuedAndDestroyed(t *testing.T) {
+	t.Parallel()
 	for _, interruption := range []string{"", "push", "boot", "release", "eject"} {
 		t.Run("interrupted at "+interruption, func(t *testing.T) {
 			journey, host := kubevirtClusterJourney(t)

@@ -137,6 +137,7 @@ func (c contextStopping) Quiescent(ctx context.Context, probe Probe) (Quiescence
 // every token its plan consumes, so a copied remedy never stops or removes
 // another context's machine of the same name.
 func TestLiveRemovalNamesTheStopCommandWithItsContext(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "artifact-server-lab", "rhel-01")
 	renamed(h, "lab-b")
@@ -161,6 +162,7 @@ func TestLiveRemovalNamesTheStopCommandWithItsContext(t *testing.T) {
 // as a machine's stop command or a pre-boot refusal, must name that context
 // and never another one's.
 func TestEveryExecutionCarriesTheContextItRunsIn(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "artifact-server-lab")
 	renamed(h, "lab-b")
@@ -197,6 +199,7 @@ func TestEveryExecutionCarriesTheContextItRunsIn(t *testing.T) {
 // a changed input the removal that takes back what the apply owns and the
 // apply that follows, and a lost block record that removal and the deletion.
 func TestRefusalsOverACompletedApplyNameTheirContext(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	t.Run("a changed input", func(t *testing.T) {
 		h := newHarness(t, "artifact-server-lab")
@@ -239,6 +242,7 @@ func TestRefusalsOverACompletedApplyNameTheirContext(t *testing.T) {
 // which the apply binds again. A removal no destroy may supersede names the
 // binding's restoration, which lets it continue, or the context's deletion.
 func TestAContinuationOfAnUnboundContextNamesAnExitThatWorks(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	unbound := func(t *testing.T, h *harness, verb reconciliation.Verb, contextName, want string) {
 		t.Helper()
@@ -296,6 +300,7 @@ func TestAContinuationOfAnUnboundContextNamesAnExitThatWorks(t *testing.T) {
 // refuses its pristine publication naming the destroy of the context it ran
 // in, which the record it captured does not carry by itself.
 func TestACompletedRemovalWhoseContextMovedNamesItsDestroy(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "artifact-server-lab")
 	renamed(h, "lab-b")

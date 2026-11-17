@@ -58,6 +58,7 @@ func destroy(h *harness) (*OperationResult, error) {
 func kept(h *harness) []string { return h.binder.producedEntries() }
 
 func TestProducedMaterialIsInCustodyBeforeTheBlockIsDone(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "install")
 	h.capability.outcomes = []Result{changedWithKubeconfig()}
 	var atPublication reconciliation.BlockState
@@ -82,6 +83,7 @@ func TestProducedMaterialIsInCustodyBeforeTheBlockIsDone(t *testing.T) {
 // not hold, so the block is neither done nor failed but unknown: the
 // continuation observes it again and captures what the observation proves.
 func TestAFailedPublicationLeavesTheAttemptUnknown(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "install")
 	h.capability.outcomes = []Result{changedWithKubeconfig()}
 	refusal := secretstore.Failure("store.conflict", "secret publication was not committed")
@@ -109,6 +111,7 @@ func TestAFailedPublicationLeavesTheAttemptUnknown(t *testing.T) {
 // media block's inverse, which deletes the installer's copy, never runs while
 // custody holds none, and a removal that then stops keeps the only access.
 func TestADestroyAfterAFailedPublicationCapturesBeforeAnyInverse(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		stagedDefinition("cluster-media-sno", reconciliation.StageClusters),
 		stagedDefinition("machine-sno-01", reconciliation.StageMachines),
@@ -142,6 +145,7 @@ func TestADestroyAfterAFailedPublicationCapturesBeforeAnyInverse(t *testing.T) {
 }
 
 func TestACancelledPublicationLeavesItUnknown(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "install")
 	h.capability.outcomes = []Result{changedWithKubeconfig()}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -168,6 +172,7 @@ func TestACancelledPublicationLeavesItUnknown(t *testing.T) {
 // observation failure, status never says the observation could not run, and
 // the refusal is custody's own, diagnosed or not.
 func TestAResolutionProvingCompletionPublishesAndAFailedPublicationStaysUnknown(t *testing.T) {
+	t.Parallel()
 	diagnosed := secretstore.Failure("store.conflict", "secret publication was not committed")
 	undiagnosed := errors.New("secret publication was lost")
 	for _, refusal := range []error{nil, diagnosed, undiagnosed} {
@@ -214,6 +219,7 @@ func TestAResolutionProvingCompletionPublishesAndAFailedPublicationStaysUnknown(
 // removal observation offers, so only the apply's publication ever reaches
 // custody.
 func TestADestroyNeverCaptures(t *testing.T) {
+	t.Parallel()
 	removalOffer := func() []Produced {
 		return []Produced{{Name: "kubeconfig", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("offered by the removal")})}}
 	}
@@ -257,6 +263,7 @@ func TestADestroyNeverCaptures(t *testing.T) {
 // block first by the apply's observation (D123), so a completion it proves is
 // captured like the apply's own before the removal withdraws it.
 func TestAFreshDestroyCapturesWhatItsResolutionOfTheApplyProves(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "install")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := apply(h); err == nil {
@@ -272,6 +279,7 @@ func TestAFreshDestroyCapturesWhatItsResolutionOfTheApplyProves(t *testing.T) {
 }
 
 func TestACompletedRemovalWithdrawsEveryEntryBeforeReleasingReservations(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "install", "media")
 	h.capability.reservations = []prerequisites.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: "install", Keys: []string{"socket:192.0.2.1:8443"}}}
 	h.capability.outcomes = []Result{changedWithKubeconfig(), {Outcome: reconciliation.OutcomeChanged, Evidence: json.RawMessage(`{"ok":true}`), Produced: []Produced{{Name: "password", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("secret")})}}}}
@@ -304,6 +312,7 @@ func TestACompletedRemovalWithdrawsEveryEntryBeforeReleasingReservations(t *test
 // completed, and the access it would leave behind is the only one: custody
 // keeps it.
 func TestAStoppedDestroyKeepsTheAccess(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		stagedDefinition("media", reconciliation.StageClusters),
 		stagedDefinition("install", reconciliation.StageClusters, "media"),
@@ -327,6 +336,7 @@ func TestAStoppedDestroyKeepsTheAccess(t *testing.T) {
 // finished: its evidence stays short of pristine, and the next invocation of
 // either verb finalizes it, withdrawing what it left.
 func TestAFinalizationWithdrawsWhatAnInterruptedRemovalLeft(t *testing.T) {
+	t.Parallel()
 	for _, verb := range []reconciliation.Verb{reconciliation.Destroy, reconciliation.Apply} {
 		t.Run(string(verb), func(t *testing.T) {
 			h := newHarness(t, "install")
@@ -363,6 +373,7 @@ func TestAFinalizationWithdrawsWhatAnInterruptedRemovalLeft(t *testing.T) {
 // adapter output or diagnostic carries its bytes, whether it entered custody
 // or its publication failed.
 func TestProducedMaterialNeverReachesRecordsLogsOrAdapterOutput(t *testing.T) {
+	t.Parallel()
 	for _, failing := range []bool{false, true} {
 		h := newHarness(t, "install")
 		h.capability.outcomes = []Result{changedWithKubeconfig()}
@@ -449,6 +460,7 @@ func (c dashboardKeeper) Keep(context.Context, Execution) ([]Produced, error) {
 // A removal marks unproved whatever output its keeper hands over, a
 // dashboard password as much as a kubeconfig, so a reveal of it warns.
 func TestARemovalKeepsAnyOutputUnproved(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "install")
 	h.service.capabilities = testResolver{capability: dashboardKeeper{h.capability}}
 	if _, err := apply(h); err != nil {
@@ -466,6 +478,7 @@ func TestARemovalKeepsAnyOutputUnproved(t *testing.T) {
 // A keep runs inside a destroy attempt but only observes, so it hands its
 // keeper the attempt's execution marked read-only.
 func TestAKeepRunsReadOnly(t *testing.T) {
+	t.Parallel()
 	keeper := &recordingKeeper{}
 	execution := Execution{Operation: "op-x", Attempt: 1}
 	if published, err := (Service{}).keep(context.Background(), nil, keeper, KeptEntry{Block: "install", Name: "kubeconfig"}, execution); err != nil || published {
@@ -501,6 +514,7 @@ func carriesForm(data []byte, forms []string) string {
 // evidence, the progress and the diagnostics carry no form of produced
 // material, encoded or not.
 func TestApplyReceiptAndRunLogCarryNoProducedMaterial(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "install")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged, Evidence: json.RawMessage(`{"ok":true}`),
 		Produced: []Produced{{Name: "client", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(clientCanary)})}}}}
@@ -547,6 +561,7 @@ func TestApplyReceiptAndRunLogCarryNoProducedMaterial(t *testing.T) {
 // lifecycle.state and leaves custody holding the original, while one of the
 // same identity replaces the bytes.
 func TestARecaptureOfAnotherIdentityRefusesBetweenAttempts(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "install")
 	h.capability.identity = func(_ string, material secrets.Material) string {
 		value, _ := material.Part(secrets.ValuePart)
@@ -584,6 +599,7 @@ func TestARecaptureOfAnotherIdentityRefusesBetweenAttempts(t *testing.T) {
 // original, one presenting the same replaces the bytes, and an entry recorded
 // with no identity is replaced and records the one presented.
 func TestARecordedRecaptureIdentityRefusesAnotherBetweenAttempts(t *testing.T) {
+	t.Parallel()
 	observed := func(value, identity string) []Observation {
 		return []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"ok":true}`),
 			Produced: []Produced{{Name: "client", Identity: identity, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)})}}}}

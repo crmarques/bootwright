@@ -54,6 +54,7 @@ func onlineHarness(t *testing.T, unrelated bool) (*harness, *onlineTestCapabilit
 }
 
 func TestOnlineRemovalPausesBeforeMachinesAndContinuesAfterOperatorStop(t *testing.T) {
+	t.Parallel()
 	h, capability := onlineHarness(t, false)
 	h.capability.outcomeFor = map[string]Result{"storage": changedWithKubeconfig()}
 	completeApply(t, h)
@@ -96,6 +97,7 @@ func TestOnlineRemovalPausesBeforeMachinesAndContinuesAfterOperatorStop(t *testi
 }
 
 func TestOnlineRemovalKeepsUnrelatedMachineAndClientUseAtInitialGate(t *testing.T) {
+	t.Parallel()
 	for _, live := range []string{"unrelated", "storage"} {
 		t.Run(live, func(t *testing.T) {
 			h, _ := onlineHarness(t, true)
@@ -112,6 +114,7 @@ func TestOnlineRemovalKeepsUnrelatedMachineAndClientUseAtInitialGate(t *testing.
 }
 
 func TestOnlineRemovalReprovesUnknownMachineStateAtEveryContinuation(t *testing.T) {
+	t.Parallel()
 	h, _ := onlineHarness(t, false)
 	completeApply(t, h)
 	h.capability.quiescence = map[string]Quiescence{"machine": {State: Unproved, Reason: "unreachable"}}
@@ -127,6 +130,7 @@ func TestOnlineRemovalReprovesUnknownMachineStateAtEveryContinuation(t *testing.
 }
 
 func TestOnlineRemovalWaitsForEveryOnlineBranchBeforeMachineProof(t *testing.T) {
+	t.Parallel()
 	h, capability := onlineHarness(t, false)
 	h.capability.definitions = append(h.capability.definitions,
 		stagedDefinition("machine-z", reconciliation.StageMachines, "host"),
@@ -145,6 +149,7 @@ func TestOnlineRemovalWaitsForEveryOnlineBranchBeforeMachineProof(t *testing.T) 
 }
 
 func TestUnknownOnlineRemovalCannotReachMachineBoundaryBeforeResolution(t *testing.T) {
+	t.Parallel()
 	h, _ := onlineHarness(t, false)
 	completeApply(t, h)
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
@@ -161,6 +166,7 @@ func TestUnknownOnlineRemovalCannotReachMachineBoundaryBeforeResolution(t *testi
 }
 
 func TestOwningApplyIdentitySurvivesRenameAndReplacementRemoval(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "service")
 	completeApply(t, h)
 	created, _ := durableOperation(t, h)
@@ -187,6 +193,7 @@ func TestOwningApplyIdentitySurvivesRenameAndReplacementRemoval(t *testing.T) {
 }
 
 func TestOwningApplyIdentityAlsoReachesApplyAndRemovalResolutions(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "service")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 	if _, err := apply(h); err == nil {
@@ -280,6 +287,7 @@ func retiredProbes(c *retiringTestCapability) map[string]bool {
 }
 
 func TestHostBoundEffectRetiresWithItsHostsWhichStopFirst(t *testing.T) {
+	t.Parallel()
 	h, capability := retiringHarness(t, hostedDefinitions(), []string{"rhel-01"})
 	completeApply(t, h)
 	before, _ := durableOperation(t, h)
@@ -311,6 +319,7 @@ func TestHostBoundEffectRetiresWithItsHostsWhichStopFirst(t *testing.T) {
 }
 
 func TestHostBoundEffectStaysOnlineWhileAnyHostSurvives(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		definitions []reconciliation.BlockDefinition
 		hosts       []string
@@ -353,6 +362,7 @@ func TestHostBoundEffectStaysOnlineWhileAnyHostSurvives(t *testing.T) {
 }
 
 func TestRetiredRemovalContinuesAfterAnUnknownInverseBeforeItsHost(t *testing.T) {
+	t.Parallel()
 	h, _ := retiringHarness(t, hostedDefinitions(), []string{"rhel-01"})
 	completeApply(t, h)
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeUnknown}}
@@ -371,6 +381,7 @@ func TestRetiredRemovalContinuesAfterAnUnknownInverseBeforeItsHost(t *testing.T)
 }
 
 func TestRetiredRemovalFlagsOnlyItsOwnDestroyAndRemovalObservation(t *testing.T) {
+	t.Parallel()
 	h, _ := retiringHarness(t, hostedDefinitions(), []string{"rhel-01"})
 	completeApply(t, h)
 	applied := len(h.capability.executions)
@@ -402,6 +413,7 @@ func TestRetiredRemovalFlagsOnlyItsOwnDestroyAndRemovalObservation(t *testing.T)
 }
 
 func TestAnOwnRemedyIsPrintedBesideTheGenericStopOfOtherLiveBlocks(t *testing.T) {
+	t.Parallel()
 	h, _ := retiringHarness(t, hostedDefinitions(stagedDefinition("other", reconciliation.StageClusters, "installation")), []string{"rhel-01", "rhel-02"})
 	completeApply(t, h)
 	h.capability.quiescence = map[string]Quiescence{"other": {State: Live, Reason: "it serves a client", Stop: "bootwright other stop"}}

@@ -48,6 +48,7 @@ func dependencies(t *testing.T, plan reconciliation.Plan) map[string][]string {
 // for, and the plan holds no cycle: the mirror's server and its fill first,
 // the controller stage after them and every other block after it.
 func TestTheControllerBlockWaitsForTheMirrorItReadsAndEveryOtherBlockForIt(t *testing.T) {
+	t.Parallel()
 	resolved, err := reconciliation.ResolveRequirements(mirrorDefinitions())
 	if err != nil {
 		t.Fatal(err)
@@ -85,6 +86,7 @@ func TestTheControllerBlockWaitsForTheMirrorItReadsAndEveryOtherBlockForIt(t *te
 // be one its capability runs without the stage's clients; any other refuses
 // the plan before it exists rather than running before what it needs.
 func TestAControllerBlockWaitingForWorkThatNeedsItsClientsRefuses(t *testing.T) {
+	t.Parallel()
 	definitions := mirrorDefinitions()
 	definitions[1].Dependencies = []string{"machine-guest"}
 	resolved, err := reconciliation.ResolveRequirements(definitions)
@@ -105,6 +107,7 @@ func TestAControllerBlockWaitingForWorkThatNeedsItsClientsRefuses(t *testing.T) 
 
 // Without a controller block the engine adds no edge at all.
 func TestAPlanWithoutAControllerBlockKeepsItsResolvedDependencies(t *testing.T) {
+	t.Parallel()
 	definitions := mirrorDefinitions()[1:]
 	resolved, err := reconciliation.ResolveRequirements(definitions)
 	if err != nil {

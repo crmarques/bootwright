@@ -241,6 +241,7 @@ func requireRemoved(t *testing.T, journey *lifecycle.CapabilityJourney, adapter 
 // whose controller never started is a partial realization, which the same
 // removal resolves and takes back at once.
 func TestALostLibvirtMachineIsRecoveredOnlyOnceItsObservationProvesIt(t *testing.T) {
+	t.Parallel()
 	host := "Machine hypervisor at 192.0.2.5"
 	foreignReason := "domain bootwright-lab-rhel-01 on " + host + " does not carry this context's ownership"
 	foreignRemedy := "remove or rename domain bootwright-lab-rhel-01 on " + host + ", which this context does not own"
@@ -298,6 +299,7 @@ func TestALostLibvirtMachineIsRecoveredOnlyOnceItsObservationProvesIt(t *testing
 // requires, the removal removes it while it is still drifted, with its
 // ownership proved.
 func TestADriftedLibvirtMachineWhoseApplyIsUnknownIsRemovedByItsDestroy(t *testing.T) {
+	t.Parallel()
 	host := "Machine hypervisor at 192.0.2.5"
 	reason := "domain bootwright-lab-rhel-01 on " + host + " is not what its apply froze: the running management controller is not the frozen image"
 	remedy := "restore domain bootwright-lab-rhel-01 on " + host + " to what its frozen request names"

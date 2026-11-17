@@ -9,6 +9,7 @@ import (
 )
 
 func TestAnUnclaimedSMBResourceRefusesTheOperation(t *testing.T) {
+	t.Parallel()
 	smb := api.NewObject(api.CephSMBResource, "smb-files", api.Value{}, api.MapValue(api.FieldValue{Name: "clusterRef", Value: api.StringValue("ceph")}))
 	catalog := api.NewCatalog([]api.Object{api.NewObject(api.CephCluster, "ceph", api.Value{}, api.MapValue()), smb})
 	claimed := []string{string(api.Machine)}
@@ -24,6 +25,7 @@ func TestAnUnclaimedSMBResourceRefusesTheOperation(t *testing.T) {
 }
 
 func TestAnUnclaimedNVMeoFSubsystemRefusesTheOperation(t *testing.T) {
+	t.Parallel()
 	subsystem := api.NewObject(api.CephNVMeoFSubsystem, "block-a", api.Value{}, api.MapValue(api.FieldValue{Name: "clusterRef", Value: api.StringValue("ceph")}))
 	catalog := api.NewCatalog([]api.Object{api.NewObject(api.CephCluster, "ceph", api.Value{}, api.MapValue()), subsystem})
 	claimed := []string{string(api.Machine)}

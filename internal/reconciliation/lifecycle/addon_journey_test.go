@@ -215,6 +215,7 @@ func addonJourney(t *testing.T, subject addonSubject, lost bool) (*lifecycle.Cap
 	return journey, adapter, block
 }
 func TestAddonInstanceEngineContinuesLostOutcomeAndSettledApplyContactsNothing(t *testing.T) {
+	t.Parallel()
 	eachAddon(t, func(t *testing.T, subject addonSubject) {
 		journey, adapter, block := addonJourney(t, subject, true)
 		ctx := context.Background()
@@ -253,6 +254,7 @@ func TestAddonInstanceEngineContinuesLostOutcomeAndSettledApplyContactsNothing(t
 	})
 }
 func TestAddonInstanceUnknownRetiresWithoutReachingUnreachableAPI(t *testing.T) {
+	t.Parallel()
 	eachAddon(t, func(t *testing.T, subject addonSubject) {
 		journey, adapter, _ := addonJourney(t, subject, true)
 		ctx := context.Background()
@@ -269,6 +271,7 @@ func TestAddonInstanceUnknownRetiresWithoutReachingUnreachableAPI(t *testing.T) 
 	})
 }
 func TestAddonInstanceDiffObservesAnotherInstalledCSV(t *testing.T) {
+	t.Parallel()
 	eachAddon(t, func(t *testing.T, subject addonSubject) {
 		journey, adapter, _ := addonJourney(t, subject, false)
 		ctx := context.Background()
@@ -291,6 +294,7 @@ func TestAddonInstanceDiffObservesAnotherInstalledCSV(t *testing.T) {
 }
 
 func TestAddonInstanceContinuesWithReceiptsFromPartialFailure(t *testing.T) {
+	t.Parallel()
 	eachAddon(t, func(t *testing.T, subject addonSubject) {
 		journey, adapter, _ := addonJourney(t, subject, false)
 		adapter.partial = true
@@ -308,6 +312,7 @@ func TestAddonInstanceContinuesWithReceiptsFromPartialFailure(t *testing.T) {
 }
 
 func TestAddonInstanceRefusesAForeignObjectAndRetiresWithoutReachingIt(t *testing.T) {
+	t.Parallel()
 	eachAddon(t, func(t *testing.T, subject addonSubject) {
 		journey, adapter, block := addonJourney(t, subject, false)
 		adapter.foreign = true
@@ -357,6 +362,7 @@ func addonTrace(t *testing.T, subject addonSubject) string {
 }
 
 func TestAnAuthoredAddonMakesTheAdapterCallsAndBlockEffectsOfABuiltInPackage(t *testing.T) {
+	t.Parallel()
 	builtin, authored := addonTrace(t, addonSubjects[0]), addonTrace(t, addonSubjects[1])
 	if builtin != authored || !strings.HasPrefix(builtin, "[apply observe] ") {
 		t.Fatalf("built-in %s, authored %s", builtin, authored)
@@ -364,6 +370,7 @@ func TestAnAuthoredAddonMakesTheAdapterCallsAndBlockEffectsOfABuiltInPackage(t *
 }
 
 func TestAuthoredDescriptorEditChangesTheFrozenRequest(t *testing.T) {
+	t.Parallel()
 	authored := addonSubjects[1]
 	before, _, _ := addonPlan(t, authored, "fixture.v1.0.0")
 	after, _, _ := addonPlan(t, authored, "fixture.v1.0.1")

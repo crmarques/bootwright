@@ -31,6 +31,7 @@ func (f *lineageFixture) failHead(t *testing.T, block string) {
 }
 
 func TestAFailedAdditiveHeadReopensTheRootsBindingForStatus(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "producer-a")
 	f := newLineageFixture(t, h, consumerDefinition())
@@ -42,6 +43,7 @@ func TestAFailedAdditiveHeadReopensTheRootsBindingForStatus(t *testing.T) {
 }
 
 func TestADestroyOverAnAdditiveHeadThatStartedNothingTakesBackTheRootAndReleasesBothBindings(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "producer-a")
 	f := newLineageFixture(t, h, consumerDefinition())
 	if _, err := destroy(h); err != nil {
@@ -64,6 +66,7 @@ func TestADestroyOverAnAdditiveHeadThatStartedNothingTakesBackTheRootAndReleases
 }
 
 func TestADestroyOverAFailedAdditiveHeadThatStartedABlockTakesBackBothOperations(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "producer-a")
 	f := newLineageFixture(t, h, consumerDefinition())
 	f.failHead(t, "consumer")
@@ -83,6 +86,7 @@ func TestADestroyOverAFailedAdditiveHeadThatStartedABlockTakesBackBothOperations
 }
 
 func TestACrashBetweenTheReleasesOfALineageRemovalIsFinalizedByTheNextDestroy(t *testing.T) {
+	t.Parallel()
 	h, f := completedLineage(t)
 	releases := 0
 	h.binder.kill = func(point string) error {
@@ -117,6 +121,7 @@ func TestACrashBetweenTheReleasesOfALineageRemovalIsFinalizedByTheNextDestroy(t 
 }
 
 func TestALineageRemovalRebindFailedAndReplacedReleasesTheReboundBinding(t *testing.T) {
+	t.Parallel()
 	alpha := definition("alpha")
 	alpha.Request = json.RawMessage(`{"credentialsRef":"bmc","name":"alpha"}`)
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{alpha})

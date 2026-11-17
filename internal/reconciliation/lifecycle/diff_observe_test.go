@@ -116,6 +116,7 @@ func refusedWith(t *testing.T, err error, code, message, remedy string) {
 }
 
 func TestAnObservedDiffWritesNothingAndBindsNothing(t *testing.T) {
+	t.Parallel()
 	scenarios := map[string]struct {
 		prepare  func(t *testing.T, f diffFixture)
 		observed int
@@ -156,6 +157,7 @@ func TestAnObservedDiffWritesNothingAndBindsNothing(t *testing.T) {
 }
 
 func TestAnObservedDiffCallsOnlyObserve(t *testing.T) {
+	t.Parallel()
 	f, projecting, _ := observedFixture(t, "alpha", "bravo", "charlie")
 	applies, destroys, probes, removals, calls := len(f.capability.applies), len(f.capability.destroys), len(f.capability.probes), len(f.capability.removals), len(f.capability.calls)
 	f.observe(t)
@@ -169,6 +171,7 @@ func TestAnObservedDiffCallsOnlyObserve(t *testing.T) {
 }
 
 func TestEveryInspectionIsReadOnlyAndUnrecorded(t *testing.T) {
+	t.Parallel()
 	f, _, operation := observedFixture(t, "alpha", "bravo")
 	captured := len(f.capability.executions)
 	f.observe(t)
@@ -189,6 +192,7 @@ func TestEveryInspectionIsReadOnlyAndUnrecorded(t *testing.T) {
 }
 
 func TestAControllerStageInspectionCannotAuthorizeAnEffect(t *testing.T) {
+	t.Parallel()
 	stage := definition("alpha")
 	stage.Stage = reconciliation.StageController
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{stage})
@@ -216,6 +220,7 @@ func TestAControllerStageInspectionCannotAuthorizeAnEffect(t *testing.T) {
 }
 
 func TestAnUnreachableTargetRendersUnknownNeverAbsent(t *testing.T) {
+	t.Parallel()
 	refusal := diagnostics.NewFailure("lifecycle.state", UnrecordedMaterialRefusal, "")
 	for name, answer := range map[string]scriptedObservation{
 		"an observation error": {err: diagnostics.NewFailure("lifecycle.adapter", "the hypervisor did not answer for the domain", "")},
@@ -236,6 +241,7 @@ func TestAnUnreachableTargetRendersUnknownNeverAbsent(t *testing.T) {
 }
 
 func TestAnObservationNeedingAnOperationNamesThatInsteadOfARestore(t *testing.T) {
+	t.Parallel()
 	f, projecting, _ := observedFixture(t, "alpha")
 	projecting.answers["alpha"] = scriptedObservation{err: diagnostics.NewFailure("lifecycle.state", UnrecordedMaterialRefusal, "")}
 	alpha := objectOf(t, f.observe(t), api.ArtifactServer, "alpha")
@@ -246,6 +252,7 @@ func TestAnObservationNeedingAnOperationNamesThatInsteadOfARestore(t *testing.T)
 }
 
 func TestNoEffectRendersAbsentOnlyWhenObserved(t *testing.T) {
+	t.Parallel()
 	f, projecting, _ := observedFixture(t, "alpha", "bravo")
 	projecting.answers["alpha"] = scriptedObservation{observation: Observation{Effect: reconciliation.EffectNoEffect}}
 	projecting.answers["bravo"] = scriptedObservation{observation: Observation{Effect: reconciliation.EffectUnknown}}
@@ -267,6 +274,7 @@ func TestNoEffectRendersAbsentOnlyWhenObserved(t *testing.T) {
 }
 
 func TestMixedBlocksFoldUnknownBeforePartialBeforePresent(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct {
 		states []string
 		want   string
@@ -303,6 +311,7 @@ func TestMixedBlocksFoldUnknownBeforePartialBeforePresent(t *testing.T) {
 }
 
 func TestAPartialEffectStillProjects(t *testing.T) {
+	t.Parallel()
 	f, projecting, _ := observedFixture(t, "alpha")
 	projecting.answers["alpha"] = imageObservation("v2", reconciliation.EffectPartial)
 	alpha := objectOf(t, f.observe(t), api.ArtifactServer, "alpha")
@@ -318,6 +327,7 @@ func TestAPartialEffectStillProjects(t *testing.T) {
 }
 
 func TestAnObjectWithoutAProjectorFallsBackToTheAppliedSide(t *testing.T) {
+	t.Parallel()
 	f, projecting, operation := observedFixture(t, "alpha", "bravo")
 	f.service.capabilities = testResolver{capability: plainObserver{projecting}}
 	result := f.observe(t)
@@ -365,6 +375,7 @@ func (p plainObserver) ObserveRemoval(ctx context.Context, execution Execution) 
 }
 
 func TestABlockThisBuildPlansDifferentlyIsNotObserved(t *testing.T) {
+	t.Parallel()
 	f, _, _ := observedFixture(t, "alpha", "bravo")
 	f.service.options.Executable = Executable{Version: "devel", Commit: "1234567"}
 	changed := definition("bravo")
@@ -393,6 +404,7 @@ func (w movingWorkspace) RunLifecycle(ctx context.Context, name string, callback
 }
 
 func TestAnObservedDiffRefusesWhenTheContextMovedWhileItRead(t *testing.T) {
+	t.Parallel()
 	for name, move := range map[string]func(t *testing.T, f diffFixture){
 		"its records": func(t *testing.T, f diffFixture) { f.destroy(t) },
 		"its revision": func(_ *testing.T, f diffFixture) {
@@ -416,6 +428,7 @@ func TestAnObservedDiffRefusesWhenTheContextMovedWhileItRead(t *testing.T) {
 }
 
 func TestAnObservedDiffRefusesAnUnreopenableBinding(t *testing.T) {
+	t.Parallel()
 	f, _, operation := observedFixture(t, "alpha")
 	f.binder.unreadable = map[string]error{"bind-1": secretstore.Failure("store.crypto", "the keyring cannot decrypt the binding")}
 	runs := f.workspace.runs
@@ -429,6 +442,7 @@ func TestAnObservedDiffRefusesAnUnreopenableBinding(t *testing.T) {
 }
 
 func TestAnObservedDiffRefusesAnotherHostOrAnUnboundContext(t *testing.T) {
+	t.Parallel()
 	other, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1,
 		"fedcba9876543210fedcba9876543210", "87654321-4321-8765-cba9-210fedcba987", "01234567-89ab-cdef-0123-456789abcdef")
 	if err != nil {
@@ -457,6 +471,7 @@ func TestAnObservedDiffRefusesAnotherHostOrAnUnboundContext(t *testing.T) {
 }
 
 func TestProducedMaterialIsClearedAndNeverRendered(t *testing.T) {
+	t.Parallel()
 	f, projecting, _ := observedFixture(t, "alpha")
 	sentinel := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("produced-sentinel-kubeconfig")})
 	projecting.answers["alpha"] = scriptedObservation{observation: Observation{
@@ -473,6 +488,7 @@ func TestProducedMaterialIsClearedAndNeverRendered(t *testing.T) {
 }
 
 func TestALentSecretInAProjectionRefusesBeforeOutput(t *testing.T) {
+	t.Parallel()
 	f, projecting, _ := observedFixture(t, "alpha")
 	f.binder.material = map[string]secrets.Material{"artifact-server-tls": secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("lent-private-key-bytes")})}
 	projecting.answers["alpha"] = imageObservation("registry/lent-private-key-bytes", reconciliation.EffectCompleted)
@@ -485,6 +501,7 @@ func TestALentSecretInAProjectionRefusesBeforeOutput(t *testing.T) {
 }
 
 func TestAnObservationsWarningsReadAsItsBlocksNotes(t *testing.T) {
+	t.Parallel()
 	f, projecting, _ := observedFixture(t, "alpha", "bravo")
 	f.binder.material = map[string]secrets.Material{"artifact-server-tls": secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("lent-private-key-bytes")})}
 	partial := imageObservation("v1", reconciliation.EffectPartial)
@@ -507,6 +524,7 @@ func TestAnObservationsWarningsReadAsItsBlocksNotes(t *testing.T) {
 }
 
 func TestAReadyObservationsHealthWarningReadsAsItsNote(t *testing.T) {
+	t.Parallel()
 	f, projecting, _ := observedFixture(t, "alpha")
 	ready := imageObservation("v1", reconciliation.EffectCompleted)
 	ready.warnings = []operationstore.Warning{{Code: "storage.health", Message: "health: POOL_APP_NOT_ENABLED names pool e2e-hand-pool"}}
@@ -523,6 +541,7 @@ func TestAReadyObservationsHealthWarningReadsAsItsNote(t *testing.T) {
 }
 
 func TestObservationsStayWithinTheConcurrencyBound(t *testing.T) {
+	t.Parallel()
 	f, _, _ := observedFixture(t, "alpha", "bravo", "charlie", "delta", "echo")
 	f.service.options.Concurrency = 2
 	var lock sync.Mutex
@@ -549,6 +568,7 @@ func TestObservationsStayWithinTheConcurrencyBound(t *testing.T) {
 }
 
 func TestCancellationStopsFurtherObservations(t *testing.T) {
+	t.Parallel()
 	f, projecting, _ := observedFixture(t, "alpha", "bravo", "charlie")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -570,6 +590,7 @@ func TestCancellationStopsFurtherObservations(t *testing.T) {
 }
 
 func TestAnInadmissibleProjectionReadsItsObjectUnknown(t *testing.T) {
+	t.Parallel()
 	image := api.MapValue(api.FieldValue{Name: "image", Value: api.StringValue("v1")})
 	for name, tt := range map[string]struct {
 		projection Projection
@@ -605,6 +626,7 @@ func TestAnInadmissibleProjectionReadsItsObjectUnknown(t *testing.T) {
 }
 
 func TestAConflictingLeafReadsAsAppliedWithANote(t *testing.T) {
+	t.Parallel()
 	declared := api.NewCatalog([]api.Object{api.NewObject(api.InfraProvider, "libvirt", api.Value{},
 		libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("80"))), profile("sno", field("diskGiB", api.IntegerValue("120")))))})
 	read := diffRead{applied: diffSide{authored: declared, effective: declared}, context: ContextIdentity{Name: "lab"}}
@@ -624,6 +646,7 @@ func TestAConflictingLeafReadsAsAppliedWithANote(t *testing.T) {
 }
 
 func TestAnUnreadableAppliedRevisionReadsObservedUnknownWithARemedy(t *testing.T) {
+	t.Parallel()
 	read := diffRead{appliedReason: "the applied revision is gone", context: ContextIdentity{Name: "lab"}}
 	side := read.observedSide("ArtifactServer/alpha", []string{"alpha-1"}, map[string]blockReading{"alpha-1": {state: sidePresent}}, nil, claimedNames{})
 	if side.State != sideUnknown || side.Reason != "the applied revision is gone" || side.Remedy != reviewStatus("lab") {
@@ -632,6 +655,7 @@ func TestAnUnreadableAppliedRevisionReadsObservedUnknownWithARemedy(t *testing.T
 }
 
 func TestAProjectorThatRendersNothingCountsAsUnprojected(t *testing.T) {
+	t.Parallel()
 	f, projecting, operation := observedFixture(t, "alpha")
 	projecting.project = func(api.Catalog, reconciliation.Block, json.RawMessage) ([]Projection, error) { return nil, nil }
 	result := f.observe(t)
@@ -643,6 +667,7 @@ func TestAProjectorThatRendersNothingCountsAsUnprojected(t *testing.T) {
 }
 
 func TestAProjectorErrorReadsUnknownWithAFixedReason(t *testing.T) {
+	t.Parallel()
 	f, projecting, _ := observedFixture(t, "alpha")
 	projecting.project = func(api.Catalog, reconciliation.Block, json.RawMessage) ([]Projection, error) {
 		return nil, fmt.Errorf("cannot decode evidence")
@@ -654,6 +679,7 @@ func TestAProjectorErrorReadsUnknownWithAFixedReason(t *testing.T) {
 }
 
 func TestAnUnobservedProfileIsKeptAsAppliedAndNotCompared(t *testing.T) {
+	t.Parallel()
 	for name, tt := range map[string]struct {
 		bravo       scriptedObservation
 		profiles    api.Value
@@ -694,6 +720,7 @@ func TestAnUnobservedProfileIsKeptAsAppliedAndNotCompared(t *testing.T) {
 }
 
 func TestAnObservedDiffReportsOneObservationCheckRow(t *testing.T) {
+	t.Parallel()
 	for name, tt := range map[string]struct {
 		bravo  scriptedObservation
 		status string
@@ -727,6 +754,7 @@ func TestAnObservedDiffReportsOneObservationCheckRow(t *testing.T) {
 // An observed diff reads what a removal of the owning apply would take back, so
 // a completed apply's block whose record is lost is still observed.
 func TestAnObservedDiffObservesACompletedApplysBlockWhoseRecordIsLost(t *testing.T) {
+	t.Parallel()
 	f, _, operation := observedFixture(t, "alpha", "bravo", "charlie")
 	lose(f.harness, path.Join(operation, "blocks", "bravo")+"/")
 	calls := len(f.capability.calls)
@@ -807,6 +835,7 @@ func recordedFixture(t *testing.T, plain bool, prepare func(*harness)) (diffFixt
 }
 
 func TestANothingLiveBlockReadsItsApplysRecordInsteadOfObserving(t *testing.T) {
+	t.Parallel()
 	f, recorded, operation := recordedFixture(t, false, nil)
 	observes := len(f.capability.observes)
 	result := f.observe(t)
@@ -824,6 +853,7 @@ func TestANothingLiveBlockReadsItsApplysRecordInsteadOfObserving(t *testing.T) {
 }
 
 func TestANothingLiveBlockWhoseRecordProvesNothingReadsUnknown(t *testing.T) {
+	t.Parallel()
 	for name, tt := range map[string]struct {
 		prepare func(*harness)
 		after   func(diffFixture, *recordOnly, string)
@@ -860,6 +890,7 @@ func TestANothingLiveBlockWhoseRecordProvesNothingReadsUnknown(t *testing.T) {
 }
 
 func TestAnUnrenderedObjectNamesEveryImplementationItRead(t *testing.T) {
+	t.Parallel()
 	f, _, operation := recordedFixture(t, true, nil)
 	alpha := objectOf(t, f.observe(t), api.ArtifactServer, "alpha")
 	note := "observed present; artifact-image-v1, artifact-server-nginx-v1 render no field, so the fields shown are what apply " + operation + " applied"
@@ -869,6 +900,7 @@ func TestAnUnrenderedObjectNamesEveryImplementationItRead(t *testing.T) {
 }
 
 func TestObservationsHonorTheClusterThrottle(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha", "bravo", "charlie", "delta", "echo", "foxtrot")
 	for i := range f.capability.definitions {
 		f.capability.definitions[i].Throttle = "cluster/shared"
@@ -923,6 +955,7 @@ func throttledDiffFixture(t *testing.T, throttled ...string) (diffFixture, *proj
 }
 
 func TestAFullThrottleNeverHoldsBackALaterObservation(t *testing.T) {
+	t.Parallel()
 	f, _ := throttledDiffFixture(t, "alpha", "bravo")
 	var lock sync.Mutex
 	inFlight, together := map[string]bool{}, false
@@ -955,6 +988,7 @@ func TestAFullThrottleNeverHoldsBackALaterObservation(t *testing.T) {
 }
 
 func TestCancellationReachesABlockWaitingOnAFullThrottle(t *testing.T) {
+	t.Parallel()
 	f, projecting := throttledDiffFixture(t, "alpha", "bravo")
 	projecting.answers["alpha"] = scriptedObservation{err: context.Canceled}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1000,6 +1034,7 @@ func TestCancellationReachesABlockWaitingOnAFullThrottle(t *testing.T) {
 }
 
 func TestEachDiffHandsItsObservationsOneSharedReadingsOfItsOwn(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha", "bravo", "charlie")
 	f.apply(t)
 	for _, execution := range f.capability.executions {
@@ -1044,6 +1079,7 @@ func (c *sharingCapability) Observe(ctx context.Context, execution Execution) (O
 }
 
 func TestOneThrottleSlotAndOneObservationAtATimeStillShareOneReading(t *testing.T) {
+	t.Parallel()
 	f := newDiffHarness(t, "alpha", "bravo", "charlie", "delta")
 	for i := range f.capability.definitions {
 		f.capability.definitions[i].Throttle = "ceph/cluster"

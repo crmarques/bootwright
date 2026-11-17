@@ -10,6 +10,7 @@ import (
 )
 
 func TestContinuationUsesSavedPlanWithoutCallingPlanner(t *testing.T) {
+	t.Parallel()
 	for _, change := range []struct {
 		name  string
 		apply func(*harness)
@@ -49,6 +50,7 @@ func TestContinuationUsesSavedPlanWithoutCallingPlanner(t *testing.T) {
 }
 
 func TestChangedExecutionFingerprintRefusesBeforeEffects(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	applyLeftUnknown(t, h)
 	current := h.service.options.Contracts
@@ -64,6 +66,7 @@ func TestChangedExecutionFingerprintRefusesBeforeEffects(t *testing.T) {
 }
 
 func TestChangedPredecessorContractRefusesEvidenceUse(t *testing.T) {
+	t.Parallel()
 	h, _ := producerAndConsumer(t)
 	f := newLineageFixture(t, h, consumerDefinition())
 	current := h.service.options.Contracts
@@ -82,6 +85,7 @@ func TestChangedPredecessorContractRefusesEvidenceUse(t *testing.T) {
 }
 
 func TestObservedDiffRefusesUnsupportedEvidenceBeforeObservation(t *testing.T) {
+	t.Parallel()
 	f, observer, _ := observedFixture(t, "artifact-server-lab")
 	current := f.service.options.Contracts
 	f.service.options.Contracts = func(block reconciliation.Block) (ExecutionContract, bool) {

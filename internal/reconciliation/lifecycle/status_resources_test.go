@@ -140,6 +140,7 @@ func storageRows(t *testing.T, status *StatusResult) map[string][]ResourceSummar
 }
 
 func TestStatusStorageResourceRows(t *testing.T) {
+	t.Parallel()
 	h := newStorageRowsHarness(t)
 	row := func(kind api.Kind, name string, status RealizationStatus) ResourceSummary {
 		return ResourceSummary{Kind: string(kind), Name: name, Status: status}

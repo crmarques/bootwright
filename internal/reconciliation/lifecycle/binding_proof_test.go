@@ -34,6 +34,7 @@ func provingHarness(t *testing.T, refusal error) (*harness, *provingCapability) 
 }
 
 func TestAFreshApplyRefusesMaterialItsCapabilityRefusesBeforeRegistration(t *testing.T) {
+	t.Parallel()
 	refusal := secrets.Refusal("part", "the serving certificate is not valid at this time", testContextName, "artifact-server-tls", "renew it, then apply again")
 	h, prover := provingHarness(t, refusal)
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
@@ -56,6 +57,7 @@ func TestAFreshApplyRefusesMaterialItsCapabilityRefusesBeforeRegistration(t *tes
 }
 
 func TestAContinuationIsNotProvedAgainBeforeRegistration(t *testing.T) {
+	t.Parallel()
 	h, prover := provingHarness(t, nil)
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
 	if result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil || result.Receipt.Next != "continue-apply" {

@@ -114,6 +114,7 @@ func requireStateRefusal(t *testing.T, err error, message string) {
 }
 
 func TestALineageIsTheOperationAndThePredecessorsItsRecordsNameOldestFirst(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := producerAndConsumer(t)
 	f := newLineageFixture(t, h, consumerDefinition())
@@ -167,6 +168,7 @@ func mustDigestOf(t *testing.T, plan reconciliation.Plan) string {
 }
 
 func TestAPredecessorNamingRecordWithoutPrerequisitesIsStillALineageMember(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := producerAndConsumer(t)
 	f := newLineageFixture(t, h, definition("loose"))
@@ -186,6 +188,7 @@ func TestAPredecessorNamingRecordWithoutPrerequisitesIsStillALineageMember(t *te
 }
 
 func TestALineageOfOneReadsNothingBeyondItsHead(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := producerAndConsumer(t)
 	completeApply(t, h)
@@ -252,6 +255,7 @@ func chainOfApplies(length int) *chainReader {
 }
 
 func TestALineageWalkRefusesWhatIsNotOneBoundedChainOfApplies(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	headOf := func(reader *chainReader, index int) lineageMember {
 		return lineageMember{operation: reader.operations[chainID(index)]}
@@ -303,6 +307,7 @@ func TestALineageWalkRefusesWhatIsNotOneBoundedChainOfApplies(t *testing.T) {
 }
 
 func TestEveryReaderOfALineageRefusesAMissingPredecessorRecord(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := producerAndConsumer(t)
 	f := newLineageFixture(t, h, consumerDefinition())
@@ -337,6 +342,7 @@ func TestEveryReaderOfALineageRefusesAMissingPredecessorRecord(t *testing.T) {
 }
 
 func TestEachBlockRoutesToTheApplyWhoseFrozenPlanHoldsIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := producerAndConsumer(t)
 	f := newLineageFixture(t, h, consumerDefinition())
@@ -363,6 +369,7 @@ func TestEachBlockRoutesToTheApplyWhoseFrozenPlanHoldsIt(t *testing.T) {
 }
 
 func TestAnExecutionIsHandedItsOwnersRegistrationTimeEvidenceAndProducers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := producerAndConsumer(t)
 	f := newLineageFixture(t, h, consumerDefinition())
@@ -428,6 +435,7 @@ func TestAnExecutionIsHandedItsOwnersRegistrationTimeEvidenceAndProducers(t *tes
 }
 
 func TestADependencyClosureReadsEachBlocksEvidenceFromItsOwner(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := producerAndConsumer(t)
 	f := newLineageFixture(t, h, consumerDefinition())
@@ -448,6 +456,7 @@ func TestADependencyClosureReadsEachBlocksEvidenceFromItsOwner(t *testing.T) {
 }
 
 func TestAControllerStageThePredecessorHoldsAnswersTheAdditionsLookup(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := stagedToolHarness(t)
 	f := newLineageFixture(t, h, stagedDefinition("gateway", reconciliation.StageInfrastructureServices, "artifacts"))
@@ -479,6 +488,7 @@ func TestAControllerStageThePredecessorHoldsAnswersTheAdditionsLookup(t *testing
 }
 
 func TestADestroyWhosePlanLacksTheControllerStageRefusesWhateverItsSourceHolds(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := stagedToolHarness(t)
 	f := newLineageFixture(t, h, stagedDefinition("gateway", reconciliation.StageInfrastructureServices, "artifacts"))
@@ -493,6 +503,7 @@ func TestADestroyWhosePlanLacksTheControllerStageRefusesWhateverItsSourceHolds(t
 }
 
 func TestSettlingSeesEveryPlanOfTheLineage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := producerAndConsumer(t)
 	f := newLineageFixture(t, h, consumerDefinition())
@@ -529,6 +540,7 @@ func TestSettlingSeesEveryPlanOfTheLineage(t *testing.T) {
 }
 
 func TestEveryBindingTheLineageHoldsIsKept(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := producerAndConsumer(t)
 	f := newLineageFixture(t, h, consumerDefinition())
@@ -543,6 +555,7 @@ func TestEveryBindingTheLineageHoldsIsKept(t *testing.T) {
 }
 
 func TestStatusViewsReportTheWholeLineageOfTheContextsApply(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h, _ := producerAndConsumer(t)
 	f := newLineageFixture(t, h, consumerDefinition())

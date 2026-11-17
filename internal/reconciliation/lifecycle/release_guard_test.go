@@ -17,6 +17,7 @@ import (
 // naming that context and its destroy (B803). Once that context's claim is
 // gone the removal proceeds.
 func TestARemovalThatWouldStrandAnotherContextsUseRefuses(t *testing.T) {
+	t.Parallel()
 	for name, claims := range map[string]struct {
 		ours, theirs prerequisites.HostReservation
 	}{
@@ -60,6 +61,7 @@ func TestARemovalThatWouldStrandAnotherContextsUseRefuses(t *testing.T) {
 // nothing, a block holding no such key is still removed, and the same destroy
 // continues once the claim is gone (B803).
 func TestAClaimMadeAfterTheDestroyRegisteredRefusesTheRemovalsEffect(t *testing.T) {
+	t.Parallel()
 	for name, claims := range map[string]struct {
 		kind, object string
 		ours, theirs prerequisites.HostReservation
@@ -117,6 +119,7 @@ func TestAClaimMadeAfterTheDestroyRegisteredRefusesTheRemovalsEffect(t *testing.
 // so the mark is durable before the effect starts, and the completed removal
 // releases the marked claim with the rest (B839).
 func TestARemovalsEffectRunsWithItsReleasedClaimMarked(t *testing.T) {
+	t.Parallel()
 	guarded := definition("guarded")
 	guarded.Kind, guarded.Object = "InfraProvider", "lab"
 	definitions := []reconciliation.BlockDefinition{definition("alpha"), guarded}

@@ -7,6 +7,7 @@ import (
 )
 
 func TestAccessToolUsesTheProvedControllerClosureWithoutEffects(t *testing.T) {
+	t.Parallel()
 	h, _ := stagedToolHarness(t)
 	if _, err := h.service.Apply(t.Context(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
@@ -22,6 +23,7 @@ func TestAccessToolUsesTheProvedControllerClosureWithoutEffects(t *testing.T) {
 }
 
 func TestAccessToolWithoutAnOperationOrWithCancellationRefuses(t *testing.T) {
+	t.Parallel()
 	h, _ := stagedToolHarness(t)
 	path, err := h.service.AccessTool(t.Context(), "lab", installer)
 	if path != "" || firstCode(err) != "access.unavailable" {

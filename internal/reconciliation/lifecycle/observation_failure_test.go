@@ -19,6 +19,7 @@ import (
 // resolution record, so the refusal and a later status name the same failure.
 // An undiagnosed failure records none and keeps the general reason.
 func TestAnObservationThatCouldNotRunIsRecordedAndStatusNamesIt(t *testing.T) {
+	t.Parallel()
 	const block = "alpha"
 	unreachable := diagnostics.NewFailureWithRemediation("lifecycle.state",
 		"the adapter could not reach Machine controller", "", "restore Machine controller so the observation reaches it")
@@ -116,6 +117,7 @@ func resolutionLog(t *testing.T, h *harness, block, event string) []operationsto
 // A recorded failure keeps the first diagnostic, its text cut to the record's
 // bound at a rune boundary, and an undiagnosed error records none.
 func TestAnObservationFailureIsTheFirstDiagnosticBounded(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("a", operationstore.MaxFailureText-1) + "é"
 	failed := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{
 		{Severity: "error", Code: "lifecycle.state", Message: long, Remediation: "fix \xff it"},

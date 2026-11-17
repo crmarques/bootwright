@@ -23,6 +23,7 @@ func (c objectClaimer) Claimed(api.Catalog) []string { return c.claimed }
 // refusal, and an effect-bearing object of a bound kind that nothing claims or
 // refuses is refused by identity instead of being left out of the plan.
 func TestAnEffectBearingObjectNoImplementationClaimsIsRefused(t *testing.T) {
+	t.Parallel()
 	provider := func(name string) api.Object {
 		return api.NewObject(api.InfraProvider, name, api.Value{}, api.MapValue())
 	}
@@ -65,6 +66,7 @@ func (c countingClaimer) Claimed(catalog api.Catalog) []string {
 // The unclaimed check asks each implementation once per selected graph and
 // each object's domain once, so its cost grows with the input, not its square.
 func TestTheUnclaimedCheckAsksEachImplementationOncePerGraph(t *testing.T) {
+	t.Parallel()
 	const count = 4000
 	objects := make([]api.Object, 0, count)
 	for index := range count {
@@ -89,6 +91,7 @@ func TestTheUnclaimedCheckAsksEachImplementationOncePerGraph(t *testing.T) {
 // Two implementations of one family that claim one object refuse it before
 // registration, even when neither plans a block for it.
 func TestAnObjectTwoImplementationsOfAFamilyClaimIsRefused(t *testing.T) {
+	t.Parallel()
 	rack := api.NewObject(api.InfraProvider, "rack", api.Value{}, api.MapValue())
 	catalog := api.NewCatalog([]api.Object{rack})
 	resolver := testResolver{capability: objectClaimer{testCapability: &testCapability{}, claimed: []string{rack.Identity()}}, bindings: []CapabilityBinding{

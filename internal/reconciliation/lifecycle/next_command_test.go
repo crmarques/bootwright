@@ -14,6 +14,7 @@ import (
 // that command's decision requires, and it is the command the terminal
 // diagnostic names; a completed operation names none.
 func TestEveryIncompleteResultNamesTheCommandItsRecordsCallFor(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	shown := shownBinding(t, newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha"), definition("bravo")}), testContextName)
 	cases := []struct {

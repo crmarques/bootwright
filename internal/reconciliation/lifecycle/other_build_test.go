@@ -33,6 +33,7 @@ func otherBuilds() []struct {
 // Another build continues through current contract and strict request proofs;
 // the operation keeps its registering identity and exact saved plan.
 func TestAnotherBuildContinuesAnOperationWhoseBlocksItFreezesTheSame(t *testing.T) {
+	t.Parallel()
 	for _, build := range otherBuilds() {
 		for _, test := range []struct {
 			verb      reconciliation.Verb
@@ -87,6 +88,7 @@ func TestAnotherBuildContinuesAnOperationWhoseBlocksItFreezesTheSame(t *testing.
 
 // Unsupported effects and unreadable requests still refuse without effects.
 func TestAnotherBuildRefusesUnsupportedFrozenExecution(t *testing.T) {
+	t.Parallel()
 	const install = "install bootwright devel (abcdef1), which registered this operation, and run bootwright controller install"
 	const differently = "this executable does not support the execution contract of block artifact-server-lab"
 	const unreadable = "the request the block artifact-server-lab froze cannot be read by this executable: the frozen request has an unsupported version"
@@ -132,6 +134,7 @@ func TestAnotherBuildRefusesUnsupportedFrozenExecution(t *testing.T) {
 // Status offers another build the continuation its blocks admit, and where the
 // build would freeze a block differently only the removal that supersedes.
 func TestStatusOffersAnotherBuildTheContinuationItsBlocksAdmit(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "artifact-server-lab")
 	failedApply(t, h)
@@ -160,6 +163,7 @@ func TestStatusOffersAnotherBuildTheContinuationItsBlocksAdmit(t *testing.T) {
 // Only the words a block is presented in may differ between two plans that
 // freeze the same effects; every other member names the block that moved.
 func TestDifferingBlockIgnoresOnlyPresentationWords(t *testing.T) {
+	t.Parallel()
 	plan := func(t *testing.T, change func(*reconciliation.BlockDefinition), extra ...reconciliation.BlockDefinition) reconciliation.Plan {
 		t.Helper()
 		first := definition("a")
@@ -228,6 +232,7 @@ func TestDifferingBlockIgnoresOnlyPresentationWords(t *testing.T) {
 // A continuation under another build that carries no proof refuses, and one
 // under the build that registered the operation needs none.
 func TestAContinuationWithNoSameBlocksProofRefusesUnderAnotherBuild(t *testing.T) {
+	t.Parallel()
 	const message = "this executable has not proved the recorded execution contracts"
 	const take = "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it"
 	ctx := context.Background()
@@ -342,6 +347,7 @@ func stoppedPair(t *testing.T, outcome Result) *harness {
 // of a failed block names the other build, the attempt before it the
 // registering one, and a block that was done gains no attempt.
 func TestAnotherBuildRetriesAFailedBlockUnderItsOwnBuild(t *testing.T) {
+	t.Parallel()
 	for _, build := range otherBuilds() {
 		t.Run(build.name, func(t *testing.T) {
 			h := stoppedPair(t, Result{Outcome: reconciliation.OutcomeFailed})
@@ -374,6 +380,7 @@ func TestAnotherBuildRetriesAFailedBlockUnderItsOwnBuild(t *testing.T) {
 // invocation complete the operation; one that proves no effect is followed by
 // that invocation's retry, which names that build too.
 func TestAnotherBuildResolvesAnUnknownApplyThenRetriesIt(t *testing.T) {
+	t.Parallel()
 	for _, build := range otherBuilds() {
 		t.Run(build.name+" completed", func(t *testing.T) {
 			h := stoppedPair(t, Result{Outcome: reconciliation.OutcomeUnknown})
@@ -425,6 +432,7 @@ func differingBlock(frozen, fresh reconciliation.Plan) (string, bool) {
 // the blocks the apply started, so a pending block this build cannot read does
 // not withdraw it.
 func TestTheTakeBackIsOfferedWhenOnlyAnUnstartedBlockIsUnreadable(t *testing.T) {
+	t.Parallel()
 	const differently = "the request the block second froze cannot be read by this executable: the frozen request has an unsupported version"
 	second := definition("second")
 	second.Dependencies = []string{"first"}
@@ -442,6 +450,7 @@ func TestTheTakeBackIsOfferedWhenOnlyAnUnstartedBlockIsUnreadable(t *testing.T) 
 // whose own state admits it started nothing, and a removal is judged over what
 // it has not yet proved gone.
 func TestTheTakeBackMirrorsTheSubsetDestroyWouldPlan(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "first")
 	applied, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("first")})
 	if err != nil {
@@ -495,6 +504,7 @@ func TestTheTakeBackMirrorsTheSubsetDestroyWouldPlan(t *testing.T) {
 }
 
 func TestAnotherBuildDestroysAnApplyFrozenWithOtherClaims(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.definitions[0].Exclusive = []string{"ceph/example"}
 	failedApply(t, h)

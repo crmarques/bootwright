@@ -11,6 +11,7 @@ import (
 )
 
 func TestReadyWorkAdvancesTheLongestSelectedChain(t *testing.T) {
+	t.Parallel()
 	definitions := []reconciliation.BlockDefinition{
 		definition("alpha"), definition("bravo"), definition("zulu"),
 		dependent("middle", "zulu"), dependent("tail", "middle"),
@@ -44,6 +45,7 @@ func TestReadyWorkAdvancesTheLongestSelectedChain(t *testing.T) {
 }
 
 func TestReadyPriorityIgnoresUnselectedSuccessorsAndKeepsPlanOrderForTies(t *testing.T) {
+	t.Parallel()
 	root, child := definition("zulu"), dependent("tail", "zulu")
 	root.Stage, child.Stage = reconciliation.StageMachines, reconciliation.StageClusters
 	leaf := definition("alpha")
@@ -64,6 +66,7 @@ func TestReadyPriorityIgnoresUnselectedSuccessorsAndKeepsPlanOrderForTies(t *tes
 }
 
 func TestReadyChainContinuesWhileAnIndependentRootIsStillRunning(t *testing.T) {
+	t.Parallel()
 	h := scheduled(t, 2, definition("alpha"), definition("bravo"), definition("zulu"), dependent("middle", "zulu"), dependent("tail", "middle"))
 	watch := newOverlap(5)
 	watch.open()
@@ -112,6 +115,7 @@ func TestReadyChainContinuesWhileAnIndependentRootIsStillRunning(t *testing.T) {
 }
 
 func TestDefaultThrottleAdmitsEightIndependentBlocks(t *testing.T) {
+	t.Parallel()
 	if MaxThrottledBlocks != 8 {
 		t.Fatalf("default cluster throttle = %d, want 8", MaxThrottledBlocks)
 	}
@@ -139,6 +143,7 @@ func TestDefaultThrottleAdmitsEightIndependentBlocks(t *testing.T) {
 }
 
 func TestChainPriorityShortensABoundedSchedule(t *testing.T) {
+	t.Parallel()
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{
 		definition("alpha"), definition("bravo"), definition("charlie"), definition("delta"),
 		definition("zulu"), dependent("middle", "zulu"), dependent("tail", "middle"),
@@ -194,6 +199,7 @@ func TestChainPriorityShortensABoundedSchedule(t *testing.T) {
 }
 
 func TestReadyPrioritySkipsAChainWhoseClaimOrThrottleIsBusy(t *testing.T) {
+	t.Parallel()
 	root := throttled("zulu", "cluster/example", "shared")
 	child := dependent("tail", "zulu")
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("alpha"), root, child})

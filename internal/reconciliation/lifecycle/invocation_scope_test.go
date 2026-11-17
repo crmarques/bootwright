@@ -45,6 +45,7 @@ func (c scopedCapability) Destroy(ctx context.Context, execution Execution) (Res
 }
 
 func TestInvocationScopeClosesOnlyAfterEveryCanceledAdapterSettles(t *testing.T) {
+	t.Parallel()
 	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
 		t.Run(string(verb), func(t *testing.T) {
 			h := scheduled(t, 2, definition("alpha"), definition("bravo"))

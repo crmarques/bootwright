@@ -14,6 +14,7 @@ import (
 )
 
 func TestLastInstanceWaitsForEverySameClusterStageConsumer(t *testing.T) {
+	t.Parallel()
 	for _, last := range []bool{false, true} {
 		pkg := addons.Package{Name: "fixture", Summary: "fixture package", Last: last, Budget: time.Minute, Render: func(addons.Instance) (addons.Rendered, error) { return addons.Rendered{}, nil }}
 		registry, err := addons.NewRegistry([]addons.Package{pkg})

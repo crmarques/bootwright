@@ -15,6 +15,7 @@ import (
 )
 
 func TestAContextAppliedWithoutPackagesGainsAnInstanceInASecondOperation(t *testing.T) {
+	t.Parallel()
 	for name, initial := range map[string][]api.Object{
 		"an added binding":                  nil,
 		"a binding that declared no member": {addonBinding("cluster")},
@@ -65,6 +66,7 @@ func TestAContextAppliedWithoutPackagesGainsAnInstanceInASecondOperation(t *test
 }
 
 func TestADiffOverAnAdditiveLineageReportsTheInputSame(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"))
@@ -78,6 +80,7 @@ func TestADiffOverAnAdditiveLineageReportsTheInputSame(t *testing.T) {
 }
 
 func TestAPlanOverACompletedApplyPreviewsTheAdditiveApplyAndAnApplyPresentsIt(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	root := f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"))
@@ -97,6 +100,7 @@ func TestAPlanOverACompletedApplyPreviewsTheAdditiveApplyAndAnApplyPresentsIt(t 
 }
 
 func TestAPlanOverACompletedApplyPreviewsTheAdditiveApplyOnlyForAnAddedInstance(t *testing.T) {
+	t.Parallel()
 	type preview struct {
 		initial []api.Object
 		next    []api.Object
@@ -137,6 +141,7 @@ func TestAPlanOverACompletedApplyPreviewsTheAdditiveApplyOnlyForAnAddedInstance(
 }
 
 func TestAnUpdatedInputIsReportedAsAnAdditionOnlyWhenTheAdditiveApplyAdmitsIt(t *testing.T) {
+	t.Parallel()
 	for name, want := range map[string]struct {
 		initial, next []api.Object
 		adds          bool
@@ -170,6 +175,7 @@ func TestAnUpdatedInputIsReportedAsAnAdditionOnlyWhenTheAdditiveApplyAdmitsIt(t 
 }
 
 func TestAnInterruptedAdditiveApplyContinuesWithoutRerunningTheLineage(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	root := f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"))
@@ -191,6 +197,7 @@ func TestAnInterruptedAdditiveApplyContinuesWithoutRerunningTheLineage(t *testin
 }
 
 func TestAContinuationRefusesWhenAPrerequisiteNoLongerReadsDone(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	root := f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"))
@@ -209,6 +216,7 @@ func TestAContinuationRefusesWhenAPrerequisiteNoLongerReadsDone(t *testing.T) {
 }
 
 func TestAnAdditiveRegistrationCrashedBeforeItsIndexWriteLeavesThePredecessorCurrent(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	root := f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"))
@@ -236,6 +244,7 @@ func TestAnAdditiveRegistrationCrashedBeforeItsIndexWriteLeavesThePredecessorCur
 }
 
 func TestAnAdditiveApplyRefusesWhatItDoesNotAddNamingTheBlock(t *testing.T) {
+	t.Parallel()
 	type refusal struct {
 		initial   []api.Object
 		next      []api.Object
@@ -293,6 +302,7 @@ func TestAnAdditiveApplyRefusesWhatItDoesNotAddNamingTheBlock(t *testing.T) {
 }
 
 func TestAnAddedBlockWhoseCapabilityAdmitsNoAdditionRefuses(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	f.root(t)
 	f.service.capabilities = testResolver{capability: f.capability.planningCapability}
@@ -301,6 +311,7 @@ func TestAnAddedBlockWhoseCapabilityAdmitsNoAdditionRefuses(t *testing.T) {
 }
 
 func TestAnAddedBlockThatMayReadMaterialOutsideItsApplyRefuses(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	f.root(t)
 	f.service.capabilities = testResolver{capability: admitsWithoutTheFact{f.capability.planningCapability}}
@@ -313,6 +324,7 @@ type admitsWithoutTheFact struct{ *planningCapability }
 func (admitsWithoutTheFact) AdmitAdded(reconciliation.Plan, reconciliation.Block) error { return nil }
 
 func TestAnAddedBlockTheCapabilityRefusesNamesTheCapabilitysReason(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"))
@@ -321,6 +333,7 @@ func TestAnAddedBlockTheCapabilityRefusesNamesTheCapabilitysReason(t *testing.T)
 }
 
 func TestADestroyRemovesBothOperationsInOneRemovalInstancesFirstAndListsTheLineage(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	root := f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"))
@@ -344,6 +357,7 @@ func TestADestroyRemovesBothOperationsInOneRemovalInstancesFirstAndListsTheLinea
 }
 
 func TestAnUnresolvedAddedInstanceNamesTheContinuationBeforeTheDestroy(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"))
@@ -362,6 +376,7 @@ func TestAnUnresolvedAddedInstanceNamesTheContinuationBeforeTheDestroy(t *testin
 }
 
 func TestAnUnresolvedInstanceOfAPlainApplyKeepsItsRemedy(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t, addonBinding("cluster", "nmstate"))
 	f.capability.outcomeFor["addon-nmstate"] = Result{Outcome: reconciliation.OutcomeUnknown}
 	_, _ = apply(f.harness)
@@ -374,6 +389,7 @@ func TestAnUnresolvedInstanceOfAPlainApplyKeepsItsRemedy(t *testing.T) {
 }
 
 func TestAnInterruptedAdditiveApplyIsContinuedByAnotherBuildThatFreezesTheSameBlocks(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"))
@@ -391,6 +407,7 @@ func TestAnInterruptedAdditiveApplyIsContinuedByAnotherBuildThatFreezesTheSameBl
 // operation the explanation is asked through, and only an instance of an
 // additive apply that has not completed is explained as an addition.
 func TestAnInstanceIsExplainedByTheApplyThatHoldsIt(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t, addonBinding("cluster", "nmstate"))
 	f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate", "metallb"))
@@ -428,6 +445,7 @@ func TestAnInstanceIsExplainedByTheApplyThatHoldsIt(t *testing.T) {
 }
 
 func TestAnAdditionThatNeedsAHostReservationRefusesWhileOneThePlanHeldIsAdmitted(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	f.capability.reserves = "metallb"
 	f.root(t)
@@ -451,6 +469,7 @@ func TestAnAdditionThatNeedsAHostReservationRefusesWhileOneThePlanHeldIsAdmitted
 }
 
 func TestADiffWithoutObserveDoesNotProveTheCustodyOfAnAddition(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"))
@@ -463,6 +482,7 @@ func TestADiffWithoutObserveDoesNotProveTheCustodyOfAnAddition(t *testing.T) {
 }
 
 func TestADiffReportsAnObservationFailureOfAnAdditionRatherThanNoAddition(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"))
@@ -493,6 +513,7 @@ func (s unreadableOnceArmed) ReadOperation(ctx context.Context, id string) (oper
 }
 
 func TestADiffReportsAnUnreadableLineageRecordOfAnAdditionRatherThanNoAddition(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	root := f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"))
@@ -525,6 +546,7 @@ func secretObject(name, source string) api.Object {
 // Secret that no added block names, that a lineage block already names, or
 // that changed or went away is no addition.
 func TestAnAdditiveApplyAdmitsOnlyANewSecretAnAddedBlockNames(t *testing.T) {
+	t.Parallel()
 	f := newAdditiveFixture(t)
 	f.root(t)
 	f.publish("rev-2", addonBinding("cluster", "nmstate"), secretObject(addonSecret, "file:one"))

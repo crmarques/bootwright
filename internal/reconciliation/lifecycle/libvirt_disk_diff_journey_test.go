@@ -97,6 +97,7 @@ func observedObject(t *testing.T, journey *lifecycle.CapabilityJourney, kind api
 }
 
 func TestALibvirtDiskResizedByHandShowsAsAHunk(t *testing.T) {
+	t.Parallel()
 	journey := diskDiffJourney(t, resizingHypervisor{observedGiB: 100, stopped: true})
 	provider := observedObject(t, journey, api.InfraProvider, "lab-libvirt")
 	if provider.Real.State != "partial" || provider.Real.Source != "observed" || provider.Real.Object == nil || provider.Desired == nil {

@@ -87,6 +87,7 @@ func warningMessages(reported []diagnostics.Diagnostic) []string {
 // the block's object unless the adapter names another; they reach the
 // attempt's record and status, and change no block's state.
 func TestAdapterWarningsReachTheRunAndStatusOncePerAttempt(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), definition("bravo"), dependent("charlie", "alpha")})
 	recorder := &warningRecorder{testCapability: h.capability, warnFor: map[string][]operationstore.Warning{
 		"charlie": {shadowed("charlie shadows")},
@@ -146,6 +147,7 @@ func TestAdapterWarningsReachTheRunAndStatusOncePerAttempt(t *testing.T) {
 // warnings both, and only an attempt's own run is handed a Warn, never an
 // observation's.
 func TestAdapterWarningsNeverChangeAFailedAttempt(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	recorder := &warningRecorder{testCapability: h.capability, warnFor: map[string][]operationstore.Warning{"alpha": {shadowed("still warned")}}}
 	h.service.capabilities = testResolver{capability: recorder}
@@ -170,6 +172,7 @@ func TestAdapterWarningsNeverChangeAFailedAttempt(t *testing.T) {
 
 // A removal's own run is handed a Warn too; its observations never are.
 func TestARemovalAttemptIsHandedAWarn(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	recorder := &warningRecorder{testCapability: h.capability}
 	h.service.capabilities = testResolver{capability: recorder}
@@ -187,6 +190,7 @@ func TestARemovalAttemptIsHandedAWarn(t *testing.T) {
 // Every code the decoder admits is one the engine reports, so a registered
 // adapter warning never vanishes between the channel and the operator.
 func TestEveryRegisteredAdapterWarningCodeIsReported(t *testing.T) {
+	t.Parallel()
 	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: "InfraProvider", Object: "lab"}}
 	plan := reconciliation.Plan{Blocks: []reconciliation.Block{block}}
 	for _, code := range adapterprotocol.WarningCodes() {
@@ -205,6 +209,7 @@ func TestEveryRegisteredAdapterWarningCodeIsReported(t *testing.T) {
 
 // An attempt's runs add up to the bound its record holds, never past it.
 func TestAWarningCollectorKeepsEveryRunsWarningsUpToTheBound(t *testing.T) {
+	t.Parallel()
 	collector := &warningCollector{}
 	collector.collect(context.Background(), []operationstore.Warning{shadowed("first")})
 	collector.collect(context.Background(), []operationstore.Warning{shadowed("second"), shadowed("third")})
@@ -230,6 +235,7 @@ func (c replaySafeRecorder) Removal(ctx context.Context, block reconciliation.Bl
 // A retried removal reads its target before it removes; that read is an
 // observation and is handed no Warn, while the removal it admits is.
 func TestARetriedRemovalsReadIsHandedNoWarn(t *testing.T) {
+	t.Parallel()
 	h := removalLeftUnknown(t, true)
 	recorder := &warningRecorder{testCapability: h.capability}
 	h.service.capabilities = testResolver{capability: replaySafeRecorder{recorder}}
@@ -247,6 +253,7 @@ func TestARetriedRemovalsReadIsHandedNoWarn(t *testing.T) {
 
 // An attempt record holds every warning the decoder admits.
 func TestAnAttemptRecordHoldsWhatTheDecoderAdmits(t *testing.T) {
+	t.Parallel()
 	if operationstore.MaxWarnings != adapterprotocol.MaxWarnings || operationstore.MaxWarningMessage != adapterprotocol.MaxWarningMessage {
 		t.Fatalf("the attempt record bounds warnings at %d of %d bytes, the decoder at %d of %d", operationstore.MaxWarnings,
 			operationstore.MaxWarningMessage, adapterprotocol.MaxWarnings, adapterprotocol.MaxWarningMessage)

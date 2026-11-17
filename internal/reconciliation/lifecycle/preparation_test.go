@@ -86,6 +86,7 @@ func recordingPreparations(h *harness, attempts ...int) *preparingRecorder {
 }
 
 func TestApplyAttemptRecordsItsPreparation(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	recordingPreparations(h, 1)
 	if err := applyOnce(h); err != nil {
@@ -98,6 +99,7 @@ func TestApplyAttemptRecordsItsPreparation(t *testing.T) {
 }
 
 func TestRemovalReceivesItsOwnApplyPreparationsInAttemptOrder(t *testing.T) {
+	t.Parallel()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), dependent("bravo", "alpha")})
 	recorder := recordingPreparations(h, 1, 3)
 	h.capability.errorFor = map[string]error{"alpha": errors.New("the attempt failed")}
@@ -147,6 +149,7 @@ func TestRemovalReceivesItsOwnApplyPreparationsInAttemptOrder(t *testing.T) {
 }
 
 func TestOnlyAnApplysOwnAttemptMayPrepare(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, "alpha")
 	recorder := recordingPreparations(h)
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
