@@ -309,15 +309,10 @@ def validate_export(request, hosts):
 class ExportWorker(ceph_native_resources.ResourceWorker):
     """The core worker with one NFS export's apply phase and its read-only observation."""
 
+    OWN_MEMBER = "nfsExport"
+
     def export(self):
         return self.request["nfsExport"]
-
-    def recovery_scope(self):
-        """The cluster's bootstrap scope: the export member is this block's own input, never part of the cluster's authoring."""
-        unused, staging = ceph_native.tunnel_helpers()
-        scope = staging.recovery_scope({key: value for key, value in self.request.items() if key != "nfsExport"})
-        require(canonical(self.markers.read("bootstrap-scope.json")) == canonical(scope), "ownership")
-        return scope
 
     def records(self):
         name = self.export()["name"]

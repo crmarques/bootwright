@@ -7,7 +7,7 @@ import hmac
 import json
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_resources
-from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import canonical, named, require, unique_object
+from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import named, require, unique_object
 
 VERSION = "ceph-replication-v1"
 PHASES = frozenset(("replication_prepare", "replication_token", "replication_import", "replication_image",
@@ -90,6 +90,8 @@ def dispatch(envelope):
 
 class ReplicationWorker(ceph_native_resources.ResourceWorker):
     """ResourceWorker custody and native executables, with one durable attempt for each endpoint."""
+
+    DELEGATED = True
     admit = staticmethod(ceph_native.validate_scope)
 
     def __init__(self, request, side, host, run=ceph_native.bounded_command, markers=None):
@@ -99,14 +101,8 @@ class ReplicationWorker(ceph_native_resources.ResourceWorker):
         super().__init__(self.endpoint["scope"], host, run, markers)
 
     def recovery_scope(self):
-        unused, staging = ceph_native.tunnel_helpers()
-        own = staging.recovery_scope(self.request)
-        recorded = self.markers.read("bootstrap-scope.json")
-        require(isinstance(recorded, dict) and isinstance(recorded.get("cluster"), dict), "ownership")
-        cluster = dict(recorded["cluster"])
-        delegated = cluster.pop("delegated", [])
-        require(canonical(dict(recorded, cluster=cluster)) == canonical(own), "ownership")
-        require(isinstance(delegated, list), "ownership")
+        recorded = super().recovery_scope()
+        require(isinstance(recorded["cluster"].get("delegated", []), list), "ownership")
         return recorded
 
     def intent(self):
@@ -129,9 +125,8 @@ class ReplicationWorker(ceph_native_resources.ResourceWorker):
 
     def native(self, program, args, data=b"", secret=False, missing=False):
         """Tokens and auth reads never enter diagnostics, including malformed output and nonzero exits."""
-        proof = self.bootstrap_hold()
         argv = [*self.admin_argv("/usr/bin/" + program), *QUIET, *args]
-        with proof:
+        with self.bootstrap_hold():
             code, output = self.run(argv, data=data, timeout=60)
         if missing and code == 2:
             return None

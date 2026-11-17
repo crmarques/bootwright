@@ -114,22 +114,13 @@ def dispatch(envelope):
 
 
 class ExportWorker(ceph_native_resources.ResourceWorker):
+    DELEGATED = True
     admit = staticmethod(ceph_native.validate_scope)
 
     def __init__(self, request, host, run=ceph_native.bounded_command, markers=None):
         self.export = validate(request)
         super().__init__(request["scope"], host, run, markers)
         self.identifier = prefix(request)
-
-    def recovery_scope(self):
-        unused, staging = ceph_native.tunnel_helpers()
-        expected = staging.recovery_scope(self.request)
-        recorded = self.markers.read("bootstrap-scope.json")
-        require(isinstance(recorded, dict) and isinstance(recorded.get("cluster"), dict), "ownership")
-        cluster = dict(recorded["cluster"])
-        cluster.pop("delegated", None)
-        require(canonical(dict(recorded, cluster=cluster)) == canonical(expected), "ownership")
-        return recorded
 
     def rgw(self, *args):
         gateway = self.export["gateway"]

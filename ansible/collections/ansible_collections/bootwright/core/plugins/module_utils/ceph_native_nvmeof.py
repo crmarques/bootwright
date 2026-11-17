@@ -86,17 +86,13 @@ def validate(request, hosts):
 
 
 class NVMeOFWorker(ceph_native_resources.ResourceWorker):
+    OWN_MEMBER = "nvmeof"
+
     def nvme_identity(self):
         frozen = self.request["nvmeof"]
         seed = canonical({"owner": self.request["owner"], "fsid": self.request["fsid"], "name": frozen["name"], "nqn": frozen["nqn"]})
         return {"serial": "bw" + hashlib.sha256(seed).hexdigest()[:18], "namespaces": {
             str(n["id"]): str(uuid.uuid5(uuid.UUID(self.request["fsid"]), seed.decode() + ":" + str(n["id"]))) for n in frozen["namespaces"]}}
-
-    def recovery_scope(self):
-        unused, staging = ceph_native.tunnel_helpers()
-        scope = staging.recovery_scope({key: value for key, value in self.request.items() if key != "nvmeof"})
-        require(canonical(self.markers.read("bootstrap-scope.json")) == canonical(scope), "ownership")
-        return scope
 
     def nvme_records(self):
         name = self.request["nvmeof"]["name"]

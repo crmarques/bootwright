@@ -519,6 +519,8 @@ def firewall_check(worker, spec, ports):
 class UnitWorker(ceph_native_resources.ResourceWorker):
     """The core worker with one service unit's apply phase and observation."""
 
+    OWN_MEMBER = "service"
+
     bound = None
     unit_rows = ()
     sso_protocol = ""
@@ -585,13 +587,6 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
 
     def unit_names(self):
         return [service_name(document) for document in self.request["service"]["documents"]]
-
-    def recovery_scope(self):
-        """The cluster's bootstrap scope: the unit member is this block's own input, never part of the cluster's authoring."""
-        unused, staging = ceph_native.tunnel_helpers()
-        scope = staging.recovery_scope({key: value for key, value in self.request.items() if key != "service"})
-        require(canonical(self.markers.read("bootstrap-scope.json")) == canonical(scope), "ownership")
-        return scope
 
     def unit_specs(self):
         limit = (len(self.request["services"]) + len(self.request.get("delegated", []))) * len(self.request["hosts"])

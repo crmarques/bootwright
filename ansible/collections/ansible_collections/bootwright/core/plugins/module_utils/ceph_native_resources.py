@@ -293,6 +293,27 @@ def take_name(device_class_name):
 class ResourceWorker(ceph_native.Worker):
     """The core worker with one pool, placement policy or client resource's phases and observation."""
 
+    OWN_MEMBER = None
+    DELEGATED = False
+
+    def recovery_scope(self):
+        """The cluster's bootstrap scope: a worker's OWN_MEMBER is its block's own input, never part of the cluster's authoring, and a
+        DELEGATED worker's recorded scope also carries the services it delegates."""
+        if self.OWN_MEMBER is None and not self.DELEGATED:
+            return super().recovery_scope()
+        unused, staging = ceph_native.tunnel_helpers()
+        if not self.DELEGATED:
+            scope = staging.recovery_scope({key: value for key, value in self.request.items() if key != self.OWN_MEMBER})
+            require(canonical(self.markers.read("bootstrap-scope.json")) == canonical(scope), "ownership")
+            return scope
+        expected = staging.recovery_scope(self.request)
+        recorded = self.markers.read("bootstrap-scope.json")
+        require(isinstance(recorded, dict) and isinstance(recorded.get("cluster"), dict), "ownership")
+        cluster = dict(recorded["cluster"])
+        cluster.pop("delegated", None)
+        require(canonical(dict(recorded, cluster=cluster)) == canonical(expected), "ownership")
+        return recorded
+
     def caps(self):
         """The grants Go froze for this client; prepare binds a subvolume's proved path into its mds grant."""
         return dict(self.request["client"]["caps"])
@@ -360,8 +381,7 @@ class ResourceWorker(ceph_native.Worker):
             require(completed is None or "rbd" in current.get("application_metadata", {}), "pool-drift")
             if completed is None:
                 self.markers.write(attempt_name, init)
-                proof = self.bootstrap_hold()
-                with proof:
+                with self.bootstrap_hold():
                     self.command([*self.admin_argv("/usr/bin/rbd"), "pool", "init", name], json_result=False)
                 require("rbd" in self.owned_pool(pool["name"]).get("application_metadata", {}), "not-ready")
                 self.markers.write(complete_name, init)
@@ -968,8 +988,7 @@ class ResourceWorker(ceph_native.Worker):
 
     def rbd_cli(self, *args, json_result=True):
         """One rbd command with the operation's own admin custody, under the bootstrap hold as every native call."""
-        proof = self.bootstrap_hold()
-        with proof:
+        with self.bootstrap_hold():
             return self.command([*self.admin_argv("/usr/bin/rbd"), *args], json_result=json_result)
 
     def rbd_names(self, pool):

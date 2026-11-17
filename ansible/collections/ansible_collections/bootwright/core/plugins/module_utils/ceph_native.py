@@ -1583,8 +1583,7 @@ class Worker:
                 "--auth_client_required=cephx", "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring")]
 
     def ceph(self, *args, data=b"", json_result=True, secrets=(), timeout=60):
-        proof = self.bootstrap_hold()
-        with proof:
+        with self.bootstrap_hold():
             return self.command([*self.admin_argv("/usr/bin/ceph"), "--format", "json", *args],
                                 data=data, json_result=json_result, secrets=secrets, timeout=timeout)
 
@@ -1593,8 +1592,7 @@ class Worker:
 
     def ceph_text(self, *args):
         """Primitive native output still holds the same original admin custody."""
-        proof = self.bootstrap_hold()
-        with proof:
+        with self.bootstrap_hold():
             return self.command([*self.admin_argv("/usr/bin/ceph"), *args], json_result=False)
 
     @contextlib.contextmanager
@@ -3933,8 +3931,7 @@ class Worker:
 
     def ceph_status(self, *args, data=b""):
         """Only the exit status: no native output, and no input it echoes, leaves this call."""
-        proof = self.bootstrap_hold()
-        with proof:
+        with self.bootstrap_hold():
             code, unused = self.run([*self.admin_argv("/usr/bin/ceph"), *args], data=data, timeout=60)
         return code
 
@@ -3965,8 +3962,7 @@ class Worker:
 
     def dashboard_tls_private(self, *args, data=b""):
         """Private native output never enters NativeFailure, even when a command fails."""
-        proof = self.bootstrap_hold()
-        with proof:
+        with self.bootstrap_hold():
             code, output = self.run([*self.admin_argv("/usr/bin/ceph"), *args], data=data, timeout=60)
         require(code == 0, "native-command")
         require(isinstance(output, bytes) and len(output) <= 65536, "native-output")

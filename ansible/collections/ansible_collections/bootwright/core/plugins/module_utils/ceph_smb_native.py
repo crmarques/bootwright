@@ -271,6 +271,7 @@ def projection(value, resource_type):
 class SMBWorker(ceph_native_resources.ResourceWorker):
     """The core worker bound to one cluster scope, with one SMB resource's apply and read-only observation."""
 
+    DELEGATED = True
     admit = staticmethod(ceph_native.validate_scope)
 
     def __init__(self, request, host, run=ceph_native.bounded_command, markers=None):
@@ -285,13 +286,8 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
 
     def recovery_scope(self):
         """The cluster's bootstrap scope: every member this scope carries, and the SMB services its delegated list names."""
-        unused, staging = ceph_native.tunnel_helpers()
-        own = staging.recovery_scope(self.request)
-        recorded = self.markers.read("bootstrap-scope.json")
-        require(isinstance(recorded, dict) and isinstance(recorded.get("cluster"), dict), "ownership")
-        cluster = dict(recorded["cluster"])
-        delegated = cluster.pop("delegated", [])
-        require(canonical(dict(recorded, cluster=cluster)) == canonical(own), "ownership")
+        recorded = super().recovery_scope()
+        delegated = recorded["cluster"].get("delegated", [])
         require(isinstance(delegated, list) and all(isinstance(entry, dict) and isinstance(entry.get("name"), str) for entry in delegated), "ownership")
         if self.served():
             service = self.smb["service"]
@@ -304,8 +300,7 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
         """The core worker's admin command; an apply alone passes `recover`, which keeps its exit code for its own refusal."""
         if recover is None:
             return super().ceph(*args, data=data, json_result=json_result)
-        proof = self.bootstrap_hold()
-        with proof:
+        with self.bootstrap_hold():
             return self.command([*self.admin_argv("/usr/bin/ceph"), "--format", "json", *args],
                                 data=data, json_result=json_result, recover=recover)
 

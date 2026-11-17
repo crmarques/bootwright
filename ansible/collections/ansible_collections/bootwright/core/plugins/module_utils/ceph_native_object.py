@@ -493,6 +493,8 @@ def identities(value):
 class ObjectWorker(ceph_native_units.UnitWorker):
     """The core worker with one object gateway's zone, placement and service phases and its observation."""
 
+    OWN_MEMBER = "gateway"
+
     tls = None
 
     def gateway(self):
@@ -569,13 +571,6 @@ class ObjectWorker(ceph_native_units.UnitWorker):
     def unit_names(self):
         return [ceph_native_units.service_name(document) for document in self.gateway()["documents"]]
 
-    def recovery_scope(self):
-        """The cluster's bootstrap scope: the gateway member is this block's own input, never part of the cluster's authoring."""
-        unused, staging = ceph_native.tunnel_helpers()
-        scope = staging.recovery_scope({key: value for key, value in self.request.items() if key != "gateway"})
-        require(canonical(self.markers.read("bootstrap-scope.json")) == canonical(scope), "ownership")
-        return scope
-
     def record(self, suffix):
         return self.unit_key() + "-" + suffix + ".json"
 
@@ -604,8 +599,7 @@ class ObjectWorker(ceph_native_units.UnitWorker):
 
     def radosgw(self, *args, json_result=True):
         """radosgw-admin with the cluster's original admin custody, as `ceph` runs; never a user, key, caps or metadata command."""
-        proof = self.bootstrap_hold()
-        with proof:
+        with self.bootstrap_hold():
             return self.command([*self.admin_argv(RADOSGW_ADMIN), "--format", "json", *args], json_result=json_result)
 
     def tool_digest(self):
@@ -969,19 +963,14 @@ class UserWorker(ObjectWorker):
     """One object user in its gateway's zone: created once by radosgw-admin, whose generated S3 key pair crosses only stdout into this
     worker and is retained in the root-only custody area before any result; a retry reads that pair back and never rotates it."""
 
+    OWN_MEMBER = "objectUser"
+
     def user(self):
         return self.request["objectUser"]
 
     def gateway(self):
         user = self.user()
         return {"name": user["gateway"], "realm": user["realm"], "zoneGroup": user["zoneGroup"], "zone": user["zone"]}
-
-    def recovery_scope(self):
-        """The cluster's bootstrap scope: the user member is this block's own input, never part of the cluster's authoring."""
-        unused, staging = ceph_native.tunnel_helpers()
-        scope = staging.recovery_scope({key: value for key, value in self.request.items() if key != "objectUser"})
-        require(canonical(self.markers.read("bootstrap-scope.json")) == canonical(scope), "ownership")
-        return scope
 
     def user_record(self, suffix):
         """Its records hold a `.` that custody's `object-user-<record>-<user>.json` names never do."""
@@ -1007,8 +996,7 @@ class UserWorker(ObjectWorker):
         """radosgw-admin user list, info or create in the gateway's zone. Its stdout can hold the user's keys, so it stays in this
         worker's memory and a failure reports only stderr."""
         argv = [*self.admin_argv(RADOSGW_ADMIN), "--format", "json", "user", *args, *self.site("realm", "zonegroup", "zone")]
-        proof = self.bootstrap_hold()
-        with proof:
+        with self.bootstrap_hold():
             code, output = self.run(argv, timeout=60)
         if code != 0:
             raise NativeFailure("native-command", self.native_coordinate(), getattr(output, "stderr", b"") or b"radosgw-admin user " + args[0].encode())
@@ -1138,6 +1126,8 @@ class BucketWorker(UserWorker):
     """One bucket of one object user this operation created, in that user's gateway zone: S3 creates it and puts its policy under the user's
     key pair, held in this worker's memory only, and radosgw-admin proves its name, owner, zone group and bucket ID."""
 
+    OWN_MEMBER = "objectBucket"
+
     pair = None
     wall = staticmethod(time.time)
 
@@ -1147,13 +1137,6 @@ class BucketWorker(UserWorker):
     def user(self):
         bucket = self.bucket()
         return {"name": bucket["owner"], "gateway": bucket["gateway"], "realm": bucket["realm"], "zoneGroup": bucket["zoneGroup"], "zone": bucket["zone"]}
-
-    def recovery_scope(self):
-        """The cluster's bootstrap scope: the bucket member is this block's own input, never part of the cluster's authoring."""
-        unused, staging = ceph_native.tunnel_helpers()
-        scope = staging.recovery_scope({key: value for key, value in self.request.items() if key != "objectBucket"})
-        require(canonical(self.markers.read("bootstrap-scope.json")) == canonical(scope), "ownership")
-        return scope
 
     def bucket_record(self, suffix):
         return "object-bucket-" + suffix + "." + self.bucket()["name"] + ".json"
