@@ -1,0 +1,262 @@
+plan apply: err=nil definitions=1 secrets=[mirror-access-key mirror-ca mirror-known-hosts mirror-registry-credentials]
+  definition mirror-images-lab digest=e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2
+{
+    "id": "mirror-images-lab",
+    "description": "fill the image mirror of lab on mirror",
+    "stage": "infrastructure-services",
+    "dependencies": null,
+    "impacts": [
+      "publish-content 203.0.113.20:5000/docker.io/library/registry@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "publish-content 203.0.113.20:5000/quay.io/metal3-io/sushy-tools@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    ],
+    "consumes": [],
+    "groups": null,
+    "kind": "Registry",
+    "object": "mirror-registry",
+    "implementation": "mirror-images-v1",
+    "contentDigest": "c45de799c2c391b50126647a5dba104b0e2b84fdaa1af59833cfd4f912934eb6",
+    "request": {
+      "egress": {
+        "noProxy": []
+      },
+      "identity": {
+        "context": "lab",
+        "environment": "lab",
+        "registry": "mirror-registry"
+      },
+      "images": [
+        {
+          "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "repository": "docker.io/library/registry",
+          "source": "docker.io/library/registry@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+          "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "repository": "quay.io/metal3-io/sushy-tools",
+          "source": "quay.io/metal3-io/sushy-tools@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        }
+      ],
+      "mirror": {
+        "credentialsRef": "mirror-registry-credentials",
+        "credentialsType": "usernamePassword",
+        "host": "203.0.113.20:5000",
+        "trustBundleRef": "mirror-ca"
+      },
+      "placement": {
+        "address": "203.0.113.20",
+        "connection": "ssh",
+        "knownHostsRef": "mirror-known-hosts",
+        "machine": "mirror",
+        "port": 22,
+        "privateKeyRef": "mirror-access-key",
+        "user": "root"
+      },
+      "version": "mirror-images-v1"
+    }
+  }
+plan destroy: err=nil definitions=1 secrets=[mirror-access-key mirror-ca mirror-known-hosts mirror-registry-credentials]
+  definition mirror-images-lab digest=e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2
+{
+    "id": "mirror-images-lab",
+    "description": "release the image mirror of lab on mirror, whose Registry's removal deletes its images",
+    "stage": "infrastructure-services",
+    "dependencies": null,
+    "impacts": [],
+    "consumes": [],
+    "groups": null,
+    "kind": "Registry",
+    "object": "mirror-registry",
+    "implementation": "mirror-images-v1",
+    "contentDigest": "c45de799c2c391b50126647a5dba104b0e2b84fdaa1af59833cfd4f912934eb6",
+    "request": {
+      "egress": {
+        "noProxy": []
+      },
+      "identity": {
+        "context": "lab",
+        "environment": "lab",
+        "registry": "mirror-registry"
+      },
+      "images": [
+        {
+          "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "repository": "docker.io/library/registry",
+          "source": "docker.io/library/registry@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+          "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "repository": "quay.io/metal3-io/sushy-tools",
+          "source": "quay.io/metal3-io/sushy-tools@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        }
+      ],
+      "mirror": {
+        "credentialsRef": "mirror-registry-credentials",
+        "credentialsType": "usernamePassword",
+        "host": "203.0.113.20:5000",
+        "trustBundleRef": "mirror-ca"
+      },
+      "placement": {
+        "address": "203.0.113.20",
+        "connection": "ssh",
+        "knownHostsRef": "mirror-known-hosts",
+        "machine": "mirror",
+        "port": 22,
+        "privateKeyRef": "mirror-access-key",
+        "user": "root"
+      },
+      "version": "mirror-images-v1"
+    }
+  }
+plan without state: err=lifecycle.state|mirror planning requires compiled desired state||- definitions=0 secrets=[]
+plan cancelled: err=context canceled definitions=0
+removal: "release the image mirror of lab on mirror, whose Registry's removal deletes its images" impacts=[] consumes=[] err=nil
+removal cancelled: context canceled
+removal of a broken request: lifecycle.state|the frozen mirror images request is malformed||-
+references: [mirror-access-key mirror-ca mirror-known-hosts mirror-registry-credentials] err=nil
+references of a broken request: lifecycle.state|the frozen mirror images request is malformed||-
+classes: map[mirror-access-key:access credential mirror-ca:trust anchor mirror-known-hosts:trust anchor mirror-registry-credentials:access credential] err=nil
+classes of a broken request: lifecycle.state|the frozen mirror images request is malformed||-
+quiescent: {State:quiescent Reason:every consumer of the image mirror precedes its fill in removal Stop: Remedy:} err=<nil>
+claimed: [Registry/mirror-registry]; none declared: []
+unresolved apply complete: false {Reason: Remedy:}
+unresolved apply empty: false {Reason: Remedy:}
+unresolved apply released: false {Reason: Remedy:}
+unresolved apply partial: false {Reason: Remedy:}
+unresolved apply foreign: true {Reason:the image mirror of lab on Machine mirror at 203.0.113.20 is not what its apply froze: the image mirror reports docker.io/library/registry@sha256:4444444444444444444444444444444444444444444444444444444444444444, which the frozen request does not name in that place Remedy:restore the image mirror of lab on Machine mirror at 203.0.113.20 to what its frozen request names}
+unresolved apply absent beside held: true {Reason:the image mirror of lab on Machine mirror at 203.0.113.20 is not what its apply froze: the image mirror reports its fill released beside images it holds Remedy:restore the image mirror of lab on Machine mirror at 203.0.113.20 to what its frozen request names}
+unresolved apply other request: false {Reason: Remedy:}
+unresolved apply garbage: false
+unresolved apply broken request: false
+unresolved destroy complete: true {Reason:the image mirror of lab on Machine mirror at 203.0.113.20 is not what its destroy froze: the image mirror reports its fill released beside images it holds Remedy:restore the image mirror of lab on Machine mirror at 203.0.113.20 so its observation reads it as this context's own}
+unresolved destroy empty: true {Reason:the image mirror of lab on Machine mirror at 203.0.113.20 is not what its destroy froze: the image mirror reports its fill released beside images it holds Remedy:restore the image mirror of lab on Machine mirror at 203.0.113.20 so its observation reads it as this context's own}
+unresolved destroy released: false {Reason: Remedy:}
+unresolved destroy partial: true {Reason:the image mirror of lab on Machine mirror at 203.0.113.20 is not what its destroy froze: the image mirror reports its fill released beside images it holds Remedy:restore the image mirror of lab on Machine mirror at 203.0.113.20 so its observation reads it as this context's own}
+unresolved destroy foreign: true {Reason:the image mirror of lab on Machine mirror at 203.0.113.20 is not what its destroy froze: the image mirror reports docker.io/library/registry@sha256:4444444444444444444444444444444444444444444444444444444444444444, which the frozen request does not name in that place Remedy:restore the image mirror of lab on Machine mirror at 203.0.113.20 so its observation reads it as this context's own}
+unresolved destroy absent beside held: true {Reason:the image mirror of lab on Machine mirror at 203.0.113.20 is not what its destroy froze: the image mirror reports its fill released beside images it holds Remedy:restore the image mirror of lab on Machine mirror at 203.0.113.20 so its observation reads it as this context's own}
+unresolved destroy other request: false {Reason: Remedy:}
+unresolved destroy garbage: false
+unresolved destroy broken request: false
+apply complete changed: outcome=changed evidence={"absent":false,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true},{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+  run mirror-images-v1 apply var=bootwright_mirror_images deadline=55m0s canonical=298a872c6268 machine=mirror materials=[image-username/imageUsername/username/mirror-registry-credentials image-password/imagePassword/password/mirror-registry-credentials image-trust/imageTrust/certificate/mirror-ca id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=image-digest-mismatch=lifecycle.state|the image mirror on mirror reports a digest other than the pinned one for an image it was given, so the fill stopped|verify the Registry and the route from mirror to the image's origin, then run bootwright apply --context lab|Registry/mirror-registry // image-unreachable=lifecycle.unknown|Machine/mirror could not copy an image from its origin into the image mirror|give mirror a route to the origins bootwright render acquisitions --context lab names, then run bootwright apply --context lab|Registry/mirror-registry // mirror-unreadable=lifecycle.unknown|Machine/mirror could not read the image mirror at 203.0.113.20:5000 with its credential and trust anchor|verify Registry/mirror-registry is ready and answers its credential, then run bootwright apply --context lab|Registry/mirror-registry // skopeo-missing=lifecycle.state|Machine/mirror has no working /usr/bin/skopeo, so the image mirror of lab cannot copy its images; this attempt copied nothing|install the skopeo package on Machine/mirror with its package manager and repeat the apply, or place Registry/mirror-registry on a Machine that has it|Registry/mirror-registry
+apply complete unchanged: outcome=unchanged evidence={"absent":false,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true},{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+apply complete failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply empty changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply empty unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply empty failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply released changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply released unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply released failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply partial changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply partial unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply partial failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply foreign changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply foreign unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply foreign failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply absent beside held changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply absent beside held unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply absent beside held failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply other request changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply other request unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply other request failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply garbage evidence: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply runner error plain: outcome=unknown evidence= err=plain: adapter stopped
+apply runner error unknown: outcome=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
+apply runner error state: outcome=failed evidence= err=lifecycle.state|adapter refused|fix|-
+apply unconfigured runner: outcome=failed evidence= err=lifecycle.state|the mirror images adapter is not configured||-
+apply foreign block object: outcome=failed evidence= err=lifecycle.state|the mirror images request does not match its frozen block identity||- no run
+apply foreign block kind: outcome=failed evidence= err=lifecycle.state|the mirror images request does not match its frozen block identity||-
+apply undecodable request: outcome=failed evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
+apply empty execution: outcome=failed evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
+destroy complete changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+  run mirror-images-v1 destroy var=bootwright_mirror_images deadline=55m0s canonical=298a872c6268 machine=mirror materials=[id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=
+destroy complete unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy complete failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy empty changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy empty unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy empty failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy released changed: outcome=changed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+destroy released unchanged: outcome=unchanged evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+destroy released failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy partial changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy partial unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy partial failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy foreign changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy foreign unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy foreign failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy absent beside held changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy absent beside held unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy absent beside held failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy other request changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy other request unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy other request failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy garbage evidence: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy runner error plain: outcome=unknown evidence= err=plain: adapter stopped
+destroy runner error unknown: outcome=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
+destroy runner error state: outcome=failed evidence= err=lifecycle.state|adapter refused|fix|-
+destroy unconfigured runner: outcome=failed evidence= err=lifecycle.state|the mirror images adapter is not configured||-
+destroy foreign block object: outcome=failed evidence= err=lifecycle.state|the mirror images request does not match its frozen block identity||- no run
+destroy foreign block kind: outcome=failed evidence= err=lifecycle.state|the mirror images request does not match its frozen block identity||-
+destroy undecodable request: outcome=failed evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
+destroy empty execution: outcome=failed evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
+observe complete changed: effect=completed evidence={"absent":false,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true},{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+  run mirror-images-v1 observe var=bootwright_mirror_images deadline=55m0s canonical=298a872c6268 machine=mirror materials=[image-username/imageUsername/username/mirror-registry-credentials image-password/imagePassword/password/mirror-registry-credentials image-trust/imageTrust/certificate/mirror-ca id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=
+observe complete unchanged: effect=completed evidence={"absent":false,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true},{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe complete failed: effect=completed evidence={"absent":false,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true},{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe empty changed: effect=no-effect evidence={"absent":false,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe empty unchanged: effect=no-effect evidence={"absent":false,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe empty failed: effect=no-effect evidence={"absent":false,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe released changed: effect=no-effect evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe released unchanged: effect=no-effect evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe released failed: effect=no-effect evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe partial changed: effect=partial evidence={"absent":false,"images":[{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":false,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe partial unchanged: effect=partial evidence={"absent":false,"images":[{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":false,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe partial failed: effect=partial evidence={"absent":false,"images":[{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":false,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe foreign changed: effect=unknown evidence={"absent":false,"images":[{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"docker.io/library/registry","verified":true}],"postcondition":false,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe foreign unchanged: effect=unknown evidence={"absent":false,"images":[{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"docker.io/library/registry","verified":true}],"postcondition":false,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe foreign failed: effect=unknown evidence={"absent":false,"images":[{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"docker.io/library/registry","verified":true}],"postcondition":false,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe absent beside held changed: effect=unknown evidence={"absent":true,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true}],"postcondition":false,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe absent beside held unchanged: effect=unknown evidence={"absent":true,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true}],"postcondition":false,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe absent beside held failed: effect=unknown evidence={"absent":true,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true}],"postcondition":false,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe other request changed: effect=unknown evidence={"absent":false,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true},{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":true,"request":"other","version":"mirror-images-evidence-v1"} err=nil
+observe other request unchanged: effect=unknown evidence={"absent":false,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true},{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":true,"request":"other","version":"mirror-images-evidence-v1"} err=nil
+observe other request failed: effect=unknown evidence={"absent":false,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true},{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":true,"request":"other","version":"mirror-images-evidence-v1"} err=nil
+observe garbage evidence: effect=unknown evidence={ err=nil
+observe runner error plain: effect=unknown evidence= err=plain: adapter stopped
+observe runner error unknown: effect=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
+observe runner error state: effect=unknown evidence= err=lifecycle.state|adapter refused|fix|-
+observe unconfigured runner: effect=unknown evidence= err=lifecycle.state|the mirror images adapter is not configured||-
+observe foreign block object: effect=unknown evidence= err=lifecycle.state|the mirror images request does not match its frozen block identity||- no run
+observe foreign block kind: effect=unknown evidence= err=lifecycle.state|the mirror images request does not match its frozen block identity||-
+observe undecodable request: effect=unknown evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
+observe empty execution: effect=unknown evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
+observe removal complete changed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+  no run
+observe removal complete unchanged: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal complete failed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal empty changed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal empty unchanged: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal empty failed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal released changed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal released unchanged: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal released failed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal partial changed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal partial unchanged: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal partial failed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal foreign changed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal foreign unchanged: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal foreign failed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal absent beside held changed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal absent beside held unchanged: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal absent beside held failed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal other request changed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal other request unchanged: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal other request failed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal garbage evidence: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal runner error plain: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal runner error unknown: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal runner error state: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal unconfigured runner: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal foreign block object: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil no run
+observe removal foreign block kind: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
+observe removal undecodable request: effect=unknown evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
+observe removal empty execution: effect=unknown evidence= err=lifecycle.state|the frozen mirror images request is malformed||-

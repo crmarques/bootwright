@@ -1,0 +1,265 @@
+plan apply: err=nil definitions=1 secrets=[mirror-access-key mirror-known-hosts]
+  definition mirror-files-lab digest=2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85
+{
+    "id": "mirror-files-lab",
+    "description": "fill the artifact mirror of lab on mirror",
+    "stage": "infrastructure-services",
+    "dependencies": null,
+    "exclusive": [
+      "path:/var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public/mirror/lab"
+    ],
+    "impacts": [
+      "publish-content /var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public/mirror/lab"
+    ],
+    "consumes": [],
+    "groups": null,
+    "kind": "ArtifactServer",
+    "object": "mirror",
+    "implementation": "mirror-files-v1",
+    "contentDigest": "7f421389ad05c85f01d902ce68f64cb09332ca6d734b7fa7268c72eac8b5206f",
+    "request": {
+      "egress": {
+        "noProxy": []
+      },
+      "files": [
+        {
+          "bytes": 5,
+          "path": "helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz",
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "source": "https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz"
+        },
+        {
+          "bytes": 7,
+          "path": "kubectl/v1.37.2/kubectl",
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+          "source": "https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl"
+        }
+      ],
+      "identity": {
+        "context": "lab",
+        "environment": "lab",
+        "server": "mirror"
+      },
+      "placement": {
+        "address": "203.0.113.20",
+        "connection": "ssh",
+        "knownHostsRef": "mirror-known-hosts",
+        "machine": "mirror",
+        "port": 22,
+        "privateKeyRef": "mirror-access-key",
+        "user": "root"
+      },
+      "root": "/var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public/mirror/lab",
+      "servedRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public",
+      "version": "mirror-files-v1"
+    }
+  }
+plan destroy: err=nil definitions=1 secrets=[mirror-access-key mirror-known-hosts]
+  definition mirror-files-lab digest=2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85
+{
+    "id": "mirror-files-lab",
+    "description": "remove the artifact mirror files of lab from mirror",
+    "stage": "infrastructure-services",
+    "dependencies": null,
+    "exclusive": [
+      "path:/var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public/mirror/lab"
+    ],
+    "impacts": [
+      "remove-content /var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public/mirror/lab"
+    ],
+    "consumes": [],
+    "groups": null,
+    "kind": "ArtifactServer",
+    "object": "mirror",
+    "implementation": "mirror-files-v1",
+    "contentDigest": "7f421389ad05c85f01d902ce68f64cb09332ca6d734b7fa7268c72eac8b5206f",
+    "request": {
+      "egress": {
+        "noProxy": []
+      },
+      "files": [
+        {
+          "bytes": 5,
+          "path": "helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz",
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "source": "https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz"
+        },
+        {
+          "bytes": 7,
+          "path": "kubectl/v1.37.2/kubectl",
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+          "source": "https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl"
+        }
+      ],
+      "identity": {
+        "context": "lab",
+        "environment": "lab",
+        "server": "mirror"
+      },
+      "placement": {
+        "address": "203.0.113.20",
+        "connection": "ssh",
+        "knownHostsRef": "mirror-known-hosts",
+        "machine": "mirror",
+        "port": 22,
+        "privateKeyRef": "mirror-access-key",
+        "user": "root"
+      },
+      "root": "/var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public/mirror/lab",
+      "servedRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public",
+      "version": "mirror-files-v1"
+    }
+  }
+plan without state: err=lifecycle.state|mirror planning requires compiled desired state||- definitions=0 secrets=[]
+plan cancelled: err=context canceled definitions=0
+removal: "remove the artifact mirror files of lab from mirror" impacts=["remove-content /var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public/mirror/lab"] consumes=[] err=nil
+removal cancelled: context canceled
+removal of a broken request: lifecycle.state|the frozen mirror files request is malformed||-
+references: [mirror-access-key mirror-known-hosts] err=nil
+references of a broken request: lifecycle.state|the frozen mirror files request is malformed||-
+classes: map[mirror-access-key:access credential mirror-known-hosts:trust anchor] err=nil
+classes of a broken request: lifecycle.state|the frozen mirror files request is malformed||-
+quiescent: {State:quiescent Reason:the controller stage that reads the mirror precedes its fill in removal Stop: Remedy:} err=<nil>
+claimed: [ArtifactServer/mirror]; none declared: []
+unresolved apply complete: false {Reason: Remedy:}
+unresolved apply empty: false {Reason: Remedy:}
+unresolved apply released: false {Reason: Remedy:}
+unresolved apply partial: false {Reason: Remedy:}
+unresolved apply foreign: true {Reason:the artifact mirror files of lab on Machine mirror at 203.0.113.20 is not what its apply froze: the artifact mirror holds foreign/v1/file, which the frozen request does not name in that place Remedy:restore the artifact mirror files of lab on Machine mirror at 203.0.113.20 to what its frozen request names}
+unresolved apply absent beside held: true {Reason:the artifact mirror files of lab on Machine mirror at 203.0.113.20 is not what its apply froze: the artifact mirror reports its root absent beside files it holds Remedy:restore the artifact mirror files of lab on Machine mirror at 203.0.113.20 to what its frozen request names}
+unresolved apply other request: false {Reason: Remedy:}
+unresolved apply garbage: false
+unresolved apply broken request: false
+unresolved destroy complete: false {Reason: Remedy:}
+unresolved destroy empty: false {Reason: Remedy:}
+unresolved destroy released: false {Reason: Remedy:}
+unresolved destroy partial: false {Reason: Remedy:}
+unresolved destroy foreign: true {Reason:the artifact mirror files of lab on Machine mirror at 203.0.113.20 is not what its destroy froze: the artifact mirror holds foreign/v1/file, which the frozen request does not name in that place Remedy:restore the artifact mirror files of lab on Machine mirror at 203.0.113.20 so its observation reads it as this context's own}
+unresolved destroy absent beside held: true {Reason:the artifact mirror files of lab on Machine mirror at 203.0.113.20 is not what its destroy froze: the artifact mirror reports its root absent beside files it holds Remedy:restore the artifact mirror files of lab on Machine mirror at 203.0.113.20 so its observation reads it as this context's own}
+unresolved destroy other request: false {Reason: Remedy:}
+unresolved destroy garbage: false
+unresolved destroy broken request: false
+apply complete changed: outcome=changed evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+  run mirror-files-v1 apply var=bootwright_mirror_files deadline=35m0s canonical=69d80d1ee52e machine=mirror materials=[id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=file-digest-mismatch=lifecycle.state|a publisher served a client file for the artifact mirror on mirror whose SHA-256 is not the one this build pins, so it was not published|verify the publisher and the route from mirror to it, then run bootwright apply --context lab|ArtifactServer/mirror // file-unreachable=lifecycle.unknown|Machine/mirror could not read a client file for the artifact mirror from its publisher, so it was not published|give mirror a route to the publishers bootwright render acquisitions --context lab names, then run bootwright apply --context lab|ArtifactServer/mirror
+apply complete unchanged: outcome=unchanged evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+apply complete failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply empty changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply empty unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply empty failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply released changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply released unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply released failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply partial changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply partial unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply partial failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply foreign changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply foreign unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply foreign failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply absent beside held changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply absent beside held unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply absent beside held failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply other request changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply other request unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply other request failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply garbage evidence: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply runner error plain: outcome=unknown evidence= err=plain: adapter stopped
+apply runner error unknown: outcome=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
+apply runner error state: outcome=failed evidence= err=lifecycle.state|adapter refused|fix|-
+apply unconfigured runner: outcome=failed evidence= err=lifecycle.state|the mirror files adapter is not configured||-
+apply foreign block object: outcome=failed evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||- no run
+apply foreign block kind: outcome=failed evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||-
+apply undecodable request: outcome=failed evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
+apply empty execution: outcome=failed evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
+destroy complete changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+  run mirror-files-v1 destroy var=bootwright_mirror_files deadline=35m0s canonical=69d80d1ee52e machine=mirror materials=[id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=
+destroy complete unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy complete failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy empty changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy empty unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy empty failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy released changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy released unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy released failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy partial changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy partial unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy partial failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy foreign changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy foreign unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy foreign failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy absent beside held changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy absent beside held unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy absent beside held failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy other request changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy other request unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy other request failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy garbage evidence: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy runner error plain: outcome=unknown evidence= err=plain: adapter stopped
+destroy runner error unknown: outcome=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
+destroy runner error state: outcome=failed evidence= err=lifecycle.state|adapter refused|fix|-
+destroy unconfigured runner: outcome=failed evidence= err=lifecycle.state|the mirror files adapter is not configured||-
+destroy foreign block object: outcome=failed evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||- no run
+destroy foreign block kind: outcome=failed evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||-
+destroy undecodable request: outcome=failed evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
+destroy empty execution: outcome=failed evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
+observe complete changed: effect=completed evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+  run mirror-files-v1 observe var=bootwright_mirror_files deadline=35m0s canonical=69d80d1ee52e machine=mirror materials=[id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=
+observe complete unchanged: effect=completed evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe complete failed: effect=completed evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe empty changed: effect=no-effect evidence={"absent":true,"files":[],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe empty unchanged: effect=no-effect evidence={"absent":true,"files":[],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe empty failed: effect=no-effect evidence={"absent":true,"files":[],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe released changed: effect=no-effect evidence={"absent":true,"files":[],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe released unchanged: effect=no-effect evidence={"absent":true,"files":[],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe released failed: effect=no-effect evidence={"absent":true,"files":[],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe partial changed: effect=partial evidence={"absent":false,"files":[{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe partial unchanged: effect=partial evidence={"absent":false,"files":[{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe partial failed: effect=partial evidence={"absent":false,"files":[{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe foreign changed: effect=unknown evidence={"absent":false,"files":[{"path":"foreign/v1/file","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe foreign unchanged: effect=unknown evidence={"absent":false,"files":[{"path":"foreign/v1/file","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe foreign failed: effect=unknown evidence={"absent":false,"files":[{"path":"foreign/v1/file","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe absent beside held changed: effect=unknown evidence={"absent":true,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe absent beside held unchanged: effect=unknown evidence={"absent":true,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe absent beside held failed: effect=unknown evidence={"absent":true,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe other request changed: effect=unknown evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"other","version":"mirror-files-evidence-v1"} err=nil
+observe other request unchanged: effect=unknown evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"other","version":"mirror-files-evidence-v1"} err=nil
+observe other request failed: effect=unknown evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"other","version":"mirror-files-evidence-v1"} err=nil
+observe garbage evidence: effect=unknown evidence={ err=nil
+observe runner error plain: effect=unknown evidence= err=plain: adapter stopped
+observe runner error unknown: effect=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
+observe runner error state: effect=unknown evidence= err=lifecycle.state|adapter refused|fix|-
+observe unconfigured runner: effect=unknown evidence= err=lifecycle.state|the mirror files adapter is not configured||-
+observe foreign block object: effect=unknown evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||- no run
+observe foreign block kind: effect=unknown evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||-
+observe undecodable request: effect=unknown evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
+observe empty execution: effect=unknown evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
+observe removal complete changed: effect=no-effect evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+  run mirror-files-v1 observe var=bootwright_mirror_files deadline=35m0s canonical=69d80d1ee52e machine=mirror materials=[id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=
+observe removal complete unchanged: effect=no-effect evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal complete failed: effect=no-effect evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal empty changed: effect=completed evidence={"absent":true,"files":[],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal empty unchanged: effect=completed evidence={"absent":true,"files":[],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal empty failed: effect=completed evidence={"absent":true,"files":[],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal released changed: effect=completed evidence={"absent":true,"files":[],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal released unchanged: effect=completed evidence={"absent":true,"files":[],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal released failed: effect=completed evidence={"absent":true,"files":[],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal partial changed: effect=partial evidence={"absent":false,"files":[{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal partial unchanged: effect=partial evidence={"absent":false,"files":[{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal partial failed: effect=partial evidence={"absent":false,"files":[{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal foreign changed: effect=unknown evidence={"absent":false,"files":[{"path":"foreign/v1/file","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal foreign unchanged: effect=unknown evidence={"absent":false,"files":[{"path":"foreign/v1/file","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal foreign failed: effect=unknown evidence={"absent":false,"files":[{"path":"foreign/v1/file","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal absent beside held changed: effect=unknown evidence={"absent":true,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal absent beside held unchanged: effect=unknown evidence={"absent":true,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal absent beside held failed: effect=unknown evidence={"absent":true,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true}],"postcondition":false,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
+observe removal other request changed: effect=unknown evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"other","version":"mirror-files-evidence-v1"} err=nil
+observe removal other request unchanged: effect=unknown evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"other","version":"mirror-files-evidence-v1"} err=nil
+observe removal other request failed: effect=unknown evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"other","version":"mirror-files-evidence-v1"} err=nil
+observe removal garbage evidence: effect=unknown evidence={ err=nil
+observe removal runner error plain: effect=unknown evidence= err=plain: adapter stopped
+observe removal runner error unknown: effect=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
+observe removal runner error state: effect=unknown evidence= err=lifecycle.state|adapter refused|fix|-
+observe removal unconfigured runner: effect=unknown evidence= err=lifecycle.state|the mirror files adapter is not configured||-
+observe removal foreign block object: effect=unknown evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||- no run
+observe removal foreign block kind: effect=unknown evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||-
+observe removal undecodable request: effect=unknown evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
+observe removal empty execution: effect=unknown evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
