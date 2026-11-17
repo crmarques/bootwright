@@ -16,6 +16,7 @@ import pathlib
 import re
 
 import yaml
+from ansible_collections.bootwright.core.tests.unit import role_tasks
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "substrate_libvirt_host"
 
@@ -23,14 +24,7 @@ OBSERVATION = re.compile(r"\b(substrate_libvirt_host_\w+)\.observation\b")
 
 
 def flattened(tasks):
-    for task in tasks:
-        if not isinstance(task, dict):
-            continue
-        if "block" in task:
-            for section in ("block", "rescue", "always"):
-                yield from flattened(task.get(section, []))
-        else:
-            yield task
+    return [task for task in role_tasks.flatten(tasks) if "block" not in task]
 
 
 def apply_tasks():

@@ -3,11 +3,10 @@
 import pathlib
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
-LOADER = DataLoader()
 SCRATCH = "bootwright.core.lifecycle_scratch"
 
 

@@ -33,7 +33,6 @@ import pytest
 from ansible.module_utils.testing import patch_module_args
 from ansible.modules import file as file_module
 from ansible.modules import find
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.tests.unit.install_phase_tasks import apply_tasks
@@ -41,11 +40,12 @@ from ansible_collections.bootwright.core.plugins.action import containercluster_
 from ansible_collections.bootwright.core.plugins.module_utils import containercluster_work_area as work_area
 from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect
 from ansible_collections.bootwright.core.plugins.modules import containercluster_media_inspect as inspect
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
+from ansible_collections.bootwright.core.tests.unit import role_tasks
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 MEDIA = ROLES / "containercluster_media_agent"
 INSTALL = ROLES / "containercluster_install_agent"
-LOADER = DataLoader()
 
 DIGEST = "a" * 64
 RELEASE = "4.21.15"
@@ -119,16 +119,7 @@ def one(found, description):
 
 
 def flattened(role, entries):
-    for task in entries:
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from flattened(role, [child for child in task.get(section) or [] if isinstance(child, dict)])
-        for action in INCLUDES:
-            target = task.get(action)
-            if isinstance(target, dict):
-                target = target.get("file")
-            if isinstance(target, str):
-                yield from flattened(role, tasks(role, target))
+    return role_tasks.flatten(entries, role_tasks.opens(role))
 
 
 def expanded(role, name):
@@ -146,7 +137,7 @@ def inserts(task):
 
 
 def test_the_installation_marks_the_work_area_before_any_node_is_handed_the_image():
-    run_order = list(flattened(INSTALL, apply_tasks(LOADER, INSTALL)))
+    run_order = flattened(INSTALL, apply_tasks(LOADER, INSTALL))
     mark = one([index for index, task in enumerate(run_order) if marks(task)], "mark the work area")
     handed = [index for index, task in enumerate(run_order) if inserts(task)]
     assert handed, "the walk no longer sees the installation insert any image"

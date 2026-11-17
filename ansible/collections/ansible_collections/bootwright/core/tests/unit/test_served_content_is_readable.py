@@ -29,7 +29,6 @@ import pytest
 import yaml
 from ansible.module_utils.testing import patch_module_args
 from ansible.modules import uri as uri_module
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -37,6 +36,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 SERVER = ROLES / "infra_artifact_server_nginx"
@@ -78,14 +79,7 @@ PUBLISHED = {
 
 
 def flattened(tasks):
-    for task in tasks:
-        if not isinstance(task, dict):
-            continue
-        if "block" in task:
-            for section in ("block", "rescue", "always"):
-                yield from flattened(task.get(section, []))
-        else:
-            yield task
+    return [task for task in role_tasks.flatten(tasks) if "block" not in task]
 
 
 def load(path):
@@ -279,7 +273,6 @@ def test_the_fetch_verifies_the_served_certificate_directly_and_refuses_anything
 # The probe and its guard are judged by what ansible-core renders from them,
 # because a path, an address or a message that reads right can still resolve
 # wrong.
-LOADER = DataLoader()
 
 
 def trusted(path):

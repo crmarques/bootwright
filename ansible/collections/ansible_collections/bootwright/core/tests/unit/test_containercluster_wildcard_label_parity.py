@@ -17,13 +17,12 @@ import json
 import pathlib
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 UNIT = pathlib.Path(__file__).resolve().parent
 ROLE = UNIT.parents[1] / "roles" / "containercluster_install_agent"
 TABLE = json.loads((UNIT / "goldens" / "containercluster_wildcard_labels.json").read_text(encoding="utf-8"))
-LOADER = DataLoader()
 
 
 def label(cluster):

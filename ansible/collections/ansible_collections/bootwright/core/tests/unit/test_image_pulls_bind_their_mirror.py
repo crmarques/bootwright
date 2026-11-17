@@ -3,24 +3,15 @@
 import pathlib
 
 import yaml
+from ansible_collections.bootwright.core.tests.unit import role_tasks
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
-
-
-def tasks(node):
-    if isinstance(node, list):
-        for item in node:
-            yield from tasks(item)
-    elif isinstance(node, dict):
-        yield node
-        for key in ("block", "rescue", "always"):
-            yield from tasks(node.get(key))
 
 
 def test_no_role_runs_a_bare_podman_pull():
     acquiring, bare = set(), []
     for path in sorted(ROLES.glob("*/tasks/*.yml")):
-        listed = list(tasks(yaml.safe_load(path.read_text())))
+        listed = role_tasks.flatten(yaml.safe_load(path.read_text()))
         for index, task in enumerate(listed):
             if "bootwright.core.image_acquire" in task:
                 acquiring.add(path.parts[-3])

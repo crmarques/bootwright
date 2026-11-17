@@ -19,12 +19,11 @@ from __future__ import annotations
 import pathlib
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 from ansible_collections.bootwright.core.plugins.module_utils.infra_service import UNIT_DIRECTORY
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
-LOADER = DataLoader()
 DIGEST = "d" * 64
 IMAGE = "registry.example/service@sha256:" + "0" * 64
 SERVER = "infra_artifact_server_nginx"

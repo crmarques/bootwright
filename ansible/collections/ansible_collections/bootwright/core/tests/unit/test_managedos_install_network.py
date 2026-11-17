@@ -22,15 +22,15 @@ from types import SimpleNamespace
 import pytest
 
 from ansible.errors import AnsibleUndefinedVariable
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as protocol
 from ansible_collections.bootwright.core.plugins.module_utils.managedos_network import guest_state
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER, SKIP, Interpreter, TaskFailed
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
 ROLES = ROLE.parent
-LOADER = DataLoader()
 PROTOCOL = "bootwright.core.managedos_install_protocol"
 FAIL = "ansible.builtin.fail"
 INCLUDE = "ansible.builtin.include_tasks"
@@ -56,20 +56,11 @@ SHARED = ("reboot.yml",)
 
 def flattened(name):
     """A task file's tasks in the order a play reaches them, each block and shared include opened."""
-    def opened(listed):
-        for task in listed or []:
-            if not isinstance(task, dict):
-                continue
-            yield task
-            if task.get(INCLUDE) in SHARED:
-                yield from opened(LOADER.load_from_file(str(ROLE / "tasks" / task[INCLUDE]), trusted_as_template=True))
-            for section in ("block", "rescue", "always"):
-                yield from opened(task.get(section))
-    return list(opened(LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True)))
+    return role_tasks.flatten(role_tasks.role_tasks(ROLE, name), role_tasks.opens(ROLE, only=SHARED))
 
 
 def defaults():
-    return dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
+    return role_tasks.role_defaults(ROLE)
 
 
 def commands():
@@ -133,7 +124,7 @@ def test_network_task_order():
     # One code path: the include has no predicate on the network's content.
     assert "when" not in applied[network]
 
-    observed = LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True)
+    observed = role_tasks.role_tasks(ROLE, "observe.yml")
     block = next(task for task in observed if "block" in task)["block"]
     reachable = index_of(block, lambda task: task.get(INCLUDE) == "reachable.yml", "reachable")
     reading = index_of(block, lambda task: task.get(INCLUDE) == "network_observe.yml", "network observe")
@@ -460,14 +451,10 @@ def answered(stdout="", rc=0):
     return {"rc": rc, "stdout": stdout, "stderr": ""}
 
 
-class Refused(Exception):
-    """A fail or assert fired, which ends the play as it ends the attempt."""
-
-
 class Guest:
     """Network task files run in order over one guest, each command answered
-    from a queue, with the frozen budgets; the first refusal that fires stops
-    the run, as ansible-core stops the attempt, and is recorded."""
+    from a queue, with the frozen budgets; the first fail or assert that fires
+    stops the run, as ansible-core stops the attempt, and is recorded."""
 
     def __init__(self, answers, matched=True, power="Off"):
         self.answers = {name: list(queue) for name, queue in answers.items()}
@@ -490,58 +477,31 @@ class Guest:
         })
 
     def run(self, name):
+        interpreter = Interpreter(ROLE, self.scope, self.step, include=lambda task: role_tasks.included_file(task) in SHARED)
         try:
-            self.perform(LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True), [])
-        except Refused:
+            interpreter.run(name)
+        except TaskFailed as failure:
+            self.fired.append(failure.task["name"])
             return self
         assert not any(self.answers.values()), ("commands never ran", self.answers)
         return self
 
-    def reached(self, conditions):
-        templar = Templar(loader=LOADER, variables=self.scope)
-        return all(templar.evaluate_conditional(condition) for condition in conditions)
-
-    def perform(self, listed, inherited):
-        for task in listed:
-            own = task.get("when", [])
-            conditions = inherited + (own if isinstance(own, list) else [own])
-            if "block" in task:
-                if self.reached(conditions):
-                    self.perform(task["block"], [])
-                continue
-            if not self.reached(conditions):
-                if "register" in task:
-                    self.scope[task["register"]] = {"changed": False, "skipped": True}
-                continue
-            self.step(task)
-
-    def step(self, task):
-        templar = Templar(loader=LOADER, variables=dict(self.scope, vars=self.scope))
+    def step(self, task, templar):
         if task.get(INCLUDE) in SHARED:
-            for name, value in (task.get("vars") or {}).items():
-                self.scope[name] = templar.template(value)
-            self.perform(LOADER.load_from_file(str(ROLE / "tasks" / task[INCLUDE]), trusted_as_template=True), [])
-        elif task.get(INCLUDE) == "guest.yml":
+            return None
+        if task.get(INCLUDE) == "guest.yml":
             command = task["vars"][GUEST].rsplit("managedos_install_anaconda_network_", 1)[-1].strip(" }")
             self.ran.append(command)
             self.argv.setdefault(command, []).append([str(word) for word in templar.template(task["vars"][GUEST])])
             if "managedos_install_anaconda_guest_retries" in task["vars"]:
                 self.budgets.append((command, str(templar.template(task["vars"]["managedos_install_anaconda_guest_retries"]))))
             self.scope["managedos_install_anaconda_guest"] = self.answers[command].pop(0)
-        elif FAIL in task:
-            self.fired.append(task["name"])
-            raise Refused(task["name"])
-        elif "ansible.builtin.assert" in task:
-            if not all(templar.evaluate_conditional(condition) for condition in task["ansible.builtin.assert"]["that"]):
-                self.fired.append(task["name"])
-                raise Refused(task["name"])
-        elif SET_FACT in task:
-            for fact, value in task[SET_FACT].items():
-                self.scope[fact] = templar.template(value)
-        elif COMPARE in task:
-            self.scope[task["register"]] = {"matched": self.matched,
-                                            "differences": [] if self.matched else ["bond0 is down, declared up"]}
-        elif (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "state_read":
+            return {"changed": False}
+        if FAIL in task or "ansible.builtin.assert" in task or SET_FACT in task:
+            return None
+        if COMPARE in task:
+            return {"matched": self.matched, "differences": [] if self.matched else ["bond0 is down, declared up"]}
+        if (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "state_read":
             assert task["ansible.builtin.include_role"]["name"] == "bootwright.core.substrate_machine"
             self.scope["substrate_machine_port_result"] = {"power": self.power}
         elif "ansible.builtin.pause" in task:
@@ -550,6 +510,7 @@ class Guest:
             self.published.append(task[PROTOCOL]["phase"])
         else:
             assert "ansible.builtin.include_role" in task, task["name"]
+        return SKIP
 
 
 def converging(first, *after):

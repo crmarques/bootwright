@@ -15,23 +15,16 @@ the installer boot, which it skips (Q66, D183).
 from __future__ import annotations
 
 import pathlib
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
-from ansible.parsing.dataloader import DataLoader
 
 TASKS = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda" / "tasks"
-LOADER = DataLoader()
 PROTOCOL = "bootwright.core.managedos_install_protocol"
 
 
 def loaded(name):
     return [task for task in LOADER.load_from_file(str(TASKS / name)) if isinstance(task, dict)]
-
-
-def flattened(tasks):
-    for task in tasks:
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from flattened([child for child in task.get(section) or [] if isinstance(child, dict)])
 
 
 def named(tasks, name):
@@ -42,7 +35,7 @@ def named(tasks, name):
 
 
 def test_the_intent_is_recorded_where_the_marker_is_proved_before_any_withdrawal():
-    tasks = list(flattened(loaded("apply.yml")))
+    tasks = list(role_tasks.flatten(loaded("apply.yml")))
     prove = tasks.index(named(tasks, "Prove the installed marker matches this frozen installation"))
     recorded = tasks.index(named(tasks, "Record that this installation is proved and its disk boot intended"))
     later = [tasks.index(named(tasks, name)) for name in (
@@ -56,21 +49,21 @@ def test_the_intent_is_recorded_where_the_marker_is_proved_before_any_withdrawal
     assert tasks[recorded][PROTOCOL] == {"phase": "prepared", "marker": "{{ bootwright_os_install_material.marker }}"}
     assert "when" not in tasks[recorded] and tasks[recorded]["no_log"] is True
     for name in ("network.yml", "update.yml"):
-        assert sum(task.get("ansible.builtin.include_tasks") == "reboot.yml" for task in flattened(loaded(name))) == 1, name
+        assert sum(task.get("ansible.builtin.include_tasks") == "reboot.yml" for task in role_tasks.flatten(loaded(name))) == 1, name
     for name in sorted(path.name for path in TASKS.glob("*.yml")):
-        records = [task for task in flattened(loaded(name)) if (task.get(PROTOCOL) or {}).get("phase") == "prepared"]
+        records = [task for task in role_tasks.flatten(loaded(name)) if (task.get(PROTOCOL) or {}).get("phase") == "prepared"]
         assert len(records) == (1 if name == "apply.yml" else 0), name
 
 
 def test_a_proved_installation_boots_its_disk_and_never_the_installer():
-    every = list(flattened(loaded("apply.yml")))
+    every = list(role_tasks.flatten(loaded("apply.yml")))
     disk = named(every, "Boot the installed disk of a machine this apply already proved")
     installer = named(every, "Boot the machine from its own installer image")
     assert every.index(disk) < every.index(installer)
     assert disk["ansible.builtin.include_tasks"] == "proved_boot.yml"
     assert any("installationProved" in str(condition) for condition in disk["when"])
     assert "not (managedos_install_anaconda_was_installed | bool)" in str(installer["when"])
-    inside = list(flattened(loaded("proved_boot.yml")))
+    inside = list(role_tasks.flatten(loaded("proved_boot.yml")))
     assert not any((task.get("ansible.builtin.include_tasks") or "") == "boot.yml" for task in inside)
     powered = inside.index(named(inside, "Refuse to boot a proved machine that is not powered off"))
     booted = inside.index(named(inside, "Boot the installed disk of the proved machine"))
@@ -81,7 +74,7 @@ def test_a_proved_installation_boots_its_disk_and_never_the_installer():
 
 
 def test_fresh_install_proves_observed_marker_before_network_or_prepared():
-    tasks = list(flattened(loaded("apply.yml")))
+    tasks = list(role_tasks.flatten(loaded("apply.yml")))
     read = tasks.index(named(tasks, "Read the installation the machine now holds, through its own channel"))
     prove = tasks.index(named(tasks, "Prove the installed marker matches this frozen installation"))
     verify = tasks.index(named(tasks, "Prove the installed machine answers on the exact key it reported"))

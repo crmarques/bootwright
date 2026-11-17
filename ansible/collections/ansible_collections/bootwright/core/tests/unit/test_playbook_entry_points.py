@@ -31,10 +31,11 @@ import sys
 
 import pytest
 import yaml
-from ansible.parsing.dataloader import DataLoader
 from ansible.playbook import Playbook
 from ansible.vars.manager import VariableManager
 from ansible_collections.bootwright.core.tests.unit.runtime_closure import closure_environment, refused
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[2]
 COLLECTIONS = COLLECTION.parents[2]
@@ -73,17 +74,11 @@ def playbooks():
 def role_imports(play):
     """Each role import a play holds as (role, tasks_from), in every task section and block around a task."""
     found = []
-
-    def visit(tasks):
-        for task in tasks or []:
+    for section in SECTIONS:
+        for task in role_tasks.flatten(play.get(section)):
             for name in ROLE_IMPORTS:
                 if name in task:
                     found.append((str(task[name]["name"]).rsplit(".", 1)[-1], str(task[name].get("tasks_from", "main"))))
-            for section in ("block", "rescue", "always"):
-                visit(task.get(section))
-
-    for section in SECTIONS:
-        visit(play.get(section))
     assert "roles" not in play, "a play lists roles, which imports an entry point nothing here walks"
     return found
 
@@ -130,7 +125,7 @@ def reached(blocks):
 
 def first_task(playbook):
     """The first task other than a meta task that ansible-core loads for a playbook's play."""
-    loader = DataLoader()
+    loader = LOADER
     plays = Playbook.load(str(PLAYBOOKS / playbook), variable_manager=VariableManager(loader=loader),
                           loader=loader).get_plays()
     assert len(plays) == len(yaml.safe_load((PLAYBOOKS / playbook).read_text())), "%s lost a play to the loader" % playbook

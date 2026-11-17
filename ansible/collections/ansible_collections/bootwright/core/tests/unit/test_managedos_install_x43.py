@@ -20,12 +20,12 @@ import pathlib
 import re
 import pytest
 
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
-LOADER = DataLoader()
 PROTOCOL = "bootwright.core.managedos_install_protocol"
 STAT = "ansible.builtin.stat"
 COMMAND = "ansible.builtin.command"
@@ -180,15 +180,7 @@ MARKER = '{"request":"' + "1" * 64 + '"}'
 
 def flattened(path):
     """A task file's tasks in the order a play reaches them, each block opened."""
-    def opened(listed):
-        for task in listed or []:
-            if not isinstance(task, dict):
-                continue
-            yield task
-            if "block" in task:
-                for section in ("block", "rescue", "always"):
-                    yield from opened(task.get(section))
-    return list(opened(LOADER.load_from_file(str(path), trusted_as_template=True)))
+    return role_tasks.flatten(role_tasks.load_tasks(path))
 
 
 # The answer of the first identity read is frozen by a set_fact, which
@@ -235,7 +227,7 @@ def test_a_first_install_reports_changed_and_a_replay_unchanged():
             if task is tasks[frozen] or "managedos_install_anaconda_was_installed" in (task.get("ansible.builtin.set_fact") or {}):
                 continue
             assert "managedos_install_anaconda_installed" not in repr(
-                {key: value for key, value in task.items() if key not in ("block", "rescue", "always")}
+                {key: value for key, value in task.items() if key not in role_tasks.SECTIONS}
             ), "%s: %s" % (path.name, task.get("name"))
 
 

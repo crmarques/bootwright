@@ -31,11 +31,10 @@ from ansible_collections.bootwright.core.tests.unit.install_phase_tasks import a
 import re
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "containercluster_install_agent"
-LOADER = DataLoader()
 
 ADDRESS = "198.51.100.21"
 # The endpoints lab-sno freezes (install-request-lab-sno.golden in

@@ -1,0 +1,68 @@
+- name: Plain
+  ansible.builtin.set_fact:
+    plain: true
+  when: enabled
+
+- name: Guarded block
+  when:
+    - outer
+    - outer_two
+  block:
+    - name: First inside
+      ansible.builtin.command: /usr/bin/true
+      register: first
+      when: inner
+      changed_when: false
+
+    - name: Failing inside
+      ansible.builtin.fail:
+        msg: boom
+      when: explode
+
+    - name: After the failure
+      ansible.builtin.set_fact:
+        after_failure: true
+
+    - name: Include inside the block
+      ansible.builtin.include_tasks: included.yml
+      when: include_inside
+
+    - name: Nested block
+      when: nested
+      block:
+        - name: Deep
+          ansible.builtin.set_fact:
+            deep: true
+          when: deep_when
+
+  rescue:
+    - name: Rescued
+      ansible.builtin.set_fact:
+        rescued: true
+
+  always:
+    - name: Always
+      ansible.builtin.set_fact:
+        settled_always: true
+
+- name: Include
+  ansible.builtin.include_tasks: included.yml
+  when: include_it
+  vars:
+    from_include: carried
+
+- name: Import
+  ansible.builtin.import_tasks: imported.yml
+  when: import_it
+  vars:
+    from_import: carried
+
+- name: Judged
+  ansible.builtin.command: /usr/bin/false
+  register: judged
+  failed_when: judged.rc == 2
+  changed_when: judged.rc == 1
+
+- name: Last
+  ansible.builtin.set_fact:
+    last: "{{ judged.rc }}"

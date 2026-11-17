@@ -23,13 +23,13 @@ from __future__ import annotations
 import pathlib
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.plugins.loader import init_plugin_loader
 from ansible.template import Templar
 from ansible.utils.collection_loader import AnsibleCollectionConfig
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
-LOADER = DataLoader()
 
 MODULES = ("bootwright.core.redfish_boot", "bootwright.core.redfish_system_read", "bootwright.core.redfish_system_inspect",
            "bootwright.core.redfish_firmware")
@@ -57,18 +57,11 @@ def loaded(path):
     return [task for task in LOADER.load_from_file(str(path), trusted_as_template=True) if isinstance(task, dict)]
 
 
-def walk(tasks):
-    for task in tasks:
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)])
-
-
 def calls(role):
     """Every Redfish module task in one role: its file, its module and its arguments."""
     found = []
     for path in sorted((ROLES / role / "tasks").glob("*.yml")):
-        for task in walk(loaded(path)):
+        for task in role_tasks.flatten(loaded(path)):
             for module in MODULES:
                 if module in task:
                     found.append((path.name, module, task[module], task))
@@ -134,7 +127,7 @@ def test_each_lifecycle_role_reads_the_bundle_it_was_handed(lookups, tmp_path, r
 # Each target of a reading hands its machine port its own bundle's path under
 # its own variable, and a target that declares none hands it nothing.
 def test_each_read_target_reads_its_own_bundle(lookups, tmp_path):
-    [port] = [task["vars"]["bootwright_machine_port"] for task in walk(loaded(ROLES / "machine_power_read" / "tasks" / "read_one.yml"))
+    [port] = [task["vars"]["bootwright_machine_port"] for task in role_tasks.flatten(loaded(ROLES / "machine_power_read" / "tasks" / "read_one.yml"))
               if "ansible.builtin.include_role" in task]
     first, second = tmp_path / "bmc-ca-0", tmp_path / "bmc-ca-1"
     material = {"controllerCA0": str(first), "controllerCA2": str(second), "controllerUser": "/run/user"}
@@ -150,7 +143,7 @@ def test_each_read_target_reads_its_own_bundle(lookups, tmp_path):
 def test_every_bare_metal_include_passes_its_bundle():
     seen = []
     for path in sorted(ROLES.glob("*/tasks/*.yml")):
-        for task in walk(loaded(path)):
+        for task in role_tasks.flatten(loaded(path)):
             for action in INCLUDES:
                 arguments = task.get(action)
                 if isinstance(arguments, dict) and arguments.get("tasks_from") in PORT_BUNDLE:
@@ -193,7 +186,7 @@ def test_the_argument_specs_admit_the_frozen_bundle():
 def port_calls(role):
     found = []
     for path in sorted((ROLES / role / "tasks").glob("*.yml")):
-        for task in walk(loaded(path)):
+        for task in role_tasks.flatten(loaded(path)):
             include = task.get("ansible.builtin.include_role", {})
             if include.get("tasks_from") in ("media_insert", "media_eject"):
                 found.append((path.name, include["tasks_from"], task["vars"]["bootwright_machine_port"]))

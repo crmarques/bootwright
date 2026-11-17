@@ -27,13 +27,12 @@ from ansible_collections.bootwright.core.plugins.modules import containercluster
 from types import SimpleNamespace
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import containercluster_install_protocol as protocol
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[4] / "roles" / "containercluster_install_agent"
-LOADER = DataLoader()
 DIGEST = "1" * 64
 IDENTITY = "17edaacca4b95042edb9ca00270c5c837fd3db4b8c1f76174c9973e40e3ce7b7"
 RELEASE = "4.21.15"

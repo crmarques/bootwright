@@ -5,11 +5,11 @@ from __future__ import annotations
 import pathlib
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_registry_discovery as discovery
 from ansible_collections.bootwright.core.plugins.modules import ceph_image_resolve
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "storage_ceph_image" / "tasks" / "resolve.yml"
 SECRET = "fixture-entitlement-password"
@@ -42,7 +42,7 @@ def failed(monkeypatch, error):
 
 
 def rendered_failure(result):
-    loader = DataLoader()
+    loader = LOADER
     tasks = loader.load_from_file(str(ROLE), trusted_as_template=True)
     call = next(task for task in tasks if "bootwright.core.ceph_image_resolve" in task)
     protocol = next(task for task in tasks if task.get("bootwright.core.ceph_image_protocol", {}).get("phase") == "refused")

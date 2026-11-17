@@ -7,11 +7,10 @@ reserved subtree.
 """
 
 import pathlib
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
-from ansible.parsing.dataloader import DataLoader
 
 MEDIA = pathlib.Path(__file__).resolve().parents[2] / 'roles' / 'containercluster_media_agent'
-LOADER = DataLoader()
 LAYOUT = 'bootwright.core.containercluster_media_layout'
 REQUEST = '{{ bootwright_cluster_media_request }}'
 # What the apply runs before the layout is proved: checks, the protocol's

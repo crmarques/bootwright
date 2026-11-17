@@ -23,11 +23,11 @@ import pathlib
 
 import pytest
 import yaml
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 MEDIA = pathlib.Path(__file__).resolve().parents[2] / "roles" / "containercluster_media_agent"
-LOADER = DataLoader()
 STRING = "tag:yaml.org,2002:str"
 
 # Each a cluster name the installer's YAML 1.1 reader takes for a number or a
@@ -57,13 +57,6 @@ def install_config(name):
     }
 
 
-def walk(tasks):
-    for task in tasks:
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)])
-
-
 def render(config, pull_secret, trust_bundles=()):
     """The task's content over a request selecting one trust bundle per path.
 
@@ -72,7 +65,7 @@ def render(config, pull_secret, trust_bundles=()):
     (MediaCapability.run in internal/containercluster/agentinstall).
     """
     loaded = LOADER.load_from_file(str(MEDIA / "tasks" / "build.yml"), trusted_as_template=True)
-    written = [task for task in walk([task for task in loaded if isinstance(task, dict)])
+    written = [task for task in role_tasks.flatten([task for task in loaded if isinstance(task, dict)])
                if task.get("name") == "Write the install configuration with its bound material"]
     assert len(written) == 1, "build.yml has %d tasks writing the install configuration" % len(written)
     request = {"installConfig": config}

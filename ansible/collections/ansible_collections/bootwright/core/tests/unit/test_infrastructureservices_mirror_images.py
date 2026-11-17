@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import pathlib
 
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 from ansible_collections.bootwright.core.plugins.action import infrastructureservices_mirror_images_protocol as protocol
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "infrastructureservices_mirror_images"
 DIGEST = "sha256:" + "0123456789abcdef" * 4
@@ -27,7 +27,6 @@ REQUEST = {
     "placement": {"connection": "ssh", "machine": "mirror"},
     "version": "mirror-images-v1",
 }
-LOADER = DataLoader()
 
 
 def tasks(name):

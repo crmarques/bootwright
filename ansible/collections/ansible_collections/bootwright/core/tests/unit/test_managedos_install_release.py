@@ -19,14 +19,14 @@ import subprocess
 
 import pytest
 
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as protocol
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
-LOADER = DataLoader()
 PROTOCOL = "bootwright.core.managedos_install_protocol"
 INCLUDE = "ansible.builtin.include_tasks"
 REACHED = "managedos_install_anaconda_reachable.rc | default(1) == 0"
@@ -40,18 +40,9 @@ def tasks(name):
 
 
 def flattened(name):
-    """A task file's tasks in play order, each block opened and its condition
-    carried onto every task inside it."""
-    def opened(listed, inherited):
-        for task in listed or []:
-            conditions = task.get("when", [])
-            conditions = inherited + (conditions if isinstance(conditions, list) else [conditions])
-            if "block" in task:
-                for section in ("block", "rescue", "always"):
-                    yield from opened(task.get(section), conditions)
-                continue
-            yield dict(task, when=conditions)
-    return list(opened(tasks(name), []))
+    """A task file's tasks in play order, each block opened and its conditions carried onto every task inside it."""
+    return [dict(visit.task, when=list(visit.conditions))
+            for visit in role_tasks.visits([task for task in tasks(name) if isinstance(task, dict)]) if "block" not in visit.task]
 
 
 def only(listed, predicate, description):

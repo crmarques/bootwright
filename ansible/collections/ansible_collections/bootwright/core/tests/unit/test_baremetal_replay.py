@@ -23,14 +23,13 @@ import sys
 from types import SimpleNamespace
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import substrate_physical_protocol as protocol
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "substrate_baremetal_machine"
 COLLECTIONS = pathlib.Path(__file__).resolve().parents[5]
-LOADER = DataLoader()
 PROTOCOL = "bootwright.core.substrate_physical_protocol"
 # What an apply may run: assertions over its request, the protocol, and one
 # read of the machine through its controller.

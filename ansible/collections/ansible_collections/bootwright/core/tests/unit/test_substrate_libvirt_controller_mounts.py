@@ -15,13 +15,12 @@ from __future__ import annotations
 import ast
 import pathlib
 
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 from ansible_collections.bootwright.core.plugins.module_utils import redfish_media_verification
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "substrate_libvirt_machine"
-LOADER = DataLoader()
 
 REQUEST = {
     "controller": {

@@ -20,12 +20,12 @@ import pathlib
 
 import pytest
 from ansible.module_utils.common.arg_spec import ArgumentSpecValidator
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 ROLE = ROLES / "containercluster_install_agent"
-LOADER = DataLoader()
 INCLUDE = "ansible.builtin.include_role"
 MATERIAL = "/run/bootwright/material/"
 CLUSTER_UID = "0b1c2d3e-0000-4000-8000-000000000001"
@@ -41,13 +41,6 @@ def encoded(value):
 
 def loaded(name):
     return [task for task in LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True) if isinstance(task, dict)]
-
-
-def walk(tasks):
-    for task in tasks:
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)])
 
 
 def specs(role):
@@ -100,7 +93,7 @@ def port(operation, variables):
 
 
 def dispatched(file, entry):
-    return next(task for task in walk(loaded(file))
+    return next(task for task in role_tasks.flatten(loaded(file))
                 if INCLUDE in task and task[INCLUDE].get("tasks_from") == entry and task[INCLUDE]["name"] == "bootwright.core.substrate_machine")
 
 
@@ -158,7 +151,7 @@ def test_a_fetching_node_is_handed_no_pin_and_no_pushed_input():
 
 
 def test_a_pushed_node_presents_its_own_image_only_by_the_ports_answer():
-    task = next(task for task in walk(loaded("node_state.yml")) if task.get("name") == "Prove the presented pushed image identity")
+    task = next(task for task in role_tasks.flatten(loaded("node_state.yml")) if task.get("name") == "Prove the presented pushed image identity")
     variables = scope()
     assert Templar(loader=LOADER, variables=variables).evaluate_conditional(task["when"])
     for answer, own in (("own", True), ("foreign", False), ("none", False), ("unknown", False)):

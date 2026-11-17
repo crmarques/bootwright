@@ -16,15 +16,15 @@ import pathlib
 import re
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.plugins.loader import init_plugin_loader
 from ansible.template import Templar
 from ansible.utils.collection_loader import AnsibleCollectionConfig
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[2]
 ROLES = COLLECTION / "roles"
 DISPATCHER = ROLES / "substrate_machine"
-LOADER = DataLoader()
 
 ARM_ROLE = re.compile(r"\bsubstrate_[a-z0-9]+_machine\b")
 PORT = ("pre_boot", "boot_media", "boot_disk", "identity_read", "state_read", "media_insert", "media_eject", "power")
@@ -43,13 +43,6 @@ def plugins_fixture():
 
 def loaded(path):
     return [task for task in LOADER.load_from_file(str(path), trusted_as_template=True) if isinstance(task, dict)]
-
-
-def walk(tasks):
-    for task in tasks:
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)])
 
 
 def table():
@@ -115,7 +108,7 @@ def test_each_entry_point_dispatches_under_its_own_key(entry):
 def dispatch():
     tasks = loaded(DISPATCHER / "tasks" / "dispatch.yml")
     refusal = next(index for index, task in enumerate(tasks) if FAIL in task)
-    lookup = next(index for index, task in enumerate(tasks) if any(INCLUDE in child for child in walk([task])))
+    lookup = next(index for index, task in enumerate(tasks) if any(INCLUDE in child for child in role_tasks.flatten([task])))
     return tasks, refusal, lookup
 
 
@@ -169,10 +162,10 @@ def test_a_synthetic_arm_reaches_machine_power_through_its_own_entry_points(plug
     tasks, refusal, lookup = dispatch()
     rendering = Templar(loader=LOADER, variables=scope(arm, arms))
     assert rendering.evaluate_conditional(tasks[refusal]["when"]) is False
-    [entered] = [task for task in walk([tasks[lookup]]) if INCLUDE in task]
+    [entered] = [task for task in role_tasks.flatten([tasks[lookup]]) if INCLUDE in task]
     assert rendering.template(entered[INCLUDE]["name"]) == "bootwright.core.substrate_vsphere_machine"
     assert rendering.template(entered[INCLUDE]["tasks_from"]) == "power"
-    [published] = [task for task in walk([tasks[lookup]]) if SET_FACT in task]
+    [published] = [task for task in role_tasks.flatten([tasks[lookup]]) if SET_FACT in task]
     assert rendering.template(published["vars"]["substrate_machine_prefix"]) == "substrate_vsphere_machine"
     answered = dict(scope(arm, arms), substrate_machine_prefix="substrate_vsphere_machine",
                     substrate_vsphere_machine_port_result={"power": "Off"})

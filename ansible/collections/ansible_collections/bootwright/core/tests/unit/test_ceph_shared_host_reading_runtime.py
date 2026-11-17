@@ -12,6 +12,7 @@ import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, native_diagnostics
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_shared_host_reading as shared
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 
 def test_the_protocol_publishes_a_reading_only_as_an_observation():
@@ -27,7 +28,6 @@ def test_the_protocol_publishes_a_reading_only_as_an_observation():
 
 def test_a_lent_reading_stays_data_through_the_roles_templating():
     """The runner marks every extra variable a string of data (ansible.ExtraVariables), so the role hands the JSON on unrendered."""
-    from ansible.parsing.dataloader import DataLoader
     from ansible.template import Templar, trust_as_template
 
     def marked(value):
@@ -38,7 +38,7 @@ def test_a_lent_reading_stays_data_through_the_roles_templating():
         return value
 
     text = json.dumps({"version": ceph_core.HOST_READING, "hosts": [{"name": "{{ 7 * 7 }}", "state": {}}]})
-    loader = DataLoader()
+    loader = LOADER
     variables = loader.load(json.dumps(marked({"bootwright_ceph_material": {"hosts": text, "knownHosts": "/run/known"}})))
     rendered = Templar(loader=loader, variables=variables).template(trust_as_template("{{ bootwright_ceph_material }}"))
     assert str(rendered["hosts"]) == text

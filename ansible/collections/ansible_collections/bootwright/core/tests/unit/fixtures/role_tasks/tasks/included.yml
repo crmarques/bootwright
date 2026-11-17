@@ -1,0 +1,4 @@
+- name: Included read
+  ansible.builtin.set_fact:
+    included: "{{ from_include | default('none') }}"
+  when: included_when

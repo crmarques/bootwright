@@ -39,13 +39,12 @@ import pytest
 from ansible.module_utils.testing import patch_module_args
 from ansible.modules import file as file_module
 from ansible.modules import find as find_module
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.modules import private_file
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 MEDIA = pathlib.Path(__file__).resolve().parents[2] / "roles" / "containercluster_media_agent"
-LOADER = DataLoader()
 WORK = "/var/lib/bootwright-hosted/lab/clusters/sno"
 OC = "/var/lib/bootwright/tools/oc/4.21.15/oc"
 ROUTED = ("Build the image this cluster's nodes boot", "Generate native cluster manifests for encrypted installation")

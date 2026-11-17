@@ -48,17 +48,17 @@ import threading
 import time
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect as inspection
 from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import (
     AGENT_CONFIG, AUTH_CONFIG, KEPT, RESTORED, STATE, UNTOUCHED, registration, restore)
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 INSTALL = ROLES / "containercluster_install_agent"
 MEDIA = ROLES / "containercluster_media_agent"
-LOADER = DataLoader()
 
 # Distinct values, so each phase is proved to read its own budget.
 INSTALL_BUDGETS = {"bootSeconds": 311, "bootstrapSeconds": 4703, "fanOut": 4, "installSeconds": 5903, "roundMarginSeconds": 83}
@@ -119,15 +119,8 @@ def trusted(path):
     return [task for task in LOADER.load_from_file(str(path), trusted_as_template=True) if isinstance(task, dict)]
 
 
-def walk(tasks):
-    for task in tasks:
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)])
-
-
 def found(role, name, predicate):
-    matches = [task for task in walk(trusted(role / "tasks" / name)) if predicate(task)]
+    matches = [task for task in role_tasks.flatten(trusted(role / "tasks" / name)) if predicate(task)]
     assert len(matches) == 1, "%s has %d tasks that match" % (name, len(matches))
     return matches[0]
 
@@ -191,7 +184,7 @@ def test_each_installer_wait_runs_every_attempt_under_what_its_budget_has_left()
     assert looped["ansible.builtin.include_tasks"] == "wait_attempt.yml"
     assert scope(INSTALL).template(looped["loop"]) == list(range(41))
     for name in ("wait.yml", "wait_attempt.yml"):
-        for task in walk(trusted(INSTALL / "tasks" / name)):
+        for task in role_tasks.flatten(trusted(INSTALL / "tasks" / name)):
             assert not {"until", "retries"} & set(task), "%s: %s" % (name, task.get("name"))
     # What is left is taken in the attempt, from the deadline, and nowhere else.
     tasks = trusted(INSTALL / "tasks" / "wait_attempt.yml")[0]["block"]
@@ -205,7 +198,7 @@ def test_each_installer_wait_runs_every_attempt_under_what_its_budget_has_left()
     assert "containercluster_install_agent_remaining" not in (INSTALL / "tasks" / "wait.yml").read_text()
     # The deadline is the wait's, set once in wait.yml: an attempt that set it
     # again would hand each attempt a fresh budget.
-    assert not [task for task in walk(trusted(INSTALL / "tasks" / "wait_attempt.yml"))
+    assert not [task for task in role_tasks.flatten(trusted(INSTALL / "tasks" / "wait_attempt.yml"))
                 if "containercluster_install_agent_deadline" in (task.get("ansible.builtin.set_fact") or {})]
     assert "containercluster_install_agent_deadline:" not in (INSTALL / "tasks" / "wait_attempt.yml").read_text()
     remaining = tasks[taking[0]]["ansible.builtin.set_fact"]["containercluster_install_agent_remaining"]
@@ -753,7 +746,7 @@ def build():
 
 
 def test_the_image_is_built_under_timeout_with_the_budget_its_request_froze():
-    builds = [task for path in sorted((MEDIA / "tasks").glob("*.yml")) for task in walk(trusted(path))
+    builds = [task for path in sorted((MEDIA / "tasks").glob("*.yml")) for task in role_tasks.flatten(trusted(path))
               if "create" in argv(task) and "image" in argv(task)]
     assert builds == [build()]
     command = argv(build())
@@ -786,7 +779,7 @@ def test_a_build_the_budget_stopped_fails_as_the_budget_spent_and_any_other_as_t
 
 
 def test_every_cluster_read_gives_up_on_a_request_after_a_bounded_time():
-    reads = [task for task in walk(trusted(INSTALL / "tasks" / "cluster_state.yml")) if argv(task)[:1] == [CLIENT]]
+    reads = [task for task in role_tasks.flatten(trusted(INSTALL / "tasks" / "cluster_state.yml")) if argv(task)[:1] == [CLIENT]]
     assert len(reads) >= 4, "the walk stopped seeing the cluster reads"
     for task in reads:
         bounds = [value for value in argv(task) if value.startswith("--request-timeout")]
@@ -796,7 +789,7 @@ def test_every_cluster_read_gives_up_on_a_request_after_a_bounded_time():
         assert 0 < int(rendered[len("--request-timeout="):-1]) <= 60, rendered
     for path in sorted((INSTALL / "tasks").glob("*.yml")):
         if path.name != "cluster_state.yml":
-            assert not [task for task in walk(trusted(path)) if argv(task)[:1] == [CLIENT]], path.name
+            assert not [task for task in role_tasks.flatten(trusted(path)) if argv(task)[:1] == [CLIENT]], path.name
 
 
 def skip():
@@ -829,11 +822,11 @@ def test_the_boot_phase_deadline_is_set_once_before_the_first_node():
 
 
 def test_every_boot_step_runs_under_what_the_boot_phase_has_left():
-    steps = [task for task in walk(bounded()["block"])
+    steps = [task for task in role_tasks.flatten(bounded()["block"])
              if (task.get("ansible.builtin.include_tasks") == "port.yml"
                  and task.get("vars", {}).get("containercluster_install_agent_port_operation") == "media_insert")
              or "ansible.builtin.include_role" in task]
-    effects = [task for task in walk(skip()["block"])
+    effects = [task for task in role_tasks.flatten(skip()["block"])
                if (task.get("ansible.builtin.include_tasks") == "port.yml"
                    and task.get("vars", {}).get("containercluster_install_agent_port_operation") == "media_insert")
                or "ansible.builtin.include_role" in task]
@@ -902,7 +895,7 @@ def test_every_budget_clock_counts_true_seconds_across_a_daylight_saving_change(
     taking = found(INSTALL, "wait_attempt.yml",
                    lambda task: "containercluster_install_agent_remaining" in (task.get("ansible.builtin.set_fact") or {}))
     stepping = found(INSTALL, "boot.yml", lambda task: "timeout" in task and "block" in task)
-    proving = [task["ansible.builtin.wait_for"] for task in walk(trusted(INSTALL / "tasks" / "readiness.yml"))
+    proving = [task["ansible.builtin.wait_for"] for task in role_tasks.flatten(trusted(INSTALL / "tasks" / "readiness.yml"))
                if "ansible.builtin.wait_for" in task]
     assert [proof["port"] for proof in proving] == [22, 8090]
     for elapsed in (1799, 1800, 1801, 3600, 7199, 7200, 9000):

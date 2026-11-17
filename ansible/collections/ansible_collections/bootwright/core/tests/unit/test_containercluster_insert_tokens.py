@@ -4,14 +4,13 @@ import pathlib
 
 from ansible_collections.bootwright.core.tests.unit.install_phase_tasks import apply_tasks as phased_tasks
 
-from ansible.parsing.dataloader import DataLoader
 from ansible.playbook.helpers import load_list_of_blocks
 from ansible.playbook.play import Play
 from ansible.template import Templar
 from ansible.vars.manager import VariableManager
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / 'roles' / 'containercluster_install_agent'
-LOADER = DataLoader()
 MODULE = 'bootwright.core.containercluster_media_token'
 BASE = 'https://192.0.2.1/private/clusters/sno/'
 TOKEN = 'insert-' + 'a' * 64

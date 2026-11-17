@@ -22,8 +22,8 @@ import re
 
 import pytest
 import yaml
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[2]
 ROLES = COLLECTION / "roles"
@@ -164,11 +164,11 @@ def test_a_role_pattern_ends_at_the_end_of_the_value(path):
 @pytest.mark.parametrize("value, admitted", [("lab", True), ("lab\n", False), ("lab\n\n", False), ("lab9", False)])
 @pytest.mark.parametrize("quote", ["'", '"'])
 def test_the_guarded_anchor_is_exact_through_ansible_templating(test, value, admitted, quote):
-    templar = Templar(loader=DataLoader(), variables={"value": value})
+    templar = Templar(loader=LOADER, variables={"value": value})
     expression = trust_as_template("value is %s(%s^[a-z]+$(?!\\n)%s)" % (test, quote, quote))
     assert templar.evaluate_conditional(expression) is admitted
 
 
 def test_a_bare_anchor_admits_a_trailing_newline_through_ansible_templating():
-    templar = Templar(loader=DataLoader(), variables={"value": "lab\n"})
+    templar = Templar(loader=LOADER, variables={"value": "lab\n"})
     assert templar.evaluate_conditional(trust_as_template("value is match('^[a-z]+$')")) is True

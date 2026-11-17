@@ -22,12 +22,12 @@ import pathlib
 import re
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[2]
 ROLES = COLLECTION / "roles"
 PLAYBOOKS = COLLECTION / "playbooks"
-LOADER = DataLoader()
 
 PREFIXES = ("ansible.builtin.", "ansible.legacy.", "")
 TRANSFERS = {prefix + name: name for prefix in PREFIXES for name in ("copy", "template", "unarchive", "assemble", "script")}
@@ -53,18 +53,11 @@ def load(path):
 
 def walk(tasks, inherited=()):
     """Each task with the variables of the blocks around it."""
-    for task in tasks or []:
-        if not isinstance(task, dict):
-            continue
-        scopes = inherited + (task.get("vars") or {},)
-        if "block" in task:
-            for key in ("block", "rescue", "always"):
-                yield from walk(task.get(key) or [], scopes)
-        else:
-            yield task, scopes
+    return [(visit.task, inherited + tuple(task.get("vars") or {} for task in visit.parents + (visit.task,)))
+            for visit in role_tasks.visits(tasks) if "block" not in visit.task]
 
 
-def role_tasks(role):
+def tasks_of_role(role):
     for directory in ("tasks", "handlers"):
         for path in sorted((role / directory).glob("*.yml")):
             for task, scopes in walk(load(path)):
@@ -240,7 +233,7 @@ def offences(tasks, files, base=None):
 
 
 def role_offences(role):
-    return offences(role_tasks(role), variable_files(role), role)
+    return offences(tasks_of_role(role), variable_files(role), role)
 
 
 @pytest.mark.parametrize("role", sorted(path.name for path in ROLES.iterdir() if (path / "tasks").is_dir()))

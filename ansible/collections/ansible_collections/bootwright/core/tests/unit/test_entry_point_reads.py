@@ -15,6 +15,7 @@ import re
 
 import pytest
 import yaml
+from ansible_collections.bootwright.core.tests.unit import role_tasks
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 VARIABLE = re.compile(r"\bbootwright_[a-z][a-z0-9_]*\b")
@@ -24,17 +25,7 @@ LITERAL = re.compile(r"(?:\{\{ role_path \}\}/tasks/)?(\w+)\.yml")
 
 def tasks_of(text):
     """Every task of a task file, with the tasks inside its blocks."""
-    found = []
-
-    def visit(tasks):
-        for task in tasks or []:
-            if isinstance(task, dict):
-                found.append(task)
-                for section in ("block", "rescue", "always"):
-                    visit(task.get(section))
-
-    visit(yaml.safe_load(text))
-    return found
+    return role_tasks.flatten(yaml.safe_load(text))
 
 
 def included_files(task):

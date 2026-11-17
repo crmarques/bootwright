@@ -6,14 +6,13 @@ import pathlib
 
 import pytest
 
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
 PROTOCOL = "bootwright.core.managedos_install_protocol"
 INCLUDE = "ansible.builtin.include_tasks"
-LOADER = DataLoader()
 
 
 def flattened(tasks):

@@ -26,13 +26,13 @@ import re
 from xml.etree import ElementTree
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import domain_disk_bindings
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 GOLDENS = pathlib.Path(__file__).resolve().parent / "goldens" / "templates"
-LOADER = DataLoader()
 UPDATE = os.environ.get("BOOTWRIGHT_UPDATE_GOLDENS") == "1"
 
 DIGEST = "0123456789abcdef" * 4
@@ -159,15 +159,6 @@ def role_vars(role):
     return dict(LOADER.load_from_file(str(path), trusted_as_template=True) or {}) if path.is_file() else {}
 
 
-def task_tree(tasks):
-    for task in tasks:
-        if not isinstance(task, dict):
-            continue
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from task_tree(task.get(section, []))
-
-
 def rendered_templates():
     """Every (role, template) a task renders through ansible.builtin.template.
 
@@ -177,7 +168,7 @@ def rendered_templates():
     found = set()
     for path in sorted(ROLES.glob("*/tasks/*.yml")):
         role = path.parent.parent.name
-        for task in task_tree(LOADER.load_from_file(str(path)) or []):
+        for task in role_tasks.flatten(LOADER.load_from_file(str(path)) or []):
             source = (task.get("ansible.builtin.template") or {}).get("src") if isinstance(task, dict) else None
             if not source:
                 continue

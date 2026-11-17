@@ -27,11 +27,10 @@ import json
 import pathlib
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "machine_power"
-LOADER = DataLoader()
 
 INSPECT = "bootwright.core.redfish_system_inspect"
 PROTOCOL = "bootwright.core.machine_power_protocol"

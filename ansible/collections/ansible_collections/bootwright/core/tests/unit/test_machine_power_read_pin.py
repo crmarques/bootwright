@@ -15,12 +15,11 @@ from __future__ import annotations
 import base64
 import pathlib
 
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 from ansible_collections.bootwright.core.plugins.action import machine_power_protocol
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
-LOADER = DataLoader()
 
 CLUSTER = "9a1f2c3d-0000-4000-8000-00000000c1a5"
 VM = "6b2e4f80-0000-4000-8000-0000000000aa"

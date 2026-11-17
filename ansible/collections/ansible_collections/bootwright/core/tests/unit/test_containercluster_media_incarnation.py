@@ -15,11 +15,10 @@ import base64
 import json
 import pathlib
 
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "containercluster_media_agent"
-LOADER = DataLoader()
 OWN = "64768:1234:b1761490000.123456789"
 EARLIER = "64768:1234:b1761400000.987654321"
 

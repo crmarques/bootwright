@@ -17,11 +17,11 @@ import pathlib
 
 import pytest
 
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
-LOADER = DataLoader()
 URI = "ansible.builtin.uri"
 
 # Each proof by role, task file and name, and whether a separate step judges
@@ -53,16 +53,7 @@ ATTEMPTS = [
 
 
 def flattened(role, name):
-    def opened(listed):
-        for task in listed or []:
-            if not isinstance(task, dict):
-                continue
-            if "block" in task:
-                for section in ("block", "rescue", "always"):
-                    yield from opened(task.get(section))
-                continue
-            yield task
-    return list(opened(LOADER.load_from_file(str(ROLES / role / "tasks" / name), trusted_as_template=True)))
+    return [task for task in role_tasks.flatten(role_tasks.role_tasks(ROLES / role, name)) if "block" not in task]
 
 
 def defaults(role):

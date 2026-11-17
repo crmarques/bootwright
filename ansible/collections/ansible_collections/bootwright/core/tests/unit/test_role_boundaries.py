@@ -20,8 +20,9 @@ import re
 import pytest
 import yaml
 from ansible.errors import AnsibleError
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[2]
 ROLES = COLLECTION / "roles"
@@ -190,14 +191,6 @@ def load(path):
     return [task for task in parsed if isinstance(task, dict)]
 
 
-def walk(tasks):
-    """Every task of a task list in the order a play reaches it, blocks opened."""
-    for task in tasks:
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)])
-
-
 def action(task):
     """The one action a task runs, or None for a block."""
     found = [key for key in task if key not in KEYWORDS]
@@ -256,7 +249,7 @@ def entry_points():
 def included_files(tasks):
     """The task files one task list includes by path."""
     found = set()
-    for task in walk(tasks):
+    for task in role_tasks.flatten(tasks):
         for name in INCLUDES[2:]:
             target = task.get(name)
             target = target.get("file") if isinstance(target, dict) else target
@@ -270,7 +263,7 @@ def included_files(tasks):
 def test_every_task_names_one_action_or_is_a_block():
     problems = []
     for path in task_files():
-        for task in walk(load(path)):
+        for task in role_tasks.flatten(load(path)):
             if "block" not in task and action(task) is None:
                 problems.append("%s: %r carries %s, which name no single action"
                                 % (label(path), task.get("name"), sorted(set(task) - KEYWORDS)))
@@ -314,7 +307,7 @@ def test_every_entry_point_hands_the_runner_loaded_before_anything_else():
         problems.extend(handoff_problems(name, load(ROLES / name)))
     for path in task_files():
         tasks = load(path)
-        handed = sum(phase(task) == "loaded" for task in walk(tasks))
+        handed = sum(phase(task) == "loaded" for task in role_tasks.flatten(tasks))
         delegated = path.parent.parent.name in ("addons_instance", "containercluster_network") and handed == 0
         if label(path) in files and handed != 1 and not delegated:
             problems.append("%s is an entry point that hands the runner loaded %d times" % (label(path), handed))
@@ -352,7 +345,7 @@ def material_problems(where, tasks, derived):
     """Why bound material or a completion's evidence might reach the adapter's output."""
     problems = []
     derived = set(derived)
-    for task in walk(tasks):
+    for task in role_tasks.flatten(tasks):
         name = task.get("name")
         received = receives_material(task, derived)
         if received and action(task) == "ansible.builtin.set_fact":
@@ -375,8 +368,8 @@ def test_no_material_or_completion_reaches_the_adapters_own_output():
     for path in task_files():
         tasks = load(path)
         problems.extend(material_problems(label(path), tasks, derived))
-        received += sum(receives_material(task, derived) for task in walk(tasks))
-        completions += sum(phase(task) in COMPLETIONS for task in walk(tasks))
+        received += sum(receives_material(task, derived) for task in role_tasks.flatten(tasks))
+        completions += sum(phase(task) in COMPLETIONS for task in role_tasks.flatten(tasks))
     entries = entry_points()
     assert len(entries) >= ENTRY_POINTS, "the walk no longer sees every playbook's entry point"
     assert received and completions >= len(set(entries.values())), "the walk no longer sees material or completions"
@@ -384,7 +377,7 @@ def test_no_material_or_completion_reaches_the_adapters_own_output():
 
 
 def test_every_printed_completion_names_a_completion_outside_no_log():
-    printed = {(label(path), task.get("name")) for path in task_files() for task in walk(load(path))
+    printed = {(label(path), task.get("name")) for path in task_files() for task in role_tasks.flatten(load(path))
                if phase(task) in COMPLETIONS and not hidden(task)}
     assert printed == PRINTED_COMPLETIONS
 
@@ -408,7 +401,7 @@ def wrapped(argv):
 def executable_problems(where, tasks, started, wrappers):
     """Why a task might start an executable the allowlist does not name."""
     problems = []
-    for task in walk(tasks):
+    for task in role_tasks.flatten(tasks):
         name = action(task)
         if name in SHELLS:
             problems.append("%s: %r runs %s, which starts what a shell decides" % (where, task.get("name"), name))
@@ -462,7 +455,7 @@ def unit_problems(where, unit):
 
 def podman_run_problems(where, tasks):
     problems = []
-    for task in walk(tasks):
+    for task in role_tasks.flatten(tasks):
         argv = command_argv(task) if action(task) in COMMANDS else None
         if argv and argv[:2] == ["/usr/bin/podman", "run"] and not any(
                 value == "--entrypoint" or value.startswith("--entrypoint=") for value in argv):
@@ -481,7 +474,7 @@ def test_every_container_names_its_entrypoint_and_nothing_runs_a_debugger():
         tasks = load(path)
         problems.extend(podman_run_problems(label(path), tasks))
         runs += sum(bool((command_argv(task) or [])[:2] == ["/usr/bin/podman", "run"])
-                    for task in walk(tasks) if action(task) in COMMANDS)
+                    for task in role_tasks.flatten(tasks) if action(task) in COMMANDS)
     for path in sorted(ROLES.rglob("*")):
         if path.is_file() and DEBUG.search(path.read_text()):
             problems.append("%s passes --debug" % label(path))
@@ -505,7 +498,7 @@ def unguarded_reads(register, expression):
 def poll_problems(where, tasks):
     """Why one failed read might end a poll instead of spending an attempt on it."""
     problems = []
-    for task in walk(tasks):
+    for task in role_tasks.flatten(tasks):
         if "until" not in task:
             continue
         register = task.get("register")
@@ -523,7 +516,7 @@ def test_every_poll_spends_an_attempt_on_a_failed_read():
     for path in task_files():
         tasks = load(path)
         problems.extend(poll_problems(label(path), tasks))
-        seen.update((label(path), task.get("register")) for task in walk(tasks) if "until" in task)
+        seen.update((label(path), task.get("register")) for task in role_tasks.flatten(tasks) if "until" in task)
     assert POLLS <= seen, "the walk no longer sees %s" % sorted(POLLS - seen)
     assert not problems, "\n".join(problems)
 
@@ -553,7 +546,7 @@ def publishes(task, register, looped):
 
 
 def controller_walk(tasks):
-    for task in walk(tasks):
+    for task in role_tasks.flatten(tasks):
         facts = task.get("ansible.builtin.set_fact", {})
         forwarded = [(name, value) for name, value in facts.items()
                      if isinstance(value, str) and name != "containercluster_install_agent_port_result"
@@ -648,7 +641,7 @@ def firing_problems(where, task, refusal):
     name, register = refusal.get("name"), task["register"]
 
     def scope(result):
-        return Templar(loader=DataLoader(), variables={register: registered(task, result)})
+        return Templar(loader=LOADER, variables={register: registered(task, result)})
 
     try:
         if not refuses(scope(REFUSED), refusal):
@@ -701,7 +694,7 @@ def test_no_management_controller_refusal_is_censored():
             seen.add(label(path))
     assert CONTROLLER_FILES <= seen, "the walk no longer sees %s" % sorted(CONTROLLER_FILES - seen)
     for path in task_files():
-        for task in walk(load(path)):
+        for task in role_tasks.flatten(load(path)):
             if reaches_controller(task) and not hidden(task):
                 problems.append("%s: %r reaches a controller with its credential outside no_log"
                                 % (label(path), task.get("name")))
@@ -741,7 +734,7 @@ def controller_refusals():
 # never the account the step read, and it stays silent when the controller
 # answered.
 def test_every_controller_refusal_names_the_controllers_message_and_nothing_it_was_given():
-    loader = DataLoader()
+    loader = LOADER
     found = controller_refusals()
     assert len(found) >= 26, "the walk no longer sees the controller refusals"
     for name, task, refusal in found:
@@ -1066,7 +1059,7 @@ def test_the_scratch_rule_rejects(text, path):
 # raw result of its last firewall-cmd --state (specs/substrates.md, Provider
 # host realization).
 def test_an_unanswered_host_firewall_refuses_with_its_remedy():
-    ordered = list(walk(load(ROLES / "substrate_libvirt_host" / "tasks" / "apply.yml")))
+    ordered = list(role_tasks.flatten(load(ROLES / "substrate_libvirt_host" / "tasks" / "apply.yml")))
     waits = [index for index, task in enumerate(ordered) if task.get("register") == "substrate_libvirt_host_firewall_state"]
     assert len(waits) == 1, "the walk no longer sees the host firewall wait"
     wait, refusal = ordered[waits[0]], ordered[waits[0] + 1]

@@ -27,8 +27,8 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[2]
 ROLE = COLLECTION / "roles" / "infra_managed_service"
@@ -37,7 +37,6 @@ SERVICES = ("dns_server", "ntp_server", "proxy", "registry")
 OPERATIONS = ("apply", "observe", "destroy")
 ROLES = COLLECTION / "roles"
 SQUID = COLLECTION / "tests" / "unit" / "goldens" / "templates" / "infra_managed_service" / "squid.conf"
-LOADER = DataLoader()
 PODMAN_STOP_TIMEOUT = 10
 
 

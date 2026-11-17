@@ -18,16 +18,16 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 from ansible_collections.bootwright.core.plugins.action import managedos_firewall_protocol as protocol
 from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, managedos_firewall_worker as worker, managedos_guest_ssh
 from ansible_collections.bootwright.core.plugins.modules import managedos_firewall as module
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[2]
 ROLE = COLLECTION / "roles" / "managedos_host_firewall"
-LOADER = DataLoader()
 DIGEST = "0123456789abcdef" * 4
 MARK = "owner context=lab block=os-firewall-ceph-01 apply=op-0123"
 RGW = "lab-ceph-ingress-rgw"
@@ -748,13 +748,8 @@ def tasks(name):
     return root
 
 
-def flattened(listed):
-    for task in listed:
-        if "block" in task:
-            for section in ("block", "rescue", "always"):
-                yield from flattened(task.get(section, []))
-        else:
-            yield task
+def flattened(tasks):
+    return [task for task in role_tasks.flatten(tasks) if "block" not in task]
 
 
 def calls(name, fqcn):

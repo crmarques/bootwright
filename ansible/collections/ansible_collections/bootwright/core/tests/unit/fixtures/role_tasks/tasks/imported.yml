@@ -1,0 +1,4 @@
+- name: Imported read
+  ansible.builtin.set_fact:
+    imported: "{{ from_import | default('none') }}"
+  when: imported_when

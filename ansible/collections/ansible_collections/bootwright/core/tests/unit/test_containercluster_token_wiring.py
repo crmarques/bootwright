@@ -7,15 +7,14 @@ import pathlib
 from ansible_collections.bootwright.core.tests.unit.install_phase_tasks import apply_tasks as phased_tasks
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.module_utils.testing import patch_module_args
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.module_utils import containercluster_publication as publication
 from ansible_collections.bootwright.core.plugins.modules import containercluster_media_token as token
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / 'roles' / 'containercluster_install_agent'
-LOADER = DataLoader()
 MODULE = 'bootwright.core.containercluster_media_token'
 TOKEN_URL = '{{ containercluster_install_agent_token.url }}'
 RESERVED = ('public', 'private', 'clusters', 'cluster')

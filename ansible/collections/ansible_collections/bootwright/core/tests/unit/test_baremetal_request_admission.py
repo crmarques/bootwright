@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from ansible.module_utils.common.arg_spec import ArgumentSpecValidator
-from ansible.parsing.dataloader import DataLoader
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 
 ROLE = Path(__file__).resolve().parents[2] / "roles" / "substrate_baremetal_machine"
@@ -22,7 +22,7 @@ REQUEST = {
 
 
 def validate(entry, request):
-    spec = DataLoader().load_from_file(str(ROLE / "meta" / "argument_specs.yml"))["argument_specs"][entry]["options"]
+    spec = LOADER.load_from_file(str(ROLE / "meta" / "argument_specs.yml"))["argument_specs"][entry]["options"]
     return ArgumentSpecValidator(spec).validate({
         "bootwright_substrate_physical_request": request,
         "bootwright_substrate_physical_digest": "a" * 64,

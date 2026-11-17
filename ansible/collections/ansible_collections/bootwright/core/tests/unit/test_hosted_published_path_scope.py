@@ -10,11 +10,10 @@ from __future__ import annotations
 import pathlib
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
-LOADER = DataLoader()
 HOSTED = "/var/lib/bootwright-hosted/lab"
 SERVED = HOSTED + "/services/artifact-server/artifacts/public/os/node/image.iso"
 ELSEWHERE = [HOSTED + "/machines/node/erase/op/image.iso", HOSTED + "/machines/node/bmc/image.iso",

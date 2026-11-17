@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import yaml
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 COLLECTION = Path(__file__).resolve().parents[2]
 TASKS = COLLECTION / 'roles/containercluster_install_agent/tasks'
@@ -81,10 +82,9 @@ def test_node_failure_waits_for_its_siblings_and_never_starts_installer_wait(tmp
 
 def test_each_install_port_request_matches_the_selected_arm_entrypoint():
     from ansible.module_utils.common.arg_spec import ArgumentSpecValidator
-    from ansible.parsing.dataloader import DataLoader
     from ansible.template import Templar
 
-    loader = DataLoader()
+    loader = LOADER
     port = loader.load_from_file(str(TASKS / 'port.yml'), trusted_as_template=True)[1]
     for arm in ('libvirt', 'baremetal'):
         specs = yaml.safe_load((COLLECTION / ('roles/substrate_%s_machine/meta/argument_specs.yml' % arm)).read_text())['argument_specs']
@@ -108,10 +108,9 @@ def test_each_install_port_request_matches_the_selected_arm_entrypoint():
 
 
 def test_node_collection_uses_the_ordered_inventory_aliases():
-    from ansible.parsing.dataloader import DataLoader
     from ansible.template import Templar
 
-    loader = DataLoader()
+    loader = LOADER
     collect = loader.load_from_file(str(TASKS / 'collect_state.yml'), trusted_as_template=True)[2]
     for index in (0, 9, 10, 27):
         scope = {

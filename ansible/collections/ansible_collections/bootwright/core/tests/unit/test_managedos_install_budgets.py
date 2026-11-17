@@ -17,11 +17,11 @@ from __future__ import annotations
 import pathlib
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
-LOADER = DataLoader()
 
 # The waits the role once chose for itself.
 RETIRED = (
@@ -59,15 +59,8 @@ def trusted(name):
             if isinstance(task, dict)]
 
 
-def walk(tasks):
-    for task in tasks:
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)])
-
-
 def one(name, predicate):
-    found = [task for task in walk(trusted(name)) if predicate(task)]
+    found = [task for task in role_tasks.flatten(trusted(name)) if predicate(task)]
     assert len(found) == 1, name
     return found[0]
 
@@ -120,7 +113,7 @@ def test_the_reachability_wait_reads_its_frozen_budget():
 
 @pytest.mark.parametrize("name", sorted(path.name for path in (ROLE / "tasks").glob("*.yml")))
 def test_no_task_waits_for_a_count_of_its_own(name):
-    for task in walk(trusted(name)):
+    for task in role_tasks.flatten(trusted(name)):
         for key in ("retries", "delay"):
             if key in task:
                 assert isinstance(task[key], str) and "{{" in task[key], "%s: %s %r" % (name, key, task.get("name"))
@@ -129,7 +122,7 @@ def test_no_task_waits_for_a_count_of_its_own(name):
 @pytest.mark.parametrize("name", sorted(path.name for path in (ROLE / "tasks").glob("*.yml")))
 def test_no_include_passes_a_count_of_its_own(name):
     observed = 0
-    for task in walk(trusted(name)):
+    for task in role_tasks.flatten(trusted(name)):
         counts = {key: value for key, value in (task.get("vars") or {}).items() if key.endswith(COUNTS)}
         if name == "observe.yml" and task.get("ansible.builtin.include_tasks") == "reachable.yml":
             assert counts == OBSERVATION_RETRY, counts
@@ -189,7 +182,7 @@ def network_rendered(value):
 def guest_waits(command):
     """The guest includes of network.yml and its restart running one command, with the budget each reads."""
     found = []
-    for task in walk(trusted("network.yml") + trusted("reboot.yml")):
+    for task in role_tasks.flatten(trusted("network.yml") + trusted("reboot.yml")):
         arguments = task.get("vars") or {}
         if task.get("ansible.builtin.include_tasks") == "guest.yml" and arguments.get(
                 "managedos_install_anaconda_guest_command") == "{{ managedos_install_anaconda_network_%s }}" % command:

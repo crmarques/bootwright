@@ -19,14 +19,14 @@ import pathlib
 from types import SimpleNamespace
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as protocol
 from ansible_collections.bootwright.core.plugins.modules.managedos_install_inspect import observe
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
-LOADER = DataLoader()
 DIGEST = "1" * 64
 PUBLISH = "bootwright.core.managedos_install_protocol"
 INSPECT = "bootwright.core.managedos_install_inspect"
@@ -37,18 +37,8 @@ NOTHING = {"image": False, "private": False, "tree": False, "treeContent": False
 def tasks():
     """observe.yml's tasks in the order a play reaches them, each block opened
     and its condition carried onto every task inside it, as a play applies it."""
-    def opened(listed, inherited):
-        for task in listed:
-            if not isinstance(task, dict):
-                continue
-            conditions = task.get("when", [])
-            conditions = inherited + (conditions if isinstance(conditions, list) else [conditions])
-            if "block" in task:
-                for section in ("block", "rescue", "always"):
-                    yield from opened(task.get(section) or [], conditions)
-                continue
-            yield dict(task, when=conditions)
-    return list(opened(LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True), []))
+    return [dict(visit.task, when=list(visit.conditions))
+            for visit in role_tasks.visits(role_tasks.role_tasks(ROLE, "observe.yml")) if "block" not in visit.task]
 
 
 def defaults():

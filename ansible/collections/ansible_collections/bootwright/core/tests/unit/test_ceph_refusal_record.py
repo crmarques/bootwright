@@ -20,15 +20,14 @@ import pathlib
 import jinja2
 import pytest
 import yaml
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import ceph_cluster_protocol as protocol
 from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, ceph_core, ceph_native, ceph_ssh_policy
 from ansible_collections.bootwright.core.plugins.modules import ceph_cluster, ceph_cluster_protocol, ceph_host
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
-LOADER = DataLoader()
 PROTOCOL = "bootwright.core.ceph_cluster_protocol"
 FAIL = "ansible.builtin.fail"
 SECRET = "REGISTRY-PASSWORD-SENTINEL"

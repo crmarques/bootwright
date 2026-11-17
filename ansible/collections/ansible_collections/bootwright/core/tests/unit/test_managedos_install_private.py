@@ -22,14 +22,14 @@ import stat
 
 import pytest
 
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as protocol
 from ansible_collections.bootwright.core.plugins.modules.managedos_install_inspect import observe
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
-LOADER = DataLoader()
 URI = "ansible.builtin.uri"
 COMMAND = "ansible.builtin.command"
 FILE = "ansible.builtin.file"
@@ -54,16 +54,7 @@ REDACTION = "replace(managedos_install_anaconda_token.stdout | trim, '<token>')"
 
 def flattened(name):
     """A task file's tasks in the order a play reaches them, each block opened."""
-    def opened(listed):
-        for task in listed or []:
-            if not isinstance(task, dict):
-                continue
-            if "block" in task:
-                for section in ("block", "rescue", "always"):
-                    yield from opened(task.get(section))
-                continue
-            yield task
-    return list(opened(LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True)))
+    return [task for task in role_tasks.flatten(role_tasks.role_tasks(ROLE, name)) if "block" not in task]
 
 
 def index_of(tasks, predicate, description):

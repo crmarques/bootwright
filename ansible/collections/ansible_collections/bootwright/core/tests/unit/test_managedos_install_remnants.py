@@ -9,16 +9,15 @@ import stat
 from types import SimpleNamespace
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
-from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as protocol
 from ansible_collections.bootwright.core.plugins.modules.managedos_install_inspect import observe
 from ansible_collections.bootwright.core.plugins.modules.lifecycle_scratch import manage
 from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import Interpreter
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
-LOADER = DataLoader()
 DIGEST = "1" * 64
 INSPECT = "bootwright.core.managedos_install_inspect"
 PROTOCOL = "bootwright.core.managedos_install_protocol"
@@ -39,13 +38,23 @@ class ReadFailed(Exception):
     """A read of the machine failed."""
 
 
-class TaskFailed(Exception):
-    """A task failed, by its failed_when or by a command's nonzero exit."""
-
-
 def tasks(name):
-    return [task for task in LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True)
-            if isinstance(task, dict)]
+    return role_tasks.role_tasks(ROLE, name)
+
+
+def a_policy_block(task):
+    """The read-only policy check this publication model assumes passed: its refusal and rescue have separate tests,
+    and no native SSH process is part of this filesystem model."""
+    return len(task.get("block", [])) == 1 and "bootwright.core.ssh_key_policy" in task["block"][0]
+
+
+def assert_no_rescue_is_reached(listed, through):
+    """This model never runs a rescue: no block before the task it stops after holds one, the policy check aside."""
+    for task in role_tasks.flatten(listed):
+        if not a_policy_block(task):
+            assert "rescue" not in task, task.get("name")
+        if task.get("name") == through:
+            return
 
 
 def names(directory):
@@ -68,7 +77,7 @@ class Host:
         self.scratch_root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.scratch_root.parent.chmod(0o700)
         self.scratch = self.scratch_root / "managedos-install"
-        self.variables = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
+        self.variables = role_tasks.role_defaults(ROLE)
         self.variables.update({
             "bootwright_run_scratch": str(self.scratch_root),
             "bootwright_os_install_digest": DIGEST,
@@ -103,65 +112,24 @@ class Host:
 
     def run(self, name, through=None):
         """Run one task file in order, stopping after the task named through."""
-        reached = self.perform(tasks(name), [], through)
+        listed = tasks(name)
+        assert_no_rescue_is_reached(listed, through)
+        interpreter = Interpreter(ROLE, self.variables, self.model, omit=self.leaves_out)
+        reached = interpreter.run_tasks(listed, through)
         assert reached or through is None, "%s holds no task named %s" % (name, through)
 
-    def perform(self, listed, inherited, through):
-        """Run a list of tasks in order, and report whether the task named
-        through ran."""
-        for task in listed:
-            if not isinstance(task, dict):
-                continue
-            conditions = task.get("when", [])
-            conditions = inherited + (conditions if isinstance(conditions, list) else [conditions])
-            if "block" in task:
-                # This publication model assumes the read-only policy check
-                # passed. Its early refusal and rescue have separate tests;
-                # no native SSH process is part of this filesystem model.
-                if len(task["block"]) == 1 and "bootwright.core.ssh_key_policy" in task["block"][0]:
-                    continue
-                assert "rescue" not in task, task.get("name")
-                try:
-                    reached = self.perform(task["block"], conditions, through)
-                finally:
-                    self.perform(task.get("always") or [], conditions, None)
-                if reached:
-                    return True
-                continue
-            module = next((candidate for candidate in MODELLED if candidate in task), None)
-            if module is None or "loop" in task:
-                continue
-            if module == COPY and not str(task[COPY].get("dest", "")).endswith("/.bootwright-tree-identity"):
-                continue
-            templar = Templar(loader=LOADER, variables=self.variables)
-            if not all(templar.evaluate_conditional(condition) for condition in conditions):
-                result = {"changed": False, "skipped": True}
-            else:
-                self.environment = task.get("environment") or {}
-                result = getattr(self, module.rsplit(".", 1)[-1])(templar.template(task[module]))
-                self.failed(task, result)
-            if "register" in task:
-                self.variables[task["register"]] = result
-            self.after.get(task.get("name"), lambda: None)()
-            if task.get("name") == through:
-                return True
-        return False
+    def leaves_out(self, task):
+        """The tasks this model does not run: modules it has no model of, loops, and every copy but the tree's identity."""
+        module = next((candidate for candidate in MODELLED if candidate in task), None)
+        return (module is None or "loop" in task
+                or (module == COPY and not str(task[COPY].get("dest", "")).endswith("/.bootwright-tree-identity")))
 
-    def failed(self, task, result):
-        """Fail a task as ansible-core would: by its failed_when, evaluated
-        over its registered result, or else by a command's nonzero exit."""
-        if "failed_when" not in task:
-            if result.get("rc", 0) != 0:
-                raise TaskFailed("%s: %s" % (task.get("name"), result.get("stderr")))
-            return
-        variables = dict(self.variables)
-        if "register" in task:
-            variables[task["register"]] = result
-        conditions = task["failed_when"]
-        conditions = conditions if isinstance(conditions, list) else [conditions]
-        templar = Templar(loader=LOADER, variables=variables)
-        if all(templar.evaluate_conditional(condition) for condition in conditions):
-            raise TaskFailed("%s: %s" % (task.get("name"), result.get("stderr")))
+    def model(self, task, templar):
+        module = next(candidate for candidate in MODELLED if candidate in task)
+        self.environment = task.get("environment") or {}
+        result = getattr(self, module.rsplit(".", 1)[-1])(templar.template(task[module]))
+        self.after.get(task.get("name"), lambda: None)()
+        return result
 
     def inside(self, path):
         path = pathlib.Path(path)
@@ -293,14 +261,7 @@ def test_an_install_never_changes_the_shared_tree(tmp_path, monkeypatch):
 
 
 def test_an_apply_completion_reads_after_its_work_area_is_gone():
-    def flatten(listed):
-        for task in listed:
-            if "block" in task:
-                yield from flatten(task["block"])
-                yield from flatten(task.get("always", []))
-            else:
-                yield task
-    applied = list(flatten(tasks("apply.yml")))
+    applied = [task for task in role_tasks.flatten(tasks("apply.yml")) if "block" not in task]
     removals = [index for index, task in enumerate(applied)
                 if (task.get(FILE) or {}).get("state") == "absent"
                 and task[FILE].get("path") == "{{ managedos_install_anaconda_work }}"]

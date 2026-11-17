@@ -29,11 +29,11 @@ import re
 
 import pytest
 from ansible.module_utils.common.arg_spec import ArgumentSpecValidator
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
-LOADER = DataLoader()
 
 INCLUDES = ("ansible.builtin.include_role", "ansible.builtin.import_role", "include_role", "import_role")
 TASK_INCLUDES = ("ansible.builtin.include_tasks", "ansible.builtin.import_tasks")
@@ -169,13 +169,6 @@ def loaded(path):
     return [task for task in LOADER.load_from_file(str(path), trusted_as_template=True) if isinstance(task, dict)]
 
 
-def walk(tasks):
-    for task in tasks:
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)])
-
-
 def label(path):
     return path.relative_to(ROLES).as_posix()
 
@@ -211,7 +204,7 @@ def composed():
     for path in task_files():
         if path.relative_to(ROLES).parts[0].startswith("substrate_"):
             continue
-        for task in walk(loaded(path)):
+        for task in role_tasks.flatten(loaded(path)):
             for action in INCLUDES:
                 arguments = task.get(action)
                 if not isinstance(arguments, dict):
@@ -278,7 +271,7 @@ def scope(consumer, arm):
 
 def operations(arm, entry):
     """Each controller effect one entry point performs: operation, target and task."""
-    tasks = walk(loaded(ROLES / SUBSTRATES[arm] / "tasks" / (entry + ".yml")))
+    tasks = role_tasks.flatten(loaded(ROLES / SUBSTRATES[arm] / "tasks" / (entry + ".yml")))
     return [(task[BOOT]["operation"], task[BOOT].get("target"), task) for task in tasks if BOOT in task]
 
 
@@ -288,7 +281,7 @@ def applies(task, variables):
 
 def dispatches(tasks):
     """Whether a task file selects among substrates, by a comparison or a machine role."""
-    for task in walk(tasks):
+    for task in role_tasks.flatten(tasks):
         conditions = task.get("when")
         conditions = conditions if isinstance(conditions, list) else [conditions]
         if any(DISPATCH.search(str(condition)) for condition in conditions if condition):
@@ -396,7 +389,7 @@ def test_installations_only_insert_and_eject_and_nothing_reads_through_the_boot_
     problems, performed = [], set()
     for path in task_files():
         role = path.relative_to(ROLES).parts[0]
-        for task in walk(loaded(path)):
+        for task in role_tasks.flatten(loaded(path)):
             operation = (task.get(BOOT) or {}).get("operation")
             if operation == "read":
                 problems.append("%s reads through a module that can drive the machine" % label(path))
@@ -410,7 +403,7 @@ def test_installations_only_insert_and_eject_and_nothing_reads_through_the_boot_
 
 def test_only_the_state_reads_look_for_media():
     for path in task_files():
-        for task in walk(loaded(path)):
+        for task in role_tasks.flatten(loaded(path)):
             if READ not in task:
                 continue
             assert path.relative_to(ROLES).parts[0] not in INSTALLATIONS
@@ -458,7 +451,7 @@ def test_a_cluster_removal_dispatches_nothing():
         if name in seen:
             continue
         seen.add(name)
-        for task in walk(loaded(ROLES / CLUSTER / "tasks" / name)):
+        for task in role_tasks.flatten(loaded(ROLES / CLUSTER / "tasks" / name)):
             assert BOOT not in task
             operation = task.get("vars", {}).get("containercluster_install_agent_port_operation")
             if operation:
@@ -482,7 +475,7 @@ def test_a_cluster_removal_dispatches_nothing():
     ("substrate_libvirt_machine/tasks/apply.yml", "substrate_libvirt_machine_controller", "On", ""),
 ])
 def test_a_poll_spends_an_attempt_on_a_read_that_failed(path, register, awaited, pending):
-    poll = one([task for task in walk(loaded(ROLES / path)) if task.get("register") == register], "poll " + register)
+    poll = one([task for task in role_tasks.flatten(loaded(ROLES / path)) if task.get("register") == register], "poll " + register)
     assert READ in poll
     if path.endswith("apply.yml"):
         assert poll[READ]["media"] is False

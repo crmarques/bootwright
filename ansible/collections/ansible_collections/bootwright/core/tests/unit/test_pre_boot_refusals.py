@@ -28,16 +28,16 @@ import json
 import pathlib
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.plugins.loader import init_plugin_loader
 from ansible.template import Templar
 from ansible.utils.collection_loader import AnsibleCollectionConfig
 
 from ansible_collections.bootwright.core.plugins.action import containercluster_install_protocol as cluster_protocol
 from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as managedos_protocol
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
-LOADER = DataLoader()
 
 ASSERT = "ansible.builtin.assert"
 FAIL = "ansible.builtin.fail"
@@ -62,11 +62,8 @@ def loaded(path):
     return [task for task in LOADER.load_from_file(str(path), trusted_as_template=True) if isinstance(task, dict)]
 
 
-def walk(tasks, parents=()):
-    for task in tasks:
-        yield task, parents
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)], parents + (task,))
+def walk(tasks):
+    return [(visit.task, visit.parents) for visit in role_tasks.visits(tasks)]
 
 
 def proof(arm, name="pre_boot.yml"):

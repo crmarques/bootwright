@@ -28,11 +28,11 @@ import json
 import pathlib
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "containercluster_install_agent"
-LOADER = DataLoader()
 
 INCLUDE = "ansible.builtin.include_role"
 BOOT = "bootwright.core.redfish_boot"
@@ -48,12 +48,9 @@ def loaded(name):
             if isinstance(task, dict)]
 
 
-def walk(tasks, parents=()):
+def walk(tasks):
     """Every task with the blocks around it, outermost first."""
-    for task in tasks:
-        yield task, parents
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)], parents + (task,))
+    return [(visit.task, visit.parents) for visit in role_tasks.visits(tasks)]
 
 
 def proof(arm):

@@ -25,11 +25,11 @@ import pathlib
 import re
 
 import yaml
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 MEDIA = pathlib.Path(__file__).resolve().parents[2] / "roles" / "containercluster_media_agent"
-LOADER = DataLoader()
 
 EVERY_HINT = {
     "hostname": "master-0",
@@ -54,13 +54,6 @@ READ_AS_ANOTHER_TYPE = {
 }
 
 
-def walk(tasks):
-    for task in tasks:
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)])
-
-
 # Strings above U+FFFF, as a hint or in the node's own network configuration.
 OUTSIDE_THE_BMP = {
     "hostname": "master-1",
@@ -76,7 +69,7 @@ SURROGATE_ESCAPE = re.compile(r"\\u[dD][89a-fA-F][0-9a-fA-F]{2}")
 
 def render(config):
     loaded = LOADER.load_from_file(str(MEDIA / "tasks" / "build.yml"), trusted_as_template=True)
-    written = [task for task in walk([task for task in loaded if isinstance(task, dict)])
+    written = [task for task in role_tasks.flatten([task for task in loaded if isinstance(task, dict)])
                if task.get("name") == "Write the agent configuration"]
     assert len(written) == 1, "build.yml has %d tasks writing the agent configuration" % len(written)
     material = {"agentConfigBase64": base64.b64encode(json.dumps(config).encode()).decode()}

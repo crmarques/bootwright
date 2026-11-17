@@ -9,13 +9,13 @@ from unittest.mock import Mock
 import pytest
 
 from ansible.plugins.action import ActionBase
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 from ansible_collections.bootwright.core.plugins.action import managedos_disk_discovery as action
 from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_media as media
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_runtime as runtime
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_progress
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 
 @pytest.mark.parametrize("operation", ["apply", "observe", "destroy"])
@@ -25,7 +25,7 @@ def test_action_converts_templated_arguments_to_native_json_types(monkeypatch, o
         "request": {"bootMedia": {"size": 1 << 30}, "interfaces": [{"name": "install", "enabled": True}]},
         "material": {"bindingBase64": "PRIVATE", "optional": None},
     }
-    loader = DataLoader()
+    loader = LOADER
     tagged = loader.load(canonical(arguments).decode("ascii"))
     templated = Templar(loader=loader, variables={"frozen": tagged}).template(trust_as_template("{{ frozen }}"))
     assert isinstance(templated["request"]["bootMedia"]["size"], int)
@@ -53,7 +53,7 @@ def test_action_converts_templated_arguments_to_native_json_types(monkeypatch, o
 @pytest.mark.parametrize("size", [True, False, None, "1073741824", 1.0, 0, -1, media.MAX_SOURCE + 1])
 def test_action_normalization_preserves_invalid_source_sizes(monkeypatch, size):
     arguments = {"operation": "apply", "digest": "a" * 64, "request": {"bootMedia": {"size": size}}, "material": {}}
-    loader = DataLoader()
+    loader = LOADER
     tagged = loader.load(canonical(arguments).decode("ascii"))
     monkeypatch.setattr(ActionBase, "run", lambda *args, **kwargs: {})
 

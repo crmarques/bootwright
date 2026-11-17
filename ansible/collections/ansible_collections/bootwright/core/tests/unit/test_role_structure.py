@@ -17,6 +17,7 @@ import re
 
 import pytest
 import yaml
+from ansible_collections.bootwright.core.tests.unit import role_tasks
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 
@@ -184,13 +185,10 @@ def load(path):
     return [task for task in parsed if isinstance(task, dict)]
 
 
-def walk(tasks, names=()):
+def walk(tasks):
     """Every task with the names of the blocks around it, outermost first."""
-    for task in tasks:
-        current = names + (str(task.get("name", "")),)
-        yield task, current
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)], current)
+    return [(visit.task, tuple(str(task.get("name", "")) for task in visit.parents + (visit.task,)))
+            for visit in role_tasks.visits(tasks)]
 
 
 def conditions(value):
@@ -308,7 +306,7 @@ def task_lists(tasks, around=()):
     it, the position of the block in that list and the section, outermost first."""
     yield tasks, around
     for position, task in enumerate(tasks):
-        for section in ("block", "rescue", "always"):
+        for section in role_tasks.SECTIONS:
             children = [child for child in task.get(section) or [] if isinstance(child, dict)]
             if children:
                 yield from task_lists(children, around + ((tasks, position, section),))

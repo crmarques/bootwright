@@ -29,14 +29,14 @@ import json
 import pathlib
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 BAREMETAL = ROLES / "substrate_baremetal_machine"
 MANAGED_OS = ROLES / "managedos_install_anaconda"
 CLUSTER = ROLES / "containercluster_install_agent"
-LOADER = DataLoader()
 
 ASSERT = "ansible.builtin.assert"
 INCLUDE = "ansible.builtin.include_role"
@@ -57,13 +57,6 @@ REMEDY = ("correct spec.substrate.baremetal.bmc.address, or destroy and apply th
 def loaded(path):
     """A task file as a play loads it: its templates trusted."""
     return [task for task in LOADER.load_from_file(str(path), trusted_as_template=True) if isinstance(task, dict)]
-
-
-def walk(tasks):
-    for task in tasks:
-        yield task
-        for section in ("block", "rescue", "always"):
-            yield from walk([child for child in task.get(section) or [] if isinstance(child, dict)])
 
 
 def one(found, description):
@@ -91,7 +84,7 @@ def declared():
 
 def include(role):
     """A consumer's bare-metal pre-boot include, by its role and the tasks_from stem."""
-    return one([task for task in walk(loaded(role / "tasks" / "boot.yml"))
+    return one([task for task in role_tasks.flatten(loaded(role / "tasks" / "boot.yml"))
                 if (task.get(INCLUDE) or {}).get("tasks_from") == "pre_boot"],
                "include the bare-metal pre-boot proof")
 

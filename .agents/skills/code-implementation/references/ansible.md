@@ -88,6 +88,12 @@ unsupported/drifted variants, privilege, timeout, cancellation, later handler
 failure, partial progress, ambient dependencies, and disclosure. Check mode is
 neither planning nor authorization.
 
+A role test reads and runs task files only through the collection's
+`tests/unit/role_tasks.py` (one loader, an in-order walk, and an interpreter
+with inherited `when`, rescue, always, register-on-skip and `failed_when`),
+never through a walker of its own; the interpreter's self-test checks it
+against ansible-core's parsed structure without running a play.
+
 Run the shared contract suite across production implementations and supported
 version boundaries. Go unit tests use injected ports rather than ambient
 Ansible. Real-system qualification remains a separate acceptance gate. Report

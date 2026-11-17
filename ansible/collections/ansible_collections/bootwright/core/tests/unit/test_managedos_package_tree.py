@@ -20,14 +20,14 @@ import stat
 from types import SimpleNamespace
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
 from ansible_collections.bootwright.core.plugins.module_utils.package_tree import observe
 from ansible_collections.bootwright.core.plugins.action import managedos_tree_protocol as protocol
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER, Interpreter, TaskFailed
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_package_tree"
-LOADER = DataLoader()
 SOURCE = b"the frozen installation DVD"
 SHA = hashlib.sha256(SOURCE).hexdigest()
 PUBLICATION = "/var/lib/bootwright-hosted/lab/services/artifact-server/artifacts/public/os/rhel-9-8/tree"
@@ -47,10 +47,6 @@ class Interrupted(Exception):
     pass
 
 
-class Refused(Exception):
-    """An assert of the role failed, which ends the run as Ansible would."""
-
-
 class Host:
     def __init__(self, root, monkeypatch, area=True, server=True, context="lab"):
         self.root = root
@@ -66,7 +62,7 @@ class Host:
         self.source.parent.mkdir(parents=True)
         self.source.write_bytes(SOURCE)
         self.extracts, self.kill, self.evidence, self.proofs = 0, False, [], []
-        self.values = dict(LOADER.load_from_file(str(ROLE / "defaults/main.yml"), trusted_as_template=True))
+        self.values = role_tasks.role_defaults(ROLE)
         self.values.update({"bootwright_os_tree_digest": "1" * 64, "bootwright_os_tree_material": {},
                             "bootwright_os_tree_request": {
                                 "version": "os-package-tree-v1",
@@ -82,47 +78,27 @@ class Host:
         return self.root / path.lstrip("/")
 
     def run(self, name):
-        self.tasks(LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True))
+        Interpreter(ROLE, self.values, self.model, omit=self.leaves_out).run(name)
+
+    def leaves_out(self, task):
+        """The tasks this model does not run: a download, and a task of no module."""
+        key = self.module(task)
+        return not key or key.endswith("uri")
+
+    def module(self, task):
+        return next((key for key in task if key.startswith(("ansible.builtin.", "bootwright.core."))), None)
+
+    def model(self, task, templar):
+        key = self.module(task)
+        if key.endswith("assert"):
+            return None
+        return self.invoke(key, templar.template(task[key]))
 
     def refusals(self):
         return [record["reason"] for record in self.evidence if record.get("phase") == "refused"]
 
     def completed(self):
         return [record for record in self.evidence if record.get("phase") == "completed"]
-
-    def tasks(self, tasks, inherited=()):
-        for task in tasks:
-            condition = task.get("when", [])
-            conditions = list(inherited) + (condition if isinstance(condition, list) else [condition])
-            templar = Templar(loader=LOADER, variables=self.values)
-            if "block" in task:
-                if all(templar.evaluate_conditional(item) for item in conditions):
-                    try:
-                        self.tasks(task["block"])
-                    finally:
-                        self.tasks(task.get("always", []))
-                continue
-            key = next((key for key in task if key.startswith(("ansible.builtin.", "bootwright.core."))), None)
-            if not key or key.endswith("uri"):
-                continue
-            if not all(templar.evaluate_conditional(item) for item in conditions):
-                result = {"skipped": True, "changed": False}
-            elif key.endswith("assert"):
-                failed = [item for item in task[key]["that"] if not templar.evaluate_conditional(item)]
-                if failed:
-                    raise Refused("%s: %s" % (task.get("name"), failed))
-                result = {"changed": False}
-            elif "loop" in task:
-                results = []
-                for item in templar.template(task["loop"]):
-                    self.values["item"] = item
-                    args = Templar(loader=LOADER, variables=self.values).template(task[key])
-                    results.append(self.invoke(key, args))
-                result = {"changed": any(value["changed"] for value in results), "results": results}
-            else:
-                result = self.invoke(key, templar.template(task[key]))
-            if "register" in task:
-                self.values[task["register"]] = result
 
     def invoke(self, key, args):
         if key.endswith("hosted_area"):
@@ -131,7 +107,7 @@ class Host:
             try:
                 exists = hosted_area.prove(args["context"], args["path"], root, os.getuid())
             except hosted_area.Refusal as refusal:
-                raise Refused(str(refusal)) from None
+                return {"failed": True, "changed": False, "msg": str(refusal)}
             self.proofs.append(list(args["path"]))
             return {"changed": False, "exists": exists}
         if key.endswith("managedos_tree_inspect"):
@@ -273,7 +249,7 @@ def test_apply_refuses_a_tree_published_from_another_source(tmp_path, monkeypatc
     (host.tree / ".treeinfo").write_text("[general]\n")
     (host.tree / ".bootwright-tree-identity").write_text("a" * 64 + "\n")
     before = contents(host.tree)
-    with pytest.raises(Refused, match="Refuse an existing tree from another source"):
+    with pytest.raises(TaskFailed, match="Refuse an existing tree from another source"):
         host.run("apply.yml")
     assert host.refusals() == ["tree-source-drift"]
     assert host.extracts == 0 and not host.stage.exists()
@@ -295,7 +271,7 @@ def test_apply_refuses_source_media_changed_after_planning_before_extraction(tmp
         host.source.symlink_to(frozen)
     else:
         host.source.unlink()
-    with pytest.raises(Refused, match="Refuse source media that changed after planning"):
+    with pytest.raises(TaskFailed, match="Refuse source media that changed after planning"):
         host.run("apply.yml")
     assert host.refusals() == ["media-changed-tree"]
     assert host.extracts == 0 and not host.tree.exists() and not host.stage.exists()
@@ -315,7 +291,7 @@ def test_every_entry_point_proves_the_artifact_servers_hosted_directories_before
     host.area.chmod(0o755)
     host.tree.mkdir(parents=True)
     (host.tree / "preserved").write_text("kept")
-    with pytest.raises(Refused, match="is not a directory only root may enter"):
+    with pytest.raises(TaskFailed, match="is not a directory only root may enter"):
         host.run(operation)
     assert host.extracts == 0 and not host.evidence[1:]
     assert not host.stage.exists() and (host.tree / "preserved").read_text() == "kept"
@@ -339,8 +315,8 @@ def test_the_servers_own_content_root_is_never_refused(tmp_path, monkeypatch, op
 
 
 def test_the_tree_proves_exactly_the_area_the_artifact_server_proves():
-    server = dict(LOADER.load_from_file(str(ROLE.parent / "infra_artifact_server_nginx/defaults/main.yml"), trusted_as_template=True))
-    tree = dict(LOADER.load_from_file(str(ROLE / "defaults/main.yml"), trusted_as_template=True))
+    server = role_tasks.role_defaults(ROLE.parent / "infra_artifact_server_nginx")
+    tree = role_tasks.role_defaults(ROLE)
     content_root = PUBLICATION.split("/public/", maxsplit=1)[0]
     values = {"bootwright_artifact_server_request": {"contentRoot": content_root},
               "bootwright_os_tree_request": {"publication": {"path": PUBLICATION}}}
@@ -358,7 +334,7 @@ def hosted(host):
 # default mode, which the server's own next apply would refuse (B1294). The
 # refusal is named, so the runner reports its remedy.
 def unapplied(host):
-    return pytest.raises(Refused, match="Refuse an artifact server that is not applied before any effect")
+    return pytest.raises(TaskFailed, match="Refuse an artifact server that is not applied before any effect")
 
 
 @pytest.mark.parametrize("present", [None, 1, 0], ids=["no hosted root", "context only", "services only"])
@@ -452,7 +428,7 @@ def test_every_entry_point_refuses_a_publication_path_not_in_the_servers_normal_
     host = Host(tmp_path, monkeypatch)
     host.values["bootwright_os_tree_request"]["publication"]["path"] = _MALFORMED[name]
     before = hosted(host)
-    with pytest.raises(Refused, match="Validate the frozen package tree request"):
+    with pytest.raises(TaskFailed, match="Validate the frozen package tree request"):
         host.run(operation)
     assert hosted(host) == before
     assert not host.evidence and host.extracts == 0 and not host.proofs

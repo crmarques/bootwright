@@ -16,14 +16,13 @@ import pathlib
 from ansible_collections.bootwright.core.tests.unit.install_phase_tasks import apply_tasks as phased_tasks
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import containercluster_install_protocol as protocol
 from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import KEPT, KUBECONFIG, keep, observe
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "containercluster_install_agent"
-LOADER = DataLoader()
 
 
 def pem(kind, body):

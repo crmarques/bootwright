@@ -25,7 +25,6 @@ import ast
 import pathlib
 
 import pytest
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 from ansible_collections.bootwright.core.plugins.module_utils import substrate_libvirt
@@ -35,9 +34,9 @@ from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt 
     network_state,
     pool_state,
 )
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "substrate_libvirt_host"
-LOADER = DataLoader()
 URI = "qemu:///system"
 NAME = "bootwright-lab-guests"
 POOL = "bootwright-lab-host-vmedia"

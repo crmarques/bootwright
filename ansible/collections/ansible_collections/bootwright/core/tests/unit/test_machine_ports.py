@@ -5,6 +5,8 @@ import pytest
 import yaml
 
 from ansible_collections.bootwright.core.plugins.filter.machine_port_state import machine_port_state
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
+from ansible_collections.bootwright.core.tests.unit import role_tasks
 
 ROOT = Path(__file__).parents[2]
 
@@ -32,7 +34,6 @@ def test_machine_port_contract(arm, entry):
 @pytest.mark.parametrize("enable", [False, True])
 def test_media_insert_admits_and_forwards_verification_setup(arm, enable):
     from ansible.module_utils.common.arg_spec import ArgumentSpecValidator
-    from ansible.parsing.dataloader import DataLoader
     from ansible.template import Templar, trust_as_template
 
     role = ROOT / "roles" / ("substrate_" + arm + "_machine")
@@ -42,7 +43,7 @@ def test_media_insert_admits_and_forwards_verification_setup(arm, enable):
     assert not ArgumentSpecValidator(spec).validate({"bootwright_machine_port": port}).error_messages
     translated = yaml.safe_load((ROOT / "roles/substrate_machine/tasks/redfish_media_insert.yml").read_text())
     native = next(task["bootwright.core.redfish_boot"] for task in translated if "bootwright.core.redfish_boot" in task)
-    templar = Templar(loader=DataLoader(), variables={"bootwright_machine_port": port})
+    templar = Templar(loader=LOADER, variables={"bootwright_machine_port": port})
     assert templar.template(trust_as_template(native["enable_verification"])) is enable
 
 
@@ -66,18 +67,11 @@ def test_power_only_read_never_proves_media_absent():
     (True, "this-install", False), (True, "other", True),
 ])
 def test_only_a_positive_foreign_marker_names_a_refusal(answered, marker, foreign):
-    from ansible.parsing.dataloader import DataLoader
     from ansible.template import Templar, trust_as_template
 
-    def walk(tasks):
-        for task in tasks:
-            yield task
-            for key in ("block", "rescue", "always"):
-                yield from walk(task.get(key, []))
-
-    tasks = list(walk(yaml.safe_load((ROOT / "roles/managedos_install_anaconda/tasks/apply.yml").read_text())))
+    tasks = role_tasks.flatten(yaml.safe_load((ROOT / "roles/managedos_install_anaconda/tasks/apply.yml").read_text()))
     classified = next(task for task in tasks if "managedos_install_anaconda_foreign" in task.get("ansible.builtin.set_fact", {}))
-    templar = Templar(loader=DataLoader(), variables={
+    templar = Templar(loader=LOADER, variables={
         "managedos_install_anaconda_answered": answered,
         "managedos_install_anaconda_marker": marker,
         "bootwright_os_install_material": {"marker": "this-install"},
@@ -120,11 +114,10 @@ def test_machine_consumers_compose_substrate_ports_instead_of_native_modules():
 ])
 def test_generic_boot_port_validates_native_aliases_before_effects(arm, entry, extra):
     from ansible.module_utils.common.arg_spec import ArgumentSpecValidator
-    from ansible.parsing.dataloader import DataLoader
     from ansible.template import Templar
 
     role = ROOT / "roles" / ("substrate_" + arm + "_machine")
-    loader = DataLoader()
+    loader = LOADER
     defaults = loader.load_from_file(str(role / "defaults/main.yml"), trusted_as_template=True)
     spec = yaml.safe_load((role / "meta/argument_specs.yml").read_text())["argument_specs"][entry]["options"]
     request = {"endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "user": "/run/user", "password": "/run/password",

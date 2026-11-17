@@ -20,14 +20,14 @@ import pathlib
 
 import pytest
 
-from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as protocol
+from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
-LOADER = DataLoader()
 COPY = "ansible.builtin.copy"
 FAIL = "ansible.builtin.fail"
 FACT = "ansible.builtin.set_fact"
@@ -52,20 +52,9 @@ KERNEL = "5.14.0-611.5.1.el9_7.x86_64"
 
 
 def flattened(name):
-    """A task file's tasks in the order a play reaches them, each block opened
-    and its condition carried onto every task inside it."""
-    def opened(listed, inherited):
-        for task in listed or []:
-            if not isinstance(task, dict):
-                continue
-            conditions = task.get("when", [])
-            conditions = inherited + (conditions if isinstance(conditions, list) else [conditions])
-            if "block" in task:
-                for section in ("block", "rescue", "always"):
-                    yield from opened(task.get(section), conditions)
-                continue
-            yield dict(task, when=conditions)
-    return list(opened(LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True), []))
+    """A task file's tasks in play order, each block opened and its conditions carried onto every task inside it."""
+    return [dict(visit.task, when=list(visit.conditions))
+            for visit in role_tasks.visits(role_tasks.role_tasks(ROLE, name)) if "block" not in visit.task]
 
 
 def only(tasks, predicate, description):
