@@ -27,8 +27,11 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
 	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/machine/power"
+	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
+	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/media"
+	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -184,14 +187,14 @@ func operationPlaybook() map[string]string {
 		installation.Implementation + "/apply":                      "managedos/install_apply.yml",
 		installation.Implementation + "/observe":                    "managedos/install_observe.yml",
 		installation.Implementation + "/destroy":                    "managedos/install_destroy.yml",
-		installation.DiscoveryImplementation + "/apply":             "managedos/discovery_apply.yml",
-		installation.DiscoveryImplementation + "/observe":           "managedos/discovery_observe.yml",
-		installation.DiscoveryImplementation + "/destroy":           "managedos/discovery_destroy.yml",
-		installation.EraseImplementation + "/destroy":               "managedos/erase_destroy.yml",
-		installation.EraseImplementation + "/observe":               "managedos/erase_observe.yml",
-		installation.FirewallImplementation + "/apply":              "managedos/firewall_apply.yml",
-		installation.FirewallImplementation + "/observe":            "managedos/firewall_observe.yml",
-		installation.FirewallImplementation + "/destroy":            "managedos/firewall_destroy.yml",
+		diskdiscovery.DiscoveryImplementation + "/apply":            "managedos/discovery_apply.yml",
+		diskdiscovery.DiscoveryImplementation + "/observe":          "managedos/discovery_observe.yml",
+		diskdiscovery.DiscoveryImplementation + "/destroy":          "managedos/discovery_destroy.yml",
+		physicalerase.EraseImplementation + "/destroy":              "managedos/erase_destroy.yml",
+		physicalerase.EraseImplementation + "/observe":              "managedos/erase_observe.yml",
+		hostfirewall.FirewallImplementation + "/apply":              "managedos/firewall_apply.yml",
+		hostfirewall.FirewallImplementation + "/observe":            "managedos/firewall_observe.yml",
+		hostfirewall.FirewallImplementation + "/destroy":            "managedos/firewall_destroy.yml",
 		ceph.Implementation + "/prepare_credentials":                "storage/admin_prepare_credentials.yml",
 		ceph.Implementation + "/update_credentials":                 "storage/admin_update_credentials.yml",
 		ceph.Implementation + "/apply":                              "storage/core_apply.yml",
@@ -296,12 +299,12 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		kind: installation.TreeKind, implementation: installation.TreeImplementation, family: "os-package-tree",
 		capability: installation.NewTree(runner).WithMedia(records),
 	}, {
-		kind: installation.Kind, implementation: installation.EraseImplementation, family: installation.EraseFamily,
+		kind: installation.Kind, implementation: physicalerase.EraseImplementation, family: installation.EraseFamily,
 	}, {
 		kind: installation.Kind, implementation: installation.Implementation, family: installation.InstallFamily,
 	}, {
-		kind: installation.Kind, implementation: installation.FirewallImplementation, family: installation.FirewallFamily,
-		capability: installation.NewFirewall(runner).WithHostPorts(hostPortRequirements),
+		kind: installation.Kind, implementation: hostfirewall.FirewallImplementation, family: hostfirewall.FirewallFamily,
+		capability: hostfirewall.New(runner).WithHostPorts(hostPortRequirements),
 	}, {
 		kind: libvirt.HostKind, implementation: libvirt.HostImplementation, family: "substrate-host",
 		capability: libvirt.NewHost(runner).WithHostPrerequisites(providerHostFirewall),
@@ -319,7 +322,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	resolver = append(resolver, boundCapability{kind: string(api.CephConsumer), implementation: ceph.ConsumerImplementation, family: "storage-consumer", capability: ceph.NewConsumer(runner).WithProofs(cephDependencyProofs{})})
 	resolver = append(resolver, boundCapability{kind: string(api.CephCluster), implementation: ceph.HostImplementation, family: "storage-host", capability: ceph.NewHost(runner).WithProofs(cephDependencyProofs{})})
 	resolver = append(resolver, boundCapability{kind: string(api.CephCluster), implementation: ceph.PhysicalRetirementImplementation, family: ceph.PhysicalRetirementFamily,
-		capability: ceph.NewPhysicalRetirement().WithProofs(cephDependencyProofs{}).WithErasureProofs(physicalCephEraseProof).WithUninstalledProofs(installation.PhysicalEraseUnstarted)})
+		capability: ceph.NewPhysicalRetirement().WithProofs(cephDependencyProofs{}).WithErasureProofs(physicalCephEraseProof).WithUninstalledProofs(physicalerase.PhysicalEraseUnstarted)})
 	resolver = append(resolver, boundCapability{kind: string(api.CephSMBResource), implementation: ceph.SMBImplementation, family: "storage-smb", capability: ceph.NewSMB(runner).WithProofs(cephDependencyProofs{})})
 	resolver = append(resolver, boundCapability{kind: string(api.CephReplication), implementation: ceph.ReplicationImplementation, family: "storage-replication", capability: ceph.NewReplication(runner).WithProofs(cephDependencyProofs{})})
 	for _, definition := range managedServiceDefinitions() {
@@ -351,8 +354,8 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 }
 
 func bindInstallations(resolver capabilityResolver, runner capabilityRunner, records installation.MediaRecords) capabilityResolver {
-	discovery := installation.NewDiscovery(runner).WithIdentities(provedIdentities{}).WithMedia(records).WithProtections(cephcluster.RootDiskProtections).WithRefinements(cephcluster.RootDiskRefinement).WithNonces(discoveryNonce)
-	resolver = append(resolver, boundCapability{kind: installation.Kind, implementation: installation.DiscoveryImplementation, family: installation.DiscoveryFamily, capability: discovery})
+	discovery := diskdiscovery.New(runner).WithIdentities(provedIdentities{}).WithMedia(records).WithProtections(cephcluster.RootDiskProtections).WithRefinements(cephcluster.RootDiskRefinement).WithNonces(discoveryNonce)
+	resolver = append(resolver, boundCapability{kind: installation.Kind, implementation: diskdiscovery.DiscoveryImplementation, family: installation.DiscoveryFamily, capability: discovery})
 	var policies []installation.RetirementPolicy
 	for _, bound := range resolver {
 		if policy, retires := bound.capability.(installation.RetirementPolicy); retires {
@@ -361,10 +364,10 @@ func bindInstallations(resolver capabilityResolver, runner capabilityRunner, rec
 	}
 	for index, bound := range resolver {
 		switch {
-		case bound.kind == installation.Kind && bound.implementation == installation.EraseImplementation:
-			resolver[index].capability = installation.NewErase(runner).WithIdentities(provedIdentities{}).WithMedia(records).WithRetirementPolicies(policies...).WithDiscoveredRoots(discovery.Roots)
+		case bound.kind == installation.Kind && bound.implementation == physicalerase.EraseImplementation:
+			resolver[index].capability = physicalerase.New(runner).WithIdentities(provedIdentities{}).WithMedia(records).WithRetirementPolicies(policies...).WithDiscoveredRoots(discovery.Roots)
 		case bound.kind == installation.Kind && bound.implementation == installation.Implementation:
-			resolver[index].capability = installation.New(runner).WithIdentities(provedIdentities{}).WithMedia(records).WithRetirementPolicies(policies...).WithDiscoveredRoots(discovery.Roots)
+			resolver[index].capability = installation.New(runner).WithIdentities(provedIdentities{}).WithMedia(records).WithRetirementPolicies(policies...).WithDiscoveredRoots(discovery.Roots).WithDiscoveredRootProof(discovery.ProveRoot)
 		}
 	}
 	return resolver
@@ -505,7 +508,7 @@ func (cephDependencyProofs) PhysicalMachine(block reconciliation.Block, evidence
 }
 
 func physicalCephEraseProof(applied reconciliation.Block, removed lifecycle.BlockEvidence, uuid string) (ceph.PhysicalErasure, bool, error) {
-	receipt, recognized, err := installation.PhysicalEraseProof(applied, removed, uuid)
+	receipt, recognized, err := physicalerase.PhysicalEraseProof(applied, removed, uuid)
 	proof := ceph.PhysicalErasure{MACs: receipt.MACs, Targets: []ceph.Device{}}
 	for _, target := range receipt.Targets {
 		proof.Targets = append(proof.Targets, ceph.Device{Path: target.DeviceName, WWN: target.WWN, Serial: target.SerialNumber, SizeBytes: target.SizeBytes})

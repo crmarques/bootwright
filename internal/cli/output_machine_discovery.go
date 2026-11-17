@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
 )
 
 type machineDiscoveryPresentation struct {
@@ -33,7 +33,7 @@ type discoveryDiskPresentation struct {
 
 func (machineDiscoveryPresentation) documentedResult() {}
 
-func displayMachineDiscovery(result *installation.DiscoverResult) machineDiscoveryPresentation {
+func displayMachineDiscovery(result *diskdiscovery.DiscoverResult) machineDiscoveryPresentation {
 	out := machineDiscoveryPresentation{Operation: displayOperation(result.Operation), Inventories: []discoveryInventoryPresentation{}}
 	for _, inventory := range result.Inventories {
 		row := discoveryInventoryPresentation{Machine: escapeDisplayLine(inventory.Machine), Disks: []discoveryDiskPresentation{}}
@@ -48,7 +48,7 @@ func displayMachineDiscovery(result *installation.DiscoverResult) machineDiscove
 	return out
 }
 
-func writeMachineDiscovery(out io.Writer, path string, result *installation.DiscoverResult, structured bool) error {
+func writeMachineDiscovery(out io.Writer, path string, result *diskdiscovery.DiscoverResult, structured bool) error {
 	shown := displayMachineDiscovery(result)
 	if structured {
 		return writeStructuredResult(out, path, shown, result.Operation.Warnings, nil, 0)

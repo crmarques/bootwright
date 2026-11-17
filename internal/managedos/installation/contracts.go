@@ -21,12 +21,6 @@ type Runner interface {
 	Run(context.Context, lifecycle.RunRequest) (lifecycle.RunResult, error)
 }
 
-type DiscoveryOperations interface {
-	Prepare(context.Context, lifecycle.PrepareRequest) (*lifecycle.OperationResult, error)
-	AppliedEvidence(ctx context.Context, contextName, kind, object string) ([]lifecycle.BlockEvidence, error)
-	PlanPreparation(context.Context, lifecycle.PrepareRequest) (*lifecycle.PlanResult, error)
-}
-
 // Identities reads the identity a physical Machine's own block proved earlier
 // in this operation, from the evidence the attempt was handed. That evidence
 // is another capability's, so its owner decodes it and this capability asks
@@ -58,7 +52,7 @@ type RetirementPolicy interface {
 	PhysicalRetirement(catalog api.Catalog, machine string) ([]reconciliation.ObjectRef, error)
 }
 
-func retirementRequirements(policies []RetirementPolicy, catalog api.Catalog, machine string) ([]reconciliation.ObjectRef, error) {
+func RetirementRequirements(policies []RetirementPolicy, catalog api.Catalog, machine string) ([]reconciliation.ObjectRef, error) {
 	var found []reconciliation.ObjectRef
 	for _, policy := range policies {
 		references, err := policy.PhysicalRetirement(catalog, machine)
@@ -74,7 +68,7 @@ func retirementRequirements(policies []RetirementPolicy, catalog api.Catalog, ma
 // discovery reports. Its result is frozen into the installation request.
 type DiscoveredRoots func(context.Context, lifecycle.PlanInput) (map[string]diskselection.Proof, error)
 
-func resolvedRequests(ctx context.Context, input lifecycle.PlanInput, roots DiscoveredRoots) ([]Request, []Requirements, error) {
+func ResolvedRequests(ctx context.Context, input lifecycle.PlanInput, roots DiscoveredRoots) ([]Request, []Requirements, error) {
 	var proofs map[string]diskselection.Proof
 	if roots != nil {
 		var err error

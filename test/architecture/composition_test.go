@@ -27,7 +27,7 @@ func applicationValues() packageSymbols {
 		"internal/desiredstate/compilation": {"State": true},
 		"internal/workspace/contexts":       {"Configuration": true},
 		// A frozen installation request owns bytes and derivations, with no service.
-		"internal/managedos/installation": {"Request": true},
+		"internal/managedos/installation": {"Request": true, "DetailRefusal": true},
 		// ScopedFailure is the failure value a dependency adapter raises for
 		// its caller's scope to render; it binds no replaceable service.
 		"internal/controller/prerequisites": {"ScopedFailure": true},

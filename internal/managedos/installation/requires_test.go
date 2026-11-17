@@ -69,8 +69,8 @@ func TestTheSessionBudgetsAndTheRunBoundsShareTheirConstants(t *testing.T) {
 			t.Errorf("%s: a %+v session outlasts the update bound %s", name, got, updateBound)
 		}
 	}
-	if registrationBound != 15*time.Minute || updateBound != 45*time.Minute || firewallDeadline != 10*time.Minute || firewallSession != 300*time.Second {
-		t.Fatalf("bounds %s, %s, %s for a %s firewall session", registrationBound, updateBound, firewallDeadline, firewallSession)
+	if registrationBound != 15*time.Minute || updateBound != 45*time.Minute {
+		t.Fatalf("bounds %s, %s", registrationBound, updateBound)
 	}
 }
 
@@ -189,21 +189,5 @@ func TestATreeRequestHoldsItsArtifactServersRoots(t *testing.T) {
 		if _, err := DecodeTreeRequest(canonical); err == nil {
 			t.Errorf("%s: a tree request naming other roots decoded", name)
 		}
-	}
-}
-
-func TestAFirewallRequestFreezesItsWorkerSession(t *testing.T) {
-	plan := firewallPlan(t, labCatalog(firewallProfile(firewallEnabled)), staticPorts(ingressRequirement(firewallMachine)))
-	request, err := DecodeFirewallRequest(plan.Definitions[0].Request)
-	if err != nil || request.Budgets.Session != 300 {
-		t.Fatalf("budgets %+v (%v)", request.Budgets, diagnostics.Of(err))
-	}
-	request.Budgets.Session = 900
-	canonical, err := request.Canonical()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := DecodeFirewallRequest(canonical); err == nil {
-		t.Fatal("a firewall request freezing another session decoded")
 	}
 }

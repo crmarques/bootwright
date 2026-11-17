@@ -93,7 +93,7 @@ a value a content digest hashes: `internal/addons/instance/`,
 `internal/containercluster/networking/`, `internal/controller/clients/`,
 `internal/infrastructureservices/` `artifactserver/`, `managedservice/`,
 `mirrorfill/`, `proxy/`, `dnsserver/`, `ntpserver/` and `registry/`, `internal/machine/power/`,
-`internal/managedos/installation/`, `internal/storage/ceph/` and
+`internal/managedos/` `diskdiscovery/`, `hostfirewall/`, `installation/` and `physicalerase/`, `internal/storage/ceph/` and
 `internal/substrate/`, each with its subdirectories.
 `TestCheckCommitsContractPathsCoverEveryImplementation` holds the list to the
 implementations the contract goldens pin.

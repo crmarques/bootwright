@@ -131,7 +131,7 @@ func TestNonFIPSGuestAgentKeepsEd25519(t *testing.T) {
 func TestAGuestHostKeyTypeWithNoGeneratedPathRefuses(t *testing.T) {
 	request, _ := onlyRequest(t, labCatalog())
 	request.Target.HostKeyType = "rsa"
-	install, err := installationFor(labCatalog(), guest(), installProfile(), request, &Requirements{})
+	install, err := InstallationFor(labCatalog(), guest(), installProfile(), request, &Requirements{})
 	if err != nil {
 		t.Fatal(err)
 	}

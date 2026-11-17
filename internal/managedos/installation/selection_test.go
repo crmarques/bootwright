@@ -8,17 +8,8 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
-
-func expectRefusal(t *testing.T, err error, code string) {
-	t.Helper()
-	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != code {
-		t.Fatalf("refusal = %#v, want %s", reported, code)
-	}
-}
 
 func onlyRequest(t *testing.T, catalog api.Catalog) (Request, Requirements) {
 	t.Helper()
@@ -132,11 +123,11 @@ func TestADeclaredChecksumIsComparedNotFrozen(t *testing.T) {
 	}
 	records := labRecords()
 	records[bootImageName] = MediaRecord{SHA256: strings.Repeat("a", 64), Size: 7, Observed: 7}
-	frozen, err := pinMedia(labCatalog(pinned), request, records)
+	frozen, err := PinMedia(labCatalog(pinned), request, records)
 	if err != nil || frozen.BootMedia.SHA256 != strings.Repeat("a", 64) || frozen.BootMedia.Size != 7 {
 		t.Fatalf("frozen boot media = %+v (%v)", frozen.BootMedia, diagnostics.Of(err))
 	}
-	if _, err := pinMedia(labCatalog(pinned), request, labRecords()); err == nil {
+	if _, err := PinMedia(labCatalog(pinned), request, labRecords()); err == nil {
 		t.Fatal("a record differing from the declared checksum was frozen")
 	}
 	malformed := api.NewObject(api.MachineImage, "rhel-9-8-boot", api.Value{}, api.MapValue(
@@ -704,15 +695,6 @@ func TestAProxyWithCredentialsIsAcceptedWithoutRepositories(t *testing.T) {
 	if strings.Contains(request.Kickstart, "proxy") {
 		t.Fatalf("the kickstart names a proxy:\n%s", request.Kickstart)
 	}
-}
-
-// sshKeySecret is a host key Secret of one source, as admission normalizes it.
-func sshKeySecret(source api.Value) api.Object {
-	declared := api.NewObject(api.Secret, "metal-01-host-key", api.Value{}, api.MapValue(
-		text("type", "sshKeyPair"), field("source", source),
-	))
-	normalized, _ := secrets.Normalize(declared, api.Catalog{})
-	return normalized
 }
 
 // The key a physical installation delivers is installed at its own type's

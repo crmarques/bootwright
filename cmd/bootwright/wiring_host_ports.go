@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -20,18 +21,18 @@ const (
 	hostPortManual   = "manual"
 )
 
-func hostPortRequirements(catalog api.Catalog) ([]installation.HostPortRequirement, error) {
+func hostPortRequirements(catalog api.Catalog) ([]hostfirewall.HostPortRequirement, error) {
 	published, err := ceph.HostPortRequirements(catalog)
 	if err != nil {
 		return nil, err
 	}
-	requirements := make([]installation.HostPortRequirement, 0, len(published))
+	requirements := make([]hostfirewall.HostPortRequirement, 0, len(published))
 	for _, requirement := range published {
-		ports := make([]installation.HostPort, 0, len(requirement.Ports))
+		ports := make([]hostfirewall.HostPort, 0, len(requirement.Ports))
 		for _, port := range requirement.Ports {
-			ports = append(ports, installation.HostPort{Number: port.Number, Transport: port.Transport})
+			ports = append(ports, hostfirewall.HostPort{Number: port.Number, Transport: port.Transport})
 		}
-		requirements = append(requirements, installation.HostPortRequirement{Machine: requirement.Machine, Publisher: requirement.Publisher, Networks: slices.Clone(requirement.Networks), Protocols: slices.Clone(requirement.Protocols), Ports: ports})
+		requirements = append(requirements, hostfirewall.HostPortRequirement{Machine: requirement.Machine, Publisher: requirement.Publisher, Networks: slices.Clone(requirement.Networks), Protocols: slices.Clone(requirement.Protocols), Ports: ports})
 	}
 	services, err := serviceHostPorts(catalog)
 	if err != nil {
@@ -56,7 +57,7 @@ func preflightHostPorts(catalog api.Catalog) ([]preflight.HostPortRequirement, e
 	return requirements, nil
 }
 
-func hostPortPlanInspection(requirements installation.HostPortRequirements, next lifecycle.PlanInspection) lifecycle.PlanInspection {
+func hostPortPlanInspection(requirements hostfirewall.HostPortRequirements, next lifecycle.PlanInspection) lifecycle.PlanInspection {
 	return func(ctx context.Context, name string, catalog api.Catalog, plan reconciliation.Plan, starting []reconciliation.Block) ([]lifecycle.PlanCheck, error) {
 		checks, err := next(ctx, name, catalog, plan, starting)
 		if err != nil {
@@ -70,7 +71,7 @@ func hostPortPlanInspection(requirements installation.HostPortRequirements, next
 	}
 }
 
-func hostPortChecks(catalog api.Catalog, requirements installation.HostPortRequirements) ([]lifecycle.PlanCheck, error) {
+func hostPortChecks(catalog api.Catalog, requirements hostfirewall.HostPortRequirements) ([]lifecycle.PlanCheck, error) {
 	if requirements == nil {
 		return nil, nil
 	}
@@ -87,7 +88,7 @@ func hostPortChecks(catalog api.Catalog, requirements installation.HostPortRequi
 			networks = "the interface holding " + strings.Join(requirement.Addresses, ", ")
 		}
 		summary := machine + " admits " + admits + " on " + networks + " for " + requirement.Publisher
-		if installation.RealizesHostPorts(catalog, requirement.Machine) {
+		if hostfirewall.RealizesHostPorts(catalog, requirement.Machine) {
 			realization := ": realized by the managed OS before the clusters stage"
 			if len(requirement.Addresses) != 0 {
 				realization = ": realized by the host firewall before its consumers"
@@ -104,7 +105,7 @@ func hostPortChecks(catalog api.Catalog, requirements installation.HostPortRequi
 	return rows, nil
 }
 
-func hostPortAdmission(requirement installation.HostPortRequirement) string {
+func hostPortAdmission(requirement hostfirewall.HostPortRequirement) string {
 	var admitted []string
 	for _, port := range requirement.Ports {
 		admitted = append(admitted, strconv.Itoa(port.Number)+"/"+port.Transport)

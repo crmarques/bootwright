@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/encoding"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
@@ -63,27 +64,27 @@ func TestPhysicalCephMatrixPreservesCanonicalPlans(t *testing.T) {
 					if !host.Physical || host.Hardware != nil || host.HostKeyRef == "" {
 						t.Fatalf("physical host lost its original-evidence boundary: %+v", host)
 					}
-					erase, ok := plan.Block(installation.EraseBlockID(host.Machine))
+					erase, ok := plan.Block(physicalerase.EraseBlockID(host.Machine))
 					if !ok {
 						t.Fatal("missing explicit erase policy", host.Machine)
 					}
-					policy, err := installation.DecodeEraseRequest(erase.Request)
+					policy, err := physicalerase.DecodeEraseRequest(erase.Request)
 					if err != nil || len(policy.Targets) != len(host.Devices)+1 || !policy.Install.Target.Physical || policy.Install.Target.Hardware == nil || len(policy.Install.Target.Hardware.Interfaces) == 0 || policy.Install.Private == nil || !policy.Install.Target.Controller.TLSVerify || policy.Install.Target.Controller.TrustBundleRef == "" {
 						t.Fatalf("incomplete original root/data erase policy: %+v %v", policy, err)
 					}
 					install, ok := plan.Block(installation.BlockID(host.Machine))
-					removal, err := installation.NewErase(nil).Removal(context.Background(), erase)
+					removal, err := physicalerase.New(nil).Removal(context.Background(), erase)
 					if !ok || err != nil || !slices.Contains(install.Consumes, "data-loss") || !slices.Contains(removal.Consumes, "data-loss") || len(erase.Consumes) != 0 {
 						t.Fatal("physical installation or erase lost data-loss authorization", host.Machine)
 					}
 					for _, device := range host.Devices {
-						if device.WWN == "" || device.Serial != "" || device.SizeBytes != 0 || !slices.ContainsFunc(policy.Targets, func(target installation.EraseTarget) bool {
+						if device.WWN == "" || device.Serial != "" || device.SizeBytes != 0 || !slices.ContainsFunc(policy.Targets, func(target physicalerase.EraseTarget) bool {
 							return target.DeviceName == device.Path && target.WWN == device.WWN && target.SerialNumber != "" && target.SizeBytes > 0
 						}) {
 							t.Fatalf("selected disk lacks explicit erasure authority: %+v", device)
 						}
 					}
-					chain := []string{ceph.ClusterBlockID(cluster.Name()), ceph.HostBlockID(cluster.Name(), host.Machine), installation.BlockID(host.Machine), installation.EraseBlockID(host.Machine), ceph.PhysicalRetirementBlockID(cluster.Name()), baremetal.BlockID(host.Machine)}
+					chain := []string{ceph.ClusterBlockID(cluster.Name()), ceph.HostBlockID(cluster.Name(), host.Machine), installation.BlockID(host.Machine), physicalerase.EraseBlockID(host.Machine), ceph.PhysicalRetirementBlockID(cluster.Name()), baremetal.BlockID(host.Machine)}
 					for index := 1; index < len(chain); index++ {
 						if !physicalCephAncestors(inverse, chain[index])[chain[index-1]] {
 							t.Fatalf("physical inverse lacks %s before %s", chain[index-1], chain[index])

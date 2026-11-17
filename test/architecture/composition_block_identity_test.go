@@ -51,13 +51,12 @@ func TestTheBlockIdentityRuleRejectsAClaimReader(t *testing.T) {
 	source := compositionSource(t, "cmd/bootwright", `package main
 
 import (
-	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 )
 
-func bind(runner installation.Runner) installation.EraseCapability {
+func bind(runner physicalerase.Runner) physicalerase.Capability {
 	_ = baremetal.BlockID("metal-01")
-	return installation.NewErase(runner).WithClaims(baremetal.BlockID)
+	return physicalerase.New(runner).WithClaims(baremetal.BlockID)
 }
 `)
 	want := []string{"cmd/bootwright/fixture.go: baremetal.BlockID is handed to a capability; require the API object from its family instead"}

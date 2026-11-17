@@ -53,7 +53,7 @@ func labMedia() *fixtureMedia { return &fixtureMedia{records: labRecords()} }
 func pinnedRequest(t *testing.T, catalog api.Catalog) Request {
 	t.Helper()
 	request, _ := onlyRequest(t, catalog)
-	pinned, err := pinMedia(catalog, request, labRecords())
+	pinned, err := PinMedia(catalog, request, labRecords())
 	if err != nil {
 		t.Fatalf("pinning: %v", diagnostics.Of(err))
 	}
@@ -298,25 +298,5 @@ func TestAHostedTreeBootImageIsComparedOnlyWhenItNamesARelease(t *testing.T) {
 	_, err := planWith(&fixtureMedia{records: records}, labCatalog())
 	if reported := onlyDiagnostic(t, err); reported.Message != bootImageName+" holds release 9.7 and MachineInstallProfile/rhel-9-8 declares spec.os.version 9.8" {
 		t.Fatalf("diagnostic = %+v", reported)
-	}
-}
-
-// The physical erase boots its image only to clear a disk, so it installs no
-// release and the release refusals stay the installation's.
-func TestTheEraseDoesNotRefuseTheImageRelease(t *testing.T) {
-	records := labRecords()
-	for name, record := range records {
-		record.Release = managedos.MediaRelease{}
-		records[name] = record
-	}
-	input := planInput(reconciliation.Apply)
-	catalog := labCatalog(metalProvider(), eraseMachine(), sshKeySecret(api.MapValue(field("generated", api.MapValue()))))
-	input.State = compilation.NewState(catalog, catalog, nil)
-	erase, err := NewErase(nil).WithMedia(&fixtureMedia{records: records}).Plan(context.Background(), input)
-	if err != nil || len(erase.Definitions) == 0 {
-		t.Fatalf("an erase of images with no release = %+v (%v)", erase, diagnostics.Of(err))
-	}
-	if _, err := New(nil).WithMedia(&fixtureMedia{records: records}).Plan(context.Background(), input); err == nil {
-		t.Fatal("the installation beside it planned images with no release")
 	}
 }

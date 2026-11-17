@@ -27,10 +27,10 @@ func (Capability) SecretClasses(block reconciliation.Block) (secrets.Classes, er
 	if err != nil {
 		return nil, err
 	}
-	return request.secretClasses(), nil
+	return request.SecretClasses(), nil
 }
 
-func (r Request) secretClasses() secrets.Classes {
+func (r Request) SecretClasses() secrets.Classes {
 	classes := r.Placement.SecretClasses().
 		Add(controllerCredentialClass(r.Target.Substrate), r.Target.Controller.CredentialsRef).
 		Add(secrets.TrustAnchor, r.Target.Controller.TrustBundleRef, r.TLSCertificateRef).
@@ -57,31 +57,6 @@ func controllerCredentialClass(target substrate.Arm) secrets.Class {
 		return secrets.AccessCredential
 	}
 	return secrets.EffectMaterial
-}
-
-func (EraseCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
-	request, err := DecodeEraseRequest(block.Request)
-	if err != nil {
-		return nil, err
-	}
-	return request.SecretReferences(), nil
-}
-
-func (EraseCapability) SecretClasses(block reconciliation.Block) (secrets.Classes, error) {
-	request, err := DecodeEraseRequest(block.Request)
-	if err != nil {
-		return nil, err
-	}
-	return request.Install.secretClasses(), nil
-}
-
-func (DiscoveryCapability) SecretClasses(block reconciliation.Block) (secrets.Classes, error) {
-	r, err := DecodeDiscoveryRequest(block.Request)
-	if err != nil {
-		return nil, err
-	}
-	return r.Placement.SecretClasses().Add(secrets.AccessCredential, r.Controller.CredentialsRef).
-		Add(secrets.TrustAnchor, r.Controller.TrustBundleRef, r.Private.CertificateRef), nil
 }
 
 func (TreeCapability) SecretReferences(block reconciliation.Block) ([]string, error) {

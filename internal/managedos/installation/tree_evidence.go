@@ -17,7 +17,7 @@ type TreeEvidence struct {
 }
 
 func decodeTreeEvidence(data []byte, digest string) (TreeEvidence, error) {
-	evidence, err := reconciliation.DecodeEvidence[TreeEvidence](data, maxEvidenceBytes, "package tree")
+	evidence, err := reconciliation.DecodeEvidence[TreeEvidence](data, MaxEvidenceBytes, "package tree")
 	if err != nil {
 		return TreeEvidence{}, err
 	}

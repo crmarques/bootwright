@@ -29,7 +29,10 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
 	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/machine/power"
+	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
+	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
@@ -137,10 +140,10 @@ func contractRecipes() map[string]digestRecipe {
 			partVersion(mirrorfill.ImagesEvidenceVersion)),
 		mirrorfill.ReleaseImplementation: digestOf(partDomain("bootwright.infrastructureservices.mirror-fill-v1"), partImplementation(mirrorfill.ReleaseImplementation),
 			partVersion(mirrorfill.ReleaseEvidenceVersion)),
-		installation.DiscoveryImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.DiscoveryImplementation), partRequest("os-disk-discovery-v1"), partPin("bmc-drive-inventory-or-minimal-ram-boot-pinned-ssh-bmc-poweroff-v1"), partPin(substrate.RedfishMediaPolicy)}},
-		installation.EraseImplementation:     {separator: ":", parts: []digestPart{partImplementation(installation.EraseImplementation), partRequest("physical-erase-v1"), partPin("descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v1"), partPin(substrate.RedfishMediaPolicy)}},
-		installation.FirewallImplementation: digestOf(partDomain("bootwright.managedos.host-firewall-v1"), partImplementation(installation.FirewallImplementation),
-			partVersion(installation.FirewallEvidenceVersion), partPin(installation.FirewallServiceRoot),
+		diskdiscovery.DiscoveryImplementation: {separator: ":", parts: []digestPart{partImplementation(diskdiscovery.DiscoveryImplementation), partRequest("os-disk-discovery-v1"), partPin("bmc-drive-inventory-or-minimal-ram-boot-pinned-ssh-bmc-poweroff-v1"), partPin(substrate.RedfishMediaPolicy)}},
+		physicalerase.EraseImplementation:     {separator: ":", parts: []digestPart{partImplementation(physicalerase.EraseImplementation), partRequest("physical-erase-v1"), partPin("descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v1"), partPin(substrate.RedfishMediaPolicy)}},
+		hostfirewall.FirewallImplementation: digestOf(partDomain("bootwright.managedos.host-firewall-v1"), partImplementation(hostfirewall.FirewallImplementation),
+			partVersion(hostfirewall.FirewallEvidenceVersion), partPin(hostfirewall.FirewallServiceRoot),
 			partPin("bootwright-host-firewall context=context block=os-firewall-machine apply=operation"), partPin("bootwright-context-publisher"),
 			partPin("e04c153c9c84d6a73bfb3f05e09e0e7b4f4104332ee1d318cc4b3021570dc1a5")),
 		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v1"),
@@ -187,17 +190,17 @@ func requestIdentities() map[string][]string {
 			"networks[].bridge", "firewallReadyUnit", "vlanRefusalUnit", "trunks[].bridge", "trunks[].name", "trunks[].uuid", "legs[].name", "legs[].device", "legs[].uuid", "routing.unit"},
 		libvirt.MachineImplementation: {"identity.context", "identity.object", "identity.block", "uri", "domain", "uuid", "directory", "poolName",
 			"poolPath", "disks[].name", "disks[].path", "interfaces[].macAddress", "controller.unit", "controller.port"},
-		baremetal.Implementation:             {"identity.context", "identity.object", "identity.block", "provider", "controller.endpoint", "hardware[].macAddress"},
-		kubevirt.HostImplementation:          {"identity.context", "identity.object", "identity.block", "namespace", "kubeconfigRef", "hostCluster"},
-		kubevirt.MachineImplementation:       {"identity.context", "identity.object", "identity.block", "provider", "namespace", "name", "rootVolume", "mediaVolume", "interfaces[].macAddress"},
-		installation.TreeImplementation:      {"identity.context", "identity.profile", "media.name", "publication.path", "placement.machine"},
-		mirrorfill.FilesImplementation:       {"identity.context", "identity.environment", "identity.server", "root", "files[].path", "placement.machine"},
-		hardware.Implementation:              {"identity.context", "identity.object", "identity.block", "placement.machine"},
-		mirrorfill.ImagesImplementation:      {"identity.context", "identity.environment", "identity.registry", "mirror.host", "images[].repository", "images[].digest", "placement.machine"},
-		mirrorfill.ReleaseImplementation:     {"identity.context", "identity.cluster", "identity.registry", "mirror.host", "release.repository", "release.components", "release.tag", "placement.machine"},
-		installation.FirewallImplementation:  {"identity.context", "identity.object", "identity.block", "services[].name", "address", "placement.machine"},
-		installation.DiscoveryImplementation: {"identity.context", "identity.object", "identity.block"},
-		installation.EraseImplementation: {"install.identity.context", "install.identity.object", "install.identity.block", "installDigest",
+		baremetal.Implementation:              {"identity.context", "identity.object", "identity.block", "provider", "controller.endpoint", "hardware[].macAddress"},
+		kubevirt.HostImplementation:           {"identity.context", "identity.object", "identity.block", "namespace", "kubeconfigRef", "hostCluster"},
+		kubevirt.MachineImplementation:        {"identity.context", "identity.object", "identity.block", "provider", "namespace", "name", "rootVolume", "mediaVolume", "interfaces[].macAddress"},
+		installation.TreeImplementation:       {"identity.context", "identity.profile", "media.name", "publication.path", "placement.machine"},
+		mirrorfill.FilesImplementation:        {"identity.context", "identity.environment", "identity.server", "root", "files[].path", "placement.machine"},
+		hardware.Implementation:               {"identity.context", "identity.object", "identity.block", "placement.machine"},
+		mirrorfill.ImagesImplementation:       {"identity.context", "identity.environment", "identity.registry", "mirror.host", "images[].repository", "images[].digest", "placement.machine"},
+		mirrorfill.ReleaseImplementation:      {"identity.context", "identity.cluster", "identity.registry", "mirror.host", "release.repository", "release.components", "release.tag", "placement.machine"},
+		hostfirewall.FirewallImplementation:   {"identity.context", "identity.object", "identity.block", "services[].name", "address", "placement.machine"},
+		diskdiscovery.DiscoveryImplementation: {"identity.context", "identity.object", "identity.block"},
+		physicalerase.EraseImplementation: {"install.identity.context", "install.identity.object", "install.identity.block", "installDigest",
 			"targets[].deviceName", "targets[].serialNumber", "targets[].sizeBytes", "targets[].wwn"},
 		installation.Implementation: {"identity.context", "identity.object", "identity.block", "identity.profile", "hostname", "markerPath",
 			"hostKeyPath", "network.documentPath", "network.markerPath", "private.path", "image.path", "target.domain", "target.uri",

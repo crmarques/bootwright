@@ -29,7 +29,10 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 	"github.com/crmarques/bootwright/internal/machine/hardware"
+	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
+	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
@@ -57,9 +60,9 @@ func contractVersions() []contractVersion {
 		{kubevirt.HostImplementation, kubevirt.HostContentDigest(), reflect.TypeFor[kubevirt.HostRequest](), reflect.TypeFor[kubevirt.HostEvidence]()},
 		{kubevirt.MachineImplementation, kubevirt.MachineContentDigest(), reflect.TypeFor[kubevirt.MachineRequest](), reflect.TypeFor[kubevirt.MachineEvidence]()},
 		{installation.TreeImplementation, installation.TreeContentDigest(), reflect.TypeFor[installation.TreeRequest](), reflect.TypeFor[installation.TreeEvidence]()},
-		{installation.DiscoveryImplementation, installation.DiscoveryContentDigest(), reflect.TypeFor[installation.DiscoveryRequest](), reflect.TypeFor[installation.DiscoveryEvidence]()},
-		{installation.EraseImplementation, installation.EraseContentDigest(), reflect.TypeFor[installation.EraseRequest](), reflect.TypeFor[installation.EraseEvidence]()},
-		{installation.FirewallImplementation, installation.FirewallContentDigest(), reflect.TypeFor[installation.FirewallRequest](), reflect.TypeFor[installation.FirewallEvidence]()},
+		{diskdiscovery.DiscoveryImplementation, diskdiscovery.DiscoveryContentDigest(), reflect.TypeFor[diskdiscovery.DiscoveryRequest](), reflect.TypeFor[diskdiscovery.DiscoveryEvidence]()},
+		{physicalerase.EraseImplementation, physicalerase.EraseContentDigest(), reflect.TypeFor[physicalerase.EraseRequest](), reflect.TypeFor[physicalerase.EraseEvidence]()},
+		{hostfirewall.FirewallImplementation, hostfirewall.FirewallContentDigest(), reflect.TypeFor[hostfirewall.FirewallRequest](), reflect.TypeFor[hostfirewall.FirewallEvidence]()},
 		{installation.Implementation, installation.ContentDigest(), reflect.TypeFor[installation.Request](), reflect.TypeFor[installation.Evidence]()},
 		{agentinstall.MediaImplementation, agentinstall.MediaContentDigest(), reflect.TypeFor[agentinstall.MediaRequest](), reflect.TypeFor[agentinstall.MediaEvidence]()},
 		{agentinstall.InstallImplementation, agentinstall.InstallContentDigest(), reflect.TypeFor[agentinstall.InstallRequest](), reflect.TypeFor[agentinstall.InstallEvidence]()},
@@ -294,7 +297,7 @@ func automationIdentities() map[string]automationFormat {
 	core, host := ceph.Implementation, ceph.HostImplementation
 	media, install := agentinstall.MediaImplementation, agentinstall.InstallImplementation
 	addon, network := instance.Implementation, networking.Implementation
-	anaconda, tree, erase := installation.Implementation, installation.TreeImplementation, installation.EraseImplementation
+	anaconda, tree, erase := installation.Implementation, installation.TreeImplementation, physicalerase.EraseImplementation
 	scratch := transient("a temporary name the call that creates it removes or renames before it returns")
 	inProcess := transient("a name the plugin gives a module it loads into its own process")
 	eraseRuntime := transient("the erase environment's RAM-only runtime, which exists only while that boot runs")

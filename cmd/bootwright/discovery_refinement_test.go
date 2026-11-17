@@ -19,7 +19,9 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/diskselection"
+	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/cephcluster"
@@ -42,7 +44,7 @@ func TestDiscoveryRefinesRenderedDiskPoliciesBeforeInstallation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner := installation.NewDiscovery(nil).WithMedia(exampleMediaRecords{}).WithIdentities(refinementIdentity{}).WithProtections(cephcluster.RootDiskProtections).WithRefinements(cephcluster.RootDiskRefinement)
+	owner := diskdiscovery.New(nil).WithMedia(exampleMediaRecords{}).WithIdentities(refinementIdentity{}).WithProtections(cephcluster.RootDiskProtections).WithRefinements(cephcluster.RootDiskRefinement)
 	state := func(catalog api.Catalog) *compilation.State { return compilation.NewState(catalog, catalog, nil) }
 	contextID := lifecycle.ContextIdentity{Name: "chart-discovery", Incarnation: "chart-incarnation"}
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: contextID, Controller: controller, State: state(before)}
@@ -72,7 +74,7 @@ func TestDiscoveryRefinesRenderedDiskPoliciesBeforeInstallation(t *testing.T) {
 			t.Fatal("installation lost first-write authorization")
 		}
 		definition.Requires = nil
-		definition.Dependencies = []string{installation.DiscoveryBlockID(definition.Object)}
+		definition.Dependencies = []string{diskdiscovery.DiscoveryBlockID(definition.Object)}
 		freshDefs = append(freshDefs, definition)
 	}
 	fresh, err := reconciliation.NewPlan(reconciliation.Apply, freshDefs)
@@ -119,7 +121,7 @@ func TestDiscoveryRefinesRenderedDiskPoliciesBeforeInstallation(t *testing.T) {
 			}
 		})
 	}
-	for _, implementation := range []string{installation.Implementation, installation.EraseImplementation} {
+	for _, implementation := range []string{installation.Implementation, physicalerase.EraseImplementation} {
 		copy := advance
 		copy.Owned.Blocks = append(slices.Clone(owned.Blocks), reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: "Machine", Object: selected.Name(), Implementation: implementation}})
 		if err := owner.AdvancePreparation(ctx, copy); err == nil {
@@ -132,7 +134,7 @@ func refinementInventories(t *testing.T, catalog api.Catalog, plan reconciliatio
 	t.Helper()
 	var records []lifecycle.BlockEvidence
 	for _, block := range plan.Blocks {
-		request, err := installation.DecodeDiscoveryRequest(block.Request)
+		request, err := diskdiscovery.DecodeDiscoveryRequest(block.Request)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -155,7 +157,7 @@ func refinementInventories(t *testing.T, catalog api.Catalog, plan reconciliatio
 		if err != nil {
 			t.Fatal(err)
 		}
-		evidence, err := json.Marshal(installation.DiscoveryEvidence{Version: installation.DiscoveryImplementation, Completed: true, Cleaned: true, Request: block.RequestDigest, Report: wire})
+		evidence, err := json.Marshal(diskdiscovery.DiscoveryEvidence{Version: diskdiscovery.DiscoveryImplementation, Completed: true, Cleaned: true, Request: block.RequestDigest, Report: wire})
 		if err != nil {
 			t.Fatal(err)
 		}

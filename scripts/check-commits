@@ -38,7 +38,10 @@ internal/infrastructureservices/proxy/
 internal/infrastructureservices/registry/
 internal/machine/hardware/
 internal/machine/power/
+internal/managedos/diskdiscovery/
+internal/managedos/hostfirewall/
 internal/managedos/installation/
+internal/managedos/physicalerase/
 internal/storage/ceph/
 internal/substrate/
 '

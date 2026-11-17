@@ -13,6 +13,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
@@ -24,7 +25,7 @@ func TestPhysicalCephRetirementGraphOrdersEraseBeforeProofAndClaimRelease(t *tes
 	plan := physicalCephRetirementPlan(t, false)
 	policy := ceph.PhysicalRetirementBlockID("ceph-lab")
 	for _, machine := range []string{"metal-01", "metal-02", "metal-03"} {
-		chain := []string{baremetal.BlockID(machine), policy, installation.EraseBlockID(machine), installation.BlockID(machine), ceph.HostBlockID("ceph-lab", machine), ceph.ClusterBlockID("ceph-lab")}
+		chain := []string{baremetal.BlockID(machine), policy, physicalerase.EraseBlockID(machine), installation.BlockID(machine), ceph.HostBlockID("ceph-lab", machine), ceph.ClusterBlockID("ceph-lab")}
 		for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
 			ordered := plan
 			if verb == reconciliation.Destroy {
@@ -98,7 +99,7 @@ func TestPhysicalCephUnstartedPoliciesNeverSelectDiskEffects(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, block := range inverse.Blocks {
-			if block.Implementation == installation.EraseImplementation || block.Implementation == installation.Implementation || strings.HasPrefix(block.Implementation, "storage-ceph") {
+			if block.Implementation == physicalerase.EraseImplementation || block.Implementation == installation.Implementation || strings.HasPrefix(block.Implementation, "storage-ceph") {
 				t.Fatalf("unstarted policy selected a disk effect: %s", block.ID)
 			}
 		}
@@ -117,7 +118,7 @@ func TestPhysicalCephPartialApplyCanReleaseUnusedClaimsWithoutErasing(t *testing
 			}
 			if phase == "after-erase-policy" {
 				for _, block := range plan.Blocks {
-					if block.Implementation == installation.EraseImplementation {
+					if block.Implementation == physicalerase.EraseImplementation {
 						states[block.ID] = reconciliation.BlockDone
 						for id := range physicalCephAncestors(plan, block.ID) {
 							states[id] = reconciliation.BlockDone
@@ -136,7 +137,7 @@ func TestPhysicalCephPartialApplyCanReleaseUnusedClaimsWithoutErasing(t *testing
 				}
 			}
 			execution := physicalCephUnstartedExecution(t, plan, inverse, states, policy)
-			capability := ceph.NewPhysicalRetirement().WithProofs(cephDependencyProofs{}).WithUninstalledProofs(installation.PhysicalEraseUnstarted).
+			capability := ceph.NewPhysicalRetirement().WithProofs(cephDependencyProofs{}).WithUninstalledProofs(physicalerase.PhysicalEraseUnstarted).
 				WithErasureProofs(func(reconciliation.Block, lifecycle.BlockEvidence, string) (ceph.PhysicalErasure, bool, error) {
 					t.Fatal("unstarted physical installation consulted an erase receipt")
 					return ceph.PhysicalErasure{}, false, nil
@@ -172,12 +173,12 @@ func physicalCephUnstartedExecution(t *testing.T, plan, inverse reconciliation.P
 			original.Evidence, _ = json.Marshal(baremetal.Evidence{Addresses: request.Addresses(), UUID: "11111111-1111-4111-8111-111111111111", Power: "On", Postcondition: true, Request: block.RequestDigest})
 			execution.ApplyProved = append(execution.ApplyProved, original)
 		}
-		if block.Implementation == installation.EraseImplementation && state == reconciliation.BlockDone {
-			original.Evidence, _ = json.Marshal(installation.EraseEvidence{Version: installation.EraseImplementation, Request: block.RequestDigest, Prepared: true})
+		if block.Implementation == physicalerase.EraseImplementation && state == reconciliation.BlockDone {
+			original.Evidence, _ = json.Marshal(physicalerase.EraseEvidence{Version: physicalerase.EraseImplementation, Request: block.RequestDigest, Prepared: true})
 			removed := original
 			removed.Block, _ = inverse.Block(block.ID)
 			removed.Verb = reconciliation.Destroy
-			removed.Evidence, _ = json.Marshal(installation.EraseEvidence{Version: installation.EraseImplementation, Request: block.RequestDigest, Prepared: true, Removed: true, Retained: true})
+			removed.Evidence, _ = json.Marshal(physicalerase.EraseEvidence{Version: physicalerase.EraseImplementation, Request: block.RequestDigest, Prepared: true, Removed: true, Retained: true})
 			execution.RemovalProved = append(execution.RemovalProved, lifecycle.RemovalEvidence{Applied: original, Removed: removed})
 		}
 		if physicalCephAncestors(plan, block.ID)[policy.ID] {

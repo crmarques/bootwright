@@ -11,7 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -40,7 +40,7 @@ func TestManagedControllerFirewallPrecedesReadinessAndRechecksBeforeListenerEffe
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	firewall, found := plan.Block(installation.FirewallBlockID("controller"))
+	firewall, found := plan.Block(hostfirewall.FirewallBlockID("controller"))
 	if !found {
 		t.Fatal("no controller firewall block")
 	}
@@ -53,7 +53,7 @@ func TestManagedControllerFirewallPrecedesReadinessAndRechecksBeforeListenerEffe
 	if !selection.Admits(firewall) {
 		t.Fatal("controller-only apply omits firewall preparation")
 	}
-	request, err := installation.DecodeFirewallRequest(firewall.Request)
+	request, err := hostfirewall.DecodeFirewallRequest(firewall.Request)
 	if err != nil || !request.Direct {
 		t.Fatal(request, err)
 	}
@@ -124,11 +124,11 @@ func TestManagedBridgeFirewallGrantsWaitForTheProviderButDaemonPreparationDoesNo
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	preparation, ok := plan.Block(installation.FirewallPreparationBlockID("controller"))
+	preparation, ok := plan.Block(hostfirewall.FirewallPreparationBlockID("controller"))
 	if !ok || len(preparation.Dependencies) != 0 {
 		t.Fatalf("daemon waits for its own consumers: %+v", preparation)
 	}
-	grant, ok := plan.Block(installation.FirewallBlockID("controller"))
+	grant, ok := plan.Block(hostfirewall.FirewallBlockID("controller"))
 	if !ok {
 		t.Fatal("no listener grant")
 	}

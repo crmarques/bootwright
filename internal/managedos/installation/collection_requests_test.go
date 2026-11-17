@@ -21,6 +21,13 @@ func TestTheCollectionReadsEveryRequestGoldenGoFreezes(t *testing.T) {
 	if err != nil || len(paths) == 0 {
 		t.Fatalf("no request golden: %v", err)
 	}
+	for _, sibling := range []string{"physicalerase"} {
+		more, err := filepath.Glob(filepath.Join("..", sibling, "testdata", "*request*.golden"))
+		if err != nil || len(more) == 0 {
+			t.Fatalf("no request golden of %s: %v", sibling, err)
+		}
+		paths = append(paths, more...)
+	}
 	requests := map[string]json.RawMessage{}
 	for _, path := range paths {
 		data, err := os.ReadFile(path)

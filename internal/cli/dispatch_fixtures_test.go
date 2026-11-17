@@ -17,7 +17,7 @@ import (
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
-	osinstallation "github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -398,10 +398,10 @@ func dispatchFlags() *pflag.FlagSet {
 
 type machineDiscoverySpy struct{ record *dispatchRecord }
 
-func (s machineDiscoverySpy) Discover(ctx context.Context, r osinstallation.DiscoverRequest) (*osinstallation.DiscoverResult, error) {
+func (s machineDiscoverySpy) Discover(ctx context.Context, r diskdiscovery.DiscoverRequest) (*diskdiscovery.DiscoverResult, error) {
 	return s.record.result.machineDiscovery, s.record.called(ctx, "machine discover", r)
 }
-func (s machineDiscoverySpy) PlanDiscovery(ctx context.Context, r osinstallation.DiscoverRequest) (*lifecycle.PlanResult, error) {
+func (s machineDiscoverySpy) PlanDiscovery(ctx context.Context, r diskdiscovery.DiscoverRequest) (*lifecycle.PlanResult, error) {
 	return s.record.result.lifecyclePlan, s.record.called(ctx, "machine discover", r)
 }
 

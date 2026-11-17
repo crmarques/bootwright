@@ -19,11 +19,11 @@ request-identity:
   placement.machine
 request-schema:
   address string
-  budgets struct installation.FirewallBudgets
+  budgets struct hostfirewall.FirewallBudgets
   budgets.session int
   direct bool
   fleetKeyRef string
-  identity struct installation.FirewallIdentity
+  identity struct hostfirewall.FirewallIdentity
   identity.block string
   identity.context string
   identity.object string
@@ -36,11 +36,11 @@ request-schema:
   placement.privateKeyRef string omitempty
   placement.user string omitempty
   preparation bool
-  services []struct installation.FirewallService
+  services []struct hostfirewall.FirewallService
   services[].addresses []string omitempty
   services[].name string
   services[].networks []string
-  services[].ports []struct installation.FirewallPort
+  services[].ports []struct hostfirewall.FirewallPort
   services[].ports[].number int
   services[].ports[].transport string
   services[].protocols []string
@@ -53,10 +53,10 @@ evidence-schema:
   ready bool
   request string
   retired bool omitempty
-  services []struct installation.FirewallServiceEvidence
+  services []struct hostfirewall.FirewallServiceEvidence
   services[].covered bool
   services[].digest string
-  services[].memberships []struct installation.FirewallMembership
+  services[].memberships []struct hostfirewall.FirewallMembership
   services[].memberships[].interface string
   services[].memberships[].zone string
   services[].name string

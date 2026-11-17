@@ -51,16 +51,16 @@ func updateFor(profile api.Object) (*Update, error) {
 	return &Update{Policy: managedos.UpdateWithinRelease, Release: release}, nil
 }
 
-// updateRefusal is completed by the worker's detail; without one the value reads unknown.
-type updateRefusal struct {
-	render func(detail string) error
+// DetailRefusal is completed by the worker's detail; without one the value reads unknown.
+type DetailRefusal struct {
+	Render func(detail string) error
 }
 
-func (r updateRefusal) Error() string                  { return r.render("").Error() }
-func (r updateRefusal) Unwrap() error                  { return r.render("") }
-func (r updateRefusal) WithDetail(detail string) error { return r.render(detail) }
+func (r DetailRefusal) Error() string                  { return r.Render("").Error() }
+func (r DetailRefusal) Unwrap() error                  { return r.Render("") }
+func (r DetailRefusal) WithDetail(detail string) error { return r.Render(detail) }
 
-func detailOr(detail string, valid func(string) bool) string {
+func DetailOr(detail string, valid func(string) bool) string {
 	if valid(detail) {
 		return detail
 	}
@@ -82,14 +82,14 @@ func updateRefusals(contextName string, request Request) map[string]error {
 	machine := "Machine/" + request.Identity.Object
 	profile := "MachineInstallProfile/" + request.Identity.Profile
 	release := request.Update.Release
-	refused := machineRefusal(request)
+	refused := MachineRefusal(request)
 	again := "then run bootwright destroy --context " + contextName + " and apply again"
 	fixed := func(message, remediation string) error {
-		return updateRefusal{render: func(string) error { return refused(message, remediation) }}
+		return DetailRefusal{Render: func(string) error { return refused(message, remediation) }}
 	}
 	caused := func(reason, message, remediation string) error {
-		return updateRefusal{render: func(detail string) error {
-			cause := detailOr(detail, func(value string) bool {
+		return DetailRefusal{Render: func(detail string) error {
+			cause := DetailOr(detail, func(value string) bool {
 				for _, known := range updateCause[reason] {
 					if value == known {
 						return true
@@ -103,11 +103,11 @@ func updateRefusals(contextName string, request Request) map[string]error {
 	return map[string]error{
 		"update-release-unavailable": fixed("the subscription service offers no release "+release+" to "+machine,
 			"set spec.os.version on "+profile+" to a release the subscription service offers, or set spec.updates.policy to none, "+again),
-		"update-release-mismatch": updateRefusal{render: func(detail string) error {
-			return refused(machine+" reports VERSION_ID "+detailOr(detail, updateFound.MatchString)+", and its installation declares release "+release,
+		"update-release-mismatch": DetailRefusal{Render: func(detail string) error {
+			return refused(machine+" reports VERSION_ID "+DetailOr(detail, updateFound.MatchString)+", and its installation declares release "+release,
 				"run bootwright destroy --context "+contextName+", make the update sources of "+profile+" offer release "+release+" alone, and apply again")
 		}},
-		"update-release-drift": updateRefusal{render: func(detail string) error {
+		"update-release-drift": DetailRefusal{Render: func(detail string) error {
 			found, repository := driftDetail(detail)
 			return refused("the update of "+machine+" would move redhat-release to "+found+" from repository "+repository+", outside release "+release,
 				"pin repository "+repository+" of "+profile+" to release "+release+" or disable it, "+again)

@@ -103,6 +103,10 @@ func packageRoles() map[string]packageRole {
 		"internal/secrets/secretstore/areacontract":           applicationRole,
 		"internal/reconciliation/lifecycle/workspacecontract": applicationRole,
 		"internal/managedos/media/storecontract":              applicationRole,
+		// The catalog and golden fixtures the managed OS capability packages' tests share,
+		// imported only by tests.
+		"internal/managedos/installfixtures":  applicationRole,
+		"internal/managedos/installationtest": applicationRole,
 		// What every in-memory operation area double refuses, imported only by
 		// tests.
 		"internal/reconciliation/operationstore/areadouble": applicationRole,
@@ -115,7 +119,7 @@ func packageRoles() map[string]packageRole {
 		"containercluster/installation", "containercluster/preflight",
 		"controller/clients", "controller/prerequisites", "controller/firewall", "desiredstate/compilation",
 		"environment/access", "environment/clusterpreflight", "environment/inspection", "environment/preflight",
-		"machine/access", "machine/hardware", "machine/inventory", "machine/power", "managedos/media", "managedos/installation",
+		"machine/access", "machine/hardware", "machine/inventory", "machine/power", "managedos/media", "managedos/installation", "managedos/hostfirewall", "managedos/physicalerase", "managedos/diskdiscovery",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",
 		"secrets/custody", "secrets/encryption", "storage/preflight", "storage/rendering", "storage/ceph",
 		"substrate/baremetal", "substrate/kubevirt", "substrate/libvirt", "trust/enrollment", "workspace/contexts",
@@ -161,7 +165,15 @@ func applicationDependencies() map[string][]string {
 		"internal/storage/ceph": {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle", "internal/infrastructureservices/artifactserver", "internal/controller/prerequisites"},
 		// Installation publishes through ArtifactServer's selection and path rules,
 		// and projects the bytes its publications write into the capacity budget.
-		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/substrate/capacity"),
+		"internal/managedos/installation": append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/substrate/capacity"),
+		// The host firewall, physical erase and disk discovery plan from the installation requests
+		// this package derives and decode its frozen request, so each consumes installation; disk
+		// discovery also refuses what physical erase owns.
+		"internal/managedos/hostfirewall":                {"internal/reconciliation/lifecycle", "internal/managedos/installation"},
+		"internal/managedos/physicalerase":               {"internal/reconciliation/lifecycle", "internal/managedos/installation"},
+		"internal/managedos/diskdiscovery":               {"internal/reconciliation/lifecycle", "internal/managedos/installation", "internal/managedos/physicalerase"},
+		"internal/managedos/installfixtures":             {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
+		"internal/managedos/installationtest":            {"internal/managedos/installation", "internal/managedos/installfixtures", "internal/reconciliation/lifecycle"},
 		"internal/containercluster/agentinstall":         append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
 		"internal/infrastructureservices/artifactserver": append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
 		"internal/infrastructureservices/managedservice": {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},

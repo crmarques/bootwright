@@ -2,7 +2,7 @@
 # message start, separated by tabs. The list only shrinks; see main.go.
 S1007	test/architecture/version_specializations_test.go	1	should use raw string (`...`) with regexp.MustCompile to avoid having to escape twice
 S1011	internal/infrastructureservices/managedservice/selection.go	1	should replace loop with egress.NoProxy = append(egress.NoProxy, choice.Get("noProxy").Strings()...)
-S1016	internal/managedos/installation/firewall_request.go	1	should convert port (type HostPort) to FirewallPort instead of using struct literal
+S1016	internal/managedos/hostfirewall/requests.go	1	should convert port (type HostPort) to FirewallPort instead of using struct literal
 S1016	internal/storage/ceph/smb.go	1	should convert a (type AuxiliaryReference) to SMBImage instead of using struct literal
 SA1019	internal/secrets/material/generation.go	6	(crypto/ecdsa.PrivateKey).D has been deprecated
 SA1019	internal/secrets/material/generation.go	2	(crypto/ecdsa.PublicKey).X has been deprecated
@@ -15,7 +15,7 @@ SA1019	internal/secrets/material/generation_test.go	2	(crypto/rsa.PrecomputedVal
 SA1019	internal/secrets/material/validation.go	4	(crypto/ecdsa.PrivateKey).D has been deprecated
 SA1019	internal/secrets/material/validation.go	1	crypto/dsa has been deprecated
 SA1019	test/architecture/diagnostics_test.go	4	go/ast.Object has been deprecated
-SA4004	internal/managedos/installation/discovery.go	1	the surrounding loop is unconditionally terminated
+SA4004	internal/managedos/diskdiscovery/capability.go	1	the surrounding loop is unconditionally terminated
 SA5001	internal/controller/venvlocal/guard_linux_amd64_test.go	2	should check error returned from exclusive() before deferring retire.Close()
 SA6006	internal/controller/privilege/sudo_test.go	2	use io.Writer.Write instead of converting from []byte to string to use io.WriteString
 ST1005	internal/addons/clusterobjects/validation.go	2	error strings should not be capitalized

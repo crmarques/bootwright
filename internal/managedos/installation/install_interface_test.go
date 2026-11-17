@@ -11,11 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-// declaredInterface is one native NMState interface of a network fixture.
-func declaredInterface(name, kind string, fields ...api.FieldValue) api.Value {
-	return api.MapValue(append([]api.FieldValue{text("name", name), text("type", kind)}, fields...)...)
-}
-
 func bondPort(name, bond string) api.Value {
 	return declaredInterface(name, "ethernet", text("controller", bond))
 }
@@ -56,37 +51,6 @@ func externalProvider() api.Object {
 	return lab.WithSpec(lab.Spec().With("segments", api.ListValue(api.MapValue(
 		text("name", "lab-guests"), field("libvirt", api.MapValue(text("bridge", "br-lab"))),
 	))))
-}
-
-func hardwareNIC(name, mac string) api.Value {
-	return api.MapValue(text("name", name), text("macAddress", mac))
-}
-
-// metalOn is the bare-metal Machine on its own network configuration, with
-// its install address on iface and the hardware NICs given.
-func metalOn(iface string, nics ...api.Value) api.Object {
-	metal := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
-	var names, addresses []api.Value
-	for _, nic := range nics {
-		names = append(names, api.MapValue(text("name", nic.Get("name").Text())))
-		addresses = append(addresses, api.MapValue(text("nicRef", nic.Get("name").Text()), text("macAddress", nic.Get("macAddress").Text())))
-	}
-	return metal.WithSpec(metal.Spec().
-		WithPath(api.ListValue(names...), "hardware", "nics").
-		WithPath(api.ListValue(addresses...), "substrate", "baremetal", "nics").
-		WithPath(api.StringValue("metal-net"), "network", "configRef").
-		WithPath(api.ListValue(
-			api.MapValue(text("name", "fqdn"), text("address", "metal-01.lab.example.test")),
-			api.MapValue(text("name", "ip"), text("address", "198.51.100.41"), text("interface", iface)),
-		), "network", "addresses"))
-}
-
-func metalNetwork(interfaces ...api.Value) api.Object {
-	return api.NewObject(api.NetworkConfig, "metal-net", api.Value{}, networkWith(interfaces...).Spec())
-}
-
-func metalCatalog(metal, network api.Object) api.Catalog {
-	return labCatalog(metalProvider(), metal, network, sshKeySecret(api.MapValue(field("generated", api.MapValue()))))
 }
 
 func requestOf(t *testing.T, catalog api.Catalog, object string) Request {

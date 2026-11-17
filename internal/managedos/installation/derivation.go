@@ -17,10 +17,10 @@ import (
 // way does not need it and does not get it.
 const guestAgent = "qemu-guest-agent"
 
-// installationFor derives the complete unattended installation from effective
+// InstallationFor derives the complete unattended installation from effective
 // state alone. It resolves every service the guest uses while installing, and
 // records each managed one as a requirement so those blocks complete first.
-func installationFor(catalog api.Catalog, machine, profile api.Object, request Request, needs *Requirements) (Installation, error) {
+func InstallationFor(catalog api.Catalog, machine, profile api.Object, request Request, needs *Requirements) (Installation, error) {
 	template, err := substrate.NetworkTemplate(catalog, machine)
 	if err != nil {
 		return Installation{}, err

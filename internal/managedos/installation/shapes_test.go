@@ -14,12 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-// networkWith is the lab network configuration declaring the given interfaces.
-func networkWith(interfaces ...api.Value) api.Object {
-	config := networkConfig()
-	return config.WithSpec(config.Spec().WithPath(api.ListValue(interfaces...), "nmstate", "interfaces"))
-}
-
 // withRoutes replaces the routes a network configuration declares.
 func withRoutes(config api.Object, routes ...api.Value) api.Object {
 	return config.WithSpec(config.Spec().WithPath(api.ListValue(routes...), "nmstate", "routes", "config"))

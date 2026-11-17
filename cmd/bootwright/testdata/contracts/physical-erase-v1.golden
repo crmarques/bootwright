@@ -186,7 +186,7 @@ request-schema:
   install.version string
   installDigest string
   network string
-  targets []struct installation.EraseTarget
+  targets []struct physicalerase.EraseTarget
   targets[].deviceName string omitempty
   targets[].method string
   targets[].serialNumber string
@@ -198,14 +198,14 @@ evidence-schema:
   request string
   prepared bool
   removed bool
-  receipt *struct installation.EraseReceipt omitempty
+  receipt *struct physicalerase.EraseReceipt omitempty
   receipt.version string
   receipt.state string
   receipt.originalAttempt string
   receipt.request string
   receipt.uuid string
   receipt.macs []string
-  receipt.targets []struct installation.EraseCoverage
+  receipt.targets []struct physicalerase.EraseCoverage
   receipt.targets[].deviceName string omitempty
   receipt.targets[].method string
   receipt.targets[].serialNumber string

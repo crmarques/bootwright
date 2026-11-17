@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const maxEvidenceBytes = 64 << 10
+const MaxEvidenceBytes = 64 << 10
 
 const (
 	maxNetworkDifferences     = 16
@@ -179,7 +179,7 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 // it to pin a session against a key this context already proved, so it decodes
 // without the request digest a running operation compares.
 func HostKeyEvidence(data []byte) (address, hostKey string, err error) {
-	evidence, err := reconciliation.DecodeEvidence[Evidence](data, maxEvidenceBytes, "installation")
+	evidence, err := reconciliation.DecodeEvidence[Evidence](data, MaxEvidenceBytes, "installation")
 	if err != nil {
 		return "", "", err
 	}
@@ -351,7 +351,7 @@ func foreignRegistration(evidence Evidence) error {
 }
 
 func decodeEvidence(data []byte, digest string) (Evidence, error) {
-	evidence, err := reconciliation.DecodeEvidence[Evidence](data, maxEvidenceBytes, "installation")
+	evidence, err := reconciliation.DecodeEvidence[Evidence](data, MaxEvidenceBytes, "installation")
 	if err != nil {
 		return Evidence{}, err
 	}

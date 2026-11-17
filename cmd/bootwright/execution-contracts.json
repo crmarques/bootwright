@@ -65,11 +65,11 @@
   },
   "os-disk-discovery-v1": {
     "contentDigest": "3b221fbf4c47753b9c26ee7ef35529319dc69b2e834eede019e150c94cf3c53c",
-    "fingerprint": "5721ca0d1155839cefb346232d372289f768ec95489eefa2e8c5fc53fda23e54"
+    "fingerprint": "caf121ac03205a512f3d6b095c9c637eb575a9ba6589e36b91bda1cde083f9ee"
   },
   "os-host-firewall-v1": {
     "contentDigest": "ef74fbe8098b01389b0dcef264da682b89702c0bc590db7d5a40412626a3c9cd",
-    "fingerprint": "d19a3661d0c58b6b68587295f86b4ae5441f4fc947a921379e1492263e567e30"
+    "fingerprint": "dac599a2301a0ae4bc7f5043fcb380e38c4269619875eac7ac43a41b7debb833"
   },
   "os-install-anaconda-v1": {
     "contentDigest": "1bb65ca142b94a27f5118520140a23df15a4a38508ed5cf33b4682bbf7d14f99",
@@ -81,7 +81,7 @@
   },
   "physical-erase-v1": {
     "contentDigest": "6c1c49685138b533ada39706c004909f33a27c52b3694793cb4e121e09f6643e",
-    "fingerprint": "5536c968f2198c2e9019a73bfdccd9f6fd12b17dc9328135f9fce932da43eb60"
+    "fingerprint": "67d4e5dd2587652836d77a984c3a1a7ca945ea12be4f2eab5b5a6b28d3d0436e"
   },
   "proxy-squid-v1": {
     "contentDigest": "f6f3786ce9c60b6b307aa8169bc8e87ab296769ab62d47fcfc5e536479147c16",

@@ -29,24 +29,6 @@ func (r *fakeRunner) Run(_ context.Context, request lifecycle.RunRequest) (lifec
 	return r.result, r.err
 }
 
-func planInput(verb reconciliation.Verb) lifecycle.PlanInput {
-	catalog := labCatalog()
-	return lifecycle.PlanInput{
-		Verb: verb, State: compilation.NewState(catalog, catalog, nil),
-		Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},
-	}
-}
-
-func fleetMaterial() map[string]secrets.Material {
-	return map[string]secrets.Material{
-		"lab-bmc-credentials": secrets.NewMaterial(nil),
-		"bootwright-machine-key": secrets.NewMaterial(map[secrets.Part][]byte{
-			secrets.PublicKeyPart:  []byte("ssh-ed25519 AAAAPUBLIC bootwright\n"),
-			secrets.PrivateKeyPart: []byte("PRIVATE"),
-		}),
-	}
-}
-
 func execution(t *testing.T, digest string) (lifecycle.Execution, Request) {
 	t.Helper()
 	request := pinnedRequest(t, labCatalog())
@@ -122,22 +104,6 @@ func TestPlanContributesOneInstallationBlockPerMachine(t *testing.T) {
 	if whole.Blocks[len(whole.Blocks)-1].ID != "os-install-rhel-01" {
 		t.Fatal("the installation did not order after everything it requires")
 	}
-}
-
-// realizing is one placeholder block per required object, standing in for the
-// capabilities that realize them in a whole plan.
-func realizing(references []reconciliation.ObjectRef) []reconciliation.BlockDefinition {
-	definitions := make([]reconciliation.BlockDefinition, 0, len(references))
-	for index, reference := range references {
-		definitions = append(definitions, reconciliation.BlockDefinition{
-			ID:          "realizes-" + strings.ToLower(reference.Kind) + "-" + reference.Object,
-			Description: "realize " + reference.Object, Stage: reconciliation.StageInfrastructureServices,
-			Kind: reference.Kind, Object: reference.Object, Implementation: "placeholder", Family: reference.Family,
-			ContentDigest: strings.Repeat("a", 64),
-			Request:       json.RawMessage(`{"index":` + string(rune('0'+index)) + `}`),
-		})
-	}
-	return definitions
 }
 
 // The block waits for its Machine and for every service the guest uses, named

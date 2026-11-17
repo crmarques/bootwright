@@ -10,6 +10,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
@@ -59,7 +60,7 @@ func TestComposedAutomaticDiscoveryPlansFleetProofWithoutInstallation(t *testing
 			t.Fatalf("manual and automatic discovery froze different native procedures: %v", err)
 		}
 		for _, block := range plan.Definitions {
-			if len(block.Consumes) != 0 || block.Implementation == installation.Implementation || block.Implementation == installation.EraseImplementation {
+			if len(block.Consumes) != 0 || block.Implementation == installation.Implementation || block.Implementation == physicalerase.EraseImplementation {
 				t.Fatalf("preparation admitted destructive block %s", block.ID)
 			}
 			if block.Implementation == baremetal.Implementation {

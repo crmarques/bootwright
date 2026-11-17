@@ -178,7 +178,7 @@ func RenderKickstart(input Installation) (string, error) {
 		input.RootDevice = "/dev/disk/by-id/wwn-" + input.RootWWN
 		input.RootSizeBytes = 4096
 	}
-	network, err := networkLine(input)
+	network, err := NetworkLine(input)
 	if err != nil {
 		return "", err
 	}
@@ -401,9 +401,9 @@ func repositoryValues(input Installation, read func(Repository) string) []string
 	return values
 }
 
-// networkLine is the one static assignment the installer applies, from the
+// NetworkLine is the one static assignment the installer applies, from the
 // Machine's own selected install address and its network's default route.
-func networkLine(input Installation) (string, error) {
+func NetworkLine(input Installation) (string, error) {
 	address, err := netip.ParseAddr(input.Address)
 	if err != nil || !address.Is4() {
 		return "", refusal("api.value", "the Machine's install address is not an IPv4 literal", "correct the selected install address")

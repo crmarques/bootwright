@@ -45,7 +45,10 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
 	"github.com/crmarques/bootwright/internal/machine/hardware"
+	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
+	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/physicalerase"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -213,10 +216,10 @@ func contractRows() []contractRow {
 			drift: map[string]any{"identity": strings.Repeat("a", 64)}},
 		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence, retains: true,
 			noEffect: map[string]any{"power": "Off"}, drift: map[string]any{"reachable": false}},
-		{kind: installation.Kind, implementation: installation.FirewallImplementation, example: "lab-rhel+firewall",
+		{kind: installation.Kind, implementation: hostfirewall.FirewallImplementation, example: "lab-rhel+firewall",
 			completedFrom: "specs/managed-os.md, Host firewall requirements: each run pins the guest key its original apply's installation proved, and marks its services with that apply operation"},
-		{kind: installation.Kind, implementation: installation.DiscoveryImplementation, example: "lab-baremetal+discovery", completedFrom: "specs/managed-os.md, Automatic root-disk discovery: each inventory boot requires the original physical UUID/MAC proof and durable attempt binding"},
-		{kind: installation.Kind, implementation: installation.EraseImplementation, example: "lab-baremetal+erase",
+		{kind: installation.Kind, implementation: diskdiscovery.DiscoveryImplementation, example: "lab-baremetal+discovery", completedFrom: "specs/managed-os.md, Automatic root-disk discovery: each inventory boot requires the original physical UUID/MAC proof and durable attempt binding"},
+		{kind: installation.Kind, implementation: physicalerase.EraseImplementation, example: "lab-baremetal+erase",
 			completedFrom: "specs/state-reconciliation.md, Opt-in physical logical overwrite: erase requires the original physical claim UUID before any adapter or receipt can be trusted"},
 		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence,
 			absence:   map[string]any{"uri": true, "poolAnswered": true, "directory": false, "carrierPolicy": map[string]any{"answered": true}, "firewallReady": map[string]any{"answered": true}, "connectionsAnswered": true},
@@ -453,7 +456,7 @@ func contractExampleOf(t *testing.T, resolver capabilityResolver, runner *contra
 		capability, _ := resolver.Resolve(binding.Kind, binding.Implementation)
 		contribution, err := capability.Plan(context.Background(), example.apply)
 		if err != nil {
-			if binding.Implementation == installation.DiscoveryImplementation && name == "lab-baremetal+discovery" {
+			if binding.Implementation == diskdiscovery.DiscoveryImplementation && name == "lab-baremetal+discovery" {
 				t.Fatalf("discovery fixture planning: %v (%+v)", err, diagnostics.Of(err))
 			}
 			if binding.Implementation == ceph.ConsumerImplementation && name == "lab-compact-df" {
@@ -1916,12 +1919,12 @@ func contractTreePresence(t *testing.T, execution lifecycle.Execution) map[strin
 	return map[string]any{"postcondition": true, "content": true, "tree": true, "identity": request.Media.SHA256, "version": installation.TreeEvidenceVersion}
 }
 
-func contractHostPorts(catalog api.Catalog) ([]installation.HostPortRequirement, error) {
-	var found []installation.HostPortRequirement
+func contractHostPorts(catalog api.Catalog) ([]hostfirewall.HostPortRequirement, error) {
+	var found []hostfirewall.HostPortRequirement
 	for _, machine := range installation.InstalledMachines(catalog) {
-		if installation.RealizesHostPorts(catalog, machine.Name()) {
-			found = append(found, installation.HostPortRequirement{Machine: machine.Name(), Publisher: "contract-ingress", Networks: []string{"198.51.100.60/32"},
-				Protocols: []string{"vrrp"}, Ports: []installation.HostPort{{Number: 443, Transport: "tcp"}}})
+		if hostfirewall.RealizesHostPorts(catalog, machine.Name()) {
+			found = append(found, hostfirewall.HostPortRequirement{Machine: machine.Name(), Publisher: "contract-ingress", Networks: []string{"198.51.100.60/32"},
+				Protocols: []string{"vrrp"}, Ports: []hostfirewall.HostPort{{Number: 443, Transport: "tcp"}}})
 		}
 	}
 	return found, nil
@@ -1929,8 +1932,8 @@ func contractHostPorts(catalog api.Catalog) ([]installation.HostPortRequirement,
 
 func withContractHostPorts(resolver capabilityResolver, runner capabilityRunner) capabilityResolver {
 	for index, bound := range resolver {
-		if bound.implementation == installation.FirewallImplementation {
-			resolver[index].capability = installation.NewFirewall(runner).WithHostPorts(contractHostPorts)
+		if bound.implementation == hostfirewall.FirewallImplementation {
+			resolver[index].capability = hostfirewall.New(runner).WithHostPorts(contractHostPorts)
 		}
 	}
 	return resolver

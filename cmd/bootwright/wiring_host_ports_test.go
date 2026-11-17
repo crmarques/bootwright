@@ -11,6 +11,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -38,7 +39,7 @@ func TestTheProductionHostPortBindingsCarryEveryCephRequirement(t *testing.T) {
 		t.Fatalf("probed = %+v, %v", probed, err)
 	}
 	for i, requirement := range published {
-		want := installation.HostPortRequirement{Machine: requirement.Machine, Publisher: requirement.Publisher, Networks: requirement.Networks, Protocols: requirement.Protocols}
+		want := hostfirewall.HostPortRequirement{Machine: requirement.Machine, Publisher: requirement.Publisher, Networks: requirement.Networks, Protocols: requirement.Protocols}
 		got := managed[i]
 		if got.Machine != want.Machine || got.Publisher != want.Publisher || !slices.Equal(got.Networks, want.Networks) || !slices.Equal(got.Protocols, want.Protocols) || len(got.Ports) != len(requirement.Ports) {
 			t.Fatalf("managed[%d] = %+v, want %+v", i, got, requirement)
@@ -48,7 +49,7 @@ func TestTheProductionHostPortBindingsCarryEveryCephRequirement(t *testing.T) {
 			t.Fatalf("probed[%d] = %+v, want %+v", i, probe, requirement)
 		}
 		for j, port := range requirement.Ports {
-			if got.Ports[j] != (installation.HostPort{Number: port.Number, Transport: port.Transport}) || probe.Ports[j].Number != port.Number || probe.Ports[j].Transport != port.Transport {
+			if got.Ports[j] != (hostfirewall.HostPort{Number: port.Number, Transport: port.Transport}) || probe.Ports[j].Number != port.Number || probe.Ports[j].Transport != port.Transport {
 				t.Fatalf("ports[%d][%d] = %+v, %+v, want %+v", i, j, got.Ports[j], probe.Ports[j], port)
 			}
 		}
@@ -62,12 +63,12 @@ func TestTheProductionHostPortBindingsCarryEveryCephRequirement(t *testing.T) {
 func TestAHostPortRowNamesTheManagedOSOrTheManualRemedy(t *testing.T) {
 	t.Parallel()
 	catalog := contractCatalog(t, "lab-rhel+firewall")
-	requirement := func(machine string) installation.HostPortRequirement {
-		return installation.HostPortRequirement{Machine: machine, Publisher: "ceph-ingress-rgw", Networks: []string{"198.51.100.60/32", "198.51.100.0/24"}, Protocols: []string{"vrrp"},
-			Ports: []installation.HostPort{{Number: 443, Transport: "tcp"}, {Number: 8443, Transport: "udp"}}}
+	requirement := func(machine string) hostfirewall.HostPortRequirement {
+		return hostfirewall.HostPortRequirement{Machine: machine, Publisher: "ceph-ingress-rgw", Networks: []string{"198.51.100.60/32", "198.51.100.0/24"}, Protocols: []string{"vrrp"},
+			Ports: []hostfirewall.HostPort{{Number: 443, Transport: "tcp"}, {Number: 8443, Transport: "udp"}}}
 	}
-	ports := func(api.Catalog) ([]installation.HostPortRequirement, error) {
-		return []installation.HostPortRequirement{requirement("rhel-fw"), requirement("rhel-01"), requirement("controller")}, nil
+	ports := func(api.Catalog) ([]hostfirewall.HostPortRequirement, error) {
+		return []hostfirewall.HostPortRequirement{requirement("rhel-fw"), requirement("rhel-01"), requirement("controller")}, nil
 	}
 	upstream := []lifecycle.PlanCheck{{ID: "listener-firewall", Status: "open", Summary: "listener"}}
 	inspect := hostPortPlanInspection(ports, func(context.Context, string, api.Catalog, reconciliation.Plan, []reconciliation.Block) ([]lifecycle.PlanCheck, error) {
@@ -141,7 +142,7 @@ func TestACephClusterOnAManagedHostWaitsForItsFirewallAndLeavesBeforeIt(t *testi
 	}
 	firewalls := 0
 	for _, block := range plan.Blocks {
-		if block.Implementation != installation.FirewallImplementation {
+		if block.Implementation != hostfirewall.FirewallImplementation {
 			continue
 		}
 		firewalls++
@@ -167,7 +168,7 @@ func TestACephClusterOnAManagedHostWaitsForItsFirewallAndLeavesBeforeIt(t *testi
 		order[block.ID] = index
 	}
 	for _, block := range plan.Blocks {
-		if block.Implementation == installation.FirewallImplementation &&
+		if block.Implementation == hostfirewall.FirewallImplementation &&
 			(order[plan.Blocks[cluster].ID] > order[block.ID] || order[block.ID] > order[installation.BlockID(block.Object)]) {
 			t.Fatalf("removal order puts %s outside the Ceph cluster and the installation of %s", block.ID, block.Object)
 		}

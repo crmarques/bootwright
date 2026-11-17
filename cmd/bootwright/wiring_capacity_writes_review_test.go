@@ -11,6 +11,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/managedos/hostfirewall"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -22,7 +23,7 @@ import (
 func TestAdmissionCountsNoMediaWhenOnlyAFirewallOrGuestBlockStarts(t *testing.T) {
 	t.Parallel()
 	fixture := capacityWritesFixture(t)
-	for _, implementation := range []string{installation.FirewallImplementation, libvirt.MachineImplementation} {
+	for _, implementation := range []string{hostfirewall.FirewallImplementation, libvirt.MachineImplementation} {
 		starting := []reconciliation.Block{{BlockDefinition: reconciliation.BlockDefinition{Kind: libvirt.MachineKind, Object: "rhel-01", Implementation: implementation}}}
 		admission := libvirtCapacityAdmission(capacity.Budget{Observer: filesystemFacts{available: fixture.guests + fixture.reserve}})
 		if err := admission(context.Background(), "lab", fixture.catalog, map[string]lifecycle.ObjectOwnership{}, starting); err != nil {

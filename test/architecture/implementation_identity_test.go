@@ -98,6 +98,7 @@ func armSupportFiles() map[string]string {
 		"internal/machine/disk_discovery.go":                      "refuses unsupported Machine root-discovery shapes and unverified physical controllers",
 		"internal/machine/erase_admission.go":                     "refuses a Machine erase on an arm with no physical disk to erase",
 		"internal/managedos/admission.go":                         "refuses ManagedOS installer and disk-encryption shapes an arm does not support",
+		"internal/managedos/installfixtures/fixtures.go":          "builds the libvirt and bare-metal Machine and provider catalog fixtures the managed OS capability tests share",
 	}
 }
 

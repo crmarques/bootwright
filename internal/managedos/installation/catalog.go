@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -13,6 +14,14 @@ const Implementation = "os-install-anaconda-v1"
 
 // Kind is shared with the substrate; resolution also requires the implementation.
 const Kind = "Machine"
+
+const InstallFamily = machineref.InstallFamily
+
+// EraseFamily and DiscoveryFamily name the families of the sibling capabilities an installation requires.
+const (
+	EraseFamily     = "physical-erase"
+	DiscoveryFamily = "os-disk-discovery"
+)
 
 const requestVersion = "os-install-anaconda-v1"
 
@@ -115,11 +124,6 @@ const (
 	updateGuestRead         = 120 * time.Second
 	updateCompletionSession = 120 * time.Second
 	updateMarkerRead        = 60 * time.Second
-)
-
-const (
-	firewallSession  = 300 * time.Second
-	firewallDeadline = firewallSession + 5*time.Minute
 )
 
 const registrationBound = max(registrationSession+releasePinSession+satelliteSession+contentViewSession, unregistrationSession) + registrationInspection

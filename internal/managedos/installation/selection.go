@@ -169,7 +169,7 @@ func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Req
 	return requestsFor(catalog, controllerMachine, contextName, nil, true)
 }
 
-func intentRequests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, []Requirements, error) {
+func IntentRequests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, []Requirements, error) {
 	return requestsFor(catalog, controllerMachine, contextName, nil, false)
 }
 
@@ -184,7 +184,7 @@ func requestsFor(catalog api.Catalog, controllerMachine, contextName string, pro
 		if found, ok := proofs[machine.Name()]; ok {
 			proof = &found
 		}
-		request, needs, err := deriveRequest(catalog, machine, controllerMachine, contextName, proof, complete)
+		request, needs, err := DeriveRequest(catalog, machine, controllerMachine, contextName, proof, complete)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -194,7 +194,7 @@ func requestsFor(catalog api.Catalog, controllerMachine, contextName string, pro
 	return requests, requirements, nil
 }
 
-func deriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, contextName string, proof *diskselection.Proof, complete bool) (Request, Requirements, error) {
+func DeriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, contextName string, proof *diskselection.Proof, complete bool) (Request, Requirements, error) {
 	name := machine.Name()
 	if !substrate.SafeSegment(name) {
 		return Request{}, Requirements{}, refusal("lifecycle.state", "the Machine name is not a safe host identifier", "rename "+machine.Identity())
@@ -272,7 +272,7 @@ func deriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, c
 		}
 		request.Tree, request.TreeMedia = tree.publication, tree.media
 	}
-	install, err := installationFor(catalog, machine, profile, request, &needs)
+	install, err := InstallationFor(catalog, machine, profile, request, &needs)
 	if err != nil {
 		return Request{}, Requirements{}, err
 	}
@@ -377,10 +377,10 @@ func storeMedia(reference, checksum, field, identity string) (Media, error) {
 	return media, nil
 }
 
-// pinMedia freezes the store record of every image a request names, refusing
+// PinMedia freezes the store record of every image a request names, refusing
 // one the store does not hold, one whose bytes no longer have the recorded
 // size and one whose record differs from the digest its MachineImage declares.
-func pinMedia(catalog api.Catalog, request Request, records map[string]MediaRecord) (Request, error) {
+func PinMedia(catalog api.Catalog, request Request, records map[string]MediaRecord) (Request, error) {
 	profile, _ := catalog.Find(api.MachineInstallProfile, request.Identity.Profile)
 	image, _ := catalog.Find(api.MachineImage, profile.Spec().Get("installer", "anaconda", "imageRef").Text())
 	boot, err := pinned(request.BootMedia, records, image.Identity(), "spec.bootMedia", image.Identity())
@@ -430,7 +430,7 @@ func pinned(media Media, records map[string]MediaRecord, owner, field, image str
 	return media, nil
 }
 
-func refusedReleases(catalog api.Catalog, request Request, records map[string]MediaRecord) error {
+func RefusedReleases(catalog api.Catalog, request Request, records map[string]MediaRecord) error {
 	profile, _ := catalog.Find(api.MachineInstallProfile, request.Identity.Profile)
 	if request.TreeMedia == nil {
 		return refusedRelease(request.BootMedia.Name, records, profile)

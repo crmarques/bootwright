@@ -21,11 +21,12 @@ import (
 // It owns what completion, replay and absence mean for that installation and
 // nothing else: the Machine it installs onto is the substrate's.
 type Capability struct {
-	runner             Runner
-	identities         Identities
-	media              MediaRecords
-	retirementPolicies []RetirementPolicy
-	discoveredRoots    DiscoveredRoots
+	runner              Runner
+	identities          Identities
+	media               MediaRecords
+	retirementPolicies  []RetirementPolicy
+	discoveredRoots     DiscoveredRoots
+	discoveredRootProof DiscoveredRootProof
 }
 
 func New(runner Runner) Capability { return Capability{runner: runner} }
@@ -62,7 +63,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
 	}
 	catalog := input.State.Effective()
-	requests, requirements, err := resolvedRequests(ctx, input, c.discoveredRoots)
+	requests, requirements, err := ResolvedRequests(ctx, input, c.discoveredRoots)
 	if err != nil {
 		return lifecycle.CapabilityPlan{}, err
 	}
@@ -75,10 +76,10 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			return lifecycle.CapabilityPlan{}, err
 		}
 		for index, request := range requests {
-			if requests[index], err = pinMedia(catalog, request, records); err != nil {
+			if requests[index], err = PinMedia(catalog, request, records); err != nil {
 				return lifecycle.CapabilityPlan{}, err
 			}
-			if err := refusedReleases(catalog, requests[index], records); err != nil {
+			if err := RefusedReleases(catalog, requests[index], records); err != nil {
 				return lifecycle.CapabilityPlan{}, err
 			}
 		}
@@ -132,7 +133,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			Context: input.Context.Name, Kind: infrastructureservices.OSInstallReservation, Service: request.Identity.Object, Keys: request.ReservationKeys(),
 		})
 	}
-	if claim, held := mediaReservation(input.Context.Name, media); held {
+	if claim, held := MediaReservation(input.Context.Name, media); held {
 		plan.Reservations = append(plan.Reservations, claim)
 	}
 	slices.Sort(plan.Secrets)
@@ -144,11 +145,11 @@ func (c Capability) retirementRequires(catalog api.Catalog, request Request) ([]
 	if !request.Target.Physical {
 		return nil, nil
 	}
-	return retirementRequirements(c.retirementPolicies, catalog, request.Identity.Object)
+	return RetirementRequirements(c.retirementPolicies, catalog, request.Identity.Object)
 }
 
 func installationRequires(needs Requirements, request Request) []reconciliation.ObjectRef {
-	references := requires(needs)
+	references := RequiredObjects(needs)
 	references[0].Family = substrate.MachineFamily
 	if request.EraseOnRemoval {
 		references = append(references, reconciliation.ObjectRef{Kind: "Machine", Object: needs.Machine, Family: EraseFamily})
@@ -161,7 +162,7 @@ func installationRequires(needs Requirements, request Request) []reconciliation.
 
 // requires names the API objects this block waits for, never their block
 // identities, so no capability learns another's naming.
-func requires(needs Requirements) []reconciliation.ObjectRef {
+func RequiredObjects(needs Requirements) []reconciliation.ObjectRef {
 	references := []reconciliation.ObjectRef{{Kind: "Machine", Object: needs.Machine}}
 	for _, name := range needs.ArtifactServers {
 		references = append(references, reconciliation.ObjectRef{Kind: "ArtifactServer", Object: name})
@@ -175,12 +176,12 @@ func requires(needs Requirements) []reconciliation.ObjectRef {
 	return references
 }
 
-// mediaReservation freezes every store entry this context's installations name,
+// MediaReservation freezes every store entry this context's installations name,
 // as one claim carrying one key each: a reservation is identified by its
 // context, kind and service, so the store entries are keys rather than
 // services of their own. The claim is shared, so any number of contexts may
 // hold it; it blocks only deletion and replacement of what it names.
-func mediaReservation(contextName string, names []string) (infrastructureservices.HostReservation, bool) {
+func MediaReservation(contextName string, names []string) (infrastructureservices.HostReservation, bool) {
 	keys := make([]string, 0, len(names))
 	for _, name := range names {
 		keys = append(keys, infrastructureservices.MediaReservationKey(name).String())
@@ -623,7 +624,7 @@ func (c Capability) applyRefusals(execution lifecycle.Execution, request Request
 	}
 	maps.Copy(refusals, mediaRefusals(execution.Context, request))
 	refusals["foreign-installation"] = foreignInstallation(execution.Context, request)
-	key, err := authorizedKey(execution, request)
+	key, err := AuthorizedKey(execution, request)
 	if err != nil {
 		return nil, err
 	}
@@ -713,11 +714,11 @@ func (c Capability) pinValues(execution lifecycle.Execution, request Request) (m
 	return values, nil
 }
 
-// authorizedKey reads the public half of the bound fleet key. Only that half
+// AuthorizedKey reads the public half of the bound fleet key. Only that half
 // ever reaches the Kickstart, the image, the tree, the evidence or the logs.
 // The adapter substitutes it after rendering, so the renderer's guard never
 // sees it: it is refused here unless it stays inside its quoted directive.
-func authorizedKey(execution lifecycle.Execution, request Request) (string, error) {
+func AuthorizedKey(execution lifecycle.Execution, request Request) (string, error) {
 	key, err := publicHalf(execution, request.FleetKeyRef, "fleet access key")
 	if err != nil {
 		return "", err

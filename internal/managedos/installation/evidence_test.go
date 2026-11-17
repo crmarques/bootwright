@@ -146,7 +146,7 @@ func TestEvidenceIsBoundedAndStrictlyShaped(t *testing.T) {
 			t.Errorf("a host key followed by %s was accepted", closer)
 		}
 	}
-	oversized := make([]byte, maxEvidenceBytes+1)
+	oversized := make([]byte, MaxEvidenceBytes+1)
 	for index := range oversized {
 		oversized[index] = ' '
 	}

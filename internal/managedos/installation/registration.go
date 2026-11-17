@@ -218,7 +218,7 @@ func registrationRefusals(contextName string, request Request) map[string]error 
 	profile := "MachineInstallProfile/" + request.Identity.Profile
 	organization, key := "Secret/"+request.Registration.OrganizationRef, "Secret/"+request.Registration.ActivationKeyRef
 	again := "then run bootwright apply --context " + contextName + " again"
-	refused := machineRefusal(request)
+	refused := MachineRefusal(request)
 	input := "the registration worker on " + machine + " refused the organization or activation key of " + entitlement + " as not one line of printable ASCII without whitespace"
 	selection := request.Registration.Satellite != nil && request.Registration.Satellite.ContentView != ""
 	inputRemedy := "replace " + organization + " or " + key + " with one line of 1 to 255 printable ASCII characters without whitespace, "
@@ -257,7 +257,7 @@ func registrationRefusals(contextName string, request Request) map[string]error 
 	return refusals
 }
 
-func machineRefusal(request Request) func(message, remediation string) error {
+func MachineRefusal(request Request) func(message, remediation string) error {
 	return func(message, remediation string) error {
 		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
 			Severity: "error", Code: "lifecycle.state", Message: message, Remediation: remediation,
@@ -272,7 +272,7 @@ func unregistrationRefusals(contextName string, request Request) map[string]erro
 	}
 	machine := "Machine/" + request.Identity.Object
 	again := "then run bootwright destroy --context " + contextName + " again"
-	refused := machineRefusal(request)
+	refused := MachineRefusal(request)
 	return map[string]error{
 		"registration-unreachable": refused("the apply of "+machine+" proved its install marker before it registered, and "+machine+
 			" did not answer through its identity channel or its pinned connection, so its subscription registration cannot be read and was not removed",

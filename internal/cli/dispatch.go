@@ -13,7 +13,7 @@ import (
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
-	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -50,7 +50,7 @@ type commandResult struct {
 	lifecycleStatus    *lifecycle.StatusResult
 	lifecycleDiff      *lifecycle.DiffResult
 	lifecycleOperation *lifecycle.OperationResult
-	machineDiscovery   *installation.DiscoverResult
+	machineDiscovery   *diskdiscovery.DiscoverResult
 
 	logs       *logview.Result
 	logsFollow *logview.Summary

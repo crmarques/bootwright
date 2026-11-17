@@ -38,7 +38,7 @@ request-schema:
   interfaces[].macAddress string
   interfaces[].name string
   inventory string
-  network struct installation.DiscoveryNetwork
+  network struct diskdiscovery.DiscoveryNetwork
   network.address string
   network.bondOptions []string omitempty
   network.bondPorts []string omitempty
@@ -61,7 +61,7 @@ request-schema:
   private.certificateRef string omitempty
   private.path string
   private.url string
-  ssh struct installation.DiscoverySSH
+  ssh struct diskdiscovery.DiscoverySSH
   ssh.port int
   version string
 evidence-schema:

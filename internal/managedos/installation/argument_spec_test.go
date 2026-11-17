@@ -164,7 +164,7 @@ func TestTheEraseRoleAdmitsTheFrozenRequest(t *testing.T) {
 	if err := yaml.Unmarshal(data, &document); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join("testdata", "erase-request-physical.golden"))
+	raw, err := os.ReadFile(filepath.Join("..", "physicalerase", "testdata", "erase-request-physical.golden"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestTheEraseRoleAdmitsTheFrozenRequest(t *testing.T) {
 	if err := decoder.Decode(&request); err != nil {
 		t.Fatal(err)
 	}
-	variable := eraseVariable + "_request"
+	variable := "bootwright_physical_erase_request"
 	for _, operation := range []string{"observe", "destroy"} {
 		specification, found := document.ArgumentSpecs[operation].Options[variable]
 		if !found {

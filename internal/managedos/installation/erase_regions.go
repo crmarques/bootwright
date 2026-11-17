@@ -35,17 +35,3 @@ func MetadataClearRegions(size int64) []EraseRegion {
 	}
 	return regions
 }
-
-func EraseCoverageBytes(target EraseTarget) int64 {
-	switch target.Method {
-	case EraseLogicalOverwrite:
-		return target.SizeBytes
-	case EraseMetadataClear:
-		total := int64(0)
-		for _, region := range MetadataClearRegions(target.SizeBytes) {
-			total += region.Length
-		}
-		return total
-	}
-	return 0
-}

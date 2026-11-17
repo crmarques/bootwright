@@ -12,16 +12,6 @@ func (Capability) Claimed(catalog api.Catalog) []string {
 	return claimed
 }
 
-func (EraseCapability) Claimed(catalog api.Catalog) []string {
-	var claimed []string
-	for _, machine := range InstalledMachines(catalog) {
-		if machine.Spec().Has("hardware", "eraseOnRemoval") {
-			claimed = append(claimed, machine.Identity())
-		}
-	}
-	return claimed
-}
-
 func (TreeCapability) Claimed(catalog api.Catalog) []string {
 	used := map[string]bool{}
 	for _, machine := range InstalledMachines(catalog) {

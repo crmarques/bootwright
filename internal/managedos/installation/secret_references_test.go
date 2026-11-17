@@ -4,7 +4,6 @@ import (
 	"slices"
 	"testing"
 
-	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -19,15 +18,9 @@ func frozenBlock(t *testing.T, request interface{ Canonical() ([]byte, error) })
 
 // Each installation block reports the declarations its frozen request names:
 // the controller's, the fleet and host keys, the publications' certificates;
-// an erase reports its install request's, and a tree its own certificate.
+// and a tree its own certificate.
 func TestInstallationBlocksReportTheSecretsTheirRequestsReference(t *testing.T) {
 	call, request := execution(t, "digest")
-	machine := eraseMachine()
-	install := requestOf(t, labCatalog(metalProvider(), machine, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), machine.Name())
-	erase, err := eraseRequest(machine, install)
-	if err != nil {
-		t.Fatal(err)
-	}
 	_, tree := treeFixture(t)
 	secured := tree
 	secured.Publication.CertificateRef = "tree-tls"
@@ -37,7 +30,6 @@ func TestInstallationBlocksReportTheSecretsTheirRequestsReference(t *testing.T) 
 		want       []string
 	}{
 		"install":      {New(nil).SecretReferences, call.Block, []string{"bootwright-machine-key", "lab-artifacts-tls", "lab-bmc-credentials", "lab-bmc-tls"}},
-		"erase":        {NewErase(nil).SecretReferences, frozenBlock(t, erase), []string{"bootwright-machine-key", "lab-artifacts-tls", "lab-bmc-credentials", "metal-01-host-key"}},
 		"tree":         {NewTree(nil).SecretReferences, frozenBlock(t, tree), nil},
 		"secured tree": {NewTree(nil).SecretReferences, frozenBlock(t, secured), []string{"tree-tls"}},
 	} {
