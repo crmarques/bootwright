@@ -273,15 +273,11 @@ func (s Service) updateAdminCredential(ctx context.Context, tx Transaction, basi
 }
 
 func (s Service) adminProduced(ctx context.Context, tx Transaction, block, name string) (secretstore.ProducedMaterial, bool, error) {
-	reader, ok := s.binder.(ProducedBinder)
-	if !ok {
-		return secretstore.ProducedMaterial{}, false, failure("access.unavailable", "produced credential custody is unavailable", "configure credential custody")
-	}
 	var value secretstore.ProducedMaterial
 	var found bool
 	err := tx.Secrets(ctx, func(selected secretstore.Context, area secretstore.Area) error {
 		var err error
-		value, found, err = reader.ReadProducedInArea(ctx, selected, area, block, name)
+		value, found, err = s.binder.ReadProducedInArea(ctx, selected, area, block, name)
 		return err
 	})
 	return value, found, err

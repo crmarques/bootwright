@@ -154,15 +154,11 @@ func planDefinitions(plan reconciliation.Plan) []reconciliation.BlockDefinition 
 
 func (s Service) producedInTransaction(tx Transaction) producedRead {
 	return func(ctx context.Context, block, output string) (secretstore.ProducedMaterial, bool, error) {
-		binder, ok := s.binder.(ProducedBinder)
-		if !ok {
-			return secretstore.ProducedMaterial{}, false, failure("lifecycle.state", "produced input lending is unavailable", "")
-		}
 		var material secretstore.ProducedMaterial
 		var found bool
 		err := tx.Secrets(ctx, func(selected secretstore.Context, area secretstore.Area) error {
 			var err error
-			material, found, err = binder.ReadProducedInArea(ctx, selected, area, block, output)
+			material, found, err = s.binder.ReadProducedInArea(ctx, selected, area, block, output)
 			return err
 		})
 		return material, found, err
@@ -171,11 +167,7 @@ func (s Service) producedInTransaction(tx Transaction) producedRead {
 
 func (s Service) producedInContext(name string) producedRead {
 	return func(ctx context.Context, block, output string) (secretstore.ProducedMaterial, bool, error) {
-		binder, ok := s.binder.(ProducedBinder)
-		if !ok {
-			return secretstore.ProducedMaterial{}, false, failure("lifecycle.state", "produced input lending is unavailable", "")
-		}
-		return binder.ReadProduced(ctx, custody.ReadProducedRequest{ContextName: name, Block: block, Name: output})
+		return s.binder.ReadProduced(ctx, custody.ReadProducedRequest{ContextName: name, Block: block, Name: output})
 	}
 }
 

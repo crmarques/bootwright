@@ -58,10 +58,6 @@ func (s Service) sameProducer(ctx context.Context, selected secretstore.Context,
 	capability, found := s.capabilities.Resolve(producer.Kind, producer.Implementation)
 	identifier, identifies := capability.(ProducedIdentifier)
 	identifies = found && identifies
-	reader, reads := s.binder.(ProducedBinder)
-	if !reads {
-		return nil
-	}
 	presented := func(recorded, name string, material secrets.Material) (string, error) {
 		if recorded != "" || !identifies {
 			return recorded, nil
@@ -72,7 +68,7 @@ func (s Service) sameProducer(ctx context.Context, selected secretstore.Context,
 		if !identifies && output.Identity == "" {
 			continue
 		}
-		held, exists, err := reader.ReadProducedInArea(ctx, selected, area, producer.ID, output.Name)
+		held, exists, err := s.binder.ReadProducedInArea(ctx, selected, area, producer.ID, output.Name)
 		if err != nil {
 			return err
 		}

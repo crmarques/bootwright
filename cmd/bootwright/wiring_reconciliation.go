@@ -379,6 +379,8 @@ func lifecycleMedia(deps lifecycleDependencies) installation.MediaRecords {
 	return storeMediaRecords{store: deps.Media}
 }
 
+var _ lifecycle.SecretBinder = (*custody.Service)(nil)
+
 func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies, compiler compilation.Compiler, binder *custody.Service) lifecycle.Service {
 	if deps.Workspace == nil || deps.Host == nil || deps.Guard == nil {
 		return lifecycle.Service{}

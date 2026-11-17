@@ -593,6 +593,33 @@ func TestARecaptureOfAnotherIdentityRefusesBetweenAttempts(t *testing.T) {
 	}
 }
 
+// A binder that wraps the port, as a counting double does, still runs the
+// producer identity check: the port carries the produced reads, so no binder
+// can skip it by lacking them.
+func TestARecaptureThroughAWrappedBinderStillChecksItsIdentity(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, "install")
+	h.service.binder = &countingBinder{SecretBinder: h.service.binder}
+	h.capability.identity = func(_ string, material secrets.Material) string {
+		value, _ := material.Part(secrets.ValuePart)
+		return strings.SplitN(string(value), "\n", 2)[0]
+	}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := apply(h); err == nil {
+		t.Fatal("an unknown outcome completed")
+	}
+	h.binder.produced = map[string]string{"install/kubeconfig": "authority-a\nfirst"}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"ok":true}`),
+		Produced: []Produced{{Name: "kubeconfig", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("authority-b\nsecond")})}}}}
+	_, err := apply(h)
+	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "another identity (authority-b)") {
+		t.Fatalf("a recapture of another identity through a wrapped binder = %v", err)
+	}
+	if !slices.Equal(kept(h), []string{"install/kubeconfig=authority-a\nfirst"}) {
+		t.Fatalf("custody %v after a refused recapture", kept(h))
+	}
+}
+
 // A producer that presents its output's identity beside the material, as a
 // Ceph output presents its cluster's fsid and principal, has custody record
 // it: a recapture presenting another refuses lifecycle.state and leaves the

@@ -44,9 +44,6 @@ func (s Service) admitRebinds(ctx context.Context, name string, decided operatio
 		return operationPlan{}, failure("lifecycle.authorization",
 			"this "+string(decided.verb)+" reopens no Secret binding, so no Secret is rebound", without+rebinds[0])
 	}
-	if _, ok := s.binder.(CredentialRebinder); !ok {
-		return operationPlan{}, failure("lifecycle.state", "this context's secret store cannot rebind a Secret binding", without+rebinds[0])
-	}
 	bound, err := s.pinnedVersions(ctx, name, binding)
 	if err != nil {
 		return operationPlan{}, err
@@ -143,12 +140,8 @@ func (s Service) rebind(ctx context.Context, name string, decided operationPlan)
 	if len(decided.rebinds) == 0 {
 		return decided, nil
 	}
-	rebinder, ok := s.binder.(CredentialRebinder)
-	if !ok {
-		return operationPlan{}, failure("lifecycle.state", "this context's secret store cannot rebind a Secret binding", "")
-	}
 	replaced := frozenBinding(decided)
-	issued, err := rebinder.Rebind(ctx, custody.RebindRequest{ContextName: name, BindingID: replaced, Names: decided.rebinds})
+	issued, err := s.binder.Rebind(ctx, custody.RebindRequest{ContextName: name, BindingID: replaced, Names: decided.rebinds})
 	if err != nil {
 		return operationPlan{}, err
 	}

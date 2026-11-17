@@ -131,6 +131,9 @@ type SecretBinder interface {
 	Produce(context.Context, secretstore.Context, secretstore.Area, custody.ProduceRequest) ([]secretstore.Produced, error)
 	Holds(ctx context.Context, selected secretstore.Context, area secretstore.Area, block, name string) (bool, error)
 	Withdraw(context.Context, secretstore.Context, secretstore.Area) (bool, error)
+	ReadProducedInArea(context.Context, secretstore.Context, secretstore.Area, string, string) (secretstore.ProducedMaterial, bool, error)
+	ReadProduced(context.Context, custody.ReadProducedRequest) (secretstore.ProducedMaterial, bool, error)
+	Rebind(context.Context, custody.RebindRequest) (secretstore.Binding, error)
 }
 
 type SecretClassifier interface {
@@ -143,10 +146,6 @@ type SecretReferencer interface {
 
 type ProducedIdentifier interface {
 	ProducedIdentity(block reconciliation.Block, name string, material secrets.Material) (string, error)
-}
-
-type CredentialRebinder interface {
-	Rebind(context.Context, custody.RebindRequest) (secretstore.Binding, error)
 }
 
 type HostIdentity interface {
@@ -722,11 +721,6 @@ type ProducedInputConsumer interface {
 
 type ProducedOutputProvider interface {
 	ProducedOutputs(reconciliation.Block) ([]string, error)
-}
-
-type ProducedBinder interface {
-	ReadProducedInArea(context.Context, secretstore.Context, secretstore.Area, string, string) (secretstore.ProducedMaterial, bool, error)
-	ReadProduced(context.Context, custody.ReadProducedRequest) (secretstore.ProducedMaterial, bool, error)
 }
 
 type StageTailConsumer interface {

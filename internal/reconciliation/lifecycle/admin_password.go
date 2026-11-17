@@ -11,12 +11,8 @@ import (
 )
 
 func (s Service) AdministratorPassword(ctx context.Context, contextName, cluster, block, seed string) (secretstore.ProducedMaterial, bool, error) {
-	reader, ok := s.binder.(ProducedBinder)
-	if !ok {
-		return secretstore.ProducedMaterial{}, false, failure("access.unavailable", "administrator credential custody is unavailable", "restore the original credential custody")
-	}
 	read := func(output string) (secretstore.ProducedMaterial, bool, error) {
-		return reader.ReadProduced(ctx, custody.ReadProducedRequest{ContextName: contextName, Block: block, Name: output})
+		return s.binder.ReadProduced(ctx, custody.ReadProducedRequest{ContextName: contextName, Block: block, Name: output})
 	}
 	active, found, err := read("admin-password")
 	if err == nil && !found {
