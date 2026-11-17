@@ -123,6 +123,7 @@ def test_certificate_mode_cannot_silently_use_plain_http():
                                ca_data=pem("issued"), verification="certificate")
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("name", ["self-signed", "issued"])
 def test_discovery_delivery_accepts_bound_leaf_on_older_python_defaults(monkeypatch, name):
     original = ssl.create_default_context
@@ -142,6 +143,7 @@ def test_discovery_delivery_accepts_bound_leaf_on_older_python_defaults(monkeypa
         assert len(received) == 1
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("name", ["wrong-name", "expired", "future", "client-only", "other-leaf"])
 def test_discovery_delivery_refuses_invalid_identity_before_http(name):
     with serving(name) as (endpoint, received):
@@ -151,6 +153,7 @@ def test_discovery_delivery_refuses_invalid_identity_before_http(name):
         assert not received
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("status", [302, 403, 404, 503])
 def test_discovery_delivery_preserves_http_refusals_without_following_redirects(status):
     with serving("issued", status=status) as (endpoint, received):
@@ -159,6 +162,7 @@ def test_discovery_delivery_preserves_http_refusals_without_following_redirects(
         assert caught.value.code == status and len(received) == 1
 
 
+@pytest.mark.serial
 def test_discovery_delivery_refuses_an_empty_successful_response():
     with serving("issued", content=b"") as (endpoint, received):
         with pytest.raises(ValueError, match="private discovery listener unavailable"):

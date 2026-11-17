@@ -106,6 +106,7 @@ def test_result_byte_limit_is_an_aggregate_bound():
         ceph_native_worker.result_bytes({"ok": True, "result": {"data": "a" * ceph_native_worker.MAX_RESULT}})
 
 
+@pytest.mark.serial
 def test_parent_drains_a_result_larger_than_a_pipe_without_deadlock():
     result = {"ok": True, "result": {"data": "a" * (256 * 1024)}}
     assert ceph_native_worker.supervise(lambda: result, budget=2, grace=0) == result
@@ -156,6 +157,7 @@ def unknown(result):
         and result["cause"].startswith("ValueError@ceph_native_worker.") and ceph_native_worker.valid_cause(result["cause"])
 
 
+@pytest.mark.serial
 def test_work_accepts_only_a_bounded_controller_allowance():
     payload = {"sources": source_bundle(), "payload": {}, "budget": 1}
     assert run_work(payload) == {"ok": True, "result": {"session": False, "source": True}}
@@ -164,6 +166,7 @@ def test_work_accepts_only_a_bounded_controller_allowance():
         assert unknown(run_work(payload))
 
 
+@pytest.mark.serial
 def test_work_returns_applied_specializations_beside_the_result():
     sources = source_bundle()
     sources["ceph_native"] = ("class Refusal(ValueError): pass\nAPPLIED = []\ndef dispatch(value):\n"
@@ -177,6 +180,7 @@ def test_work_returns_applied_specializations_beside_the_result():
             ceph_native_worker.result_bytes({"ok": True, "result": {}, "specializations": value})
 
 
+@pytest.mark.serial
 def test_envelope_cannot_raise_the_argv_ceiling_before_source_loading(tmp_path):
     effect = tmp_path / "effect"
     sources = source_bundle()
@@ -257,6 +261,7 @@ def test_fixed_argv_allowance_defaults_to_remote_ceiling_and_accepts_short_calls
     assert ceph_native_worker.execution_budget(["0.125"]) == 0.125
 
 
+@pytest.mark.serial
 def test_slow_payload_never_loads_sources_or_executes_after_its_allowance(tmp_path):
     effect = tmp_path / "effect"
     sources = source_bundle()
@@ -266,6 +271,7 @@ def test_slow_payload_never_loads_sources_or_executes_after_its_allowance(tmp_pa
     assert not effect.exists()
 
 
+@pytest.mark.serial
 def test_smaller_allowance_interrupts_native_execution_without_transcript():
     sources = source_bundle()
     sources["ceph_native"] = "import time\nclass Refusal(ValueError): pass\ndef dispatch(value):\n    time.sleep(1)\n    return {}\n"
@@ -285,6 +291,7 @@ def delayed_effect(effect, delay=0.4):
         os._exit(0)
 
 
+@pytest.mark.serial
 def test_natural_worker_exit_stops_descendant_before_releasing_pid(tmp_path):
     effect = tmp_path / "effect"
 
@@ -297,6 +304,7 @@ def test_natural_worker_exit_stops_descendant_before_releasing_pid(tmp_path):
     assert not effect.exists()
 
 
+@pytest.mark.serial
 def test_remote_deadline_stops_worker_and_inherited_delayed_effect(tmp_path):
     effect = tmp_path / "effect"
 
@@ -453,6 +461,7 @@ def test_generic_cause_keeps_direct_helper_and_innermost_nonhelper_sites():
         assert "synthetic-secret" not in named
 
 
+@pytest.mark.serial
 def test_failure_cause_is_a_closed_reason_or_a_code_site_never_a_value():
     sources = source_bundle()
     sources["ceph_native"] = ("class Refusal(ValueError): pass\ndef dispatch(value):\n"
@@ -677,6 +686,7 @@ HELPER_FAILURES = {
 }
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("name", sorted(HELPER_FAILURES))
 def test_helper_load_failure_keeps_an_attested_cause_without_source_values_or_unvalidated_metadata(name):
     helper, text, kind = HELPER_FAILURES[name]
@@ -731,6 +741,7 @@ def test_package_failure_projection_omits_native_metadata_unless_the_validator_a
     assert "synthetic-secret" not in json.dumps(value)
 
 
+@pytest.mark.serial
 def test_work_supplies_the_same_deadline_to_native_batch_admission():
     sources = source_bundle()
     sources["ceph_native"] = ("import time\nclass Refusal(ValueError): pass\ndef dispatch(value):\n"

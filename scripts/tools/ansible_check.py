@@ -118,6 +118,11 @@ def collection_targets(collection: Path, paths: list[str]) -> list[str]:
     return targets
 
 
+# The marker of the unit tests that fork, arm a timer or signal their own
+# process, which the plain loop runs alone in process; conftest.py registers it
+# and refuses those effects from any test without it.
+SERIAL_MARKER = "serial"
+
 # The status a narrowed unit run exits with when tests failed in parallel and
 # passed on the serial rerun: not a pass, and not a failure the rerun confirms.
 # scripts/tools/focus.py reports it as FLAKY.
@@ -618,12 +623,15 @@ def plain_lane(run_: Run, wheelhouse: Path) -> Lane:
     """Return the lane of the plain pytest loop.
 
     ansible-test installs the collection loader before it collects a test.
-    This runs the same tests again the plain way, pytest alone with the
-    collections directory on PYTHONPATH, where the collection's conftest.py
-    installs that loader instead. -P and -s keep the working directory and the
-    user site off the path, as -I does, while PYTHONPATH is still read.
-    Narrowed, it runs the targets alone, and nothing else of the suite runs.
-    A coverage run loads the recorder from a directory of its own on the path.
+    This runs the tests marked serial, and the one test of the loader, the
+    plain way, pytest alone with the collections directory on PYTHONPATH,
+    where the collection's conftest.py installs that loader instead: a test
+    that forks or signals its own process is settled here, in one process with
+    no pytest-xdist worker thread, and every other test runs under ansible-test.
+    -P and -s keep the working directory and the user site off the path, as -I
+    does, while PYTHONPATH is still read. Narrowed, it runs the targets alone,
+    and nothing else of the suite runs. A coverage run runs every test, and
+    loads the recorder from a directory of its own on the path.
     """
     pytest = [str(run_.executable), "-P", "-s", "-m", "pytest"]
 
@@ -649,8 +657,11 @@ def plain_lane(run_: Run, wheelhouse: Path) -> Lane:
                 BOOTWRIGHT_COVERAGE_OUT=str(run_.coverage),
             )
             command = pytest + ["-p", "coverage_recorder"]
+        selection = [] if run_.coverage is not None else ["-m", SERIAL_MARKER]
         run(
-            command + [str(test_collection.relative_to(collections) / "tests/unit")],
+            command
+            + selection
+            + [str(test_collection.relative_to(collections) / "tests/unit")],
             output,
             cwd=collections,
             env=plain,

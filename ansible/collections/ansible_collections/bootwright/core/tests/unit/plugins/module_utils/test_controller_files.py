@@ -17,6 +17,8 @@ import types
 import unittest
 from unittest import mock
 
+import pytest
+
 from ansible_collections.bootwright.core.plugins.module_utils import (
     controller_files as files,
 )
@@ -230,6 +232,7 @@ class ControllerFilesTests(unittest.TestCase):
         )
         return root, location
 
+    @pytest.mark.serial
     def test_first_publication_replay_and_partial_recovery(self):
         data = b"qualified executable"
         definition = tool(data)
@@ -269,6 +272,7 @@ class ControllerFilesTests(unittest.TestCase):
         )
         self.assertEqual(executable.stat().st_mode & 0o7777, 0o700)
 
+    @pytest.mark.serial
     def test_capacity_lists_the_held_bundle_as_it_is_now(self):
         held = HeldListing()
         descriptor = held.open(str(self.root), files.DIRECTORY_FLAGS)
@@ -312,6 +316,7 @@ class ControllerFilesTests(unittest.TestCase):
                     files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
         self.assertEqual(self.left(), [])
 
+    @pytest.mark.serial
     def test_sealed_missing_target_is_never_refilled(self):
         definition = tool(b"complete source")
         with serve(body(b"complete source")):
@@ -325,6 +330,7 @@ class ControllerFilesTests(unittest.TestCase):
                     files.prepare_tool(location, definition, EGRESS, DEADLINE)
             self.assertFalse(executable.exists())
 
+    @pytest.mark.serial
     def test_unattributed_target_and_changed_existing_target_are_refused(self):
         definition = tool(b"complete source")
         target = self.root / definition["files"][0]["path"]
@@ -489,6 +495,7 @@ class ControllerFilesTests(unittest.TestCase):
         ip = files.endpoint("https://192.0.2.8/file")
         self.assertIsNone(files.proxy_for(dict(egress, noProxy=["192.0.2.0/24"]), ip))
 
+    @pytest.mark.serial
     def test_download_freezes_source_bytes_and_uses_explicit_tls_proxy(self):
         body = b"publisher bytes"
         source = tool(body)["source"]
@@ -530,6 +537,7 @@ class ControllerFilesTests(unittest.TestCase):
         self.assertFalse(observed[1][2]["redirect"])
         self.assertFalse(observed[1][2]["preload_content"])
 
+    @pytest.mark.serial
     def test_download_refuses_bytes_whose_digest_disagrees_with_the_publisher_checksum(self):
         source = tool(b"publisher bytes")["source"]
         substituted = io.BytesIO(b"substituted!!!!")
@@ -547,6 +555,7 @@ class ControllerFilesTests(unittest.TestCase):
                 files.download(source, EGRESS, descriptor, DOWNLOAD, files.Routes())
         self.assertEqual(refused.exception.reason, "integrity")
 
+    @pytest.mark.serial
     def test_a_mirror_redirect_to_a_publisher_host_refuses_before_dialing_it(self):
         source = dict(tool(b"publisher bytes")["source"], url="https://mirror.corp.test/tools/helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz")
         requested = []
@@ -625,6 +634,7 @@ class ControllerFilesTests(unittest.TestCase):
                     files.prepare_tool(self.location, definition, EGRESS, DEADLINE)
             self.assertEqual(self.left(), self.retained_only(definition))
 
+    @pytest.mark.serial
     def test_each_acquired_chunk_is_written_before_the_next_read(self):
         data = bytes(range(256)) * (5 * files.CHUNK // 256) + b"tail"
         definition = tool(data)
@@ -652,6 +662,7 @@ class ControllerFilesTests(unittest.TestCase):
         )
         self.assertEqual((self.root / definition["files"][0]["path"]).read_bytes(), data)
 
+    @pytest.mark.serial
     def test_neither_a_source_nor_a_member_is_ever_held_whole(self):
         pattern = hashlib.sha256(b"block").digest() * (files.CHUNK // 32)
         size = 16 << 20
@@ -690,6 +701,7 @@ class ControllerFilesTests(unittest.TestCase):
         self.assertEqual((root / clients["files"][1]["path"]).stat().st_size, size + len(stamped(body=b"")))
         self.assertEqual(package.stat().st_size, size)
 
+    @pytest.mark.serial
     def test_a_source_deadline_replaces_the_fixed_one(self):
         data = bytes(8 * files.CHUNK)
         now = [1000.0]
@@ -832,6 +844,7 @@ class ControllerFilesTests(unittest.TestCase):
                 replay = files.prepare_tool(location, definition, EGRESS, DEADLINE, inspect_only=True)
                 self.assertEqual(replay, dict(result, changed=False))
 
+    @pytest.mark.serial
     def test_an_unproved_oc_release_publishes_neither_client(self):
         for name, oc in (
             ("unstamped", b"client executable" + files.RELEASE_MARKER),
@@ -935,6 +948,7 @@ class TrustedRoots(unittest.TestCase):
             with self.assertRaises(files.Refused):
                 files.trusted_roots()
 
+    @pytest.mark.serial
     def test_download_uses_the_loaded_system_trust(self):
         data = b"publisher bytes"
         observed = []
@@ -1078,6 +1092,7 @@ class Classify(unittest.TestCase):
             with self.subTest(repr(error)):
                 self.assertEqual(files.classify(error), expected)
 
+    @pytest.mark.serial
     def test_a_refused_download_carries_its_class_and_never_its_text(self):
         source = tool(b"publisher bytes")["source"]
 

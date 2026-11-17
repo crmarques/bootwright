@@ -680,6 +680,7 @@ def test_xz_metadata_is_rejected_before_loading_an_unbounded_dictionary(tmp_path
         acquisition.metadata_member(str(path), metadata_record(b"metadata"), "a" * 64, path.stat().st_size)
 
 
+@pytest.mark.serial
 def test_remote_worker_deadline_kills_mutating_descendants_and_retains_decision(tmp_path):
     decision, effect = tmp_path / "decision.json", tmp_path / "unexecuted-effect"
 

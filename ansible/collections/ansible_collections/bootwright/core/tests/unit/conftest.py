@@ -16,6 +16,7 @@ import fcntl
 import json
 import os
 import pathlib
+import signal
 
 import pytest
 from ansible.module_utils.testing import patch_module_args
@@ -25,9 +26,62 @@ from ansible.utils.collection_loader._collection_finder import _AnsibleCollectio
 COLLECTIONS = pathlib.Path(__file__).resolve().parents[5]
 
 
-def pytest_configure():
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "serial: forks or sends a process-directed signal, so the gate's plain loop runs it alone, in process, with no xdist worker thread",
+    )
     if AnsibleCollectionConfig.collection_finder is None:
         _AnsibleCollectionFinder(paths=[str(COLLECTIONS)])._install()
+
+
+@pytest.fixture(autouse=True)
+def only_a_serial_test_forks_or_signals_itself(request, monkeypatch):
+    """Refuse a fork or a process-directed signal from a test the plain loop does not run alone.
+
+    Under pytest-xdist every worker has an I/O thread of its own: a fork there
+    may deadlock in the child and a signal sent to the process may reach that
+    thread. The gate runs the tests marked serial alone in process, so a test
+    that forks, arms a timer or signals its own process carries the marker.
+    """
+    if request.node.get_closest_marker("serial"):
+        return
+
+    def refused(what):
+        raise AssertionError(what + " needs @pytest.mark.serial: the gate runs only those tests alone, in process")
+
+    kill, setitimer, alarm = os.kill, signal.setitimer, signal.alarm
+
+    def guarded_fork():
+        refused("os.fork")
+
+    def guarded_forkpty():
+        refused("os.forkpty")
+
+    def guarded_kill(pid, number):
+        if pid in (0, os.getpid()) and number != 0:
+            refused("a signal sent to the test's own process")
+        return kill(pid, number)
+
+    def guarded_setitimer(which, seconds, interval=0.0):
+        if seconds or interval:
+            refused("signal.setitimer")
+        return setitimer(which, seconds, interval)
+
+    def guarded_alarm(seconds):
+        if seconds:
+            refused("signal.alarm")
+        return alarm(seconds)
+
+    def guarded_raise_signal(number):
+        refused("signal.raise_signal")
+
+    monkeypatch.setattr(os, "fork", guarded_fork)
+    monkeypatch.setattr(os, "forkpty", guarded_forkpty)
+    monkeypatch.setattr(os, "kill", guarded_kill)
+    monkeypatch.setattr(signal, "setitimer", guarded_setitimer)
+    monkeypatch.setattr(signal, "alarm", guarded_alarm)
+    monkeypatch.setattr(signal, "raise_signal", guarded_raise_signal)
 
 
 @pytest.fixture

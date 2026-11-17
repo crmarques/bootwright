@@ -227,6 +227,7 @@ def test_receive_reuses_the_immutable_report_without_requiring_another_boot(tmp_
     assert instance.receive() == wire
 
 
+@pytest.mark.serial
 def test_total_deadline_stops_continuous_activity_and_restores_handler():
     previous = signal.getsignal(signal.SIGALRM)
     with pytest.raises(TimeoutError):

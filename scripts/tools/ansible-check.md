@@ -73,13 +73,18 @@ then runs the unit tests twice, in lanes of their own: under `ansible-test
 units`, and as the plain loop the
 [collection structure](../../specs/architecture.md#ansible-collection-structure)
 supports, pytest alone from the copy's collections directory with that
-directory on `PYTHONPATH`; a failure of either fails the suite. By hand, the
-plain loop is `pytest ansible_collections/bootwright/core/tests/unit` run from
+directory on `PYTHONPATH`; a failure of either fails the suite. The plain loop
+runs only the tests marked `serial`, in one process with no pytest-xdist worker
+thread: the tests that fork, arm a timer or signal their own process, and the
+one test of the collection loader. `conftest.py` registers the marker and fails
+any other test that forks, arms a timer or signals its own process, so a new
+such test carries the marker from the start. By hand, the plain loop is
+`pytest -m serial ansible_collections/bootwright/core/tests/unit` run from
 `ansible/collections` with that directory on `PYTHONPATH`, using the prepared
-environment's pytest.
+environment's pytest; without `-m serial` it runs every test.
 
 `./scripts/ansible-check --coverage DIRECTORY`, which `make cover` runs, is
-that plain loop alone over every test, with `coverage_recorder.py` loaded as a
+that plain loop alone over every test, marked serial or not, with `coverage_recorder.py` loaded as a
 pytest plugin from a directory of its own on `PYTHONPATH`; it records the
 plugins' executed lines into the directory, which must exist and be empty,
 and neither reads nor writes a pass record.

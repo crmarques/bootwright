@@ -663,6 +663,7 @@ def test_the_read_after_a_stall_runs_under_no_log_and_never_fails_the_wait_itsel
 # The installer's two give-ups that mark a stall name no host. The read names
 # each declared node no registered host carries the name of, and the failure
 # leads with it, also when the budget stopped the attempt after the stall.
+@pytest.mark.serial
 @pytest.mark.parametrize("registered, named", [
     (("master-0", "master-2"), "node master-1 never registered"),
     (("master-0",), "nodes master-1, master-2 never registered"),
@@ -678,6 +679,7 @@ def test_a_stall_names_each_declared_node_that_never_registered(tmp_path, servic
     assert service.seen == [READ] and TOKEN not in message
 
 
+@pytest.mark.serial
 def test_a_wait_that_stalls_again_and_again_reads_once(tmp_path, service):
     service.answer = (200, listed("master-0", "master-1"))
     wait = Wait([(1, STALLED, 1)] * 41, work=asset_state(tmp_path / "work"), nodes=NODES)
@@ -689,6 +691,7 @@ def test_a_wait_that_stalls_again_and_again_reads_once(tmp_path, service):
 
 # A read that fails, or that finds every declared node registered by the time
 # it runs, names no node and leaves the stall's own hint.
+@pytest.mark.serial
 @pytest.mark.parametrize("answer, state", [
     ((200, listed("master-0", "master-1", "master-2")), True),
     ((401, b'{"code":"401","reason":"unauthorized"}'), True),
@@ -706,6 +709,7 @@ def test_a_read_that_names_no_node_keeps_the_stalls_own_hint(tmp_path, service, 
     assert service.seen == ([READ] if state else [])
 
 
+@pytest.mark.serial
 def test_a_rendezvous_host_that_does_not_answer_keeps_the_stalls_own_hint(tmp_path, monkeypatch):
     closed = http.server.HTTPServer(("127.0.0.1", 0), Service)
     port = closed.server_address[1]
@@ -925,6 +929,7 @@ def test_a_failed_wait_names_the_kubeconfig_it_restored(tmp_path):
     assert "restored the installer's kubeconfig from the kept copy before waiting" in message
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("script", [
     [(0, "", 10**6)],
     [(1, TIMED_OUT, 60), (1, TIMED_OUT, 4690)],
@@ -942,6 +947,7 @@ def test_bootstrap_timeout_or_budget_spent_reads_hosts_once(tmp_path, service, s
 # The installer gives up on its own compiled deadline just short of the
 # budget, and no attempt follows: only its timeout makes the wait read, and a
 # cluster held short of every declared node never reached ready.
+@pytest.mark.serial
 def test_the_installers_own_timeout_reads_hosts_and_names_no_stall(tmp_path, service):
     wait = Wait([(1, TIMED_OUT, 4690)], work=asset_state(tmp_path / "work"), nodes=NODES)
     message = wait.run()
@@ -963,6 +969,7 @@ def test_install_wait_timeout_never_reads_assisted_hosts(tmp_path, service):
     assert wait.reads == [] and service.seen == []
 
 
+@pytest.mark.serial
 def test_bootstrap_diagnosis_leads_with_missing_then_bad_state_nodes(tmp_path, service):
     hosts = json.loads(listed("master-0", "master-2"))
     hosts[0]["hosts"][0].update(

@@ -633,6 +633,7 @@ def service_fixture(request, monkeypatch):
     return server
 
 
+@pytest.mark.serial
 def test_the_read_names_each_declared_node_no_registered_host_carries_the_name_of(tmp_path, service):
     work = asset_state(tmp_path / "work")
     service.answer = (200, listed(host(reported="master-0"), host(requested="master-2", reported="localhost")), {})
@@ -659,6 +660,7 @@ class Refused:
         return
 
 
+@pytest.mark.serial
 def test_the_read_reaches_the_rendezvous_address_on_the_port_the_image_serves_the_service_on(tmp_path, monkeypatch):
     monkeypatch.setattr(Refused, "opened", [])
     monkeypatch.setattr(inspect.http.client, "HTTPConnection", Refused)
@@ -682,6 +684,7 @@ def test_the_token_goes_only_to_a_rendezvous_address_the_request_declares(tmp_pa
 # cluster but exactly one, or a host without a name proves nothing about which
 # declared node is missing, and neither does any status but 200. A redirect
 # is never followed.
+@pytest.mark.serial
 @pytest.mark.parametrize("status, body, headers", [
     (401, b'{"code":"401","reason":"unauthorized"}', {}),
     (302, b"", {"Location": "http://127.0.0.1:1/api/assisted-install/v2/clusters"}),
@@ -730,6 +733,7 @@ def test_an_asset_state_past_its_bound_or_not_a_regular_file_is_never_read(tmp_p
     assert registration(declared(tmp_path, work)) == {"read": True, "unregistered": ["master-1", "master-2"]}
 
 
+@pytest.mark.serial
 def test_the_read_is_bounded_in_size(service):
     body = listed(host(reported="master-0"))
     service.answer = (200, body, {})
@@ -772,6 +776,7 @@ class Silent:
         self.listener.close()
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("trickle", [False, True], ids=["nothing", "a byte at a time"])
 def test_the_read_is_bounded_in_time_however_slowly_the_answer_arrives(trickle):
     silent = Silent(trickle)
@@ -783,6 +788,7 @@ def test_the_read_is_bounded_in_time_however_slowly_the_answer_arrives(trickle):
         silent.stop()
 
 
+@pytest.mark.serial
 def test_the_module_reports_the_registration_and_never_the_token(tmp_path, service, capsys):
     arguments = {"request": declared(tmp_path, asset_state(tmp_path / "work")), "registered": True}
     result = run(arguments, capsys)
@@ -795,6 +801,7 @@ def test_the_module_reports_the_registration_and_never_the_token(tmp_path, servi
     assert service.seen == [READ]
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("status", ["insufficient", "disconnected", "pending-for-input", "preparing-failed",
                                     "installing-pending-user-action", "error"])
 def test_registration_reports_bad_states_and_only_failing_validation_ids(tmp_path, service, status):
@@ -810,6 +817,7 @@ def test_registration_reports_bad_states_and_only_failing_validation_ids(tmp_pat
     assert service.seen == [READ]
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("validations", ["not json", "[]", "null", '{"hardware": null}'])
 def test_bad_validation_shape_keeps_the_host_status(tmp_path, service, validations):
     service.answer = (200, listed(dict(host(requested="master-0"), status="error",

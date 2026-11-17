@@ -12,6 +12,8 @@ import pathlib
 import signal
 import socket
 import ssl
+import subprocess
+import sys
 import threading
 import time
 from types import SimpleNamespace
@@ -514,6 +516,7 @@ def fake_tls(monkeypatch, checks=None):
     monkeypatch.setattr(discovery, "tls_proof", proof)
 
 
+@pytest.mark.serial
 def test_execute_uses_the_frozen_controller_route_for_the_selected_image(tmp_path, monkeypatch):
     registry, _bundle = private_loans(tmp_path)
     fake_tls(monkeypatch)
@@ -549,6 +552,7 @@ def test_observation_and_removal_read_nothing_remote_and_report_absence(monkeypa
         discovery.execute(operation, GOLDEN["request"], GOLDEN["digest"], {"registryJSON": "/owned/loan"})
 
 
+@pytest.mark.serial
 def test_tls_refusal_precedes_private_read(monkeypatch):
     @contextlib.contextmanager
     def refused():
@@ -596,6 +600,7 @@ def test_original_loan_custody_refuses_unsafe_or_replaced_files(tmp_path, change
             pytest.fail("unsafe private read permitted: " + str(handle.fileno()))
 
 
+@pytest.mark.serial
 def test_private_loan_is_retained_and_no_file_or_cache_is_created(tmp_path, monkeypatch):
     tmp_path.chmod(0o700)
     path = tmp_path / "registry"
@@ -614,15 +619,32 @@ def test_private_loan_is_retained_and_no_file_or_cache_is_created(tmp_path, monk
     assert "synthetic-secret" not in str(result)
 
 
+CANCELLATION = """
+import json, os, signal, sys
+sys.path.insert(0, sys.argv[2])
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_registry_discovery as discovery
+number = signal.Signals(int(sys.argv[1]))
+original = signal.getsignal(number)
+try:
+    with discovery.bounded_lifetime(1):
+        os.kill(os.getpid(), number)
+    outcome = "not interrupted"
+except discovery.DiscoveryRefusal as refusal:
+    outcome = str(refusal)
+print(json.dumps({"outcome": outcome, "restored": signal.getsignal(number) == original, "timer": signal.getitimer(signal.ITIMER_REAL)}))
+"""
+
+
 @pytest.mark.parametrize("signal_number", [signal.SIGTERM, signal.SIGHUP, signal.SIGINT])
 def test_cancellation_is_bounded_and_restores_handlers(signal_number):
-    original = signal.getsignal(signal_number)
-    with pytest.raises(discovery.DiscoveryRefusal, match="^timeout$"):
-        with discovery.bounded_lifetime(1):
-            os.kill(os.getpid(), signal_number)
-    assert signal.getsignal(signal_number) == original and signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+    """The signal goes to a child process that runs the bounded lifetime, never to the test's own process."""
+    result = subprocess.run([sys.executable, "-I", "-c", CANCELLATION, str(int(signal_number)), str(COLLECTION.parents[2])],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60, check=False)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"outcome": "timeout", "restored": True, "timer": [0.0, 0.0]}
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("slow_body", [False, True])
 def test_slow_http_headers_and_body_are_stopped_by_whole_call_budget(monkeypatch, slow_body):
     listener = socket.socket()
@@ -687,6 +709,7 @@ def test_an_authored_digest_must_be_the_resolved_child_and_never_the_index():
         discovery.resolution(index, GOLDEN["digest"], child)
 
 
+@pytest.mark.serial
 def test_authored_index_digest_refuses_after_resolution_without_evidence(tmp_path, monkeypatch):
     tmp_path.chmod(0o700)
     path = tmp_path / "registry"
@@ -930,6 +953,7 @@ class AuxiliaryClient(Client):
                      response(self.index, discovery.INDEX_TYPES[0]), response(self.manifest, discovery.MANIFEST_TYPES[0])]
 
 
+@pytest.mark.serial
 def test_auxiliary_reference_resolves_its_own_linux_amd64_digest(tmp_path, monkeypatch):
     tmp_path.chmod(0o700)
     path = tmp_path / "registry"
@@ -980,6 +1004,7 @@ class DigestAuxiliaryClient(Client):
                      response(self.manifest, discovery.MANIFEST_TYPES[0]), response(self.config, discovery.CONFIG_TYPES[0])]
 
 
+@pytest.mark.serial
 def test_each_authored_auxiliary_reference_resolves_its_linux_amd64_digest(tmp_path, monkeypatch):
     tmp_path.chmod(0o700)
     path = tmp_path / "registry"
@@ -1077,6 +1102,7 @@ def private_loans(tmp_path):
     return str(registry), str(bundle)
 
 
+@pytest.mark.serial
 def test_resolution_trusts_only_the_bound_bundle_when_declared(tmp_path, monkeypatch):
     registry, bundle = private_loans(tmp_path)
     monkeypatch.setattr(discovery.ssl, "create_default_context", lambda *args, **kwargs: pytest.fail("default trust"))
@@ -1114,6 +1140,7 @@ def test_resolution_trusts_only_the_bound_bundle_when_declared(tmp_path, monkeyp
     assert len(contexts) == 1 and isinstance(contexts[0], ssl.SSLContext) and contexts[0].get_ca_certs() == synthetic_ca_certs()
 
 
+@pytest.mark.serial
 def test_resolution_without_a_bundle_keeps_the_host_trust_store(tmp_path, monkeypatch):
     registry, bundle = private_loans(tmp_path)
     checks = []
@@ -1197,6 +1224,7 @@ def test_refusal_detail_never_contains_credentials_or_token(tmp_path, monkeypatc
         assert all(private not in text for text in texts)
 
 
+@pytest.mark.serial
 def test_every_frozen_auxiliary_reference_resolves_through_the_bound_bundle(tmp_path, monkeypatch):
     registry_path, bundle = private_loans(tmp_path)
     monkeypatch.setattr(discovery, "tls_proof", lambda *args: pytest.fail("host trust store with a bound bundle"))
@@ -1221,6 +1249,7 @@ def test_every_frozen_auxiliary_reference_resolves_through_the_bound_bundle(tmp_
     assert all(client.egress == route for client in clients.values())
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize(
     "content,mode",
     [

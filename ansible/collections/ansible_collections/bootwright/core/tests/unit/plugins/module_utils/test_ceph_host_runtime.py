@@ -1862,6 +1862,7 @@ def test_the_images_signal_leaves_a_batch_its_cancellation_before_the_supervisor
     assert runtime.PULL_CANCEL_SECONDS < ceph_host_worker.CANCEL_RESERVE < runtime.PULL_RESERVE
 
 
+@pytest.mark.serial
 def test_a_supervised_images_worker_cleans_up_an_interrupted_batch_before_its_supervisor_deadline(request_value, tmp_path, monkeypatch):
     request_value["auxiliary"] = [{"name": "haproxy", "image": HAPROXY}, {"name": "keepalived", "image": KEEPALIVED}]
     sleep, records = shutil.which("sleep"), tmp_path / "records"

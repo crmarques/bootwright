@@ -515,7 +515,8 @@ class LanesTest(unittest.TestCase):
             ],
         )
 
-    def test_the_plain_lane_runs_one_serial_pytest_in_process(self):
+    def plain_commands(self, coverage=False):
+        """The commands the plain lane runs, with no pytest started."""
         commands = []
 
         def run(command, **_):
@@ -529,6 +530,12 @@ class LanesTest(unittest.TestCase):
             wheelhouse = area / "wheels"
             wheelhouse.mkdir()
             (wheelhouse / "get_pip_25_2.py").write_text("", encoding="utf-8")
+            recorded = area / "recorded"
+            recorded.mkdir()
+            (area / "scripts/tools").mkdir(parents=True)
+            (area / "scripts/tools/coverage_recorder.py").write_text(
+                "", encoding="utf-8"
+            )
             run_ = ansible_check.Run(
                 area,
                 Path("/venv/bin/python"),
@@ -539,13 +546,27 @@ class LanesTest(unittest.TestCase):
                 {},
                 {"units"},
                 [],
+                recorded if coverage else None,
             )
             with mock.patch.object(ansible_check.subprocess, "run", run):
                 lane = ansible_check.plain_lane(run_, wheelhouse)
                 self.assertIsNone(lane(None))
+        return commands
+
+    def test_the_plain_lane_runs_one_serial_pytest_in_process_over_the_serial_tests(
+        self,
+    ):
+        commands = self.plain_commands()
         self.assertEqual(len(commands), 1)
         self.assertEqual(commands[0][1:5], ["-P", "-s", "-m", "pytest"])
         self.assertNotIn("-n", commands[0])
+        self.assertEqual(commands[0][5:7], ["-m", "serial"])
+        self.assertTrue(commands[0][-1].endswith("tests/unit"))
+
+    def test_a_coverage_run_of_the_plain_lane_runs_every_test(self):
+        commands = self.plain_commands(coverage=True)
+        self.assertEqual(len(commands), 1)
+        self.assertNotIn("serial", commands[0])
         self.assertTrue(commands[0][-1].endswith("tests/unit"))
 
 

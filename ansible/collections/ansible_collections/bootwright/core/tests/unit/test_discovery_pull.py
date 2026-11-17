@@ -257,6 +257,7 @@ def test_cleanup_forces_off_only_its_own_boot(tmp_path, monkeypatch):
     client.power.assert_not_called()
 
 
+@pytest.mark.serial
 def test_failed_inventory_keeps_its_cause_private_and_starts_restricted_ssh(monkeypatch):
     monkeypatch.setattr(worker, "prepare_network", lambda: {"network": {"address": "192.0.2.10"}})
     monkeypatch.setattr(worker, "collect", Mock(side_effect=ValueError("SECRET serial ABC123")))
