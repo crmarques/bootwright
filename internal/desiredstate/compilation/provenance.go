@@ -55,7 +55,7 @@ func (r *objectRecord) recordReordering(before, after api.Value, shape *api.Shap
 		if schema == nil || !old.Present() || !current.Present() {
 			return
 		}
-		schema = shapeForValue(schema, current)
+		schema = schema.ForValue(current)
 		if schema.Open || schema.KindDefaults {
 			return
 		}

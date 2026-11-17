@@ -479,12 +479,7 @@ func retainReferences(value api.Value, shape *api.Shape, wanted func(api.Kind) b
 	if shape == nil {
 		return
 	}
-	for _, alternative := range shape.Alternatives {
-		if alternative.Type == value.Type() {
-			shape = alternative
-			break
-		}
-	}
+	shape = shape.ForValue(value)
 	if value.Type() == api.String {
 		for _, kind := range shape.Reference {
 			if wanted(kind) {

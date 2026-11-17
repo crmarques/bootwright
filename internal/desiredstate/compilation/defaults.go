@@ -23,7 +23,7 @@ func inherit(value, fallback api.Value, shape *api.Shape, path string, root bool
 	if shape == nil {
 		return value
 	}
-	shape = shapeForValue(shape, value)
+	shape = shape.ForValue(value)
 	if value.Type() != api.Mapping || fallback.Type() != api.Mapping || shape.Atomic || shape.Open || shape.KindDefaults || value.Len() == 0 && !root {
 		return value
 	}
@@ -95,7 +95,7 @@ func builtInDefaults(value api.Value, shape *api.Shape) api.Value {
 	if shape == nil || !value.Present() {
 		return value
 	}
-	shape = shapeForValue(shape, value)
+	shape = shape.ForValue(value)
 	if shape.KindDefaults || shape.Open {
 		return value
 	}

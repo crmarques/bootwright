@@ -1,7 +1,6 @@
 package compilation
 
 import (
-	"math/big"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,11 +12,11 @@ func validateShape(record *objectRecord, value api.Value, shape *api.Shape, path
 	if shape == nil || sink.stopped() || !value.Present() {
 		return
 	}
-	shape = shapeForValue(shape, value)
-	if shape.Type != api.Absent && shape.Type != value.Type() && !(shape.Type == api.Number && value.Type() == api.Integer) {
+	shape = shape.ForValue(value)
+	if shape.Type != api.Absent && !shape.Admits(value) {
 		return
 	}
-	if shape.MinLength > 0 && value.Type() == api.String && len(value.Text()) < shape.MinLength {
+	if shape.ShortString(value) {
 		sink.issue(record, api.Issue{Code: "api.value", Field: path, Message: "value must not be empty", Remediation: "set a non-empty value"})
 	}
 	switch value.Type() {
@@ -182,20 +181,8 @@ func secretTypes() []string {
 }
 
 func validateRange(record *objectRecord, value api.Value, shape *api.Shape, path string, sink *diagnosticSink) {
-	n, ok := new(big.Rat).SetString(value.Text())
-	if !ok {
-		return
-	}
-	outside := false
-	for _, bound := range []struct {
-		text    string
-		minimum bool
-	}{{shape.Minimum, true}, {shape.Maximum, false}} {
-		if b, valid := new(big.Rat).SetString(bound.text); bound.text != "" && valid && (bound.minimum && n.Cmp(b) < 0 || !bound.minimum && n.Cmp(b) > 0) {
-			outside = true
-		}
-	}
-	if !outside {
+	below, above, numeric := shape.OutsideRange(value)
+	if !numeric || !below && !above {
 		return
 	}
 	message := "number must be at most " + shape.Maximum
@@ -278,7 +265,7 @@ func validateEntries(record *objectRecord, value api.Value, field api.Field, pat
 	if field.Shape == nil || value.Type() != api.Sequence {
 		return
 	}
-	if shape := shapeForValue(field.Shape, value); shape.Type != api.Sequence || value.Len() >= shape.MinLength {
+	if shape := field.Shape.ForValue(value); shape.Type != api.Sequence || value.Len() >= shape.MinLength {
 		return
 	}
 	remediation := "add at least one entry, or omit the field"
@@ -313,15 +300,6 @@ func validateSequence(record *objectRecord, value api.Value, shape *api.Shape, p
 		}
 		validateShape(record, item, shape.Element, childPath, partial, references, catalog, sink)
 	}
-}
-
-func shapeForValue(shape *api.Shape, value api.Value) *api.Shape {
-	for _, alternative := range shape.Alternatives {
-		if alternative.Type == value.Type() || alternative.Type == api.Number && value.Type() == api.Integer {
-			return alternative
-		}
-	}
-	return shape
 }
 
 func valueKey(value api.Value) string {

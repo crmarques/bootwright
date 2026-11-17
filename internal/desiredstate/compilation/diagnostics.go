@@ -191,7 +191,7 @@ func referenceAt(object api.Object, field string) (*api.Shape, api.Value) {
 		if segments >= fieldPathSegmentsBound {
 			return nil, api.Value{}
 		}
-		shape = shapeForValue(shape, value)
+		shape = shape.ForValue(value)
 		switch rest[0] {
 		case '.':
 			end := strings.IndexAny(rest[1:], ".[")
@@ -224,7 +224,7 @@ func referenceAt(object api.Object, field string) (*api.Shape, api.Value) {
 	if shape == nil || rest != "" {
 		return nil, api.Value{}
 	}
-	shape = shapeForValue(shape, value)
+	shape = shape.ForValue(value)
 	if len(shape.Reference) == 0 {
 		return nil, api.Value{}
 	}

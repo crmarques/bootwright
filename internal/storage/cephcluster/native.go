@@ -225,16 +225,15 @@ func (a *admission) nativeShape(value api.Value, shape *api.Shape, field string,
 		return
 	}
 	if len(shape.Alternatives) > 0 {
-		for _, alternative := range shape.Alternatives {
-			if alternative.Type == value.Type() {
-				a.nativeShape(value, alternative, field, partial)
-				return
-			}
+		selected := shape.ForValue(value)
+		if selected == shape {
+			a.issue("api.type", field, "native value has the wrong type", "use the qualified native field type at "+field)
+			return
 		}
-		a.issue("api.type", field, "native value has the wrong type", "use the qualified native field type at "+field)
+		a.nativeShape(value, selected, field, partial)
 		return
 	}
-	if value.Type() != shape.Type && !(shape.Type == api.Number && value.Type() == api.Integer) {
+	if !shape.Admits(value) {
 		a.issue("api.type", field, "native value has the wrong type", "use the qualified native field type at "+field)
 		return
 	}
@@ -268,25 +267,17 @@ func (a *admission) nativeShape(value api.Value, shape *api.Shape, field string,
 			}
 		}
 	case api.Integer, api.Number:
+		below, above, numeric := shape.OutsideRange(value)
 		for _, bound := range []struct {
-			text    string
-			minimum bool
-		}{{shape.Minimum, true}, {shape.Maximum, false}} {
-			if bound.text == "" {
-				continue
-			}
-			n, ok := new(big.Rat).SetString(value.Text())
-			limit, valid := new(big.Rat).SetString(bound.text)
-			if !ok || !valid || (bound.minimum && n.Cmp(limit) < 0) || (!bound.minimum && n.Cmp(limit) > 0) {
-				relation := "at most "
-				if bound.minimum {
-					relation = "at least "
-				}
-				a.invalid(field, "native numeric value is outside its supported bounds", "set "+field+" to a number "+relation+bound.text)
+			text, relation string
+			violated       bool
+		}{{shape.Minimum, "at least ", below}, {shape.Maximum, "at most ", above}} {
+			if bound.text != "" && (bound.violated || !numeric) {
+				a.invalid(field, "native numeric value is outside its supported bounds", "set "+field+" to a number "+bound.relation+bound.text)
 			}
 		}
 	case api.String:
-		if shape.MinLength > 0 && value.Text() == "" {
+		if shape.ShortString(value) {
 			a.invalid(field, "native string must not be empty", "supply a nonempty string for this native field")
 		}
 		if len(shape.Enums) != 0 && !slices.Contains(shape.Enums, value.Text()) {

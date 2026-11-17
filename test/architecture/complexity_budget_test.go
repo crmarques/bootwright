@@ -248,7 +248,6 @@ func goFunctionsAwaitingSplit() []string {
 		"internal/storage/ceph/smb_evidence.go.EvaluateSMBEvidence",
 		"internal/storage/cephcluster/native.go.admission.nativePlacement",
 		"internal/storage/cephcluster/native.go.admission.nativeServices",
-		"internal/storage/cephcluster/native.go.admission.nativeShape",
 		"internal/storage/cephcluster/normalization.go.normalizeCluster",
 		"internal/workspace/contextfs/repository_linux_amd64.go.transaction.Commit",
 	}

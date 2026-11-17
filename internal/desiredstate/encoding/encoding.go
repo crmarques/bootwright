@@ -77,12 +77,7 @@ func selectedShape(shape *api.Shape, value api.Value) *api.Shape {
 	if shape == nil {
 		return &api.Shape{}
 	}
-	for _, alternative := range shape.Alternatives {
-		if alternative.Type == value.Type() {
-			return alternative
-		}
-	}
-	return shape
+	return shape.ForValue(value)
 }
 
 func fields(value api.Value, shape *api.Shape) []api.FieldValue {
