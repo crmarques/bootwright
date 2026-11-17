@@ -36,11 +36,15 @@ A block that prints a few kilobytes therefore reached disk only when it ended.
   and not at all under `-I`, with or without the variable set.
 - The later interval-based coalescer still required another write to notice
   elapsed time, so a wedged adapter could leave its last line buffered. Audit
-  003 OUT-11 exposed that gap. `AdapterOutput` now publishes each write
-  synchronously, retaining the same byte bounds and best-effort failures. This
-  costs more append calls but has no timer or background writer to outlive the
-  held area. See [logs.go](../../internal/reconciliation/operationstore/logs.go)
-  and `TestAdapterOutputPublishesEachWriteWithoutWaitingForAnother` in
+  003 OUT-11 exposed that gap, and for a while `AdapterOutput` published each
+  write synchronously, at one fsync of the log area per output burst. Audit 005
+  G11-02 restored batching without the gap: a write publishes at once when
+  8 KiB is pending, and otherwise the first pending byte starts a one-second
+  timer that publishes it. `Close` stops the timer and publishes the rest
+  under the output's mutex, and both callers defer it inside the callback that
+  holds the area, so no timer write outlives the held area. See
+  [logs.go](../../internal/reconciliation/operationstore/logs.go) and
+  `TestAdapterOutputPublishesItsFinalLineWithoutWaitingForAnother` in
   [logs_test.go](../../internal/reconciliation/operationstore/logs_test.go).
 
 ## How to apply
