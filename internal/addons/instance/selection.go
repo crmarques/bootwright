@@ -7,8 +7,25 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
+
+type rendering struct {
+	request   Request
+	requires  []reconciliation.ObjectRef
+	err       error
+	data      []byte
+	canonical error
+}
+
+type assessment struct {
+	refusals  []lifecycle.Refusal
+	instanced bool
+	selected  []addons.SelectedInstance
+	issues    []addons.SelectionIssue
+	renders   map[int]rendering
+}
 
 var shapeRows = map[addons.ShapeRefusal][2]string{
 	addons.ShapeManifestSet: {"<addon> declares a manifest set, which this executable does not install", "remove spec.manifestSet from <addon> and declare an olm arm, or remove <addon> from the selection of <binding>"},
@@ -29,6 +46,10 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	if state == nil {
 		return nil
 	}
+	return c.assess(state).refusals
+}
+
+func (c Capability) assess(state *compilation.State) assessment {
 	catalog := state.Effective()
 	result := []lifecycle.Refusal{}
 	for _, binding := range catalog.OfKind(api.ClusterAddonBinding) {
@@ -40,11 +61,12 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 		}
 	}
 	if c.facts == nil {
-		return lifecycle.SortRefusals(result)
+		return assessment{refusals: lifecycle.SortRefusals(result)}
 	}
-	selected, _ := addons.Instances(catalog, c.registry)
+	selected, issues := addons.Instances(catalog, c.registry)
+	assessed := assessment{instanced: true, selected: selected, issues: issues, renders: map[int]rendering{}}
 	controllerName, _ := lifecycle.ControllerMachine(catalog)
-	for _, selection := range selected {
+	for index, selection := range selected {
 		facts := c.facts(catalog, selection.Instance.Cluster)
 		binding, ok := catalog.Find(api.ClusterAddonBinding, selection.Instance.Binding)
 		if hostedNamespace(selection.Package, facts) && ok {
@@ -52,17 +74,21 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 			result = append(result, lifecycle.RefusalOf(binding, fill("<addon> uses namespace <namespace>, which KubeVirt hosts for <cluster>", values), fill("set spec.olm.namespace.name of <addon> to a namespace that is not hosted for <cluster>", values)))
 			continue
 		}
-		request, _, err := Render(selection, facts, controllerName)
+		request, requires, err := Render(selection, facts, controllerName)
+		rendered := rendering{request: request, requires: requires, err: err}
 		if err == nil {
-			_, err = request.Canonical()
+			rendered.data, rendered.canonical = request.Canonical()
+			err = rendered.canonical
 		}
+		assessed.renders[index] = rendered
 		if err == nil || !ok {
 			continue
 		}
 		reason, remedy := unrenderable(selection, binding.Identity(), err)
 		result = append(result, lifecycle.RefusalOf(binding, reason, remedy))
 	}
-	return lifecycle.SortRefusals(result)
+	assessed.refusals = lifecycle.SortRefusals(result)
+	return assessed
 }
 
 func authoredRefusal(binding, addon api.Object) (string, string, bool) {

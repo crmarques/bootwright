@@ -30,10 +30,14 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if input.State == nil {
 		return lifecycle.CapabilityPlan{}, fmt.Errorf("add-on planning needs compiled state")
 	}
-	if refusals := c.Unsupported(input.State); len(refusals) > 0 {
+	assessed := c.assess(input.State)
+	if len(assessed.refusals) > 0 {
 		return lifecycle.CapabilityPlan{}, refusal("selected add-on cannot be realized", "select a built-in package")
 	}
-	selected, issues := addons.Instances(input.State.Effective(), c.registry)
+	selected, issues := assessed.selected, assessed.issues
+	if !assessed.instanced {
+		selected, issues = addons.Instances(input.State.Effective(), c.registry)
+	}
 	if len(issues) > 0 {
 		return lifecycle.CapabilityPlan{}, refusal(issues[0].Issue.Message, "correct the add-on binding")
 	}
@@ -51,15 +55,22 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if c.facts == nil {
 		return plan, refusal("add-on cluster facts are unavailable", "")
 	}
-	for _, selection := range selected {
-		request, requires, err := Render(selection, c.facts(input.State.Effective(), selection.Instance.Cluster), controllerName)
+	for index, selection := range selected {
+		rendered, known := assessed.renders[index]
+		if !known {
+			rendered.request, rendered.requires, rendered.err = Render(selection, c.facts(input.State.Effective(), selection.Instance.Cluster), controllerName)
+		}
+		request, requires, err := rendered.request, rendered.requires, rendered.err
 		if err != nil {
 			return plan, unrenderableRefusal(selection, err)
 		}
 		if err := validatePlacements(request, input.State.Effective()); err != nil {
 			return plan, err
 		}
-		data, err := request.Canonical()
+		data, err := rendered.data, rendered.canonical
+		if !known {
+			data, err = request.Canonical()
+		}
 		if err != nil {
 			return plan, unrenderableRefusal(selection, err)
 		}

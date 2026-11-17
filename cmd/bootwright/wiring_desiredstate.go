@@ -52,6 +52,9 @@ func wireCompilerWithRegistry(registry addons.Registry) compilation.Compiler {
 			normalized, packageIssues := addons.NormalizePackages(normalized, registry)
 			return normalized, append(issues, packageIssues...)
 		}, ValidateAuthored: addons.ValidateAuthored, ValidatePartial: addons.ValidatePartial, Validate: func(o api.Object, c api.Catalog) []api.Issue {
+			if o.Kind() != api.ClusterAddonBinding {
+				return addons.Validate(o, c)
+			}
 			return addons.ValidateWithRegistry(o, c, registry, addonFacts(c, o.Spec().Get("clusterRef").Text()))
 		}},
 		compilation.Rules{Normalize: customplaybooks.Normalize, ValidateAuthored: customplaybooks.ValidateAuthored, ValidatePartial: customplaybooks.ValidatePartial, Validate: customplaybooks.Validate},
