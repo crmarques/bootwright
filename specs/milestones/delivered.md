@@ -16390,3 +16390,20 @@ once needs a new protocol between the Go runner and the `controller_tool`
 action, which stays on B1468. An independent review found no data race, leak
 or limit breach; its follow-ups are applied.
 
+## X517 — One owner for eight more repeated rules
+
+### B1485
+
+Split from B1464 under [D274](backlog.md#d274) (the rest of audit 005 W3.3).
+One owner each now holds the service endpoint resolver, the hosted layout,
+the image reference parser, the shape leaf rules, the conversion of an API
+value to native data, the vulnerability-exception rules (the gate and the
+bill of materials), the tools' verified download, and the collection's
+repeated protocol-module documentation, a doc fragment whose `ansible-doc`
+output is unchanged for all 77 modules. Two parts stay deliberate: the shape
+walks of compilation and of Ceph keep their own diagnostics over shared leaf
+rules, and the release reference's own grammar is not the image parser's. No
+request, digest or golden moved; the collection's content changed, so the
+next live setup rebuilds its bundle. An independent review approved the
+supply-chain commits.
+
