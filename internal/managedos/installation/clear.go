@@ -138,17 +138,13 @@ func clearProofLines(target ClearTarget, node string) []string {
 	lines = append(lines, `bootwright_disk="/sys/class/block/$(basename -- "${`+node+`}")"`)
 	if target.WWN != "" {
 		lines = append(lines,
-			`bootwright_wwid="${bootwright_disk}/device/wwid"`,
-			`if [ -e "${bootwright_disk}/wwid" ]; then bootwright_wwid="${bootwright_disk}/wwid"; fi`,
-			`if ! bootwright_wwid=$(bootwright_identity "${bootwright_wwid}" text); then`)
+			`if ! bootwright_wwid=$(bootwright_wwn_of "${bootwright_disk}"); then`)
 		lines = append(lines, refuse("reports no readable WWN")...)
 		lines = append(lines, `if [ "${bootwright_wwid}" != 'naa.`+strings.TrimPrefix(target.WWN, "0x")+`' ]; then`)
 		lines = append(lines, refuse("reports a WWN other than "+target.WWN)...)
 	}
 	lines = append(lines,
-		`bootwright_serial="${bootwright_disk}/device/vpd_pg80" bootwright_form=vpd`,
-		`if [ -e "${bootwright_disk}/device/serial" ]; then bootwright_serial="${bootwright_disk}/device/serial" bootwright_form=text; fi`,
-		`if ! bootwright_serial=$(bootwright_identity "${bootwright_serial}" "${bootwright_form}"); then`)
+		`if ! bootwright_serial=$(bootwright_serial_of "${bootwright_disk}"); then`)
 	lines = append(lines, refuse("reports no readable serial number")...)
 	lines = append(lines, `if [ "${bootwright_serial}" != '`+target.SerialNumber+`' ]; then`)
 	lines = append(lines, refuse("reports a serial number other than "+target.SerialNumber)...)

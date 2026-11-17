@@ -839,9 +839,7 @@ func inventoriedLines(serials []string) []string {
 		`if [[ ! "${bootwright_name}" =~ ^(sd[a-z]+|nvme[0-9]+n[0-9]+)$ ]] || [ -e "${bootwright_entry}/partition" ] || [ "$(cat -- "${bootwright_entry}/hidden" 2>/dev/null)" = 1 ]; then continue; fi`,
 		`if [ "$(cat -- "${bootwright_entry}/removable" 2>/dev/null)" = 1 ] || [ "$(cat -- "${bootwright_entry}/ro" 2>/dev/null)" = 1 ]; then continue; fi`,
 		`case "$(readlink -f -- "${bootwright_entry}")" in */usb[0-9]*) continue;; esac`,
-		`bootwright_value="${bootwright_entry}/device/vpd_pg80" bootwright_form=vpd`,
-		`if [ -e "${bootwright_entry}/device/serial" ]; then bootwright_value="${bootwright_entry}/device/serial" bootwright_form=text; fi`,
-		`if ! bootwright_serial=$(bootwright_identity "${bootwright_value}" "${bootwright_form}" 2>/dev/null) || [[ ! "${bootwright_serial}" =~ ^[A-Za-z0-9._:+/=-]+$ ]] || [[ "${bootwright_inventoried}" != *" ${bootwright_serial} "* ]]; then`,
+		`if ! bootwright_serial=$(bootwright_serial_of "${bootwright_entry}" 2>/dev/null) || [[ ! "${bootwright_serial}" =~ ^[A-Za-z0-9._:+/=-]+$ ]] || [[ "${bootwright_inventoried}" != *" ${bootwright_serial} "* ]]; then`,
 		`echo 'Bootwright: Linux shows a whole disk the BMC drive inventory did not list, so the root selection is not proved unique; refusing before any disk is touched. Set rootDevice.discover.inventory to boot.' >&2`,
 		"exit 1",
 		"fi",
@@ -852,12 +850,10 @@ func inventoriedLines(serials []string) []string {
 func serialResolverLines() []string {
 	return []string{
 		`bootwright_resolve() {`,
-		`local entry value form count=0 found=''`,
+		`local entry value count=0 found=''`,
 		`for entry in /sys/class/block/*; do`,
 		`if [ ! -e "${entry}" ] || [ -e "${entry}/partition" ] || [ "$(cat -- "${entry}/hidden" 2>/dev/null)" = 1 ]; then continue; fi`,
-		`value="${entry}/device/vpd_pg80" form=vpd`,
-		`if [ -e "${entry}/device/serial" ]; then value="${entry}/device/serial" form=text; fi`,
-		`if ! value=$(bootwright_identity "${value}" "${form}" 2>/dev/null); then continue; fi`,
+		`if ! value=$(bootwright_serial_of "${entry}" 2>/dev/null); then continue; fi`,
 		`if [ "${value}" = "$1" ]; then count=$((count + 1)) found=$(basename -- "${entry}"); fi`,
 		`done`,
 		`printf '%s %s\n' "${count}" "${found}"`,
@@ -897,18 +893,14 @@ func rootIdentityLines(input Installation, subject string) []string {
 	lines := []string{`bootwright_disk="/sys/class/block/$(basename -- "${bootwright_root}")"`}
 	if input.RootWWN != "" {
 		lines = append(lines,
-			`bootwright_wwid="${bootwright_disk}/device/wwid"`,
-			`if [ -e "${bootwright_disk}/wwid" ]; then bootwright_wwid="${bootwright_disk}/wwid"; fi`,
-			`if ! bootwright_wwid=$(bootwright_identity "${bootwright_wwid}" text); then`)
+			`if ! bootwright_wwid=$(bootwright_wwn_of "${bootwright_disk}"); then`)
 		lines = append(lines, refuse("reports no readable WWN")...)
 		lines = append(lines, `if [ "${bootwright_wwid}" != 'naa.`+strings.TrimPrefix(input.RootWWN, "0x")+`' ]; then`)
 		lines = append(lines, refuse("reports a WWN other than "+input.RootWWN)...)
 	}
 	if input.RootSerial != "" {
 		lines = append(lines,
-			`bootwright_serial="${bootwright_disk}/device/vpd_pg80" bootwright_form=vpd`,
-			`if [ -e "${bootwright_disk}/device/serial" ]; then bootwright_serial="${bootwright_disk}/device/serial" bootwright_form=text; fi`,
-			`if ! bootwright_serial=$(bootwright_identity "${bootwright_serial}" "${bootwright_form}"); then`)
+			`if ! bootwright_serial=$(bootwright_serial_of "${bootwright_disk}"); then`)
 		lines = append(lines, refuse("reports no readable serial number")...)
 		lines = append(lines, `if [ "${bootwright_serial}" != '`+input.RootSerial+`' ]; then`)
 		lines = append(lines, refuse("reports a serial number other than "+input.RootSerial)...)
@@ -931,8 +923,7 @@ const rootWWNStage = "/tmp/bootwright-root-wwn"
 func rootWWNRecordLines(subject string) []string {
 	return []string{
 		`bootwright_root_wwn=''`,
-		`bootwright_wwid="${bootwright_disk}/device/wwid"`,
-		`if [ -e "${bootwright_disk}/wwid" ]; then bootwright_wwid="${bootwright_disk}/wwid"; fi`,
+		`bootwright_wwid=$(bootwright_wwid_path "${bootwright_disk}")`,
 		`if [ -e "${bootwright_wwid}" ]; then`,
 		`if ! bootwright_raw=$(tr -d ' \t\n\v\f\r' < "${bootwright_wwid}") ||`,
 		`{ [ -n "${bootwright_raw}" ] && ! bootwright_root_wwn=$(bootwright_identity "${bootwright_wwid}" text); }; then`,
@@ -983,6 +974,17 @@ func identityFunctionLines() []string {
 		`value+="${byte}"`,
 		`done`,
 		`printf '%s\n' "${value}"`,
+		`}`,
+		`bootwright_wwid_path() {`,
+		`if [ -e "$1/wwid" ]; then printf '%s\n' "$1/wwid"; else printf '%s\n' "$1/device/wwid"; fi`,
+		`}`,
+		`bootwright_wwn_of() {`,
+		`local path`,
+		`path=$(bootwright_wwid_path "$1")`,
+		`bootwright_identity "${path}" text`,
+		`}`,
+		`bootwright_serial_of() {`,
+		`if [ -e "$1/device/serial" ]; then bootwright_identity "$1/device/serial" text; else bootwright_identity "$1/device/vpd_pg80" vpd; fi`,
 		`}`,
 	}
 }
@@ -1039,9 +1041,7 @@ func volumeRootLines() []string {
 		`bootwright_volume_count=0`,
 		`for bootwright_entry in /sys/class/block/*; do`,
 		`if [ ! -e "${bootwright_entry}" ] || [ -e "${bootwright_entry}/partition" ] || [ "$(cat -- "${bootwright_entry}/hidden" 2>/dev/null)" = 1 ]; then continue; fi`,
-		`bootwright_id="${bootwright_entry}/device/wwid"`,
-		`if [ -e "${bootwright_entry}/wwid" ]; then bootwright_id="${bootwright_entry}/wwid"; fi`,
-		`if bootwright_id=$(bootwright_identity "${bootwright_id}" text 2>/dev/null) && [ "${bootwright_id}" = 'naa.` + VolumeWWNToken + `' ]; then bootwright_volume_count=$((bootwright_volume_count + 1)); fi`,
+		`if bootwright_id=$(bootwright_wwn_of "${bootwright_entry}" 2>/dev/null) && [ "${bootwright_id}" = 'naa.` + VolumeWWNToken + `' ]; then bootwright_volume_count=$((bootwright_volume_count + 1)); fi`,
 		`done`,
 		`if [ "${bootwright_volume_count}" != 1 ] || [ "$(lsblk -ndo RO -- "${bootwright_root}")" != 0 ] || [ "$(lsblk -ndo RM -- "${bootwright_root}")" != 0 ]; then`,
 		`echo 'Bootwright: the root volume is ambiguous, read-only or removable; refusing before any disk is touched.' >&2`,
