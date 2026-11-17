@@ -49,6 +49,7 @@ func TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy(t *testing
 	destroy := "bootwright destroy --context lab again"
 	stop := "bootwright machine stop --context lab --name " + machine + " --force"
 	retain := "bootwright destroy --context lab --authorize erase=" + machine + ":retain"
+	custody := "/var/lib/bootwright-hosted/lab/machines/" + machine + "/erase/apply-1"
 	for reason, want := range map[string][]string{
 		eraseMachineRunning:     {"is running", stop, destroy},
 		eraseIdentityMismatch:   {"answers as another system", destroy, retain},
@@ -62,7 +63,7 @@ func TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy(t *testing
 		eraseForeignWorker:      {"another host key", "BMC console and boot order", stop, destroy, retain},
 		eraseReceiptTimeout:     {"within the erase deadline", stop, destroy},
 		eraseForeignCustody:     {"belongs to another request", destroy, retain},
-		eraseCustodyDrift:       {"differs from what its removal recorded", destroy, retain},
+		eraseCustodyDrift:       {"differs from what its removal recorded", "inspect " + custody + " on the execution host", "under " + request.Install.Private.Path + " ", "remove " + custody + " whole", destroy},
 		eraseBootMediaMismatch:  {"no longer matches its size and SHA-256", "bootwright media add", destroy},
 		eraseImageBuildFailed:   {"could not be built", destroy},
 	} {
@@ -89,7 +90,7 @@ func TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy(t *testing
 			}
 		})
 	}
-	if len(eraseRefusals("lab", "", machine, "https://bmc", "192.0.2.10")) != 15 {
+	if len(eraseRefusals("lab", "", machine, "https://bmc", "192.0.2.10", custody, "/published")) != 15 {
 		t.Fatal("the erase refusal vocabulary is not the fifteen codes the collection names")
 	}
 }

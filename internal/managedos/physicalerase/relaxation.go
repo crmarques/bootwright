@@ -139,8 +139,11 @@ func (c Capability) withdraw(ctx context.Context, execution lifecycle.Execution,
 		"originalAttempt":  execution.Operation + "/" + execution.Block.ID + "/" + strconv.Itoa(execution.Attempt),
 		"applyOperation":   execution.ApplyOperation,
 	}
+	install := request.Install
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: EraseImplementation, Operation: operation, Variable: eraseVariable, Canonical: canonical,
-		Placement: request.Install.Placement, Values: values, Deadline: withdrawDeadline}))
+		Placement: install.Placement, Values: values, Deadline: withdrawDeadline,
+		Refusals: eraseRefusals(execution.Context, execution.Continuation, install.Identity.Object, install.Target.Controller.Endpoint, install.Address,
+			eraseCustody(execution.Context, install.Identity.Object, execution.ApplyOperation), erasePublication(request))}))
 }
 
 func (c Capability) destroyWaived(ctx context.Context, execution lifecycle.Execution, request EraseRequest) (lifecycle.Result, error) {

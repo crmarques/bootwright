@@ -270,16 +270,21 @@ class Controller:
     def custody(self):
         """The custody record's token and removal, and whether that removal is another than this one's, or None without one.
 
-        A record naming no valid token or original attempt refuses: its
-        private publication could not be found to withdraw.
+        A record that cannot be read or decoded, or names no valid token or
+        original attempt, refuses as drifted: its private publication could
+        not be found to withdraw, so its remedy is the operator's inspection,
+        never another waiver that reads the same record.
         """
         mine = removal(self.material.get("originalAttempt"))
         if not mine:
             raise worker.Refusal("original-attempt")
         path = self.root / "custody.json"
-        if not path.exists():
+        if not os.path.lexists(path):
             return None
-        state = json.loads(read(path))
+        try:
+            state = json.loads(read(path))
+        except (worker.Refusal, ValueError):
+            raise worker.Refusal("custody-token") from None
         token = state.get("token") if isinstance(state, dict) else None
         holder = removal(state.get("originalAttempt")) if isinstance(state, dict) else ""
         if not isinstance(token, str) or not re.fullmatch(TOKEN, token) or not holder:

@@ -210,6 +210,11 @@ func TestAWaivedEraseWithdrawsWithoutTheControllerAndRecordsRetention(t *testing
 	if sent.Operation != "destroy" || !reflect.DeepEqual(sent.MaterialValues, want) || sent.Prepare != nil || sent.Deadline != withdrawDeadline {
 		t.Fatalf("the waived erase asked the adapter %s with %v (prepare %t, deadline %s)", sent.Operation, sent.MaterialValues, sent.Prepare != nil, sent.Deadline)
 	}
+	drift := diagnostics.Of(sent.Refusals[eraseCustodyDrift])
+	if len(drift) != 1 || !strings.Contains(drift[0].Remediation, "/machines/"+block.Object+"/erase/apply-1 whole") ||
+		strings.Contains(drift[0].Remediation, ":retain") {
+		t.Fatalf("the waived erase names custody drift as %v, want the custody to remove by hand and no waiver that reads it again", drift)
+	}
 	for _, material := range sent.Materials {
 		if slices.Contains([]string{"controllerUser", "controllerPassword", "controllerCA", "fleetIdentity", "artifactCertificate"}, material.Variable) {
 			t.Fatalf("the waived erase handed the adapter %s", material.Variable)

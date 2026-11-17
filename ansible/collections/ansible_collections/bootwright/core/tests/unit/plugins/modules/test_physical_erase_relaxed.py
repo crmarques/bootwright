@@ -139,3 +139,16 @@ def test_a_retained_removal_names_custody_it_cannot_locate(host, run_module):
     refused = run(run_module, host, "withdraw", retaining("op-remove-2/erase-metal-01/1"))
     assert "failed" not in refused and refused["refused"] == "custody-drift"
     assert (host["root"] / "host-key").exists(), "a refused withdrawal removed custody"
+
+
+@pytest.mark.parametrize("record", [b"{not json", b"[]", b"\xff\xfe"])
+def test_a_retained_removal_names_custody_it_cannot_decode_and_never_reads_it_as_retained(host, run_module, record):
+    run(run_module, host, "prepare", booting("op-remove-1/erase-metal-01/1"))
+    path = host["root"] / "custody.json"
+    path.chmod(0o600)
+    path.write_bytes(record)
+    assert path.read_bytes() == record and (host["root"] / "host-key").exists(), "the injected undecodable custody is missing"
+    for phase in ("withdraw", "observe"):
+        refused = run(run_module, host, phase, retaining("op-remove-2/erase-metal-01/1"))
+        assert "failed" not in refused and refused["refused"] == "custody-drift" and "evidence" not in refused, refused
+    assert path.read_bytes() == record and (host["root"] / "host-key").exists(), "a refused withdrawal changed custody"

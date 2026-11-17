@@ -2738,8 +2738,13 @@ and minutes, never a value derived from the private material; the play then
 stops outside `no_log` naming the code and the controller's own printable
 line. Each diagnostic is a `lifecycle.state` failure of the Machine whose
 remedy names the destroy to run; a foreign worker, an unreachable worker and
-a custody refusal also name releasing the Machine without erasing through
-`--authorize erase=<machine>:retain`.
+a foreign custody also name releasing the Machine without erasing through
+`--authorize erase=<machine>:retain`. A custody drift never does, because a
+retained erase reads the same custody: its remedy names the custody directory
+`/var/lib/bootwright-hosted/<context>/machines/<machine>/erase/<apply operation>`
+and the private erase publication directory, for the operator to remove the
+image its record names and then that custody by hand before the destroy runs
+again.
 
 #### Erase methods and coverage
 
@@ -2797,7 +2802,9 @@ On the execution host it acts only on the custody of its apply operation: it
 withdraws the private erase publication and boot-private files that custody
 left, and custody naming another removal's attempt serves no live removal, so
 it is withdrawn too and its records set aside as superseded, never adopted;
-custody naming no token or attempt refuses as drifted. It records retention,
+custody it cannot read or decode, or naming no token or attempt, refuses as
+drifted, and so does a publication entry that is not a directory; it never
+moves or removes what it cannot attribute. It records retention,
 `prepared`, `removed` and `retained` with no receipt. Its observation changes
 nothing and reads that retention as completed only when no custody of another
 removal, publication or boot-private file remains, and anything short of it

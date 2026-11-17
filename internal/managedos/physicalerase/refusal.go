@@ -32,7 +32,20 @@ const (
 	eraseImageBuildFailed   = "image-build-failed"
 )
 
-func eraseRefusals(contextName, continuation, machine, endpoint, address string) map[string]error {
+const eraseCustodyRoot = "/var/lib/bootwright-hosted"
+
+func eraseCustody(contextName, machine, applyOperation string) string {
+	return eraseCustodyRoot + "/" + contextName + "/machines/" + machine + "/erase/" + applyOperation
+}
+
+func erasePublication(request EraseRequest) string {
+	if request.Install.Private == nil {
+		return "its private erase publication directory"
+	}
+	return request.Install.Private.Path
+}
+
+func eraseRefusals(contextName, continuation, machine, endpoint, address, custody, publication string) map[string]error {
 	identity := string(api.Machine) + "/" + machine
 	refused := func(message, remediation string) error {
 		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
@@ -78,8 +91,9 @@ func eraseRefusals(contextName, continuation, machine, endpoint, address string)
 			stop+again+repeats),
 		eraseForeignCustody: refused("the private erase custody of "+identity+" on the execution host belongs to another request, so it was not used",
 			"restore the original apply and removal records, "+again+retain),
-		eraseCustodyDrift: refused("the private erase custody of "+identity+" on the execution host differs from what its removal recorded, so it was not used",
-			"restore the original apply and removal records, "+again+retain),
+		eraseCustodyDrift: refused("the private erase custody of "+identity+" on the execution host differs from what its removal recorded or cannot be read, so it was not used",
+			"inspect "+custody+" on the execution host as root: first remove the private erase image directory its custody.json names under "+publication+
+				" (when it names none you can read, remove there only the erase images of "+identity+"), then remove "+custody+" whole, "+again),
 		eraseBootMediaMismatch: refused("the installer image the apply of "+identity+" pinned is missing from the controller's media store or no longer matches its size and SHA-256, so no erase image was built and the machine was not booted",
 			"restore that image with bootwright media add and check it with bootwright media list --checksums, "+again),
 		eraseImageBuildFailed: refused("the erase image of "+identity+" could not be built from its pinned installer image within its time bound, so the machine was not booted",
