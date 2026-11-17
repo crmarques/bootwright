@@ -16514,3 +16514,20 @@ on the earlier code hold every Apply, Destroy and observation result,
 evidence and diagnostic unchanged. The other copies stay on
 [B1465](m1.md#b1465).
 
+## X524 — The remaining arms on the shared skeleton
+
+### B1494
+
+Split from B1465 under [D274](backlog.md#d274) (audit 005 W4.1). Agent-based
+installation's media, the artifact server, the managed service and
+installation mutate through `lifecycle.MutateBlock` and read their effect
+through `ReadEffect`, and four packages take their step groups from
+`StepGroups`. Where an arm's rule differs, it keeps its own code: the media
+destroy proves absence while its observation reads no effect, the install run
+lends and clears its kubeconfig itself, a certificate mismatch stays a failure,
+and installation's observation and inconclusive removal tail stay its own. Pin
+tests written on the earlier code pass unchanged. Each substrate arm again
+names the operation it runs where its mutation is built, so the embedded
+playbook binding test checks their apply and destroy, which it had lost at
+X523.
+
