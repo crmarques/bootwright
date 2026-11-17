@@ -2194,6 +2194,17 @@ starting with `.`) other than `.rgw.root`. Every other check, `MON_DOWN` and
 `MDS_INSUFFICIENT_STANDBY` included, keeps every block of the cluster from
 ready.
 
+The core evidence carries these readiness facts raw, and Bootwright applies
+the predicates above to them: its `readiness` member lists the health check
+codes, whether a code fell outside the check grammar, the scoped checks whose
+detail every line named, the pools and the filesystems those checks named,
+the placement-group count with its `active+clean` count, and a cluster block's
+IBM license state (`accepted`, `unneeded` where the image carries no license
+contract, or `pending`). Evidence that claims ready while its facts fail a
+predicate proves nothing. The worker applies the same predicates to the same
+facts only to end its own readiness waits
+([named exception](architecture.md#named-exceptions)).
+
 A cluster block's read under `diff --observe` names each scoped check it
 passed, one per pool or filesystem, as a `storage.health` warning
 `health: <check> names pool <name>` (or `filesystem <name>`), which

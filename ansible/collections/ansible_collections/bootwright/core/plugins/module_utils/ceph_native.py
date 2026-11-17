@@ -432,6 +432,11 @@ def named(value):
     return isinstance(value, str) and NAME.fullmatch(value) is not None
 
 
+def empty_readiness():
+    """The readiness facts of an observation that read no cluster health: no check, no scoped name, no PG and no license read."""
+    return {"checks": [], "unnamed": False, "scoped": [], "pools": [], "filesystems": [], "pgs": {"total": 0, "clean": 0}, "license": ""}
+
+
 def host_secret_refs(hosts):
     return sorted({ref for host in hosts for ref in (host["sshKeyRef"], host.get("hostKeyRef"), host.get("knownHostsRef")) if ref})
 
@@ -833,8 +838,8 @@ def selected_device(host, value):
     return found[0]
 
 
-def placement_groups_ready(status, action):
-    """Require a complete, typed PG snapshot; unfinished PGs remain partial."""
+def placement_group_counts(status):
+    """The PG count and how many of them are `active+clean`, from a complete, typed PG snapshot."""
     pgmap = status.get("pgmap")
     require(isinstance(pgmap, dict), "native-output")
     count, states = pgmap.get("num_pgs"), pgmap.get("pgs_by_state")
@@ -843,9 +848,15 @@ def placement_groups_ready(status, action):
         require(isinstance(state, dict) and isinstance(state.get("state_name"), str) and bool(state["state_name"]), "native-output")
         require(type(state.get("count")) is int and state["count"] > 0, "native-output")
     require(sum(state["count"] for state in states) == count, "native-output")
-    if count == 0:
+    return {"total": count, "clean": sum(state["count"] for state in states if state["state_name"] == "active+clean")}
+
+
+def placement_groups_ready(status, action):
+    """The worker's convergence wait on the PG snapshot; unfinished PGs remain partial. Go judges the published counts."""
+    counts = placement_group_counts(status)
+    if counts["total"] == 0:
         return action == "cluster"
-    return all(state["state_name"] == "active+clean" for state in states)
+    return counts["clean"] == counts["total"]
 
 
 def daemon_identity_host(kind, identifier, hosts):
@@ -2501,6 +2512,7 @@ class Worker:
                     "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": "", "incarnation": ""}
         if self.request["action"] == "cluster" and "stretch" in self.request:
             evidence["stretch"] = {"stage": "", "enabled": False}
+        evidence["readiness"] = empty_readiness()
         return evidence
 
     def observe(self):
@@ -2540,9 +2552,17 @@ class Worker:
         blocking = set() if status == "HEALTH_OK" else set(checks) - TOLERATED_HEALTH
         scoped = sorted(name for name in blocking if name in SCOPED_HEALTH)
         notes = []
+        self.health_facts = dict(empty_readiness(), checks=sorted(name for name in checks if HEALTH_CHECK.fullmatch(name)),
+                                 unnamed=any(HEALTH_CHECK.fullmatch(name) is None for name in checks))
         if scoped:
             named_by = health_names(self.ceph("health", "detail"), scoped)
             pools, filesystems = health_owned(self.request)
+            named = {"pool": set(), "fs": set()}
+            for name in scoped:
+                if named_by[name] is not None:
+                    self.health_facts["scoped"].append(name)
+                    named[SCOPED_HEALTH[name][0]].update(named_by[name])
+            self.health_facts.update(pools=sorted(named["pool"]), filesystems=sorted(named["fs"]))
             for name in scoped:
                 kind, names = SCOPED_HEALTH[name][0], named_by[name]
                 if names is None or names & (pools if kind == "pool" else filesystems) or any(
@@ -2554,6 +2574,15 @@ class Worker:
         if self.reading and self.request["action"] == "cluster":
             self.blocking = (self.blocking + [note for note in notes if HEALTH_NOTE.fullmatch(note)])[:16]
         return status, status == "HEALTH_OK" or bool(checks) and not blocking
+
+    def license_state(self):
+        """A cluster block's IBM license: accepted, unneeded where the image carries no license contract, or pending; other blocks
+        read none."""
+        if self.request["action"] != "cluster":
+            return ""
+        if self.license_accepted():
+            return "accepted"
+        return "unneeded" if self.selection.variant("ceph.mgr.license-contract") == "absent" else "pending"
 
     def prove_cluster_policy(self):
         prove_fips(self.request)
@@ -2581,10 +2610,12 @@ class Worker:
         require(isinstance(status, dict) and status.get("fsid") == self.request["fsid"], "native-output")
         require(isinstance(status.get("health"), dict), "native-output")
         evidence["health"], healthy = self.readiness_health(status["health"])
-        license_ready = self.request["action"] != "cluster" or self.license_accepted() or self.selection.variant("ceph.mgr.license-contract") == "absent"
+        license_state = self.license_state()
+        license_ready = license_state in ("", "accepted", "unneeded")
         if not license_ready:
             self.blocking = sorted(set(self.blocking) | {"IBM_LICENSE_NOT_ACCEPTED"})[:16]
         pg_ready = placement_groups_ready(status, self.request["action"])
+        evidence["readiness"] = dict(self.health_facts, pgs=placement_group_counts(status), license=license_state)
         self.call_home_state()
         quorum = self.ceph("quorum_status")
         mgr = self.ceph("mgr", "dump")

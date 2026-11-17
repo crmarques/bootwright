@@ -370,6 +370,16 @@ evidence-schema:
   pool.name string
   pool.size int
   pool.type string
+  readiness struct ceph.ReadinessEvidence
+  readiness.checks []string
+  readiness.filesystems []string
+  readiness.license string
+  readiness.pgs struct ceph.PGEvidence
+  readiness.pgs.clean int64
+  readiness.pgs.total int64
+  readiness.pools []string
+  readiness.scoped []string
+  readiness.unnamed bool
   ready bool
   removed bool
   request string

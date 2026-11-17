@@ -629,7 +629,8 @@ def cluster_evidence(request, **dashboard):
              "hosts": [h["name"] for h in request["hosts"]], "monitors": ["node-1"], "monAddrs": [{"host": "node-1", "address": "192.0.2.1"}],
              "mgrActive": "node-1", "mgrStandbys": ["node-2"], "osds": [], "resource": {"id": "", "path": ""}, "client": "",
              "dashboard": {"url": URL, "certificateSHA256": hashlib.sha256(CERTIFICATE_DER).hexdigest(), "reachable": False},
-             "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": "", "incarnation": "2026-01-01T00:00:00.000000Z"}
+             "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": "", "incarnation": "2026-01-01T00:00:00.000000Z",
+             "readiness": {"checks": [], "unnamed": False, "scoped": [], "pools": [], "filesystems": [], "pgs": {"total": 0, "clean": 0}, "license": ""}}
     value["dashboard"].update(dashboard)
     return value
 

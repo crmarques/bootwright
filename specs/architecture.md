@@ -186,6 +186,14 @@ Each is deliberate and bounded; another like it is a defect.
   `substrate/baremetal` proved. `beginSignalOperation` in
   `cmd/bootwright/interrupts.go` reads an interrupt `privilege.Begin` received
   as the CLI's `ErrInterrupted`.
+- **The Ceph worker's readiness waits.** The Ceph core worker decides on the
+  host when a readiness wait ends and when a step that needs a ready cluster
+  may run, so it applies the
+  [readiness predicates](ceph.md#scoped-health-checks) to the health checks,
+  placement-group counts and license state it reads, and judges its own
+  daemon, OSD and resource convergence, mid-procedure where Go cannot answer.
+  It publishes the health, placement-group and license facts raw, and
+  `storage/ceph` judges them again before it accepts a ready claim.
 - **The schema registry.** `api/v1alpha1`'s `init` functions fill its
   package-global kind-to-schema map through `register`, which panics on a
   duplicate; nothing writes it afterwards, and `Schema` returns a fresh `Shape`.

@@ -130,7 +130,8 @@ func TestCompiledObjectUserHandoffUsesPublicGatewayReference(t *testing.T) {
 
 func objectHandoffEvidence(t *testing.T, block reconciliation.Block, r ceph.Request) []byte {
 	t.Helper()
-	e := ceph.Evidence{Version: ceph.EvidenceVersion, Request: block.RequestDigest, Action: r.Action, Owner: "apply-original", FSID: ceph.FSIDFor("apply-original", r.Cluster), Owned: true, Exists: true, Ready: true, Health: "HEALTH_OK", Hosts: []string{}, Monitors: []string{}, MGRStandbys: []string{}, MonAddrs: []ceph.MonitorAddress{}, OSDs: []ceph.OSDEvidence{}, Daemons: []ceph.UnitDaemon{}, Resource: ceph.ResourceEvidence{ID: r.ObjectUser.Name}}
+	e := ceph.Evidence{Version: ceph.EvidenceVersion, Request: block.RequestDigest, Action: r.Action, Owner: "apply-original", FSID: ceph.FSIDFor("apply-original", r.Cluster), Owned: true, Exists: true, Ready: true, Health: "HEALTH_OK", Hosts: []string{}, Monitors: []string{}, MGRStandbys: []string{}, MonAddrs: []ceph.MonitorAddress{}, OSDs: []ceph.OSDEvidence{}, Daemons: []ceph.UnitDaemon{}, Resource: ceph.ResourceEvidence{ID: r.ObjectUser.Name},
+		Readiness: ceph.ReadinessEvidence{Checks: []string{}, Scoped: []string{}, Pools: []string{}, Filesystems: []string{}, PGs: ceph.PGEvidence{Total: 32, Clean: 32}}}
 	for _, h := range r.Hosts {
 		e.Hosts = append(e.Hosts, h.Name)
 		for _, d := range h.Devices {

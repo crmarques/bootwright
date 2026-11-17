@@ -20,7 +20,8 @@ def gateway_evidence(**changes):
              "hosts": ["node-1"], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [], "resource": {"id": "", "path": ""},
              "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False},
              "endpoint": {"certificateSHA256": LEAF, "reachable": True},
-             "daemons": [{"host": "node-1", "name": "mgmt-gateway.node-1", "service": "mgmt-gateway"}], "sso": "", "incarnation": ""}
+             "daemons": [{"host": "node-1", "name": "mgmt-gateway.node-1", "service": "mgmt-gateway"}], "sso": "", "incarnation": "",
+             "readiness": {"checks": [], "unnamed": False, "scoped": [], "pools": [], "filesystems": [], "pgs": {"total": 0, "clean": 0}, "license": ""}}
     value.update(changes)
     return value
 

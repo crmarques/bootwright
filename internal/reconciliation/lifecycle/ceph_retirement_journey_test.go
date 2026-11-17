@@ -60,6 +60,10 @@ func (r *fleetRunner) Run(_ context.Context, run lifecycle.RunRequest) (lifecycl
 		Action: request.Action, Exists: true, FSID: request.FSID, Health: "HEALTH_OK", Hosts: fleetHosts, Incarnation: "2026-01-01T00:00:00.000000Z", MGRActive: fleetHosts[0], MGRStandbys: fleetHosts[1:2],
 		Monitors: fleetHosts, OSDs: []ceph.OSDEvidence{}, Owned: true, Owner: request.Owner, Ready: true, Request: run.Digest, Version: ceph.EvidenceVersion,
 		MonAddrs: []ceph.MonitorAddress{}, Daemons: []ceph.UnitDaemon{},
+		Readiness: ceph.ReadinessEvidence{Checks: []string{}, Scoped: []string{}, Pools: []string{}, Filesystems: []string{}, PGs: ceph.PGEvidence{Total: 32, Clean: 32}},
+	}
+	if request.Action == "cluster" {
+		evidence.Readiness.License = "accepted"
 	}
 	for index, host := range fleetHosts {
 		evidence.OSDs = append(evidence.OSDs, ceph.OSDEvidence{Host: host, ID: index, Path: "/dev/vdb", UUID: "osd-" + host})

@@ -61,6 +61,18 @@
   "owned": true,
   "owner": "apply-original",
   "partial": false,
+  "readiness": {
+    "checks": [],
+    "filesystems": [],
+    "license": "accepted",
+    "pgs": {
+      "clean": 32,
+      "total": 32
+    },
+    "pools": [],
+    "scoped": [],
+    "unnamed": false
+  },
   "ready": true,
   "removed": false,
   "request": "digest",

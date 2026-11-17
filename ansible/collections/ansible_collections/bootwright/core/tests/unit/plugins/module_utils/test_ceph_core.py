@@ -155,7 +155,8 @@ def observation(core_request, ready=False):
             "owned": True, "exists": ready, "ready": ready, "removed": not ready, "partial": False, "health": "HEALTH_OK" if ready else "",
             "hosts": [h["name"] for h in core_request["hosts"]] if ready else [], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [],
             "osds": [], "resource": {"id": "", "path": ""}, "client": "", "dashboard": dict(EMPTY_DASHBOARD),
-            "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": "", "incarnation": "2026-01-01T00:00:00.000000Z"}
+            "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": "", "incarnation": "2026-01-01T00:00:00.000000Z",
+            "readiness": {"checks": [], "unnamed": False, "scoped": [], "pools": [], "filesystems": [], "pgs": {"total": 0, "clean": 0}, "license": ""}}
 
 
 def failing_command(core_request, applied):

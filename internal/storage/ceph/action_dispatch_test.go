@@ -92,7 +92,7 @@ func dispatchEvidences(r Request) []Evidence {
 				for _, reachable := range []bool{false, true} {
 					e := Evidence{Version: EvidenceVersion, Action: r.Action, Owner: r.Owner, FSID: r.FSID, Request: strings.Repeat("b", 64), Owned: true, Exists: true, Ready: true,
 						Health: "HEALTH_OK", Hosts: []string{"node-1", "node-2", "node-3"}, Monitors: []string{"node-1", "node-2", "node-3"}, MGRActive: "node-1", MGRStandbys: []string{"node-2"},
-						Resource: resource, Client: client, Daemons: []UnitDaemon{}, MonAddrs: []MonitorAddress{}}
+						Resource: resource, Client: client, Daemons: []UnitDaemon{}, MonAddrs: []MonitorAddress{}, Readiness: readyGates(r)}
 					for _, host := range e.Hosts {
 						e.OSDs = append(e.OSDs, OSDEvidence{Host: host, Path: "/dev/vdb", ID: len(e.OSDs), UUID: "uuid-" + host})
 					}

@@ -108,6 +108,7 @@ type Evidence struct {
 	Owner           string             `json:"owner"`
 	Partial         bool               `json:"partial"`
 	Pool            *PoolEvidence      `json:"pool,omitempty"`
+	Readiness       ReadinessEvidence  `json:"readiness"`
 	Ready           bool               `json:"ready"`
 	Removed         bool               `json:"removed"`
 	Request         string             `json:"request"`
@@ -128,7 +129,7 @@ func decodeEvidence(data []byte) (Evidence, error) {
 		return e, err
 	}
 	fields, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](data, 60*1024, "Ceph members")
-	expected := 24
+	expected := 25
 	if _, ok := fields["specializations"]; ok {
 		expected++
 		if !validSpecializationsMember(fields) {
@@ -153,7 +154,7 @@ func decodeEvidence(data []byte) (Evidence, error) {
 	if err != nil || len(fields) != expected {
 		return Evidence{}, evidenceFailure()
 	}
-	required := []string{"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs", "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons", "sso", "incarnation"}
+	required := []string{"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs", "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons", "sso", "incarnation", "readiness"}
 	for _, key := range required {
 		v, ok := fields[key]
 		if !ok || string(v) == "null" {
@@ -528,7 +529,7 @@ func EvaluateEvidence(data []byte, r Request, digest string, removal bool) (reco
 	if err != nil {
 		return reconciliation.EffectUnknown, err
 	}
-	if e.Version != EvidenceVersion || e.Request != digest || digest == "" || e.Action != r.Action || e.Owner != r.Owner || r.Owner == "" || e.FSID != r.FSID || r.FSID == "" || !validateScope(e, r) || !validDashboard(e, r) || !validEndpoint(e, r) || !validSSO(e, r) || !validIncarnation(e.Incarnation) || !validStretchEvidence(e, r) || !validReadings(e, r) {
+	if e.Version != EvidenceVersion || e.Request != digest || digest == "" || e.Action != r.Action || e.Owner != r.Owner || r.Owner == "" || e.FSID != r.FSID || r.FSID == "" || !validateScope(e, r) || !validDashboard(e, r) || !validEndpoint(e, r) || !validSSO(e, r) || !validIncarnation(e.Incarnation) || !validStretchEvidence(e, r) || !validReadings(e, r) || !validReadiness(e) {
 		return reconciliation.EffectUnknown, evidenceFailure()
 	}
 	if e.Ready && (!e.Owned || !e.Exists || e.Partial || e.Removed) || e.Removed && (!e.Owned || e.Exists || e.Ready || e.Partial) || e.Partial && (!e.Owned || !e.Exists || e.Ready || e.Removed) {
@@ -558,7 +559,7 @@ func EvaluateEvidence(data []byte, r Request, digest string, removal bool) (reco
 		return reconciliation.EffectUnknown, evidenceFailure()
 	}
 	if e.Ready {
-		if !validateReady(e, r) {
+		if !validateReady(e, r) || !readinessGates(e, r) {
 			return reconciliation.EffectUnknown, evidenceFailure()
 		}
 		if removal {

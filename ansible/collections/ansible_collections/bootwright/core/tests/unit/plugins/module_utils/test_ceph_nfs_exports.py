@@ -538,7 +538,8 @@ def observation(ready):
             "ready": ready, "removed": False, "partial": not ready, "health": "HEALTH_OK", "hosts": ["node-1", "node-2", "node-3"], "monitors": [],
             "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [], "resource": {"id": "1", "path": "/docs"} if ready else {"id": "", "path": ""},
             "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False}, "endpoint": {"certificateSHA256": "", "reachable": False},
-            "daemons": [], "sso": "", "incarnation": "2026-01-01T00:00:00.000000Z"}
+            "daemons": [], "sso": "", "incarnation": "2026-01-01T00:00:00.000000Z",
+            "readiness": {"checks": [], "unnamed": False, "scoped": [], "pools": [], "filesystems": [], "pgs": {"total": 0, "clean": 0}, "license": ""}}
 
 
 class Transport:

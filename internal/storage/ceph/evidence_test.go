@@ -23,11 +23,34 @@ func readyEvidence(r Request) Evidence {
 	if r.Action == "cluster" {
 		e.Dashboard = DashboardEvidence{URL: "https://node-1:8443/", CertificateSHA256: strings.Repeat("c", 64), Reachable: true}
 	}
+	e.Readiness = readyGates(r)
 	return e
 }
+
+// readyGates are the readiness facts of a healthy core: clean placement
+// groups and, for a cluster block, an accepted license.
+func readyGates(r Request) ReadinessEvidence {
+	g := ReadinessEvidence{Checks: []string{}, Scoped: []string{}, Pools: []string{}, Filesystems: []string{}, PGs: PGEvidence{Total: 32, Clean: 32}}
+	if r.Action == "cluster" {
+		g.License = "accepted"
+	}
+	return g
+}
+
+// published fills the readiness lists a fixture left nil as the worker
+// publishes them, empty and never null.
+func published(e Evidence) Evidence {
+	for _, list := range []*[]string{&e.Readiness.Checks, &e.Readiness.Scoped, &e.Readiness.Pools, &e.Readiness.Filesystems} {
+		if *list == nil {
+			*list = []string{}
+		}
+	}
+	return e
+}
+
 func evidenceBytes(t *testing.T, e Evidence) []byte {
 	t.Helper()
-	data, err := json.Marshal(e)
+	data, err := json.Marshal(published(e))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +71,7 @@ func TestEvidenceRequiresExactOwnedReadyServiceAndDiskScope(t *testing.T) {
 		t.Fatalf("valid count-two among three rejected: %s %v", effect, err)
 	}
 	tolerated := readyEvidence(r)
-	tolerated.Health = "HEALTH_ERR"
+	tolerated.Health, tolerated.Readiness.Checks = "HEALTH_ERR", []string{"CHA_ERROR_SENDING_REPORT"}
 	if effect, err := EvaluateEvidence(evidenceBytes(t, tolerated), r, "digest", false); err != nil || effect != reconciliation.EffectCompleted {
 		t.Fatalf("a ready cluster whose only checks the worker tolerates was rejected: %s %v", effect, err)
 	}

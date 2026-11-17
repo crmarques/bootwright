@@ -86,7 +86,7 @@ def evidence(value, request_digest, request=None):
     if isinstance(value, dict) and value.get("version") == ceph_host_runtime.EVIDENCE_VERSION:
         return host_evidence(value, request_digest, request)
     fields = {"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs",
-              "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons", "sso", "incarnation"}
+              "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons", "sso", "incarnation", "readiness"}
     ceph_native.require(isinstance(value, dict) and fields <= set(value) <= fields | {"specializations", "stretch", "pool", "inventory"}, "evidence")
     ceph_native_stretch.evidence(value, request)
     reading_evidence(value, request)
@@ -102,6 +102,7 @@ def evidence(value, request_digest, request=None):
     daemon_evidence(value, request)
     ceph_native.require(all(type(value[k]) is bool for k in ("owned", "exists", "ready", "removed", "partial")), "evidence")
     ceph_native.require(value["health"] in ("", "HEALTH_OK", "HEALTH_WARN", "HEALTH_ERR"), "evidence")
+    readiness_evidence(value)
     ceph_native.require(ceph_native.named(value["owner"]), "evidence")
     for field in ("hosts", "monitors", "mgrStandbys"):
         ceph_native.require(isinstance(value[field], list) and len(value[field]) <= 128 and all(ceph_native.named(n) for n in value[field]), "evidence")
@@ -147,6 +148,23 @@ def evidence(value, request_digest, request=None):
     ceph_native.require(not value["removed"] or value["owned"] and not value["exists"] and not value["ready"], "evidence")
     ceph_native.require(len(ceph_native.canonical(value)) <= 60000, "evidence")
     return value
+
+
+def readiness_evidence(value):
+    """The raw readiness facts Go judges: sorted check codes, the scoped checks whose detail named only pools and filesystems, those
+    names, the PG counts and the cluster block's license state."""
+    facts = value["readiness"]
+    ceph_native.require(isinstance(facts, dict) and set(facts) == {"checks", "unnamed", "scoped", "pools", "filesystems", "pgs", "license"}, "evidence")
+    for field, grammar, limit in (("checks", ceph_native.HEALTH_CHECK, 256), ("scoped", ceph_native.HEALTH_CHECK, 256),
+                                  ("pools", re.compile(ceph_native.POOL_NAMED + r"\Z"), 4096), ("filesystems", re.compile(ceph_native.FS_NAMED + r"\Z"), 4096)):
+        names = facts[field]
+        ceph_native.require(isinstance(names, list) and len(names) <= limit and names == sorted(set(names))
+                            and all(isinstance(name, str) and grammar.fullmatch(name) is not None for name in names), "evidence")
+    ceph_native.require(set(facts["scoped"]) <= set(facts["checks"]) and type(facts["unnamed"]) is bool, "evidence")
+    pgs = facts["pgs"]
+    ceph_native.require(isinstance(pgs, dict) and set(pgs) == {"total", "clean"} and all(type(pgs[k]) is int for k in pgs)
+                        and 0 <= pgs["clean"] <= pgs["total"], "evidence")
+    ceph_native.require(facts["license"] in ("", "accepted", "unneeded", "pending") and (facts["license"] == "" or value["action"] == "cluster"), "evidence")
 
 
 POOL_READING = frozenset(("applications", "autoscale", "maxBytes", "maxObjects", "minSize", "name", "size", "type"))
