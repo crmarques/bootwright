@@ -10,6 +10,7 @@ import (
 type ByteProgress struct {
 	Completed int64
 	Total     int64
+	Note      string
 }
 
 func (p ByteProgress) Known() bool {

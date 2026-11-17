@@ -89,3 +89,38 @@ func TestAGroupWithoutProgressLogsItsStatusAndAnEmptyCountLogsNothing(t *testing
 		t.Fatalf("a record read after the exit reported %+v and logged %+v", *reports, *logged)
 	}
 }
+
+func TestAGroupsDetailReachesTheEngineAsItsCapabilitysNoteAndOnlyForADeclaredGroup(t *testing.T) {
+	clock := time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)
+	judge, reports, logged := progressJudge(&clock)
+	judge.request.Groups = []string{"erase-1", "erase-2"}
+	judge.request.GroupNote = func(group, detail string) (string, bool) {
+		return "note " + group + " " + detail, detail == "unanswered:refused:3min"
+	}
+	moment := adapterprotocol.Moment{Open: true}
+	noted := adapterprotocol.Record{Phase: "group", Group: "erase-2", Status: "running", Detail: "unanswered:refused:3min"}
+	if verdict := judge.Judge(context.Background(), noted, moment); !verdict.Valid {
+		t.Fatalf("a declared group's note was judged %+v", verdict)
+	}
+	if len(*reports) != 1 || (*reports)[0].bytes.Note != "note erase-2 unanswered:refused:3min" || (*reports)[0].group != "erase-2" {
+		t.Fatalf("reports = %+v", *reports)
+	}
+	if len(*logged) != 1 || (*logged)[0].Detail != "running note erase-2 unanswered:refused:3min" {
+		t.Fatalf("log records = %+v", *logged)
+	}
+	for _, record := range []adapterprotocol.Record{
+		{Phase: "group", Group: "waiting for the erase worker", Status: "running"},
+		{Phase: "group", Group: "erase-1", Status: "running", Detail: "unanswered:refused:4min"},
+	} {
+		if verdict := judge.Judge(context.Background(), record, moment); verdict.Valid {
+			t.Fatalf("record %+v was judged valid", record)
+		}
+	}
+	unnoted, _, _ := progressJudge(&clock)
+	if verdict := unnoted.Judge(context.Background(), noted, moment); verdict.Valid {
+		t.Fatal("a detail reached a run whose capability words none")
+	}
+	if len(*reports) != 1 {
+		t.Fatalf("an invalid record reported %+v", *reports)
+	}
+}

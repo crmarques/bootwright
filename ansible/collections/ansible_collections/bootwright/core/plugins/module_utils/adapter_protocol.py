@@ -221,6 +221,11 @@ def handed(arguments, capability, emit):
         progress = progress_of(arguments.get("progress"))
         if progress is not None:
             record["progress"] = progress
+        # A running group's note is a closed detail its capability words;
+        # one the Go decoder would refuse is left out, never failing the effect.
+        detail = arguments.get("detail")
+        if capability.detail and status == "running" and isinstance(detail, str) and 0 < len(detail) <= MAX_DETAIL and not set(detail) - DETAIL:
+            record["detail"] = detail
         emit(record)
         return {"changed": False}
     if phase == "refused":

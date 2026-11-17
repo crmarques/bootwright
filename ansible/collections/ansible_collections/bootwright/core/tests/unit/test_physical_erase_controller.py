@@ -508,6 +508,17 @@ class WithdrawalTests(unittest.TestCase):
             self.assertTrue(instance.withdrawn())
             self.assertFalse(instance.withdraw())
 
+    def test_only_the_last_removals_set_aside_keep_their_superseded_records(self):
+        for index in range(1, 7):
+            root, _token = self.custody("op-remove-%d/erase-metal-01/1" % index, receipt={"index": index}, completed={"index": index})
+            with self.opened() as instance:
+                self.assertTrue(instance.withdraw())
+        kept = sorted(path.name for path in root.iterdir())
+        expected = sorted("superseded-op-remove-%d-%s.json" % (index, record) for index in range(3, 7) for record in ("receipt", "completed"))
+        self.assertEqual(kept, expected)
+        self.assertEqual(controller.SUPERSEDED_KEPT, 4)
+        self.assertEqual(json.loads((root / "superseded-op-remove-6-receipt.json").read_text()), {"index": 6})
+
     def test_no_custody_leaves_nothing_to_withdraw(self):
         with self.assertRaises(FileNotFoundError), self.opened():
             pass

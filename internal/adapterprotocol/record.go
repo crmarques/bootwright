@@ -113,7 +113,7 @@ type phase struct {
 // phases is the one table of which runner admits which phase.
 var phases = map[string]phase{
 	"loaded":    {members: []string{"phase"}, admitted: Lifecycle | Controller},
-	"group":     {members: []string{"group", "phase", "status"}, admitted: Lifecycle, progress: Lifecycle},
+	"group":     {members: []string{"group", "phase", "status"}, admitted: Lifecycle, detail: Lifecycle, progress: Lifecycle},
 	"prepared":  {members: []string{"phase", "preparation"}, admitted: Lifecycle | Controller},
 	"native":    {members: []string{"phase"}, admitted: Controller},
 	"continue":  {members: []string{"phase"}, admitted: Controller},
@@ -382,6 +382,9 @@ func groupRecord(members map[string]json.RawMessage, record *Record) bool {
 		var ok bool
 		record.Progress, ok = progress(raw)
 		valid = valid && ok
+	}
+	if raw, named := members["detail"]; named {
+		valid = valid && record.Status == "running" && text(raw, &record.Detail) && detailed(record.Detail)
 	}
 	return valid
 }

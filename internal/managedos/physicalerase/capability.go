@@ -384,6 +384,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, requ
 	}
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: EraseImplementation, Operation: operation, Variable: eraseVariable, Canonical: canonical,
 		Placement: install.Placement, Materials: materials, Values: values, Deadline: deadline, RemovalPreparation: validate,
+		Groups: eraseGroupIDs(execution.Block), GroupNote: eraseGroupNote(install.Address),
 		Refusals: eraseRefusals(execution.Context, execution.Continuation, install.Identity.Object, install.Target.Controller.Endpoint, install.Address)}))
 	if err != nil {
 		return result, err

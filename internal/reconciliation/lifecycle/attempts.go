@@ -519,7 +519,7 @@ func (s Service) invoke(ctx context.Context, run invocation, block reconciliatio
 					settled[group] = struct{}{}
 				}
 				s.report(inner, ProgressEvent{Block: block.ID, Description: block.Description, Group: group,
-					Detail: groupDescription(block, group), Status: status, Position: position, Total: total,
+					Detail: groupDetail(block, group, bytes), Status: status, Position: position, Total: total,
 					Completed: len(settled), Declared: len(block.Groups), Bytes: bytes})
 			},
 		}
@@ -648,6 +648,13 @@ func groupDescription(block reconciliation.Block, id string) string {
 		}
 	}
 	return id
+}
+
+func groupDetail(block reconciliation.Block, id string, bytes ByteProgress) string {
+	if bytes.Note != "" {
+		return bytes.Note
+	}
+	return groupDescription(block, id)
 }
 
 func declaresGroup(block reconciliation.Block, id string) bool {

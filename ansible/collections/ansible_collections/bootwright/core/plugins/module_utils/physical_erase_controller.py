@@ -32,6 +32,9 @@ RETAIN = "retain"
 # that embeds it, the worker session's SSH files and the unpublished image.
 BOOT_PRIVATE = ("host-key", "host-key.pub", "ks.cfg", "ssh_config", "known_hosts", "erase.iso")
 TOKEN = "[0-9a-f]{64}"
+# The superseded records of at most this many earlier removals are kept.
+SUPERSEDED_KEPT = 4
+SUPERSEDED = re.compile(r"superseded-([A-Za-z0-9-]{1,128})-(?:receipt|finalizing|completed)\.json")
 
 
 def relaxation(material):
@@ -235,15 +238,34 @@ class Controller:
         """Keep an earlier removal's records as superseded-<operation>-<record>.json, then drop its custody record.
 
         The completion record goes last, so an interrupted supersession is
-        never read as this removal's completed or finalizing custody.
+        never read as this removal's completed or finalizing custody. Each
+        record set aside is stamped later than every one kept before it, and
+        only the SUPERSEDED_KEPT removals set aside last keep theirs.
         """
+        stamp = max([time.time_ns()] + [moment + 1 for moment in self.superseded().values()])
         for record in ("receipt", "finalizing", "completed"):
             kept = self.root / (record + ".json")
             if kept.exists():
-                os.replace(kept, self.root / ("superseded-" + earlier + "-" + record + ".json"))
+                target = self.root / ("superseded-" + earlier + "-" + record + ".json")
+                os.replace(kept, target)
+                os.utime(target, ns=(stamp, stamp), follow_symlinks=False)
+        ranked = sorted(self.superseded().items(), key=lambda item: item[1], reverse=True)
+        for operation, _moment in ranked[SUPERSEDED_KEPT:]:
+            for record in ("receipt", "finalizing", "completed"):
+                (self.root / ("superseded-" + operation + "-" + record + ".json")).unlink(missing_ok=True)
         os.fsync(self.lock)
         (self.root / "custody.json").unlink()
         os.fsync(self.lock)
+
+    def superseded(self):
+        """Each earlier removal whose records are set aside, with the latest stamp among them."""
+        found = {}
+        for path in self.root.iterdir():
+            match = SUPERSEDED.fullmatch(path.name)
+            if match:
+                moment = path.lstat().st_mtime_ns
+                found[match.group(1)] = max(found.get(match.group(1), moment), moment)
+        return found
 
     def custody(self):
         """The custody record's token and removal, and whether that removal is another than this one's, or None without one.

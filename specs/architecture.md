@@ -1133,6 +1133,16 @@ lifecycle runner's 64 records, so a wait of hours can report each group about
 once a minute. The member
 is additive and moves no capability's request, evidence or effect pin.
 
+A `running` `group` record may also carry `detail`, a note in the closed
+detail grammar, such as `unanswered:refused:3min`; the decoder refuses one on
+any other status. Only a capability that words
+it receives it: the runner hands the capability's wording of it to the
+attempt's progress, which shows that sentence in place of the group's
+description, and refuses a detail the capability does not word, or any detail
+in a run whose capability words none. A capability that names its declared
+groups to the runner, as the physical erase does, also refuses a `group` record
+naming any other id. A note is presentation like `progress`.
+
 A lifecycle `completed` record may carry `warnings`, a nonempty array of at
 most 16 advisories, each exactly `code`, one of the registered adapter warning
 codes, `message`, nonempty printable ASCII

@@ -2661,8 +2661,9 @@ retries of that removal. A fresh removal always erases under its own custody:
 finding custody naming another removal's attempt, whether that removal failed,
 was replaced or finished, it withdraws that custody's private publication and
 boot-private files, sets its receipt and any finalizing or completed record
-aside as `superseded-<operation>-<record>.json` without adopting them, and then
-writes its own, and an observation of it reads unprepared for this removal.
+aside as `superseded-<operation>-<record>.json` without adopting them, keeping
+those of only the four removals set aside last, and then writes its own, and an
+observation of it reads unprepared for this removal.
 The path is unchanged. The installed OS's existing host key is never the erase
 receipt identity. The RAM service accepts only receipt reads and receipt-hash
 acknowledgement through pinned SSH. A complete receipt binds request, original
@@ -2702,11 +2703,16 @@ worker refuses promptly. A worker no session reaches refuses
 `worker-unreachable` once none has answered within the 900-second RAM startup
 allowance plus 300 seconds of the wait's start, or once an answering worker
 stays unanswered for 600 seconds; both are timed within one wait, so a repeated
-wait starts its own bound. While it waits, the run reports each target's written
-plus read-back bytes of twice its coverage as that target's group
-[progress](architecture.md#adapter-warnings-and-group-progress), from
-the worker's partial status at most every ten seconds, and a worker no session
-reaches as `waiting for the erase worker at <address>, no answer for <n> min
+wait starts its own bound. A session answered with another host key than the
+pinned erase-only key, as the installed system answers when the machine did not
+boot its erase media, refuses `foreign-worker` at once. While it waits, the run
+reports each target's written plus read-back bytes of twice its coverage as that
+target's group [progress](architecture.md#adapter-warnings-and-group-progress),
+from the worker's partial status at most every ten seconds and at most once a
+minute per target, spaced further so every target reports across the whole
+deadline within the runner's bound; on every target's group, a worker no
+session reaches carries the detail `unanswered:<class>:<n>min`, which Go shows
+as `waiting for the erase worker at <address>, no answer for <n> min
 (<class>)`; a malformed count is ignored and no count is completion evidence. The operator powers off the Machine before
 running the destroy again, whose fresh boot repeats every target's frozen method and
 readback after rechecking every identity. A completed durable receipt is replayed.

@@ -45,7 +45,10 @@ class Waiting:
         return action.wait(self.poll, request or REQUEST, self.channel, clock=self.clock, pause=self.pause)
 
     def running(self, prefix=""):
-        return [record for record in self.records if record["status"] == "running" and record["group"].startswith(prefix)]
+        return [record for record in self.records if record["status"] == "running" and record["group"].startswith(prefix) and "detail" not in record]
+
+    def notes(self):
+        return [record for record in self.records if "detail" in record]
 
 
 def partial(*counts):
@@ -56,9 +59,18 @@ def test_a_worker_that_never_answers_shows_its_silence_each_minute_and_refuses_a
     waiting = Waiting([])
     assert waiting.wait() == {"refused": "worker-unreachable", "detail": "refused:20min", "controller": ""}
     assert action.FIRST_ANSWER_SECONDS <= waiting.now < action.FIRST_ANSWER_SECONDS + 10
-    shown = [record["group"] for record in waiting.running("waiting")]
-    assert shown == ["waiting for the erase worker at 192.0.2.10, no answer for %d min (refused)" % minutes for minutes in range(1, 20)]
-    assert all(set(record) == {"phase", "group", "status"} for record in waiting.running("waiting"))
+    shown = [(record["group"], record["detail"]) for record in waiting.notes()]
+    assert shown == [(group, "unanswered:refused:%dmin" % minutes) for minutes in range(1, 20) for group in ("erase-1", "erase-2")]
+    assert all(set(record) == {"phase", "group", "status", "detail"} and record["status"] == "running" for record in waiting.notes())
+    assert "192.0.2.10" not in repr(waiting.records), "the adapter words the note; Go names the address"
+
+
+def test_another_host_key_at_the_install_address_refuses_foreign_worker_at_once():
+    answers = [partial((0, 2), (0, 2)), {"answer": "unanswered", "cause": "refused"}, {"answer": "unanswered", "cause": "host-key"}]
+    waiting = Waiting(answers)
+    assert waiting.wait() == {"refused": "foreign-worker", "detail": "host-key", "controller": ""}
+    assert waiting.polls == 3 and waiting.now < 60, "the foreign host was waited on"
+    assert Waiting([{"answer": "unanswered", "cause": "host-key"}]).wait()["refused"] == "foreign-worker"
 
 
 def test_a_worker_that_answered_and_went_silent_refuses_after_ten_minutes():
@@ -86,8 +98,9 @@ def test_a_transient_silence_shows_once_and_the_next_answer_reports_at_once():
     answers = [partial((GiB, 16 * GiB), (0, 2 * GiB))] + [None] * 10 + [partial((GiB, 16 * GiB), (0, 2 * GiB)), {"answer": "complete", "receipt": RECEIPT}]
     waiting = Waiting(answers)
     assert waiting.wait() == {"receipt": RECEIPT}
-    groups = [record["group"] for record in waiting.running()]
-    assert groups == ["erase-1", "erase-2", "waiting for the erase worker at 192.0.2.10, no answer for 1 min (refused)", "erase-1", "erase-2"]
+    groups = [(record["group"], record.get("detail")) for record in waiting.records if record["status"] == "running"]
+    assert groups == [("erase-1", None), ("erase-2", None), ("erase-1", "unanswered:refused:1min"), ("erase-2", "unanswered:refused:1min"),
+                      ("erase-1", None), ("erase-2", None)]
 
 
 def test_malformed_progress_is_ignored_and_never_refuses():
@@ -119,30 +132,39 @@ def test_the_wait_ends_at_its_deadline_with_receipt_timeout():
     assert waiting.now >= 600 + action.DEADLINE_MARGIN_SECONDS
 
 
-def test_running_records_stay_within_the_runners_bound_and_a_channel_failure_never_fails_the_wait():
+def test_sixteen_targets_report_across_the_full_deadline_within_the_runners_bound():
     targets = [{"method": "logicalOverwrite"}] * 16
-    moving = [lambda now: {"answer": "partial", "progress": [{"completed": int(now), "total": 10**9}] * 16}] * 10**5
+    moving = [lambda now: {"answer": "partial", "progress": [{"completed": int(now), "total": 10**9}] * 16}] * 10**6
     waiting = Waiting(moving)
-    assert waiting.wait(dict(REQUEST, targets=targets)) == {"refused": "receipt-timeout", "detail": "", "controller": ""}
-    assert 16 * 200 < len(waiting.running()) <= action.PRESENTATION_RECORDS < 4096
-    reporter = action.Reporter(waiting.channel, "192.0.2.10", 1, budget=2)
-    waiting.records.clear()
+    request = dict(REQUEST, targets=targets)
+    assert waiting.wait(request) == {"refused": "receipt-timeout", "detail": "", "controller": ""}
+    seconds = request["deadlineSeconds"] + action.DEADLINE_MARGIN_SECONDS
+    every = action.interval(16, seconds, action.PRESENTATION_RECORDS - action.NOTE_RECORDS)
+    assert every > action.PROGRESS_SECONDS, "the full deadline at sixteen targets must stretch the interval"
+    assert len(waiting.running()) <= action.PRESENTATION_RECORDS - action.NOTE_RECORDS < 4096
+    for index in range(16):
+        reported = [record["progress"]["completed"] for record in waiting.running("erase-%d" % (index + 1))]
+        assert reported[-1] >= seconds - every - 10, ("erase-%d stopped reporting" % (index + 1), reported[-1], seconds)
+    assert action.interval(2, seconds, action.PRESENTATION_RECORDS - action.NOTE_RECORDS) == action.PROGRESS_SECONDS
+
+
+def test_the_waiting_note_has_its_own_budget_and_a_channel_failure_never_fails_the_wait():
+    waiting = Waiting([])
+    reporter = action.Reporter(waiting.channel, 2, 3600, budget=10, notes=4)
     for minute in range(1, 5):
         reporter.waiting("timeout", minute * 60)
+    for second in range(6):
+        reporter.progress([{"completed": second, "total": 9}, {"completed": second, "total": 9}], second * 3600)
     reporter.settled()
-    assert [record["status"] for record in waiting.records] == ["running", "running", "ok"]
+    expected = [("erase-%d" % target, "unanswered:timeout:%dmin" % minute) for minute in (1, 2) for target in (1, 2)]
+    assert [(record["group"], record.get("detail")) for record in waiting.notes()] == expected
+    assert len(waiting.running()) == 6 and [record["status"] for record in waiting.records[-2:]] == ["ok", "ok"]
 
     def broken(record, acknowledge=False):
         raise BrokenPipeError("runner gone")
 
     assert action.wait(Waiting([partial((0, 2), (0, 2)), {"answer": "complete", "receipt": RECEIPT}]).poll, REQUEST, broken,
                        pause=lambda seconds: None) == {"receipt": RECEIPT}
-
-
-def test_an_address_outside_its_alphabet_is_not_shown():
-    waiting = Waiting([])
-    waiting.wait(dict(REQUEST, install={"address": "host\nname"}))
-    assert waiting.running()[0]["group"] == "waiting for the erase worker at its install address, no answer for 1 min (refused)"
 
 
 def test_the_action_polls_the_module_with_the_task_arguments_and_hides_its_result(monkeypatch):

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -57,8 +58,8 @@ func TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy(t *testing
 		eraseControllerDeadline: {"within its time bound", destroy},
 		erasePowerOffUnproved:   {"did not power off", stop, destroy},
 		eraseWorkerFailed:       {"stopped without a complete receipt", stop, destroy},
-		eraseWorkerUnreachable:  {"did not reach the RAM erase worker", request.Install.Address + " on port 22", stop, destroy, retain},
-		eraseForeignWorker:      {"another request or removal attempt", stop, destroy, retain},
+		eraseWorkerUnreachable:  {"did not reach the RAM erase worker", "of the wait's start", request.Install.Address + " on port 22", stop, destroy, retain},
+		eraseForeignWorker:      {"another host key", "BMC console and boot order", stop, destroy, retain},
 		eraseReceiptTimeout:     {"within the erase deadline", stop, destroy},
 		eraseForeignCustody:     {"belongs to another request", destroy, retain},
 		eraseCustodyDrift:       {"differs from what its removal recorded", destroy, retain},
@@ -79,6 +80,9 @@ func TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy(t *testing
 					t.Fatalf("refusal %s = %q, want %q", reason, text, part)
 				}
 			}
+			if !slices.Equal(runner.requests[0].Groups, eraseGroupIDs(execution.Block)) || runner.requests[0].GroupNote == nil {
+				t.Fatalf("refusal %s ran without the declared groups or the erase note", reason)
+			}
 			uuid, _ := base64.StdEncoding.DecodeString(runner.requests[0].MaterialValues["pinnedUUIDBase64"])
 			if strings.Contains(text, string(uuid)) || strings.Contains(text, "lifecycle adapter") {
 				t.Fatalf("refusal %s carries a pinned value or the generic adapter failure: %q", reason, text)
@@ -87,5 +91,22 @@ func TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy(t *testing
 	}
 	if len(eraseRefusals("lab", "", machine, "https://bmc", "192.0.2.10")) != 15 {
 		t.Fatal("the erase refusal vocabulary is not the fifteen codes the collection names")
+	}
+}
+
+func TestAnUnansweredEraseWorkerNoteIsWordedFromItsClosedDetailOnly(t *testing.T) {
+	note := eraseGroupNote("198.51.100.41")
+	if got, ok := note("erase-1", "unanswered:refused:3min"); !ok || got != "waiting for the erase worker at 198.51.100.41, no answer for 3 min (refused)" {
+		t.Fatalf("note = %q, %v", got, ok)
+	}
+	for _, detail := range []string{"", "unanswered:refused", "unanswered:host-key:3min", "unanswered:refused:0min", "unanswered:refused:03min",
+		"unanswered:refused:3", "answered:refused:3min", "unanswered:refused:3min:x", "unanswered:refused:-1min"} {
+		if got, ok := note("erase-1", detail); ok {
+			t.Fatalf("detail %q worded %q", detail, got)
+		}
+	}
+	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Groups: []reconciliation.Group{{ID: "erase-1"}, {ID: "erase-2"}}}}
+	if got := eraseGroupIDs(block); !slices.Equal(got, []string{"erase-1", "erase-2"}) {
+		t.Fatalf("ids = %v", got)
 	}
 }

@@ -331,6 +331,24 @@ func TestDecodeReadsAGroupsByteProgressForALifecycleRunOnly(t *testing.T) {
 	refuses(t, Controller, `{"group":"x","phase":"group","progress":{"completed":0,"total":1},"status":"running"}`)
 }
 
+func TestDecodeReadsARunningGroupsClosedDetailForALifecycleRunOnly(t *testing.T) {
+	records := accepts(t, Lifecycle,
+		`{"detail":"unanswered:refused:3min","group":"erase-1","phase":"group","status":"running"}`,
+		`{"detail":"unanswered:host-key:1min","group":"erase-2","phase":"group","progress":{"completed":0,"total":2},"status":"running"}`,
+	)
+	if records[0].Detail != "unanswered:refused:3min" || records[1].Detail != "unanswered:host-key:1min" || records[1].Progress == nil {
+		t.Fatalf("records = %+v", records)
+	}
+	refuses(t, Controller, `{"detail":"unanswered:refused:3min","group":"erase-1","phase":"group","status":"running"}`)
+	refuses(t, Lifecycle,
+		`{"detail":"unanswered:refused:3min","group":"erase-1","phase":"group","status":"ok"}`,
+		`{"detail":"","group":"erase-1","phase":"group","status":"running"}`,
+		`{"detail":"waiting for 3 min","group":"erase-1","phase":"group","status":"running"}`,
+		`{"detail":"`+strings.Repeat("a", 161)+`","group":"erase-1","phase":"group","status":"running"}`,
+		`{"detail":1,"group":"erase-1","phase":"group","status":"running"}`,
+	)
+}
+
 func TestDecodeRefusesAMalformedByteProgressLikeAnyMalformedMember(t *testing.T) {
 	for _, progress := range []string{
 		`null`, `[]`, `1`, `"1"`, `{}`,

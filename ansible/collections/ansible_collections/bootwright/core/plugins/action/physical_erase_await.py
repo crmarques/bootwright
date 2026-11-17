@@ -11,7 +11,7 @@ not take is dropped, and neither ever refuses or proves anything.
 
 from __future__ import annotations
 
-import re
+import math
 import time
 
 from ansible.plugins.action import ActionBase
@@ -33,13 +33,19 @@ FIRST_ANSWER_SECONDS = 900 + 300
 SILENCE_SECONDS = 600
 DEADLINE_MARGIN_SECONDS = 900
 ROUND_SECONDS = 5
-# A target's count is reported when it moved, at most once a minute, and a
-# run hands at most this many running records, within the runner's bound of
-# 4096 (internal/adapterprotocol).
+# A run hands at most this many running records, within the runner's bound
+# of 4096 (internal/adapterprotocol), and keeps NOTE_RECORDS of them for the
+# waiting note. A target's count is reported when it moved, at most once per
+# interval: a minute, or longer when that many targets over the whole wait
+# would outrun the rest of the budget.
 PROGRESS_SECONDS = 60
 PRESENTATION_RECORDS = 4000
+NOTE_RECORDS = 800
+# An unanswered session's closed failure classes. A host key other than the
+# pinned erase-only key means another host answered at the install address,
+# such as the installed system after a boot that skipped the erase media.
 CAUSES = ("timeout", "refused", "no-route", "host-key", "auth", "exit")
-ADDRESS = re.compile(r"[A-Za-z0-9.:-]{1,253}")
+FOREIGN_CAUSES = ("host-key",)
 
 
 def group(index):
@@ -47,23 +53,39 @@ def group(index):
     return "erase-%d" % (index + 1)
 
 
-class Reporter:
-    """The running records of one wait, within its budget; a refused record is dropped."""
+def interval(targets, seconds, budget):
+    """The seconds between two reports of one target, so every target reports across the whole wait within budget."""
+    return max(PROGRESS_SECONDS, math.ceil(seconds * max(targets, 1) / max(budget, 1)))
 
-    def __init__(self, channel, address, targets, budget=PRESENTATION_RECORDS):
-        self.channel, self.address, self.targets, self.budget = channel, address, targets, budget
+
+class Reporter:
+    """The running records of one wait, within its budgets; a refused record is dropped.
+
+    Every record names a group the plan declares, one per target: progress
+    and the waiting note alike, the note as the closed detail
+    unanswered:<class>:<minutes>min that Go words for the operator.
+    """
+
+    def __init__(self, channel, targets, seconds, budget=PRESENTATION_RECORDS, notes=NOTE_RECORDS):
+        self.channel, self.targets = channel, targets
+        self.budget, self.notes = budget - notes, notes
+        self.every = interval(targets, seconds, self.budget)
         self.last = {}
         self.waited = None
 
-    def record(self, name, status, progress=None):
-        if status == "running":
-            if self.budget <= 0:
-                return
-            self.budget -= 1
+    def record(self, name, status, progress=None, detail=None):
         arguments = {"phase": "group", "group": name, "status": status}
         if progress is not None:
             arguments["progress"] = progress
+        if detail is not None:
+            arguments["detail"] = detail
         adapter_protocol.publish(arguments, protocol.CAPABILITY, self.channel)
+
+    def running(self, name, progress):
+        if self.budget <= 0:
+            return
+        self.budget -= 1
+        self.record(name, "running", progress)
 
     def progress(self, measured, now):
         """Each target's count that moved, at most once a minute, or at once after a silence was shown."""
@@ -75,18 +97,20 @@ class Reporter:
             return
         for index, value in enumerate(measured):
             seen = self.last.get(index)
-            if not resumed and seen is not None and (seen[1] == value or now - seen[0] < PROGRESS_SECONDS):
+            if not resumed and seen is not None and (seen[1] == value or now - seen[0] < self.every):
                 continue
             self.last[index] = (now, value)
-            self.record(group(index), "running", value)
+            self.running(group(index), value)
 
     def waiting(self, cause, silent):
-        """The visible status of a worker no session reaches, once per whole minute of silence."""
+        """The visible note on every target of a worker no session reaches, once per whole minute of silence."""
         minutes = int(silent // 60)
-        if minutes < 1 or minutes == self.waited:
+        if minutes < 1 or minutes == self.waited or self.notes < self.targets:
             return
         self.waited = minutes
-        self.record("waiting for the erase worker at %s, no answer for %d min (%s)" % (self.address, minutes, cause), "running")
+        self.notes -= self.targets
+        for index in range(self.targets):
+            self.record(group(index), "running", detail="unanswered:%s:%dmin" % (cause, minutes))
 
     def settled(self):
         for index in range(self.targets):
@@ -103,12 +127,10 @@ def wait(poll, request, channel, clock=time.monotonic, pause=time.sleep):
     The result is the module's own shape: the receipt, or a named refusal
     with its detail and controller line, or the module's generic failure.
     """
-    address = request["install"]["address"]
-    if not isinstance(address, str) or not ADDRESS.fullmatch(address):
-        address = "its install address"
-    reporter = Reporter(channel, address, len(request["targets"]))
+    seconds = request["deadlineSeconds"] + DEADLINE_MARGIN_SECONDS
+    reporter = Reporter(channel, len(request["targets"]), seconds)
     began = clock()
-    deadline = began + request["deadlineSeconds"] + DEADLINE_MARGIN_SECONDS
+    deadline = began + seconds
     answered, cause = None, "exit"
     while clock() < deadline:
         answer = poll()
@@ -127,6 +149,8 @@ def wait(poll, request, channel, clock=time.monotonic, pause=time.sleep):
                 reporter.progress(answer.get("progress"), now)
         elif kind == "unanswered":
             cause = answer.get("cause") if answer.get("cause") in CAUSES else cause
+            if answer.get("cause") in FOREIGN_CAUSES:
+                return refused("foreign-worker", answer["cause"])
             silent = now - (began if answered is None else answered)
             if silent >= (FIRST_ANSWER_SECONDS if answered is None else SILENCE_SECONDS):
                 return refused("worker-unreachable", "%s:%dmin" % (cause, silent // 60))

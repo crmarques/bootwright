@@ -1,8 +1,13 @@
 package physicalerase
 
 import (
+	"slices"
+	"strconv"
+	"strings"
+
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 func refusal(code, message, remediation string) error {
@@ -64,11 +69,11 @@ func eraseRefusals(contextName, continuation, machine, endpoint, address string)
 		eraseWorkerFailed: refused("the RAM erase worker of "+identity+" stopped without a complete receipt, so no target is proved erased",
 			stop+again+repeats),
 		eraseWorkerUnreachable: refused("the controller did not reach the RAM erase worker of "+identity+" at "+address+
-			" within 20 minutes of its boot, or for 10 minutes after its last answer, so no target is proved erased",
+			" within 20 minutes of the wait's start, or for 10 minutes after its last answer, so no target is proved erased",
 			"check that the controller reaches "+address+" on port 22 (the address "+identity+" was installed with) and look at its BMC console; then "+
 				stop+again+repeats+retain),
-		eraseForeignWorker: refused("the RAM erase worker answering for "+identity+" belongs to another request or removal attempt, so its receipt was not accepted",
-			stop+again+repeats+retain),
+		eraseForeignWorker: refused("the host answering at "+address+" for "+identity+" is not this removal's RAM erase worker: it belongs to another request or removal attempt, or it answered with another host key, as the installed system does when the machine did not boot its erase media, so its receipt was not accepted",
+			"look at the BMC console and boot order of "+identity+" to see what booted; "+stop+again+repeats+retain),
 		eraseReceiptTimeout: refused("the RAM erase worker of "+identity+" did not report a complete receipt within the erase deadline",
 			stop+again+repeats),
 		eraseForeignCustody: refused("the private erase custody of "+identity+" on the execution host belongs to another request, so it was not used",
@@ -79,5 +84,29 @@ func eraseRefusals(contextName, continuation, machine, endpoint, address string)
 			"restore that image with bootwright media add and check it with bootwright media list --checksums, "+again),
 		eraseImageBuildFailed: refused("the erase image of "+identity+" could not be built from its pinned installer image within its time bound, so the machine was not booted",
 			"check the execution host's free space and its mkksiso and xorriso installation, "+again),
+	}
+}
+
+var eraseSessionCauses = []string{"timeout", "refused", "no-route", "auth", "exit"}
+
+func eraseGroupIDs(block reconciliation.Block) []string {
+	ids := make([]string, 0, len(block.Groups))
+	for _, group := range block.Groups {
+		ids = append(ids, group.ID)
+	}
+	return ids
+}
+
+func eraseGroupNote(address string) func(string, string) (string, bool) {
+	return func(_, detail string) (string, bool) {
+		parts := strings.Split(detail, ":")
+		if len(parts) != 3 || parts[0] != "unanswered" || !slices.Contains(eraseSessionCauses, parts[1]) {
+			return "", false
+		}
+		minutes, err := strconv.Atoi(strings.TrimSuffix(parts[2], "min"))
+		if err != nil || minutes < 1 || parts[2] != strconv.Itoa(minutes)+"min" {
+			return "", false
+		}
+		return "waiting for the erase worker at " + address + ", no answer for " + strconv.Itoa(minutes) + " min (" + parts[1] + ")", true
 	}
 }

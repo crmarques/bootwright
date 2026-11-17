@@ -2065,6 +2065,23 @@ func TestProgressCarriesAGroupsBytesWithoutChangingItsRows(t *testing.T) {
 	}
 }
 
+func TestAGroupsNoteReplacesItsRowsDescriptionWhileItRuns(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, "artifact-server-lab")
+	progress := &testProgress{}
+	h.service.options.Progress = progress
+	h.capability.groupBytes = ByteProgress{Note: "waiting for the image registry, no answer for 3 min (refused)"}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	noted := slices.IndexFunc(progress.rows, func(row string) bool {
+		return strings.Contains(row, ":waiting for the image registry, no answer for 3 min (refused):running")
+	})
+	if noted < 0 || len(progress.rows) != 4 {
+		t.Fatalf("progress = %q, want the running row worded by its note", progress.rows)
+	}
+}
+
 func TestDeclinedConfirmationRegistersNothing(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")

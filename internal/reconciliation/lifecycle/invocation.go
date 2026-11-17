@@ -99,6 +99,8 @@ type RunRequest struct {
 	// and what to change; a reason not listed here breaks the protocol.
 	Refusals     map[string]error
 	NativeErrors bool
+	Groups       []string
+	GroupNote    func(group, detail string) (string, bool)
 	// Deadline bounds the run: the capability derives it from the waits its
 	// frozen request budgets, and the runner honors it as stated. Zero keeps
 	// the runner's default.
@@ -162,6 +164,8 @@ type Invocation struct {
 	// with the diagnostic it reports in place of the adapter's failure.
 	Refusals     map[string]error
 	NativeErrors bool
+	Groups       []string
+	GroupNote    func(group, detail string) (string, bool)
 	// Deadline is the run's own deadline, derived from the budgets the frozen
 	// request carries; zero keeps the runner's default.
 	Deadline           time.Duration
@@ -216,6 +220,8 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		OutputRemediation: attemptOutputRemediation(execution),
 		Refusals:          maps.Clone(invocation.Refusals),
 		NativeErrors:      invocation.NativeErrors,
+		Groups:            slices.Clone(invocation.Groups),
+		GroupNote:         invocation.GroupNote,
 		Deadline:          invocation.Deadline,
 		ReadOnly:          readOnly,
 		Unrecorded:        !Recorded(execution),

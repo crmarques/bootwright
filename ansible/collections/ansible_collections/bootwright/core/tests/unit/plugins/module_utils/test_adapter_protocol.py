@@ -124,6 +124,18 @@ def test_a_progress_the_go_decoder_would_refuse_is_left_out_and_never_fails_the_
         assert records == [({"phase": "group", "group": "erase-1", "status": "running"}, False)]
 
 
+def test_a_running_group_carries_a_closed_detail_only_for_a_detailed_capability():
+    detailed = adapter_protocol.Capability("widget", "unpublished", completion, phases=adapter_protocol.REFUSING_PHASES, detail=True)
+    note = {"phase": "group", "group": "erase-1", "status": "running", "detail": "unanswered:refused:3min"}
+    assert published(note, detailed)[1] == [(note, False)]
+    plain = {"phase": "group", "group": "erase-1", "status": "running"}
+    assert published(note)[1] == [(plain, False)], "a capability without details carried one"
+    for changed in ({"status": "ok"}, {"detail": ""}, {"detail": "waiting 3 min"}, {"detail": "a" * 161}, {"detail": 3}):
+        record = dict(note, **changed)
+        expected = {key: value for key, value in record.items() if key != "detail"}
+        assert published(record, detailed) == ({"changed": False}, [(expected, False)]), changed
+
+
 def test_a_refusal_the_capability_does_not_name_is_refused():
     result, records = published({"phase": "refused", "reason": "widget-busy"})
     assert result == {"changed": False}
