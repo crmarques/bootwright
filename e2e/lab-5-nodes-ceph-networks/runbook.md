@@ -200,7 +200,7 @@ material stays in files; nothing below prints it.
 
 ```bash
 BUNDLE="$RUN_DIR/e2e-sample"; mkdir -m 0700 "$BUNDLE"
-cp "$CASE_DIR/app/sample-server.py" "$CASE_DIR/app/app-setup.sh" "$CASE_DIR/app/app-teardown.sh" "$BUNDLE/"
+cp "$CASE_DIR/app/sample-server.py" "$CASE_DIR/app/attach.py" "$CASE_DIR/app/app-setup.sh" "$CASE_DIR/app/app-teardown.sh" "$BUNDLE/"
 cat > "$BUNDLE/sample.env" <<EOF
 USER_ADDRESS=$APP_USER
 PORT=$APP_PORT

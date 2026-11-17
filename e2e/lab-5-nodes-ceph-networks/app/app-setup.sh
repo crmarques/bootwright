@@ -7,9 +7,10 @@
 #
 # The bundle holds sample.env, ceph.conf (the cluster's minimal
 # configuration), cephfs-path, app-block.keyring, app-files.keyring, s3.json,
-# rgw-ca.pem and sample-server.py. It maps the RBD image and mounts the CephFS
-# subvolume with the kernel clients, so no Ceph package is installed here, and
-# every key reaches the kernel from a root-only file, never from an argument.
+# rgw-ca.pem, sample-server.py and attach.py. It maps the RBD image and mounts
+# the CephFS subvolume with the kernel clients, so no Ceph package is installed
+# here, and every key reaches the kernel from a root-only file, never from an
+# argument.
 # A repeated run keeps what is already attached.
 set -euo pipefail
 umask 077
@@ -20,6 +21,8 @@ bundle=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 : "${USER_ADDRESS:?}" "${PORT:?}" "${USER_CIDR:?}" "${RBD_POOL:?}" "${RBD_IMAGE:?}"
 : "${BLOCK_CLIENT:?}" "${FILE_CLIENT:?}" "${FS_NAME:?}"
 : "${S3_VIP:?}" "${S3_HOST:?}" "${S3_BUCKET:?}" "${S3_REGION:?}"
+
+attach() { /usr/bin/python3 -I "$bundle/attach.py" "$@"; }
 
 etc=/etc/e2e-sample
 lib=/usr/local/libexec/e2e-sample
@@ -35,25 +38,12 @@ install -m 0644 "$bundle/rgw-ca.pem" "$etc/rgw-ca.pem"
 
 # The base64 key of a keyring file, or the file's text when it holds a bare key.
 for client in "$BLOCK_CLIENT" "$FILE_CLIENT"; do
-    /usr/bin/python3 -I -c '
-import re, sys
-text = open(sys.argv[1]).read()
-match = re.search(r"^\s*key\s*=\s*(\S+)", text, re.M)
-sys.stdout.write(match.group(1) if match else text.strip())
-' "$bundle/$client.keyring" > "$etc/$client.secret"
+    attach keyring "$bundle/$client.keyring" > "$etc/$client.secret"
     test -s "$etc/$client.secret"
 done
 
 # The MONs' msgr v1 addresses (ip:port,...), the kernel clients' default protocol.
-monitors=$(/usr/bin/python3 -I -c '
-import re, sys
-text = open(sys.argv[1]).read()
-line = re.search(r"^\s*mon_host\s*=\s*(.+)$", text, re.M).group(1)
-pairs = re.findall(r"v1:([0-9.]+):([0-9]+)", line)
-if not pairs:
-    pairs = [(ip, "6789") for ip in re.findall(r"\b([0-9]+(?:\.[0-9]+){3})\b", line)]
-print(",".join(ip + ":" + port for ip, port in pairs))
-' "$bundle/ceph.conf")
+monitors=$(attach monitors "$bundle/ceph.conf")
 test -n "$monitors"
 printf 'MON addresses: %s\n' "$monitors"
 
@@ -96,32 +86,12 @@ fi
 # CephFS through mount(2) directly, so the key never appears in a process
 # argument and no mount.ceph helper is needed.
 if ! mountpoint -q "$file_dir"; then
-    /usr/bin/python3 -I -c '
-import ctypes, os, sys
-monitors, path, client, secret_file, fs_name, target = sys.argv[1:]
-secret = open(secret_file).read().strip()
-options = "name=%s,secret=%s,mds_namespace=%s" % (client, secret, fs_name)
-libc = ctypes.CDLL("libc.so.6", use_errno=True)
-if libc.mount((monitors + ":" + path).encode(), target.encode(), b"ceph", 0, options.encode()) != 0:
-    error = ctypes.get_errno()
-    sys.exit("CephFS mount failed: %s" % os.strerror(error))
-' "$monitors" "$(cat "$bundle/cephfs-path")" "$FILE_CLIENT" "$etc/$FILE_CLIENT.secret" "$FS_NAME" "$file_dir"
+    attach mount "$monitors" "$(cat "$bundle/cephfs-path")" "$FILE_CLIENT" "$etc/$FILE_CLIENT.secret" "$FS_NAME" "$file_dir"
 fi
 findmnt -n -o SOURCE,FSTYPE,TARGET "$block_dir"
 findmnt -n -o SOURCE,FSTYPE,TARGET "$file_dir"
 
-/usr/bin/python3 -I -c '
-import json, sys
-monitors = [pair.split(":")[0] for pair in sys.argv[1].split(",")]
-config = {
-    "listen": sys.argv[2], "port": int(sys.argv[3]),
-    "blockDir": sys.argv[4], "fileDir": sys.argv[5], "monitors": monitors,
-    "s3": {"vip": sys.argv[6], "host": sys.argv[7], "bucket": sys.argv[8], "region": sys.argv[9],
-           "caFile": sys.argv[10] + "/rgw-ca.pem", "credentialsFile": sys.argv[10] + "/s3.json"},
-}
-with open(sys.argv[10] + "/config.json", "w") as handle:
-    json.dump(config, handle, indent=2, sort_keys=True)
-' "$monitors" "$USER_ADDRESS" "$PORT" "$block_dir" "$file_dir" "$S3_VIP" "$S3_HOST" "$S3_BUCKET" "$S3_REGION" "$etc"
+attach config "$monitors" "$USER_ADDRESS" "$PORT" "$block_dir" "$file_dir" "$S3_VIP" "$S3_HOST" "$S3_BUCKET" "$S3_REGION" "$etc"
 
 # Admit the server port from the user network only, until the next reload.
 rule="rule family=ipv4 source address=$USER_CIDR port port=$PORT protocol=tcp accept"
