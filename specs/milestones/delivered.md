@@ -17052,3 +17052,19 @@ proof replaces installation's direct read of discovery evidence. Implementation
 identities, requests, digests and request goldens are unchanged; the contract
 goldens moved only in their struct labels.
 
+## X552 — The context store's kernel
+
+### B1522
+
+Split from B1469 under [D274](backlog.md#d274) (audit 005 W8.5). One
+`lendSecretArea` and one secret-record prologue replace their copies, and one
+`withRead` prologue serves every read entry point of the context store,
+including the log read the audit missed, with each entry point's refusals and
+lock reports set by its scope. The handle-safe filesystem kernel (directories,
+relative opens, identity and privacy checks, the held listing, the walk to the
+root and the locks) is `internal/workspace/contextfs/kernel`, which only its
+parent adapter may import; media and SSH trust are types of their own behind
+the Store's unchanged ports. Every refusal, crash point and recovery is
+unchanged. Stage publication and collection and the context-tree walk stay in
+contextfs until the kernel has a checkpoint port.
+
