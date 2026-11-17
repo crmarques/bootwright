@@ -13,6 +13,8 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -57,9 +59,9 @@ func setupLogError(err error) error {
 // directory holds. A name a setup output takes that is no private regular file
 // within its bound refuses; every other name is ignored.
 func setupRunNumbers(ctx context.Context, host *directory) ([]int, error) {
-	names, err := directoryNames(host, maxOperationEntries)
+	names, err := kernel.DirectoryNames(host, maxOperationEntries)
 	if err != nil {
-		return nil, setupRunAccessError(host.path, err)
+		return nil, setupRunAccessError(host.Path, err)
 	}
 	numbers := []int{}
 	for _, name := range names {
@@ -70,12 +72,12 @@ func setupRunNumbers(ctx context.Context, host *directory) ([]int, error) {
 		if !valid {
 			continue
 		}
-		location := filepath.Join(host.path, name)
+		location := filepath.Join(host.Path, name)
 		stat, err := listedEntry(host, name)
 		if err != nil {
 			return nil, setupRunAccessError(location, err)
 		}
-		if !private(stat, syscall.S_IFREG, host.identity.Uid, host.identity.Gid) || stat.Dev != host.identity.Dev || stat.Size > maxSetupRunOutput {
+		if !kernel.Private(stat, syscall.S_IFREG, host.Identity.Uid, host.Identity.Gid) || stat.Dev != host.Identity.Dev || stat.Size > maxSetupRunOutput {
 			return nil, unsafeSetupRun(location, "it is not a private regular file within its bound")
 		}
 		numbers = append(numbers, number)
@@ -128,7 +130,7 @@ func (s *Store) nextSetupRun(ctx context.Context, host *directory, recorded int)
 // call verified.
 func (s *Store) removeSetupRun(ctx context.Context, host *directory, number int) error {
 	name := setupRunName(number) + outputSuffix
-	location := filepath.Join(host.path, name)
+	location := filepath.Join(host.Path, name)
 	stat, err := listedEntry(host, name)
 	if err == nil {
 		err = unlinkVerified(host, name, stat, false)
@@ -137,16 +139,16 @@ func (s *Store) removeSetupRun(ctx context.Context, host *directory, number int)
 		return setupRunAccessError(location, err)
 	}
 	if err := s.syncDirectory(ctx, host); err != nil {
-		return setupRunAccessError(host.path, err)
+		return setupRunAccessError(host.Path, err)
 	}
 	return nil
 }
 
 func setupRunAccessError(path string, err error) error {
 	var errno syscall.Errno
-	var ioErr *ioFailure
-	var listing *listingFailure
-	if errors.As(err, &listing) && listing.kind == listingUnreadable {
+	var ioErr *kernel.IOFailure
+	var listing *kernel.ListingFailure
+	if errors.As(err, &listing) && listing.Kind == kernel.ListingUnreadable {
 		return err
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.As(err, &ioErr) {
@@ -164,17 +166,17 @@ func (s *Store) createSetupRun(ctx context.Context, host *directory, name string
 	if err := s.checkpoint(ctx, checkpointCreateFile); err != nil {
 		return nil, err
 	}
-	location := filepath.Join(host.path, name)
-	file, err := openRelative(host, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
+	location := filepath.Join(host.Path, name)
+	file, err := kernel.OpenRelative(host, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
 	if err != nil {
 		return nil, setupRunAccessError(location, err)
 	}
-	created, err := statHandle(file)
+	created, err := kernel.StatHandle(file)
 	if err != nil {
 		file.Close()
 		return nil, setupRunAccessError(location, err)
 	}
-	if !private(created, syscall.S_IFREG, host.identity.Uid, host.identity.Gid) || created.Mode&0777 != 0600 {
+	if !kernel.Private(created, syscall.S_IFREG, host.Identity.Uid, host.Identity.Gid) || created.Mode&0777 != 0600 {
 		file.Close()
 		discardCreated(host, name, created)
 		return nil, unsafeSetupRun(location, "it could not be made durable as a private file")

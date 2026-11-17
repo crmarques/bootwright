@@ -30,8 +30,8 @@ against its directory) stays valid. A recorded device may still be written and
 quoted, as a context's incarnation quotes it, as long as nothing compares it
 with a live one. The owning rule is
 [recorded directory identity](../../specs/contexts.md#recorded-directory-identity);
-the helper is `recordedDirectory` in
-`internal/workspace/contextfs/files_linux_amd64.go`, and
+the helper is `RecordedDirectory` in
+`internal/workspace/contextfs/kernel/directory_linux_amd64.go`, and
 `internal/workspace/contextfs/recorded_directory_linux_amd64_test.go` holds a
 store whose recorded devices differ from the current ones to opening. Records
 the collection keeps on managed Ceph hosts (`ceph_tunnel_custody`,

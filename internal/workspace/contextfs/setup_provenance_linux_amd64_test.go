@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
@@ -137,9 +139,9 @@ func TestSetupRunAccessFailureClassification(t *testing.T) {
 		err    error
 		unsafe bool
 	}{
-		{"listing unavailable", &listingFailure{listingUnreadable, state("unavailable")}, false},
-		{"listing replaced", &listingFailure{listingReplaced, state("changed")}, true},
-		{"listing limit", &listingFailure{listingOverLimit, state("too many")}, true},
+		{"listing unavailable", &kernel.ListingFailure{Kind: kernel.ListingUnreadable, Failure: state("unavailable")}, false},
+		{"listing replaced", &kernel.ListingFailure{Kind: kernel.ListingReplaced, Failure: state("changed")}, true},
+		{"listing limit", &kernel.ListingFailure{Kind: kernel.ListingOverLimit, Failure: state("too many")}, true},
 		{"stat IO", &os.PathError{Op: "fstat", Path: "synthetic", Err: syscall.EIO}, false},
 		{"storage IO", storeFailure("unavailable", syscall.EIO), false},
 		{"cancel", context.Canceled, false},
@@ -161,11 +163,11 @@ func TestSetupLogInspectionWithUnavailableStatIsOptional(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity, err := statHandle(file)
+	identity, err := kernel.StatHandle(file)
 	if err != nil {
 		t.Fatal(err)
 	}
-	run := &directory{file: file, path: file.Name(), identity: identity}
+	run := &directory{File: file, Path: file.Name(), Identity: identity}
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}

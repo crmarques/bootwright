@@ -9,6 +9,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
@@ -57,7 +59,7 @@ func (a *secretArea) SyncFile(ctx context.Context, path string) error {
 		return secretConflict(ctx, "secret synchronization parent cannot be verified", err)
 	}
 	defer close()
-	if !sameIdentity(parent.identity, expected.parentIdentity) {
+	if !kernel.SameIdentity(parent.Identity, expected.parentIdentity) {
 		return secretConflict(ctx, "secret synchronization parent was replaced", nil)
 	}
 	if err := a.store.syncVerifiedFile(ctx, parent, name, expected.identity); err != nil {
@@ -226,7 +228,7 @@ func (a *secretArea) removeObserved(ctx context.Context, target secretCleanupTar
 		return secretConflict(ctx, "secret cleanup parent cannot be verified", err)
 	}
 	defer close()
-	if !sameIdentity(parent.identity, target.expectation.parentIdentity) {
+	if !kernel.SameIdentity(parent.Identity, target.expectation.parentIdentity) {
 		return secretConflict(ctx, "secret cleanup parent was replaced", nil)
 	}
 	directory := target.expectation.identity.Mode&syscall.S_IFMT == syscall.S_IFDIR
@@ -246,16 +248,16 @@ func (a *secretArea) removeObserved(ctx context.Context, target secretCleanupTar
 }
 
 func verifySecretObserved(parent *directory, name string, expected syscall.Stat_t) error {
-	if err := parent.verify(); err != nil {
+	if err := parent.Verify(); err != nil {
 		return err
 	}
-	file, err := openRelative(parent, name, pathHandle, 0)
+	file, err := kernel.OpenRelative(parent, name, kernel.PathHandle, 0)
 	if err != nil {
 		return state("secret cleanup store cannot be verified")
 	}
 	defer file.Close()
-	actual, err := statHandle(file)
-	if err != nil || !sameFile(expected, actual) {
+	actual, err := kernel.StatHandle(file)
+	if err != nil || !kernel.SameFile(expected, actual) {
 		return state("secret cleanup store was replaced or modified")
 	}
 	return nil

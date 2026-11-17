@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -29,21 +31,9 @@ const (
 // unsafeRoot names what the state root is and what it must be.
 func unsafeRoot(stat syscall.Stat_t, uid, gid uint32) error {
 	return contexts.StateErrorWithRemediation(
-		"the state root is "+fileKind(stat.Mode)+" owned by "+ownerText(stat.Uid, stat.Gid)+" with mode "+modeText(stat.Mode)+
+		"the state root is "+kernel.FileKind(stat.Mode)+" owned by "+ownerText(stat.Uid, stat.Gid)+" with mode "+modeText(stat.Mode)+
 			", but it must be a directory owned by "+ownerText(uid, gid)+" with mode 0700",
 		unsafeRootRemediation)
-}
-
-func fileKind(mode uint32) string {
-	switch mode & syscall.S_IFMT {
-	case syscall.S_IFDIR:
-		return "a directory"
-	case syscall.S_IFREG:
-		return "a regular file"
-	case syscall.S_IFLNK:
-		return "a symbolic link"
-	}
-	return "a special file"
 }
 
 func ownerText(uid, gid uint32) string {
@@ -135,11 +125,11 @@ func (s *Store) withRead(ctx context.Context, how int, scope readScope, callback
 	if err != nil {
 		return safeError(err)
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	if how == syscall.LOCK_EX {
 		err = awaitRoot(ctx, s, root, syscall.LOCK_EX)
 	} else {
-		err = lockShared(root)
+		err = kernel.LockShared(root)
 	}
 	if err != nil && scope.held != nil {
 		return scope.held(err)
@@ -147,7 +137,7 @@ func (s *Store) withRead(ctx context.Context, how int, scope readScope, callback
 	if err != nil {
 		return err
 	}
-	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
+	defer syscall.Flock(int(root.File.Fd()), syscall.LOCK_UN)
 	registry, exists, err := readRegistry(ctx, root)
 	if err != nil {
 		return safeError(err)
@@ -255,7 +245,7 @@ func pendingInitialRegistryName(name string) bool {
 }
 
 func rootEntryNames(root *directory, maximum int) ([]string, error) {
-	names, err := heldNames(root, maximum)
+	names, err := kernel.HeldNames(root, maximum)
 	if err != nil {
 		return nil, rootListingError(err)
 	}
@@ -265,23 +255,23 @@ func rootEntryNames(root *directory, maximum int) ([]string, error) {
 // rootHoldsEntries answers whether the state root holds any entry, listing it
 // through a fresh handle so the held one keeps its directory offset.
 func rootHoldsEntries(root *directory) (bool, error) {
-	_, err := heldNames(root, 0)
-	var failed *listingFailure
-	if errors.As(err, &failed) && failed.kind == listingOverLimit {
+	_, err := kernel.HeldNames(root, 0)
+	var failed *kernel.ListingFailure
+	if errors.As(err, &failed) && failed.Kind == kernel.ListingOverLimit {
 		return true, nil
 	}
 	return false, rootListingError(err)
 }
 
 func rootListingError(err error) error {
-	var failed *listingFailure
+	var failed *kernel.ListingFailure
 	if !errors.As(err, &failed) {
 		return err
 	}
-	switch failed.kind {
-	case listingReplaced:
+	switch failed.Kind {
+	case kernel.ListingReplaced:
 		return state("state root changed during enumeration")
-	case listingOverLimit:
+	case kernel.ListingOverLimit:
 		return state("state root entry count exceeds its limit")
 	}
 	return state("state root cannot be enumerated safely")
@@ -329,11 +319,11 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 		switch name {
 		case "registry.json":
 		case "contexts":
-			dir, err := openDirectory(root, name)
+			dir, err := kernel.OpenDirectory(root, name)
 			if err != nil {
 				return err
 			}
-			dir.file.Close()
+			dir.File.Close()
 		case controllerContainer:
 			if err := verifyControllerContainer(root, registry); isUnattributedEntry(err) {
 				unattributed = err
@@ -341,11 +331,11 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 				return err
 			}
 		case mediaContainer:
-			dir, err := openDirectory(root, name)
+			dir, err := kernel.OpenDirectory(root, name)
 			if err != nil {
 				return err
 			}
-			dir.file.Close()
+			dir.File.Close()
 		default:
 			if !pendingInitialRegistryName(name) {
 				unattributed = unattributedRootEntry()
@@ -363,19 +353,19 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 	if err != nil || !slices.Equal(names, current) {
 		return unsupportedRootState()
 	}
-	if err := root.verify(); err != nil {
+	if err := root.Verify(); err != nil {
 		return err
 	}
 	return unattributed
 }
 
 func verifyControllerContainer(root *directory, registry contexts.Registry) error {
-	host, err := openDirectory(root, controllerContainer)
+	host, err := kernel.OpenDirectory(root, controllerContainer)
 	if err != nil {
 		return err
 	}
-	defer host.file.Close()
-	names, err := directoryNames(host, maxContexts+1)
+	defer host.File.Close()
+	names, err := kernel.DirectoryNames(host, maxContexts+1)
 	if err != nil {
 		return unsupportedRootState()
 	}
@@ -383,11 +373,11 @@ func verifyControllerContainer(root *directory, registry contexts.Registry) erro
 	for _, name := range names {
 		switch name {
 		case installSubtree:
-			dir, err := openDirectory(host, name)
+			dir, err := kernel.OpenDirectory(host, name)
 			if err != nil {
 				return err
 			}
-			dir.file.Close()
+			dir.File.Close()
 		case controllerSubtree:
 			if err := verifyControllerEntry(host, registry); err != nil {
 				return err
@@ -396,7 +386,7 @@ func verifyControllerContainer(root *directory, registry contexts.Registry) erro
 			unattributed = unattributedRootEntry()
 		}
 	}
-	if err := host.verify(); err != nil {
+	if err := host.Verify(); err != nil {
 		return err
 	}
 	return unattributed
@@ -406,12 +396,12 @@ func verifyControllerEntry(host *directory, registry contexts.Registry) error {
 	if registry.Controller == (contexts.ControllerDescriptor{}) {
 		return state("context store contains an undeclared controller subtree")
 	}
-	dir, err := openDirectory(host, controllerSubtree)
+	dir, err := kernel.OpenDirectory(host, controllerSubtree)
 	if err != nil {
 		return err
 	}
-	replaced := registry.Controller.DirectoryInode != 0 && !dir.recorded(registry.Controller.DirectoryInode)
-	dir.file.Close()
+	replaced := registry.Controller.DirectoryInode != 0 && !dir.Recorded(registry.Controller.DirectoryInode)
+	dir.File.Close()
 	if replaced {
 		return state("controller directory was replaced")
 	}
@@ -422,35 +412,35 @@ func verifyIgnoredRegistryStage(ctx context.Context, root *directory, name strin
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	file, err := openRelative(root, name, pathHandle, 0)
+	file, err := kernel.OpenRelative(root, name, kernel.PathHandle, 0)
 	if err != nil {
 		return err
 	}
-	before, err := statHandle(file)
+	before, err := kernel.StatHandle(file)
 	file.Close()
-	if err != nil || before.Dev != root.identity.Dev || !private(before, syscall.S_IFREG, root.identity.Uid, root.identity.Gid) || before.Size < 0 || before.Size > maxRegistry {
+	if err != nil || before.Dev != root.Identity.Dev || !kernel.Private(before, syscall.S_IFREG, root.Identity.Uid, root.Identity.Gid) || before.Size < 0 || before.Size > maxRegistry {
 		return state("unpublished registry stage is unsafe")
 	}
-	file, err = openRelative(root, name, pathHandle, 0)
+	file, err = kernel.OpenRelative(root, name, kernel.PathHandle, 0)
 	if err != nil {
 		return err
 	}
-	after, err := statHandle(file)
+	after, err := kernel.StatHandle(file)
 	file.Close()
-	if err != nil || !sameFile(before, after) {
+	if err != nil || !kernel.SameFile(before, after) {
 		return state("unpublished registry stage changed during verification")
 	}
-	return root.verify()
+	return root.Verify()
 }
 
 func (s *Store) syncPendingInitialRegistry(ctx context.Context, root *directory, name string, expected syscall.Stat_t) (syscall.Stat_t, error) {
-	file, err := openRelative(root, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	file, err := kernel.OpenRelative(root, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return syscall.Stat_t{}, initialRegistryRecoveryError("pending initial registry cannot be verified")
 	}
 	defer file.Close()
-	before, err := statHandle(file)
-	if err != nil || !sameFile(expected, before) {
+	before, err := kernel.StatHandle(file)
+	if err != nil || !kernel.SameFile(expected, before) {
 		return syscall.Stat_t{}, initialRegistryRecoveryError("pending initial registry changed during recovery")
 	}
 	if err := s.checkpoint(ctx, checkpointSyncInitialRegistryFile); err != nil {
@@ -459,11 +449,11 @@ func (s *Store) syncPendingInitialRegistry(ctx context.Context, root *directory,
 	if err := file.Sync(); err != nil {
 		return syscall.Stat_t{}, initialRegistryRecoveryError("pending initial registry durability could not be established")
 	}
-	after, err := statHandle(file)
-	if err != nil || !sameFile(before, after) {
+	after, err := kernel.StatHandle(file)
+	if err != nil || !kernel.SameFile(before, after) {
 		return syscall.Stat_t{}, initialRegistryRecoveryError("pending initial registry changed during recovery")
 	}
-	if err := root.verify(); err != nil {
+	if err := root.Verify(); err != nil {
 		return syscall.Stat_t{}, initialRegistryRecoveryError("state root changed during initial registry recovery")
 	}
 	return after, nil
@@ -494,7 +484,7 @@ func (s *Store) recoverInitialRegistry(ctx context.Context, root *directory) (bo
 		}
 		return false, initialRegistryRecoveryError("pending initial registry cannot be reverified safely")
 	}
-	if !recoverable || currentName != name || !sameFile(identity, currentIdentity) {
+	if !recoverable || currentName != name || !kernel.SameFile(identity, currentIdentity) {
 		return false, initialRegistryRecoveryError("pending initial registry changed during recovery")
 	}
 	if err := renameNoReplaceAt(root, name, "registry.json"); err != nil {
@@ -505,7 +495,7 @@ func (s *Store) recoverInitialRegistry(ctx context.Context, root *directory) (bo
 		return false, uncertainInitialRegistryRecovery()
 	}
 	published, publishedIdentity, err := readBoundedIdentity(ctx, root, "registry.json", maxRegistry, true)
-	if err != nil || !bytes.Equal(published, want) || !sameIdentity(currentIdentity, publishedIdentity) {
+	if err != nil || !bytes.Equal(published, want) || !kernel.SameIdentity(currentIdentity, publishedIdentity) {
 		return false, uncertainInitialRegistryRecovery()
 	}
 	if err := s.checkpoint(ctx, checkpointAfterInitialRegistryRecovery); err != nil {
@@ -523,7 +513,7 @@ func (s *Store) recoverInitialRegistry(ctx context.Context, root *directory) (bo
 		return false, uncertainInitialRegistryRecovery()
 	}
 	final, finalIdentity, err := readBoundedIdentity(ctx, root, "registry.json", maxRegistry, true)
-	if err != nil || !bytes.Equal(final, want) || !sameFile(publishedIdentity, finalIdentity) {
+	if err != nil || !bytes.Equal(final, want) || !kernel.SameFile(publishedIdentity, finalIdentity) {
 		return false, uncertainInitialRegistryRecovery()
 	}
 	return true, nil
@@ -582,7 +572,7 @@ func proveMappings(ctx context.Context, root *directory, registry contexts.Regis
 		}
 		close()
 	}
-	return sizes, root.verify()
+	return sizes, root.Verify()
 }
 
 // restoreStoreRemediation is the exit of damage a context's deletion cannot
@@ -650,21 +640,21 @@ func reservationDamage(ctx context.Context, name string, err error) error {
 // configuration and selected revision, and returns the size of the manifest
 // that revision references.
 func verifyContextMapping(ctx context.Context, root *directory, record contexts.Record) (int64, error) {
-	container, err := openDirectory(root, "contexts")
+	container, err := kernel.OpenDirectory(root, "contexts")
 	if err != nil {
 		return 0, contextDamage(ctx, record.Name, "contexts", err, restoreStoreRemediation)
 	}
-	defer container.file.Close()
+	defer container.File.Close()
 	entry := "contexts/" + record.Name
-	dir, err := openDirectory(container, record.Name)
+	dir, err := kernel.OpenDirectory(container, record.Name)
 	switch {
 	case errors.Is(err, syscall.ENOENT):
 		return 0, contextDamage(ctx, record.Name, entry, err, abandonRemediation(record.Name))
 	case err != nil:
 		return 0, contextDamage(ctx, record.Name, entry, err, restoreStoreRemediation)
 	}
-	defer dir.file.Close()
-	if record.DirectoryInode != 0 && !dir.recorded(record.DirectoryInode) {
+	defer dir.File.Close()
+	if record.DirectoryInode != 0 && !dir.Recorded(record.DirectoryInode) {
 		return 0, contextDamage(ctx, record.Name, entry, state("context directory was replaced"), replacedContextRemediation)
 	}
 	if err := verifyReservation(ctx, dir, record.Name); err != nil {
@@ -689,13 +679,13 @@ func verifyRevisionMapping(ctx context.Context, dir *directory, record contexts.
 	owned := []*directory{}
 	defer func() {
 		for i := len(owned) - 1; i >= 0; i-- {
-			owned[i].file.Close()
+			owned[i].File.Close()
 		}
 	}()
 	parent := dir
 	for _, name := range []string{"desired-state", "revisions", record.Revision} {
 		entry += "/" + name
-		child, err := openDirectory(parent, name)
+		child, err := kernel.OpenDirectory(parent, name)
 		if err != nil {
 			return 0, contextDamage(ctx, record.Name, entry, err, entryRemediation(record.Name, err))
 		}
@@ -703,13 +693,13 @@ func verifyRevisionMapping(ctx context.Context, dir *directory, record contexts.
 		parent = child
 	}
 	entry += "/manifest.json"
-	file, err := openRelative(parent, "manifest.json", pathHandle, 0)
+	file, err := kernel.OpenRelative(parent, "manifest.json", kernel.PathHandle, 0)
 	if err != nil {
 		return 0, contextDamage(ctx, record.Name, entry, err, entryRemediation(record.Name, err))
 	}
-	stat, err := statHandle(file)
+	stat, err := kernel.StatHandle(file)
 	file.Close()
-	if err != nil || !private(stat, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid) {
+	if err != nil || !kernel.Private(stat, syscall.S_IFREG, parent.Identity.Uid, parent.Identity.Gid) {
 		return 0, contextDamage(ctx, record.Name, entry, state("manifest handle is unsafe"), unsafeEntryRemediation)
 	}
 	if stat.Size < 0 || stat.Size > maxManifest {
@@ -719,18 +709,18 @@ func verifyRevisionMapping(ctx context.Context, dir *directory, record contexts.
 }
 
 func openContext(root *directory, record contexts.Record) (*directory, *directory, error) {
-	container, err := openDirectory(root, "contexts")
+	container, err := kernel.OpenDirectory(root, "contexts")
 	if err != nil {
 		return nil, nil, err
 	}
-	dir, err := openDirectory(container, record.Name)
+	dir, err := kernel.OpenDirectory(container, record.Name)
 	if err != nil {
-		container.file.Close()
+		container.File.Close()
 		return nil, nil, err
 	}
-	if record.DirectoryInode != 0 && !dir.recorded(record.DirectoryInode) {
-		dir.file.Close()
-		container.file.Close()
+	if record.DirectoryInode != 0 && !dir.Recorded(record.DirectoryInode) {
+		dir.File.Close()
+		container.File.Close()
 		return nil, nil, state("context directory was replaced")
 	}
 	return container, dir, nil
@@ -750,11 +740,11 @@ func (e *reservationFailure) Error() string { return e.failure.Error() }
 func (e *reservationFailure) Unwrap() error { return e.failure }
 
 func verifyReservation(ctx context.Context, dir *directory, name string) error {
-	runtime, err := openDirectory(dir, "state")
+	runtime, err := kernel.OpenDirectory(dir, "state")
 	if err != nil {
 		return &reservationFailure{state("context reservation directory is missing or unsafe"), "state", err}
 	}
-	defer runtime.file.Close()
+	defer runtime.File.Close()
 	data, err := readBounded(ctx, runtime, "reservation.json", maxRecord, true)
 	if err != nil {
 		return &reservationFailure{state("context reservation is missing or unsafe"), "state/reservation.json", err}
@@ -783,17 +773,17 @@ func readReadyMutation(ctx context.Context, dir *directory) ([]byte, error) {
 }
 
 func readEvidence(ctx context.Context, dir *directory, absentReadsEmpty bool) ([]byte, error) {
-	runtime, err := openDirectory(dir, "state")
+	runtime, err := kernel.OpenDirectory(dir, "state")
 	if err != nil {
 		return nil, err
 	}
-	defer runtime.file.Close()
+	defer runtime.File.Close()
 	data, err := readBounded(ctx, runtime, "mutation.json", maxRecord, true)
 	if absentReadsEmpty && errors.Is(err, syscall.ENOENT) {
 		return []byte{}, nil
 	}
 	if err != nil && !errors.Is(err, syscall.ENOENT) && ctx.Err() == nil {
-		return nil, contextDamage(ctx, dir.name, storeEntry(runtime, "mutation.json"), err, evidenceRemediation(dir.name))
+		return nil, contextDamage(ctx, dir.Name, storeEntry(runtime, "mutation.json"), err, evidenceRemediation(dir.Name))
 	}
 	return data, err
 }
@@ -905,15 +895,15 @@ func (s *Store) transactHeld(ctx context.Context, create, shared bool, inputs []
 	if err != nil {
 		return safeError(err)
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	hold := func(dir *directory) error { return awaitRoot(ctx, s, dir, syscall.LOCK_EX) }
 	if shared {
-		hold = lockShared
+		hold = kernel.LockShared
 	}
 	if err := hold(root); err != nil {
 		return safeError(err)
 	}
-	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
+	defer syscall.Flock(int(root.File.Fd()), syscall.LOCK_UN)
 	registry, exists, err := readRegistry(ctx, root)
 	var missing *missingRegistryError
 	if create && errors.As(err, &missing) && missing.recoverable {
@@ -987,11 +977,11 @@ type transaction struct {
 func (t *transaction) close() {
 	t.closed = true
 	for _, dir := range t.leases {
-		syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
-		dir.file.Close()
+		syscall.Flock(int(dir.File.Fd()), syscall.LOCK_UN)
+		dir.File.Close()
 	}
 	if t.container != nil {
-		t.container.file.Close()
+		t.container.File.Close()
 	}
 }
 
@@ -1002,7 +992,7 @@ func (t *transaction) available(ctx context.Context) error {
 	if t.closed || t.committed {
 		return state("context transaction has already finished")
 	}
-	return t.root.verify()
+	return t.root.Verify()
 }
 
 func (t *transaction) Registry() contexts.Registry { return cloneRegistry(t.registry) }
@@ -1036,17 +1026,17 @@ func (t *transaction) contextDirectory(ctx context.Context, name string) (*direc
 		return nil, err
 	}
 	if t.container == nil {
-		t.container, err = openDirectory(t.root, "contexts")
+		t.container, err = kernel.OpenDirectory(t.root, "contexts")
 		if err != nil {
 			return nil, err
 		}
 	}
-	dir, err := openDirectory(t.container, record.Name)
+	dir, err := kernel.OpenDirectory(t.container, record.Name)
 	if err != nil {
 		return nil, err
 	}
-	if record.DirectoryInode != 0 && !dir.recorded(record.DirectoryInode) {
-		dir.file.Close()
+	if record.DirectoryInode != 0 && !dir.Recorded(record.DirectoryInode) {
+		dir.File.Close()
 		return nil, state("context directory was replaced")
 	}
 	return dir, nil
@@ -1085,7 +1075,7 @@ func (t *transaction) syncIntent(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if t.expected == nil || !sameFile(actual.identity, t.expected.identity) || !bytes.Equal(actual.data, t.expected.data) {
+		if t.expected == nil || !kernel.SameFile(actual.identity, t.expected.identity) || !bytes.Equal(actual.data, t.expected.data) {
 			return state("context intent changed before retry")
 		}
 		if pass == 0 {
@@ -1158,23 +1148,23 @@ func (t *transaction) leaseContext(ctx context.Context, name string) (*directory
 		return nil, err
 	}
 	if dir := t.leases[name]; dir != nil {
-		return dir, dir.verify()
+		return dir, dir.Verify()
 	}
 	dir, err := t.contextDirectory(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	hold := lock
+	hold := kernel.Lock
 	if t.shared {
-		hold = lockShared
+		hold = kernel.LockShared
 	}
 	if err := hold(dir); err != nil {
-		dir.file.Close()
+		dir.File.Close()
 		return nil, err
 	}
 	if err := t.admitLease(ctx, dir, name); err != nil {
-		syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
-		dir.file.Close()
+		syscall.Flock(int(dir.File.Fd()), syscall.LOCK_UN)
+		dir.File.Close()
 		return nil, err
 	}
 	t.leases[name] = dir
@@ -1207,11 +1197,11 @@ type expectedRegistry struct {
 }
 
 func registryExpectation(ctx context.Context, root *directory, registry contexts.Registry) (*expectedRegistry, error) {
-	file, err := openRelative(root, "registry.json", pathHandle, 0)
+	file, err := kernel.OpenRelative(root, "registry.json", kernel.PathHandle, 0)
 	if err != nil {
 		return nil, state("registry identity cannot be verified")
 	}
-	before, err := statHandle(file)
+	before, err := kernel.StatHandle(file)
 	file.Close()
 	if err != nil {
 		return nil, err
@@ -1224,13 +1214,13 @@ func registryExpectation(ctx context.Context, root *directory, registry contexts
 	if err != nil || !bytes.Equal(data, canonical) {
 		return nil, state("registry changed during transaction acquisition")
 	}
-	file, err = openRelative(root, "registry.json", pathHandle, 0)
+	file, err = kernel.OpenRelative(root, "registry.json", kernel.PathHandle, 0)
 	if err != nil {
 		return nil, state("registry identity cannot be verified")
 	}
-	after, err := statHandle(file)
+	after, err := kernel.StatHandle(file)
 	file.Close()
-	if err != nil || !sameFile(before, after) {
+	if err != nil || !kernel.SameFile(before, after) {
 		return nil, state("registry was replaced during transaction acquisition")
 	}
 	return &expectedRegistry{data: data, identity: after}, nil
@@ -1273,10 +1263,10 @@ func (s *Store) publishInitialRegistry(ctx context.Context, root *directory, reg
 	if err := s.checkpoint(ctx, checkpointBeforeRegistryRename); err != nil {
 		return err
 	}
-	if err := root.verify(); err != nil {
+	if err := root.Verify(); err != nil {
 		return err
 	}
-	file, err := openRelative(root, "registry.json", pathHandle, 0)
+	file, err := kernel.OpenRelative(root, "registry.json", kernel.PathHandle, 0)
 	if file != nil {
 		file.Close()
 	}
@@ -1287,7 +1277,7 @@ func (s *Store) publishInitialRegistry(ctx context.Context, root *directory, reg
 	if err != nil {
 		return err
 	}
-	if !sameFile(pendingIdentity, currentPending) {
+	if !kernel.SameFile(pendingIdentity, currentPending) {
 		return initialRegistryRecoveryError("pending initial registry changed before publication")
 	}
 	entry, sole, err := soleRootEntry(root)
@@ -1301,7 +1291,7 @@ func (s *Store) publishInitialRegistry(ctx context.Context, root *directory, reg
 		return initialRegistryRecoveryError("initial registry could not be atomically published")
 	}
 	publishedIdentity, err := verifyPending(ctx, root, "registry.json", data)
-	if err != nil || !sameIdentity(currentPending, publishedIdentity) {
+	if err != nil || !kernel.SameIdentity(currentPending, publishedIdentity) {
 		return uncertainInitialRegistryRecovery()
 	}
 	if err := s.checkpoint(ctx, checkpointAfterRegistryRename); err != nil {
@@ -1319,7 +1309,7 @@ func (s *Store) publishInitialRegistry(ctx context.Context, root *directory, reg
 		return uncertainInitialRegistryRecovery()
 	}
 	finalIdentity, err := verifyPending(ctx, root, "registry.json", data)
-	if err != nil || !sameFile(publishedIdentity, finalIdentity) {
+	if err != nil || !kernel.SameFile(publishedIdentity, finalIdentity) {
 		return uncertainInitialRegistryRecovery()
 	}
 	return nil
@@ -1338,7 +1328,7 @@ func (s *Store) replaceRegistry(ctx context.Context, root *directory, registry c
 		subject: "registry", suffix: ".json", replace: true, immutable: true, bound: maxRegistry,
 		renameFailure: "registry could not be atomically published",
 		prove: func(ctx context.Context) error {
-			if err := root.verify(); err != nil {
+			if err := root.Verify(); err != nil {
 				return err
 			}
 			current, _, err := readRegistry(ctx, root)
@@ -1349,7 +1339,7 @@ func (s *Store) replaceRegistry(ctx context.Context, root *directory, registry c
 			if err != nil {
 				return err
 			}
-			if expected == nil || !sameFile(expected.identity, actual.identity) || !bytes.Equal(expected.data, actual.data) {
+			if expected == nil || !kernel.SameFile(expected.identity, actual.identity) || !bytes.Equal(expected.data, actual.data) {
 				return state("registry was replaced or modified during the transaction")
 			}
 			return nil
@@ -1362,11 +1352,11 @@ func (s *Store) replaceRegistry(ctx context.Context, root *directory, registry c
 }
 
 func verifyPending(ctx context.Context, root *directory, name string, data []byte) (syscall.Stat_t, error) {
-	file, err := openRelative(root, name, pathHandle, 0)
+	file, err := kernel.OpenRelative(root, name, kernel.PathHandle, 0)
 	if err != nil {
 		return syscall.Stat_t{}, state("pending registry cannot be verified")
 	}
-	before, err := statHandle(file)
+	before, err := kernel.StatHandle(file)
 	file.Close()
 	if err != nil {
 		return syscall.Stat_t{}, err
@@ -1375,13 +1365,13 @@ func verifyPending(ctx context.Context, root *directory, name string, data []byt
 	if err != nil || !bytes.Equal(data, actual) {
 		return syscall.Stat_t{}, state("pending registry contents changed before publication")
 	}
-	file, err = openRelative(root, name, pathHandle, 0)
+	file, err = kernel.OpenRelative(root, name, kernel.PathHandle, 0)
 	if err != nil {
 		return syscall.Stat_t{}, state("pending registry cannot be verified")
 	}
-	after, err := statHandle(file)
+	after, err := kernel.StatHandle(file)
 	file.Close()
-	if err != nil || !sameFile(before, after) {
+	if err != nil || !kernel.SameFile(before, after) {
 		return syscall.Stat_t{}, state("pending registry changed during verification")
 	}
 	return after, nil
@@ -1436,7 +1426,7 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 			if !held {
 				return state("context publication requires its mutation lease")
 			}
-			if err := dir.verify(); err != nil {
+			if err := dir.Verify(); err != nil {
 				return err
 			}
 			current, err := readMutation(ctx, dir)
@@ -1496,7 +1486,7 @@ func blobName(index int) string {
 }
 
 func revisionEntries(dir *directory, prefix, suffix string) ([]string, error) {
-	names, err := directoryNames(dir, maxRevisions)
+	names, err := kernel.DirectoryNames(dir, maxRevisions)
 	if err != nil {
 		return nil, err
 	}

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -32,7 +34,7 @@ func stageName(name string, bare bool) bool {
 // verification that refuses it; it descends into subdirectories only while
 // depth admits one.
 func (s *Store) collectStages(ctx context.Context, dir *directory, maximum int, bound int64, bare bool, depth int) error {
-	names, err := directoryNames(dir, maximum)
+	names, err := kernel.DirectoryNames(dir, maximum)
 	if err != nil {
 		return nil
 	}
@@ -49,12 +51,12 @@ func (s *Store) collectStages(ctx context.Context, dir *directory, maximum int, 
 			if depth < 0 || depth >= maxOperationSegments {
 				continue
 			}
-			nested, err := openDirectory(dir, name)
+			nested, err := kernel.OpenDirectory(dir, name)
 			if err != nil {
 				continue
 			}
 			err = s.collectStages(ctx, nested, maximum, bound, bare, depth+1)
-			nested.file.Close()
+			nested.File.Close()
 			if err != nil {
 				return err
 			}
@@ -74,19 +76,19 @@ func (s *Store) collectStages(ctx context.Context, dir *directory, maximum int, 
 
 // listedEntry reads the identity of one listed entry without following it.
 func listedEntry(dir *directory, name string) (syscall.Stat_t, error) {
-	entry, err := openRelative(dir, name, pathHandle, 0)
+	entry, err := kernel.OpenRelative(dir, name, kernel.PathHandle, 0)
 	if err != nil {
 		return syscall.Stat_t{}, err
 	}
 	defer entry.Close()
-	return statHandle(entry)
+	return kernel.StatHandle(entry)
 }
 
 // collectStage removes one listed entry only when it is proved a publication
 // stage of dir: a private regular file named as one, on dir's device and
 // within bound. It reports whether it removed the entry.
 func (s *Store) collectStage(ctx context.Context, dir *directory, name string, stat syscall.Stat_t, bound int64, bare bool) (bool, error) {
-	if !stageName(name, bare) || stat.Dev != dir.identity.Dev || !private(stat, syscall.S_IFREG, dir.identity.Uid, dir.identity.Gid) || stat.Size > bound {
+	if !stageName(name, bare) || stat.Dev != dir.Identity.Dev || !kernel.Private(stat, syscall.S_IFREG, dir.Identity.Uid, dir.Identity.Gid) || stat.Size > bound {
 		return false, nil
 	}
 	if err := s.checkpoint(ctx, checkpointBeforeStageCollection); err != nil {
@@ -135,11 +137,11 @@ func (s *Store) collectRegistryStages(ctx context.Context, root *directory) erro
 // collectContextStages removes the stages in a leased context's state
 // directory and, with subtrees, in its operation and trust areas.
 func (s *Store) collectContextStages(ctx context.Context, dir *directory, subtrees bool) error {
-	runtime, err := openDirectory(dir, "state")
+	runtime, err := kernel.OpenDirectory(dir, "state")
 	if err != nil {
 		return nil
 	}
-	defer runtime.file.Close()
+	defer runtime.File.Close()
 	if err := s.collectStages(ctx, runtime, maxContextStateEntries+maxContextStateStages, maxRecord, false, -1); err != nil {
 		return err
 	}
@@ -147,7 +149,7 @@ func (s *Store) collectContextStages(ctx context.Context, dir *directory, subtre
 		return nil
 	}
 	for _, name := range []string{"operations", trustSubtree} {
-		area, err := openDirectory(runtime, name)
+		area, err := kernel.OpenDirectory(runtime, name)
 		if err != nil {
 			continue
 		}
@@ -156,7 +158,7 @@ func (s *Store) collectContextStages(ctx context.Context, dir *directory, subtre
 			bound = operationstore.MaxPlanBytes
 		}
 		err = s.collectStages(ctx, area, maxOperationEntries, bound, true, 0)
-		area.file.Close()
+		area.File.Close()
 		if err != nil {
 			return err
 		}
@@ -172,6 +174,6 @@ func (s *Store) collectControllerStages(ctx context.Context, root *directory, re
 	if err != nil {
 		return nil
 	}
-	defer dir.close()
+	defer dir.Close()
 	return s.collectStages(ctx, dir, maxControllerStages+2, maxControllerState, false, -1)
 }

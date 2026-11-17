@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -53,7 +55,7 @@ func (s *Store) ReadSetup(ctx context.Context) (prerequisites.SetupView, error) 
 	if err != nil {
 		return prerequisites.SetupView{}, safeError(err)
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	if err := admitRegistry(ctx, root); err != nil {
 		return prerequisites.SetupView{}, safeError(err)
 	}
@@ -64,7 +66,7 @@ func (s *Store) ReadSetup(ctx context.Context) (prerequisites.SetupView, error) 
 	if err != nil {
 		return prerequisites.SetupView{}, safeError(err)
 	}
-	defer dir.close()
+	defer dir.Close()
 	view, err := readSetupView(ctx, dir)
 	return view, safeError(err)
 }
@@ -129,7 +131,7 @@ func (s *Store) mutateSetup(ctx context.Context, callback func(prerequisites.Set
 	if err != nil {
 		return safeError(err)
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	if err := admitRegistry(ctx, root); err != nil {
 		return safeError(err)
 	}
@@ -137,12 +139,12 @@ func (s *Store) mutateSetup(ctx context.Context, callback func(prerequisites.Set
 	if err != nil {
 		return safeError(err)
 	}
-	defer dir.close()
+	defer dir.Close()
 	held, err := lockSetup(ctx, dir, wait)
 	if err != nil {
 		return err
 	}
-	defer unlockAndClose(held)
+	defer kernel.UnlockAndClose(held)
 	tx := &setupTransaction{store: s, dir: dir, active: true}
 	defer func() { tx.active = false }()
 	if err := tx.admit(ctx); err != nil {
@@ -156,9 +158,9 @@ func (s *Store) ensureSetupSubtree(ctx context.Context) error {
 	if err == nil {
 		dir, openErr := openControllerEntry(root, installSubtree)
 		if openErr == nil {
-			dir.close()
+			dir.Close()
 		}
-		root.file.Close()
+		root.File.Close()
 		if openErr == nil {
 			return nil
 		}
@@ -173,12 +175,12 @@ func (s *Store) ensureSetupSubtree(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		defer host.file.Close()
+		defer host.File.Close()
 		dir, err := t.store.ensureDirectory(ctx, host, installSubtree)
 		if err != nil {
 			return err
 		}
-		dir.file.Close()
+		dir.File.Close()
 		return nil
 	})
 }
@@ -186,12 +188,12 @@ func (s *Store) ensureSetupSubtree(ctx context.Context) error {
 // lockSetup polls rather than blocks when it waits, so cancellation still
 // ends the wait.
 func lockSetup(ctx context.Context, dir *directory, wait bool) (*os.File, error) {
-	file, err := openRelative(dir, setupLockName, syscall.O_RDWR|syscall.O_CREAT, 0600)
+	file, err := kernel.OpenRelative(dir, setupLockName, syscall.O_RDWR|syscall.O_CREAT, 0600)
 	if err != nil {
 		return nil, safeError(err)
 	}
-	stat, err := statHandle(file)
-	if err != nil || !private(stat, syscall.S_IFREG, dir.identity.Uid, dir.identity.Gid) || stat.Dev != dir.identity.Dev {
+	stat, err := kernel.StatHandle(file)
+	if err != nil || !kernel.Private(stat, syscall.S_IFREG, dir.Identity.Uid, dir.Identity.Gid) || stat.Dev != dir.Identity.Dev {
 		file.Close()
 		return nil, state("setup lock type, owner or permissions is unsafe")
 	}
@@ -206,7 +208,7 @@ func lockSetup(ctx context.Context, dir *directory, wait bool) (*os.File, error)
 		}
 		if !wait {
 			file.Close()
-			return nil, busy("controller setup is held by another command")
+			return nil, kernel.Busy("controller setup is held by another command")
 		}
 		timer := time.NewTimer(delay)
 		select {
@@ -217,8 +219,8 @@ func lockSetup(ctx context.Context, dir *directory, wait bool) (*os.File, error)
 		case <-timer.C:
 		}
 	}
-	if err := dir.verify(); err != nil {
-		unlockAndClose(file)
+	if err := dir.Verify(); err != nil {
+		kernel.UnlockAndClose(file)
 		return nil, err
 	}
 	return file, nil
@@ -238,7 +240,7 @@ func (t *setupTransaction) available(ctx context.Context) error {
 	if !t.active {
 		return state("setup storage capability is no longer available")
 	}
-	return t.dir.verify()
+	return t.dir.Verify()
 }
 
 func (t *setupTransaction) owned(ctx context.Context) error {
@@ -264,7 +266,7 @@ func (t *setupTransaction) admit(ctx context.Context) error {
 }
 
 func recognizedSetup(ctx context.Context, dir *directory) (bool, error) {
-	names, err := directoryNames(dir, maxSetupEntries)
+	names, err := kernel.DirectoryNames(dir, maxSetupEntries)
 	if err != nil {
 		return false, err
 	}
@@ -272,14 +274,14 @@ func recognizedSetup(ctx context.Context, dir *directory) (bool, error) {
 		switch name {
 		case setupLockName, setupStateName:
 		case setupRuntimesName, setupCacheName:
-			child, err := openDirectory(dir, name)
+			child, err := kernel.OpenDirectory(dir, name)
 			if errors.Is(err, syscall.ENOTDIR) {
 				return false, nil
 			}
 			if err != nil {
 				return false, err
 			}
-			child.file.Close()
+			child.File.Close()
 		default:
 			if !stageName(name, false) {
 				return false, nil
@@ -293,14 +295,14 @@ func (t *setupTransaction) sweepStages(ctx context.Context) error {
 	if err := t.store.collectStages(ctx, t.dir, maxSetupEntries, maxSetupState, false, -1); err != nil {
 		return err
 	}
-	runtimes, err := openDirectory(t.dir, setupRuntimesName)
+	runtimes, err := kernel.OpenDirectory(t.dir, setupRuntimesName)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	defer runtimes.file.Close()
+	defer runtimes.File.Close()
 	names, err := rawNames(runtimes, maxSetupTreeEntries)
 	if err != nil {
 		return err
@@ -361,7 +363,7 @@ func (t *setupTransaction) DiscardForeign(ctx context.Context) error {
 	held, err := t.claimRuntimes()
 	defer func() {
 		for _, file := range held {
-			unlockAndClose(file)
+			kernel.UnlockAndClose(file)
 		}
 	}()
 	if err != nil {
@@ -387,11 +389,11 @@ func (t *setupTransaction) DiscardForeign(ctx context.Context) error {
 }
 
 func (t *setupTransaction) claimRuntimes() ([]*os.File, error) {
-	runtimes, err := openDirectory(t.dir, setupRuntimesName)
+	runtimes, err := kernel.OpenDirectory(t.dir, setupRuntimesName)
 	if err != nil {
 		return nil, nil
 	}
-	defer runtimes.file.Close()
+	defer runtimes.File.Close()
 	names, err := rawNames(runtimes, maxSetupTreeEntries)
 	if err != nil {
 		return nil, err
@@ -400,7 +402,7 @@ func (t *setupTransaction) claimRuntimes() ([]*os.File, error) {
 	for _, name := range names {
 		file, err := holdRuntimeLock(runtimes, name, syscall.LOCK_EX)
 		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return held, busy("a controller runtime is in use by a running command")
+			return held, kernel.Busy("a controller runtime is in use by a running command")
 		}
 		if err == nil {
 			held = append(held, file)
@@ -424,12 +426,12 @@ func (t *setupTransaction) OpenRun(ctx context.Context) (string, prerequisites.S
 	if err != nil {
 		return "", nil, setupLogError(err)
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	host, err := t.store.logDirectory(ctx, root, logController, true)
 	if err != nil {
 		return "", nil, setupLogError(err)
 	}
-	defer host.file.Close()
+	defer host.File.Close()
 	return t.store.nextSetupRun(ctx, host, recordedSetupNumber(t.view.State))
 }
 
@@ -446,10 +448,10 @@ func (t *setupTransaction) WheelPath(ctx context.Context, sha256, filename strin
 		if err != nil {
 			return "", err
 		}
-		defer child.file.Close()
+		defer child.File.Close()
 		parent = child
 	}
-	return filepath.Join(parent.path, filename), nil
+	return filepath.Join(parent.Path, filename), nil
 }
 
 func (t *setupTransaction) PruneWheels(ctx context.Context, keep []string) (int, error) {
@@ -461,22 +463,22 @@ func (t *setupTransaction) PruneWheels(ctx context.Context, keep []string) (int,
 			return 0, state("cached wheel identity is invalid")
 		}
 	}
-	cache, err := openDirectory(t.dir, setupCacheName)
+	cache, err := kernel.OpenDirectory(t.dir, setupCacheName)
 	if errors.Is(err, syscall.ENOENT) {
 		return 0, nil
 	}
 	if err != nil {
 		return 0, err
 	}
-	defer cache.file.Close()
-	wheels, err := openDirectory(cache, setupWheelsName)
+	defer cache.File.Close()
+	wheels, err := kernel.OpenDirectory(cache, setupWheelsName)
 	if errors.Is(err, syscall.ENOENT) {
 		return 0, nil
 	}
 	if err != nil {
 		return 0, err
 	}
-	defer wheels.file.Close()
+	defer wheels.File.Close()
 	names, err := rawNames(wheels, maxSetupTreeEntries)
 	if err != nil {
 		return 0, err
@@ -519,7 +521,7 @@ func (t *setupTransaction) StageRuntime(ctx context.Context) (prerequisites.Runt
 	if err != nil {
 		return nil, err
 	}
-	defer runtimes.file.Close()
+	defer runtimes.File.Close()
 	for range 16 {
 		name, err := t.store.candidate(runtimeStagePrefix)
 		if err != nil {
@@ -532,8 +534,8 @@ func (t *setupTransaction) StageRuntime(ctx context.Context) (prerequisites.Runt
 		if err != nil {
 			return nil, err
 		}
-		stage.file.Close()
-		return &runtimeStage{owner: t, name: name, path: stage.path, identity: stage.identity}, nil
+		stage.File.Close()
+		return &runtimeStage{owner: t, name: name, path: stage.Path, identity: stage.Identity}, nil
 	}
 	return nil, state("runtime stage exhausted its collision limit")
 }
@@ -549,26 +551,26 @@ func (t *setupTransaction) PublishRuntime(ctx context.Context, stage prerequisit
 	if !validControllerDigest(digest) {
 		return false, state("runtime identity is invalid")
 	}
-	runtimes, err := openDirectory(t.dir, setupRuntimesName)
+	runtimes, err := kernel.OpenDirectory(t.dir, setupRuntimesName)
 	if err != nil {
 		return false, err
 	}
-	defer runtimes.file.Close()
-	dir, err := openDirectory(runtimes, staged.name)
-	if err != nil || !sameIdentity(dir.identity, staged.identity) {
+	defer runtimes.File.Close()
+	dir, err := kernel.OpenDirectory(runtimes, staged.name)
+	if err != nil || !kernel.SameIdentity(dir.Identity, staged.identity) {
 		if err == nil {
-			dir.file.Close()
+			dir.File.Close()
 		}
 		return false, state("runtime stage was replaced")
 	}
-	defer dir.file.Close()
+	defer dir.File.Close()
 	if err := sealRuntime(dir); err != nil {
 		return false, err
 	}
 	if err := t.store.checkpoint(ctx, checkpointBeforeSetupRuntimeRename); err != nil {
 		return false, err
 	}
-	if err := syncFilesystem(dir.file); err != nil {
+	if err := syncFilesystem(dir.File); err != nil {
 		return false, err
 	}
 	err = renameNoReplaceAt(runtimes, staged.name, digest)
@@ -597,11 +599,11 @@ func (t *setupTransaction) DiscardRuntime(ctx context.Context, stage prerequisit
 	if staged.done {
 		return nil
 	}
-	runtimes, err := openDirectory(t.dir, setupRuntimesName)
+	runtimes, err := kernel.OpenDirectory(t.dir, setupRuntimesName)
 	if err != nil {
 		return err
 	}
-	defer runtimes.file.Close()
+	defer runtimes.File.Close()
 	staged.done = true
 	if err := t.store.removeSetupEntry(ctx, runtimes, staged.name); err != nil {
 		return err
@@ -610,22 +612,22 @@ func (t *setupTransaction) DiscardRuntime(ctx context.Context, stage prerequisit
 }
 
 func sealRuntime(dir *directory) error {
-	record, err := openRelative(dir, runtimeRecordName, pathHandle, 0)
+	record, err := kernel.OpenRelative(dir, runtimeRecordName, kernel.PathHandle, 0)
 	if err != nil {
 		return state("a runtime is published only with its " + runtimeRecordName)
 	}
-	stat, err := statHandle(record)
+	stat, err := kernel.StatHandle(record)
 	record.Close()
-	if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFREG || stat.Uid != dir.identity.Uid || stat.Dev != dir.identity.Dev || stat.Nlink != 1 || stat.Size < 1 || stat.Size > maxRuntimeRecord {
+	if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFREG || stat.Uid != dir.Identity.Uid || stat.Dev != dir.Identity.Dev || stat.Nlink != 1 || stat.Size < 1 || stat.Size > maxRuntimeRecord {
 		return state("a runtime is published only with its " + runtimeRecordName)
 	}
-	lock, err := openRelative(dir, runtimeLockName, syscall.O_RDONLY|syscall.O_CREAT, 0600)
+	lock, err := kernel.OpenRelative(dir, runtimeLockName, syscall.O_RDONLY|syscall.O_CREAT, 0600)
 	if err != nil {
 		return state("runtime lock could not be created")
 	}
-	stat, err = statHandle(lock)
+	stat, err = kernel.StatHandle(lock)
 	lock.Close()
-	if err != nil || !private(stat, syscall.S_IFREG, dir.identity.Uid, dir.identity.Gid) {
+	if err != nil || !kernel.Private(stat, syscall.S_IFREG, dir.Identity.Uid, dir.Identity.Gid) {
 		return state("runtime lock type, owner or permissions is unsafe")
 	}
 	return nil
@@ -635,14 +637,14 @@ func (t *setupTransaction) Runtimes(ctx context.Context) ([]string, error) {
 	if err := t.owned(ctx); err != nil {
 		return nil, err
 	}
-	runtimes, err := openDirectory(t.dir, setupRuntimesName)
+	runtimes, err := kernel.OpenDirectory(t.dir, setupRuntimesName)
 	if errors.Is(err, syscall.ENOENT) {
 		return []string{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	defer runtimes.file.Close()
+	defer runtimes.File.Close()
 	names, err := rawNames(runtimes, maxSetupTreeEntries)
 	if err != nil {
 		return nil, err
@@ -664,14 +666,14 @@ func (t *setupTransaction) RetireRuntime(ctx context.Context, digest string) (bo
 	if !validControllerDigest(digest) {
 		return false, state("runtime identity is invalid")
 	}
-	runtimes, err := openDirectory(t.dir, setupRuntimesName)
+	runtimes, err := kernel.OpenDirectory(t.dir, setupRuntimesName)
 	if errors.Is(err, syscall.ENOENT) {
 		return true, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	defer runtimes.file.Close()
+	defer runtimes.File.Close()
 	held, err := holdRuntimeLock(runtimes, digest, syscall.LOCK_EX)
 	switch {
 	case errors.Is(err, syscall.ENOENT):
@@ -683,7 +685,7 @@ func (t *setupTransaction) RetireRuntime(ctx context.Context, digest string) (bo
 	case err != nil:
 		return false, err
 	default:
-		defer unlockAndClose(held)
+		defer kernel.UnlockAndClose(held)
 	}
 	withdrawn, err := t.store.candidate(runtimeStagePrefix)
 	if err != nil {
@@ -702,20 +704,20 @@ func (t *setupTransaction) RetireRuntime(ctx context.Context, digest string) (bo
 }
 
 func holdRuntimeLock(runtimes *directory, digest string, how int) (*os.File, error) {
-	dir, err := openDirectory(runtimes, digest)
+	dir, err := kernel.OpenDirectory(runtimes, digest)
 	if err != nil {
 		return nil, err
 	}
-	defer dir.file.Close()
-	file, err := openRelative(dir, runtimeLockName, syscall.O_RDONLY, 0)
+	defer dir.File.Close()
+	file, err := kernel.OpenRelative(dir, runtimeLockName, syscall.O_RDONLY, 0)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil, errNoRuntimeLock
 	}
 	if err != nil {
 		return nil, err
 	}
-	stat, err := statHandle(file)
-	if err != nil || !private(stat, syscall.S_IFREG, dir.identity.Uid, dir.identity.Gid) {
+	stat, err := kernel.StatHandle(file)
+	if err != nil || !kernel.Private(stat, syscall.S_IFREG, dir.Identity.Uid, dir.Identity.Gid) {
 		file.Close()
 		return nil, state("runtime lock type, owner or permissions is unsafe")
 	}
@@ -723,8 +725,8 @@ func holdRuntimeLock(runtimes *directory, digest string, how int) (*os.File, err
 		file.Close()
 		return nil, err
 	}
-	if err := dir.verify(); err != nil {
-		unlockAndClose(file)
+	if err := dir.Verify(); err != nil {
+		kernel.UnlockAndClose(file)
 		return nil, syscall.EWOULDBLOCK
 	}
 	return file, nil
@@ -738,7 +740,7 @@ type runtimeHold struct {
 
 func (h *runtimeHold) Path() string { return h.path }
 
-func (h *runtimeHold) Release() { h.once.Do(func() { unlockAndClose(h.file) }) }
+func (h *runtimeHold) Release() { h.once.Do(func() { kernel.UnlockAndClose(h.file) }) }
 
 func (s *Store) HoldRuntime(ctx context.Context, digest string) (prerequisites.RuntimeHold, error) {
 	if !validControllerDigest(digest) {
@@ -748,43 +750,43 @@ func (s *Store) HoldRuntime(ctx context.Context, digest string) (prerequisites.R
 	if err != nil {
 		return nil, runtimeUnavailable(err)
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	setup, err := openControllerEntry(root, installSubtree)
 	if err != nil {
 		return nil, runtimeUnavailable(err)
 	}
-	defer setup.close()
-	runtimes, err := openDirectory(setup, setupRuntimesName)
+	defer setup.Close()
+	runtimes, err := kernel.OpenDirectory(setup, setupRuntimesName)
 	if err != nil {
 		return nil, runtimeUnavailable(err)
 	}
-	defer runtimes.file.Close()
+	defer runtimes.File.Close()
 	file, err := holdRuntimeLock(runtimes, digest, syscall.LOCK_SH)
 	if err != nil {
 		return nil, runtimeUnavailable(err)
 	}
 	if err := runtimeNamed(runtimes, digest); err != nil {
-		unlockAndClose(file)
+		kernel.UnlockAndClose(file)
 		return nil, err
 	}
-	return &runtimeHold{file: file, path: filepath.Join(runtimes.path, digest)}, nil
+	return &runtimeHold{file: file, path: filepath.Join(runtimes.Path, digest)}, nil
 }
 
 // runtimeNamed requires the held runtime's record to name its own digest, so
 // a runtime renamed into another's place is never launched as that one.
 func runtimeNamed(runtimes *directory, digest string) error {
-	dir, err := openDirectory(runtimes, digest)
+	dir, err := kernel.OpenDirectory(runtimes, digest)
 	if err != nil {
 		return runtimeUnavailable(err)
 	}
-	defer dir.file.Close()
-	file, err := openRelative(dir, runtimeRecordName, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	defer dir.File.Close()
+	file, err := kernel.OpenRelative(dir, runtimeRecordName, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return state("runtime " + digest[:12] + " holds no readable " + runtimeRecordName)
 	}
 	defer file.Close()
-	stat, err := statHandle(file)
-	if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFREG || stat.Uid != dir.identity.Uid || stat.Dev != dir.identity.Dev || stat.Nlink != 1 || stat.Size > maxRuntimeRecord {
+	stat, err := kernel.StatHandle(file)
+	if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFREG || stat.Uid != dir.Identity.Uid || stat.Dev != dir.Identity.Dev || stat.Nlink != 1 || stat.Size > maxRuntimeRecord {
 		return state("runtime " + digest[:12] + " holds no readable " + runtimeRecordName)
 	}
 	data, err := io.ReadAll(io.LimitReader(file, maxRuntimeRecord+1))
@@ -811,13 +813,13 @@ func (s *Store) removeSetupEntry(ctx context.Context, parent *directory, name st
 	if errors.Is(err, syscall.ENOENT) {
 		return nil
 	}
-	if err != nil || !removableSetupEntry(stat, parent.identity) {
+	if err != nil || !removableSetupEntry(stat, parent.Identity) {
 		return state("setup entry is not this store's own: " + storeEntry(parent, name))
 	}
 	isDirectory := stat.Mode&syscall.S_IFMT == syscall.S_IFDIR
 	if isDirectory {
 		remaining := maxSetupTreeEntries
-		if err := emptySetupTree(ctx, parent, name, stat, parent.identity, 0, &remaining); err != nil {
+		if err := emptySetupTree(ctx, parent, name, stat, parent.Identity, 0, &remaining); err != nil {
 			return err
 		}
 	}
@@ -831,16 +833,16 @@ func emptySetupTree(ctx context.Context, parent *directory, name string, identit
 	if depth > maxSetupTreeDepth {
 		return state("setup tree exceeds its depth bound")
 	}
-	file, err := openWithin(parent, name, syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
+	file, err := kernel.OpenWithin(parent, name, syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
 	if err != nil {
 		return state("setup tree directory cannot be opened without following a link")
 	}
 	defer file.Close()
-	current, err := statHandle(file)
-	if err != nil || !sameIdentity(identity, current) {
+	current, err := kernel.StatHandle(file)
+	if err != nil || !kernel.SameIdentity(identity, current) {
 		return state("setup tree directory was substituted")
 	}
-	dir := &directory{file: file, path: filepath.Join(parent.path, name), identity: current}
+	dir := &directory{File: file, Path: filepath.Join(parent.Path, name), Identity: current}
 	names, err := rawNames(dir, *remaining)
 	if err != nil {
 		return err
@@ -873,7 +875,7 @@ func removableSetupEntry(stat, owner syscall.Stat_t) bool {
 }
 
 func rawNames(dir *directory, maximum int) ([]string, error) {
-	file, err := openWithin(dir, ".", syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
+	file, err := kernel.OpenWithin(dir, ".", syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
 	if err != nil {
 		return nil, state("setup tree cannot be enumerated")
 	}

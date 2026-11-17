@@ -34,7 +34,7 @@ func (t *lifecycleTransaction) Secrets(ctx context.Context, callback func(secret
 	if record.Mode != contexts.Ready || record != t.record {
 		return secretstore.Failure("store.conflict", "context identity changed before secret access")
 	}
-	if err := t.context.verify(); err != nil {
+	if err := t.context.Verify(); err != nil {
 		return state("context directory changed during the operation")
 	}
 	if err := verifySecretContextLayout(ctx, t.context); err != nil {

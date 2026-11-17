@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/nativefs"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
@@ -163,7 +165,7 @@ func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *direct
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	names, err := directoryNames(dir, min(*remaining, contextDirectoryLimit(path)))
+	names, err := kernel.DirectoryNames(dir, min(*remaining, contextDirectoryLimit(path)))
 	if err != nil {
 		return err
 	}
@@ -176,11 +178,11 @@ func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *direct
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		file, err := openRelative(dir, name, pathHandle, 0)
+		file, err := kernel.OpenRelative(dir, name, kernel.PathHandle, 0)
 		if err != nil {
 			return unverifiedEntryRefusal(dir, name, "context traversal entry cannot be verified", storeCauseText(err), errors.Is(err, syscall.EXDEV))
 		}
-		identity, statErr := statHandle(file)
+		identity, statErr := kernel.StatHandle(file)
 		file.Close()
 		kind := identity.Mode & syscall.S_IFMT
 		if reason := unsafeEntryReason(dir, path, name, identity, statErr); reason != "" {
@@ -190,12 +192,12 @@ func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *direct
 			if err := s.checkpoint(ctx, checkpointBeforeContextSubtree); err != nil {
 				return err
 			}
-			child, err := openDirectory(dir, name)
+			child, err := kernel.OpenDirectory(dir, name)
 			if err != nil {
 				return err
 			}
-			if !sameIdentity(identity, child.identity) {
-				child.file.Close()
+			if !kernel.SameIdentity(identity, child.Identity) {
+				child.File.Close()
 				return state("context traversal directory was substituted")
 			}
 			next := name
@@ -203,7 +205,7 @@ func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *direct
 				next = path + "/" + name
 			}
 			err = s.walkContextTreeWithRemovalGuard(ctx, child, next, action, remaining, beforeRemove)
-			child.file.Close()
+			child.File.Close()
 			if err != nil {
 				return err
 			}
@@ -234,17 +236,17 @@ func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *direct
 	if action == syncContextTree || action == removeContextTree && len(names) > 0 {
 		return s.syncDirectory(ctx, dir)
 	}
-	return dir.verify()
+	return dir.Verify()
 }
 
 func (s *Store) syncVerifiedFile(ctx context.Context, parent *directory, name string, expected syscall.Stat_t) error {
-	file, err := openRelative(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	file, err := kernel.OpenRelative(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return state("context durability target cannot be verified")
 	}
 	defer file.Close()
-	before, err := statHandle(file)
-	if err != nil || !sameFile(expected, before) {
+	before, err := kernel.StatHandle(file)
+	if err != nil || !kernel.SameFile(expected, before) {
 		return state("context durability target was substituted")
 	}
 	if err := s.checkpoint(ctx, checkpointSyncContextFile); err != nil {
@@ -253,37 +255,37 @@ func (s *Store) syncVerifiedFile(ctx context.Context, parent *directory, name st
 	if err := file.Sync(); err != nil {
 		return state("context file durability could not be established")
 	}
-	after, err := statHandle(file)
-	if err != nil || !sameFile(before, after) {
+	after, err := kernel.StatHandle(file)
+	if err != nil || !kernel.SameFile(before, after) {
 		return state("context durability target changed")
 	}
-	current, err := openRelative(parent, name, pathHandle, 0)
+	current, err := kernel.OpenRelative(parent, name, kernel.PathHandle, 0)
 	if err != nil {
 		return state("context durability target was replaced")
 	}
 	defer current.Close()
-	actual, err := statHandle(current)
-	if err != nil || !sameFile(after, actual) {
+	actual, err := kernel.StatHandle(current)
+	if err != nil || !kernel.SameFile(after, actual) {
 		return state("context durability target was replaced")
 	}
-	return parent.verify()
+	return parent.Verify()
 }
 
 func unlinkVerified(parent *directory, name string, expected syscall.Stat_t, directory bool) error {
-	if err := parent.verify(); err != nil {
+	if err := parent.Verify(); err != nil {
 		return err
 	}
 	return unlinkMatching(parent, name, expected, directory)
 }
 
 func unlinkMatching(parent *directory, name string, expected syscall.Stat_t, directory bool) error {
-	file, err := openRelative(parent, name, pathHandle, 0)
+	file, err := kernel.OpenRelative(parent, name, kernel.PathHandle, 0)
 	if err != nil {
 		return state("context deletion target cannot be verified")
 	}
-	actual, err := statHandle(file)
+	actual, err := kernel.StatHandle(file)
 	file.Close()
-	if err != nil || !sameIdentity(expected, actual) || !directory && !sameFile(expected, actual) {
+	if err != nil || !kernel.SameIdentity(expected, actual) || !directory && !kernel.SameFile(expected, actual) {
 		return state("context deletion target was substituted")
 	}
 	if _, err := syscall.BytePtrFromString(name); err != nil {
@@ -298,8 +300,8 @@ func unlinkMatching(parent *directory, name string, expected syscall.Stat_t, dir
 // unlinkAt removes one name beneath a held directory without following it: a
 // directory only when it is empty and directory is set.
 func unlinkAt(dir *directory, name string, directory bool) syscall.Errno {
-	errno := errnoOf(nativefs.Unlink(int(dir.file.Fd()), name, directory))
-	runtime.KeepAlive(dir.file)
+	errno := errnoOf(nativefs.Unlink(int(dir.File.Fd()), name, directory))
+	runtime.KeepAlive(dir.File)
 	return errno
 }
 
@@ -339,7 +341,7 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 		err = t.syncAbsentDirectory(ctx, record)
 	case err == nil:
 		err = t.removeContextDirectory(ctx, record, dir)
-		dir.file.Close()
+		dir.File.Close()
 	}
 	if err != nil {
 		return err
@@ -394,7 +396,7 @@ func (t *transaction) abandonLostDirectory(ctx context.Context, record contexts.
 	if t.container == nil {
 		return state("lost context parent is missing")
 	}
-	if err := t.container.verify(); err != nil {
+	if err := t.container.Verify(); err != nil {
 		return err
 	}
 	if !absentWithin(t.container, record.Name) {
@@ -422,7 +424,7 @@ func (t *transaction) removeContextDirectory(ctx context.Context, record context
 			if err := t.store.syncDirectory(ctx, t.container); err != nil {
 				return err
 			}
-			record.DirectoryDevice, record.DirectoryInode = uint64(dir.identity.Dev), dir.identity.Ino
+			record.DirectoryDevice, record.DirectoryInode = uint64(dir.Identity.Dev), dir.Identity.Ino
 		}
 		if record.Mode == contexts.Ready {
 			if _, held := t.leases[record.Name]; !held {
@@ -454,14 +456,14 @@ func (t *transaction) removeContextDirectory(ctx context.Context, record context
 	if err := t.checkControllerRecovery(ctx, record.Name); err != nil {
 		return err
 	}
-	if err := unlinkVerified(t.container, record.Name, dir.identity, true); err != nil {
+	if err := unlinkVerified(t.container, record.Name, dir.Identity, true); err != nil {
 		return err
 	}
 	return t.store.syncDirectory(ctx, t.container)
 }
 
 func absentWithin(parent *directory, name string) bool {
-	file, err := openRelative(parent, name, pathHandle, 0)
+	file, err := kernel.OpenRelative(parent, name, kernel.PathHandle, 0)
 	if file != nil {
 		file.Close()
 	}
@@ -591,7 +593,7 @@ func (t *transaction) lostRefusal(ctx context.Context, name string, err error) e
 		}
 		return err
 	}
-	if t.container.verify() != nil || !absentWithin(t.container, name) {
+	if t.container.Verify() != nil || !absentWithin(t.container, name) {
 		return err
 	}
 	if t.lost == nil {
@@ -645,13 +647,13 @@ func unsafeEntryReason(dir *directory, path, name string, identity syscall.Stat_
 	case statErr != nil:
 		return "it cannot be read: " + storeCauseText(statErr)
 	case kind != syscall.S_IFDIR && kind != syscall.S_IFREG:
-		return "it is " + fileKind(identity.Mode)
-	case identity.Dev != dir.identity.Dev:
+		return "it is " + kernel.FileKind(identity.Mode)
+	case identity.Dev != dir.Identity.Dev:
 		return foreignFilesystemReason
 	case kind == syscall.S_IFREG && identity.Nlink != 1:
 		return "it is a regular file with " + strconv.FormatUint(uint64(identity.Nlink), 10) + " links"
-	case !private(identity, kind, dir.identity.Uid, dir.identity.Gid):
-		return "it is " + fileKind(identity.Mode) + " owned by " + ownerText(identity.Uid, identity.Gid) + " with mode " + modeText(identity.Mode)
+	case !kernel.Private(identity, kind, dir.Identity.Uid, dir.Identity.Gid):
+		return "it is " + kernel.FileKind(identity.Mode) + " owned by " + ownerText(identity.Uid, identity.Gid) + " with mode " + modeText(identity.Mode)
 	case !contextEntryAllowed(path, name, kind == syscall.S_IFDIR):
 		return "it is not part of a context's layout"
 	}

@@ -9,10 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/nativefs"
@@ -80,274 +81,18 @@ func ioDiagnosis(message string, errno syscall.Errno) (string, string) {
 	return message + ": " + errnoText(errno), storeDeviceRemediation
 }
 
-// ioFailure is a store write or sync the kernel refused. Its diagnostic is
-// context.state for every caller; its type lets the secret area report the
-// same cause and remedy under its own code.
-type ioFailure struct{ failure error }
-
-func (e *ioFailure) Error() string { return e.failure.Error() }
-
-func (e *ioFailure) Unwrap() error { return e.failure }
-
 // storeFailure names the errno a failed write or sync returned. A capacity
 // answer is never read as damage: it names the room the filesystem lacks and
 // the free-space remedy. A failure without an errno keeps its message alone.
+type directory = kernel.Directory
+
 func storeFailure(message string, cause error) error {
 	errno, found := storeErrno(cause)
 	if !found {
 		return state(message)
 	}
 	text, remediation := ioDiagnosis(message, errno)
-	return &ioFailure{failure: contexts.StateErrorWithRemediation(text, remediation)}
-}
-
-const pathHandle = nativefs.PathOnly
-
-type directory struct {
-	file       *os.File
-	path       string
-	identity   syscall.Stat_t
-	parent     *directory
-	name       string
-	ownsParent bool
-}
-
-func (d *directory) close() {
-	unlockAndClose(d.file)
-	if d.ownsParent {
-		unlockAndClose(d.parent.file)
-	}
-}
-
-func statHandle(file *os.File) (syscall.Stat_t, error) {
-	var stat syscall.Stat_t
-	if err := syscall.Fstat(int(file.Fd()), &stat); err != nil {
-		return stat, &ioFailure{failure: state("state handle cannot be verified")}
-	}
-	return stat, nil
-}
-
-func sameIdentity(a, b syscall.Stat_t) bool {
-	return a.Dev == b.Dev && a.Ino == b.Ino && a.Mode == b.Mode && a.Uid == b.Uid && a.Gid == b.Gid
-}
-
-func sameFile(a, b syscall.Stat_t) bool {
-	return sameIdentity(a, b) && a.Size == b.Size && a.Nlink == b.Nlink && a.Mtim == b.Mtim && a.Ctim == b.Ctim
-}
-
-func private(stat syscall.Stat_t, kind, uid, gid uint32) bool {
-	mode := uint32(0600)
-	if kind == syscall.S_IFDIR {
-		mode = 0700
-	}
-	return stat.Mode&syscall.S_IFMT == kind && stat.Uid == uid && stat.Gid == gid && stat.Mode&07777 == mode && (kind != syscall.S_IFREG || stat.Nlink == 1)
-}
-
-func readableFile(stat syscall.Stat_t, immutable bool, parent *directory) bool {
-	if !immutable && stat.Nlink == 0 {
-		stat.Nlink = 1
-	}
-	return private(stat, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid)
-}
-
-func openRelative(parent *directory, name string, flags int, mode uint32) (*os.File, error) {
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\x00") {
-		return nil, state("state path component is invalid")
-	}
-	return openWithin(parent, name, flags, mode)
-}
-
-func openWithin(parent *directory, name string, flags int, mode uint32) (*os.File, error) {
-	if strings.ContainsRune(name, 0) {
-		return nil, state("state path component is invalid")
-	}
-	fd, err := nativefs.OpenBeneath(int(parent.file.Fd()), name, flags, mode)
-	runtime.KeepAlive(parent.file)
-	if err != nil {
-		return nil, err
-	}
-	return os.NewFile(uintptr(fd), filepath.Join(parent.path, name)), nil
-}
-
-func openDirectory(parent *directory, name string) (*directory, error) {
-	file, err := openRelative(parent, name, syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
-	if err != nil {
-		return nil, err
-	}
-	stat, err := statHandle(file)
-	if err != nil {
-		file.Close()
-		return nil, err
-	}
-	if !private(stat, syscall.S_IFDIR, parent.identity.Uid, parent.identity.Gid) || stat.Dev != parent.identity.Dev {
-		file.Close()
-		return nil, state("state directory type, owner, permissions or device is unsafe")
-	}
-	return &directory{file: file, path: filepath.Join(parent.path, name), identity: stat, parent: parent, name: name}, nil
-}
-
-func recordedDirectory(child, parent syscall.Stat_t, inode uint64) bool {
-	return inode != 0 && child.Ino == inode && child.Dev == parent.Dev
-}
-
-func (d *directory) recorded(inode uint64) bool {
-	return d.parent != nil && recordedDirectory(d.identity, d.parent.identity, inode)
-}
-
-func (d *directory) verify() error {
-	stat, err := statHandle(d.file)
-	if err != nil {
-		return err
-	}
-	if !private(stat, syscall.S_IFDIR, d.identity.Uid, d.identity.Gid) || !sameIdentity(d.identity, stat) {
-		return state("held state directory changed")
-	}
-	var reopened *os.File
-	if d.parent == nil {
-		reopened, err = walkAbsolute(d.path, nil)
-	} else {
-		if err = d.parent.verify(); err != nil {
-			return err
-		}
-		reopened, err = openRelative(d.parent, d.name, syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
-	}
-	if err != nil {
-		if errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ELOOP) || errors.Is(err, syscall.ENOTDIR) || errors.Is(err, syscall.EXDEV) {
-			return state("state directory location cannot be verified")
-		}
-		return err
-	}
-	defer reopened.Close()
-	current, err := statHandle(reopened)
-	if err != nil {
-		return err
-	}
-	if !sameIdentity(d.identity, current) {
-		return state("state directory location was replaced")
-	}
-	return nil
-}
-
-// listingKind is why heldNames refused a listing it read itself, so each
-// caller can report it under its own code.
-type listingKind uint8
-
-const (
-	listingReplaced listingKind = iota
-	listingUnreadable
-	listingOverLimit
-)
-
-type listingFailure struct {
-	kind    listingKind
-	failure error
-}
-
-func (e *listingFailure) Error() string { return e.failure.Error() }
-
-func (e *listingFailure) Unwrap() error { return e.failure }
-
-// heldNames lists, sorted, the directory dir holds, through a fresh handle on
-// that very directory rather than a resolution of its name, so a directory
-// renamed over it is never what is listed. It verifies dir's location before
-// and after, so a directory moved away during the listing refuses as replaced.
-func heldNames(dir *directory, maximum int) ([]string, error) {
-	if err := dir.verify(); err != nil {
-		return nil, err
-	}
-	file, err := openWithin(dir, ".", syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	identity, err := statHandle(file)
-	if err != nil {
-		return nil, &listingFailure{listingUnreadable, err}
-	}
-	if !sameIdentity(dir.identity, identity) {
-		return nil, &listingFailure{listingReplaced, state("held state directory was replaced")}
-	}
-	names := make([]string, 0, min(maximum, 1024))
-	for len(names) <= maximum {
-		part, readErr := file.Readdirnames(min(1024, maximum+1-len(names)))
-		names = append(names, part...)
-		if len(names) > maximum {
-			return nil, &listingFailure{listingOverLimit, state("state directory entry count exceeds its limit")}
-		}
-		if errors.Is(readErr, io.EOF) {
-			break
-		}
-		if readErr != nil || len(part) == 0 {
-			return nil, &listingFailure{listingUnreadable, state("state directory cannot be enumerated")}
-		}
-	}
-	if err := dir.verify(); err != nil {
-		return nil, err
-	}
-	slices.Sort(names)
-	return names, nil
-}
-
-func directoryNames(dir *directory, maximum int) ([]string, error) {
-	return heldNames(dir, maximum)
-}
-
-// Existing ancestors may be system directories; all missing suffixes are
-// exclusively created private directories. No component may be a symlink.
-func walkAbsolute(path string, create func(*os.File) error) (*os.File, error) {
-	fd, err := syscall.Open("/", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
-	if err != nil {
-		return nil, err
-	}
-	parent := os.NewFile(uintptr(fd), "/")
-	if path == "/" {
-		return parent, nil
-	}
-	if create != nil {
-		probe, err := openWithin(&directory{file: parent, path: "/"}, ".", pathHandle|syscall.O_DIRECTORY, 0)
-		if err != nil {
-			parent.Close()
-			return nil, state("state containment primitives are unavailable")
-		}
-		probe.Close()
-		return createAbsolute(path, parent, create)
-	}
-	components := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	for i, name := range components {
-		if err := qualifiedFileSystem(parent); err != nil {
-			parent.Close()
-			return nil, err
-		}
-		child, err := syscall.Openat(int(parent.Fd()), name, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
-		if err != nil {
-			err = unreachableAncestor(parent, name, components[:i+1], err)
-			parent.Close()
-			return nil, err
-		}
-		parent.Close()
-		parent = os.NewFile(uintptr(child), name)
-	}
-	return parent, nil
-}
-
-// unreachableRoot is the refusal of a state root the store cannot reach
-// because one component of its absolute path, named in full, is a symbolic
-// link or not a directory; its status tells the root itself from an ancestor.
-type unreachableRoot struct {
-	component string
-	stat      syscall.Stat_t
-	failure   error
-}
-
-func (e *unreachableRoot) Error() string { return e.failure.Error() }
-
-func (e *unreachableRoot) Unwrap() error { return e.failure }
-
-func unreachableRootRefusal(component string, stat syscall.Stat_t) error {
-	return &unreachableRoot{component: component, stat: stat, failure: contexts.StateErrorWithRemediation(
-		"the state root is reached through "+component+", which is "+fileKind(stat.Mode)+
-			", but the store reaches its root only through directories and never follows a symbolic link",
-		"replace "+component+" with a directory, such as the directory a symbolic link there names or a mount of that storage, then repeat the command")}
+	return &kernel.IOFailure{Failure: contexts.StateErrorWithRemediation(text, remediation)}
 }
 
 // refusedRoot is unsafeRoot with an ancestor link's exit for a root that is a link.
@@ -359,120 +104,6 @@ func refusedRoot(path string, stat syscall.Stat_t, uid, gid uint32) error {
 	}
 	return contexts.StateErrorWithRemediation(failure.Diagnostics[0].Message,
 		"replace "+path+" with a directory, such as the directory the link names or a mount of that storage, then repeat the command")
-}
-
-// unreachableAncestor names the component an open of the root's path refused
-// because it is a symbolic link or not a directory; any other error, or one
-// whose component cannot be read without following it, passes unchanged.
-func unreachableAncestor(parent *os.File, name string, walked []string, err error) error {
-	if !errors.Is(err, syscall.ENOTDIR) && !errors.Is(err, syscall.ELOOP) {
-		return err
-	}
-	fd, openErr := syscall.Openat(int(parent.Fd()), name, pathHandle|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
-	if openErr != nil {
-		return err
-	}
-	var stat syscall.Stat_t
-	statErr := syscall.Fstat(fd, &stat)
-	syscall.Close(fd)
-	if statErr != nil || stat.Mode&syscall.S_IFMT == syscall.S_IFDIR {
-		return err
-	}
-	return unreachableRootRefusal("/"+strings.Join(walked, "/"), stat)
-}
-
-func createAbsolute(path string, base *os.File, admit func(*os.File) error) (*os.File, error) {
-	type held struct {
-		file     *os.File
-		name     string
-		identity syscall.Stat_t
-	}
-	initial, err := statHandle(base)
-	if err != nil {
-		base.Close()
-		return nil, err
-	}
-	chain := []held{{file: base, identity: initial}}
-	keep := false
-	defer func() {
-		for i, entry := range chain {
-			if !keep || i != len(chain)-1 {
-				entry.file.Close()
-			}
-		}
-	}()
-	verify := func() error {
-		for i, entry := range chain {
-			current, err := statHandle(entry.file)
-			if err != nil || !sameIdentity(entry.identity, current) {
-				return state("state ancestor changed during creation")
-			}
-			if i == 0 {
-				continue
-			}
-			fd, err := syscall.Openat(int(chain[i-1].file.Fd()), entry.name, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
-			if err != nil {
-				return state("state ancestor was replaced during creation")
-			}
-			var named syscall.Stat_t
-			err = syscall.Fstat(fd, &named)
-			syscall.Close(fd)
-			if err != nil || !sameIdentity(entry.identity, named) {
-				return state("state ancestor was replaced during creation")
-			}
-		}
-		return nil
-	}
-	components := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	for i, name := range components {
-		if err := verify(); err != nil {
-			return nil, err
-		}
-		parent := chain[len(chain)-1].file
-		if err := qualifiedFileSystem(parent); err != nil {
-			return nil, err
-		}
-		fd, err := syscall.Openat(int(parent.Fd()), name, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
-		created := false
-		if errors.Is(err, syscall.ENOENT) {
-			if err := verify(); err != nil {
-				return nil, err
-			}
-			if err := admit(parent); err != nil {
-				return nil, err
-			}
-			err = syscall.Mkdirat(int(parent.Fd()), name, 0700)
-			if err != nil {
-				return nil, err
-			}
-			created = true
-			fd, err = syscall.Openat(int(parent.Fd()), name, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
-		}
-		if err != nil {
-			return nil, unreachableAncestor(parent, name, components[:i+1], err)
-		}
-		file := os.NewFile(uintptr(fd), name)
-		if err := qualifiedFileSystem(file); err != nil {
-			file.Close()
-			return nil, err
-		}
-		identity, err := statHandle(file)
-		if err != nil || created && (!private(identity, syscall.S_IFDIR, uint32(os.Geteuid()), uint32(os.Getegid())) || identity.Mode&0777 != 0700) {
-			file.Close()
-			return nil, state("created state ancestor is unsafe")
-		}
-		chain = append(chain, held{file: file, name: name, identity: identity})
-		if err := verify(); err != nil {
-			return nil, err
-		}
-		if created {
-			if err := parent.Sync(); err != nil {
-				return nil, state("state ancestor durability could not be established")
-			}
-		}
-	}
-	keep = true
-	return chain[len(chain)-1].file, nil
 }
 
 func (s *Store) rootPath() (string, error) {
@@ -517,27 +148,27 @@ func (s *Store) openRoot(ctx context.Context, create bool, inputs []string) (*di
 	if create {
 		admit = s.admitCreation(path)
 	}
-	file, err := walkAbsolute(path, admit)
+	file, err := kernel.WalkAbsolute(path, admit)
 	if err != nil {
 		// A root that is itself a link or not a directory is a root of
 		// another type, which setup reports the same way.
-		var unreachable *unreachableRoot
-		if errors.As(err, &unreachable) && unreachable.component == path {
-			return nil, refusedRoot(path, unreachable.stat, uid, gid)
+		var unreachable *kernel.UnreachableRoot
+		if errors.As(err, &unreachable) && unreachable.Component == path {
+			return nil, refusedRoot(path, unreachable.Stat, uid, gid)
 		}
 		return nil, err
 	}
-	stat, err := statHandle(file)
+	stat, err := kernel.StatHandle(file)
 	if err != nil {
 		file.Close()
 		return nil, state("state root type, owner or permissions is unsafe")
 	}
-	if !private(stat, syscall.S_IFDIR, uid, gid) {
+	if !kernel.Private(stat, syscall.S_IFDIR, uid, gid) {
 		file.Close()
 		return nil, refusedRoot(path, stat, uid, gid)
 	}
 	var fs syscall.Statfs_t
-	if err = syscall.Fstatfs(int(file.Fd()), &fs); err != nil || !localFilesystem(fs.Type) {
+	if err = syscall.Fstatfs(int(file.Fd()), &fs); err != nil || !kernel.LocalFilesystem(fs.Type) {
 		file.Close()
 		return nil, state("state filesystem is not qualified for private durable storage")
 	}
@@ -545,9 +176,9 @@ func (s *Store) openRoot(ctx context.Context, create bool, inputs []string) (*di
 		file.Close()
 		return nil, err
 	}
-	root := &directory{file: file, path: path, identity: stat}
+	root := &directory{File: file, Path: path, Identity: stat}
 	// Probe the required kernel primitive without creating anything.
-	probe, err := openRelative(root, "registry.json", pathHandle, 0)
+	probe, err := kernel.OpenRelative(root, "registry.json", kernel.PathHandle, 0)
 	if probe != nil {
 		probe.Close()
 	}
@@ -556,14 +187,6 @@ func (s *Store) openRoot(ctx context.Context, create bool, inputs []string) (*di
 		return nil, state("state containment primitives are unavailable or the registry path is unsafe")
 	}
 	return root, nil
-}
-
-func localFilesystem(kind int64) bool {
-	switch kind {
-	case 0xef53, 0x58465342, 0x9123683e, 0x01021994, 0x794c7630:
-		return true
-	}
-	return false
 }
 
 // transientFilesystems are the qualified filesystems that may not keep a
@@ -600,14 +223,6 @@ func (s *Store) admitCreation(path string) func(*os.File) error {
 	}
 }
 
-func qualifiedFileSystem(file *os.File) error {
-	var fs syscall.Statfs_t
-	if err := syscall.Fstatfs(int(file.Fd()), &fs); err != nil || !localFilesystem(fs.Type) {
-		return state("state filesystem is not qualified for private durable storage")
-	}
-	return nil
-}
-
 func readBounded(ctx context.Context, parent *directory, name string, maximum int, immutable bool) ([]byte, error) {
 	data, _, err := readBoundedIdentity(ctx, parent, name, maximum, immutable)
 	return data, err
@@ -617,13 +232,13 @@ func readBoundedIdentity(ctx context.Context, parent *directory, name string, ma
 	if err := ctx.Err(); err != nil {
 		return nil, syscall.Stat_t{}, err
 	}
-	file, err := openRelative(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	file, err := kernel.OpenRelative(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, syscall.Stat_t{}, err
 	}
 	defer file.Close()
-	before, err := statHandle(file)
-	if err != nil || !readableFile(before, immutable, parent) || before.Size < 0 || before.Size > int64(maximum) {
+	before, err := kernel.StatHandle(file)
+	if err != nil || !kernel.ReadableFile(before, immutable, parent) || before.Size < 0 || before.Size > int64(maximum) {
 		return nil, syscall.Stat_t{}, state("state file type, owner, permissions, links or size is unsafe")
 	}
 	data := make([]byte, 0, int(before.Size))
@@ -644,28 +259,28 @@ func readBoundedIdentity(ctx context.Context, parent *directory, name string, ma
 			return nil, syscall.Stat_t{}, state("state file exceeds its byte limit")
 		}
 	}
-	after, err := statHandle(file)
-	stable := sameFile(before, after)
+	after, err := kernel.StatHandle(file)
+	stable := kernel.SameFile(before, after)
 	if !immutable {
 		// A registry replacement may unlink this complete, already-open old
 		// snapshot. Its contents remain immutable even though ctime/nlink change.
-		stable = sameIdentity(before, after) && before.Size == after.Size && before.Mtim == after.Mtim && readableFile(after, false, parent)
+		stable = kernel.SameIdentity(before, after) && before.Size == after.Size && before.Mtim == after.Mtim && kernel.ReadableFile(after, false, parent)
 	}
 	if err != nil || !stable || int64(len(data)) != after.Size {
 		return nil, syscall.Stat_t{}, state("state file changed during reading")
 	}
 	if immutable {
-		current, err := openRelative(parent, name, pathHandle, 0)
+		current, err := kernel.OpenRelative(parent, name, kernel.PathHandle, 0)
 		if err != nil {
 			return nil, syscall.Stat_t{}, state("immutable state file was replaced")
 		}
-		stat, statErr := statHandle(current)
+		stat, statErr := kernel.StatHandle(current)
 		current.Close()
-		if statErr != nil || !sameFile(after, stat) {
+		if statErr != nil || !kernel.SameFile(after, stat) {
 			return nil, syscall.Stat_t{}, state("immutable state file was replaced")
 		}
 	}
-	if err := parent.verify(); err != nil {
+	if err := parent.Verify(); err != nil {
 		return nil, syscall.Stat_t{}, err
 	}
 	return data, after, nil
@@ -675,29 +290,29 @@ func (s *Store) newDirectory(ctx context.Context, parent *directory, name string
 	if err := s.checkpoint(ctx, checkpointMkdir); err != nil {
 		return nil, err
 	}
-	if err := parent.verify(); err != nil {
+	if err := parent.Verify(); err != nil {
 		return nil, err
 	}
-	if err := syscall.Mkdirat(int(parent.file.Fd()), name, 0700); err != nil {
+	if err := syscall.Mkdirat(int(parent.File.Fd()), name, 0700); err != nil {
 		return nil, err
 	}
-	child, err := openDirectory(parent, name)
+	child, err := kernel.OpenDirectory(parent, name)
 	if err != nil {
 		return nil, err
 	}
-	if child.identity.Mode&0777 != 0700 {
-		child.file.Close()
+	if child.Identity.Mode&0777 != 0700 {
+		child.File.Close()
 		return nil, state("new state directory does not have private creation permissions")
 	}
 	if err = s.syncDirectory(ctx, parent); err != nil {
-		child.file.Close()
+		child.File.Close()
 		return nil, err
 	}
 	return child, nil
 }
 
 func (s *Store) ensureDirectory(ctx context.Context, parent *directory, name string) (*directory, error) {
-	child, err := openDirectory(parent, name)
+	child, err := kernel.OpenDirectory(parent, name)
 	if !errors.Is(err, syscall.ENOENT) {
 		return child, err
 	}
@@ -709,12 +324,12 @@ func (s *Store) ensureDirectory(ctx context.Context, parent *directory, name str
 }
 
 func (s *Store) concurrentDirectory(ctx context.Context, parent *directory, name string) (*directory, error) {
-	child, err := openDirectory(parent, name)
+	child, err := kernel.OpenDirectory(parent, name)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.syncDirectory(ctx, parent); err != nil {
-		child.file.Close()
+		child.File.Close()
 		return nil, err
 	}
 	return child, nil
@@ -724,10 +339,10 @@ func (s *Store) syncDirectory(ctx context.Context, dir *directory) error {
 	if err := s.checkpoint(ctx, checkpointSyncDirectory); err != nil {
 		return err
 	}
-	if err := dir.verify(); err != nil {
+	if err := dir.Verify(); err != nil {
 		return err
 	}
-	if err := dir.file.Sync(); err != nil {
+	if err := dir.File.Sync(); err != nil {
 		return storeFailure("state directory durability could not be established", err)
 	}
 	return nil
@@ -750,10 +365,10 @@ func (s *Store) writeExclusiveIdentity(ctx context.Context, parent *directory, n
 	if err := s.checkpoint(ctx, checkpointCreateFile); err != nil {
 		return syscall.Stat_t{}, err
 	}
-	if err := parent.verify(); err != nil {
+	if err := parent.Verify(); err != nil {
 		return syscall.Stat_t{}, err
 	}
-	file, err := openRelative(parent, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
+	file, err := kernel.OpenRelative(parent, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
 	if err != nil {
 		return syscall.Stat_t{}, err
 	}
@@ -763,12 +378,12 @@ func (s *Store) writeExclusiveIdentity(ctx context.Context, parent *directory, n
 		if complete || retain {
 			return
 		}
-		if created, err := statHandle(file); err == nil {
+		if created, err := kernel.StatHandle(file); err == nil {
 			discardCreated(parent, name, created)
 		}
 	}()
-	before, err := statHandle(file)
-	if err != nil || !private(before, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid) || before.Mode&0777 != 0600 {
+	before, err := kernel.StatHandle(file)
+	if err != nil || !kernel.Private(before, syscall.S_IFREG, parent.Identity.Uid, parent.Identity.Gid) || before.Mode&0777 != 0600 {
 		return syscall.Stat_t{}, state("new state file is unsafe")
 	}
 	size := len(data)
@@ -788,17 +403,17 @@ func (s *Store) writeExclusiveIdentity(ctx context.Context, parent *directory, n
 	if err := file.Sync(); err != nil {
 		return syscall.Stat_t{}, storeFailure("state file durability could not be established", err)
 	}
-	held, err := statHandle(file)
-	if err != nil || !sameIdentity(before, held) || !private(held, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid) || held.Size != int64(size) {
+	held, err := kernel.StatHandle(file)
+	if err != nil || !kernel.SameIdentity(before, held) || !kernel.Private(held, syscall.S_IFREG, parent.Identity.Uid, parent.Identity.Gid) || held.Size != int64(size) {
 		return syscall.Stat_t{}, state("new state file changed during publication")
 	}
-	current, err := openRelative(parent, name, pathHandle, 0)
+	current, err := kernel.OpenRelative(parent, name, kernel.PathHandle, 0)
 	if err != nil {
 		return syscall.Stat_t{}, state("new state file was replaced")
 	}
-	after, statErr := statHandle(current)
+	after, statErr := kernel.StatHandle(current)
 	current.Close()
-	if statErr != nil || !sameFile(held, after) {
+	if statErr != nil || !kernel.SameFile(held, after) {
 		return syscall.Stat_t{}, state("new state file was replaced")
 	}
 	if err := s.syncDirectory(ctx, parent); err != nil {
@@ -815,7 +430,7 @@ func (s *Store) writeExclusiveIdentity(ctx context.Context, parent *directory, n
 // the refusal that caused it is the one to report.
 func discardCreated(parent *directory, name string, identity syscall.Stat_t) {
 	if unlinkVerified(parent, name, identity, false) == nil {
-		_ = parent.file.Sync()
+		_ = parent.File.Sync()
 	}
 }
 
@@ -830,7 +445,7 @@ func (s *Store) writeExclusiveAtomic(ctx context.Context, parent *directory, nam
 }
 
 func renameNoReplaceAt(parent *directory, oldName, newName string) error {
-	if err := parent.verify(); err != nil {
+	if err := parent.Verify(); err != nil {
 		return err
 	}
 	if len(oldName) == 0 || len(oldName) > 255 || oldName == "." || oldName == ".." || strings.ContainsAny(oldName, "/\x00") {
@@ -839,8 +454,8 @@ func renameNoReplaceAt(parent *directory, oldName, newName string) error {
 	if len(newName) == 0 || len(newName) > 255 || newName == "." || newName == ".." || strings.ContainsAny(newName, "/\x00") {
 		return state("immutable state name is invalid")
 	}
-	err := nativefs.RenameNoReplace(int(parent.file.Fd()), oldName, newName)
-	runtime.KeepAlive(parent.file)
+	err := nativefs.RenameNoReplace(int(parent.File.Fd()), oldName, newName)
+	runtime.KeepAlive(parent.File)
 	if err != nil {
 		return err
 	}
@@ -867,37 +482,6 @@ func syncFilesystem(file *os.File) error {
 	return nil
 }
 
-// busyError is a root lock or context lease another Bootwright command holds.
-// Nothing is wrong with the store, so it is reported as lifecycle.lease rather
-// than context.state: the same command succeeds once the holder finishes, and
-// Bootwright never takes a lock over.
-type busyError struct{ failure error }
-
-func busy(message string) error {
-	return &busyError{diagnostics.NewFailureWithRemediation("lifecycle.lease", message, "",
-		"retry after the running Bootwright command finishes")}
-}
-
-func (e *busyError) Error() string { return e.failure.Error() }
-
-func (e *busyError) Unwrap() error { return e.failure }
-
-func lock(dir *directory) error {
-	if err := dir.verify(); err != nil {
-		return err
-	}
-	if err := syscall.Flock(int(dir.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); errors.Is(err, syscall.EWOULDBLOCK) {
-		return busy("context state is held by another mutator")
-	} else if err != nil {
-		return state("context state is held by another mutator")
-	}
-	if err := dir.verify(); err != nil {
-		syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
-		return err
-	}
-	return nil
-}
-
 func rootWait(s *Store) time.Duration {
 	if s != nil && s.rootWait > 0 {
 		return s.rootWait
@@ -909,13 +493,13 @@ func awaitRoot(ctx context.Context, s *Store, dir *directory, how int) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := dir.verify(); err != nil {
+	if err := dir.Verify(); err != nil {
 		return err
 	}
 	bounded, cancel := context.WithTimeout(ctx, rootWait(s))
 	defer cancel()
 	for delay := rootLockPoll; ; delay = min(2*delay, maxRootLockPoll) {
-		err := syscall.Flock(int(dir.file.Fd()), how|syscall.LOCK_NB)
+		err := syscall.Flock(int(dir.File.Fd()), how|syscall.LOCK_NB)
 		if err == nil {
 			break
 		}
@@ -929,25 +513,13 @@ func awaitRoot(ctx context.Context, s *Store, dir *directory, how int) error {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			return busy("context state stayed held by another command for the whole root lock wait")
+			return kernel.Busy("context state stayed held by another command for the whole root lock wait")
 		case <-timer.C:
 		}
 	}
-	if err := dir.verify(); err != nil {
-		syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
+	if err := dir.Verify(); err != nil {
+		syscall.Flock(int(dir.File.Fd()), syscall.LOCK_UN)
 		return err
-	}
-	return nil
-}
-
-func lockShared(dir *directory) error {
-	if err := dir.verify(); err != nil {
-		return err
-	}
-	if err := syscall.Flock(int(dir.file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); errors.Is(err, syscall.EWOULDBLOCK) {
-		return busy("context storage is busy")
-	} else if err != nil {
-		return state("context storage is busy")
 	}
 	return nil
 }

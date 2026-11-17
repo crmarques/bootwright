@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/nativefs"
@@ -148,10 +150,10 @@ func (s *Store) Uninstall(ctx context.Context, callback func(prerequisites.Unins
 			release()
 		}
 		for _, parent := range tx.parents {
-			parent.file.Close()
+			parent.File.Close()
 		}
 		for _, file := range held {
-			unlockAndClose(file)
+			kernel.UnlockAndClose(file)
 		}
 	}()
 	parents, err := s.uninstallParents(tx, &view, uid, gid, &held)
@@ -169,7 +171,7 @@ func (s *Store) Uninstall(ctx context.Context, callback func(prerequisites.Unins
 			return err
 		}
 		if staging != nil {
-			identity, err := statHandle(staging)
+			identity, err := kernel.StatHandle(staging)
 			if err != nil {
 				return safeError(err)
 			}
@@ -218,7 +220,7 @@ func (s *Store) uninstallParents(tx *uninstallTransaction, view *prerequisites.U
 			return nil, err
 		}
 		if len(found) != 0 {
-			if err := qualifiedFileSystem(parent.file); err != nil {
+			if err := kernel.QualifiedFileSystem(parent.File); err != nil {
 				return nil, err
 			}
 		}
@@ -240,18 +242,18 @@ func (s *Store) inspectStoreForUninstall(ctx context.Context, tx *uninstallTrans
 	if err != nil {
 		return safeError(err)
 	}
-	*releases = append(*releases, func() { root.file.Close() })
-	if err := lock(root); err != nil {
+	*releases = append(*releases, func() { root.File.Close() })
+	if err := kernel.Lock(root); err != nil {
 		return safeError(err)
 	}
-	*releases = append(*releases, func() { syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN) })
+	*releases = append(*releases, func() { syscall.Flock(int(root.File.Fd()), syscall.LOCK_UN) })
 	release, err := s.inspectRootForUninstall(ctx, parent, root, view)
 	*releases = append(*releases, release)
 	if err != nil {
 		return safeError(err)
 	}
 	view.RootExists = true
-	tx.trees = append(tx.trees, uninstallTree{parent: parent, path: view.Root, identity: root.identity})
+	tx.trees = append(tx.trees, uninstallTree{parent: parent, path: view.Root, identity: root.Identity})
 	return nil
 }
 
@@ -272,7 +274,7 @@ func (s *Store) inspectOwnedTrees(tx *uninstallTransaction, parents map[string]*
 			continue
 		}
 		*owned.seen = true
-		tx.trees = append(tx.trees, uninstallTree{parent: parent, path: owned.path, identity: tree.identity})
+		tx.trees = append(tx.trees, uninstallTree{parent: parent, path: owned.path, identity: tree.Identity})
 		if owned.path != view.Images {
 			continue
 		}
@@ -289,27 +291,27 @@ func (s *Store) inspectOwnedTrees(tx *uninstallTransaction, parents map[string]*
 }
 
 func uninstallParent(path string) (*directory, error) {
-	file, err := walkAbsolute(path, nil)
+	file, err := kernel.WalkAbsolute(path, nil)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, safeError(err)
 	}
-	identity, err := statHandle(file)
+	identity, err := kernel.StatHandle(file)
 	if err != nil {
 		file.Close()
 		return nil, safeError(err)
 	}
-	return &directory{file: file, path: path, identity: identity}, nil
+	return &directory{File: file, Path: path, Identity: identity}, nil
 }
 
 func (s *Store) inspectRootForUninstall(ctx context.Context, parent, root *directory, view *prerequisites.UninstallView) (func(), error) {
 	release := func() {}
-	if root.identity.Dev != parent.identity.Dev {
-		return release, mountedAside(root.path)
+	if root.Identity.Dev != parent.Identity.Dev {
+		return release, mountedAside(root.Path)
 	}
-	if err := s.sameEntry(parent, filepath.Base(root.path), root.identity); err != nil {
+	if err := s.sameEntry(parent, filepath.Base(root.Path), root.Identity); err != nil {
 		return release, err
 	}
 	registry, exists, err := decodeStoredRegistry(ctx, root)
@@ -343,12 +345,12 @@ func (s *Store) inspectRootForUninstall(ctx context.Context, parent, root *direc
 	}
 	held, err := lockSetup(ctx, dir, false)
 	if err != nil {
-		dir.close()
+		dir.Close()
 		return release, err
 	}
 	release = func() {
-		unlockAndClose(held)
-		dir.close()
+		kernel.UnlockAndClose(held)
+		dir.Close()
 	}
 	if view.Unreadable != nil {
 		return release, nil
@@ -358,14 +360,14 @@ func (s *Store) inspectRootForUninstall(ctx context.Context, parent, root *direc
 }
 
 func uninstallMedia(ctx context.Context, s *Store, root *directory) ([]string, error) {
-	dir, err := openDirectory(root, mediaContainer)
+	dir, err := kernel.OpenDirectory(root, mediaContainer)
 	if errors.Is(err, syscall.ENOENT) {
 		return []string{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	defer dir.file.Close()
+	defer dir.File.Close()
 	area := &mediaArea{store: s, root: root, dir: dir, active: func() bool { return true }}
 	names, err := area.Names(ctx)
 	if err != nil {
@@ -380,7 +382,7 @@ func uninstallMedia(ctx context.Context, s *Store, root *directory) ([]string, e
 			names = append(names, entry.Name)
 		}
 	}
-	entries, err := directoryNames(dir, maxMediaDirectory)
+	entries, err := kernel.DirectoryNames(dir, maxMediaDirectory)
 	if err != nil {
 		return nil, err
 	}
@@ -393,7 +395,7 @@ func uninstallMedia(ctx context.Context, s *Store, root *directory) ([]string, e
 			return nil, err
 		}
 		if held {
-			return nil, busy("a media add is acquiring installer media")
+			return nil, kernel.Busy("a media add is acquiring installer media")
 		}
 	}
 	slices.Sort(names)
@@ -405,17 +407,17 @@ func (s *Store) openStagingForUninstall(parent *directory, name string, uid, gid
 	if dir == nil || err != nil {
 		return nil, err
 	}
-	file, path := dir.file, dir.path
+	file, path := dir.File, dir.Path
 	names, err := rawNames(dir, maxHostParentNames)
 	if err != nil {
 		return nil, err
 	}
 	for _, entry := range names {
-		lock, err := openWithin(dir, entry+"/"+stageLockName, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+		lock, err := kernel.OpenWithin(dir, entry+"/"+stageLockName, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 		if err != nil {
 			continue
 		}
-		listed, err := statHandle(lock)
+		listed, err := kernel.StatHandle(lock)
 		if err != nil || listed.Mode&syscall.S_IFMT != syscall.S_IFREG {
 			lock.Close()
 			continue
@@ -423,7 +425,7 @@ func (s *Store) openStagingForUninstall(parent *directory, name string, uid, gid
 		switch err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); {
 		case errors.Is(err, syscall.EWOULDBLOCK):
 			lock.Close()
-			return nil, busy("a staging extraction in " + path + " is held by another process")
+			return nil, kernel.Busy("a staging extraction in " + path + " is held by another process")
 		case err != nil:
 			lock.Close()
 			return nil, state("a staging extraction lock cannot be inspected")
@@ -434,11 +436,11 @@ func (s *Store) openStagingForUninstall(parent *directory, name string, uid, gid
 }
 
 func (s *Store) openOwnedTree(parent *directory, name string, uid, gid uint32, held *[]*os.File) (*directory, error) {
-	fd, err := syscall.Openat(int(parent.file.Fd()), name, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	fd, err := syscall.Openat(int(parent.File.Fd()), name, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil, nil
 	}
-	path := filepath.Join(parent.path, name)
+	path := filepath.Join(parent.Path, name)
 	foreign := diagnostics.NewFailureWithRemediation("controller.uninstall",
 		path+" is not a directory Bootwright owns, so uninstall leaves it", "",
 		"inspect "+path+" and remove it yourself if nothing uses it, then run bootwright controller uninstall again")
@@ -446,12 +448,12 @@ func (s *Store) openOwnedTree(parent *directory, name string, uid, gid uint32, h
 		return nil, foreign
 	}
 	file := os.NewFile(uintptr(fd), path)
-	stat, err := statHandle(file)
+	stat, err := kernel.StatHandle(file)
 	if err != nil || stat.Uid != uid || stat.Gid != gid || stat.Mode&0022 != 0 {
 		file.Close()
 		return nil, foreign
 	}
-	if stat.Dev != parent.identity.Dev {
+	if stat.Dev != parent.Identity.Dev {
 		file.Close()
 		return nil, mountedAside(path)
 	}
@@ -459,7 +461,7 @@ func (s *Store) openOwnedTree(parent *directory, name string, uid, gid uint32, h
 		file.Close()
 		return nil, err
 	}
-	if err := qualifiedFileSystem(file); err != nil {
+	if err := kernel.QualifiedFileSystem(file); err != nil {
 		file.Close()
 		return nil, err
 	}
@@ -468,7 +470,7 @@ func (s *Store) openOwnedTree(parent *directory, name string, uid, gid uint32, h
 		return nil, err
 	}
 	*held = append(*held, file)
-	return &directory{file: file, path: path, identity: stat}, nil
+	return &directory{File: file, Path: path, Identity: stat}, nil
 }
 
 func (t *uninstallTransaction) guardParents(uid uint32) error {
@@ -480,11 +482,11 @@ func (t *uninstallTransaction) guardParents(uid uint32) error {
 		acted = append(acted, leftover.parent)
 	}
 	for _, parent := range acted {
-		mode := parent.identity.Mode
-		if parent.identity.Uid != uid || mode&0022 != 0 && mode&syscall.S_ISVTX == 0 {
+		mode := parent.Identity.Mode
+		if parent.Identity.Uid != uid || mode&0022 != 0 && mode&syscall.S_ISVTX == 0 {
 			return diagnostics.NewFailureWithRemediation("controller.uninstall",
-				parent.path+" may be written by a user other than root, so uninstall cannot rename or remove a tree within it safely", "",
-				"make "+parent.path+" owned by root and writable by no group or other user, or set its sticky bit, then run bootwright controller uninstall again")
+				parent.Path+" may be written by a user other than root, so uninstall cannot rename or remove a tree within it safely", "",
+				"make "+parent.Path+" owned by root and writable by no group or other user, or set its sticky bit, then run bootwright controller uninstall again")
 		}
 	}
 	return nil
@@ -492,11 +494,11 @@ func (t *uninstallTransaction) guardParents(uid uint32) error {
 
 func holdUnreadableSetup(root *directory) (func(), error) {
 	release := func() {}
-	file, err := openWithin(root, controllerContainer+"/"+installSubtree+"/"+setupLockName, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	file, err := kernel.OpenWithin(root, controllerContainer+"/"+installSubtree+"/"+setupLockName, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return release, nil
 	}
-	stat, err := statHandle(file)
+	stat, err := kernel.StatHandle(file)
 	if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFREG {
 		file.Close()
 		return release, nil
@@ -504,18 +506,18 @@ func holdUnreadableSetup(root *directory) (func(), error) {
 	switch err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); {
 	case errors.Is(err, syscall.EWOULDBLOCK):
 		file.Close()
-		return release, busy("controller setup is held by another command")
+		return release, kernel.Busy("controller setup is held by another command")
 	case err != nil:
 		file.Close()
 		return release, state("controller setup lock could not be taken")
 	}
-	return func() { unlockAndClose(file) }, nil
+	return func() { kernel.UnlockAndClose(file) }, nil
 }
 
 func holdTree(file *os.File, path string) error {
 	switch err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); {
 	case errors.Is(err, syscall.EWOULDBLOCK):
-		return busy("another Bootwright command holds " + path)
+		return kernel.Busy("another Bootwright command holds " + path)
 	case err != nil:
 		return state("a Bootwright tree cannot be locked: " + path)
 	}
@@ -539,18 +541,18 @@ func (s *Store) leftovers(parent *directory, bases []string, uid, gid uint32, he
 			continue
 		}
 		stat, err := s.entryOf(parent, name)
-		if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR || stat.Uid != uid || stat.Gid != gid || stat.Dev != parent.identity.Dev {
+		if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR || stat.Uid != uid || stat.Gid != gid || stat.Dev != parent.Identity.Dev {
 			continue
 		}
-		tree, err := openWithin(parent, name, syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
+		tree, err := kernel.OpenWithin(parent, name, syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
 		if err != nil {
 			continue
 		}
-		if opened, err := statHandle(tree); err != nil || !sameIdentity(opened, stat) {
+		if opened, err := kernel.StatHandle(tree); err != nil || !kernel.SameIdentity(opened, stat) {
 			tree.Close()
 			continue
 		}
-		path := filepath.Join(parent.path, name)
+		path := filepath.Join(parent.Path, name)
 		if err := holdTree(tree, path); err != nil {
 			tree.Close()
 			return nil, err
@@ -563,11 +565,11 @@ func (s *Store) leftovers(parent *directory, bases []string, uid, gid uint32, he
 }
 
 func hostNames(parent *directory) ([]string, error) {
-	fd, err := syscall.Openat(int(parent.file.Fd()), ".", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC, 0)
+	fd, err := syscall.Openat(int(parent.File.Fd()), ".", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, state("the state root's parent cannot be enumerated")
 	}
-	listing := os.NewFile(uintptr(fd), parent.path)
+	listing := os.NewFile(uintptr(fd), parent.Path)
 	defer listing.Close()
 	var names []string
 	for {
@@ -587,7 +589,7 @@ func hostNames(parent *directory) ([]string, error) {
 
 func (s *Store) entryOf(parent *directory, name string) (syscall.Stat_t, error) {
 	if s.uninstallEntry != nil {
-		return s.uninstallEntry(parent.path, name)
+		return s.uninstallEntry(parent.Path, name)
 	}
 	return listedEntry(parent, name)
 }
@@ -595,10 +597,10 @@ func (s *Store) entryOf(parent *directory, name string) (syscall.Stat_t, error) 
 func (s *Store) sameEntry(parent *directory, name string, identity syscall.Stat_t) error {
 	stat, err := s.entryOf(parent, name)
 	if errors.Is(err, syscall.EXDEV) {
-		return mountedAside(filepath.Join(parent.path, name))
+		return mountedAside(filepath.Join(parent.Path, name))
 	}
-	if err != nil || !sameIdentity(stat, identity) {
-		return state("the state root was replaced while uninstall inspected it: " + filepath.Join(parent.path, name))
+	if err != nil || !kernel.SameIdentity(stat, identity) {
+		return state("the state root was replaced while uninstall inspected it: " + filepath.Join(parent.Path, name))
 	}
 	return nil
 }
@@ -644,7 +646,7 @@ func (t *uninstallTransaction) RemoveState(ctx context.Context) ([]string, error
 			continue
 		}
 		synced[tree.parent] = true
-		if err := tree.parent.file.Sync(); err != nil {
+		if err := tree.parent.File.Sync(); err != nil {
 			return removed, storeFailure("the rename of Bootwright's state could not be made durable", err)
 		}
 	}
@@ -666,21 +668,21 @@ func (t *uninstallTransaction) renameAside(parent *directory, name string, ident
 		return "", err
 	}
 	if errno := renameNoReplaceIn(parent, name, target); errno != 0 {
-		return "", storeFailure("Bootwright's state could not be renamed aside: "+filepath.Join(parent.path, name), errno)
+		return "", storeFailure("Bootwright's state could not be renamed aside: "+filepath.Join(parent.Path, name), errno)
 	}
 	if err := t.store.sameEntry(parent, target, identity); err != nil {
 		if errno := renameNoReplaceIn(parent, target, name); errno != 0 {
 			return "", storeFailure("a tree uninstall renamed aside is not the one it inspected, and could not be renamed back: inspect "+
-				filepath.Join(parent.path, target)+" and restore it as "+filepath.Join(parent.path, name), errno)
+				filepath.Join(parent.Path, target)+" and restore it as "+filepath.Join(parent.Path, name), errno)
 		}
-		return "", state("the state root was replaced while uninstall renamed it, so uninstall renamed it back: " + filepath.Join(parent.path, name))
+		return "", state("the state root was replaced while uninstall renamed it, so uninstall renamed it back: " + filepath.Join(parent.Path, name))
 	}
 	return target, nil
 }
 
 func renameNoReplaceIn(parent *directory, oldName, newName string) syscall.Errno {
-	errno := errnoOf(nativefs.RenameNoReplace(int(parent.file.Fd()), oldName, newName))
-	runtime.KeepAlive(parent.file)
+	errno := errnoOf(nativefs.RenameNoReplace(int(parent.File.Fd()), oldName, newName))
+	runtime.KeepAlive(parent.File)
 	return errno
 }
 
@@ -690,35 +692,35 @@ func removeTree(ctx context.Context, parent *directory, name string) error {
 		if errors.Is(err, syscall.ENOENT) {
 			return nil
 		}
-		return state("a renamed Bootwright tree cannot be inspected: " + filepath.Join(parent.path, name))
+		return state("a renamed Bootwright tree cannot be inspected: " + filepath.Join(parent.Path, name))
 	}
 	remaining := maxUninstallEntries
 	if err := emptyRenamedTree(ctx, parent, name, stat, 0, &remaining); err != nil {
 		return err
 	}
 	if errno := unlinkAt(parent, name, true); errno != 0 && errno != syscall.ENOENT {
-		return storeFailure("a renamed Bootwright tree could not be removed: "+filepath.Join(parent.path, name), errno)
+		return storeFailure("a renamed Bootwright tree could not be removed: "+filepath.Join(parent.Path, name), errno)
 	}
 	return nil
 }
 
 func emptyRenamedTree(ctx context.Context, parent *directory, name string, identity syscall.Stat_t, depth int, remaining *int) error {
 	refused := func() error {
-		return state("a renamed Bootwright tree holds an entry uninstall cannot remove safely: " + filepath.Join(parent.path, name))
+		return state("a renamed Bootwright tree holds an entry uninstall cannot remove safely: " + filepath.Join(parent.Path, name))
 	}
 	if depth > maxUninstallDepth || identity.Mode&syscall.S_IFMT != syscall.S_IFDIR {
 		return refused()
 	}
-	file, err := openWithin(parent, name, syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
+	file, err := kernel.OpenWithin(parent, name, syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
 	if err != nil {
 		return refused()
 	}
 	defer file.Close()
-	current, err := statHandle(file)
-	if err != nil || !sameIdentity(identity, current) {
+	current, err := kernel.StatHandle(file)
+	if err != nil || !kernel.SameIdentity(identity, current) {
 		return refused()
 	}
-	dir := &directory{file: file, path: filepath.Join(parent.path, name), identity: current}
+	dir := &directory{File: file, Path: filepath.Join(parent.Path, name), Identity: current}
 	names, err := rawNames(dir, *remaining)
 	if err != nil {
 		return refused()

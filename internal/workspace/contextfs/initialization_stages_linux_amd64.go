@@ -7,6 +7,8 @@ import (
 	"errors"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -24,7 +26,7 @@ func (t *transaction) collectInitializationStages(ctx context.Context, name stri
 		return err
 	}
 	if t.container == nil {
-		container, err := openDirectory(t.root, "contexts")
+		container, err := kernel.OpenDirectory(t.root, "contexts")
 		if errors.Is(err, syscall.ENOENT) {
 			return nil
 		}
@@ -33,7 +35,7 @@ func (t *transaction) collectInitializationStages(ctx context.Context, name stri
 		}
 		t.container = container
 	}
-	names, err := directoryNames(t.container, maxContexts+maxInitializationStages)
+	names, err := kernel.DirectoryNames(t.container, maxContexts+maxInitializationStages)
 	if err != nil {
 		return err
 	}
@@ -60,22 +62,22 @@ func (t *transaction) collectInitializationStages(ctx context.Context, name stri
 }
 
 func (t *transaction) initializationStage(ctx context.Context, name string, remove bool) error {
-	dir, err := openDirectory(t.container, name)
+	dir, err := kernel.OpenDirectory(t.container, name)
 	if err != nil {
 		return unsafeEntry(t.container, name, err)
 	}
-	defer dir.file.Close()
-	names, err := directoryNames(dir, 1)
+	defer dir.File.Close()
+	names, err := kernel.DirectoryNames(dir, 1)
 	if err != nil || len(names) == 1 && names[0] != "state" {
 		return state("initialization stage contains foreign entries: " + storeEntry(t.container, name))
 	}
 	if len(names) == 1 {
-		runtime, err := openDirectory(dir, "state")
+		runtime, err := kernel.OpenDirectory(dir, "state")
 		if err != nil {
 			return unsafeEntry(dir, "state", err)
 		}
-		defer runtime.file.Close()
-		entries, err := directoryNames(runtime, 1)
+		defer runtime.File.Close()
+		entries, err := kernel.DirectoryNames(runtime, 1)
 		if err != nil || len(entries) == 1 && entries[0] != "reservation.json" {
 			return state("initialization stage contains foreign state: " + storeEntry(dir, "state"))
 		}
@@ -94,7 +96,7 @@ func (t *transaction) initializationStage(ctx context.Context, name string, remo
 			}
 		}
 		if remove {
-			if err := unlinkVerified(dir, "state", runtime.identity, true); err != nil {
+			if err := unlinkVerified(dir, "state", runtime.Identity, true); err != nil {
 				return err
 			}
 			if err := t.store.syncDirectory(ctx, dir); err != nil {
@@ -103,10 +105,10 @@ func (t *transaction) initializationStage(ctx context.Context, name string, remo
 		}
 	}
 	if remove {
-		if err := unlinkVerified(t.container, name, dir.identity, true); err != nil {
+		if err := unlinkVerified(t.container, name, dir.Identity, true); err != nil {
 			return err
 		}
 		return t.store.syncDirectory(ctx, t.container)
 	}
-	return dir.verify()
+	return dir.Verify()
 }

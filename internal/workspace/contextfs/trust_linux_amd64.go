@@ -71,8 +71,8 @@ func (s *Store) withTrustArea(ctx context.Context, name string, mutation bool, c
 		if err != nil {
 			return safeError(err)
 		}
-		defer container.file.Close()
-		defer dir.file.Close()
+		defer container.File.Close()
+		defer dir.File.Close()
 		active := true
 		defer func() { active = false }()
 		area := &operationArea{

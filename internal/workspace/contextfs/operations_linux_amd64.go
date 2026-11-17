@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
@@ -62,8 +64,8 @@ func unsafeEntry(parent *directory, name string, cause error) error {
 // location on the host.
 func storeEntry(dir *directory, name string) string {
 	parts := []string{name}
-	for current := dir; current != nil && current.parent != nil; current = current.parent {
-		parts = append(parts, current.name)
+	for current := dir; current != nil && current.Parent != nil; current = current.Parent {
+		parts = append(parts, current.Name)
 	}
 	slices.Reverse(parts)
 	return path.Join(parts...)
@@ -99,9 +101,9 @@ const entryConfirmations = 3
 func (a *operationArea) resolveEntry(ctx context.Context, dir *directory, name string) (syscall.Stat_t, bool, error) {
 	var stat syscall.Stat_t
 	for attempt := 0; ; attempt++ {
-		child, err := openRelative(dir, name, pathHandle, 0)
+		child, err := kernel.OpenRelative(dir, name, kernel.PathHandle, 0)
 		if err == nil {
-			stat, err = statHandle(child)
+			stat, err = kernel.StatHandle(child)
 			child.Close()
 			if err == nil {
 				return stat, true, nil
@@ -124,7 +126,7 @@ func (a *operationArea) resolveEntry(ctx context.Context, dir *directory, name s
 // same confirmation.
 func (a *operationArea) confirmDirectory(ctx context.Context, parent *directory, name string) (*directory, error) {
 	for attempt := 0; ; attempt++ {
-		nested, err := openDirectory(parent, name)
+		nested, err := kernel.OpenDirectory(parent, name)
 		if err == nil || errors.Is(err, syscall.ENOENT) || attempt == entryConfirmations {
 			return nested, err
 		}
@@ -255,7 +257,7 @@ func (a *operationArea) newDirectory(ctx context.Context, parent *directory, nam
 }
 
 func (a *operationArea) child(ctx context.Context, parent *directory, name string, create bool) (*directory, error) {
-	child, err := openDirectory(parent, name)
+	child, err := kernel.OpenDirectory(parent, name)
 	if !create || !errors.Is(err, syscall.ENOENT) {
 		return child, err
 	}
@@ -318,7 +320,7 @@ func (a *operationArea) available(ctx context.Context, mutation bool) error {
 	if mutation && a.readOnly {
 		return state("read-only lifecycle access refuses mutation")
 	}
-	return a.context.verify()
+	return a.context.Verify()
 }
 
 // root opens this area's own subtree, creating it only for a mutation. A read
@@ -330,7 +332,7 @@ func (a *operationArea) root(ctx context.Context, create bool) (*directory, func
 	if a.logged {
 		return a.logRoot(ctx, create)
 	}
-	runtime, err := openDirectory(a.context, "state")
+	runtime, err := kernel.OpenDirectory(a.context, "state")
 	if err != nil {
 		return nil, nil, state("context state directory is unsafe")
 	}
@@ -338,16 +340,16 @@ func (a *operationArea) root(ctx context.Context, create bool) (*directory, func
 	if create {
 		operations, err = a.store.ensureDirectory(ctx, runtime, a.subtree)
 	} else {
-		operations, err = openDirectory(runtime, a.subtree)
+		operations, err = kernel.OpenDirectory(runtime, a.subtree)
 	}
 	if err != nil {
-		runtime.file.Close()
+		runtime.File.Close()
 		if errors.Is(err, syscall.ENOENT) {
 			return nil, nil, err
 		}
 		return nil, nil, state("lifecycle operations directory is unsafe")
 	}
-	return operations, func() { operations.file.Close(); runtime.file.Close() }, nil
+	return operations, func() { operations.File.Close(); runtime.File.Close() }, nil
 }
 
 // descend walks the validated components, returning the parent of the final
@@ -373,7 +375,7 @@ func (a *operationArea) descend(ctx context.Context, parts []string, create bool
 			}
 			return nil, "", nil, unsafeEntry(parent, part, err)
 		}
-		closers = append(closers, func() { child.file.Close() })
+		closers = append(closers, func() { child.File.Close() })
 		parent = child
 	}
 	name := ""
@@ -439,7 +441,7 @@ func (a *operationArea) Entries(ctx context.Context, target string) ([]operation
 		return nil, err
 	}
 	defer release()
-	names, err := directoryNames(parent, maxOperationEntries)
+	names, err := kernel.DirectoryNames(parent, maxOperationEntries)
 	if err != nil {
 		return nil, state("lifecycle operation directory cannot be listed")
 	}
@@ -488,7 +490,7 @@ func (a *operationArea) directory(ctx context.Context, parts []string, create bo
 			}
 			return nil, nil, unsafeEntry(parent, part, err)
 		}
-		closers = append(closers, func() { child.file.Close() })
+		closers = append(closers, func() { child.File.Close() })
 		parent = child
 	}
 	return parent, release, nil
@@ -531,15 +533,15 @@ func (a *operationArea) RemoveDirectory(ctx context.Context, target string) (err
 		return err
 	}
 	defer release()
-	child, err := openDirectory(parent, name)
+	child, err := kernel.OpenDirectory(parent, name)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil
 	}
 	if err != nil {
 		return unsafeEntry(parent, name, err)
 	}
-	identity := child.identity
-	child.file.Close()
+	identity := child.Identity
+	child.File.Close()
 	generation := a.generation()
 	if err := unlinkVerified(parent, name, identity, true); err != nil {
 		return state("lifecycle operation directory could not be removed: " + storeEntry(parent, name))
@@ -695,8 +697,8 @@ func (a *operationArea) Append(ctx context.Context, target string, data []byte) 
 		return err
 	}
 	defer file.Close()
-	stat, err := statHandle(file)
-	if err != nil || !private(stat, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid) || stat.Mode&0777 != 0600 {
+	stat, err := kernel.StatHandle(file)
+	if err != nil || !kernel.Private(stat, syscall.S_IFREG, parent.Identity.Uid, parent.Identity.Gid) || stat.Mode&0777 != 0600 {
 		return state("private operation log is unsafe")
 	}
 	if stat.Size+int64(len(data)) > maxOperationLog {
@@ -723,7 +725,7 @@ func (a *operationArea) Append(ctx context.Context, target string, data []byte) 
 // writer created first, after this call found none, is appended to as if it
 // had existed, its entry already admitted.
 func (a *operationArea) openLog(ctx context.Context, parent *directory, name string, size int) (*os.File, uint64, bool, error) {
-	file, err := openRelative(parent, name, syscall.O_WRONLY|syscall.O_APPEND, 0)
+	file, err := kernel.OpenRelative(parent, name, syscall.O_WRONLY|syscall.O_APPEND, 0)
 	added := 0
 	switch {
 	case err == nil:
@@ -745,10 +747,10 @@ func (a *operationArea) openLog(ctx context.Context, parent *directory, name str
 	if file != nil {
 		return file, generation, false, nil
 	}
-	file, err = openRelative(parent, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL|syscall.O_APPEND, 0600)
+	file, err = kernel.OpenRelative(parent, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL|syscall.O_APPEND, 0600)
 	created := err == nil
 	if errors.Is(err, syscall.EEXIST) {
-		file, err = openRelative(parent, name, syscall.O_WRONLY|syscall.O_APPEND, 0)
+		file, err = kernel.OpenRelative(parent, name, syscall.O_WRONLY|syscall.O_APPEND, 0)
 	}
 	if err != nil {
 		return nil, 0, false, state("private operation log could not be opened")
@@ -850,7 +852,7 @@ func (a *operationArea) scan(ctx context.Context, dir *directory, depth int) (in
 	if depth > maxOperationSegments {
 		return 0, 0, state("lifecycle operation storage exceeds its depth bound")
 	}
-	names, err := directoryNames(dir, maxOperationEntries)
+	names, err := kernel.DirectoryNames(dir, maxOperationEntries)
 	if err != nil {
 		return 0, 0, state("lifecycle operation storage cannot be measured")
 	}
@@ -877,7 +879,7 @@ func (a *operationArea) scan(ctx context.Context, dir *directory, depth int) (in
 				return 0, 0, unsafeEntry(dir, name, err)
 			}
 			childEntries, childBytes, err := a.scan(ctx, nested, depth+1)
-			nested.file.Close()
+			nested.File.Close()
 			if err != nil && vanished(dir, name) {
 				entries--
 				continue
@@ -900,7 +902,7 @@ func (a *operationArea) scan(ctx context.Context, dir *directory, depth int) (in
 // walk opened it is; one replaced at its name has not vanished and still
 // refuses.
 func vanished(parent *directory, name string) bool {
-	entry, err := openRelative(parent, name, pathHandle, 0)
+	entry, err := kernel.OpenRelative(parent, name, kernel.PathHandle, 0)
 	if err == nil {
 		entry.Close()
 	}

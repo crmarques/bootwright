@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -2099,7 +2101,7 @@ func checkpointMediaRetainScenario() checkpointScenario {
 		var held error
 		release := func() {
 			if holder != nil {
-				unlockAndClose(holder)
+				kernel.UnlockAndClose(holder)
 				holder = nil
 			}
 		}

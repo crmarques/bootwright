@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"syscall"
+
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
 )
 
 type publicationOutcome int
@@ -69,7 +71,7 @@ func (s *Store) publishStage(ctx context.Context, parent *directory, name string
 		}
 	}
 	current, matches := readsBack(ctx, parent, pending, data, p.bound, true)
-	if !matches || !sameFile(staged, current) {
+	if !matches || !kernel.SameFile(staged, current) {
 		return publicationNotCommitted, state("staged " + p.subject + " was substituted")
 	}
 	if err := renameStage(parent, pending, name, p.replace); err != nil {
@@ -83,14 +85,14 @@ func (s *Store) publishStage(ctx context.Context, parent *directory, name string
 		return publicationUnknown, err
 	}
 	published, matches := readsBack(ctx, parent, name, data, p.bound, p.immutable)
-	if !matches || !sameIdentity(staged, published) {
+	if !matches || !kernel.SameIdentity(staged, published) {
 		return publicationUnknown, state("published " + p.subject + " is unsafe")
 	}
 	if err := s.syncDirectory(ctx, parent); err != nil {
 		return publicationUnknown, err
 	}
 	final, matches := readsBack(ctx, parent, name, data, p.bound, p.immutable)
-	if !matches || !sameFile(published, final) {
+	if !matches || !kernel.SameFile(published, final) {
 		return publicationUnknown, state("published " + p.subject + " is unsafe")
 	}
 	return publicationCommitted, nil
@@ -128,8 +130,8 @@ func renameStage(parent *directory, pending, name string, replace bool) error {
 	if !replace {
 		return renameNoReplaceAt(parent, pending, name)
 	}
-	if err := parent.verify(); err != nil {
+	if err := parent.Verify(); err != nil {
 		return err
 	}
-	return syscall.Renameat(int(parent.file.Fd()), pending, int(parent.file.Fd()), name)
+	return syscall.Renameat(int(parent.File.Fd()), pending, int(parent.File.Fd()), name)
 }

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -33,7 +35,7 @@ func (l *leasedLifecycle) shared(ctx context.Context, call func(context.Context)
 	if err := awaitRoot(ctx, t.base.store, t.base.root, syscall.LOCK_EX); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(t.base.root.file.Fd()), syscall.LOCK_UN)
+	defer syscall.Flock(int(t.base.root.File.Fd()), syscall.LOCK_UN)
 	registry, _, err := readRegistry(ctx, t.base.root)
 	if err != nil {
 		return err
@@ -53,7 +55,7 @@ func (l *leasedLifecycle) shared(ctx context.Context, call func(context.Context)
 	if err != nil {
 		return err
 	}
-	if bytes.Equal(expected.data, t.base.expected.data) && !sameFile(expected.identity, t.base.expected.identity) {
+	if bytes.Equal(expected.data, t.base.expected.data) && !kernel.SameFile(expected.identity, t.base.expected.identity) {
 		return state("registry identity changed during lifecycle operation")
 	}
 	t.base.registry, t.base.expected, t.stored = registry, expected, actual
@@ -71,7 +73,7 @@ func sameLifecycleController(before, after controllerStored, name string) bool {
 	if before.data == nil {
 		return true
 	}
-	if bytes.Equal(before.data, after.data) && !sameFile(before.identity, after.identity) {
+	if bytes.Equal(before.data, after.data) && !kernel.SameFile(before.identity, after.identity) {
 		return false
 	}
 	if !before.value.Host.Equal(after.value.Host) {
@@ -141,7 +143,7 @@ func (l *leasedLifecycle) inspect(ctx context.Context, call func(context.Context
 	if err := awaitRoot(ctx, l.base.store, l.base.root, syscall.LOCK_SH); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(l.base.root.file.Fd()), syscall.LOCK_UN)
+	defer syscall.Flock(int(l.base.root.File.Fd()), syscall.LOCK_UN)
 	return call(context.WithValue(ctx, lifecycleRootHeld{}, l))
 }
 
@@ -168,10 +170,10 @@ func (s *Store) prepareBoundedController(ctx context.Context, root *directory, r
 		}
 		mutex.Lock()
 		defer mutex.Unlock()
-		if err := lockShared(root); err != nil {
+		if err := kernel.LockShared(root); err != nil {
 			return err
 		}
-		defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
+		defer syscall.Flock(int(root.File.Fd()), syscall.LOCK_UN)
 		return read(context.WithValue(call, lifecycleRootHeld{}, &mutex))
 	}
 	guard := func(call context.Context) error {
@@ -187,7 +189,7 @@ func (s *Store) prepareBoundedController(ctx context.Context, root *directory, r
 			if err != nil {
 				return err
 			}
-			if bytes.Equal(observed.data, expected.data) && !sameFile(observed.identity, expected.identity) {
+			if bytes.Equal(observed.data, expected.data) && !kernel.SameFile(observed.identity, expected.identity) {
 				return state("registry identity changed during bounded lifecycle run")
 			}
 			currentRecord, err := lifecycleRecord(latest, record.Name)
@@ -250,7 +252,7 @@ func (l *leasedLifecycle) prepareControllerAccess() {
 			if err != nil {
 				return err
 			}
-			if bytes.Equal(observed.data, t.expected.data) && !sameFile(observed.identity, t.expected.identity) {
+			if bytes.Equal(observed.data, t.expected.data) && !kernel.SameFile(observed.identity, t.expected.identity) {
 				return state("registry identity changed during lifecycle operation")
 			}
 			currentRecord, err := lifecycleRecord(registry, record.Name)

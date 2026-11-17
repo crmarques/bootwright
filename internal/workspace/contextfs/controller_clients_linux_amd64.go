@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -99,18 +101,18 @@ func (t *lifecycleTransaction) attributeClientArea(ctx context.Context, id strin
 	if err != nil {
 		return err
 	}
-	defer owner.close()
+	defer owner.Close()
 	parent, err := t.base.store.ensureDirectory(ctx, owner, toolAreasName)
 	if err != nil {
 		return err
 	}
-	defer parent.file.Close()
+	defer parent.File.Close()
 	var identity syscall.Stat_t
-	switch existing, err := openDirectory(parent, id); {
+	switch existing, err := kernel.OpenDirectory(parent, id); {
 	case err == nil:
-		entries, listErr := directoryNames(existing, 1)
-		identity = existing.identity
-		existing.file.Close()
+		entries, listErr := kernel.DirectoryNames(existing, 1)
+		identity = existing.Identity
+		existing.File.Close()
 		if listErr != nil {
 			return listErr
 		}
@@ -124,8 +126,8 @@ func (t *lifecycleTransaction) attributeClientArea(ctx context.Context, id strin
 		if err != nil {
 			return err
 		}
-		defer dir.file.Close()
-		identity = dir.identity
+		defer dir.File.Close()
+		identity = dir.Identity
 		if err := t.base.store.checkpoint(ctx, checkpointAfterClientAreaDirectory); err != nil {
 			return err
 		}
@@ -174,7 +176,7 @@ func (t *lifecycleTransaction) SealClientArea(ctx context.Context, id string) er
 		return err
 	}
 	if area := t.openArea(id); area != nil {
-		return lockShared(area.dir)
+		return kernel.LockShared(area.dir)
 	}
 	return nil
 }

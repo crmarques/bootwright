@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
@@ -39,7 +41,7 @@ func secretConflict(ctx context.Context, message string, err error) error {
 // secretLockFailure reports a lock another command holds as lifecycle.lease,
 // like every other store command, and any other lock failure as a conflict.
 func secretLockFailure(ctx context.Context, message string, err error) error {
-	var held *busyError
+	var held *kernel.BusyError
 	if errors.As(err, &held) && ctx.Err() == nil {
 		return err
 	}
@@ -70,7 +72,7 @@ func secretEffectFailure(ctx context.Context, message string, err error) error {
 // it already or its errno arrives raw, as secret.store with the kernel's
 // answer and its remedy.
 func secretIOFailure(message string, err error) (error, bool) {
-	var refused *ioFailure
+	var refused *kernel.IOFailure
 	if errors.As(err, &refused) {
 		reported := diagnostics.Of(refused)
 		return diagnostics.NewFailureWithRemediation("secret.store", reported[0].Message, "", reported[0].Remediation), true
@@ -120,8 +122,8 @@ func (s *Store) ReadSecrets(ctx context.Context, expected secretstore.Context, c
 		if err != nil {
 			return safeError(err)
 		}
-		defer container.file.Close()
-		defer dir.file.Close()
+		defer container.File.Close()
+		defer dir.File.Close()
 		area := &secretArea{store: s, root: root, context: dir, readOnly: true, active: true, mutable: make(map[string]secretExpectation)}
 		return lendSecretArea(ctx, area, dir, func() error { return callback(area) })
 	})
@@ -140,12 +142,12 @@ func (s *Store) MutateSecrets(ctx context.Context, expected secretstore.Context,
 		if err != nil {
 			return safeError(err)
 		}
-		defer container.file.Close()
-		defer dir.file.Close()
-		if err := lock(dir); err != nil {
+		defer container.File.Close()
+		defer dir.File.Close()
+		if err := kernel.Lock(dir); err != nil {
 			return secretLockFailure(ctx, "secret context is held by another mutator", err)
 		}
-		defer syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
+		defer syscall.Flock(int(dir.File.Fd()), syscall.LOCK_UN)
 		if err := s.collectContextStages(ctx, dir, false); err != nil {
 			return safeError(err)
 		}
@@ -180,10 +182,10 @@ func lendSecretArea(ctx context.Context, area *secretArea, dir *directory, callb
 	defer func() {
 		area.close()
 		if area.secrets != nil {
-			area.secrets.file.Close()
+			area.secrets.File.Close()
 		}
 	}()
-	if secrets, openErr := openDirectory(dir, "secrets"); openErr == nil {
+	if secrets, openErr := kernel.OpenDirectory(dir, "secrets"); openErr == nil {
 		area.secrets = secrets
 	} else if !errors.Is(openErr, syscall.ENOENT) {
 		return secretCorrupt("secret storage directory is unsafe")
@@ -230,8 +232,8 @@ func openSecretContext(ctx context.Context, root *directory, record contexts.Rec
 		return nil, nil, err
 	}
 	if err := verifyReservation(ctx, dir, record.Name); err != nil {
-		dir.file.Close()
-		container.file.Close()
+		dir.File.Close()
+		container.File.Close()
 		return nil, nil, err
 	}
 	return container, dir, nil
@@ -241,7 +243,7 @@ func verifyContextLayout(ctx context.Context, dir *directory) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	names, err := directoryNames(dir, 4)
+	names, err := kernel.DirectoryNames(dir, 4)
 	if err != nil {
 		return state("context layout cannot be verified")
 	}
@@ -252,7 +254,7 @@ func verifyContextLayout(ctx context.Context, dir *directory) error {
 				return err
 			}
 		case "state", "desired-state", "secrets":
-			child, err := openDirectory(dir, name)
+			child, err := kernel.OpenDirectory(dir, name)
 			if err != nil {
 				return state("context subdirectory is unsafe")
 			}
@@ -261,14 +263,14 @@ func verifyContextLayout(ctx context.Context, dir *directory) error {
 				if name == "state" {
 					maximum = maxContextStateEntries + maxContextStateStages
 				}
-				entries, listErr := directoryNames(child, maximum)
+				entries, listErr := kernel.DirectoryNames(child, maximum)
 				if listErr == nil {
 					stages := 0
 					for _, entry := range entries {
 						if name == "state" && stageName(entry, false) {
 							stat, err := listedEntry(child, entry)
 							stages++
-							if err == nil && stages <= maxContextStateStages && stat.Dev == child.identity.Dev && private(stat, syscall.S_IFREG, child.identity.Uid, child.identity.Gid) && stat.Size <= maxRecord {
+							if err == nil && stages <= maxContextStateStages && stat.Dev == child.Identity.Dev && kernel.Private(stat, syscall.S_IFREG, child.Identity.Uid, child.Identity.Gid) && stat.Size <= maxRecord {
 								continue
 							}
 						}
@@ -279,22 +281,22 @@ func verifyContextLayout(ctx context.Context, dir *directory) error {
 					}
 				}
 				if listErr != nil {
-					child.file.Close()
+					child.File.Close()
 					return listErr
 				}
 			}
-			child.file.Close()
+			child.File.Close()
 		default:
 			return state("context contains unsupported state; mutation is refused")
 		}
 	}
-	return dir.verify()
+	return dir.Verify()
 }
 
 func verifySecretContextLayout(ctx context.Context, dir *directory) error {
-	secrets, err := openDirectory(dir, "secrets")
+	secrets, err := kernel.OpenDirectory(dir, "secrets")
 	if err == nil {
-		secrets.file.Close()
+		secrets.File.Close()
 	} else if !errors.Is(err, syscall.ENOENT) {
 		return secretCorruption(ctx, "secret storage directory is unsafe", err)
 	}
@@ -347,7 +349,7 @@ func (a *secretArea) forgetExpectation(path string) {
 
 func (a *secretArea) rememberReadExpectation(path string, next secretExpectation) error {
 	if prior, exists := a.mutable[path]; exists {
-		if prior.exists != next.exists || prior.parentKnown != next.parentKnown || prior.parentKnown && !sameIdentity(prior.parentIdentity, next.parentIdentity) || prior.exists && (!sameFile(prior.identity, next.identity) || !bytes.Equal(prior.data, next.data)) {
+		if prior.exists != next.exists || prior.parentKnown != next.parentKnown || prior.parentKnown && !kernel.SameIdentity(prior.parentIdentity, next.parentIdentity) || prior.exists && (!kernel.SameFile(prior.identity, next.identity) || !bytes.Equal(prior.data, next.data)) {
 			return secretCorrupt("secret storage observation changed during the callback")
 		}
 		return nil
@@ -375,14 +377,14 @@ func (a *secretArea) available(ctx context.Context, mutation bool) error {
 	if mutation && a.readOnly {
 		return secretConflict(ctx, "read-only secret storage refuses mutation", nil)
 	}
-	if err := a.root.verify(); err != nil {
+	if err := a.root.Verify(); err != nil {
 		return secretConflict(ctx, "context state changed during secret access", err)
 	}
-	if err := a.context.verify(); err != nil {
+	if err := a.context.Verify(); err != nil {
 		return secretConflict(ctx, "context identity changed during secret access", err)
 	}
 	if a.secrets != nil {
-		if err := a.secrets.verify(); err != nil {
+		if err := a.secrets.Verify(); err != nil {
 			return secretCorruption(ctx, "secret storage directory is unsafe", err)
 		}
 	}
@@ -412,7 +414,7 @@ func secretPath(path string, minimum, maximum int) ([]string, error) {
 
 func (a *secretArea) ensureRoot(ctx context.Context) error {
 	if a.secrets != nil {
-		if err := a.secrets.verify(); err != nil {
+		if err := a.secrets.Verify(); err != nil {
 			return secretCorruption(ctx, "secret storage directory is unsafe", err)
 		}
 		return nil
@@ -443,11 +445,11 @@ func (a *secretArea) parent(ctx context.Context, parts []string) (*directory, st
 	if len(parts) == 1 {
 		return a.secrets, parts[0], func() {}, nil
 	}
-	parent, err := openDirectory(a.secrets, parts[0])
+	parent, err := kernel.OpenDirectory(a.secrets, parts[0])
 	if err != nil {
 		return nil, "", func() {}, err
 	}
-	return parent, parts[1], func() { parent.file.Close() }, nil
+	return parent, parts[1], func() { parent.File.Close() }, nil
 }
 
 func (a *secretArea) Read(ctx context.Context, path string, maximum int) ([]byte, bool, error) {
@@ -485,7 +487,7 @@ func (a *secretArea) read(ctx context.Context, path string, maximum int, mutable
 	data, identity, err := readBoundedIdentity(ctx, parent, name, maximum, !mutable)
 	if errors.Is(err, syscall.ENOENT) {
 		if mutable {
-			if err := a.rememberReadExpectation(path, secretExpectation{parentIdentity: parent.identity, parentKnown: true}); err != nil {
+			if err := a.rememberReadExpectation(path, secretExpectation{parentIdentity: parent.Identity, parentKnown: true}); err != nil {
 				return nil, false, err
 			}
 		}
@@ -495,11 +497,11 @@ func (a *secretArea) read(ctx context.Context, path string, maximum int, mutable
 		return nil, false, secretCorruption(ctx, "secret storage file is unsafe", err)
 	}
 	if mutable {
-		if err := a.rememberReadExpectation(path, secretExpectation{exists: true, data: data, identity: identity, parentIdentity: parent.identity, parentKnown: true}); err != nil {
+		if err := a.rememberReadExpectation(path, secretExpectation{exists: true, data: data, identity: identity, parentIdentity: parent.Identity, parentKnown: true}); err != nil {
 			clear(data)
 			return nil, false, err
 		}
-		a.observe(path, parent.identity, identity)
+		a.observe(path, parent.Identity, identity)
 	}
 	return data, true, nil
 }
@@ -523,11 +525,11 @@ func (a *secretArea) Entries(ctx context.Context, path string) ([]secretstore.En
 	}
 	dir := a.secrets
 	if len(parts) == 1 {
-		dir, err = openDirectory(a.secrets, parts[0])
+		dir, err = kernel.OpenDirectory(a.secrets, parts[0])
 		if err != nil {
 			return nil, secretCorruption(ctx, "secret storage directory is unsafe", err)
 		}
-		defer dir.file.Close()
+		defer dir.File.Close()
 	}
 	names, err := secretDirectoryNames(ctx, dir, maxSecretEntries)
 	if err != nil {
@@ -544,7 +546,7 @@ func (a *secretArea) Entries(ctx context.Context, path string) ([]secretstore.En
 		return nil, err
 	}
 	for name, identity := range observations {
-		a.observe(name, dir.identity, identity)
+		a.observe(name, dir.Identity, identity)
 	}
 	return entries, nil
 }
@@ -570,34 +572,34 @@ func inspectSecretDirectoryNamesObserved(ctx context.Context, dir *directory, na
 		if _, err := secretPath(name, 1, 1); err != nil {
 			return nil, secretCorrupt("secret storage contains an invalid entry")
 		}
-		file, err := openRelative(dir, name, pathHandle, 0)
+		file, err := kernel.OpenRelative(dir, name, kernel.PathHandle, 0)
 		if errors.Is(err, syscall.ENOENT) && allowVanishedPending && secretPendingName(name) {
 			continue
 		}
 		if err != nil {
 			return nil, secretCorruption(ctx, "secret storage entry is unsafe", err)
 		}
-		stat, statErr := statHandle(file)
+		stat, statErr := kernel.StatHandle(file)
 		file.Close()
 		if statErr != nil {
 			return nil, secretCorruption(ctx, "secret storage entry is unsafe", statErr)
 		}
-		if stat.Dev != dir.identity.Dev {
+		if stat.Dev != dir.Identity.Dev {
 			return nil, secretCorrupt("secret storage entry is unsafe")
 		}
 		switch stat.Mode & syscall.S_IFMT {
 		case syscall.S_IFDIR:
-			if !allowDirectories || !private(stat, syscall.S_IFDIR, dir.identity.Uid, dir.identity.Gid) || stat.Mode&0777 != 0700 {
+			if !allowDirectories || !kernel.Private(stat, syscall.S_IFDIR, dir.Identity.Uid, dir.Identity.Gid) || stat.Mode&0777 != 0700 {
 				return nil, secretCorrupt("secret storage directory is unsafe")
 			}
-			child, err := openDirectory(dir, name)
+			child, err := kernel.OpenDirectory(dir, name)
 			if err != nil {
 				return nil, secretCorruption(ctx, "secret storage directory is unsafe", err)
 			}
-			child.file.Close()
+			child.File.Close()
 			entries = append(entries, secretstore.Entry{Name: name, Directory: true})
 		case syscall.S_IFREG:
-			if !private(stat, syscall.S_IFREG, dir.identity.Uid, dir.identity.Gid) || stat.Mode&0777 != 0600 || stat.Size < 0 || stat.Size > maxSecretBytes {
+			if !kernel.Private(stat, syscall.S_IFREG, dir.Identity.Uid, dir.Identity.Gid) || stat.Mode&0777 != 0600 || stat.Size < 0 || stat.Size > maxSecretBytes {
 				return nil, secretCorrupt("secret storage file is unsafe")
 			}
 			entries = append(entries, secretstore.Entry{Name: name, Size: stat.Size})
@@ -608,7 +610,7 @@ func inspectSecretDirectoryNamesObserved(ctx context.Context, dir *directory, na
 			observe(name, stat)
 		}
 	}
-	if err := dir.verify(); err != nil {
+	if err := dir.Verify(); err != nil {
 		return nil, secretCorruption(ctx, "secret storage directory changed during enumeration", err)
 	}
 	return entries, nil
@@ -631,16 +633,16 @@ func secretDirectoryNames(ctx context.Context, dir *directory, maximum int) ([]s
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	names, err := heldNames(dir, maximum)
-	var failed *listingFailure
+	names, err := kernel.HeldNames(dir, maximum)
+	var failed *kernel.ListingFailure
 	switch {
 	case err == nil:
 		return names, nil
 	case !errors.As(err, &failed):
 		return nil, secretCorruption(ctx, "secret storage directory changed during enumeration", err)
-	case failed.kind == listingOverLimit:
+	case failed.Kind == kernel.ListingOverLimit:
 		return nil, secretLimit("secret storage directory entry count exceeds its limit")
-	case failed.kind == listingUnreadable:
+	case failed.Kind == kernel.ListingUnreadable:
 		return nil, secretCorruption(ctx, "secret storage directory cannot be enumerated", err)
 	}
 	return nil, secretCorruption(ctx, "secret storage directory changed during enumeration", err)
@@ -665,12 +667,12 @@ func (a *secretArea) scan(ctx context.Context) (int, int64, error) {
 			size += entry.Size
 			continue
 		}
-		dir, err := openDirectory(a.secrets, entry.Name)
+		dir, err := kernel.OpenDirectory(a.secrets, entry.Name)
 		if err != nil {
 			return 0, 0, secretCorruption(ctx, "secret storage directory is unsafe", err)
 		}
 		children, childErr := listSecretDirectory(ctx, dir, false, a.readOnly)
-		dir.file.Close()
+		dir.File.Close()
 		if childErr != nil {
 			return 0, 0, childErr
 		}
@@ -716,8 +718,8 @@ func (a *secretArea) EnsureDirectory(ctx context.Context, path string) error {
 	if err := a.ensureRoot(ctx); err != nil {
 		return err
 	}
-	if child, err := openDirectory(a.secrets, parts[0]); err == nil {
-		child.file.Close()
+	if child, err := kernel.OpenDirectory(a.secrets, parts[0]); err == nil {
+		child.File.Close()
 		return nil
 	} else if !errors.Is(err, syscall.ENOENT) {
 		return secretCorruption(ctx, "secret storage directory is unsafe", err)
@@ -731,7 +733,7 @@ func (a *secretArea) EnsureDirectory(ctx context.Context, path string) error {
 	if err != nil {
 		return secretEffectFailure(ctx, "secret storage directory could not be created safely", err)
 	}
-	return child.file.Close()
+	return child.File.Close()
 }
 
 func (a *secretArea) WriteExclusive(ctx context.Context, path string, data []byte) error {
@@ -790,8 +792,8 @@ func (a *secretArea) rememberPublishedFile(ctx context.Context, parent *director
 		return secretConflict(ctx, "published secret state changed before verification", err)
 	}
 	a.forgetExpectation(path)
-	a.mutable[path] = secretExpectation{exists: true, data: slices.Clone(data), identity: identity, parentIdentity: parent.identity, parentKnown: true}
-	a.observeReplacement(path, parent.identity, identity)
+	a.mutable[path] = secretExpectation{exists: true, data: slices.Clone(data), identity: identity, parentIdentity: parent.Identity, parentKnown: true}
+	a.observeReplacement(path, parent.Identity, identity)
 	return nil
 }
 
@@ -871,22 +873,22 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 }
 
 func verifySecretExpectation(ctx context.Context, parent *directory, name string, expected secretExpectation) error {
-	if expected.parentKnown && !sameIdentity(parent.identity, expected.parentIdentity) {
+	if expected.parentKnown && !kernel.SameIdentity(parent.Identity, expected.parentIdentity) {
 		return state("secret storage parent was replaced before publication")
 	}
 	if !expected.exists {
-		file, err := openRelative(parent, name, pathHandle, 0)
+		file, err := kernel.OpenRelative(parent, name, kernel.PathHandle, 0)
 		if file != nil {
 			file.Close()
 		}
 		if !errors.Is(err, syscall.ENOENT) {
 			return state("secret state appeared before publication")
 		}
-		return parent.verify()
+		return parent.Verify()
 	}
 	actual, identity, err := readBoundedIdentity(ctx, parent, name, len(expected.data), true)
 	defer clear(actual)
-	if err != nil || !sameFile(expected.identity, identity) || !bytes.Equal(expected.data, actual) {
+	if err != nil || !kernel.SameFile(expected.identity, identity) || !bytes.Equal(expected.data, actual) {
 		return state("secret state was replaced or modified before publication")
 	}
 	return nil
@@ -927,7 +929,7 @@ func (a *secretArea) verifyExpectedContext(ctx context.Context) error {
 		return err
 	}
 	actual, err := registryExpectation(ctx, a.root, registry)
-	if err != nil || !sameFile(a.expected.identity, actual.identity) || !bytes.Equal(a.expected.data, actual.data) {
+	if err != nil || !kernel.SameFile(a.expected.identity, actual.identity) || !bytes.Equal(a.expected.data, actual.data) {
 		return state("context identity changed before secret publication")
 	}
 	if _, err := exactSecretRecord(registry, a.token); err != nil {
@@ -949,11 +951,11 @@ func (a *secretArea) Sync(ctx context.Context, path string) error {
 	}
 	dir := a.secrets
 	if len(parts) == 1 {
-		dir, err = openDirectory(a.secrets, parts[0])
+		dir, err = kernel.OpenDirectory(a.secrets, parts[0])
 		if err != nil {
 			return secretCorruption(ctx, "secret storage directory is unsafe", err)
 		}
-		defer dir.file.Close()
+		defer dir.File.Close()
 	}
 	if err := a.store.syncDirectory(ctx, dir); err != nil {
 		return secretEffectFailure(ctx, "secret storage directory could not be synchronized", err)

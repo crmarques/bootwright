@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
@@ -22,7 +24,7 @@ func TestSecretContainmentPrimitiveRefusesExistingMountCrossing(t *testing.T) {
 	defer root.Close()
 	// Exercise the same kernel boundary used for every secret subtree open,
 	// without mounting anything or requiring a privileged test process.
-	file, err := openWithin(&directory{file: root, path: "/"}, "proc", syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
+	file, err := kernel.OpenWithin(&directory{File: root, Path: "/"}, "proc", syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
 	if file != nil {
 		file.Close()
 	}

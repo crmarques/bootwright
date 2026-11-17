@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -28,17 +30,17 @@ func (t *transaction) collectRevisions(ctx context.Context, id string) error {
 	if record.Mode == contexts.Deleting {
 		return nil
 	}
-	input, err := openDirectory(dir, "desired-state")
+	input, err := kernel.OpenDirectory(dir, "desired-state")
 	if err != nil {
 		return err
 	}
-	defer input.file.Close()
-	revisions, err := openDirectory(input, "revisions")
+	defer input.File.Close()
+	revisions, err := kernel.OpenDirectory(input, "revisions")
 	if err != nil {
 		return err
 	}
-	defer revisions.file.Close()
-	names, err := directoryNames(revisions, maxRevisions)
+	defer revisions.File.Close()
+	names, err := kernel.DirectoryNames(revisions, maxRevisions)
 	if err != nil {
 		return err
 	}
@@ -62,11 +64,11 @@ func (t *transaction) collectRevisions(ctx context.Context, id string) error {
 }
 
 func (t *transaction) collectRevision(ctx context.Context, owner, revisions *directory, name, id string) error {
-	dir, err := openDirectory(revisions, name)
+	dir, err := kernel.OpenDirectory(revisions, name)
 	if err != nil {
 		return err
 	}
-	defer dir.file.Close()
+	defer dir.File.Close()
 	path := "desired-state/revisions/" + name
 	remaining := desiredstate.MaxFiles + desiredstate.MaxMarkers + 1
 	if err := t.store.walkContextTree(ctx, dir, path, inspectContextTree, &remaining); err != nil {
@@ -89,7 +91,7 @@ func (t *transaction) collectRevision(ctx context.Context, owner, revisions *dir
 	if err := guard(ctx); err != nil {
 		return err
 	}
-	if err := unlinkVerified(revisions, name, dir.identity, true); err != nil {
+	if err := unlinkVerified(revisions, name, dir.Identity, true); err != nil {
 		return err
 	}
 	return t.store.syncDirectory(ctx, revisions)
@@ -99,18 +101,18 @@ func (t *transaction) verifyRevisionCollection(ctx context.Context, owner *direc
 	if err := t.checkControllerRecovery(ctx, id); err != nil {
 		return err
 	}
-	file, err := openRelative(t.root, "registry.json", pathHandle, 0)
+	file, err := kernel.OpenRelative(t.root, "registry.json", kernel.PathHandle, 0)
 	if err != nil {
 		return state("context selection cannot be verified before input cleanup")
 	}
-	actual, err := statHandle(file)
+	actual, err := kernel.StatHandle(file)
 	file.Close()
-	if err != nil || t.expected == nil || !sameFile(actual, t.expected.identity) {
+	if err != nil || t.expected == nil || !kernel.SameFile(actual, t.expected.identity) {
 		return state("context selection changed before input cleanup")
 	}
 	evidence, err := readMutation(ctx, owner)
 	if err != nil || !bytes.Equal(evidence, t.evidence[id]) {
 		return state("context mutation evidence changed before input cleanup")
 	}
-	return t.root.verify()
+	return t.root.Verify()
 }

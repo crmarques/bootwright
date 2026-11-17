@@ -10,6 +10,8 @@ import (
 	"slices"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -93,19 +95,19 @@ func (t *transaction) Publish(ctx context.Context, name, environment string, sou
 	if err != nil {
 		return "", err
 	}
-	if beneath(m.InputDirectory, t.root.path) || beneath(environment, t.root.path) {
+	if beneath(m.InputDirectory, t.root.Path) || beneath(environment, t.root.Path) {
 		return "", state("state root overlaps frozen input")
 	}
 	input, err := t.store.ensureDirectory(ctx, dir, "desired-state")
 	if err != nil {
 		return "", safeError(err)
 	}
-	defer input.file.Close()
+	defer input.File.Close()
 	revisions, err := t.store.ensureDirectory(ctx, input, "revisions")
 	if err != nil {
 		return "", safeError(err)
 	}
-	defer revisions.file.Close()
+	defer revisions.File.Close()
 	names, err := revisionEntries(revisions, "rev-", "")
 	if err != nil {
 		return "", err
@@ -158,15 +160,15 @@ func (t *transaction) Publish(ctx context.Context, name, environment string, sou
 		}
 		if err != nil {
 			t.store.discardRevision(ctx, revisions, fresh, revision)
-			fresh.file.Close()
+			fresh.File.Close()
 			return "", safeError(err)
 		}
 		if err := t.store.syncDirectory(ctx, revisions); err != nil {
 			t.store.discardRevision(ctx, revisions, fresh, revision)
-			fresh.file.Close()
+			fresh.File.Close()
 			return "", err
 		}
-		fresh.file.Close()
+		fresh.File.Close()
 		return revision, nil
 	}
 	return "", state("input revision reservation exhausted its collision limit")
@@ -178,7 +180,7 @@ func (s *Store) discardRevision(ctx context.Context, revisions, fresh *directory
 	if s.walkContextTree(ctx, fresh, "desired-state/revisions/"+revision, removeContextTree, &remaining) != nil {
 		return
 	}
-	if unlinkVerified(revisions, revision, fresh.identity, true) == nil {
+	if unlinkVerified(revisions, revision, fresh.Identity, true) == nil {
 		_ = s.syncDirectory(ctx, revisions)
 	}
 }
@@ -215,7 +217,7 @@ func (t *transaction) Unchanged(ctx context.Context, name, environment string, s
 			return false, ctx.Err()
 		}
 	}
-	if dir.verify() != nil {
+	if dir.Verify() != nil {
 		return false, ctx.Err()
 	}
 	return true, nil
@@ -255,7 +257,7 @@ func admitManifest(m manifest, root *directory, name, revision, environment stri
 	if err := validateManifest(m, name, revision, environment); err != nil {
 		return err
 	}
-	if beneath(m.InputDirectory, root.path) || beneath(m.EnvironmentDirectory, root.path) {
+	if beneath(m.InputDirectory, root.Path) || beneath(m.EnvironmentDirectory, root.Path) {
 		return state("persisted input overlaps runtime state")
 	}
 	return nil
@@ -265,12 +267,12 @@ func readManifestAt(ctx context.Context, root *directory, name, revision string,
 	owned := []*directory{}
 	close := func() {
 		for i := len(owned) - 1; i >= 0; i-- {
-			owned[i].file.Close()
+			owned[i].File.Close()
 		}
 	}
 	parent := root
 	for _, component := range []string{"contexts", name, "desired-state", "revisions", revision} {
-		next, err := openDirectory(parent, component)
+		next, err := kernel.OpenDirectory(parent, component)
 		if err != nil {
 			close()
 			return manifest{}, nil, func() {}, state("referenced input revision is missing or unsafe")
@@ -318,12 +320,12 @@ func readRetainedSnapshot(ctx context.Context, root *directory, record contexts.
 func heldContext(revision *directory, record contexts.Record) bool {
 	held := revision
 	for range 3 {
-		if held.parent == nil {
+		if held.Parent == nil {
 			return false
 		}
-		held = held.parent
+		held = held.Parent
 	}
-	return record.DirectoryInode == 0 || held.recorded(record.DirectoryInode)
+	return record.DirectoryInode == 0 || held.Recorded(record.DirectoryInode)
 }
 
 func readFrozen(ctx context.Context, m manifest, dir *directory) (desiredstate.Sources, error) {
@@ -343,7 +345,7 @@ func readFrozen(ctx context.Context, m manifest, dir *directory) (desiredstate.S
 			result.Markers = append(result.Markers, source)
 		}
 	}
-	if err := dir.verify(); err != nil {
+	if err := dir.Verify(); err != nil {
 		return desiredstate.Sources{}, err
 	}
 	return result, nil

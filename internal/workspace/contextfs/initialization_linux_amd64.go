@@ -8,6 +8,8 @@ import (
 	"errors"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -16,7 +18,7 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 	if err := t.writable(ctx); err != nil {
 		return contexts.Record{}, err
 	}
-	if !contextName(name) || environment != "" && (!canonicalPath(environment) || beneath(environment, t.root.path)) || len(config) == 0 || len(config) > maxRecord {
+	if !contextName(name) || environment != "" && (!canonicalPath(environment) || beneath(environment, t.root.Path)) || len(config) == 0 || len(config) > maxRecord {
 		return contexts.Record{}, state("context reservation request is invalid")
 	}
 	configuration, err := contexts.ParseConfiguration(name, config)
@@ -37,7 +39,7 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 		}
 		return contexts.Record{}, initializationDamage(name, err)
 	}
-	defer dir.file.Close()
+	defer dir.File.Close()
 	if err := verifyContextLayout(ctx, dir); err != nil {
 		return contexts.Record{}, err
 	}
@@ -45,8 +47,8 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 		if err := t.store.syncDirectory(ctx, t.container); err != nil {
 			return contexts.Record{}, err
 		}
-		record.DirectoryDevice = uint64(dir.identity.Dev)
-		record.DirectoryInode = dir.identity.Ino
+		record.DirectoryDevice = uint64(dir.Identity.Dev)
+		record.DirectoryInode = dir.Identity.Ino
 		registry := cloneRegistry(t.registry)
 		for i := range registry.Contexts {
 			if registry.Contexts[i].Name == record.Name {
@@ -106,7 +108,7 @@ func (t *transaction) openContextReservation(ctx context.Context, record context
 	if err := t.collectInitializationStages(ctx, record.Name); err != nil {
 		return nil, err
 	}
-	dir, err := openDirectory(t.container, record.Name)
+	dir, err := kernel.OpenDirectory(t.container, record.Name)
 	if errors.Is(err, syscall.ENOENT) && record.DirectoryInode == 0 {
 		return t.createContextDirectory(ctx, record.Name)
 	}
@@ -114,15 +116,15 @@ func (t *transaction) openContextReservation(ctx context.Context, record context
 		return nil, err
 	}
 	if fresh {
-		dir.file.Close()
+		dir.File.Close()
 		return nil, state("context directory already exists and cannot be adopted")
 	}
-	if record.DirectoryInode != 0 && !dir.recorded(record.DirectoryInode) {
-		dir.file.Close()
+	if record.DirectoryInode != 0 && !dir.Recorded(record.DirectoryInode) {
+		dir.File.Close()
 		return nil, state("initializing context directory was replaced")
 	}
 	if err := verifyReservation(ctx, dir, record.Name); err != nil {
-		dir.file.Close()
+		dir.File.Close()
 		return nil, err
 	}
 	return dir, nil
@@ -138,7 +140,7 @@ func (t *transaction) createContextDirectory(ctx context.Context, name string) (
 		return nil, err
 	}
 	if err := t.store.checkpoint(ctx, checkpointAfterContextDirectory); err != nil {
-		dir.file.Close()
+		dir.File.Close()
 		return nil, err
 	}
 	runtime, makeErr := t.store.newDirectory(ctx, dir, "state")
@@ -148,39 +150,39 @@ func (t *transaction) createContextDirectory(ctx context.Context, name string) (
 		// only its reservation lets a retry attribute it and record the
 		// identity deletion requires: an interrupted write keeps it.
 		_, makeErr = t.store.writeExclusiveIdentity(ctx, runtime, "reservation.json", data, true)
-		runtime.file.Close()
+		runtime.File.Close()
 	}
 	if makeErr != nil {
-		dir.file.Close()
+		dir.File.Close()
 		return nil, makeErr
 	}
 	if err := t.store.checkpoint(ctx, checkpointBeforeContextPublish); err != nil {
-		dir.file.Close()
+		dir.File.Close()
 		return nil, err
 	}
-	if err := dir.verify(); err != nil {
-		dir.file.Close()
+	if err := dir.Verify(); err != nil {
+		dir.File.Close()
 		return nil, err
 	}
-	identity := dir.identity
+	identity := dir.Identity
 	if err := renameNoReplaceAt(t.container, stageName, name); err != nil {
-		dir.file.Close()
+		dir.File.Close()
 		return nil, err
 	}
-	dir.file.Close()
+	dir.File.Close()
 	if err := t.store.checkpoint(ctx, checkpointAfterContextPublish); err != nil {
 		return nil, err
 	}
-	dir, err = openDirectory(t.container, name)
+	dir, err = kernel.OpenDirectory(t.container, name)
 	if err != nil {
 		return nil, err
 	}
-	if !sameIdentity(identity, dir.identity) {
-		dir.file.Close()
+	if !kernel.SameIdentity(identity, dir.Identity) {
+		dir.File.Close()
 		return nil, state("initializing context directory changed during publication")
 	}
 	if err := t.store.syncDirectory(ctx, t.container); err != nil {
-		dir.file.Close()
+		dir.File.Close()
 		return nil, err
 	}
 	return dir, nil
@@ -204,18 +206,18 @@ func (t *transaction) populateContextReservation(ctx context.Context, dir *direc
 		if name == "desired-state" {
 			revisions, err := t.store.ensureDirectory(ctx, child, "revisions")
 			if err != nil {
-				child.file.Close()
+				child.File.Close()
 				return err
 			}
-			revisions.file.Close()
+			revisions.File.Close()
 		}
-		child.file.Close()
+		child.File.Close()
 	}
-	runtime, err := openDirectory(dir, "state")
+	runtime, err := kernel.OpenDirectory(dir, "state")
 	if err != nil {
 		return err
 	}
-	defer runtime.file.Close()
+	defer runtime.File.Close()
 	evidence := []byte(pristineMutation)
 	old, err := readBounded(ctx, runtime, "mutation.json", maxRecord, true)
 	if errors.Is(err, syscall.ENOENT) {
@@ -234,7 +236,7 @@ func (t *transaction) Configuration(ctx context.Context, name string) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	defer dir.file.Close()
+	defer dir.File.Close()
 	if err := verifyReservation(ctx, dir, name); err != nil {
 		return nil, err
 	}
@@ -275,10 +277,10 @@ func (t *transaction) InitializeSecrets(ctx context.Context, id string, callback
 	defer func() {
 		area.close()
 		if area.secrets != nil {
-			area.secrets.file.Close()
+			area.secrets.File.Close()
 		}
 	}()
-	area.secrets, err = openDirectory(dir, "secrets")
+	area.secrets, err = kernel.OpenDirectory(dir, "secrets")
 	if err != nil {
 		return err
 	}

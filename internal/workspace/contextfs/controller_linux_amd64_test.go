@@ -89,7 +89,7 @@ func publishControllerState(t *testing.T, store *Store, value prerequisites.Host
 		if err != nil {
 			return err
 		}
-		defer dir.file.Close()
+		defer dir.File.Close()
 		data, err := encodeRecord(controllerRecord(value, stored.bundles), maxControllerState)
 		if err != nil {
 			return err

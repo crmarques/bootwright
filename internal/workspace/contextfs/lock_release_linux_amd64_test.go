@@ -41,8 +41,8 @@ func TestToolAreaUnlocksWhileACopyOfItsDescriptorLives(t *testing.T) {
 	var path string
 	err := withClientArea(t, store, func(_ lifecycle.Transaction, area prerequisites.BundleArea) error {
 		held := area.(*controllerBundleArea).dir
-		path = held.path
-		copyDescriptor(t, held.file)
+		path = held.Path
+		copyDescriptor(t, held.File)
 		return nil
 	})
 	if err != nil {

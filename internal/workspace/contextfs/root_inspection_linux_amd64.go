@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -59,12 +61,12 @@ func (s *Store) inspectStateRoot(ctx context.Context, path string, uid, gid uint
 		inspection.Observed, inspection.Status, inspection.Refusal = "behind a path every store command refuses to open", "not-ready", safeError(err)
 		return inspection, nil
 	}
-	if !private(stat, syscall.S_IFDIR, uid, gid) {
-		inspection.Observed, inspection.Status = fileKind(stat.Mode)+" owned by "+ownerText(stat.Uid, stat.Gid)+" with mode "+modeText(stat.Mode), "not-ready"
+	if !kernel.Private(stat, syscall.S_IFDIR, uid, gid) {
+		inspection.Observed, inspection.Status = kernel.FileKind(stat.Mode)+" owned by "+ownerText(stat.Uid, stat.Gid)+" with mode "+modeText(stat.Mode), "not-ready"
 		inspection.Refusal = refusedRoot(path, stat, uid, gid)
 		return inspection, nil
 	}
-	if !localFilesystem(filesystem.Type) {
+	if !kernel.LocalFilesystem(filesystem.Type) {
 		inspection.Observed, inspection.Status = "not on a qualified local filesystem", "not-ready"
 		inspection.Refusal = state("state filesystem is not qualified for private durable storage")
 		return inspection, nil
@@ -97,18 +99,18 @@ func (s *Store) inspectStateRoot(ctx context.Context, path string, uid, gid uint
 func statStateRoot(path string) (syscall.Stat_t, syscall.Statfs_t, error) {
 	var stat syscall.Stat_t
 	var filesystem syscall.Statfs_t
-	parent, err := walkAbsolute(filepath.Dir(path), nil)
+	parent, err := kernel.WalkAbsolute(filepath.Dir(path), nil)
 	if err != nil {
 		return stat, filesystem, err
 	}
 	defer parent.Close()
-	if err := qualifiedFileSystem(parent); err != nil {
+	if err := kernel.QualifiedFileSystem(parent); err != nil {
 		return stat, filesystem, err
 	}
 	if syscall.Fstatfs(int(parent.Fd()), &filesystem) != nil {
 		filesystem.Type = 0
 	}
-	fd, err := syscall.Openat(int(parent.Fd()), filepath.Base(path), pathHandle|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	fd, err := syscall.Openat(int(parent.Fd()), filepath.Base(path), kernel.PathHandle|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
 	if err != nil {
 		return stat, filesystem, err
 	}

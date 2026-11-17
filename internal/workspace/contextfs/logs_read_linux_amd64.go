@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/reconciliation/logview"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -41,7 +43,7 @@ func (v *logsView) Mutating(ctx context.Context) (bool, error) {
 	if err := v.logs.available(ctx, false); err != nil {
 		return false, err
 	}
-	return probeLock(v.context.file, syscall.LOCK_SH, v.context.path)
+	return probeLock(v.context.File, syscall.LOCK_SH, v.context.Path)
 }
 
 func probeLock(file *os.File, how int, location string) (bool, error) {
@@ -70,7 +72,7 @@ func (f *logFile) ReadRange(offset int64, maximum int) ([]byte, error) {
 }
 
 func (f *logFile) Size() (int64, error) {
-	stat, err := statHandle(f.file)
+	stat, err := kernel.StatHandle(f.file)
 	return stat.Size, err
 }
 
@@ -120,17 +122,17 @@ func openAreaLog(ctx context.Context, area *operationArea, target string) (*logF
 }
 
 func openHeldLog(parent *directory, name string) (*logFile, bool, error) {
-	location := filepath.Join(parent.path, name)
-	file, err := openRelative(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	location := filepath.Join(parent.Path, name)
+	file, err := kernel.OpenRelative(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil, false, nil
 	}
 	if err != nil {
 		return nil, false, unsafeLogFile(location)
 	}
-	stat, err := statHandle(file)
-	if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFREG || stat.Uid != parent.identity.Uid || stat.Gid != parent.identity.Gid ||
-		stat.Mode&077 != 0 || stat.Nlink != 1 || stat.Dev != parent.identity.Dev {
+	stat, err := kernel.StatHandle(file)
+	if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFREG || stat.Uid != parent.Identity.Uid || stat.Gid != parent.Identity.Gid ||
+		stat.Mode&077 != 0 || stat.Nlink != 1 || stat.Dev != parent.Identity.Dev {
 		file.Close()
 		return nil, false, unsafeLogFile(location)
 	}
@@ -167,8 +169,8 @@ func (s *Store) readLogsContext(root *directory, registry contexts.Registry, nam
 	if err != nil {
 		return safeError(err)
 	}
-	defer container.file.Close()
-	defer dir.file.Close()
+	defer container.File.Close()
+	defer dir.File.Close()
 	active := true
 	defer func() { active = false }()
 	live := func() bool { return active }
@@ -212,7 +214,7 @@ func (s *Store) OpenSetup(ctx context.Context, setup string) (logview.Stream, bo
 	if err != nil {
 		return nil, false, err
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	host, err := s.logDirectory(ctx, root, logController, false)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil, false, nil
@@ -220,7 +222,7 @@ func (s *Store) OpenSetup(ctx context.Context, setup string) (logview.Stream, bo
 	if err != nil {
 		return nil, false, err
 	}
-	defer host.file.Close()
+	defer host.File.Close()
 	return s.openSetupOutput(ctx, host, setup, nil)
 }
 
@@ -255,9 +257,9 @@ func (s *Store) openSetupOutput(ctx context.Context, host *directory, setup stri
 }
 
 func newestSetupOutput(host *directory) (string, error) {
-	names, err := directoryNames(host, maxOperationEntries)
+	names, err := kernel.DirectoryNames(host, maxOperationEntries)
 	if err != nil {
-		return "", setupRunAccessError(host.path, err)
+		return "", setupRunAccessError(host.Path, err)
 	}
 	highest := 0
 	for _, name := range names {
@@ -279,7 +281,7 @@ func (s *Store) setupHeld(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, safeError(err)
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	dir, err := openControllerEntry(root, installSubtree)
 	if errors.Is(err, syscall.ENOENT) {
 		return false, nil
@@ -287,8 +289,8 @@ func (s *Store) setupHeld(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, safeError(err)
 	}
-	defer dir.close()
-	file, err := openRelative(dir, setupLockName, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	defer dir.Close()
+	file, err := kernel.OpenRelative(dir, setupLockName, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if errors.Is(err, syscall.ENOENT) {
 		return false, nil
 	}
@@ -296,8 +298,8 @@ func (s *Store) setupHeld(ctx context.Context) (bool, error) {
 		return false, safeError(err)
 	}
 	defer file.Close()
-	location := filepath.Join(dir.path, setupLockName)
-	if stat, err := statHandle(file); err != nil || !private(stat, syscall.S_IFREG, dir.identity.Uid, dir.identity.Gid) || stat.Dev != dir.identity.Dev {
+	location := filepath.Join(dir.Path, setupLockName)
+	if stat, err := kernel.StatHandle(file); err != nil || !kernel.Private(stat, syscall.S_IFREG, dir.Identity.Uid, dir.Identity.Gid) || stat.Dev != dir.Identity.Dev {
 		return false, state("setup lock type, owner or permissions is unsafe: " + location)
 	}
 	return probeLock(file, syscall.LOCK_SH, location)

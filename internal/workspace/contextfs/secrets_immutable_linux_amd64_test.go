@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets/localkeyring"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
@@ -77,11 +79,11 @@ func TestReadOnlySecretScanToleratesCompletedPendingRename(t *testing.T) {
 	}
 	err := store.ReadSecrets(context.Background(), token, func(area secretstore.Area) error {
 		concrete := area.(*secretArea)
-		directory, err := openDirectory(concrete.secrets, "identities")
+		directory, err := kernel.OpenDirectory(concrete.secrets, "identities")
 		if err != nil {
 			return err
 		}
-		defer directory.file.Close()
+		defer directory.File.Close()
 		names, err := secretDirectoryNames(context.Background(), directory, maxSecretEntries)
 		if err != nil {
 			return err

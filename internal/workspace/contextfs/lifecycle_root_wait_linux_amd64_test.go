@@ -166,7 +166,7 @@ func TestACancelledRootWaitTakesNoLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := awaitRoot(ctx, store, root, syscall.LOCK_EX); !errors.Is(err, context.Canceled) {

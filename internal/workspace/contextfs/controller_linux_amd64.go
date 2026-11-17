@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -55,16 +57,16 @@ const (
 // openControllerEntry opens a child of the controller container, holding the container
 // open until the child's close.
 func openControllerEntry(root *directory, name string) (*directory, error) {
-	host, err := openDirectory(root, controllerContainer)
+	host, err := kernel.OpenDirectory(root, controllerContainer)
 	if err != nil {
 		return nil, err
 	}
-	dir, err := openDirectory(host, name)
+	dir, err := kernel.OpenDirectory(host, name)
 	if err != nil {
-		host.file.Close()
+		host.File.Close()
 		return nil, err
 	}
-	dir.ownsParent = true
+	dir.OwnsParent = true
 	return dir, nil
 }
 
@@ -80,8 +82,8 @@ func openControllerDirectory(root *directory, registry contexts.Registry) (*dire
 	if err != nil {
 		return nil, state("attributed controller directory is missing or unsafe")
 	}
-	if !dir.recorded(registry.Controller.DirectoryInode) {
-		dir.close()
+	if !dir.Recorded(registry.Controller.DirectoryInode) {
+		dir.Close()
 		return nil, state("controller directory is unattributable or replaced; preserve the complete store for recovery")
 	}
 	return dir, nil
@@ -101,7 +103,7 @@ func readControllerStored(ctx context.Context, root *directory, registry context
 	if err != nil {
 		return controllerStored{}, err
 	}
-	defer dir.close()
+	defer dir.Close()
 	names, err := controllerNames(dir)
 	if err != nil {
 		return controllerStored{}, err
@@ -111,11 +113,11 @@ func readControllerStored(ctx context.Context, root *directory, registry context
 			continue
 		}
 		if name == toolAreasName {
-			child, err := openDirectory(dir, name)
+			child, err := kernel.OpenDirectory(dir, name)
 			if err != nil {
 				return controllerStored{}, err
 			}
-			child.file.Close()
+			child.File.Close()
 			continue
 		}
 		if !pendingInitialRegistryName(name) {
@@ -151,7 +153,7 @@ func readControllerStored(ctx context.Context, root *directory, registry context
 // controllerNames lists the controller directory: its record, the tool area
 // parent and at most maxControllerStages publication stages.
 func controllerNames(dir *directory) ([]string, error) {
-	names, err := directoryNames(dir, maxControllerStages+2)
+	names, err := kernel.DirectoryNames(dir, maxControllerStages+2)
 	if err != nil {
 		return nil, state("state directory entry count exceeds its limit")
 	}
@@ -168,7 +170,7 @@ func setupPrepared(ctx context.Context, root *directory) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer dir.close()
+	defer dir.Close()
 	view, err := readSetupView(ctx, dir)
 	if err != nil {
 		return false, err
@@ -243,11 +245,11 @@ func (s *Store) ReadController(ctx context.Context, name string, callback func(p
 	if err != nil {
 		return safeError(err)
 	}
-	defer root.file.Close()
-	if err := lockShared(root); err != nil {
+	defer root.File.Close()
+	if err := kernel.LockShared(root); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
+	defer syscall.Flock(int(root.File.Fd()), syscall.LOCK_UN)
 	registry, exists, err := readRegistry(ctx, root)
 	if err == nil && exists {
 		err = verifyRootEntries(ctx, root, registry)
@@ -277,7 +279,7 @@ func (s *Store) inspectControllerBundles(root *directory, registry contexts.Regi
 		}
 		guard := func(call context.Context) error {
 			actual, err := readControllerStored(call, root, registry)
-			if err != nil || !bytes.Equal(actual.data, stored.data) || actual.data != nil && !sameFile(actual.identity, stored.identity) {
+			if err != nil || !bytes.Equal(actual.data, stored.data) || actual.data != nil && !kernel.SameFile(actual.identity, stored.identity) {
 				return state("controller evidence changed during inspection")
 			}
 			return nil
@@ -310,21 +312,21 @@ func (t *transaction) initializeController(ctx context.Context, host evidence.In
 		if err != nil {
 			return controllerStored{}, err
 		}
-		if dir, err := openDirectory(host, controllerSubtree); err == nil {
-			dir.file.Close()
-			host.file.Close()
+		if dir, err := kernel.OpenDirectory(host, controllerSubtree); err == nil {
+			dir.File.Close()
+			host.File.Close()
 			return controllerStored{}, state("existing controller directory cannot be adopted")
 		} else if !errors.Is(err, syscall.ENOENT) {
-			host.file.Close()
+			host.File.Close()
 			return controllerStored{}, err
 		}
 		dir, err := t.store.newDirectory(ctx, host, controllerSubtree)
-		host.file.Close()
+		host.File.Close()
 		if err != nil {
 			return controllerStored{}, err
 		}
-		identity := dir.identity
-		dir.file.Close()
+		identity := dir.Identity
+		dir.File.Close()
 		if err := t.store.checkpoint(ctx, checkpointAfterControllerDirectory); err != nil {
 			return controllerStored{}, err
 		}
@@ -348,7 +350,7 @@ func (t *transaction) initializeController(ctx context.Context, host evidence.In
 		if err == nil {
 			_, err = t.store.replaceControllerRecord(ctx, dir, stored, data, retry)
 		}
-		dir.close()
+		dir.Close()
 		if err != nil {
 			return controllerStored{}, err
 		}
@@ -379,7 +381,7 @@ func (s *Store) replaceControllerRecord(ctx context.Context, dir *directory, exp
 				}
 				return nil
 			}
-			if err != nil || !bytes.Equal(current, expected.data) || !sameFile(identity, expected.identity) {
+			if err != nil || !bytes.Equal(current, expected.data) || !kernel.SameFile(identity, expected.identity) {
 				return state("controller receipt changed before publication")
 			}
 			return nil
@@ -400,7 +402,7 @@ func (t *transaction) checkControllerRecovery(ctx context.Context, name string) 
 		return err
 	}
 	if expected := t.controllerEvidence; expected != nil {
-		if !bytes.Equal(expected.data, stored.data) || stored.data != nil && !sameFile(expected.identity, stored.identity) {
+		if !bytes.Equal(expected.data, stored.data) || stored.data != nil && !kernel.SameFile(expected.identity, stored.identity) {
 			return state("controller recovery evidence changed during context mutation")
 		}
 	} else {

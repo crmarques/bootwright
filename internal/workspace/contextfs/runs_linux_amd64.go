@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -93,8 +95,8 @@ func (s *Store) openNextRun(ctx context.Context, runs *directory) (string, *os.F
 	for attempt := 1; attempt <= maxRunAllocations; attempt++ {
 		name, err := outputName(runPrefix, highest+attempt)
 		if err != nil {
-			return "", nil, diagnostics.NewFailureWithRemediation("lifecycle.state", "bounded run numbers are exhausted in "+runs.path, "",
-				"remove "+runs.path+", then repeat the command")
+			return "", nil, diagnostics.NewFailureWithRemediation("lifecycle.state", "bounded run numbers are exhausted in "+runs.Path, "",
+				"remove "+runs.Path+", then repeat the command")
 		}
 		run, err := s.createRun(ctx, runs, name)
 		if errors.Is(err, syscall.EEXIST) {
@@ -102,16 +104,16 @@ func (s *Store) openNextRun(ctx context.Context, runs *directory) (string, *os.F
 		}
 		return name, run, err
 	}
-	return "", nil, state("bounded run output could not be created exclusively in " + runs.path)
+	return "", nil, state("bounded run output could not be created exclusively in " + runs.Path)
 }
 
 // retireRuns removes the lowest-numbered runs no live run holds until fewer
 // than maxBoundedRuns remain, and reports the highest number it listed. Every
 // entry not named as a run is neither counted nor removed.
 func (s *Store) retireRuns(ctx context.Context, runs *directory) (int, error) {
-	names, err := directoryNames(runs, maxOperationEntries)
+	names, err := kernel.DirectoryNames(runs, maxOperationEntries)
 	if err != nil {
-		return 0, state("bounded run storage cannot be listed: " + runs.path)
+		return 0, state("bounded run storage cannot be listed: " + runs.Path)
 	}
 	numbers := []int{}
 	for _, name := range names {
@@ -148,13 +150,13 @@ func (s *Store) retireRuns(ctx context.Context, runs *directory) (int, error) {
 // is the area's own private, singly linked regular file. It reports whether
 // the run is gone.
 func retireRun(runs *directory, name string) bool {
-	file, err := openRelative(runs, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	file, err := kernel.OpenRelative(runs, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return false
 	}
 	defer file.Close()
-	stat, err := statHandle(file)
-	if err != nil || !private(stat, syscall.S_IFREG, runs.identity.Uid, runs.identity.Gid) || stat.Dev != runs.identity.Dev {
+	stat, err := kernel.StatHandle(file)
+	if err != nil || !kernel.Private(stat, syscall.S_IFREG, runs.Identity.Uid, runs.Identity.Gid) || stat.Dev != runs.Identity.Dev {
 		return false
 	}
 	if syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
@@ -172,19 +174,19 @@ func (s *Store) createRun(ctx context.Context, runs *directory, name string) (*o
 	if err := s.checkpoint(ctx, checkpointCreateFile); err != nil {
 		return nil, err
 	}
-	if err := runs.verify(); err != nil {
+	if err := runs.Verify(); err != nil {
 		return nil, err
 	}
-	location := filepath.Join(runs.path, name)
-	run, err := openRelative(runs, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
+	location := filepath.Join(runs.Path, name)
+	run, err := kernel.OpenRelative(runs, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
 	if errors.Is(err, syscall.EEXIST) {
 		return nil, err
 	}
 	if err != nil {
 		return nil, state("bounded run output could not be created exclusively: " + location)
 	}
-	created, err := statHandle(run)
-	if err != nil || !private(created, syscall.S_IFREG, runs.identity.Uid, runs.identity.Gid) || created.Dev != runs.identity.Dev {
+	created, err := kernel.StatHandle(run)
+	if err != nil || !kernel.Private(created, syscall.S_IFREG, runs.Identity.Uid, runs.Identity.Gid) || created.Dev != runs.Identity.Dev {
 		run.Close()
 		discardCreated(runs, name, created)
 		return nil, state("bounded run output is not a private file: " + location)
@@ -193,7 +195,7 @@ func (s *Store) createRun(ctx context.Context, runs *directory, name string) (*o
 		discardRun(runs, name, run)
 		return nil, state("bounded run output could not be held: " + location)
 	}
-	if current, err := listedEntry(runs, name); err != nil || !sameIdentity(current, created) {
+	if current, err := listedEntry(runs, name); err != nil || !kernel.SameIdentity(current, created) {
 		run.Close()
 		return nil, state("bounded run output was removed before it was held: " + location)
 	}
@@ -223,7 +225,7 @@ func holdRun(ctx context.Context, run *os.File) error {
 
 // discardRun takes no context, so an interrupted run still cleans up.
 func discardRun(runs *directory, name string, run *os.File) {
-	stat, err := statHandle(run)
+	stat, err := kernel.StatHandle(run)
 	run.Close()
 	if err == nil {
 		discardCreated(runs, name, stat)

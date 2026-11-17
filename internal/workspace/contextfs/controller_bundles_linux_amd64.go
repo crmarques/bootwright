@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -31,7 +33,7 @@ const bundleStagePrefix = "pending-"
 func bundleStageName(name string) bool { return identifier(name, bundleStagePrefix) }
 
 func verifyControllerBundleReservations(ctx context.Context, owner *directory, reservations []controllerBundleReservation) error {
-	parent, err := openDirectory(owner, toolAreasName)
+	parent, err := kernel.OpenDirectory(owner, toolAreasName)
 	if errors.Is(err, syscall.ENOENT) {
 		for _, reservation := range reservations {
 			if reservation.DirectoryInode != 0 && reservation.Mode != retiringArea {
@@ -43,8 +45,8 @@ func verifyControllerBundleReservations(ctx context.Context, owner *directory, r
 	if err != nil {
 		return err
 	}
-	defer parent.file.Close()
-	names, err := directoryNames(parent, maxControllerBundles)
+	defer parent.File.Close()
+	names, err := kernel.DirectoryNames(parent, maxControllerBundles)
 	if err != nil {
 		return err
 	}
@@ -54,12 +56,12 @@ func verifyControllerBundleReservations(ctx context.Context, owner *directory, r
 			return state("controller bundle directory is not reserved")
 		}
 		reservation := reservations[index]
-		dir, err := openDirectory(parent, name)
+		dir, err := kernel.OpenDirectory(parent, name)
 		if err != nil {
 			return err
 		}
-		matches := dir.recorded(reservation.DirectoryInode)
-		dir.file.Close()
+		matches := dir.Recorded(reservation.DirectoryInode)
+		dir.File.Close()
 		// A reserved entry records intent published before the directory was
 		// created, so an unattributed directory is this store's own interrupted
 		// attempt. Reading it is safe; only an attributed identity can be
@@ -95,7 +97,7 @@ type controllerBundleArea struct {
 
 func (a *controllerBundleArea) close() {
 	for index := len(a.owned) - 1; index >= 0; index-- {
-		a.owned[index].close()
+		a.owned[index].Close()
 	}
 	a.owned = nil
 	a.dir = nil
@@ -118,7 +120,7 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 		return nil, err
 	}
 	area.owned = append(area.owned, owner)
-	parent, err := openDirectory(owner, toolAreasName)
+	parent, err := kernel.OpenDirectory(owner, toolAreasName)
 	if err == nil {
 		area.owned = append(area.owned, parent)
 	}
@@ -126,7 +128,7 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 		area.close()
 		return nil, err
 	}
-	dir, err := openDirectory(parent, id)
+	dir, err := kernel.OpenDirectory(parent, id)
 	if err == nil {
 		area.owned = append(area.owned, dir)
 	}
@@ -135,9 +137,9 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 		return nil, err
 	}
 	if writable {
-		err = lock(dir)
+		err = kernel.Lock(dir)
 	} else {
-		err = lockShared(dir)
+		err = kernel.LockShared(dir)
 	}
 	if err != nil {
 		area.close()
@@ -163,10 +165,10 @@ func (a *controllerBundleArea) available(ctx context.Context, write bool) error 
 			return err
 		}
 	}
-	if err := a.dir.verify(); err != nil {
+	if err := a.dir.Verify(); err != nil {
 		return err
 	}
-	if !a.dir.recorded(a.reservation.DirectoryInode) {
+	if !a.dir.Recorded(a.reservation.DirectoryInode) {
 		return state("controller bundle directory was replaced")
 	}
 	return nil
@@ -197,12 +199,12 @@ func (a *controllerBundleArea) parent(parts []string) (*directory, string, func(
 	owned := []*directory{}
 	close := func() {
 		for index := len(owned) - 1; index >= 0; index-- {
-			owned[index].file.Close()
+			owned[index].File.Close()
 		}
 	}
 	parent := a.dir
 	for _, name := range parts[:len(parts)-1] {
-		child, err := openDirectory(parent, name)
+		child, err := kernel.OpenDirectory(parent, name)
 		if err != nil {
 			close()
 			return nil, "", func() {}, err
@@ -217,7 +219,7 @@ func privateBundleFile(stat syscall.Stat_t, parent *directory) bool {
 	if stat.Mode&07777 == 0700 {
 		stat.Mode = stat.Mode&^07777 | 0600
 	}
-	return stat.Dev == parent.identity.Dev && private(stat, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid)
+	return stat.Dev == parent.Identity.Dev && kernel.Private(stat, syscall.S_IFREG, parent.Identity.Uid, parent.Identity.Gid)
 }
 
 func (a *controllerBundleArea) Read(ctx context.Context, path string, maximum int) ([]byte, error) {
@@ -264,12 +266,12 @@ func (a *controllerBundleArea) within(ctx context.Context, path string, maximum 
 		return err
 	}
 	defer close()
-	file, err := openRelative(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	file, err := kernel.OpenRelative(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return safeError(err)
 	}
 	defer file.Close()
-	before, err := statHandle(file)
+	before, err := kernel.StatHandle(file)
 	if err != nil || !privateBundleFile(before, parent) || before.Size < 0 || before.Size > maximum {
 		return state("controller bundle file metadata is unsafe")
 	}
@@ -277,17 +279,17 @@ func (a *controllerBundleArea) within(ctx context.Context, path string, maximum 
 	if err != nil {
 		return err
 	}
-	after, err := statHandle(file)
-	if err != nil || !sameFile(before, after) || after.Size != read {
+	after, err := kernel.StatHandle(file)
+	if err != nil || !kernel.SameFile(before, after) || after.Size != read {
 		return state("controller bundle file changed during inspection")
 	}
-	current, err := openRelative(parent, name, pathHandle, 0)
+	current, err := kernel.OpenRelative(parent, name, kernel.PathHandle, 0)
 	if err != nil {
 		return state("controller bundle file was replaced")
 	}
-	actual, err := statHandle(current)
+	actual, err := kernel.StatHandle(current)
 	current.Close()
-	if err != nil || !sameFile(after, actual) {
+	if err != nil || !kernel.SameFile(after, actual) {
 		return state("controller bundle file was replaced")
 	}
 	return a.available(ctx, false)
@@ -310,11 +312,11 @@ func (a *controllerBundleArea) EnsureDirectory(ctx context.Context, path string)
 	owned := []*directory{}
 	defer func() {
 		for index := len(owned) - 1; index >= 0; index-- {
-			owned[index].file.Close()
+			owned[index].File.Close()
 		}
 	}()
 	for _, name := range parts {
-		child, err := openDirectory(parent, name)
+		child, err := kernel.OpenDirectory(parent, name)
 		if errors.Is(err, syscall.ENOENT) {
 			if a.entries >= maxBundleEntries {
 				return state("controller bundle entry limit exceeded")
@@ -365,7 +367,7 @@ func (a *controllerBundleArea) Write(ctx context.Context, path string, data []by
 	if err := a.available(ctx, true); err != nil {
 		return err
 	}
-	if err := parent.verify(); err != nil {
+	if err := parent.Verify(); err != nil {
 		return err
 	}
 	mode := uint32(0600)
@@ -397,7 +399,7 @@ func (a *controllerBundleArea) writeFile(ctx context.Context, parent *directory,
 	if err != nil {
 		return err
 	}
-	file, err := openRelative(parent, stage, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, mode)
+	file, err := kernel.OpenRelative(parent, stage, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, mode)
 	if err != nil {
 		return safeError(err)
 	}
@@ -408,11 +410,11 @@ func (a *controllerBundleArea) writeFile(ctx context.Context, parent *directory,
 		if held == "" {
 			return
 		}
-		if created, err := statHandle(file); err == nil {
+		if created, err := kernel.StatHandle(file); err == nil {
 			discardCreated(parent, held, created)
 		}
 	}()
-	before, err := statHandle(file)
+	before, err := kernel.StatHandle(file)
 	if err != nil || !privateBundleFile(before, parent) || before.Mode&07777 != mode {
 		return state("created controller bundle file is unsafe")
 	}
@@ -432,8 +434,8 @@ func (a *controllerBundleArea) writeFile(ctx context.Context, parent *directory,
 	if err := file.Sync(); err != nil {
 		return storeFailure("controller bundle file durability is uncertain", err)
 	}
-	after, err := statHandle(file)
-	if err != nil || !sameIdentity(before, after) || after.Size != int64(len(data)) {
+	after, err := kernel.StatHandle(file)
+	if err != nil || !kernel.SameIdentity(before, after) || after.Size != int64(len(data)) {
 		return state("controller bundle file changed during publication")
 	}
 	if err := a.store.checkpoint(ctx, checkpointBeforeControllerBundleRename); err != nil {
@@ -445,17 +447,17 @@ func (a *controllerBundleArea) writeFile(ctx context.Context, parent *directory,
 	held = name
 	// The rename moves the file's change time, so the proof compares the
 	// handle's identity after it with what the parent now names.
-	renamed, err := statHandle(file)
-	if err != nil || !sameIdentity(after, renamed) || renamed.Size != after.Size {
+	renamed, err := kernel.StatHandle(file)
+	if err != nil || !kernel.SameIdentity(after, renamed) || renamed.Size != after.Size {
 		return state("controller bundle file changed during publication")
 	}
-	current, err := openRelative(parent, name, pathHandle, 0)
+	current, err := kernel.OpenRelative(parent, name, kernel.PathHandle, 0)
 	if err != nil {
 		return state("controller bundle file was replaced")
 	}
-	actual, err := statHandle(current)
+	actual, err := kernel.StatHandle(current)
 	current.Close()
-	if err != nil || !sameFile(renamed, actual) {
+	if err != nil || !kernel.SameFile(renamed, actual) {
 		return state("controller bundle file was replaced")
 	}
 	held = ""
@@ -503,7 +505,7 @@ func (a *controllerBundleArea) list(ctx context.Context, sweep bool) ([]prerequi
 		if depth > maxBundleDepth {
 			return state("controller bundle tree exceeds its depth bound")
 		}
-		names, err := directoryNames(dir, maxBundleEntries-entries)
+		names, err := kernel.DirectoryNames(dir, maxBundleEntries-entries)
 		if err != nil {
 			return err
 		}
@@ -524,27 +526,27 @@ func (a *controllerBundleArea) list(ctx context.Context, sweep bool) ([]prerequi
 			if _, err := bundleParts(prefix + name); err != nil {
 				return err
 			}
-			file, err := openRelative(dir, name, pathHandle, 0)
+			file, err := kernel.OpenRelative(dir, name, kernel.PathHandle, 0)
 			if err != nil {
 				return state("controller bundle entry is unsafe")
 			}
-			identity, err := statHandle(file)
+			identity, err := kernel.StatHandle(file)
 			file.Close()
 			if err != nil {
 				return err
 			}
 			if identity.Mode&syscall.S_IFMT == syscall.S_IFDIR {
 				result = append(result, prerequisites.BundleEntry{Path: prefix + name, Directory: true})
-				child, err := openDirectory(dir, name)
+				child, err := kernel.OpenDirectory(dir, name)
 				if err != nil {
 					return err
 				}
-				if !sameIdentity(identity, child.identity) {
-					child.file.Close()
+				if !kernel.SameIdentity(identity, child.Identity) {
+					child.File.Close()
 					return state("controller bundle directory changed during inspection")
 				}
 				err = walk(child, prefix+name+"/", depth+1)
-				child.file.Close()
+				child.File.Close()
 				if err != nil {
 					return err
 				}
@@ -556,7 +558,7 @@ func (a *controllerBundleArea) list(ctx context.Context, sweep bool) ([]prerequi
 				result = append(result, prerequisites.BundleEntry{Path: prefix + name, Executable: identity.Mode&07777 == 0700, Size: identity.Size})
 			}
 		}
-		current, err := directoryNames(dir, maxBundleEntries)
+		current, err := kernel.DirectoryNames(dir, maxBundleEntries)
 		if err != nil || !slices.Equal(names, current) {
 			return state("controller bundle entries changed during inspection")
 		}
@@ -566,7 +568,7 @@ func (a *controllerBundleArea) list(ctx context.Context, sweep bool) ([]prerequi
 				return err
 			}
 		}
-		return dir.verify()
+		return dir.Verify()
 	}
 	if err := walk(a.dir, "", 0); err != nil {
 		return nil, err
@@ -585,11 +587,11 @@ func abandonedBundleStage(dir *directory, name string, sealed bool) (syscall.Sta
 	if sealed {
 		return syscall.Stat_t{}, state("sealed controller bundle holds an unpublished staging file")
 	}
-	file, err := openRelative(dir, name, pathHandle, 0)
+	file, err := kernel.OpenRelative(dir, name, kernel.PathHandle, 0)
 	if err != nil {
 		return syscall.Stat_t{}, state("controller bundle entry is unsafe")
 	}
-	identity, err := statHandle(file)
+	identity, err := kernel.StatHandle(file)
 	file.Close()
 	if err != nil || !privateBundleFile(identity, dir) || identity.Size < 0 || identity.Size > maxBundleFileBytes {
 		return syscall.Stat_t{}, state("controller bundle staging file is unsafe")
@@ -636,12 +638,12 @@ func (a *controllerBundleArea) sync(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		file, err := openRelative(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+		file, err := kernel.OpenRelative(parent, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 		if err != nil {
 			close()
 			return err
 		}
-		before, err := statHandle(file)
+		before, err := kernel.StatHandle(file)
 		if err == nil && (!privateBundleFile(before, parent) || before.Size != entry.Size || (before.Mode&07777 == 0700) != entry.Executable) {
 			err = state("controller bundle file changed before durable sealing")
 		}
@@ -651,19 +653,19 @@ func (a *controllerBundleArea) sync(ctx context.Context) error {
 		if err == nil {
 			err = file.Sync()
 		}
-		after, statErr := statHandle(file)
+		after, statErr := kernel.StatHandle(file)
 		file.Close()
-		if err == nil && (statErr != nil || !sameFile(before, after)) {
+		if err == nil && (statErr != nil || !kernel.SameFile(before, after)) {
 			err = state("controller bundle file changed during durable sealing")
 		}
 		if err == nil {
-			current, openErr := openRelative(parent, name, pathHandle, 0)
+			current, openErr := kernel.OpenRelative(parent, name, kernel.PathHandle, 0)
 			if openErr != nil {
 				err = openErr
 			} else {
-				actual, statErr := statHandle(current)
+				actual, statErr := kernel.StatHandle(current)
 				current.Close()
-				if statErr != nil || !sameFile(after, actual) {
+				if statErr != nil || !kernel.SameFile(after, actual) {
 					err = state("controller bundle file was replaced during durable sealing")
 				}
 			}
@@ -686,10 +688,10 @@ func (a *controllerBundleArea) sync(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		dir, err := openDirectory(parent, name)
+		dir, err := kernel.OpenDirectory(parent, name)
 		if err == nil {
 			err = a.store.syncDirectory(ctx, dir)
-			dir.file.Close()
+			dir.File.Close()
 		}
 		close()
 		if err != nil {
@@ -707,5 +709,5 @@ func (a *controllerBundleArea) Location(ctx context.Context) (prerequisites.Bund
 		return prerequisites.BundleLocation{}, err
 	}
 	a.scanned = false // A native child may change the tree before the next call.
-	return prerequisites.BundleLocation{Path: a.dir.path, Device: uint64(a.dir.identity.Dev), Inode: a.dir.identity.Ino, Writable: a.writable(), Sealed: a.isSealed()}, nil
+	return prerequisites.BundleLocation{Path: a.dir.Path, Device: uint64(a.dir.Identity.Dev), Inode: a.dir.Identity.Ino, Writable: a.writable(), Sealed: a.isSealed()}, nil
 }

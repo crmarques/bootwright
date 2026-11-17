@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -392,18 +394,18 @@ func TestAHeldListingRefusesASubstitutedDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer root.file.Close()
-	container, err := openDirectory(root, "contexts")
+	defer root.File.Close()
+	container, err := kernel.OpenDirectory(root, "contexts")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer container.file.Close()
-	held, err := openDirectory(container, "example")
+	defer container.File.Close()
+	held, err := kernel.OpenDirectory(container, "example")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer held.file.Close()
-	if names, err := heldNames(root, 16); err != nil || !slices.Equal(names, []string{"contexts", "registry.json"}) {
+	defer held.File.Close()
+	if names, err := kernel.HeldNames(root, 16); err != nil || !slices.Equal(names, []string{"contexts", "registry.json"}) {
 		t.Fatalf("the root lists %v (%v)", names, err)
 	}
 	contextsPath := filepath.Join(store.options.Root, "contexts")
@@ -414,7 +416,7 @@ func TestAHeldListingRefusesASubstitutedDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	writePrivate(t, filepath.Join(contextsPath, "example", "substitute"), []byte("planted\n"))
-	for name, list := range map[string]func(*directory, int) ([]string, error){"heldNames": heldNames, "directoryNames": directoryNames} {
+	for name, list := range map[string]func(*directory, int) ([]string, error){"heldNames": kernel.HeldNames, "directoryNames": kernel.DirectoryNames} {
 		names, err := list(held, 16)
 		reported := diagnostics.Of(err)
 		if names != nil || len(reported) != 1 || reported[0].Code != "context.state" || !strings.Contains(reported[0].Message, "replaced") {

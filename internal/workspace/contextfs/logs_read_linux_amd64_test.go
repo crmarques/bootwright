@@ -424,12 +424,12 @@ func TestNewestSetupOutputSurvivesPruningBetweenListAndOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	held, err := store.logDirectory(ctx, root, logController, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer held.file.Close()
+	defer held.File.Close()
 	listings := 0
 	stream, found, err := store.openSetupOutput(ctx, held, "", func() {
 		if listings++; listings == 1 {

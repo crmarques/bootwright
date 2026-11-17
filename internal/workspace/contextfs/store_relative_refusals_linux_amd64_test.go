@@ -52,11 +52,11 @@ func TestReadingTheRegistryLeavesTheHeldRootListingAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	if _, exists, err := readRegistry(ctx, root); exists || err == nil {
 		t.Fatalf("a root holding only a foreign stage read as a registry: exists=%v err=%v", exists, err)
 	}
-	names, err := root.file.Readdirnames(-1)
+	names, err := root.File.Readdirnames(-1)
 	if err != nil || !slices.Equal(names, []string{stage}) {
 		t.Fatalf("the held root handle lists %v (%v), want only %s", names, err, stage)
 	}

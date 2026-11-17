@@ -557,13 +557,13 @@ func TestACancelledCollectionStopsItsWalk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	container, dir, err := openContext(root, record)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer container.file.Close()
-	defer dir.file.Close()
+	defer container.File.Close()
+	defer dir.File.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := store.collectContextStages(ctx, dir, true); !errors.Is(err, context.Canceled) {

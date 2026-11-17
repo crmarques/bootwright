@@ -14,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/nativefs"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -79,24 +81,24 @@ func (s *Store) openLogRoot(ctx context.Context, create bool) (*directory, error
 	if create {
 		admit = func(*os.File) error { return nil }
 	}
-	file, err := walkAbsolute(logs, admit)
+	file, err := kernel.WalkAbsolute(logs, admit)
 	if errors.Is(err, syscall.EEXIST) {
-		file, err = walkAbsolute(logs, nil)
+		file, err = kernel.WalkAbsolute(logs, nil)
 	}
-	var unreachable *unreachableRoot
+	var unreachable *kernel.UnreachableRoot
 	if errors.As(err, &unreachable) {
-		return nil, unsafeLogPath(unreachable.component)
+		return nil, unsafeLogPath(unreachable.Component)
 	}
 	if err != nil {
 		return nil, err
 	}
-	stat, err := statHandle(file)
+	stat, err := kernel.StatHandle(file)
 	uid, gid := s.logOwner()
-	if err != nil || !private(stat, syscall.S_IFDIR, uid, gid) {
+	if err != nil || !kernel.Private(stat, syscall.S_IFDIR, uid, gid) {
 		file.Close()
 		return nil, unsafeLogPath(logs)
 	}
-	return &directory{file: file, path: logs, identity: stat}, nil
+	return &directory{File: file, Path: logs, Identity: stat}, nil
 }
 
 func (s *Store) logDirectory(ctx context.Context, parent *directory, name string, create bool) (*directory, error) {
@@ -105,14 +107,14 @@ func (s *Store) logDirectory(ctx context.Context, parent *directory, name string
 	if create {
 		child, err = s.ensureDirectory(ctx, parent, name)
 	} else {
-		child, err = openDirectory(parent, name)
+		child, err = kernel.OpenDirectory(parent, name)
 	}
 	if err == nil || errors.Is(err, syscall.ENOENT) || ctx.Err() != nil {
 		return child, err
 	}
 	stat, statErr := listedEntry(parent, name)
-	if statErr == nil && (!private(stat, syscall.S_IFDIR, parent.identity.Uid, parent.identity.Gid) || stat.Dev != parent.identity.Dev) {
-		return nil, unsafeLogPath(filepath.Join(parent.path, name))
+	if statErr == nil && (!kernel.Private(stat, syscall.S_IFDIR, parent.Identity.Uid, parent.Identity.Gid) || stat.Dev != parent.Identity.Dev) {
+		return nil, unsafeLogPath(filepath.Join(parent.Path, name))
 	}
 	return nil, err
 }
@@ -124,16 +126,16 @@ func (s *Store) contextLogs(ctx context.Context, name string, create bool) (*dir
 	}
 	container, err := s.logDirectory(ctx, root, logContexts, create)
 	if err != nil {
-		root.file.Close()
+		root.File.Close()
 		return nil, nil, err
 	}
 	dir, err := s.logDirectory(ctx, container, name, create)
 	if err != nil {
-		container.file.Close()
-		root.file.Close()
+		container.File.Close()
+		root.File.Close()
 		return nil, nil, err
 	}
-	return dir, func() { dir.file.Close(); container.file.Close(); root.file.Close() }, nil
+	return dir, func() { dir.File.Close(); container.File.Close(); root.File.Close() }, nil
 }
 
 func (a *operationArea) logRoot(ctx context.Context, create bool) (*directory, func(), error) {
@@ -146,7 +148,7 @@ func (a *operationArea) logRoot(ctx context.Context, create bool) (*directory, f
 		release()
 		return nil, nil, err
 	}
-	return subtree, func() { subtree.file.Close(); release() }, nil
+	return subtree, func() { subtree.File.Close(); release() }, nil
 }
 
 type operationLogArea struct{ *operationArea }
@@ -168,7 +170,7 @@ func (a *operationLogArea) MarkCurrent(ctx context.Context, id string) {
 // linkCurrent renames a staged link over current, leaving an entry that is no link.
 func (s *Store) linkCurrent(ctx context.Context, dir *directory, id string) error {
 	if stat, err := listedEntry(dir, currentLink); err == nil && stat.Mode&syscall.S_IFMT != syscall.S_IFLNK {
-		return state("the current log link is not a link: " + filepath.Join(dir.path, currentLink))
+		return state("the current log link is not a link: " + filepath.Join(dir.Path, currentLink))
 	}
 	stage, err := s.candidate(currentStagePrefix)
 	if err != nil {
@@ -180,7 +182,7 @@ func (s *Store) linkCurrent(ctx context.Context, dir *directory, id string) erro
 	if err := symlinkAt(path.Join(operationLogs, id), dir, stage); err != nil {
 		return err
 	}
-	if err := syscall.Renameat(int(dir.file.Fd()), stage, int(dir.file.Fd()), currentLink); err != nil {
+	if err := syscall.Renameat(int(dir.File.Fd()), stage, int(dir.File.Fd()), currentLink); err != nil {
 		unlinkAt(dir, stage, false)
 		return err
 	}
@@ -188,8 +190,8 @@ func (s *Store) linkCurrent(ctx context.Context, dir *directory, id string) erro
 }
 
 func symlinkAt(target string, dir *directory, name string) error {
-	err := nativefs.Symlink(target, int(dir.file.Fd()), name)
-	runtime.KeepAlive(dir.file)
+	err := nativefs.Symlink(target, int(dir.File.Fd()), name)
+	runtime.KeepAlive(dir.File)
 	return err
 }
 
@@ -215,7 +217,7 @@ func (a *operationLogArea) Retain(ctx context.Context, keep []string) {
 // modification time then name, until fewer than maxOperationLogs remain
 // within retainedLogBytes; one holding what this store never creates is left.
 func (s *Store) retainOperationLogs(ctx context.Context, operations *directory, keep []string) error {
-	names, err := directoryNames(operations, maxOperationEntries)
+	names, err := kernel.DirectoryNames(operations, maxOperationEntries)
 	if err != nil {
 		return err
 	}
@@ -224,13 +226,13 @@ func (s *Store) retainOperationLogs(ctx context.Context, operations *directory, 
 		if !reconciliation.ValidOperationID(name) {
 			continue
 		}
-		dir, err := openDirectory(operations, name)
+		dir, err := kernel.OpenDirectory(operations, name)
 		if err != nil {
 			continue
 		}
 		size := logTreeBytes(dir, 0)
-		logs = append(logs, retainedLog{name: name, identity: dir.identity, bytes: size})
-		dir.file.Close()
+		logs = append(logs, retainedLog{name: name, identity: dir.Identity, bytes: size})
+		dir.File.Close()
 		total += size
 	}
 	slices.SortFunc(logs, func(x, y retainedLog) int {
@@ -255,7 +257,7 @@ func (s *Store) retainOperationLogs(ctx context.Context, operations *directory, 
 }
 
 func logTreeBytes(dir *directory, depth int) int64 {
-	names, err := directoryNames(dir, maxOperationEntries)
+	names, err := kernel.DirectoryNames(dir, maxOperationEntries)
 	if err != nil || depth > maxOperationSegments {
 		return 0
 	}
@@ -269,9 +271,9 @@ func logTreeBytes(dir *directory, depth int) int64 {
 			size += stat.Size
 			continue
 		}
-		if child, err := openDirectory(dir, name); err == nil {
+		if child, err := kernel.OpenDirectory(dir, name); err == nil {
 			size += logTreeBytes(child, depth+1)
-			child.file.Close()
+			child.File.Close()
 		}
 	}
 	return size
@@ -284,16 +286,16 @@ func (s *Store) removeLogTree(ctx context.Context, parent *directory, name strin
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	location := filepath.Join(parent.path, name)
-	dir, err := openDirectory(parent, name)
-	if err != nil || !sameIdentity(dir.identity, expected) || depth > maxOperationSegments {
+	location := filepath.Join(parent.Path, name)
+	dir, err := kernel.OpenDirectory(parent, name)
+	if err != nil || !kernel.SameIdentity(dir.Identity, expected) || depth > maxOperationSegments {
 		if dir != nil {
-			dir.file.Close()
+			dir.File.Close()
 		}
 		return unsafeLogPath(location)
 	}
-	defer dir.file.Close()
-	names, err := directoryNames(dir, maxOperationEntries)
+	defer dir.File.Close()
+	names, err := kernel.DirectoryNames(dir, maxOperationEntries)
 	if err != nil {
 		return unsafeLogPath(location)
 	}
@@ -302,11 +304,11 @@ func (s *Store) removeLogTree(ctx context.Context, parent *directory, name strin
 		if errors.Is(err, syscall.ENOENT) {
 			continue
 		}
-		owned := err == nil && stat.Uid == dir.identity.Uid && stat.Gid == dir.identity.Gid && stat.Dev == dir.identity.Dev
+		owned := err == nil && stat.Uid == dir.Identity.Uid && stat.Gid == dir.Identity.Gid && stat.Dev == dir.Identity.Dev
 		switch {
 		case owned && stat.Mode&syscall.S_IFMT == syscall.S_IFDIR:
 			err = s.removeLogTree(ctx, dir, child, stat, depth+1)
-		case owned && (private(stat, syscall.S_IFREG, dir.identity.Uid, dir.identity.Gid) || stat.Mode&syscall.S_IFMT == syscall.S_IFLNK):
+		case owned && (kernel.Private(stat, syscall.S_IFREG, dir.Identity.Uid, dir.Identity.Gid) || stat.Mode&syscall.S_IFMT == syscall.S_IFLNK):
 			if unlinkVerified(dir, child, stat, false) != nil {
 				err = unsafeLogPath(filepath.Join(location, child))
 			}
@@ -320,7 +322,7 @@ func (s *Store) removeLogTree(ctx context.Context, parent *directory, name strin
 	if err := s.syncDirectory(ctx, dir); err != nil {
 		return err
 	}
-	if unlinkVerified(parent, name, dir.identity, true) != nil {
+	if unlinkVerified(parent, name, dir.Identity, true) != nil {
 		return unsafeLogPath(location)
 	}
 	return nil
@@ -335,7 +337,7 @@ func (s *Store) removeContextLogs(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	defer root.file.Close()
+	defer root.File.Close()
 	container, err := s.logDirectory(ctx, root, logContexts, false)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil
@@ -343,7 +345,7 @@ func (s *Store) removeContextLogs(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	defer container.file.Close()
+	defer container.File.Close()
 	stat, err := listedEntry(container, name)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil
@@ -351,9 +353,9 @@ func (s *Store) removeContextLogs(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if stat.Mode&syscall.S_IFMT == syscall.S_IFLNK && stat.Uid == container.identity.Uid {
+	if stat.Mode&syscall.S_IFMT == syscall.S_IFLNK && stat.Uid == container.Identity.Uid {
 		if unlinkVerified(container, name, stat, false) != nil {
-			return unsafeLogPath(filepath.Join(container.path, name))
+			return unsafeLogPath(filepath.Join(container.Path, name))
 		}
 	} else if err := s.removeLogTree(ctx, container, name, stat, 0); err != nil {
 		return err

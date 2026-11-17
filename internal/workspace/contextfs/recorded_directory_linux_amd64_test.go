@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -244,13 +246,13 @@ func TestARecordedDirectoryIsItsInodeOnItsParentsFilesystem(t *testing.T) {
 		{name: "no recorded inode", child: syscall.Stat_t{Dev: 101}, inode: 0},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if got := recordedDirectory(test.child, parent, test.inode); got != test.want {
+			if got := kernel.RecordedDirectory(test.child, parent, test.inode); got != test.want {
 				t.Fatalf("recordedDirectory = %t, want %t", got, test.want)
 			}
 		})
 	}
-	orphan := &directory{identity: syscall.Stat_t{Dev: 101, Ino: 1001}}
-	if orphan.recorded(1001) {
+	orphan := &directory{Identity: syscall.Stat_t{Dev: 101, Ino: 1001}}
+	if orphan.Recorded(1001) {
 		t.Fatal("a directory held without its parent was taken as recorded")
 	}
 }

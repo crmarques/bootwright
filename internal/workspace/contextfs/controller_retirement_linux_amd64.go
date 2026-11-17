@@ -9,6 +9,8 @@ import (
 	"slices"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -67,7 +69,7 @@ func (t *transaction) publishToolAreas(ctx context.Context, stored controllerSto
 	if err != nil {
 		return stored, err
 	}
-	defer dir.close()
+	defer dir.Close()
 	if _, err := t.store.replaceControllerRecord(ctx, dir, stored, data, retry); err != nil {
 		return stored, err
 	}
@@ -81,15 +83,15 @@ func (t *transaction) removeRetiringAreas(ctx context.Context, areas []controlle
 	if err != nil {
 		return err
 	}
-	defer owner.close()
-	parent, err := openDirectory(owner, toolAreasName)
+	defer owner.Close()
+	parent, err := kernel.OpenDirectory(owner, toolAreasName)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	defer parent.file.Close()
+	defer parent.File.Close()
 	for _, area := range areas {
 		if area.Mode != retiringArea {
 			continue
@@ -101,23 +103,23 @@ func (t *transaction) removeRetiringAreas(ctx context.Context, areas []controlle
 		if errors.Is(err, syscall.ENOENT) {
 			continue
 		}
-		if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR || !recordedDirectory(stat, parent.identity, area.DirectoryInode) {
+		if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR || !kernel.RecordedDirectory(stat, parent.Identity, area.DirectoryInode) {
 			return state("retiring controller tool area directory was replaced")
 		}
-		held, err := openDirectory(parent, area.ID)
+		held, err := kernel.OpenDirectory(parent, area.ID)
 		if err != nil {
 			return err
 		}
-		defer held.file.Close()
-		if held.identity.Ino != stat.Ino || held.identity.Dev != stat.Dev {
+		defer held.File.Close()
+		if held.Identity.Ino != stat.Ino || held.Identity.Dev != stat.Dev {
 			return state("retiring controller tool area directory was replaced before its lease")
 		}
-		if err := lock(held); err != nil {
+		if err := kernel.Lock(held); err != nil {
 			return err
 		}
-		defer syscall.Flock(int(held.file.Fd()), syscall.LOCK_UN)
+		defer syscall.Flock(int(held.File.Fd()), syscall.LOCK_UN)
 		remaining := maxBundleEntries
-		if err := emptySetupTree(ctx, parent, area.ID, stat, parent.identity, 0, &remaining); err != nil {
+		if err := emptySetupTree(ctx, parent, area.ID, stat, parent.Identity, 0, &remaining); err != nil {
 			return err
 		}
 		if errno := unlinkAt(parent, area.ID, true); errno != 0 {

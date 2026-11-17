@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -44,17 +46,17 @@ func openContextState(t *testing.T, store *Store, record contexts.Record) *direc
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { root.file.Close() })
+	t.Cleanup(func() { root.File.Close() })
 	container, dir, err := openContext(root, record)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { container.file.Close(); dir.file.Close() })
-	runtime, err := openDirectory(dir, "state")
+	t.Cleanup(func() { container.File.Close(); dir.File.Close() })
+	runtime, err := kernel.OpenDirectory(dir, "state")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { runtime.file.Close() })
+	t.Cleanup(func() { runtime.File.Close() })
 	return runtime
 }
 

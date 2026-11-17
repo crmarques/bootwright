@@ -55,7 +55,7 @@ blocks' publications as `context.state: published lifecycle record is unsafe`.
 
 The operation areas (lifecycle, bounded runs, SSH trust) and
 `Store.ensureDirectory` now treat `EEXIST` as a concurrent creator winning:
-they reopen through `openDirectory`, which applies exactly the checks an
+they reopen through `kernel.OpenDirectory`, which applies exactly the checks an
 existing directory passes, and sync the parent again, since the loser may
 proceed before the winner's sync completes. A writer whose plain open lands
 between the winner's `Mkdirat` and its sync still syncs nothing; that window

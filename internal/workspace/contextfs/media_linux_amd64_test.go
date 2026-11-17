@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/managedos"
@@ -949,7 +951,7 @@ func holdRootLock(t *testing.T, store *Store) func() {
 		holder.Close()
 		t.Fatalf("the root lock could not be taken: %v", err)
 	}
-	return func() { unlockAndClose(holder) }
+	return func() { kernel.UnlockAndClose(holder) }
 }
 
 // lockedPublication is the media store with another command holding the root

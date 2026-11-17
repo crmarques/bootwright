@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -93,7 +95,7 @@ func expectState(t *testing.T, err error) {
 // retry remedy, never a context.state defect.
 func expectBusy(t *testing.T, err error) {
 	t.Helper()
-	var held *busyError
+	var held *kernel.BusyError
 	reported := diagnostics.Of(err)
 	if !errors.As(err, &held) || len(reported) != 1 || reported[0].Code != "lifecycle.lease" ||
 		reported[0].Remediation != "retry after the running Bootwright command finishes" {
@@ -986,11 +988,11 @@ func TestConcurrentReadersSeeCompleteRevisions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer root.file.Close()
-	if err := lockShared(root); err != nil {
+	defer root.File.Close()
+	if err := kernel.LockShared(root); err != nil {
 		t.Fatal(err)
 	}
-	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
+	defer syscall.Flock(int(root.File.Fd()), syscall.LOCK_UN)
 	expectBusy(t, store.Transact(context.Background(), false, nil, func(contexts.Transaction) error { t.Fatal("mutator entered shared reader lock"); return nil }))
 }
 

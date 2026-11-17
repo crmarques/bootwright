@@ -46,6 +46,7 @@ func packageRoles() map[string]packageRole {
 		"internal/desiredstate/yamlstream":         adapterRole,
 		"internal/desiredstate/encoding":           adapterRole,
 		"internal/workspace/contextfs":             adapterRole,
+		"internal/workspace/contextfs/kernel":      adapterRole,
 		"internal/workspace/selectionfs":           adapterRole,
 		"internal/workspace/invokerfs":             adapterRole,
 		"internal/controller/privilege":            adapterRole,
@@ -267,6 +268,12 @@ func permitsDependency(consumer, provider packageRole) bool {
 	}
 }
 
+// ownKernel is the one adapter-to-adapter edge: an adapter imports the kernel
+// it keeps beneath its own path, which no other adapter may import.
+func ownKernel(consumerPath, providerPath string, consumer, provider packageRole) bool {
+	return consumer == adapterRole && provider == adapterRole && strings.HasPrefix(providerPath, consumerPath+"/")
+}
+
 type sourceFile struct {
 	path    string
 	owner   string
@@ -365,7 +372,7 @@ func dependencyViolations(sources []sourceFile, roles map[string]packageRole, de
 				violations = append(violations, fmt.Sprintf("%s imports unclassified package %s", source.path, providerPath))
 				continue
 			}
-			if !permitsDependency(consumer, provider) {
+			if !permitsDependency(consumer, provider) && !ownKernel(source.owner, providerPath, consumer, provider) {
 				violations = append(violations, fmt.Sprintf("%s (%s) depends on %s (%s)", source.path, consumer, providerPath, provider))
 				continue
 			}
@@ -412,20 +419,21 @@ func TestDependencyDirectionRefusesWhatItGuards(t *testing.T) {
 		"internal/domain": domainRole, "internal/stale": domainRole, "internal/application": applicationRole,
 		"internal/other": applicationRole, "internal/third": applicationRole, "internal/adapter": adapterRole,
 		"internal/adapter2": adapterRole, "internal/cli": cliRole, "internal/technical": technicalRole,
-		"ansible": embeddedRole, "cmd/bootwright": compositionRole,
+		"internal/adapter/kernel": adapterRole, "ansible": embeddedRole, "cmd/bootwright": compositionRole,
 	}
 	imports := map[string][]string{
-		"internal/domain":       {"internal/technical", "internal/application"},
-		"internal/application":  {"internal/domain", "internal/other", "internal/third", "internal/adapter"},
-		"internal/other":        {"internal/application"},
-		"internal/third":        {"internal/technical"},
-		"internal/adapter":      {"internal/domain", "internal/application", "internal/adapter2"},
-		"internal/adapter2":     {"internal/cli"},
-		"internal/cli":          {"internal/application", "internal/adapter"},
-		"internal/technical":    {"internal/domain", "internal/unknown"},
-		"ansible":               {"internal/domain"},
-		"cmd/bootwright":        {"internal/adapter", "internal/cli", "ansible"},
-		"internal/unclassified": {"internal/domain"},
+		"internal/domain":         {"internal/technical", "internal/application"},
+		"internal/application":    {"internal/domain", "internal/other", "internal/third", "internal/adapter"},
+		"internal/other":          {"internal/application"},
+		"internal/third":          {"internal/technical"},
+		"internal/adapter":        {"internal/domain", "internal/application", "internal/adapter2", "internal/adapter/kernel"},
+		"internal/adapter/kernel": {"internal/technical"},
+		"internal/adapter2":       {"internal/cli", "internal/adapter/kernel"},
+		"internal/cli":            {"internal/application", "internal/adapter"},
+		"internal/technical":      {"internal/domain", "internal/unknown"},
+		"ansible":                 {"internal/domain"},
+		"cmd/bootwright":          {"internal/adapter", "internal/cli", "ansible"},
+		"internal/unclassified":   {"internal/domain"},
 	}
 	var sources []sourceFile
 	for _, owner := range sortedKeys(imports) {
@@ -444,6 +452,7 @@ func TestDependencyDirectionRefusesWhatItGuards(t *testing.T) {
 	want := []string{
 		"ansible/fixture.go (embedded assets) depends on internal/domain (domain)",
 		"internal/adapter/fixture.go (adapter) depends on internal/adapter2 (adapter)",
+		"internal/adapter2/fixture.go (adapter) depends on internal/adapter/kernel (adapter)",
 		"internal/adapter2/fixture.go (adapter) depends on internal/cli (CLI)",
 		"internal/application/fixture.go (application) depends on internal/adapter (adapter)",
 		"internal/application/fixture.go consumes internal/third without declaring why in applicationDependencies",
@@ -635,6 +644,7 @@ func effectGrants() map[string][]string {
 		"internal/workspace/contextfs": {"crypto/rand", "golang.org/x/sys/unix.AT_EMPTY_PATH",
 			"golang.org/x/sys/unix.IoctlGetInt", "golang.org/x/sys/unix.STATX_BTIME", "golang.org/x/sys/unix.Statx", "golang.org/x/sys/unix.Statx_t",
 			"io", "os", "syscall"},
+		"internal/workspace/contextfs/kernel":   {"io", "os", "syscall"},
 		"internal/workspace/selectionfs":        {"crypto/rand", "io", "os", "syscall"},
 		"internal/workspace/contexts":           {"io"},
 		"internal/secrets/material":             {"crypto/rand", "io", "net.IP", "os", "syscall"},

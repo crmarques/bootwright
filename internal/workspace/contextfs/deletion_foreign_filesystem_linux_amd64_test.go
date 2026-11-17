@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
@@ -69,12 +71,12 @@ func refuseMountedEntry(t *testing.T, base string) {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	identity, err := statHandle(file)
+	identity, err := kernel.StatHandle(file)
 	if err != nil {
 		t.Fatal(err)
 	}
 	remaining := 16
-	err = (&Store{}).walkContextTree(context.Background(), &directory{file: file, path: base, identity: identity}, "", inspectContextTree, &remaining)
+	err = (&Store{}).walkContextTree(context.Background(), &directory{File: file, Path: base, Identity: identity}, "", inspectContextTree, &remaining)
 	got := diagnostics.Of(deletionDamage(context.Background(), "alpha", err))
 	want := "unmount mounted beneath the state root, which is on another filesystem whose contents are not the context's and must never be removed, " +
 		"then repeat bootwright context delete --name alpha --purge, adding --allow-orphans when the deletion abandons what the context owns; or " + restoreStoreRemediation
@@ -95,7 +97,7 @@ func TestAnEntryOnAnotherFilesystemIsUnmountedNeverRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	dir := &directory{file: file, identity: syscall.Stat_t{Dev: 1, Uid: 0, Gid: 0}}
+	dir := &directory{File: file, Identity: syscall.Stat_t{Dev: 1, Uid: 0, Gid: 0}}
 	for name, test := range map[string]struct {
 		identity syscall.Stat_t
 		verb     string

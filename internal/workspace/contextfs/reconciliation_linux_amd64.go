@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
@@ -204,13 +206,13 @@ func (s *Store) readLifecycleContext(ctx context.Context, root *directory, regis
 	if err != nil {
 		return safeError(err)
 	}
-	defer container.file.Close()
-	defer dir.file.Close()
+	defer container.File.Close()
+	defer dir.File.Close()
 	if bounded {
-		if err := lockShared(dir); err != nil {
+		if err := kernel.LockShared(dir); err != nil {
 			return err
 		}
-		defer syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
+		defer syscall.Flock(int(dir.File.Fd()), syscall.LOCK_UN)
 	}
 	inputs, err := readSnapshot(ctx, root, record)
 	if err != nil {
@@ -250,7 +252,7 @@ func (s *Store) readLifecycleContext(ctx context.Context, root *directory, regis
 	}
 	runs := &operationArea{store: s, subtree: runsSubtree, context: dir, name: record.Name, active: live, readOnly: !bounded, logged: true}
 	if bounded {
-		if err := syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN); err != nil {
+		if err := syscall.Flock(int(root.File.Fd()), syscall.LOCK_UN); err != nil {
 			return err
 		}
 	}
@@ -341,7 +343,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 		// Every publication this transaction performs is independently atomic
 		// and verified, so it needs no registry commit: a lifecycle operation
 		// changes no context record.
-		if err := syscall.Flock(int(t.root.file.Fd()), syscall.LOCK_UN); err != nil {
+		if err := syscall.Flock(int(t.root.File.Fd()), syscall.LOCK_UN); err != nil {
 			return err
 		}
 		return callback(leased)
@@ -361,11 +363,11 @@ func (t *lifecycleTransaction) PublishEvidence(ctx context.Context, data []byte)
 	if len(data) == 0 || len(data) > maxRecord {
 		return state("context mutation evidence exceeds its bounds")
 	}
-	runtime, err := openDirectory(t.context, "state")
+	runtime, err := kernel.OpenDirectory(t.context, "state")
 	if err != nil {
 		return state("context state directory is unsafe")
 	}
-	defer runtime.file.Close()
+	defer runtime.File.Close()
 	current, err := readBounded(ctx, runtime, "mutation.json", maxRecord, true)
 	if err != nil || !bytes.Equal(current, t.evidence) {
 		return state("context mutation evidence changed before publication")
@@ -605,7 +607,7 @@ func (t *lifecycleTransaction) publishControllerState(ctx context.Context, value
 	if err != nil {
 		return err
 	}
-	defer dir.close()
+	defer dir.Close()
 	data, err := encodeRecord(controllerRecord(value, bundles), maxControllerState)
 	if err != nil {
 		return err

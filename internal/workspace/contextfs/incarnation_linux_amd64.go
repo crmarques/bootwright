@@ -33,7 +33,7 @@ func incarnation(record contexts.Record, dir *directory) (string, error) {
 	if record.DirectoryInode == 0 {
 		return "", nil
 	}
-	birth, err := birthOf(int(dir.file.Fd()))
+	birth, err := birthOf(int(dir.File.Fd()))
 	if err != nil {
 		return "", err
 	}

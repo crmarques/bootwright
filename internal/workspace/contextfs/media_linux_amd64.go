@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
+
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/managedos/media"
@@ -43,7 +45,7 @@ func (a *mediaArea) available(ctx context.Context, write bool) error {
 	if a.dir == nil {
 		return nil
 	}
-	return a.dir.verify()
+	return a.dir.Verify()
 }
 
 // ReadMedia takes a coherent read of the store under the shared root lock. It
@@ -71,7 +73,7 @@ func (s *Store) withMedia(ctx context.Context, write bool, callback func(*mediaA
 		how = syscall.LOCK_EX
 	}
 	scope := readScope{absent: mediaUnprepared(), registered: true, unverified: true, held: func(err error) error {
-		var held *busyError
+		var held *kernel.BusyError
 		if errors.As(err, &held) {
 			return &mediaBusy{held}
 		}
@@ -90,10 +92,10 @@ func (s *Store) lendMedia(ctx context.Context, root *directory, registry context
 	active := true
 	defer func() { active = false }()
 	area := &mediaArea{store: s, root: root, stored: stored, active: func() bool { return active }, write: write}
-	dir, err := openDirectory(root, mediaContainer)
+	dir, err := kernel.OpenDirectory(root, mediaContainer)
 	switch {
 	case err == nil:
-		defer dir.file.Close()
+		defer dir.File.Close()
 		area.dir = dir
 	case !errors.Is(err, syscall.ENOENT):
 		return safeError(err)
@@ -102,7 +104,7 @@ func (s *Store) lendMedia(ctx context.Context, root *directory, registry context
 		if err != nil {
 			return safeError(err)
 		}
-		defer created.file.Close()
+		defer created.File.Close()
 		area.dir = created
 	}
 	if area.dir != nil && write {
@@ -116,7 +118,7 @@ func (s *Store) lendMedia(ctx context.Context, root *directory, registry context
 // mediaBusy is a root lock another command holds. The media service tells it
 // from every other refusal, so a pinned add keeps the stage it verified; it
 // still reports the lock's lifecycle.lease diagnostic.
-type mediaBusy struct{ held *busyError }
+type mediaBusy struct{ held *kernel.BusyError }
 
 func (e *mediaBusy) Error() string { return e.held.Error() }
 
@@ -137,7 +139,7 @@ func (a *mediaArea) Names(ctx context.Context) ([]string, error) {
 	if a.dir == nil {
 		return []string{}, nil
 	}
-	entries, err := directoryNames(a.dir, maxMediaDirectory)
+	entries, err := kernel.DirectoryNames(a.dir, maxMediaDirectory)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +262,7 @@ func (a *mediaArea) Retained(ctx context.Context) ([]managedos.MediaEntry, error
 	if a.dir == nil {
 		return kept, nil
 	}
-	entries, err := directoryNames(a.dir, maxMediaDirectory)
+	entries, err := kernel.DirectoryNames(a.dir, maxMediaDirectory)
 	if err != nil {
 		return nil, err
 	}
@@ -268,14 +270,14 @@ func (a *mediaArea) Retained(ctx context.Context) ([]managedos.MediaEntry, error
 		if !stagedMediaName(entry) || !slices.Contains(entries, entry+".json") {
 			continue
 		}
-		file, err := openRelative(a.dir, entry, pathHandle, 0)
+		file, err := kernel.OpenRelative(a.dir, entry, kernel.PathHandle, 0)
 		if errors.Is(err, syscall.ENOENT) {
 			continue
 		}
 		if err != nil {
 			return nil, safeError(err)
 		}
-		opened, err := statHandle(file)
+		opened, err := kernel.StatHandle(file)
 		file.Close()
 		if err != nil {
 			return nil, err
@@ -293,11 +295,11 @@ func (a *mediaArea) Retained(ctx context.Context) ([]managedos.MediaEntry, error
 }
 
 func (a *mediaArea) size(name string) (int64, error) {
-	file, err := openRelative(a.dir, name, pathHandle, 0)
+	file, err := kernel.OpenRelative(a.dir, name, kernel.PathHandle, 0)
 	if err != nil {
 		return 0, err
 	}
-	stat, err := statHandle(file)
+	stat, err := kernel.StatHandle(file)
 	file.Close()
 	if err != nil || !privateMediaFile(stat, a.dir) {
 		return 0, state("media file type, owner, permissions or links is unsafe")
@@ -306,7 +308,7 @@ func (a *mediaArea) size(name string) (int64, error) {
 }
 
 func privateMediaFile(stat syscall.Stat_t, parent *directory) bool {
-	return stat.Dev == parent.identity.Dev && private(stat, syscall.S_IFREG, parent.identity.Uid, parent.identity.Gid)
+	return stat.Dev == parent.Identity.Dev && kernel.Private(stat, syscall.S_IFREG, parent.Identity.Uid, parent.Identity.Gid)
 }
 
 // Hold opens one listed image under the shared root lock and proves its file
@@ -326,14 +328,14 @@ func (a *mediaArea) Hold(ctx context.Context, name string) (media.Held, error) {
 		}
 		return nil, mediaFailure(absent, "list the store with bootwright media list")
 	}
-	file, err := openRelative(a.dir, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	file, err := kernel.OpenRelative(a.dir, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		if err := a.storeFailure(ctx); err != nil {
 			return nil, err
 		}
 		return nil, imageFailure{reason: imageUnopenable}
 	}
-	before, err := statHandle(file)
+	before, err := kernel.StatHandle(file)
 	if err != nil || !privateMediaFile(before, a.dir) {
 		file.Close()
 		return nil, imageFailure{reason: imageUnsafe}
@@ -361,13 +363,13 @@ func (h *mediaHeld) Digest(ctx context.Context) (string, error) {
 		}
 		return "", imageFailure{reason: imageUnreadable}
 	}
-	after, err := statHandle(h.file)
+	after, err := kernel.StatHandle(h.file)
 	switch {
 	case err != nil:
 		return "", imageFailure{reason: imageChanged}
 	case after.Nlink == 0:
 		return "", imageFailure{reason: imageReplaced}
-	case !sameFile(h.before, after) || size != after.Size:
+	case !kernel.SameFile(h.before, after) || size != after.Size:
 		return "", imageFailure{reason: imageChanged}
 	}
 	return digest, nil
@@ -482,7 +484,7 @@ func mediaStageName(image string) string {
 // its record may appear after the listing: whether an unheld stage has one is
 // read beside it, never taken from the listing.
 func (a *mediaArea) pruneStaging(ctx context.Context) error {
-	entries, err := directoryNames(a.dir, maxMediaDirectory)
+	entries, err := kernel.DirectoryNames(a.dir, maxMediaDirectory)
 	if err != nil {
 		return err
 	}
@@ -539,7 +541,7 @@ func (a *mediaArea) pruneStage(ctx context.Context, stage string) (bool, error) 
 // unlinkPresent removes a name that another invocation may already have
 // removed.
 func unlinkPresent(dir *directory, name string) error {
-	if err := syscall.Unlinkat(int(dir.file.Fd()), name); err != nil && !errors.Is(err, syscall.ENOENT) {
+	if err := syscall.Unlinkat(int(dir.File.Fd()), name); err != nil && !errors.Is(err, syscall.ENOENT) {
 		return err
 	}
 	return nil
@@ -550,28 +552,28 @@ func unlinkPresent(dir *directory, name string) error {
 // the listing is not held; neither is an entry that is not a regular file,
 // which no owner could hold.
 func (a *mediaArea) stageHeld(name string) (bool, syscall.Stat_t, error) {
-	probe, err := openRelative(a.dir, name, pathHandle, 0)
+	probe, err := kernel.OpenRelative(a.dir, name, kernel.PathHandle, 0)
 	if errors.Is(err, syscall.ENOENT) {
 		return false, syscall.Stat_t{}, nil
 	}
 	if err != nil {
 		return false, syscall.Stat_t{}, err
 	}
-	listed, err := statHandle(probe)
+	listed, err := kernel.StatHandle(probe)
 	probe.Close()
 	if err != nil || listed.Mode&syscall.S_IFMT != syscall.S_IFREG {
 		return false, listed, err
 	}
-	file, err := openRelative(a.dir, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	file, err := kernel.OpenRelative(a.dir, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if errors.Is(err, syscall.ENOENT) {
 		return false, syscall.Stat_t{}, nil
 	}
 	if err != nil {
 		return false, syscall.Stat_t{}, err
 	}
-	defer unlockAndClose(file)
-	opened, err := statHandle(file)
-	if err != nil || !sameIdentity(listed, opened) {
+	defer kernel.UnlockAndClose(file)
+	opened, err := kernel.StatHandle(file)
+	if err != nil || !kernel.SameIdentity(listed, opened) {
 		return false, syscall.Stat_t{}, state("media staging changed while it was inspected")
 	}
 	switch err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); {
@@ -581,14 +583,6 @@ func (a *mediaArea) stageHeld(name string) (bool, syscall.Stat_t, error) {
 		return false, syscall.Stat_t{}, state("media staging lock cannot be inspected")
 	}
 	return false, opened, nil
-}
-
-// unlockAndClose releases a lock before closing its descriptor. The lock
-// belongs to the open file description, which a child forked meanwhile shares
-// until it execs, so closing the descriptor alone can leave it held.
-func unlockAndClose(file *os.File) {
-	syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
-	file.Close()
 }
 
 // retainedPair is a stage a pinned add retained: the entry the record beside
@@ -627,7 +621,7 @@ func (a *mediaArea) Stage(ctx context.Context, name, pin string) (media.Stage, e
 	if a.dir == nil || !managedos.ValidMediaName(name) {
 		return nil, state("media staging requires a valid image name")
 	}
-	entries, err := directoryNames(a.dir, maxMediaDirectory)
+	entries, err := kernel.DirectoryNames(a.dir, maxMediaDirectory)
 	if err != nil {
 		return nil, err
 	}
@@ -664,7 +658,7 @@ func (s *mediaStage) claim(ctx context.Context) error {
 		s.release()
 		return err
 	}
-	file, err := openRelative(s.dir, s.name, syscall.O_RDWR|syscall.O_CREAT|syscall.O_EXCL, 0600)
+	file, err := kernel.OpenRelative(s.dir, s.name, syscall.O_RDWR|syscall.O_CREAT|syscall.O_EXCL, 0600)
 	if errors.Is(err, syscall.EEXIST) {
 		s.release()
 		return acquiringFailure(s.image)
@@ -674,7 +668,7 @@ func (s *mediaStage) claim(ctx context.Context) error {
 		return safeError(err)
 	}
 	s.file = file
-	created, err := statHandle(file)
+	created, err := kernel.StatHandle(file)
 	if err != nil || !privateMediaFile(created, s.dir) || created.Size != 0 ||
 		syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
 		s.Close()
@@ -694,7 +688,7 @@ func acquiringFailure(image string) error {
 // live, so it refuses as a second add of the image does; a record whose stage
 // is gone leaves nothing to lock.
 func (s *mediaStage) lockRetained() (bool, error) {
-	record, err := openRelative(s.dir, s.name+".json", pathHandle, 0)
+	record, err := kernel.OpenRelative(s.dir, s.name+".json", kernel.PathHandle, 0)
 	if errors.Is(err, syscall.ENOENT) {
 		return false, nil
 	}
@@ -702,7 +696,7 @@ func (s *mediaStage) lockRetained() (bool, error) {
 		return false, safeError(err)
 	}
 	record.Close()
-	file, err := openRelative(s.dir, s.name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	file, err := kernel.OpenRelative(s.dir, s.name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if errors.Is(err, syscall.ENOENT) {
 		return true, nil
 	}
@@ -725,7 +719,7 @@ func (s *mediaStage) lockRetained() (bool, error) {
 // fresh.
 func (s *mediaStage) adopt(ctx context.Context, pin string) (bool, error) {
 	if s.file != nil {
-		opened, err := statHandle(s.file)
+		opened, err := kernel.StatHandle(s.file)
 		if err != nil {
 			return false, err
 		}
@@ -751,7 +745,7 @@ func (s *mediaStage) discard(ctx context.Context) error {
 		return safeError(err)
 	}
 	if s.file != nil {
-		opened, err := statHandle(s.file)
+		opened, err := kernel.StatHandle(s.file)
 		if err != nil {
 			return err
 		}
@@ -763,7 +757,7 @@ func (s *mediaStage) discard(ctx context.Context) error {
 		return err
 	}
 	if s.file != nil {
-		unlockAndClose(s.file)
+		kernel.UnlockAndClose(s.file)
 		s.file = nil
 	}
 	return nil
@@ -776,17 +770,17 @@ func (a *mediaArea) openStage(ctx context.Context, image string) (*mediaStage, e
 	if err != nil {
 		return nil, safeError(err)
 	}
-	if !sameIdentity(root.identity, a.root.identity) {
-		root.file.Close()
+	if !kernel.SameIdentity(root.Identity, a.root.Identity) {
+		root.File.Close()
 		return nil, state("state root was replaced")
 	}
-	dir, err := openDirectory(root, mediaContainer)
-	if err == nil && !sameIdentity(dir.identity, a.dir.identity) {
-		dir.file.Close()
+	dir, err := kernel.OpenDirectory(root, mediaContainer)
+	if err == nil && !kernel.SameIdentity(dir.Identity, a.dir.Identity) {
+		dir.File.Close()
 		err = state("media directory was replaced")
 	}
 	if err != nil {
-		root.file.Close()
+		root.File.Close()
 		return nil, safeError(err)
 	}
 	return &mediaStage{store: a.store, root: root, dir: dir, image: image, name: mediaStageName(image)}, nil
@@ -849,8 +843,8 @@ func (s *mediaStage) Fill(ctx context.Context, source media.Payload, limit int64
 		}
 		return media.Staged{}, state("media staging durability could not be established")
 	}
-	after, err := statHandle(s.file)
-	if err != nil || !sameIdentity(s.created, after) || after.Size != size {
+	after, err := kernel.StatHandle(s.file)
+	if err != nil || !kernel.SameIdentity(s.created, after) || after.Size != size {
 		return media.Staged{}, state("media staging file changed while it was written")
 	}
 	s.staged, s.measured = &media.Staged{Size: size, SHA256: digest}, after
@@ -876,7 +870,7 @@ func (s *mediaStage) Verify(ctx context.Context) (media.Staged, error) {
 	if s.closed || s.adopted == nil || s.staged != nil {
 		return media.Staged{}, state("media stage is not an adopted stage awaiting verification")
 	}
-	before, err := statHandle(s.file)
+	before, err := kernel.StatHandle(s.file)
 	if err != nil || !privateMediaFile(before, s.dir) {
 		return media.Staged{}, state("media file type, owner, permissions or links is unsafe")
 	}
@@ -884,8 +878,8 @@ func (s *mediaStage) Verify(ctx context.Context) (media.Staged, error) {
 	if err != nil {
 		return media.Staged{}, err
 	}
-	after, err := statHandle(s.file)
-	if err != nil || !sameFile(before, after) || size != after.Size {
+	after, err := kernel.StatHandle(s.file)
+	if err != nil || !kernel.SameFile(before, after) || size != after.Size {
 		return media.Staged{}, state("media file changed while it was being read")
 	}
 	s.staged, s.measured = &media.Staged{Size: size, SHA256: digest}, after
@@ -963,7 +957,7 @@ func (s *mediaStage) Close() error {
 
 // remove deletes this stage, after the record retained beside an adopted one.
 func (s *mediaStage) remove() error {
-	held, err := statHandle(s.file)
+	held, err := kernel.StatHandle(s.file)
 	if err != nil {
 		return err
 	}
@@ -975,36 +969,36 @@ func (s *mediaStage) remove() error {
 	if err := unlinkVerified(s.dir, s.name, held, false); err != nil {
 		return err
 	}
-	return s.dir.file.Sync()
+	return s.dir.File.Sync()
 }
 
 func (s *mediaStage) release() {
 	if s.file != nil {
-		unlockAndClose(s.file)
+		kernel.UnlockAndClose(s.file)
 	}
-	s.dir.file.Close()
-	s.root.file.Close()
+	s.dir.File.Close()
+	s.root.File.Close()
 }
 
 // at proves that the named entry is this stage's file and that its status is
 // still the one taken when its bytes were measured. A rename sets the change
 // time, so once renamed the change time alone is not compared.
 func (s *mediaStage) at(dir *directory, name string, renamed bool) error {
-	held, err := statHandle(s.file)
+	held, err := kernel.StatHandle(s.file)
 	if err != nil {
 		return err
 	}
-	current, err := openRelative(dir, name, pathHandle, 0)
+	current, err := kernel.OpenRelative(dir, name, kernel.PathHandle, 0)
 	if err != nil {
 		return state("media stage cannot be verified")
 	}
-	named, err := statHandle(current)
+	named, err := kernel.StatHandle(current)
 	current.Close()
 	measured := s.measured
 	if renamed {
 		measured.Ctim = held.Ctim
 	}
-	if err != nil || !sameFile(held, named) || !sameFile(measured, held) || !privateMediaFile(named, dir) {
+	if err != nil || !kernel.SameFile(held, named) || !kernel.SameFile(measured, held) || !privateMediaFile(named, dir) {
 		return state("media stage was substituted or changed before publication")
 	}
 	return nil
@@ -1027,7 +1021,7 @@ func (a *mediaArea) Publish(ctx context.Context, name string, published media.St
 		return err
 	}
 	if stage.closed || stage.published || stage.staged == nil || stage.mismatch || stage.image != name || a.dir == nil ||
-		!sameIdentity(stage.dir.identity, a.dir.identity) || entry.Size != stage.staged.Size || entry.SHA256 != stage.staged.SHA256 {
+		!kernel.SameIdentity(stage.dir.Identity, a.dir.Identity) || entry.Size != stage.staged.Size || entry.SHA256 != stage.staged.SHA256 {
 		return state("media publication does not describe a filled stage of this store")
 	}
 	if err := stage.at(a.dir, stage.name, false); err != nil {
@@ -1115,7 +1109,7 @@ func (a *mediaArea) remove(ctx context.Context, name string) error {
 	if err := a.store.checkpoint(ctx, checkpointBeforeMediaRecordRemoval); err != nil {
 		return err
 	}
-	if err := a.dir.verify(); err != nil {
+	if err := a.dir.Verify(); err != nil {
 		return err
 	}
 	if err := a.removeEntry(name+".json", name); err != nil {
