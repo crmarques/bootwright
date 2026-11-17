@@ -2,106 +2,37 @@
 # The identity operation for a machine with no out-of-band channel: connect to
 # it over SSH pinned to exactly the key this installation delivered. A machine
 # presenting any other key is not this installation, and one that does not
-# answer has not answered yet; neither is ever read as absence.
+# answer has not answered yet; neither is ever read as absence. The session is
+# the one the collection's guest session builder opens for every pinned
+# connection, so no option is written here.
 #
 # The inputs are this entry point's argument spec, passed explicitly by the
 # consuming role and never inherited from a shared fact, and the answers are
 # published under this role's own names.
-- name: Read the effective crypto policy on this connection's placement host
-  bootwright.core.ssh_key_policy:
-  register: machine_ssh_identity_policy
+- name: Open the pinned connection to the machine
+  bootwright.core.managedos_guest_session:
+    state: present
+    directory: '{{ bootwright_machine_identity.work }}'
+    address: '{{ bootwright_machine_identity.address }}'
+    host_key: '{{ bootwright_machine_identity.key }}'
+  register: machine_ssh_identity_session
 
-- name: Pin the delivered host key for this one connection
-  ansible.builtin.copy:
-    content: >-
-      {{ bootwright_machine_identity.address }} {{ bootwright_machine_identity.key }}
-    dest: '{{ bootwright_machine_identity.work }}/known_hosts'
-    owner: root
-    group: root
-    mode: '0600'
-  changed_when: false
-  no_log: true
-
-# ssh reads this file in place of the system and personal configuration, so no
-# ambient known hosts, proxy, control socket, agent or identity reaches the
-# connection; only the validated host crypto policy is kept. An absent backend
-# uses native defaults. The keepalives end a connection whose peer stopped answering.
-- name: Write the one-connection client configuration
-  ansible.builtin.copy:
-    content: '{{ machine_ssh_identity_policy.configuration }}'
-    dest: '{{ bootwright_machine_identity.work }}/ssh_config'
-    owner: root
-    group: root
-    mode: '0600'
-  changed_when: false
-
-# Pinning may narrow the effective policy but must never re-enable an excluded
-# algorithm. RSA pins use only their policy-permitted SHA-2 signatures.
-- name: Name the algorithms the delivered key is accepted under
-  ansible.builtin.set_fact:
-    machine_ssh_identity_algorithms: >-
-      {{ bootwright_machine_identity.key
-         | bootwright.core.host_key_algorithms(machine_ssh_identity_policy.hostKeyAlgorithms) }}
-  changed_when: false
-
+# One read of a file is bounded by the 55 seconds ssh itself takes to give up
+# a peer that stopped answering, and a few more, so a machine whose read hangs
+# ends this attempt rather than the identity budget.
 - name: Read the install marker over that pinned connection
-  ansible.builtin.command:
+  bootwright.core.managedos_guest_command:
+    address: '{{ bootwright_machine_identity.address }}'
+    user: '{{ bootwright_machine_identity.user }}'
+    identity: '{{ bootwright_machine_identity.file }}'
+    ssh_config: '{{ machine_ssh_identity_session.ssh_config }}'
+    known_hosts: '{{ machine_ssh_identity_session.known_hosts }}'
+    host_key_algorithms: '{{ machine_ssh_identity_session.host_key_algorithms }}'
+    policy_host_key_algorithms: '{{ machine_ssh_identity_session.policy_host_key_algorithms }}'
     argv:
-      - /usr/bin/ssh
-      - -F
-      - '{{ bootwright_machine_identity.work }}/ssh_config'
-      - -o
-      - 'UserKnownHostsFile={{ bootwright_machine_identity.work }}/known_hosts'
-      - -o
-      - GlobalKnownHostsFile=none
-      - -o
-      - KnownHostsCommand=none
-      - -o
-      - VerifyHostKeyDNS=no
-      - -o
-      - UpdateHostKeys=no
-      - -o
-      - CheckHostIP=no
-      - -o
-      - StrictHostKeyChecking=yes
-      - -o
-      - 'HostKeyAlgorithms={{ machine_ssh_identity_algorithms }}'
-      - -o
-      - IdentitiesOnly=yes
-      - -o
-      - IdentityAgent=none
-      - -o
-      - PasswordAuthentication=no
-      - -o
-      - KbdInteractiveAuthentication=no
-      - -o
-      - GSSAPIAuthentication=no
-      - -o
-      - HostbasedAuthentication=no
-      - -o
-      - ForwardAgent=no
-      - -o
-      - ProxyCommand=none
-      - -o
-      - ProxyJump=none
-      - -o
-      - ControlMaster=no
-      - -o
-      - ControlPath=none
-      - -o
-      - BatchMode=yes
-      - -o
-      - ConnectTimeout=10
-      - -o
-      - ServerAliveInterval=15
-      - -o
-      - ServerAliveCountMax=3
-      - -i
-      - '{{ bootwright_machine_identity.file }}'
-      - >-
-        {{ bootwright_machine_identity.user }}@{{ bootwright_machine_identity.address }}
       - /usr/bin/cat
       - '{{ bootwright_machine_identity.marker_path }}'
+    timeout: 60
   register: machine_ssh_identity_marker_read
   retries: '{{ bootwright_machine_identity.retries | int }}'
   delay: '{{ bootwright_machine_identity.delay | int }}'
@@ -116,25 +47,18 @@
 - name: Publish what the connection answered
   ansible.builtin.set_fact:
     machine_ssh_identity_answered: >-
-      {{ machine_ssh_identity_marker_read.rc == 0 }}
+      {{ machine_ssh_identity_marker_read.rc | default(1) == 0 }}
     machine_ssh_identity_marker: >-
       {{ machine_ssh_identity_marker_read.stdout | default('') | trim
-         if machine_ssh_identity_marker_read.rc == 0 else '' }}
+         if machine_ssh_identity_marker_read.rc | default(1) == 0 else '' }}
     # A connection that succeeded proves the machine presented the delivered
     # key, because nothing else was accepted.
     machine_ssh_identity_host_key: >-
       {{ bootwright_machine_identity.key
-         if machine_ssh_identity_marker_read.rc == 0 else '' }}
+         if machine_ssh_identity_marker_read.rc | default(1) == 0 else '' }}
   changed_when: false
 
-- name: Remove the one-connection known-hosts file
-  ansible.builtin.file:
-    path: '{{ bootwright_machine_identity.work }}/known_hosts'
+- name: Close the pinned connection to the machine
+  bootwright.core.managedos_guest_session:
     state: absent
-  changed_when: false
-
-- name: Remove the one-connection client configuration
-  ansible.builtin.file:
-    path: '{{ bootwright_machine_identity.work }}/ssh_config'
-    state: absent
-  changed_when: false
+    directory: '{{ bootwright_machine_identity.work }}'

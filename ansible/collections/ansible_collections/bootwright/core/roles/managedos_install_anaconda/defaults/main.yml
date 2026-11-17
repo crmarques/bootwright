@@ -8,6 +8,16 @@ managedos_install_anaconda_work: >-
   {{ managedos_install_anaconda_work_parent }}/{{ bootwright_os_install_request.identity.context }}/{{ managedos_install_anaconda_area | join('/') }}
 managedos_install_anaconda_scratch: '{{ bootwright_run_scratch }}/managedos-install'
 managedos_install_anaconda_media: /var/lib/bootwright/media
+# Seconds one pinned guest connection may take. ssh itself gives up a peer that
+# stopped answering after its 10-second connect timeout plus three missed
+# 15-second keepalives, 55 seconds, so these bounds end only a live machine
+# whose command hangs, and name that timeout at the step that ran it. The
+# reachability probe runs /usr/bin/true; a fixed command takes at most the
+# networkApply budget of 24 attempts of 5 seconds; network.yml gives a
+# checkpoint rollback or commit the checkpoint's own seconds, past which
+# NetworkManager has already rolled the checkpoint back.
+managedos_install_anaconda_reachable_seconds: 60
+managedos_install_anaconda_guest_seconds: 120
 # The executables this block needs, proved by path. The controller stage
 # installs the packages that provide them.
 managedos_install_anaconda_tooling:

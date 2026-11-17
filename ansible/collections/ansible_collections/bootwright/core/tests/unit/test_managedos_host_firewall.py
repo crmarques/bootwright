@@ -825,13 +825,12 @@ def test_the_observation_is_self_contained_inspects_literally_and_writes_only_be
     assert "session.yml" not in str(list(flattened(tasks("observe.yml"))))
     inspect = calls("observe.yml", "bootwright.core.managedos_firewall")
     assert len(inspect) == 1 and inspect[0]["bootwright.core.managedos_firewall"]["operation"] == "inspect"
-    writes = [task for task in flattened(tasks("observe.yml")) if "ansible.builtin.copy" in task or "ansible.builtin.file" in task]
-    assert len(writes) == 4
+    writes = [task for task in flattened(tasks("observe.yml")) if role_tasks.GUEST_SESSION in task]
+    assert len(writes) == 2
     for task in writes:
-        body = task.get("ansible.builtin.copy") or task.get("ansible.builtin.file")
-        assert render(body["dest" if "dest" in body else "path"]).startswith("/var/tmp/bootwright-scratch-1-1/managedos-firewall/")
+        assert render(task[role_tasks.GUEST_SESSION]["directory"]) == "/var/tmp/bootwright-scratch-1-1/managedos-firewall"
     assert {key for task in flattened(tasks("observe.yml")) for key in task if key.startswith("ansible.builtin.")} <= {
-        "ansible.builtin.assert", "ansible.builtin.copy", "ansible.builtin.file", "ansible.builtin.set_fact", "ansible.builtin.fail"}
+        "ansible.builtin.assert", "ansible.builtin.fail"}
     complete = calls("observe.yml", "bootwright.core.managedos_firewall_protocol")[-1]["bootwright.core.managedos_firewall_protocol"]
     assert complete["phase"] == "completed" and complete["outcome"] == "unchanged" and complete["observed"] is True
     assert "removed" not in complete
@@ -859,18 +858,13 @@ def test_the_module_call_pins_the_frozen_connection_and_hands_it_only_the_mark_a
     assert set(arguments) == {"operation", "address", "user", "identity", "ssh_config", "known_hosts", "host_key_algorithms",
                               "policy_host_key_algorithms", "mark", "services", "timeout"}
     scratch = "/var/tmp/bootwright-scratch-1-1/managedos-firewall"
-    extra = {"managedos_host_firewall_operation": "apply", "managedos_host_firewall_observe_host_key_algorithms": "ssh-ed25519",
-             "managedos_host_firewall_ssh_policy": {"hostKeyAlgorithms": "ssh-ed25519"},
-             "managedos_host_firewall_observe_ssh_policy": {"hostKeyAlgorithms": "ssh-ed25519"},
-             "managedos_host_firewall_host_key_algorithms": "ssh-ed25519"}
-    assert render(arguments["ssh_config"], **extra) == scratch + "/ssh_config"
-    assert render(arguments["known_hosts"], **extra) == scratch + "/known_hosts"
+    opened = role_tasks.guest_session(flattened(tasks(name)), key)[0][role_tasks.GUEST_SESSION]
+    assert render(opened["directory"]) == scratch and render(opened["address"]) == "192.0.2.10"
+    assert render(opened["host_key"]).strip() == "ssh-ed25519 AAAA"
     assert render(arguments["address"]) == "192.0.2.10" and render(arguments["user"]) == "fleet"
     assert render(arguments["identity"]) == "/run/material/fleet-id" and render(arguments["mark"]) == MARK
     assert [item["name"] for item in render(arguments["services"])] == [RGW, NFS]
     assert render(arguments["services"])[0]["content"] == xml(RGW)
-    known = next(task for task in flattened(tasks(name)) if "ansible.builtin.copy" in task and task["ansible.builtin.copy"]["dest"].endswith("known_hosts"))
-    assert render(known["ansible.builtin.copy"]["content"]) == "192.0.2.10 ssh-ed25519 AAAA"
 
 
 @pytest.mark.parametrize("answer, message, detail", [

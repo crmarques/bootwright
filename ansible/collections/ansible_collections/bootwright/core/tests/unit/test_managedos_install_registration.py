@@ -28,7 +28,6 @@ from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
-COPY = "ansible.builtin.copy"
 FILE = "ansible.builtin.file"
 FAIL = "ansible.builtin.fail"
 FACT = "ansible.builtin.set_fact"
@@ -48,17 +47,8 @@ NAMED = ["registration-input", "registration-foreign", "registration-refused", "
 REGISTER_ONLY = ("organization_file", "activation_key_file", "enable", "disable")
 MATERIAL = ("rhsmOrganization", "rhsmActivationKey", "rhsmSatelliteCA")
 FILES = ("organization_file", "activation_key_file", "satellite_ca_file")
-# The names each file gives the connection guest.yml makes, so the tasks can be
-# compared with guest.yml's option for option.
-SESSIONS = {
-    "register.yml": ("managedos_install_anaconda_registration_ssh_policy",
-                     "managedos_install_anaconda_registration_host_key_algorithms"),
-    "registration_observe.yml": ("managedos_install_anaconda_registration_observe_ssh_policy",
-                                 "managedos_install_anaconda_registration_observe_host_key_algorithms"),
-    "unregister.yml": ("managedos_install_anaconda_unregistration_ssh_policy",
-                       "managedos_install_anaconda_unregistration_host_key_algorithms"),
-}
-GUEST = ("managedos_install_anaconda_guest_ssh_policy", "managedos_install_anaconda_guest_host_key_algorithms")
+# The session each file opens, as guest.yml opens its own.
+SESSIONS = ("register.yml", "registration_observe.yml", "unregister.yml")
 
 
 def flattened(name):
@@ -199,26 +189,13 @@ def test_register_material_never_enters_a_task_variable():
     assert not any(word in repr(flattened("registration_observe.yml")) for word in MATERIAL)
 
 
-def normalized(task, names):
-    text = repr(task)
-    for own, guest in zip(names, GUEST):
-        text = text.replace(own, guest)
-    return text
-
-
 @pytest.mark.parametrize("name", sorted(SESSIONS))
 def test_register_session_is_the_guest_connection(name):
-    guest, own = flattened("guest.yml"), flattened(name)
-    session = [task for task in own if REGISTRATION not in task]
-    assert [normalized(task, SESSIONS[name]) for task in session[:4]] == [repr(task) for task in guest[:4]]
-    assert [normalized(task, SESSIONS[name]) for task in session[4:6]] == [repr(task) for task in guest[-2:]]
-    assert own.index(module(name)) == 4
-    arguments = module(name)[REGISTRATION]
-    policy, algorithms = SESSIONS[name]
-    assert render(arguments["ssh_config"]) == render(guest[2][COPY]["dest"])
-    assert render(arguments["known_hosts"]) == render(guest[1][COPY]["dest"])
-    assert arguments["host_key_algorithms"] == "{{ %s }}" % algorithms
-    assert arguments["policy_host_key_algorithms"] == "{{ %s.hostKeyAlgorithms }}" % policy
+    guest = role_tasks.guest_session(role_tasks.role_tasks(ROLE, "guest.yml"), "bootwright.core.managedos_guest_command")
+    opened, run, closed = role_tasks.guest_session(role_tasks.role_tasks(ROLE, name), REGISTRATION)
+    assert opened[role_tasks.GUEST_SESSION] == guest[0][role_tasks.GUEST_SESSION]
+    assert closed[role_tasks.GUEST_SESSION] == guest[2][role_tasks.GUEST_SESSION]
+    arguments = run[REGISTRATION]
     assert render(arguments["address"]) == "192.0.2.10" and render(arguments["user"]) == "fleet"
     assert render(arguments["identity"]) == "/run/material/fleet-id" and render(arguments["request"]) == DIGEST
     assert module(name)["failed_when"] is False and module(name)["no_log"] is True
@@ -370,12 +347,11 @@ def test_destroy_session_uses_the_reduced_policy_config():
     assert not any(word in repr(task) for word in MATERIAL)
     scratch = render(trust_as_template("{{ managedos_install_anaconda_scratch }}"))
     assert scratch.startswith("/var/tmp/bootwright-scratch-1-1/")
-    assert render(arguments["ssh_config"]) == scratch + "/ssh_config"
-    assert render(arguments["known_hosts"]) == scratch + "/known_hosts"
+    opened = role_tasks.guest_session(role_tasks.role_tasks(ROLE, "unregister.yml"), REGISTRATION)[0]
+    assert render(opened[role_tasks.GUEST_SESSION]["directory"]) == scratch
     assert render(arguments["request"]) == DIGEST and arguments["timeout"] == 330
     assert task["register"] == UNREGISTRATION and task["no_log"] is True and task["failed_when"] is False
-    assert not [other for other in flattened("unregister.yml") if FACT in other
-                and set(other[FACT]) != {"managedos_install_anaconda_unregistration_host_key_algorithms"}]
+    assert not [other for other in flattened("unregister.yml") if FACT in other]
 
 
 def test_destroy_leaves_a_foreign_registration():

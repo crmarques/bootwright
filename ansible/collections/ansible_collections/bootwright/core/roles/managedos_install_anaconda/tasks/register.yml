@@ -1,8 +1,7 @@
 ---
 # Registration runs once the installed machine's network converged and its FIPS
 # and root-encryption proofs passed, over the pinned fleet connection guest.yml
-# makes, option for option; test_register_session_is_the_guest_connection holds
-# the two equal. A request updating within its release also sets that release
+# opens. A request updating within its release also sets that release
 # before the repositories, which its update bound allows 120 more seconds for.
 # The organization and activation key are lent as files whose
 # paths only the controller module reads: their values reach the machine only
@@ -10,34 +9,13 @@
 # with a Satellite also lends its CA bundle the same way, and its session has
 # 60 more seconds for the worker's subscription-manager config call. Explicit
 # content selection adds 60 seconds for its live identity proof.
-- name: Read the effective crypto policy on this connection's placement host
-  bootwright.core.ssh_key_policy:
-  register: managedos_install_anaconda_registration_ssh_policy
-
-- name: Publish the guest's own host key for this one connection
-  ansible.builtin.copy:
-    content: '{{ bootwright_os_install_request.address }} {{ managedos_install_anaconda_host_key | trim }}'
-    dest: '{{ managedos_install_anaconda_scratch }}/known_hosts'
-    owner: root
-    group: root
-    mode: '0600'
-  changed_when: false
-
-- name: Write the one-connection client configuration
-  ansible.builtin.copy:
-    content: '{{ managedos_install_anaconda_registration_ssh_policy.configuration }}'
-    dest: '{{ managedos_install_anaconda_scratch }}/ssh_config'
-    owner: root
-    group: root
-    mode: '0600'
-  changed_when: false
-
-- name: Name the algorithms the guest's key is accepted under
-  ansible.builtin.set_fact:
-    managedos_install_anaconda_registration_host_key_algorithms: >-
-      {{ managedos_install_anaconda_host_key
-         | bootwright.core.host_key_algorithms(managedos_install_anaconda_registration_ssh_policy.hostKeyAlgorithms) }}
-  changed_when: false
+- name: Open the pinned connection to the installed machine
+  bootwright.core.managedos_guest_session:
+    state: present
+    directory: '{{ managedos_install_anaconda_scratch }}'
+    address: '{{ bootwright_os_install_request.address }}'
+    host_key: '{{ managedos_install_anaconda_host_key }}'
+  register: managedos_install_anaconda_registration_session
 
 - name: Register the installed machine through the fixed worker on that exact key
   bootwright.core.managedos_registration:
@@ -45,10 +23,10 @@
     address: '{{ bootwright_os_install_request.address }}'
     user: '{{ bootwright_os_install_request.user }}'
     identity: '{{ bootwright_os_install_material.fleetIdentity }}'
-    ssh_config: '{{ managedos_install_anaconda_scratch }}/ssh_config'
-    known_hosts: '{{ managedos_install_anaconda_scratch }}/known_hosts'
-    host_key_algorithms: '{{ managedos_install_anaconda_registration_host_key_algorithms }}'
-    policy_host_key_algorithms: '{{ managedos_install_anaconda_registration_ssh_policy.hostKeyAlgorithms }}'
+    ssh_config: '{{ managedos_install_anaconda_registration_session.ssh_config }}'
+    known_hosts: '{{ managedos_install_anaconda_registration_session.known_hosts }}'
+    host_key_algorithms: '{{ managedos_install_anaconda_registration_session.host_key_algorithms }}'
+    policy_host_key_algorithms: '{{ managedos_install_anaconda_registration_session.policy_host_key_algorithms }}'
     request: '{{ bootwright_os_install_digest }}'
     organization_file: '{{ bootwright_os_install_material.rhsmOrganization }}'
     activation_key_file: '{{ bootwright_os_install_material.rhsmActivationKey }}'
@@ -69,17 +47,10 @@
   changed_when: false
   no_log: true
 
-- name: Remove the one-connection known-hosts file
-  ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+- name: Close the pinned connection to the installed machine
+  bootwright.core.managedos_guest_session:
     state: absent
-  changed_when: false
-
-- name: Remove the one-connection client configuration
-  ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_scratch }}/ssh_config'
-    state: absent
-  changed_when: false
+    directory: '{{ managedos_install_anaconda_scratch }}'
 
 - name: Name the registration the worker answered with
   ansible.builtin.set_fact:

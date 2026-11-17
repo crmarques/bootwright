@@ -174,23 +174,18 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("substrate_machine", "dispatch.yml", "ansible.builtin.fail", "refuses an arm with no machine port before any lookup", read)
 	add("substrate_machine", "dispatch.yml", "ansible.builtin.set_fact", "republishes the arm's answer in memory", read)
 	add("managedos_install_anaconda", "identity.yml", "ansible.builtin.set_fact", "takes the channel's answer in memory", read)
-	add("managedos_install_anaconda", "reachable.yml", observeCollection+"ssh_key_policy", "reads the host's effective crypto policy", read)
-	add("managedos_install_anaconda", "reachable.yml", "ansible.builtin.set_fact", "names the pinned key's algorithms in memory", read)
-	add("managedos_install_anaconda", "reachable.yml", "ansible.builtin.command", "runs /usr/bin/true over ssh pinned to the reported key", read)
 	add("managedos_install_anaconda", "network_observe.yml", "ansible.builtin.set_fact", "names the network answers in memory", read)
+	add("managedos_install_anaconda", "reachable.yml", observeCollection+"managedos_guest_command", "runs /usr/bin/true over the pinned guest session", read)
+	add("managedos_install_anaconda", "guest.yml", observeCollection+"managedos_guest_command", "runs over the pinned guest session the fixed read network_observe.yml, host_security.yml, root_encryption.yml, root_wwn.yml or os_release.yml names; test_observe_reads_network_read_only, test_the_fips_read_only_reads, test_the_root_encryption_read_only_reads, test_the_record_is_read_through_the_pinned_connection_and_writes_nothing and test_the_release_read_only_reads hold it to those reads", read)
+	add("machine_ssh_identity", "main.yml", observeCollection+"managedos_guest_command", "runs /usr/bin/cat of the marker over the pinned guest session", read)
 	add("managedos_install_anaconda", "network_observe.yml", observeCollection+"managedos_network_compare", "compares the declared network with the running one in memory", read)
-	add("managedos_install_anaconda", "guest.yml", observeCollection+"ssh_key_policy", "reads the host's effective crypto policy", read)
-	add("managedos_install_anaconda", "guest.yml", "ansible.builtin.set_fact", "names the pinned key's algorithms in memory", read)
-	add("managedos_install_anaconda", "guest.yml", "ansible.builtin.command", "runs over ssh pinned to the reported key the fixed read network_observe.yml, host_security.yml, root_encryption.yml, root_wwn.yml or os_release.yml names; test_observe_reads_network_read_only, test_the_fips_read_only_reads, test_the_root_encryption_read_only_reads, test_the_record_is_read_through_the_pinned_connection_and_writes_nothing and test_the_release_read_only_reads hold it to those reads", read)
 	add("managedos_install_anaconda", "host_security.yml", "ansible.builtin.set_fact", "names the FIPS answers in memory", read)
 	add("managedos_install_anaconda", "root_encryption.yml", "ansible.builtin.set_fact", "names the root-encryption answers in memory", read)
 	add("managedos_install_anaconda", "root_wwn.yml", "ansible.builtin.set_fact", "names the root disk WWN record in memory", read)
 	add("managedos_install_anaconda", "os_release.yml", "ansible.builtin.set_fact", "names the release answers in memory", read)
-	add("managedos_install_anaconda", "registration_observe.yml", observeCollection+"ssh_key_policy", "reads the host's effective crypto policy", read)
-	add("managedos_install_anaconda", "registration_observe.yml", "ansible.builtin.set_fact", "names the pinned key's algorithms and the registration answers in memory", read)
+	add("managedos_install_anaconda", "registration_observe.yml", "ansible.builtin.set_fact", "names the registration answers in memory", read)
 	add("managedos_install_anaconda", "registration_observe.yml", observeCollection+"managedos_registration", "runs the registration worker's read-only inspect operation over ssh pinned to the reported key", observeRegistrationInspect)
-	add("managedos_install_anaconda", "update_observe.yml", observeCollection+"ssh_key_policy", "reads the host's effective crypto policy", read)
-	add("managedos_install_anaconda", "update_observe.yml", "ansible.builtin.set_fact", "names the pinned key's algorithms and the update answers in memory", read)
+	add("managedos_install_anaconda", "update_observe.yml", "ansible.builtin.set_fact", "names the update answers in memory", read)
 	add("managedos_install_anaconda", "update_observe.yml", observeCollection+"managedos_update", "runs the update worker's read-only inspect operation over ssh pinned to the reported key", observeRegistrationInspect)
 	add("managedos_package_tree", "observe.yml", observeCollection+"managedos_tree_inspect", "reads the shared tree and its staging area", read)
 	add("managedos_package_tree", "observe.yml", observeCollection+"hosted_area", "proves the artifact server's hosted directories without creating one", func(params, _ map[string]any) bool {
@@ -200,8 +195,6 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("infrastructureservices_mirror_fill", "observe.yml", observeCollection+"hosted_area", "proves the artifact server's hosted directories without creating one", func(params, _ map[string]any) bool {
 		return params["state"] == "proved"
 	})
-	add("managedos_host_firewall", "observe.yml", observeCollection+"ssh_key_policy", "reads the host's effective crypto policy", read)
-	add("managedos_host_firewall", "observe.yml", "ansible.builtin.set_fact", "names the pinned key's algorithms in memory", read)
 	add("managedos_host_firewall", "observe.yml", "ansible.builtin.fail", "refuses an unproved observation without touching the guest", read)
 	add("managedos_host_firewall", "observe.yml", observeCollection+"managedos_firewall", "runs the firewall worker's read-only inspect operation over ssh pinned to the proved key", observeRegistrationInspect)
 	add("storage_ceph_core", "observe.yml", observeCollection+"ceph_cluster", "runs the adapter's read-only observe operation", observeOperation)
@@ -211,9 +204,7 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("storage_ceph_replication", "observe.yml", observeCollection+"ceph_replication", "reads both endpoints without native effects or marker writes", observeOperation)
 	add("storage_ceph_consumer", "observe.yml", observeCollection+"ceph_export", "reads original export custody and native identities without credential generation or writes", observeOperation)
 	add("substrate_baremetal_machine", "observe.yml", observeCollection+"redfish_system_inspect", "reads the machine from its controller", read)
-	add("machine_ssh_identity", "main.yml", observeCollection+"ssh_key_policy", "reads the host's effective crypto policy", read)
 	add("substrate_baremetal_machine", "identity_read.yml", "ansible.builtin.set_fact", "names the answers in memory", read)
-	add("machine_ssh_identity", "main.yml", "ansible.builtin.command", "runs /usr/bin/cat of the marker over ssh pinned to the delivered key", read)
 	add("substrate_libvirt_host", "observe.yml", observeCollection+"libvirt_host_inspect", "reads the provider host", read)
 	add("substrate_libvirt_machine", "observe.yml", observeCollection+"libvirt_domain_inspect", "reads the domain", read)
 	add("substrate_libvirt_machine", "observe.yml", observeCollection+"redfish_system_read", "reads the machine's power from its controller", read)
@@ -226,18 +217,11 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 func addObserveScratch(add func(string, string, string, string, func(map[string]any, map[string]any) bool), read func(map[string]any, map[string]any) bool) {
 	add("managedos_install_anaconda", "observe.yml", observeCollection+"lifecycle_scratch", "creates and removes this invocation's private bootwright_run_scratch", observeScratchRoot)
 	add("managedos_host_firewall", "observe.yml", observeCollection+"lifecycle_scratch", "creates and removes this invocation's private bootwright_run_scratch", observeScratchRoot)
-	add("managedos_host_firewall", "observe.yml", "ansible.builtin.copy", "writes one connection's files under bootwright_run_scratch", observeUnder("dest", "{{ managedos_host_firewall_scratch }}/"))
-	add("managedos_host_firewall", "observe.yml", "ansible.builtin.file", "removes one connection's files under bootwright_run_scratch", observeUnder("path", "{{ managedos_host_firewall_scratch }}/"))
-	add("managedos_install_anaconda", "reachable.yml", "ansible.builtin.copy", "writes one connection's files under bootwright_run_scratch", observeUnder("dest", "{{ managedos_install_anaconda_scratch }}/"))
-	add("managedos_install_anaconda", "reachable.yml", "ansible.builtin.file", "removes one connection's files under bootwright_run_scratch", observeUnder("path", "{{ managedos_install_anaconda_scratch }}/"))
-	add("managedos_install_anaconda", "guest.yml", "ansible.builtin.copy", "writes one connection's files under bootwright_run_scratch", observeUnder("dest", "{{ managedos_install_anaconda_scratch }}/"))
-	add("managedos_install_anaconda", "guest.yml", "ansible.builtin.file", "removes one connection's files under bootwright_run_scratch", observeUnder("path", "{{ managedos_install_anaconda_scratch }}/"))
-	add("managedos_install_anaconda", "registration_observe.yml", "ansible.builtin.copy", "writes one connection's files under bootwright_run_scratch", observeUnder("dest", "{{ managedos_install_anaconda_scratch }}/"))
-	add("managedos_install_anaconda", "registration_observe.yml", "ansible.builtin.file", "removes one connection's files under bootwright_run_scratch", observeUnder("path", "{{ managedos_install_anaconda_scratch }}/"))
-	add("managedos_install_anaconda", "update_observe.yml", "ansible.builtin.copy", "writes one connection's files under bootwright_run_scratch", observeUnder("dest", "{{ managedos_install_anaconda_scratch }}/"))
-	add("managedos_install_anaconda", "update_observe.yml", "ansible.builtin.file", "removes one connection's files under bootwright_run_scratch", observeUnder("path", "{{ managedos_install_anaconda_scratch }}/"))
-	add("machine_ssh_identity", "main.yml", "ansible.builtin.copy", "writes one connection's files under the work directory the caller passes, bootwright_run_scratch on observe", observeUnder("dest", "{{ bootwright_machine_identity.work }}/"))
-	add("machine_ssh_identity", "main.yml", "ansible.builtin.file", "removes one connection's files under the work directory the caller passes", observeUnder("path", "{{ bootwright_machine_identity.work }}/"))
+	add("managedos_host_firewall", "observe.yml", observeCollection+"managedos_guest_session", "writes and removes one connection's files in bootwright_run_scratch", observeIs("directory", "{{ managedos_host_firewall_scratch }}"))
+	for _, file := range []string{"reachable.yml", "guest.yml", "registration_observe.yml", "update_observe.yml"} {
+		add("managedos_install_anaconda", file, observeCollection+"managedos_guest_session", "writes and removes one connection's files in bootwright_run_scratch", observeIs("directory", "{{ managedos_install_anaconda_scratch }}"))
+	}
+	add("machine_ssh_identity", "main.yml", observeCollection+"managedos_guest_session", "writes and removes one connection's files in the work directory the caller passes, bootwright_run_scratch on observe", observeIs("directory", "{{ bootwright_machine_identity.work }}"))
 }
 
 func observeParams(task map[string]any, module string) map[string]any {
@@ -275,10 +259,9 @@ func observeCustodyCopy(_, task map[string]any) bool {
 	return slices.ContainsFunc(observeWhens(task), observeCustodyWhen.MatchString)
 }
 
-func observeUnder(field, prefix string) func(map[string]any, map[string]any) bool {
+func observeIs(field, want string) func(map[string]any, map[string]any) bool {
 	return func(params, _ map[string]any) bool {
-		value, ok := params[field].(string)
-		return ok && strings.HasPrefix(value, prefix) && !strings.Contains(value, "..")
+		return params[field] == want
 	}
 }
 

@@ -28,7 +28,6 @@ from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
-COPY = "ansible.builtin.copy"
 FAIL = "ansible.builtin.fail"
 FACT = "ansible.builtin.set_fact"
 INCLUDE = "ansible.builtin.include_tasks"
@@ -42,12 +41,7 @@ ANSWER = "managedos_install_anaconda_update_answer"
 DIGEST = "1" * 64
 NAMED = ["update-release-mismatch", "update-release-drift", "update-no-repository", "update-foreign",
          "update-unavailable", "update-failed"]
-SESSIONS = {
-    "update_session.yml": ("managedos_install_anaconda_update_ssh_policy", "managedos_install_anaconda_update_host_key_algorithms"),
-    "update_observe.yml": ("managedos_install_anaconda_update_observe_ssh_policy",
-                           "managedos_install_anaconda_update_observe_host_key_algorithms"),
-}
-GUEST = ("managedos_install_anaconda_guest_ssh_policy", "managedos_install_anaconda_guest_host_key_algorithms")
+SESSIONS = ("update_session.yml", "update_observe.yml")
 KERNEL = "5.14.0-611.5.1.el9_7.x86_64"
 
 
@@ -172,26 +166,13 @@ def test_the_update_reboot_holds_power_off_and_return_to_one_reboot_budget(attem
     assert attempts == 1 or poweroff + back == attempts
 
 
-def normalized(task, names):
-    text = repr(task)
-    for own, guest in zip(names, GUEST):
-        text = text.replace(own, guest)
-    return text
-
-
 @pytest.mark.parametrize("name", sorted(SESSIONS))
 def test_update_session_is_the_guest_connection(name):
-    guest, own = flattened("guest.yml"), flattened(name)
-    session = [task for task in own if UPDATE not in task]
-    assert [normalized(task, SESSIONS[name]) for task in session[:4]] == [repr(task) for task in guest[:4]]
-    assert [normalized(task, SESSIONS[name]) for task in session[4:6]] == [repr(task) for task in guest[-2:]]
-    assert own.index(module(name)) == 4
-    arguments = module(name)[UPDATE]
-    policy, algorithms = SESSIONS[name]
-    assert render(arguments["ssh_config"]) == render(guest[2][COPY]["dest"])
-    assert render(arguments["known_hosts"]) == render(guest[1][COPY]["dest"])
-    assert arguments["host_key_algorithms"] == "{{ %s }}" % algorithms
-    assert arguments["policy_host_key_algorithms"] == "{{ %s.hostKeyAlgorithms }}" % policy
+    guest = role_tasks.guest_session(role_tasks.role_tasks(ROLE, "guest.yml"), "bootwright.core.managedos_guest_command")
+    opened, run, closed = role_tasks.guest_session(role_tasks.role_tasks(ROLE, name), UPDATE)
+    assert opened[role_tasks.GUEST_SESSION] == guest[0][role_tasks.GUEST_SESSION]
+    assert closed[role_tasks.GUEST_SESSION] == guest[2][role_tasks.GUEST_SESSION]
+    arguments = run[UPDATE]
     assert render(arguments["address"]) == "192.0.2.10" and render(arguments["user"]) == "fleet"
     assert render(arguments["identity"]) == "/run/material/fleet-id" and render(arguments["request"]) == DIGEST
     assert render(arguments["release"]) == "9.8"

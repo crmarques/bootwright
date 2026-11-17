@@ -34,7 +34,6 @@ ROLES = ROLE.parent
 PROTOCOL = "bootwright.core.managedos_install_protocol"
 FAIL = "ansible.builtin.fail"
 INCLUDE = "ansible.builtin.include_tasks"
-COMMAND = "ansible.builtin.command"
 GUEST = "managedos_install_anaconda_guest_command"
 DIGEST = "0123456789abcdef" * 4
 BOOT_ID = "6f1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
@@ -236,36 +235,51 @@ def test_opt_in_physical_erase_recovery_names_the_destructive_policy_and_authori
         assert "keeps the system installed" not in message
 
 
-def option_values(argv):
-    return [argv[position + 1] for position, word in enumerate(argv) if word == "-o"]
-
-
 def ssh_task(name, register):
     return next(task for task in flattened(name) if task.get("register") == register)
 
 
+RUN = "bootwright.core.managedos_guest_command"
+
+
+# Both pinned connections are the session the collection's builder opens: the
+# same directory, address and reported key, the argv handed over as words the
+# module joins, and each attempt bounded by its own named seconds.
 def test_guest_commands_pin_the_host_key():
-    guest = ssh_task("guest.yml", "managedos_install_anaconda_guest")
-    reachable = ssh_task("reachable.yml", "managedos_install_anaconda_reachable")
-    options = option_values(guest[COMMAND]["argv"])
-    assert options == [value.replace("managedos_install_anaconda_host_key_algorithms",
-                                     "managedos_install_anaconda_guest_host_key_algorithms")
-                       for value in option_values(reachable[COMMAND]["argv"])]
-    for required in ("StrictHostKeyChecking=yes", "KnownHostsCommand=none", "GlobalKnownHostsFile=none",
-                     "UserKnownHostsFile={{ managedos_install_anaconda_scratch }}/known_hosts"):
-        assert required in options, required
-    argv = guest[COMMAND]["argv"]
-    assert argv[:3] == ["/usr/bin/ssh", "-F", "{{ managedos_install_anaconda_scratch }}/ssh_config"]
-    assert argv[-1] == '{{ managedos_install_anaconda_guest_command | map("quote") | join(" ") }}'
-    assert guest["no_log"] is True and guest["failed_when"] is False
-    known = next(task for task in flattened("guest.yml")
-                 if (task.get("ansible.builtin.copy") or {}).get("dest", "").endswith("/known_hosts"))
-    assert known["ansible.builtin.copy"]["content"] == (
-        "{{ bootwright_os_install_request.address }} {{ managedos_install_anaconda_host_key | trim }}")
-    assert known["ansible.builtin.copy"]["mode"] == "0600"
+    guest = role_tasks.guest_session(role_tasks.role_tasks(ROLE, "guest.yml"), RUN)
+    reachable = role_tasks.guest_session(role_tasks.role_tasks(ROLE, "reachable.yml"), RUN)
+    assert guest[0][role_tasks.GUEST_SESSION] == reachable[0][role_tasks.GUEST_SESSION] == {
+        "state": "present", "directory": "{{ managedos_install_anaconda_scratch }}",
+        "address": "{{ bootwright_os_install_request.address }}", "host_key": "{{ managedos_install_anaconda_host_key }}"}
+    run, probe = guest[1], reachable[1]
+    assert run[RUN]["argv"] == "{{ %s }}" % GUEST and probe[RUN]["argv"] == ["/usr/bin/true"]
+    assert run[RUN]["stdin"] == "{{ managedos_install_anaconda_guest_stdin | default(omit) }}" and "stdin" not in probe[RUN]
+    for task in (run, probe):
+        assert task["no_log"] is True and task["failed_when"] is False
+        assert {key: task[RUN][key] for key in ("address", "user", "identity")} == {
+            "address": "{{ bootwright_os_install_request.address }}", "user": "{{ bootwright_os_install_request.user }}",
+            "identity": "{{ bootwright_os_install_material.fleetIdentity }}"}
+    scope = defaults()
+    templar = Templar(loader=LOADER, variables=scope)
+    assert templar.template(trust_as_template(run[RUN]["timeout"])) == 120
+    assert Templar(loader=LOADER, variables=dict(scope, managedos_install_anaconda_guest_timeout=240)).template(
+        trust_as_template(run[RUN]["timeout"])) == 240
+    assert templar.template(trust_as_template(probe[RUN]["timeout"])) == 60
     for path in sorted(ROLES.glob("*/tasks/*.yml")) + sorted(ROLES.glob("*/defaults/*.yml")):
         text = path.read_text()
         assert "StrictHostKeyChecking=no" not in text and "accept-new" not in text, path
+
+
+def test_a_checkpoint_rollback_or_commit_is_bounded_by_the_checkpoint():
+    tasks = flattened("network.yml")
+    scope = dict(defaults(), **failing_scope())
+    templar = Templar(loader=LOADER, variables=scope)
+    for command in ("rollback", "commit"):
+        task = tasks[index_of(tasks, runs(command), command)]
+        assert templar.template(task["vars"]["managedos_install_anaconda_guest_timeout"]) == \
+            int(scope["bootwright_os_install_request"]["network"]["checkpointSeconds"])
+    others = [task for task in tasks if task.get(INCLUDE) == "guest.yml" and not runs("rollback")(task) and not runs("commit")(task)]
+    assert others and not any("managedos_install_anaconda_guest_timeout" in (task.get("vars") or {}) for task in others)
 
 
 def test_document_reaches_the_guest_on_stdin_only():
@@ -278,8 +292,8 @@ def test_document_reaches_the_guest_on_stdin_only():
     assert SENTINEL in stdin and isinstance(stdin, str)
     assert SENTINEL not in " ".join(str(word) for word in command)
     guest = ssh_task("guest.yml", "managedos_install_anaconda_guest")
-    joined = Templar(loader=LOADER, variables=dict(scope, **{GUEST: command})).template(guest[COMMAND]["argv"][-1])
-    assert SENTINEL not in joined
+    assert guest[RUN]["argv"] == "{{ %s }}" % GUEST
+    assert guest[RUN]["stdin"] == "{{ managedos_install_anaconda_guest_stdin | default(omit) }}"
     for name, words in commands().items():
         assert not DOCUMENT_REFERENCE.search(repr(words)), name
     for task in tasks:
@@ -363,7 +377,7 @@ def test_observe_reads_network_read_only():
         modules = [key for key in task if "." in key]
         assert not any(module.startswith("bootwright.core.redfish_") for module in modules), task["name"]
         assert not any(module in modules for module in (
-            "ansible.builtin.include_role", FAIL, "ansible.builtin.assert", "ansible.builtin.pause", COMMAND)), task["name"]
+            "ansible.builtin.include_role", FAIL, "ansible.builtin.assert", "ansible.builtin.pause", "ansible.builtin.command")), task["name"]
 
 
 def test_the_guest_scripts_parse():

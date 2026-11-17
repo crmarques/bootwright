@@ -7,34 +7,13 @@
         scope: managedos-firewall
       register: managedos_host_firewall_scratch_ready
 
-    - name: Read the effective crypto policy on this connection's placement host
-      bootwright.core.ssh_key_policy:
-      register: managedos_host_firewall_observe_ssh_policy
-
-    - name: Publish the guest's own host key for this one connection
-      ansible.builtin.copy:
-        content: '{{ bootwright_os_firewall_request.address }} {{ bootwright_os_firewall_material.hostKey | trim }}'
-        dest: '{{ managedos_host_firewall_scratch }}/known_hosts'
-        owner: root
-        group: root
-        mode: '0600'
-      changed_when: false
-
-    - name: Write the one-connection client configuration
-      ansible.builtin.copy:
-        content: '{{ managedos_host_firewall_observe_ssh_policy.configuration }}'
-        dest: '{{ managedos_host_firewall_scratch }}/ssh_config'
-        owner: root
-        group: root
-        mode: '0600'
-      changed_when: false
-
-    - name: Name the algorithms the guest's key is accepted under
-      ansible.builtin.set_fact:
-        managedos_host_firewall_observe_host_key_algorithms: >-
-          {{ bootwright_os_firewall_material.hostKey
-             | bootwright.core.host_key_algorithms(managedos_host_firewall_observe_ssh_policy.hostKeyAlgorithms) }}
-      changed_when: false
+    - name: Open the pinned connection to the installed machine
+      bootwright.core.managedos_guest_session:
+        state: present
+        directory: '{{ managedos_host_firewall_scratch }}'
+        address: '{{ bootwright_os_firewall_request.address }}'
+        host_key: '{{ bootwright_os_firewall_material.hostKey }}'
+      register: managedos_host_firewall_observe_session
 
     - name: Inspect the installed machine's host firewall through the fixed worker on that exact key
       bootwright.core.managedos_firewall:
@@ -42,10 +21,10 @@
         address: '{{ bootwright_os_firewall_request.address }}'
         user: '{{ bootwright_os_firewall_request.user }}'
         identity: '{{ bootwright_os_firewall_material.fleetIdentity }}'
-        ssh_config: '{{ managedos_host_firewall_scratch }}/ssh_config'
-        known_hosts: '{{ managedos_host_firewall_scratch }}/known_hosts'
-        host_key_algorithms: '{{ managedos_host_firewall_observe_host_key_algorithms }}'
-        policy_host_key_algorithms: '{{ managedos_host_firewall_observe_ssh_policy.hostKeyAlgorithms }}'
+        ssh_config: '{{ managedos_host_firewall_observe_session.ssh_config }}'
+        known_hosts: '{{ managedos_host_firewall_observe_session.known_hosts }}'
+        host_key_algorithms: '{{ managedos_host_firewall_observe_session.host_key_algorithms }}'
+        policy_host_key_algorithms: '{{ managedos_host_firewall_observe_session.policy_host_key_algorithms }}'
         mark: '{{ bootwright_os_firewall_material.mark }}'
         services: '{{ managedos_host_firewall_services }}'
         timeout: 120
@@ -54,17 +33,10 @@
       changed_when: false
       no_log: true
 
-    - name: Remove the one-connection known-hosts file
-      ansible.builtin.file:
-        path: '{{ managedos_host_firewall_scratch }}/known_hosts'
+    - name: Close the pinned connection to the installed machine
+      bootwright.core.managedos_guest_session:
         state: absent
-      changed_when: false
-
-    - name: Remove the one-connection client configuration
-      ansible.builtin.file:
-        path: '{{ managedos_host_firewall_scratch }}/ssh_config'
-        state: absent
-      changed_when: false
+        directory: '{{ managedos_host_firewall_scratch }}'
 
     - name: Name a host firewall the machine refused
       bootwright.core.managedos_firewall_protocol:

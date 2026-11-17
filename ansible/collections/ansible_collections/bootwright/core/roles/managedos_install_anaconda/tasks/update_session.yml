@@ -1,7 +1,6 @@
 ---
 # One session of the update worker, apply or complete, over the pinned fleet
-# connection guest.yml makes, option for option, as the registration worker's
-# is; test_update_session_is_the_guest_connection holds the two equal. Only
+# connection guest.yml opens, as the registration worker's is. Only
 # the operation, the request digest, the release and the release pin reach the
 # machine, on the fixed worker's standard input. The pin is what the
 # registration worker answered on this run, set or unset, and the release
@@ -9,34 +8,13 @@
 # module refuses it. A refusal is named to the runner with its
 # detail, the version found, <found>@<repository> or the closed cause, and the
 # run fails.
-- name: Read the effective crypto policy on this connection's placement host
-  bootwright.core.ssh_key_policy:
-  register: managedos_install_anaconda_update_ssh_policy
-
-- name: Publish the guest's own host key for this one connection
-  ansible.builtin.copy:
-    content: '{{ bootwright_os_install_request.address }} {{ managedos_install_anaconda_host_key | trim }}'
-    dest: '{{ managedos_install_anaconda_scratch }}/known_hosts'
-    owner: root
-    group: root
-    mode: '0600'
-  changed_when: false
-
-- name: Write the one-connection client configuration
-  ansible.builtin.copy:
-    content: '{{ managedos_install_anaconda_update_ssh_policy.configuration }}'
-    dest: '{{ managedos_install_anaconda_scratch }}/ssh_config'
-    owner: root
-    group: root
-    mode: '0600'
-  changed_when: false
-
-- name: Name the algorithms the guest's key is accepted under
-  ansible.builtin.set_fact:
-    managedos_install_anaconda_update_host_key_algorithms: >-
-      {{ managedos_install_anaconda_host_key
-         | bootwright.core.host_key_algorithms(managedos_install_anaconda_update_ssh_policy.hostKeyAlgorithms) }}
-  changed_when: false
+- name: Open the pinned connection to the installed machine
+  bootwright.core.managedos_guest_session:
+    state: present
+    directory: '{{ managedos_install_anaconda_scratch }}'
+    address: '{{ bootwright_os_install_request.address }}'
+    host_key: '{{ managedos_install_anaconda_host_key }}'
+  register: managedos_install_anaconda_update_session
 
 - name: Run the update worker on the installed machine on that exact key
   bootwright.core.managedos_update:
@@ -44,10 +22,10 @@
     address: '{{ bootwright_os_install_request.address }}'
     user: '{{ bootwright_os_install_request.user }}'
     identity: '{{ bootwright_os_install_material.fleetIdentity }}'
-    ssh_config: '{{ managedos_install_anaconda_scratch }}/ssh_config'
-    known_hosts: '{{ managedos_install_anaconda_scratch }}/known_hosts'
-    host_key_algorithms: '{{ managedos_install_anaconda_update_host_key_algorithms }}'
-    policy_host_key_algorithms: '{{ managedos_install_anaconda_update_ssh_policy.hostKeyAlgorithms }}'
+    ssh_config: '{{ managedos_install_anaconda_update_session.ssh_config }}'
+    known_hosts: '{{ managedos_install_anaconda_update_session.known_hosts }}'
+    host_key_algorithms: '{{ managedos_install_anaconda_update_session.host_key_algorithms }}'
+    policy_host_key_algorithms: '{{ managedos_install_anaconda_update_session.policy_host_key_algorithms }}'
     request: '{{ bootwright_os_install_digest }}'
     release: "{{ bootwright_os_install_request['update'].release }}"
     pin: >-
@@ -60,17 +38,10 @@
   changed_when: false
   no_log: true
 
-- name: Remove the one-connection known-hosts file
-  ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+- name: Close the pinned connection to the installed machine
+  bootwright.core.managedos_guest_session:
     state: absent
-  changed_when: false
-
-- name: Remove the one-connection client configuration
-  ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_scratch }}/ssh_config'
-    state: absent
-  changed_when: false
+    directory: '{{ managedos_install_anaconda_scratch }}'
 
 - name: Name an update the machine or its update sources refused
   bootwright.core.managedos_install_protocol:

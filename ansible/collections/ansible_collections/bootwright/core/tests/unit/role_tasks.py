@@ -64,6 +64,31 @@ FAIL = "ansible.builtin.fail"
 SET_FACT = "ansible.builtin.set_fact"
 
 
+GUEST_SESSION = "bootwright.core.managedos_guest_session"
+SESSION_ARGUMENTS = ("ssh_config", "known_hosts", "host_key_algorithms", "policy_host_key_algorithms")
+
+
+def guest_session(tasks: list[dict], module: str) -> tuple[dict, dict, dict]:
+    """The open, run and close tasks of the one pinned guest session `module` runs in a task file's tasks.
+
+    Every session file takes one shape: it opens the session, runs the one
+    module over exactly the files and algorithms the open answered, and closes
+    the same directory, so no file names a session file or an algorithm of
+    its own."""
+    opened = [task for task in tasks if GUEST_SESSION in task]
+    assert len(opened) == 2, "%d session tasks" % len(opened)
+    first, last = opened[0][GUEST_SESSION], opened[1][GUEST_SESSION]
+    assert first["state"] == "present" and set(first) == {"state", "directory", "address", "host_key"}, first
+    assert last == {"state": "absent", "directory": first["directory"]}, last
+    runs = [task for task in tasks if module in task]
+    assert len(runs) == 1, "%d tasks run %s" % (len(runs), module)
+    assert tasks.index(opened[0]) < tasks.index(runs[0]) < tasks.index(opened[1])
+    register = opened[0]["register"]
+    for key in SESSION_ARGUMENTS:
+        assert runs[0][module][key] == "{{ %s.%s }}" % (register, key), key
+    return opened[0], runs[0], opened[1]
+
+
 class Skipped:
     """What an executor returns for a task its model leaves out."""
 

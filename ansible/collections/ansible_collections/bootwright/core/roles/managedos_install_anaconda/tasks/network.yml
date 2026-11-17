@@ -81,6 +81,7 @@
       ansible.builtin.include_tasks: guest.yml
       vars:
         managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_rollback }}'
+        managedos_install_anaconda_guest_timeout: '{{ bootwright_os_install_request.network.checkpointSeconds | int }}'
 
     - name: Stop at a rollback NetworkManager refused
       ansible.builtin.fail:
@@ -285,6 +286,7 @@
       ansible.builtin.include_tasks: guest.yml
       vars:
         managedos_install_anaconda_guest_command: '{{ managedos_install_anaconda_network_commit }}'
+        managedos_install_anaconda_guest_timeout: '{{ bootwright_os_install_request.network.checkpointSeconds | int }}'
 
     - name: Stop at a commit NetworkManager did not take
       ansible.builtin.fail:

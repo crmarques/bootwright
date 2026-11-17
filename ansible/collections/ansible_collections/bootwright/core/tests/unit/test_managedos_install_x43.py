@@ -21,6 +21,7 @@ import re
 import pytest
 
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.plugins.module_utils import managedos_guest_ssh
 from ansible_collections.bootwright.core.tests.unit import listener_proof, role_tasks
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
@@ -29,8 +30,6 @@ ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_instal
 PROTOCOL = "bootwright.core.managedos_install_protocol"
 STAT = "ansible.builtin.stat"
 COMMAND = "ansible.builtin.command"
-COPY = "ansible.builtin.copy"
-FILE = "ansible.builtin.file"
 BOOT = {"name": "rhel-9.8-x86_64-boot.iso", "sha256": "0123456789abcdef" * 4, "size": 1105199104}
 DVD = {"name": "rhel-9.8-x86_64-dvd.iso", "sha256": "fedcba9876543210" * 4, "size": 13107200000}
 
@@ -232,53 +231,37 @@ def test_a_first_install_reports_changed_and_a_replay_unchanged():
 
 # Every ssh client a role runs reads only a configuration written for that one
 # connection, which keeps the host crypto policy and nothing ambient, and ends a
-# connection whose peer stopped answering.
-def test_every_ssh_argv_uses_a_generated_configuration_and_keepalives():
-    found = 0
+# connection whose peer stopped answering. The roles start none themselves:
+# each pinned session is the builder's (test_role_boundaries.py
+# test_no_task_file_builds_an_ssh_argv), and the builder carries every option.
+def test_every_ssh_argv_uses_a_generated_configuration_and_keepalives(tmp_path):
     for path in sorted(ROLES.glob("*/tasks/*.yml")):
-        tasks = flattened(path)
-        for index, task in enumerate(tasks):
+        for task in flattened(path):
             for module in ("ansible.builtin.shell", "ansible.builtin.command", "ansible.builtin.raw"):
                 body = task.get(module)
                 text = body if isinstance(body, str) else (body or {}).get("cmd", "") if isinstance(body, dict) else ""
                 assert not re.search(r"(^|[\s/])ssh(\s|$)", str(text)), "%s: %s runs ssh in a string" % (path, task.get("name"))
             argv = [str(argument) for argument in ((task.get(COMMAND) or {}).get("argv") or [])]
-            if not argv or argv[0] != "/usr/bin/ssh":
-                assert all(not argument.endswith("/ssh") and argument != "ssh" for argument in argv[:1]), path
-                continue
-            found += 1
-            where = "%s: %s" % (path.relative_to(ROLES), task.get("name"))
-            assert argv[1] == "-F" and argv[2].endswith("/ssh_config"), where
-            configuration = argv[2]
-            work = configuration[:-len("/ssh_config")]
-            identity = argv.index("-i")
-            pairs = argv[3:identity]
-            assert len(pairs) % 2 == 0 and all(flag == "-o" for flag in pairs[0::2]), where
-            options = pairs[1::2]
-            assert options[0] == "UserKnownHostsFile=%s/known_hosts" % work, where
-            for required in SSH_OPTIONS:
-                assert required in options, "%s lacks %s" % (where, required)
-            # The pinned key is negotiated under its own type's algorithms, so
-            # a FIPS controller proves an rsa or ecdsa key it pinned.
-            pinned = [option for option in options if option.startswith("HostKeyAlgorithms=")]
-            assert len(pinned) == 1 and "bootwright.core.host_key_algorithms" not in pinned[0], where
-            fact = pinned[0][len("HostKeyAlgorithms={{ "):-len(" }}")]
-            derivations = [earlier for earlier in tasks[:index]
-                           if fact in (earlier.get("ansible.builtin.set_fact") or {})]
-            assert derivations, "%s pins no derived algorithm list" % where
-            assert "| bootwright.core.host_key_algorithms" in derivations[-1]["ansible.builtin.set_fact"][fact], where
-            writes = [earlier for earlier in tasks[:index]
-                      if (earlier.get(COPY) or {}).get("dest") == configuration]
-            checks = [earlier for earlier in tasks[:index] if "bootwright.core.ssh_key_policy" in earlier]
-            assert checks, where
-            policy_name = checks[-1]["register"]
-            assert writes and writes[-1][COPY]["content"] == "{{ %s.configuration }}" % policy_name, where
-            assert policy_name + ".hostKeyAlgorithms" in derivations[-1]["ansible.builtin.set_fact"][fact], where
-            assert (writes[-1][COPY]["owner"], writes[-1][COPY]["group"], writes[-1][COPY]["mode"]) == ("root", "root", "0600"), where
-            removals = [later for later in tasks[index + 1:]
-                        if (later.get(FILE) or {}).get("path") == configuration and later[FILE].get("state") == "absent"]
-            assert removals, where
-    assert found >= 2
+            assert not argv or (not argv[0].endswith("/ssh") and argv[0] != "ssh"), "%s: %s runs ssh" % (path, task.get("name"))
+    policy = {"configuration": "Ciphers aes256-gcm@openssh.com\n", "hostKeyAlgorithms": "ecdsa-sha2-nistp256,ssh-ed25519"}
+    session = managedos_guest_ssh.open_session(str(tmp_path), "192.0.2.10", "ecdsa-sha2-nistp256 AAAA", policy)
+    identity = tmp_path / "identity"
+    identity.write_bytes(b"")
+    argv = managedos_guest_ssh.guest_argv(identity=str(identity), user="fleet", address="192.0.2.10", remote_argv=["/usr/bin/true"],
+                                          **session)
+    assert argv[1] == "-F" and argv[2] == str(tmp_path / "ssh_config")
+    pairs = argv[3:argv.index("-i")]
+    assert len(pairs) % 2 == 0 and all(flag == "-o" for flag in pairs[0::2])
+    options = pairs[1::2]
+    assert options[0] == "UserKnownHostsFile=%s/known_hosts" % tmp_path
+    for required in SSH_OPTIONS:
+        assert required in options, required
+    # The pinned key is negotiated under its own type's algorithms, so a FIPS
+    # controller proves an rsa or ecdsa key it pinned.
+    assert [option for option in options if option.startswith("HostKeyAlgorithms=")] == ["HostKeyAlgorithms=ecdsa-sha2-nistp256"]
+    assert (tmp_path / "ssh_config").read_text() == policy["configuration"]
+    managedos_guest_ssh.close_session(str(tmp_path))
+    assert sorted(item.name for item in tmp_path.iterdir()) == ["identity"]
 
 
 def test_the_work_area_lives_under_a_root_only_parent():

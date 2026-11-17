@@ -93,7 +93,6 @@ EXECUTABLES = frozenset({
     "/usr/bin/qemu-img",
     "/usr/bin/rmdir",
     "/usr/bin/skopeo",
-    "/usr/bin/ssh",
     "/usr/bin/systemctl",
     "/usr/bin/timeout",
     "/usr/bin/virsh",
@@ -425,6 +424,64 @@ def test_every_command_starts_an_executable_the_allowlist_names():
     assert not problems, "\n".join(problems)
     assert started == EXECUTABLES, "no task starts %s any longer: remove it" % sorted(EXECUTABLES - started)
     assert wrappers == WRAPPED, "timeout no longer starts %s: remove it" % sorted(WRAPPED - wrappers)
+
+
+# The pinned guest session is built only by module_utils/managedos_guest_ssh.py,
+# which managedos_guest_session and managedos_guest_command run: no task file
+# starts ssh, names one of its options or writes a known_hosts file, so a
+# hardening of the session has one place to land.
+SSH_WORDS = re.compile(r"(^|[\s/'\"])ssh(\s|$)|UserKnownHostsFile|StrictHostKeyChecking|HostKeyAlgorithms=|KnownHostsCommand")
+GUEST_SESSIONS = {
+    "machine_ssh_identity/tasks/main.yml",
+    "managedos_host_firewall/tasks/installed_observe.yml",
+    "managedos_host_firewall/tasks/session.yml",
+    "managedos_install_anaconda/tasks/guest.yml",
+    "managedos_install_anaconda/tasks/reachable.yml",
+    "managedos_install_anaconda/tasks/register.yml",
+    "managedos_install_anaconda/tasks/registration_observe.yml",
+    "managedos_install_anaconda/tasks/unregister.yml",
+    "managedos_install_anaconda/tasks/update_observe.yml",
+    "managedos_install_anaconda/tasks/update_session.yml",
+}
+SESSION = "bootwright.core.managedos_guest_session"
+
+
+def ssh_problems(where, tasks):
+    """Why a task file might build a guest SSH session of its own."""
+    problems = []
+    for task in role_tasks.flatten(tasks):
+        body = {key: value for key, value in task.items() if key not in role_tasks.SECTIONS}
+        if action(task) in COMMANDS + ("ansible.builtin.shell", "ansible.builtin.raw", "ansible.builtin.script"):
+            argv = command_argv(task) or [str(arguments(task).get("cmd", body.get(action(task), "")))]
+            if argv and (argv[0].endswith("/ssh") or argv[0] == "ssh" or SSH_WORDS.search(" ".join(argv))):
+                problems.append("%s: %r runs ssh itself" % (where, task.get("name")))
+        if SSH_WORDS.search(repr(body)) and action(task) not in COMMANDS:
+            problems.append("%s: %r names an ssh option" % (where, task.get("name")))
+        if str(arguments(task).get("dest", "")).endswith(("known_hosts", "ssh_config")):
+            problems.append("%s: %r writes a session file" % (where, task.get("name")))
+    return problems
+
+
+def test_no_task_file_builds_an_ssh_argv():
+    problems, opened = [], set()
+    for path in task_files():
+        tasks = load(path)
+        problems.extend(ssh_problems(label(path), tasks))
+        sessions = [task for task in role_tasks.flatten(tasks) if action(task) == SESSION]
+        if sessions:
+            opened.add(label(path))
+            states = [arguments(task)["state"] for task in sessions]
+            assert states == ["present", "absent"], "%s opens and closes its session as %s" % (label(path), states)
+            assert arguments(sessions[0])["directory"] == arguments(sessions[1])["directory"], label(path)
+    assert not problems, "\n".join(problems)
+    assert opened == GUEST_SESSIONS, "the guest sessions moved: %s" % sorted(opened ^ GUEST_SESSIONS)
+
+
+def test_a_planted_ssh_argv_is_reported():
+    planted = [{"name": "Reach the guest", "ansible.builtin.command": {"argv": ["/usr/bin/ssh", "-o", "BatchMode=yes", "fleet@192.0.2.10"]}},
+               {"name": "Pin a key", "ansible.builtin.copy": {"content": "x", "dest": "/run/known_hosts"}},
+               {"name": "Option", "bootwright.core.managedos_guest_command": {"argv": ["/usr/bin/true"], "user": "-oStrictHostKeyChecking=no"}}]
+    assert len(ssh_problems("planted.yml", planted)) == 3
 
 
 def unit_problems(where, unit):

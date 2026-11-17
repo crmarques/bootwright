@@ -88,6 +88,28 @@ def effective_policy(data, run=bounded_process.run):
     return {"configuration": config, "hostKeyAlgorithms": host, "fleetKeyAlgorithms": fleet}
 
 
+# ssh-rsa, the SHA-1 signature, is deliberately absent, unlike the controller's
+# own host-key records (internal/trust/hostkeys.go), which accept it for hosts
+# they did not install: an installed RHEL 9 sshd signs an rsa host key with
+# SHA-2, and a controller under the FIPS crypto policy refuses SHA-1.
+def pinned_algorithms(line, allowed=None):
+    """The HostKeyAlgorithms value that accepts exactly the pinned key's type, within the allowed list when one is given."""
+    fields = line.split() if isinstance(line, str) else []
+    if not fields:
+        raise PolicyError("the pinned SSH host key is empty or missing; restore its identity proof before connecting")
+    key_type = fields[0]
+    if key_type in ALGORITHMS:
+        candidates = ALGORITHMS[key_type].split(",")
+        if allowed is not None:
+            candidates = [value for value in candidates if value in allowed.split(",")]
+        if not candidates:
+            raise PolicyError("the pinned SSH host key type %s is excluded by the placement host SSH policy" % key_type,
+                              "ssh-policy-host-excluded")
+        return ",".join(candidates)
+    printable = "".join(character for character in key_type if character.isprintable())[:64]
+    raise PolicyError("the pinned SSH host key's type %s is not one an installation pins" % printable)
+
+
 def check_keys(policy, keys):
     """Validate actual bound public-key types, never a declared provider policy."""
     for key in keys:

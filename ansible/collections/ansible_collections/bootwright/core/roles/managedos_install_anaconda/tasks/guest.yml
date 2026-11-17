@@ -1,100 +1,37 @@
 ---
 # One fixed command on the installed machine as the fleet account, pinned to
-# exactly the key its identity channel reported. The connection is the one
-# reachable.yml proves, option for option, so a command here never trusts a
-# first-use answer; test_guest_commands_pin_the_host_key holds the two equal.
+# exactly the key its identity channel reported, over the session the
+# collection's guest session builder opens for every pinned connection, so a
+# command here never trusts a first-use answer and no task file writes an ssh
+# option.
 #
 # The caller names the command as a list of argv words and may give it
 # standard input, the only way a document or marker reaches the machine. The
-# caller owns the budget, as templates of frozen budgets. Every attempt is a
-# new connection; the result is censored and the caller names what failed.
-- name: Read the effective crypto policy on this connection's placement host
-  bootwright.core.ssh_key_policy:
-  register: managedos_install_anaconda_guest_ssh_policy
-
-- name: Publish the guest's own host key for this one connection
-  ansible.builtin.copy:
-    content: '{{ bootwright_os_install_request.address }} {{ managedos_install_anaconda_host_key | trim }}'
-    dest: '{{ managedos_install_anaconda_scratch }}/known_hosts'
-    owner: root
-    group: root
-    mode: '0600'
-  changed_when: false
-
-- name: Write the one-connection client configuration
-  ansible.builtin.copy:
-    content: '{{ managedos_install_anaconda_guest_ssh_policy.configuration }}'
-    dest: '{{ managedos_install_anaconda_scratch }}/ssh_config'
-    owner: root
-    group: root
-    mode: '0600'
-  changed_when: false
-
-- name: Name the algorithms the guest's key is accepted under
-  ansible.builtin.set_fact:
-    managedos_install_anaconda_guest_host_key_algorithms: >-
-      {{ managedos_install_anaconda_host_key
-         | bootwright.core.host_key_algorithms(managedos_install_anaconda_guest_ssh_policy.hostKeyAlgorithms) }}
-  changed_when: false
+# caller owns the budget, as templates of frozen budgets, and may name the
+# seconds one attempt may take; a command that outruns them answers no exit
+# status and names the timeout, so the caller's own step fails on it. Every
+# attempt is a new connection; the result is censored and the caller names
+# what failed.
+- name: Open the pinned connection to the installed machine
+  bootwright.core.managedos_guest_session:
+    state: present
+    directory: '{{ managedos_install_anaconda_scratch }}'
+    address: '{{ bootwright_os_install_request.address }}'
+    host_key: '{{ managedos_install_anaconda_host_key }}'
+  register: managedos_install_anaconda_guest_session
 
 - name: Run the fixed command as the fleet account on that exact key
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/ssh
-      - -F
-      - '{{ managedos_install_anaconda_scratch }}/ssh_config'
-      - -o
-      - 'UserKnownHostsFile={{ managedos_install_anaconda_scratch }}/known_hosts'
-      - -o
-      - GlobalKnownHostsFile=none
-      - -o
-      - KnownHostsCommand=none
-      - -o
-      - VerifyHostKeyDNS=no
-      - -o
-      - UpdateHostKeys=no
-      - -o
-      - CheckHostIP=no
-      - -o
-      - StrictHostKeyChecking=yes
-      - -o
-      - 'HostKeyAlgorithms={{ managedos_install_anaconda_guest_host_key_algorithms }}'
-      - -o
-      - IdentitiesOnly=yes
-      - -o
-      - IdentityAgent=none
-      - -o
-      - PasswordAuthentication=no
-      - -o
-      - KbdInteractiveAuthentication=no
-      - -o
-      - GSSAPIAuthentication=no
-      - -o
-      - HostbasedAuthentication=no
-      - -o
-      - ForwardAgent=no
-      - -o
-      - ProxyCommand=none
-      - -o
-      - ProxyJump=none
-      - -o
-      - ControlMaster=no
-      - -o
-      - ControlPath=none
-      - -o
-      - BatchMode=yes
-      - -o
-      - ConnectTimeout=10
-      - -o
-      - ServerAliveInterval=15
-      - -o
-      - ServerAliveCountMax=3
-      - -i
-      - '{{ bootwright_os_install_material.fleetIdentity }}'
-      - '{{ bootwright_os_install_request.user }}@{{ bootwright_os_install_request.address }}'
-      - '{{ managedos_install_anaconda_guest_command | map("quote") | join(" ") }}'
+  bootwright.core.managedos_guest_command:
+    address: '{{ bootwright_os_install_request.address }}'
+    user: '{{ bootwright_os_install_request.user }}'
+    identity: '{{ bootwright_os_install_material.fleetIdentity }}'
+    ssh_config: '{{ managedos_install_anaconda_guest_session.ssh_config }}'
+    known_hosts: '{{ managedos_install_anaconda_guest_session.known_hosts }}'
+    host_key_algorithms: '{{ managedos_install_anaconda_guest_session.host_key_algorithms }}'
+    policy_host_key_algorithms: '{{ managedos_install_anaconda_guest_session.policy_host_key_algorithms }}'
+    argv: '{{ managedos_install_anaconda_guest_command }}'
     stdin: '{{ managedos_install_anaconda_guest_stdin | default(omit) }}'
-    stdin_add_newline: false
+    timeout: '{{ managedos_install_anaconda_guest_timeout | default(managedos_install_anaconda_guest_seconds) | int }}'
   register: managedos_install_anaconda_guest
   retries: '{{ managedos_install_anaconda_guest_retries | default(0) | int }}'
   delay: '{{ managedos_install_anaconda_guest_pause | default(1) | int }}'
@@ -105,14 +42,7 @@
   changed_when: false
   no_log: true
 
-- name: Remove the one-connection known-hosts file
-  ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+- name: Close the pinned connection to the installed machine
+  bootwright.core.managedos_guest_session:
     state: absent
-  changed_when: false
-
-- name: Remove the one-connection client configuration
-  ansible.builtin.file:
-    path: '{{ managedos_install_anaconda_scratch }}/ssh_config'
-    state: absent
-  changed_when: false
+    directory: '{{ managedos_install_anaconda_scratch }}'
