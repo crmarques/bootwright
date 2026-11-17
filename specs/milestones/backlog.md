@@ -4073,8 +4073,6 @@ holding such a clause, the clauses pending and the work they enable.
   Bootwright-owned NetworkManager trunk and one owned nftables routing table
   per provider (X395); (7), turning on `net.ipv4.ip_forward`, is outside the
   approved boundary.
-- [D274](#d274): clauses (1) to (10), the code quality audit 005 program
-  (X497 to X500).
 
 ### D1
 
@@ -9198,8 +9196,8 @@ operation or push is authorized.
 
 ### D274
 
-**session-pending** (2026-11-16, the owner's request; clauses (1) to (9) are
-the session's): shown [code audit 005](../../audits/005-code-quality/report-fable.md)
+**owner** (2026-11-16, the owner's request; clauses (1) to (10) were taken by
+the session and the owner decided them on 2026-11-17, below): shown [code audit 005](../../audits/005-code-quality/report-fable.md)
 and its improvement plan, asks to "proceed with plan implementation". This
 authorizes, out of sequence for implementation, the plan's workstreams in its
 order: X497 (M1, B1435 to B1449) and X498 (M2, B1450 to B1452) for the
@@ -9231,6 +9229,18 @@ the owner's review:
     directive that is not cryptographic, as the Python readers already did;
     a site's client directive in `local.d` must move to the client
     configuration (B1479, added 2026-11-16).
+
+The owner's review of 2026-11-17 keeps clauses (1), (3), (4), (5), (6), (7),
+(8), (9) and (10) as written. For (2) the owner chose to move the readiness
+judgment to Go now: X547 did, and the worker keeps its own copy only to end its
+host-side waits, a named exception in the
+[architecture](../architecture.md#named-exceptions). Commands that print a
+service-account token stay allowed: they reveal no session token of the
+operator and are administrative work. The owner accepted the delivered defect
+fixes of X497 and X498 without an operator run, and pushes main themselves.
+The owner also asked (2026-11-17) to complete the whole plan, landing slices on
+focused checks with one full gate at the end, and that full gates fix every
+failure they find, earlier ones included.
 
 The owner's focused-check instruction of [D273](#d273) remains in force:
 until E2E acceptance, each slice lands on its focused checks, the changed

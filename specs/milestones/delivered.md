@@ -16905,3 +16905,88 @@ those journeys failed; X535's focused run had not selected the lifecycle
 package. The fixtures now derive the grants through the exported
 `ceph.WithClientCaps`, and the journeys pass with their assertions unchanged.
 
+## X497 — Audit 005 defect fixes (M1)
+
+Delivered in tree under [D274](backlog.md#d274) on 2026-11-16 and accepted
+by the owner on 2026-11-17 without an operator run, an acceptance the owner
+stated explicitly ([D165](backlog.md#d165)); no ledger row records a run.
+
+### B1435
+
+a single-Machine copy builds its member through the same key-part derivation as a several-Machine copy, so a key-authenticated copy to one Machine reaches the proof instead of refusing.
+
+### B1436
+
+the dnf output writer accepts every byte it is given and records overflow, so a preview over its bound is shown truncated; `controller uninstall` passes dnf output through the terminal escaping every other native output uses.
+
+### B1437
+
+the check that a remote firewalld start cannot cut SSH parses a rich rule that contains a colon as one rule and keeps checking the rules after it.
+
+### B1438
+
+formatting a value that holds secret material in an unexported field prints a redaction marker, not the bytes.
+
+### B1439
+
+an I/O, bound or permission failure reading the setup state refuses and keeps the state; only content that decodes with another format reads as written by another build ([D274](backlog.md#d274) (1)); the controller-record spec states it.
+
+### B1440
+
+a publication that fails after creating its revision directory removes it, so an applied context keeps no partial revision.
+
+### B1441
+
+the erase worker's atomic write removes its stage file when the write fails, so a later acknowledgement in that boot can succeed.
+
+### B1442
+
+every role lookup of a lent password file passes `rstrip=false`, and a structural test refuses a lookup of a lent secret file without it.
+
+### B1443
+
+the managed-service role checks the unit name against the grammar Go derives it by before it builds a path that destroy deletes.
+
+### B1444
+
+the Python runtime build sets a wait bound after cancellation and keeps a bounded stderr tail in its failure.
+
+### B1445
+
+the sudo argument guard checks the executable whether or not a `--` is present, and a missing file opener refuses instead of opening as root.
+
+### B1446
+
+the diff path that drops an error returns it, so a failed observation is never reported as no change.
+
+### B1447
+
+the rule against pinning one endpoint to two keys compares canonical address forms, so two spellings of one address cannot hold different keys.
+
+### B1448
+
+effective YAML output quotes `yes`, `no`, `on`, `off`, `y`, `n` and their case variants.
+
+### B1449
+
+the render script names the failed route probe and exits non-zero with a message instead of exiting silently.
+
+
+## X498 — Audit 005 defect fixes (M2)
+
+Delivered in tree under [D274](backlog.md#d274) on 2026-11-16 and accepted
+by the owner on 2026-11-17 without an operator run, an acceptance the owner
+stated explicitly ([D165](backlog.md#d165)); no ledger row records a run.
+
+### B1450
+
+the lifecycle checks the custody read's error before it checks whether the credential is missing, so a failed or cancelled read is never reported as a missing credential.
+
+### B1451
+
+the request identity check refuses a request that carries any arm besides its action's own, for all twelve arms.
+
+### B1452
+
+a quiescence probe that fails or is cancelled reports that cause, distinct from an unproved quiescence.
+
