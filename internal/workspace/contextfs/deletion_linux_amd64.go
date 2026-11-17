@@ -217,15 +217,12 @@ func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *direct
 					return err
 				}
 			}
-			if err := unlinkVerified(dir, name, identity, kind == syscall.S_IFDIR); err != nil {
-				return err
-			}
-			if err := s.syncDirectory(ctx, dir); err != nil {
+			if err := unlinkMatching(dir, name, identity, kind == syscall.S_IFDIR); err != nil {
 				return err
 			}
 		}
 	}
-	if action == syncContextTree {
+	if action == syncContextTree || action == removeContextTree && len(names) > 0 {
 		return s.syncDirectory(ctx, dir)
 	}
 	return dir.verify()
@@ -267,6 +264,10 @@ func unlinkVerified(parent *directory, name string, expected syscall.Stat_t, dir
 	if err := parent.verify(); err != nil {
 		return err
 	}
+	return unlinkMatching(parent, name, expected, directory)
+}
+
+func unlinkMatching(parent *directory, name string, expected syscall.Stat_t, directory bool) error {
 	file, err := openRelative(parent, name, pathHandle, 0)
 	if err != nil {
 		return state("context deletion target cannot be verified")
