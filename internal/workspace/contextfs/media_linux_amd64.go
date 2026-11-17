@@ -48,26 +48,36 @@ func (a *mediaArea) available(ctx context.Context, write bool) error {
 	return a.dir.Verify()
 }
 
-// ReadMedia takes a coherent read of the store under the shared root lock. It
-// creates, repairs and publishes nothing.
+type mediaStore struct{ store *Store }
+
 func (s *Store) ReadMedia(ctx context.Context, callback func(media.View) error) error {
+	return mediaStore{s}.read(ctx, callback)
+}
+
+func (s *Store) MutateMedia(ctx context.Context, callback func(media.Transaction) error) error {
+	return mediaStore{s}.mutate(ctx, callback)
+}
+
+// read takes a coherent read of the store under the shared root lock. It
+// creates, repairs and publishes nothing.
+func (m mediaStore) read(ctx context.Context, callback func(media.View) error) error {
 	if callback == nil {
 		return state("media read callback is missing")
 	}
-	return s.withMedia(ctx, false, func(area *mediaArea) error { return callback(area) })
+	return m.withMedia(ctx, false, func(area *mediaArea) error { return callback(area) })
 }
 
-// MutateMedia holds the exclusive root lock for the whole callback, so an image
+// mutate holds the exclusive root lock for the whole callback, so an image
 // cannot be published while another invocation reads the reservations that
 // freeze it. A stage the callback claims is the one thing that outlives it.
-func (s *Store) MutateMedia(ctx context.Context, callback func(media.Transaction) error) error {
+func (m mediaStore) mutate(ctx context.Context, callback func(media.Transaction) error) error {
 	if callback == nil {
 		return state("media mutation callback is missing")
 	}
-	return s.withMedia(ctx, true, func(area *mediaArea) error { return callback(area) })
+	return m.withMedia(ctx, true, func(area *mediaArea) error { return callback(area) })
 }
 
-func (s *Store) withMedia(ctx context.Context, write bool, callback func(*mediaArea) error) error {
+func (m mediaStore) withMedia(ctx context.Context, write bool, callback func(*mediaArea) error) error {
 	how := syscall.LOCK_SH
 	if write {
 		how = syscall.LOCK_EX
@@ -79,19 +89,19 @@ func (s *Store) withMedia(ctx context.Context, write bool, callback func(*mediaA
 		}
 		return err
 	}}
-	return s.withRead(ctx, how, scope, func(root *directory, registry contexts.Registry) error {
-		return s.lendMedia(ctx, root, registry, write, callback)
+	return m.store.withRead(ctx, how, scope, func(root *directory, registry contexts.Registry) error {
+		return m.lendMedia(ctx, root, registry, write, callback)
 	})
 }
 
-func (s *Store) lendMedia(ctx context.Context, root *directory, registry contexts.Registry, write bool, callback func(*mediaArea) error) error {
+func (m mediaStore) lendMedia(ctx context.Context, root *directory, registry contexts.Registry, write bool, callback func(*mediaArea) error) error {
 	stored, err := readControllerStored(ctx, root, registry)
 	if err != nil {
 		return safeError(err)
 	}
 	active := true
 	defer func() { active = false }()
-	area := &mediaArea{store: s, root: root, stored: stored, active: func() bool { return active }, write: write}
+	area := &mediaArea{store: m.store, root: root, stored: stored, active: func() bool { return active }, write: write}
 	dir, err := kernel.OpenDirectory(root, mediaContainer)
 	switch {
 	case err == nil:
@@ -100,7 +110,7 @@ func (s *Store) lendMedia(ctx context.Context, root *directory, registry context
 	case !errors.Is(err, syscall.ENOENT):
 		return safeError(err)
 	case write:
-		created, err := s.newDirectory(ctx, root, mediaContainer)
+		created, err := m.store.newDirectory(ctx, root, mediaContainer)
 		if err != nil {
 			return safeError(err)
 		}
