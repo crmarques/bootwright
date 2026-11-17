@@ -74,9 +74,9 @@ func TestAnInOperationRootTransactionWaitsOutAHeldRootLock(t *testing.T) {
 			if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
 				release := holdRoot(t, store, how)
 				defer release()
+				started := time.Now()
 				timer := time.AfterFunc(rootHold, release)
 				defer timer.Stop()
-				started := time.Now()
 				err := tx.Reserve(ctx, rootWaitClaim())
 				waited = time.Since(started)
 				return err
@@ -140,9 +140,9 @@ func TestCancellationEndsAnInOperationRootWait(t *testing.T) {
 	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
 		release := holdRoot(t, store, syscall.LOCK_EX)
 		defer release()
+		started := time.Now()
 		timer := time.AfterFunc(rootHold, cancel)
 		defer timer.Stop()
-		started := time.Now()
 		err := tx.Reserve(ctx, rootWaitClaim())
 		waited = time.Since(started)
 		return err
@@ -179,9 +179,9 @@ func TestAMutatorWaitsOutALogReadersHoldThenRefusesPastTheBound(t *testing.T) {
 	ctx := context.Background()
 	store := rootWaitFixture(t)
 	release := holdRoot(t, store, syscall.LOCK_SH)
+	started := time.Now()
 	timer := time.AfterFunc(rootHold, release)
 	defer timer.Stop()
-	started := time.Now()
 	entered := false
 	if err := store.MutateLifecycle(ctx, "example", func(lifecycle.Transaction) error { entered = true; return nil }); err != nil || !entered {
 		t.Fatalf("a mutator beside a reader's short hold = %v, entered %t", err, entered)
@@ -208,9 +208,9 @@ func TestAMutatorWaitsOutALogReadersHoldThenRefusesPastTheBound(t *testing.T) {
 func waitsOutAReader(t *testing.T, store *Store, name string, mutate func() error) {
 	t.Helper()
 	release := holdRoot(t, store, syscall.LOCK_SH)
+	started := time.Now()
 	timer := time.AfterFunc(rootHold, release)
 	defer timer.Stop()
-	started := time.Now()
 	if err := mutate(); err != nil {
 		t.Fatalf("%s beside a reader's short hold = %#v", name, diagnostics.Of(err))
 	}

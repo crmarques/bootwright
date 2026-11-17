@@ -855,7 +855,6 @@ func endHolder(t *testing.T, path string) {
 // handler is armed before it reports, so the check never rests on how a shell
 // delivers a trap during its wait.
 func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
-	t.Parallel()
 	shell := func(script string) func() *exec.Cmd {
 		return func() *exec.Cmd { return exec.Command("/bin/sh", "-c", script) }
 	}
@@ -870,7 +869,6 @@ func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
 		}},
 	} {
 		t.Run(check.name, func(t *testing.T) {
-			t.Parallel()
 			runner := sweepingRunner(t, check.adapter)
 			runner.drain = 2 * time.Second
 			var output bytes.Buffer
@@ -896,7 +894,6 @@ func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
 // after the adapter exits is cut at the drain: the run returns at its bound,
 // and the completed record it read is no result.
 func TestARunReturnsAtItsDrainWhenADescendantHoldsItsOutput(t *testing.T) {
-	t.Parallel()
 	holder := filepath.Join(t.TempDir(), "holder")
 	t.Cleanup(func() { endHolder(t, holder) })
 	runner := sweepingRunner(t, func() *exec.Cmd {
