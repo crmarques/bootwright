@@ -16480,3 +16480,21 @@ its own effect and removal evidence, and `managedservice.MirrorSource` builds
 the mirror's source once. Requests, digests and goldens are unchanged. An
 independent review of the custody paths found no defect.
 
+## X522 — One walker for the role tests
+
+### B1492
+
+Split from B1467 under [D274](backlog.md#d274) (audit 005 W6.2). The
+collection's unit tests share one task loader, walker and interpreter
+(`role_tasks.py`): blocks in order with rescue and always, a block's `when`
+inherited and tested again per task, a register set when its task is skipped,
+`changed_when`, `failed_when`, `ignore_errors`, loops, and includes resolved in
+the role with the condition ansible-core gives each. Its self-tests compare it
+with ansible-core's own block, include and conditional objects on a fixture
+role without running a play. The role tests moved onto it, keeping each
+deliberate difference as an assertion of its own. The register-order rule
+walks nested tasks and `set_fact` names; the three reads it then flagged are
+exempted by rule (a fact another task file or the defaults provide, a block's
+lazy `vars`) and tested. No role changed. Running role entry points through
+ansible-core (W6.1) stays on B1467.
+
