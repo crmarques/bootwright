@@ -8,11 +8,15 @@ import (
 )
 
 func inspectArtifacts(ctx context.Context, area secretstore.Area, selector secretstore.Selector, index indexRecord) (int, bool, error) {
-	paths, err := obsoleteArtifacts(ctx, area, selector, index)
+	paths, err := listedArtifacts(ctx, area, selector, index, false)
 	return len(paths), len(paths) != 0, err
 }
 
 func obsoleteArtifacts(ctx context.Context, area secretstore.Area, selector secretstore.Selector, index indexRecord) ([]string, error) {
+	return listedArtifacts(ctx, area, selector, index, true)
+}
+
+func listedArtifacts(ctx context.Context, area secretstore.Area, selector secretstore.Selector, index indexRecord, publishing bool) ([]string, error) {
 	obsolete, count, err := rootArtifacts(ctx, area)
 	if err != nil {
 		return nil, err
@@ -22,7 +26,7 @@ func obsoleteArtifacts(ctx context.Context, area secretstore.Area, selector secr
 		return nil, err
 	}
 	obsolete, count = append(obsolete, stored...), count+entries
-	identities, entries, err := identityArtifacts(ctx, area, selector, index)
+	identities, entries, err := identityArtifacts(ctx, area, selector, index, publishing)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +123,7 @@ func storedArtifacts(ctx context.Context, area secretstore.Area, index indexReco
 	return obsolete, count, nil
 }
 
-func identityArtifacts(ctx context.Context, area secretstore.Area, selector secretstore.Selector, index indexRecord) ([]string, int, error) {
+func identityArtifacts(ctx context.Context, area secretstore.Area, selector secretstore.Selector, index indexRecord, publishing bool) ([]string, int, error) {
 	identities, err := area.Entries(ctx, "identities")
 	if err != nil {
 		return nil, 0, areaFailure(ctx, "store.corrupt", "secret identities cannot be enumerated safely", err)
@@ -141,6 +145,10 @@ func identityArtifacts(ctx context.Context, area secretstore.Area, selector secr
 		if entry.Directory || !strings.HasSuffix(entry.Name, ".json") || !validID(name, "ver-") && !validID(name, "bind-") || entry.Size <= 0 || entry.Size > selectorMaximum {
 			return nil, 0, secretstore.Failure("store.corrupt", "secret identity reservation is invalid")
 		}
+		delete(reserved, name)
+		if !publishing {
+			continue
+		}
 		data, exists, err := area.Read(ctx, "identities/"+entry.Name, selectorMaximum)
 		if err != nil || !exists {
 			return nil, 0, areaFailure(ctx, "store.corrupt", "secret identity reservation is missing or unsafe", err)
@@ -149,7 +157,6 @@ func identityArtifacts(ctx context.Context, area secretstore.Area, selector secr
 		if decodeCanonical(data, selectorMaximum, 16, &identity) != nil || identity.FormatVersion != formatVersion || identity.Context != selector.Context || identity.ID != name {
 			return nil, 0, secretstore.Failure("store.corrupt", "secret identity reservation is invalid")
 		}
-		delete(reserved, name)
 	}
 	if len(reserved) != 0 {
 		return nil, 0, secretstore.Failure("store.corrupt", "referenced secret identity reservation is missing")
