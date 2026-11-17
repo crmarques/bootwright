@@ -1,8 +1,13 @@
-"""Both Python crypto-policy reducers give the verdict and configuration the Go reducer's corpus names."""
+"""The Python crypto-policy reducer gives the verdict and configuration the Go reducer's corpus names.
+
+ceph_tunnel owns the reducer and the key-type table, because it runs alone on a
+host; ssh_key_policy reads both from it and only words its own refusal.
+"""
 
 import json
 from pathlib import Path
 import unittest
+from unittest import mock
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_tunnel, ssh_key_policy
 
@@ -51,3 +56,10 @@ class SSHCryptoPolicyCorpusTests(unittest.TestCase):
         named = {line.split()[0].lower() for line in lines}
         self.assertEqual(named, set(ssh_key_policy.DIRECTIVES))
         self.assertEqual(named, set(ceph_tunnel.CRYPTO_DIRECTIVES))
+
+    def test_ssh_key_policy_reads_the_reducer_and_table_ceph_tunnel_owns(self):
+        self.assertIs(ssh_key_policy.DIRECTIVES, ceph_tunnel.CRYPTO_DIRECTIVES)
+        self.assertEqual(ssh_key_policy.ALGORITHMS, {key_type: ",".join(names) for key_type, names in ceph_tunnel.HOST_KEY_ALGORITHMS.items()})
+        with mock.patch.object(ceph_tunnel, "crypto_policy", return_value="Ciphers aes256-gcm@openssh.com\n") as reducer:
+            self.assertEqual(ssh_key_policy.configuration("any"), "Ciphers aes256-gcm@openssh.com\n")
+        reducer.assert_called_once_with("any")

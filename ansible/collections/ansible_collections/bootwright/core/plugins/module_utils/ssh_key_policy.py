@@ -6,25 +6,14 @@ import os
 import re
 import stat
 
-from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, ceph_tunnel
 
 POLICY_PATH = "/etc/crypto-policies/back-ends/openssh.config"
 MAX_POLICY = 64 * 1024
-ALGORITHMS = {
-    "ssh-ed25519": "ssh-ed25519",
-    "ssh-rsa": "rsa-sha2-512,rsa-sha2-256",
-    "ecdsa-sha2-nistp256": "ecdsa-sha2-nistp256",
-    "ecdsa-sha2-nistp384": "ecdsa-sha2-nistp384",
-    "ecdsa-sha2-nistp521": "ecdsa-sha2-nistp521",
-}
-# Same crypto-only boundary as internal/machine/sshlocal/policy.go. Reject
-# everything else rather than evaluate Include, Match exec or connection data.
-DIRECTIVES = frozenset((
-    "ciphers", "macs", "kexalgorithms", "gssapikexalgorithms",
-    "hostkeyalgorithms", "pubkeyacceptedalgorithms", "pubkeyacceptedkeytypes",
-    "hostbasedacceptedalgorithms", "hostbasedkeytypes", "casignaturealgorithms",
-    "requiredrsasize", "rsaminsize", "rekeylimit",
-))
+# ceph_tunnel runs alone on a host, so it owns the key-type table and the
+# crypto-only boundary internal/machine/sshlocal/policy.go also holds.
+ALGORITHMS = {key_type: ",".join(names) for key_type, names in ceph_tunnel.HOST_KEY_ALGORITHMS.items()}
+DIRECTIVES = ceph_tunnel.CRYPTO_DIRECTIVES
 
 
 class PolicyError(ValueError):
@@ -63,17 +52,10 @@ def configuration(data):
     """Keep only closed crypto directives, letting OpenSSH evaluate list modifiers."""
     if len(data) > MAX_POLICY:
         raise PolicyError("the placement host SSH crypto policy exceeds its byte limit")
-    lines = []
-    for raw in data.splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if not line:
-            continue
-        match = re.fullmatch(r"([A-Za-z]+)\s*(?:=\s*|\s+)([A-Za-z0-9@.,_+^*?!/ -]+)", line)
-        disabled_gssapi = match is not None and match.group(1).lower() == "gssapikeyexchange" and match.group(2).strip().lower() == "no"
-        if match is None or (match.group(1).lower() not in DIRECTIVES and not disabled_gssapi):
-            raise PolicyError("the placement host SSH crypto policy has unsupported syntax or a non-crypto directive")
-        lines.append(line)
-    return "\n".join(lines) + ("\n" if lines else "")
+    try:
+        return ceph_tunnel.crypto_policy(data)
+    except ceph_tunnel.TunnelRefusal:
+        raise PolicyError("the placement host SSH crypto policy has unsupported syntax or a non-crypto directive") from None
 
 
 def effective_policy(data, run=bounded_process.run):
