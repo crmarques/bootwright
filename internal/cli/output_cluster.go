@@ -471,7 +471,7 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 			monitors = append(monitors, field{Label: label, Value: monitor.Host + "  " + monitor.FQDN + "  " + monitor.Address})
 		}
 		text.mutedFields(monitors...)
-		text.mutedVerbatimFields(field{Label: "Ceph command", Value: ceph.CephCommand})
+		text.mutedVerbatimFields(field{Label: "Ceph command", Value: ceph.CephCommand, Tone: "command"})
 	}
 	if ceph.Dashboard != nil {
 		text.mutedFields(dashboardAccessFields(ceph.Dashboard)...)
@@ -482,10 +482,12 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 	text.emphasizedSubsection("Evidence")
 	fields := []field{{Label: "Status", Value: ceph.Status, Tone: "state"}}
 	if ceph.Status != inspection.StatusReady {
-		fields = append(fields, field{Label: "Reason", Value: ceph.Reason}, field{Label: "Next", Value: ceph.Remedy})
+		fields = append(fields, field{Label: "Reason", Value: ceph.Reason}, field{Label: "Next", Value: ceph.Remedy, Tone: "command"})
 	} else if full {
-		fields = append(fields, field{Label: "FSID", Value: ceph.FSID}, field{Label: "Image", Value: ceph.Image.Reference},
-			field{Label: "Digest", Value: ceph.Image.Digest}, field{Label: "Platform", Value: ceph.Image.Platform}, specializationsField(ceph.Specializations))
+		specializations := specializationsField(ceph.Specializations)
+		specializations.Tone = "muted"
+		fields = append(fields, field{Label: "FSID", Value: ceph.FSID, Tone: "muted"}, field{Label: "Image", Value: ceph.Image.Reference, Tone: "muted"},
+			field{Label: "Digest", Value: ceph.Image.Digest, Tone: "muted"}, field{Label: "Platform", Value: ceph.Image.Platform, Tone: "muted"}, specializations)
 	}
 	text.mutedFields(fields...)
 	writeResources(text, ceph.Resources, full)
@@ -553,7 +555,7 @@ func dashboardAccessFields(d *inspection.Dashboard) []field {
 	}
 	fields = append(fields, field{Label: "Dashboard status", Value: d.Status, Tone: "state", Note: note})
 	if d.CertificateSHA256 != "" {
-		fields = append(fields, field{Label: "Certificate SHA-256", Value: colonHex(d.CertificateSHA256) + "  (self-signed; compare before accepting the browser warning)"})
+		fields = append(fields, field{Label: "Certificate SHA-256", Value: colonHex(d.CertificateSHA256) + "  (self-signed; compare before accepting the browser warning)", Tone: "muted"})
 	}
 	return fields
 }
@@ -561,13 +563,11 @@ func dashboardAccessFields(d *inspection.Dashboard) []field {
 func endpointAccessFields(endpoints []inspection.Endpoint, full bool) []field {
 	fields := []field{}
 	for _, e := range endpoints {
-		value := e.Service + "  " + e.Status
+		note := "  (as the apply proved it; diff --observe reads it live)"
 		if e.Reason != "" {
-			value += ": " + e.Reason
-		} else {
-			value += "  (as the apply proved it; diff --observe reads it live)"
+			note = ": " + e.Reason
 		}
-		fields = append(fields, field{Label: "Endpoint", Value: value})
+		fields = append(fields, field{Label: "Endpoint " + e.Service, Value: e.Status, Tone: "state", Note: note})
 		if !full {
 			continue
 		}
@@ -579,7 +579,7 @@ func endpointAccessFields(endpoints []inspection.Endpoint, full bool) []field {
 			if e.Issuer == inspection.IssuerCephadm {
 				note = "(cephadm-signed; compare before accepting the browser warning)"
 			}
-			fields = append(fields, field{Value: colonHex(e.CertificateSHA256) + "  " + note})
+			fields = append(fields, field{Value: colonHex(e.CertificateSHA256) + "  " + note, Tone: "muted"})
 		}
 	}
 	return fields
@@ -599,15 +599,20 @@ func writeAccessCommands(text *display, contextName, cluster string, commands []
 }
 
 func writeAccessCommandRows(text *display, contextName, cluster string, commands []inspection.AccessCommand, full bool) {
+	width := 0
+	for _, command := range commands {
+		width = max(width, displayCellWidth(escapeDisplayLine(command.Command)))
+	}
 	for _, command := range commands {
 		tone := "state"
 		if command.Status == inspection.StatusNotApplicable || command.Status == inspection.StatusNotImplemented {
-			tone = ""
+			tone = "muted"
 		}
-		text.mutedFields(field{Label: command.Command, Value: command.Status, Tone: tone})
+		label := command.Command + strings.Repeat(" ", width-displayCellWidth(escapeDisplayLine(command.Command)))
+		text.mutedFields(field{Label: label, Value: command.Status, Tone: tone})
 		switch command.Status {
 		case inspection.StatusReady:
-			text.mutedVerbatimLines([]string{accessTemplate(contextName, cluster, command)})
+			text.commandLines([]string{accessTemplate(contextName, cluster, command)})
 		case inspection.StatusNotApplicable:
 			if full {
 				text.mutedLines([]string{command.Reason})

@@ -34,6 +34,6 @@ func writeAdminCredentials(out io.Writer, command string, result *lifecycle.Upda
 	}
 	var text display
 	text.headline("OK", "Updated administrator credentials for "+result.Cluster)
-	text.mutedFields(field{Label: "User", Value: result.User}, field{Label: "Next", Value: "bootwright cluster info --context " + result.Context + " --name " + result.Cluster + " --secrets"})
+	text.mutedFields(field{Label: "User", Value: result.User}, field{Label: "Next", Value: "bootwright cluster info --context " + result.Context + " --name " + result.Cluster + " --secrets", Tone: "command"})
 	return text.writeTo(out)
 }

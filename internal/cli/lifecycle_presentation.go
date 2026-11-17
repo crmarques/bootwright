@@ -136,20 +136,20 @@ func (d *display) lifecycleSteps(result lifecycle.PlanResult) {
 			if state == "" {
 				state = "pending"
 			}
-			detail := state
+			detail := styleMuted(" · "+escapeDisplayLine(state), r.options)
 			if selected := selectionMarker(planned); selected != "" {
-				detail += " · " + selected
+				detail += styleMuted(" · "+escapeDisplayLine(selected), r.options)
 			}
 			if len(planned.Consumes) != 0 {
-				detail += " · " + strings.Join(planned.Consumes, ", ")
+				detail += styleMuted(" · ", r.options) + presentationStyle(escapeDisplayLine(strings.Join(planned.Consumes, ", ")), stateStyleCode("warning"), r.options)
 			}
 			if r.options.Detail == "full" {
 				if waiting := waitMarker(planned); waiting != "" {
-					detail += " · " + waiting
+					detail += styleMuted(" · "+escapeDisplayLine(waiting), r.options)
 				}
 			}
 			action := lifecycleActionLabel(planned.Description, planned.Object, r.options)
-			r.styledParagraph(action+styleMuted(" · "+escapeDisplayLine(detail), r.options), fmt.Sprintf("    %s %d. ", marker, index+1), "plain")
+			r.styledParagraph(action+detail, fmt.Sprintf("    %s %d. ", marker, index+1), "plain")
 			for _, impact := range planned.Impacts {
 				r.paragraph(impact, "      ", "muted")
 			}

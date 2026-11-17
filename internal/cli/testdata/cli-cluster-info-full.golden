@@ -19,17 +19,17 @@
       Ingress domain        *.apps.edge.example.test
       Console user      kubeadmin
       Console password  hidden; rerun with --secrets --name edge
-      cluster exec  ready
+      cluster exec        ready
       bootwright cluster exec --context lab --name edge --node node-01 -- <command>...
-      cluster keyring  not-applicable
+      cluster keyring     not-applicable
       applies to managed CephClusters only
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name edge
-      cluster kubectl  ready
+      cluster kubectl     ready
       bootwright cluster kubectl --context lab --name edge -- <command>...
-      cluster oc  ready
+      cluster oc          ready
       bootwright cluster oc --context lab --name edge -- <command>...
-      cluster rsh  ready
+      cluster rsh         ready
       bootwright cluster rsh --context lab --name edge --node node-01
     Nodes
       node-01  controlPlane  (Machine host-0)
@@ -64,17 +64,17 @@
       Ingress domain        *.apps.okd-lab.example.test
       Console user      kubeadmin
       Console password  hidden; rerun with --secrets --name okd-lab
-      cluster exec  ready
+      cluster exec        ready
       bootwright cluster exec --context lab --name okd-lab --node node-01 -- <command>...
-      cluster keyring  not-applicable
+      cluster keyring     not-applicable
       applies to managed CephClusters only
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name okd-lab
-      cluster kubectl  ready
+      cluster kubectl     ready
       bootwright cluster kubectl --context lab --name okd-lab -- <command>...
-      cluster oc  ready
+      cluster oc          ready
       bootwright cluster oc --context lab --name okd-lab -- <command>...
-      cluster rsh  ready
+      cluster rsh         ready
       bootwright cluster rsh --context lab --name okd-lab --node node-01
     Nodes
       node-01  controlPlane  (Machine host-0)
@@ -92,18 +92,18 @@
     Topology
       Type  CephCluster
     Access
-      cluster exec  not-applicable
+      cluster exec        not-applicable
       the external CephCluster archive declares no node roster; sessions apply to managed
       CephClusters
-      cluster keyring  not-applicable
+      cluster keyring     not-applicable
       applies to managed CephClusters only
       cluster kubeconfig  not-applicable
       applies to OpenShiftClusters only
-      cluster kubectl  not-applicable
+      cluster kubectl     not-applicable
       applies to OpenShiftClusters only
-      cluster oc  not-applicable
+      cluster oc          not-applicable
       applies to OpenShiftClusters only
-      cluster rsh  not-applicable
+      cluster rsh         not-applicable
       the external CephCluster archive declares no node roster; sessions apply to managed
       CephClusters
 
@@ -114,17 +114,17 @@
       Release     9.9.1.2
       Admin node  rhel-01
     Access
-      cluster exec  ready
+      cluster exec        ready
       bootwright cluster exec --context lab --name storage --node rhel-01 -- <command>...
-      cluster keyring  ready
+      cluster keyring     ready
       bootwright cluster keyring --context lab --name storage --client <client>
       cluster kubeconfig  not-applicable
       applies to OpenShiftClusters only
-      cluster kubectl  not-applicable
+      cluster kubectl     not-applicable
       applies to OpenShiftClusters only
-      cluster oc  not-applicable
+      cluster oc          not-applicable
       applies to OpenShiftClusters only
-      cluster rsh  ready
+      cluster rsh         ready
       bootwright cluster rsh --context lab --name storage --node rhel-01
       Monitors  rhel-01  rhel-01.lab.test  192.0.2.11
                 rhel-02  rhel-02.lab.test  192.0.2.12
@@ -137,14 +137,14 @@
       Dashboard status     ready
       Certificate SHA-256  AB:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C
                            (self-signed; compare before accepting the browser warning)
-      Endpoint  mgmt-gateway  ready  (as the apply proved it; diff --observe reads it live)
-                https://192.0.2.50:9443/
-                CD:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E
-                (cephadm-signed; compare before accepting the browser warning)
-      Endpoint  nfs.files  ready  (as the apply proved it; diff --observe reads it live)
-                nfs://192.0.2.60:2049/
-      Endpoint  rgw.objects  unproved: the apply did not prove this endpoint reachable
-                https://objects.lab.test:8443/
+      Endpoint mgmt-gateway  ready  (as the apply proved it; diff --observe reads it live)
+                             https://192.0.2.50:9443/
+                             CD:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E
+                             (cephadm-signed; compare before accepting the browser warning)
+      Endpoint nfs.files     ready  (as the apply proved it; diff --observe reads it live)
+                             nfs://192.0.2.60:2049/
+      Endpoint rgw.objects   unproved: the apply did not prove this endpoint reachable
+                             https://objects.lab.test:8443/
     Evidence
       Status           ready
       FSID             6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b

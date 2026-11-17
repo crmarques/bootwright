@@ -520,7 +520,7 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	// is selected, so its dry run names the baseline and neither the example's
 	// target tools nor its host binding.
 	plan, _ := contextRun(t, services, 0, "controller", "install", "--dry-run")
-	for _, expected := range []string{"Scope     baseline", "[UNKNOWN]  Controller runtime", "Outcome  planned", "Next     bootwright controller install"} {
+	for _, expected := range []string{"Scope     baseline", "[UNKNOWN]   Controller runtime", "Outcome  planned", "Next     bootwright controller install"} {
 		if !strings.Contains(plan, expected) {
 			t.Fatalf("baseline dry-run lacks %q:\n%s", expected, plan)
 		}

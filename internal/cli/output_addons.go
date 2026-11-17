@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"io"
 	"strings"
 
@@ -29,13 +28,13 @@ func writeAddOns(out io.Writer, command string, result *catalog.ListResult, stru
 	if structured {
 		return writeStructuredResult(out, command, shown, []diagnostic{}, []string{}, 0)
 	}
-	var text strings.Builder
-	text.WriteString("NAME  PROVIDES  REQUIRES  OLM PACKAGE  DEFAULT SOURCE  CONFIGURATION\n")
-	for _, entry := range shown.AddOns {
-		fmt.Fprintf(&text, "%s  %s  %s  %s  %s  %s\n", entry.Name, joinedOrNone(entry.Provides), joinedOrNone(entry.Requires), textOrNone(entry.OLMPackage), textOrNone(entry.DefaultSource), joinedOrNone(entry.Configuration))
+	rows := make([][]string, 0, len(result.AddOns))
+	for _, entry := range result.AddOns {
+		rows = append(rows, []string{entry.Name, joinedOrNone(entry.Provides), joinedOrNone(entry.Requires), textOrNone(entry.OLMPackage), textOrNone(entry.DefaultSource), joinedOrNone(entry.Configuration)})
 	}
-	_, err := io.WriteString(out, text.String())
-	return err
+	var text display
+	text.resourceTable([]string{"NAME", "PROVIDES", "REQUIRES", "OLM PACKAGE", "DEFAULT SOURCE", "CONFIGURATION"}, rows, tableStyle{Kind: "add-on", Identity: 0})
+	return text.writeTo(out)
 }
 func joinedOrNone(values []string) string { return textOrNone(strings.Join(values, ",")) }
 func textOrNone(value string) string {

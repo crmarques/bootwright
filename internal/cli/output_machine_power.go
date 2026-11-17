@@ -108,7 +108,7 @@ func writePowerTable(text *display, result *power.Results) {
 	for _, row := range result.Machines {
 		rows = append(rows, []string{row.Machine, displayValue(row.Power), displayValue(row.Previous), displayValue(row.LogLocation)})
 	}
-	text.table([]string{"MACHINE", "POWER", "PREVIOUS", "LOGS"}, rows)
+	text.resourceTable([]string{"MACHINE", "POWER", "PREVIOUS", "LOGS"}, rows, tableStyle{Kind: "machine", Identity: 0, States: []int{1}})
 }
 
 func writeSingleMachinePower(out io.Writer, result power.Result) error {

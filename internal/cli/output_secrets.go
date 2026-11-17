@@ -345,7 +345,7 @@ func writeEncryptionStatus(out io.Writer, command string, result *encryption.Sta
 		}
 		status = append(status,
 			field{Label: "Implementation", Value: implementation.Type},
-			field{Label: "State", Value: implementation.State},
+			field{Label: "State", Value: implementation.State, Tone: "state"},
 			field{Label: "Store", Value: implementation.Store.ID},
 			field{Label: "Key custody", Value: implementation.KeyCustody.ID},
 			field{Label: "Active key", Value: activeKey},
@@ -360,7 +360,7 @@ func writeEncryptionStatus(out io.Writer, command string, result *encryption.Sta
 		for _, key := range sortedEncryptionKeys(result.Keys) {
 			rows = append(rows, []string{key.ID, key.State, strconv.FormatUint(key.Seals, 10)})
 		}
-		text.table([]string{"KEY", "STATE", "SEALS"}, rows)
+		text.resourceTable([]string{"KEY", "STATE", "SEALS"}, rows, tableStyle{Kind: "key", Identity: 0, States: []int{1}})
 	}
 	text.section("Items")
 	text.fields(
@@ -372,7 +372,7 @@ func writeEncryptionStatus(out io.Writer, command string, result *encryption.Sta
 	)
 	if result.Items.CleanupRequired {
 		text.section("")
-		text.fields(field{Label: "Next", Value: secrets.Command(result.Context.Name, "encryption init")})
+		text.fields(field{Label: "Next", Value: secrets.Command(result.Context.Name, "encryption init"), Tone: "command"})
 	}
 	return text.writeTo(out)
 }

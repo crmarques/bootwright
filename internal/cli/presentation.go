@@ -105,6 +105,10 @@ func styleMuted(value string, options PresentationOptions) string {
 	return presentationStyle(value, "38;5;245", options)
 }
 
+func styleCommand(value string, options PresentationOptions) string {
+	return presentationStyle(value, "1", options)
+}
+
 func styleAccent(value string, options PresentationOptions) string {
 	return presentationStyle(value, "1;38;5;69", options)
 }
@@ -124,13 +128,13 @@ func stateStyleCode(value string) string {
 		state = word
 	}
 	switch state {
-	case "ok", "done", "ready", "passed", "success", "complete", "completed", "verified", "available", "on", "current", "unchanged", "reused", "trusted", "applied":
+	case "ok", "done", "ready", "passed", "success", "complete", "completed", "verified", "available", "on", "current", "unchanged", "reused", "trusted", "applied", "changed", "copied", "stored":
 		code = "38;5;35"
-	case "running", "active", "working", "create", "update", "observe", "preview":
+	case "running", "active", "working", "create", "update", "observe", "preview", "planned", "add":
 		code = "38;5;69"
-	case "warn", "warning", "pending", "queued", "waiting", "deferred", "unknown", "unproved", "unsupported", "data-loss", "unchecked", "off", "paused", "skipped", "not-applied", "stale", "orphaned", "not-applicable":
+	case "warn", "warning", "pending", "queued", "waiting", "deferred", "unknown", "unproved", "unsupported", "data-loss", "unchecked", "off", "paused", "skipped", "not-applied", "stale", "orphaned", "not-applicable", "initializing", "deleting", "replace", "remove":
 		code = "38;5;172"
-	case "fail", "failed", "error", "blocked", "unavailable", "missing", "mismatch", "canceled", "invalid", "not-implemented":
+	case "fail", "failed", "error", "blocked", "unavailable", "missing", "mismatch", "canceled", "invalid", "not-implemented", "unreadable":
 		code = "38;5;160"
 	}
 	return code

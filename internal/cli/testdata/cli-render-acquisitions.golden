@@ -1,3 +1,19 @@
-KIND  ARTIFACT  VERSION  CLASS  ORIGIN  SHA-256  SIZE  MACHINES  SELECTED BY
-client  helm  4.3.1  public  https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz  0000000000000000000000000000000000000000000000000000000000000000  20368240  controller  Environment/lab
-host package  podman  none  host repositories  the controller's dnf repositories  none  none  controller  Environment/lab
+  ○ acquisition | helm
+      KIND         client
+      VERSION      4.3.1
+      CLASS        public
+      ORIGIN       https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz
+      SHA-256      0000000000000000000000000000000000000000000000000000000000000000
+      SIZE         19 MiB
+      MACHINES     controller
+      SELECTED BY  Environment/lab
+
+  ○ acquisition | podman
+      KIND         host package
+      VERSION      none
+      CLASS        host repositories
+      ORIGIN       the controller's dnf repositories
+      SHA-256      none
+      SIZE         none
+      MACHINES     controller
+      SELECTED BY  Environment/lab

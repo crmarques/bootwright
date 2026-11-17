@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/crmarques/bootwright/internal/managedos/diskdiscovery"
@@ -56,23 +55,27 @@ func writeMachineDiscovery(out io.Writer, path string, result *diskdiscovery.Dis
 	if err := writeLifecycleOperation(out, result.Operation); err != nil {
 		return err
 	}
-	for _, inventory := range shown.Inventories {
-		if _, err := fmt.Fprintf(out, "\nDisk inventory for %s\n", inventory.Machine); err != nil {
-			return err
-		}
+	var text display
+	for _, inventory := range result.Inventories {
+		text.section("Disk inventory · " + inventory.Machine)
+		rows := make([][]string, 0, len(inventory.Disks))
 		for _, d := range inventory.Disks {
 			identity := "wwn:" + d.WWN
 			if d.WWN == "" {
 				identity = "serial:" + d.SerialNumber
 			}
-			if _, err := fmt.Fprintf(out, "  %s  sizeBytes=%d  model=%q  controller=%s  transport=%s\n", identity, d.SizeBytes, d.Model, d.ControllerPCIAddress, d.Transport); err != nil {
-				return err
-			}
+			rows = append(rows, []string{identity, humanBytes(d.SizeBytes), displayValue(d.Model), displayValue(d.ControllerPCIAddress), displayValue(d.Transport)})
+		}
+		text.resourceTable([]string{"DISK", "SIZE", "MODEL", "CONTROLLER", "TRANSPORT"}, rows, tableStyle{Kind: "disk", Identity: 0})
+	}
+	if result.Operation.Receipt.State == "done" {
+		text.section("")
+		text.verbatimFields(field{Label: "Next", Value: "bootwright plan --context " + result.Operation.Context.Name, Tone: "command"})
+	}
+	if len(text.blocks) != 0 {
+		if _, err := io.WriteString(out, "\n"); err != nil {
+			return err
 		}
 	}
-	if shown.Next != "" {
-		_, err := fmt.Fprintf(out, "\nNext: %s\n", shown.Next)
-		return err
-	}
-	return nil
+	return text.writeTo(out)
 }

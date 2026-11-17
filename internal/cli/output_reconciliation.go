@@ -346,7 +346,7 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 	}
 	closing := logFields(result.LogLocation, logsHint{Context: result.Context.Name, Operation: result.Receipt.Operation, Running: result.Receipt.State == "running"})
 	if result.NextCommand != "" {
-		closing = append(closing, field{Label: "Next", Value: result.NextCommand})
+		closing = append(closing, field{Label: "Next", Value: result.NextCommand, Tone: "command"})
 	}
 	if len(closing) != 0 {
 		text.section("")

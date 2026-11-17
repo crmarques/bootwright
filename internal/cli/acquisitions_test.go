@@ -21,9 +21,10 @@ func TestTheAcquisitionListIsOneSortedTableOrOneResult(t *testing.T) {
 	if err := writeAcquisitions(&text, "render acquisitions", list, api.Catalog{}, false); err != nil {
 		t.Fatal(err)
 	}
-	lines := strings.Split(strings.TrimSpace(text.String()), "\n")
-	if len(lines) != 3 || !strings.HasPrefix(lines[0], "KIND  ARTIFACT") || !strings.HasPrefix(lines[1], "client  helm  4.3.1  public") || !strings.Contains(lines[2], "  a,b  Proxy/egress") || !strings.Contains(lines[1], "  none  10  controller  none") {
-		t.Fatalf("table:\n%s", text.String())
+	listed := text.String()
+	helm, squid := strings.Index(listed, "acquisition | helm\n"), strings.Index(listed, "acquisition | docker.io/ubuntu/squid\n")
+	if helm < 0 || squid < helm || !strings.Contains(listed[helm:squid], "SIZE         10 B\n") || !strings.Contains(listed[squid:], "MACHINES     a,b\n") || !strings.Contains(listed[squid:], "SELECTED BY  Proxy/egress\n") {
+		t.Fatalf("table:\n%s", listed)
 	}
 	var structured bytes.Buffer
 	if err := writeAcquisitions(&structured, "render acquisitions", list, api.Catalog{}, true); err != nil {

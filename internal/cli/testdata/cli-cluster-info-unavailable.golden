@@ -18,16 +18,16 @@
       Ingress domain        *.apps.edge.example.test
       Console user      kubeadmin
       Console password  hidden; rerun with --secrets --name edge
-      cluster exec  ready
+      cluster exec        ready
       bootwright cluster exec --context lab --name edge --node node-01 -- <command>...
-      cluster keyring  not-applicable
+      cluster keyring     not-applicable
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name edge
-      cluster kubectl  ready
+      cluster kubectl     ready
       bootwright cluster kubectl --context lab --name edge -- <command>...
-      cluster oc  ready
+      cluster oc          ready
       bootwright cluster oc --context lab --name edge -- <command>...
-      cluster rsh  ready
+      cluster rsh         ready
       bootwright cluster rsh --context lab --name edge --node node-01
     Nodes
       node-01  controlPlane  (Machine host-0)
@@ -61,19 +61,19 @@
       Ingress domain        *.apps.okd-lab.example.test
       Console user      kubeadmin
       Console password  hidden; rerun with --secrets --name okd-lab
-      cluster exec  ready
+      cluster exec        ready
       bootwright cluster exec --context lab --name okd-lab --node node-01 -- <command>...
-      cluster keyring  not-applicable
+      cluster keyring     not-applicable
       cluster kubeconfig  unavailable
       this context holds no administrator kubeconfig for okd-lab until an apply proves its
       installation complete; run bootwright apply --context lab
-      cluster kubectl  unavailable
+      cluster kubectl     unavailable
       this context holds no administrator kubeconfig for okd-lab until an apply proves its
       installation complete; run bootwright apply --context lab
-      cluster oc  unavailable
+      cluster oc          unavailable
       this context holds no administrator kubeconfig for okd-lab until an apply proves its
       installation complete; run bootwright apply --context lab
-      cluster rsh  ready
+      cluster rsh         ready
       bootwright cluster rsh --context lab --name okd-lab --node node-01
     Nodes
       node-01  controlPlane  (Machine host-0)
@@ -93,12 +93,12 @@
     Topology
       Type  CephCluster
     Access
-      cluster exec  not-applicable
-      cluster keyring  not-applicable
+      cluster exec        not-applicable
+      cluster keyring     not-applicable
       cluster kubeconfig  not-applicable
-      cluster kubectl  not-applicable
-      cluster oc  not-applicable
-      cluster rsh  not-applicable
+      cluster kubectl     not-applicable
+      cluster oc          not-applicable
+      cluster rsh         not-applicable
 
   ○ cluster | storage · unavailable
     Topology
@@ -106,15 +106,15 @@
       Management  managed
       Release     9.9.1.2
     Access
-      cluster exec  unavailable
+      cluster exec        unavailable
       the Machine rhel-01, which runs node rhel-01, has no proved host key; bootwright apply
       --context lab --stage machines records it
-      cluster keyring  unavailable
+      cluster keyring     unavailable
       the CephCluster storage declares no CephClient
       cluster kubeconfig  not-applicable
-      cluster kubectl  not-applicable
-      cluster oc  not-applicable
-      cluster rsh  unavailable
+      cluster kubectl     not-applicable
+      cluster oc          not-applicable
+      cluster rsh         unavailable
       the Machine rhel-01, which runs node rhel-01, has no proved host key; bootwright apply
       --context lab --stage machines records it
     Evidence

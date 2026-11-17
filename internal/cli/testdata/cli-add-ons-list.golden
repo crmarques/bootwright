@@ -1,7 +1,41 @@
-NAME  PROVIDES  REQUIRES  OLM PACKAGE  DEFAULT SOURCE  CONFIGURATION
-acm  none  none  advanced-cluster-management  redhat-operators  hub,mce,subscription,timeout
-fdf  dataFoundation  none  odf-operator  none  cephConsumerRef,defaultStorageClass,multiCloudGateway,subscription,timeout
-gitops  none  none  openshift-gitops-operator  redhat-operators  bootstrap,subscription,timeout
-kubevirt  kubevirt  none  kubevirt-hyperconverged  redhat-operators  subscription,timeout
-metallb  metallb  none  metallb-operator  redhat-operators  pools,subscription,timeout
-nmstate  nmstate  none  kubernetes-nmstate-operator  redhat-operators  subscription,timeout
+  ○ add-on | acm
+      PROVIDES        none
+      REQUIRES        none
+      OLM PACKAGE     advanced-cluster-management
+      DEFAULT SOURCE  redhat-operators
+      CONFIGURATION   hub,mce,subscription,timeout
+
+  ○ add-on | fdf
+      PROVIDES        dataFoundation
+      REQUIRES        none
+      OLM PACKAGE     odf-operator
+      DEFAULT SOURCE  none
+      CONFIGURATION   cephConsumerRef,defaultStorageClass,multiCloudGateway,subscription,timeout
+
+  ○ add-on | gitops
+      PROVIDES        none
+      REQUIRES        none
+      OLM PACKAGE     openshift-gitops-operator
+      DEFAULT SOURCE  redhat-operators
+      CONFIGURATION   bootstrap,subscription,timeout
+
+  ○ add-on | kubevirt
+      PROVIDES        kubevirt
+      REQUIRES        none
+      OLM PACKAGE     kubevirt-hyperconverged
+      DEFAULT SOURCE  redhat-operators
+      CONFIGURATION   subscription,timeout
+
+  ○ add-on | metallb
+      PROVIDES        metallb
+      REQUIRES        none
+      OLM PACKAGE     metallb-operator
+      DEFAULT SOURCE  redhat-operators
+      CONFIGURATION   pools,subscription,timeout
+
+  ○ add-on | nmstate
+      PROVIDES        nmstate
+      REQUIRES        none
+      OLM PACKAGE     kubernetes-nmstate-operator
+      DEFAULT SOURCE  redhat-operators
+      CONFIGURATION   subscription,timeout

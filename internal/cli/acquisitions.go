@@ -2,10 +2,8 @@ package cli
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"slices"
-	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -59,7 +57,13 @@ func writeAcquisitions(out io.Writer, command string, list AcquisitionList, cata
 	if err != nil {
 		return err
 	}
+	acquired = slices.Clone(acquired)
+	slices.SortStableFunc(acquired, func(a, b Acquisition) int {
+		return strings.Compare(escapeDisplayLine(a.Kind)+"\x00"+escapeDisplayLine(a.Artifact)+"\x00"+escapeDisplayLine(a.Consumer),
+			escapeDisplayLine(b.Kind)+"\x00"+escapeDisplayLine(b.Artifact)+"\x00"+escapeDisplayLine(b.Consumer))
+	})
 	shown := acquisitionsPresentation{Acquisitions: []acquisitionPresentation{}}
+	rows := make([][]string, 0, len(acquired))
 	for _, item := range acquired {
 		machines := slices.Clone(item.Machines)
 		slices.Sort(machines)
@@ -72,23 +76,18 @@ func writeAcquisitions(out io.Writer, command string, list AcquisitionList, cata
 		}
 		shown.Acquisitions = append(shown.Acquisitions, acquisitionPresentation{Kind: escapeDisplayLine(item.Kind), Artifact: escapeDisplayLine(item.Artifact), Version: escapeDisplayLine(item.Version),
 			Origin: escapeDisplayLine(item.Origin), Class: escapeDisplayLine(item.Class), SHA256: escapeDisplayLine(item.SHA256), Bytes: item.Bytes, Machines: machines, Consumer: escapeDisplayLine(item.Consumer)})
+		size := "none"
+		if item.Bytes > 0 {
+			size = humanBytes(item.Bytes)
+		}
+		raw := slices.Compact(slices.Sorted(slices.Values(item.Machines)))
+		rows = append(rows, []string{item.Kind, item.Artifact, textOrNone(item.Version), item.Class, textOrNone(item.Origin),
+			textOrNone(item.SHA256), size, joinedOrNone(raw), textOrNone(item.Consumer)})
 	}
-	slices.SortStableFunc(shown.Acquisitions, func(a, b acquisitionPresentation) int {
-		return strings.Compare(a.Kind+"\x00"+a.Artifact+"\x00"+a.Consumer, b.Kind+"\x00"+b.Artifact+"\x00"+b.Consumer)
-	})
 	if structured {
 		return writeStructuredResult(out, command, shown, []diagnostic{}, []string{}, 0)
 	}
-	var text strings.Builder
-	text.WriteString("KIND  ARTIFACT  VERSION  CLASS  ORIGIN  SHA-256  SIZE  MACHINES  SELECTED BY\n")
-	for _, item := range shown.Acquisitions {
-		size := "none"
-		if item.Bytes > 0 {
-			size = strconv.FormatInt(item.Bytes, 10)
-		}
-		fmt.Fprintf(&text, "%s  %s  %s  %s  %s  %s  %s  %s  %s\n", item.Kind, item.Artifact, textOrNone(item.Version), item.Class, textOrNone(item.Origin),
-			textOrNone(item.SHA256), size, joinedOrNone(item.Machines), textOrNone(item.Consumer))
-	}
-	_, err = io.WriteString(out, text.String())
-	return err
+	var text display
+	text.resourceTable([]string{"KIND", "ARTIFACT", "VERSION", "CLASS", "ORIGIN", "SHA-256", "SIZE", "MACHINES", "SELECTED BY"}, rows, tableStyle{Kind: "acquisition", Identity: 1})
+	return text.writeTo(out)
 }

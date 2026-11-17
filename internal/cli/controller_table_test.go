@@ -49,7 +49,7 @@ func TestANotReadyControllerCheckShowsTheTableAndNoPlan(t *testing.T) {
 	report.Table.Runtime = "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — not prepared"
 	report.Next = "bootwright controller install"
 	got := runControllerResult(t, report, diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run bootwright controller install"), "controller", "check")
-	for _, want := range []string{"    Packages  missing podman\n", "    Outcome  not-ready\n", "[FAIL]  Controller runtime"} {
+	for _, want := range []string{"    Packages  missing podman\n", "    Outcome  not-ready\n", "[FAIL]   Controller runtime"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("result %q lacks %q", got, want)
 		}

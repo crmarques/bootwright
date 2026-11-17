@@ -79,9 +79,11 @@ ASCII equivalents. Diagnostics use explicit `error` or `warning` severity with t
 and its detail group. Progress retains explicit state words such as `[RUNNING]`, `[DONE]`,
 `[SKIPPED]`, `[FAIL]`, `[CANCELED]` and `[UNKNOWN]`.
 
-Identity is bright white, nested details grey, active work and stage headings
-blue, verified completion green, attention or pending evidence amber, and
-failure red. Meaning remains explicit in text when color is absent. Warnings
+Identity is bright white; field labels, table headers and explanatory notes
+grey; values ordinary text; commands to run next bold; active work and stage
+headings blue, verified completion green, attention or pending evidence amber,
+and failure red. A plan step's authorization class is amber. Meaning remains
+explicit in text when color is absent. Warnings
 never change exit status. A resource's name remains identity text even when its
 spelling is a status word. Commands provide explicit identity and state-column
 metadata; the renderer never infers semantics from a header or a value.
@@ -92,11 +94,14 @@ Every command composes the same semantic blocks. Commands supply raw facts;
 one renderer owns escaping, styling, spacing, wrapping and column widths.
 Headlines, section headings and tables begin at two spaces; ordinary fields
 begin at four spaces. Resource info uses a resource heading followed by
-group headings at four spaces and details at six spaces, normally grey;
+group headings at four spaces and details at six spaces;
 [cluster info](#cluster-discovery) emphasizes access details. One blank line
 separates top-level groups. Fields align values within their group. Tables use
 three spaces between columns and switch to stacked resource records when the
-available width cannot hold them; every identity, state and detail is retained.
+available width cannot hold them; every identity, state and detail is retained,
+and a stacked record keeps each state column's semantic color. A headerless
+table whose leading columns fit half the width wraps its last column beneath
+that column's start.
 Plans group numbered changes by stage in frozen order and indent the effects
 beneath the change that causes them.
 
@@ -112,8 +117,8 @@ facts; `internal/cli` performs no environment or descriptor discovery.
 Standard output and standard error use their own injected terminal capabilities.
 SSH streams retain their original descriptors without presentation wrappers.
 
-Resource lists emphasize each white identity, grey descriptive columns and
-semantic states. Resource info groups only facts the existing service result
+Resource lists emphasize each white identity and semantic states; descriptive
+columns are ordinary text. Resource info groups only facts the existing service result
 provides: machine Placement, Access and Evidence; secret Identity and Custody;
 cluster Topology, Access, Evidence and Custody where meaningful. No view invents
 roles, counts, usage, fingerprints, timestamps or readiness. Compact detail
@@ -577,11 +582,13 @@ computed one. `reason` names why an image failed, and is present exactly when
 `verified` is `failed`. Whether a context reserves an image never hides
 whether it verified.
 
-The human table shows the columns `NAME`, `SIZE`, `DIGEST`, `COMPUTED` (only
-with `--checksums`), `ADDED`, `RELEASE`, `RESERVED` and `STATE`, with the digests
-prefixed by `sha256:`. `RELEASE` is the release's version and arch, such as
-`9.8 x86_64`, or `-`. `SIZE`, `DIGEST`, `ADDED` and `RELEASE` show `-` for an image
-whose record could not be read. `RESERVED` joins the reserving contexts with
+The human table shows `NAME`, `SIZE` in binary units such as `997 MiB`,
+`RELEASE`, `RESERVED`, `ADDED` (the date; the time too with `--detail full`)
+and `STATE`. `RELEASE` is the release's version and arch, such as `9.8 x86_64`,
+or `-`. `SIZE`, `ADDED` and `RELEASE` show `-` for an image whose record could
+not be read. With `--checksums` or `--detail full` a `Digests` group follows:
+under each name, `Recorded` and, with `--checksums`, `Computed`, red when it
+differs, each `sha256:`-prefixed or `-`. `RESERVED` joins the reserving contexts with
 commas, or shows `-`. `STATE` is `verified` for an `ok` image; `mismatch` for a
 `mismatch` one, which `media add` replaces or `media delete` removes; `failed`
 for a `failed` one; and `stored` for an image whose bytes were not read and
@@ -592,7 +599,7 @@ remove the image with `media delete`, replace it with `media add`, or repeat
 
 Before a replacing `media add` or a `media delete` prompts, standard output
 shows the stored image under a `Media replacement` or `Media deletion` title:
-its `Name`, then the `Size`, `Digest`, `Added` and `Source` of its record, or a
+its `Name`, then the `Size` (binary units and bytes), `Digest`, `Added` and `Source` of its record, or a
 `Record` field reading `unreadable` when the name holds an image whose record
 cannot be read. A replacement adds `New source`, the origin the new record
 would carry: when its pin adopts the stage an interrupted add retained for that
@@ -859,6 +866,8 @@ neutral text; URLs use the blue accent, usernames and explicitly revealed creden
 bold identity text, and applicable status values use semantic colors. Explanatory
 notes, fingerprints, hidden-password guidance and verbose evidence remain muted.
 Unimplemented command families and inapplicable access entries remain muted.
+Ready access templates and the Ceph command are bold commands, and each
+endpoint row is labeled with its service and shows its status.
 Resources lists each row as `<Kind>/<name>` with its
 status; full detail appends its scope. Full detail includes verbose frozen
 evidence and access templates; compact detail retains statuses, actionable

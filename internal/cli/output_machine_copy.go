@@ -58,7 +58,7 @@ func writeMachineCopy(out, errOut io.Writer, path string, result *machineaccess.
 	for _, row := range result.Machines {
 		rows = append(rows, []string{row.Machine, row.Status, strconv.FormatInt(row.Files, 10), strconv.FormatInt(row.Bytes, 10), row.Destination})
 	}
-	text.table([]string{"MACHINE", "STATUS", "FILES", "BYTES", "DESTINATION"}, rows)
+	text.resourceTable([]string{"MACHINE", "STATUS", "FILES", "BYTES", "DESTINATION"}, rows, tableStyle{Kind: "machine", Identity: 0, States: []int{1}})
 	if err := text.writeTo(out); err != nil {
 		return err
 	}

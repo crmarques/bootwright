@@ -124,7 +124,7 @@ func writeContainerInfo(text *display, contextName string, cluster inspection.Co
 	text.emphasizedSubsection("Evidence")
 	text.mutedFields(field{Label: "Installation", Value: details.Status, Tone: "state", Note: "  (recorded locally)"})
 	if details.Reason != "" {
-		text.mutedFields(field{Label: "Reason", Value: details.Reason}, field{Label: "Next", Value: details.Remedy})
+		text.mutedFields(field{Label: "Reason", Value: details.Reason}, field{Label: "Next", Value: details.Remedy, Tone: "command"})
 	}
 }
 

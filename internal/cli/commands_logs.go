@@ -128,7 +128,7 @@ func logFields(location string, hint logsHint) []field {
 	}
 	fields := []field{{Label: logLocationLabel, Value: location}}
 	if command := logsCommand(hint); command != "" {
-		fields = append(fields, field{Label: followLabel, Value: command})
+		fields = append(fields, field{Label: followLabel, Value: command, Tone: "command"})
 	}
 	return fields
 }

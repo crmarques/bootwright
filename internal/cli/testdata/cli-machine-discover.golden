@@ -16,7 +16,8 @@ verb: apply
 state: done
 next: none
 
-Disk inventory for rhel-01
-  wwn:0x5000000000000001  sizeBytes=1073741824  model="EXAMPLE SSD"  controller=0000:01:00.0  transport=scsi
+  Disk inventory · rhel-01
+  DISK                     SIZE    MODEL         CONTROLLER     TRANSPORT
+  wwn:0x5000000000000001   1 GiB   EXAMPLE SSD   0000:01:00.0   scsi
 
-Next: bootwright plan --context lab
+    Next  bootwright plan --context lab

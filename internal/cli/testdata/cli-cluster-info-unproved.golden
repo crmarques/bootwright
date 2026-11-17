@@ -5,14 +5,14 @@
       Release     9.9.1.2
       Admin node  rhel-01
     Access
-      cluster exec  ready
+      cluster exec        ready
       bootwright cluster exec --context lab --name storage --node rhel-01 -- <command>...
-      cluster keyring  ready
+      cluster keyring     ready
       bootwright cluster keyring --context lab --name storage --client <client>
       cluster kubeconfig  not-applicable
-      cluster kubectl  not-applicable
-      cluster oc  not-applicable
-      cluster rsh  ready
+      cluster kubectl     not-applicable
+      cluster oc          not-applicable
+      cluster rsh         ready
       bootwright cluster rsh --context lab --name storage --node rhel-01
       Monitors  rhel-01  rhel-01.lab.test  192.0.2.11
                 rhel-02  rhel-02.lab.test  192.0.2.12
@@ -26,9 +26,9 @@
                            manager's dashboard port did not present the stored certificate
       Certificate SHA-256  AB:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C
                            (self-signed; compare before accepting the browser warning)
-      Endpoint  mgmt-gateway  ready  (as the apply proved it; diff --observe reads it live)
-      Endpoint  nfs.files  ready  (as the apply proved it; diff --observe reads it live)
-      Endpoint  rgw.objects  unproved: the apply did not prove this endpoint reachable
+      Endpoint mgmt-gateway  ready  (as the apply proved it; diff --observe reads it live)
+      Endpoint nfs.files     ready  (as the apply proved it; diff --observe reads it live)
+      Endpoint rgw.objects   unproved: the apply did not prove this endpoint reachable
     Evidence
       Status  ready
     Resources

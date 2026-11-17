@@ -1,35 +1,103 @@
-metallb
-MetalLB load balancer with optional layer 2 address pools
+  metallb
+    MetalLB load balancer with optional layer 2 address pools
 
-Provides: metallb
-Requires: none
-Requires means: another instance selected for the same cluster must provide each required capability
-OLM package: metallb-operator
-Default source: redhat-operators
-Secret namespaces: metallb-system
-Channel and CSV lookup: oc get packagemanifest metallb-operator -n openshift-marketplace -o json
+    Provides           metallb
+    Requires           none  (another instance selected for the same cluster must provide each
+                       required capability)
+    OLM package        metallb-operator
+    Default source     redhat-operators
+    Secret namespaces  metallb-system
 
-Configuration under spec.packages.metallb:
-  FIELD                                                       TYPE                        REQUIRED                                                    DEFAULT
-  subscription.channel                                        string                      required                                                    none
-  subscription.startingCSV                                    string                      required                                                    none
-  subscription.source                                         DNS name                    optional                                                    redhat-operators
-  subscription.sourceNamespace                                name                        optional                                                    openshift-marketplace
-  subscription.catalogSource.name                             name                        required in subscription.catalogSource                      none
-  subscription.catalogSource.image                            image reference             required in subscription.catalogSource                      none
-  subscription.catalogSource.priority                         integer                     required in subscription.catalogSource                      none
-  subscription.catalogSource.pollInterval                     duration                    optional                                                    none
-  subscription.catalogSource.securityContextConfig            string (legacy|restricted)  optional                                                    restricted
-  timeout                                                     duration                    optional                                                    30m
-  pools[].name                                                name                        required in pools[]                                         none
-  pools[].addresses                                           list of string              required in pools[]                                         none
-  pools[].autoAssign                                          boolean                     optional                                                    true
-  pools[].l2.interface                                        string                      optional                                                    none
-  pools[].serviceAllocation.namespaces                        list of name                optional                                                    none
-  pools[].serviceAllocation.namespaceSelectors[].matchLabels  mapping                     required in pools[].serviceAllocation.namespaceSelectors[]  none
-  pools[].serviceAllocation.serviceSelectors[].matchLabels    mapping                     required in pools[].serviceAllocation.serviceSelectors[]    none
+  Channel and CSV lookup
+    oc get packagemanifest metallb-operator -n openshift-marketplace -o json
 
-Binding skeleton (replace each <field>):
+  Configuration under spec.packages.metallb
+  ○ field | subscription.channel
+      TYPE      string
+      REQUIRED  required
+      DEFAULT   none
+
+  ○ field | subscription.startingCSV
+      TYPE      string
+      REQUIRED  required
+      DEFAULT   none
+
+  ○ field | subscription.source
+      TYPE      DNS name
+      REQUIRED  optional
+      DEFAULT   redhat-operators
+
+  ○ field | subscription.sourceNamespace
+      TYPE      name
+      REQUIRED  optional
+      DEFAULT   openshift-marketplace
+
+  ○ field | subscription.catalogSource.name
+      TYPE      name
+      REQUIRED  required in subscription.catalogSource
+      DEFAULT   none
+
+  ○ field | subscription.catalogSource.image
+      TYPE      image reference
+      REQUIRED  required in subscription.catalogSource
+      DEFAULT   none
+
+  ○ field | subscription.catalogSource.priority
+      TYPE      integer
+      REQUIRED  required in subscription.catalogSource
+      DEFAULT   none
+
+  ○ field | subscription.catalogSource.pollInterval
+      TYPE      duration
+      REQUIRED  optional
+      DEFAULT   none
+
+  ○ field | subscription.catalogSource.securityContextConfig
+      TYPE      string (legacy|restricted)
+      REQUIRED  optional
+      DEFAULT   restricted
+
+  ○ field | timeout
+      TYPE      duration
+      REQUIRED  optional
+      DEFAULT   30m
+
+  ○ field | pools[].name
+      TYPE      name
+      REQUIRED  required in pools[]
+      DEFAULT   none
+
+  ○ field | pools[].addresses
+      TYPE      list of string
+      REQUIRED  required in pools[]
+      DEFAULT   none
+
+  ○ field | pools[].autoAssign
+      TYPE      boolean
+      REQUIRED  optional
+      DEFAULT   true
+
+  ○ field | pools[].l2.interface
+      TYPE      string
+      REQUIRED  optional
+      DEFAULT   none
+
+  ○ field | pools[].serviceAllocation.namespaces
+      TYPE      list of name
+      REQUIRED  optional
+      DEFAULT   none
+
+  ○ field | pools[].serviceAllocation.namespaceSelectors[].matchLabels
+      TYPE      mapping
+      REQUIRED  required in pools[].serviceAllocation.namespaceSelectors[]
+      DEFAULT   none
+
+  ○ field | pools[].serviceAllocation.serviceSelectors[].matchLabels
+      TYPE      mapping
+      REQUIRED  required in pools[].serviceAllocation.serviceSelectors[]
+      DEFAULT   none
+
+  Binding skeleton (replace each <field>)
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
 metadata:

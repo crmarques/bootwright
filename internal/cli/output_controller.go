@@ -278,7 +278,7 @@ func writeControllerReport(out, errOut io.Writer, command string, report *prereq
 		for _, action := range report.Progress {
 			rows = append(rows, []string{progressToken(action), controllerActionLabel(action.ID)})
 		}
-		text.rows(rows)
+		text.stateRows(rows, 0)
 	}
 	text.section("")
 	text.fields(controllerOutcomeFields(command, report)...)
@@ -296,13 +296,13 @@ func controllerOutcomeFields(command string, report *prerequisites.Report) []fie
 	if report.DryRun {
 		outcome += " (dry run)"
 	}
-	fields := []field{{Label: "Outcome", Value: outcome}}
+	fields := []field{{Label: "Outcome", Value: outcome, Tone: "state"}}
 	if report.PlanPresented && (report.Outcome == "changed" || report.Outcome == "unchanged") {
 		fields = append(fields, field{Label: "Readiness", Value: "all required prerequisites verified"})
 	}
 	fields = append(fields, logFields(report.LogLocation, logsHint{Install: report.SetupRun})...)
 	if next := controllerNextCommand(command, report); next != "" {
-		fields = append(fields, field{Label: "Next", Value: next})
+		fields = append(fields, field{Label: "Next", Value: next, Tone: "command"})
 	}
 	return fields
 }
@@ -538,7 +538,7 @@ func controllerChecksText(text *display, report *prerequisites.Report, table boo
 	}
 	if len(rows) != 0 {
 		text.section("Checks")
-		text.rows(rows)
+		text.stateRows(rows, 0)
 	}
 
 }

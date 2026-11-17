@@ -55,7 +55,7 @@ func writeMediaMutation(out io.Writer, result *media.MutationResult) error {
 	values := []field{{Label: "Name", Value: result.Name}}
 	if result.Outcome != "deleted" || result.SHA256 != "" {
 		values = append(values,
-			field{Label: "Size", Value: strconv.FormatInt(result.Size, 10)},
+			field{Label: "Size", Value: mediaSize(result.Size)},
 			field{Label: "Digest", Value: "sha256:" + result.SHA256},
 		)
 	}
@@ -75,31 +75,41 @@ func writeMediaList(out io.Writer, command string, result *media.ListResult, jso
 		text.headline("OK", "No stored media")
 		return text.writeTo(out)
 	}
-	headers := []string{"NAME", "SIZE", "DIGEST", "ADDED", "RELEASE", "RESERVED", "STATE"}
-	if result.Checksums {
-		headers = []string{"NAME", "SIZE", "DIGEST", "COMPUTED", "ADDED", "RELEASE", "RESERVED", "STATE"}
-	}
+	full := presentationFor(out).Detail == "full"
 	rows := make([][]string, 0, len(result.Media))
 	failed := []field{}
 	for _, row := range result.Media {
-		size, digest, added, release := "-", "-", "-", "-"
+		size, added, release := "-", "-", "-"
 		if row.SHA256 != "" {
-			size, digest, added = strconv.FormatInt(row.Size, 10), "sha256:"+row.SHA256, row.Added
+			size, added = humanBytes(row.Size), row.Added
+			if !full && len(added) >= len("2006-01-02") {
+				added = added[:len("2006-01-02")]
+			}
 		}
 		if row.SHA256 != "" && row.Release.Present() {
 			release = row.Release.Version + " " + row.Release.Arch
 		}
-		cells := []string{row.Name, size, digest}
-		if result.Checksums {
-			cells = append(cells, mediaDigest(row.Computed))
-		}
-		cells = append(cells, added, release, displayValue(strings.Join(row.ReservedBy, ",")), mediaStateToken(row))
-		rows = append(rows, cells)
+		rows = append(rows, []string{row.Name, size, release, displayValue(strings.Join(row.ReservedBy, ",")), added, mediaStateToken(row)})
 		if row.Verified == "failed" {
 			failed = append(failed, field{Label: row.Name, Value: row.Failure})
 		}
 	}
-	text.table(headers, rows)
+	text.resourceTable([]string{"NAME", "SIZE", "RELEASE", "RESERVED", "ADDED", "STATE"}, rows, tableStyle{Kind: "media", Identity: 0, States: []int{5}})
+	if result.Checksums || full {
+		text.section("Digests")
+		for _, row := range result.Media {
+			text.emphasizedSubsection(row.Name)
+			digests := []field{{Label: "Recorded", Value: mediaDigest(row.SHA256)}}
+			if result.Checksums {
+				tone := ""
+				if row.Computed != "" && row.Computed != row.SHA256 {
+					tone = "failure"
+				}
+				digests = append(digests, field{Label: "Computed", Value: mediaDigest(row.Computed), Tone: tone})
+			}
+			text.mutedVerbatimFields(digests...)
+		}
+	}
 	if len(failed) != 0 {
 		text.section("Failed")
 		text.fields(failed...)
@@ -108,6 +118,13 @@ func writeMediaList(out io.Writer, command string, result *media.ListResult, jso
 			"bootwright media add --name <name> --from-file <path>, or --from-url <url> --sha256 <digest>; repeat bootwright media list --checksums for one that changed while it was read."})
 	}
 	return text.writeTo(out)
+}
+
+func mediaSize(size int64) string {
+	if size < 1024 {
+		return strconv.FormatInt(size, 10) + " bytes"
+	}
+	return humanBytes(size) + " (" + strconv.FormatInt(size, 10) + " bytes)"
 }
 
 func mediaDigest(digest string) string {
@@ -189,7 +206,7 @@ func (p *MediaChangePresenter) PresentMediaChange(ctx context.Context, change me
 	switch {
 	case change.Stored && change.Readable:
 		values = append(values,
-			field{Label: "Size", Value: strconv.FormatInt(change.Entry.Size, 10)},
+			field{Label: "Size", Value: mediaSize(change.Entry.Size)},
 			field{Label: "Digest", Value: "sha256:" + change.Entry.SHA256},
 			field{Label: "Added", Value: change.Entry.Added},
 			field{Label: "Source", Value: change.Entry.Source},

@@ -99,14 +99,6 @@ func (d *display) mutedFields(values ...field) {
 	d.custom(func(r *displayRenderer) { r.fields(copy, true, false) })
 }
 
-func (d *display) rows(rows [][]string) {
-	d.custom(func(r *displayRenderer) { r.table(nil, rows, tableStyle{Identity: -1}) })
-}
-
-func (d *display) table(headers []string, rows [][]string) {
-	d.custom(func(r *displayRenderer) { r.table(headers, rows, tableStyle{Identity: -1}) })
-}
-
 func (d *display) resourceTable(headers []string, rows [][]string, style tableStyle) {
 	d.custom(func(r *displayRenderer) { r.table(headers, rows, style) })
 }
@@ -118,7 +110,7 @@ func (d *display) resourceHeading(kind, name, state string) {
 func (d *display) steps(items []step) {
 	d.custom(func(r *displayRenderer) {
 		for _, item := range items {
-			r.paragraph("○ "+item.Text, "    ", "plain")
+			r.paragraph(item.Text, "    ○ ", "plain")
 			for _, effect := range item.Effects {
 				r.paragraph(effect, "      ", "muted")
 			}
@@ -138,6 +130,32 @@ func (d *display) mutedVerbatimLines(items []string) {
 	d.custom(func(r *displayRenderer) {
 		for _, item := range items {
 			r.verbatimLine(escapeDisplayLine(item), "      ", "muted")
+		}
+	})
+}
+
+func (d *display) stateRows(rows [][]string, states ...int) {
+	d.custom(func(r *displayRenderer) { r.table(nil, rows, tableStyle{Identity: -1, States: states}) })
+}
+
+func (d *display) statusLine(value, state string) {
+	d.custom(func(r *displayRenderer) {
+		r.styledParagraph(presentationStyle(escapeDisplayLine(value), stateStyleCode(state), r.options), "    ", "plain")
+	})
+}
+
+func (d *display) commands(items []string) {
+	d.custom(func(r *displayRenderer) {
+		for _, item := range items {
+			r.verbatimLine(escapeDisplayLine(item), "    ", "command")
+		}
+	})
+}
+
+func (d *display) commandLines(items []string) {
+	d.custom(func(r *displayRenderer) {
+		for _, item := range items {
+			r.verbatimLine(escapeDisplayLine(item), "      ", "command")
 		}
 	})
 }
@@ -224,6 +242,10 @@ func (r *displayRenderer) tone(value, tone string) string {
 		return styleAccent(value, r.options)
 	case "state":
 		return styleState(value, r.options)
+	case "command":
+		return styleCommand(value, r.options)
+	case "failure":
+		return presentationStyle(value, stateStyleCode("failed"), r.options)
 	}
 	return value
 }
@@ -250,14 +272,13 @@ func (r *displayRenderer) fields(values []field, muted, verbatim bool) {
 	}
 	for _, value := range values {
 		label := escapeDisplayLine(value.Label)
-		indent, tone := "    ", "plain"
+		indent, tone, labelTone := "    ", "plain", "muted"
 		if muted {
-			indent, tone = "      ", "muted"
+			indent = "      "
 		}
-		labelTone := "muted"
 		if value.Tone != "" {
 			tone = value.Tone
-			if tone != "state" {
+			if tone == "identity" || tone == "accent" {
 				labelTone = "identity"
 			}
 		}
@@ -271,7 +292,7 @@ func (r *displayRenderer) fields(values []field, muted, verbatim bool) {
 			body += styleMuted(note, r.options)
 		}
 		prefix := label + strings.Repeat(" ", labelWidth-displayCellWidth(label)+displayGap)
-		if !verbatim && r.options.columns()-displayCellWidth(indent+prefix) < 12 {
+		if !verbatim && value.Tone != "command" && r.options.columns()-displayCellWidth(indent+prefix) < 12 {
 			if value.Tone == "" && value.Note == "" {
 				r.paragraph(value.Label+": "+value.Value, indent, tone)
 			} else {
@@ -281,7 +302,7 @@ func (r *displayRenderer) fields(values []field, muted, verbatim bool) {
 		}
 		width := r.options.columns() - displayCellWidth(indent+prefix)
 		lines := []string{body}
-		if !verbatim {
+		if !verbatim && value.Tone != "command" {
 			lines = wrapDisplayText(body, width)
 		}
 		for n, line := range lines {
@@ -365,37 +386,9 @@ func (r *displayRenderer) table(headers []string, rows [][]string, style tableSt
 		}
 		return false
 	}
-	if total > r.options.columns() && len(headers) == 0 {
-		for _, row := range rows {
-			r.paragraph(strings.Join(row, "  "), "    ", "plain")
-		}
-		return
-	}
-	if total > r.options.columns() && len(headers) > 0 {
-		for n, row := range rows {
-			if n > 0 {
-				r.gap()
-			}
-			headedState := -1
-			if style.Identity >= 0 && style.Identity < len(row) {
-				state := ""
-				for _, col := range style.States {
-					if col < len(row) {
-						state = row[col]
-						headedState = col
-						break
-					}
-				}
-				r.resourceHeading(style.Kind, row[style.Identity], state)
-			}
-			var values []field
-			for col, value := range row {
-				if col >= len(headers) || col == style.Identity || col == headedState {
-					continue
-				}
-				values = append(values, field{Label: headers[col], Value: value})
-			}
-			r.fields(values, true, false)
+	if total > r.options.columns() {
+		if len(headers) != 0 || !r.hangingRows(rows, widths, stateColumn) {
+			r.narrowTable(headers, rows, style, stateColumn)
 		}
 		return
 	}
@@ -412,7 +405,7 @@ func (r *displayRenderer) table(headers []string, rows [][]string, style tableSt
 				value = presentationASCII(value)
 			}
 			styled := value
-			if heading || style.Identity >= 0 {
+			if heading {
 				styled = styleMuted(value, r.options)
 			}
 			if !heading && col == style.Identity {
@@ -433,6 +426,92 @@ func (r *displayRenderer) table(headers []string, rows [][]string, style tableSt
 	for _, row := range rows {
 		printRow(row, false)
 	}
+}
+
+func (r *displayRenderer) narrowTable(headers []string, rows [][]string, style tableStyle, stateColumn func(int) bool) {
+	if len(headers) == 0 {
+		for _, row := range rows {
+			cells := make([]string, len(row))
+			for col, cell := range row {
+				cells[col] = escapeDisplayLine(cell)
+				if stateColumn(col) {
+					cells[col] = styleState(cells[col], r.options)
+				}
+			}
+			r.styledParagraph(strings.Join(cells, "  "), "    ", "plain")
+		}
+		return
+	}
+	for n, row := range rows {
+		if n > 0 {
+			r.gap()
+		}
+		headedState := -1
+		if style.Identity >= 0 && style.Identity < len(row) {
+			state := ""
+			for _, col := range style.States {
+				if col < len(row) {
+					state = row[col]
+					headedState = col
+					break
+				}
+			}
+			r.resourceHeading(style.Kind, row[style.Identity], state)
+		}
+		var values []field
+		for col, value := range row {
+			if col >= len(headers) || col == style.Identity || col == headedState {
+				continue
+			}
+			tone := ""
+			if stateColumn(col) {
+				tone = "state"
+			}
+			values = append(values, field{Label: headers[col], Value: value, Tone: tone})
+		}
+		r.fields(values, true, false)
+	}
+}
+
+// hangingRows aligns every column but the last and wraps the last beneath its
+// own start, when the leading columns leave it at least half the width.
+func (r *displayRenderer) hangingRows(rows [][]string, widths []int, stateColumn func(int) bool) bool {
+	last := len(widths) - 1
+	lead := 2
+	for _, width := range widths[:max(last, 0)] {
+		lead += width + 3
+	}
+	if last < 1 || lead > r.options.columns()/2 {
+		return false
+	}
+	for _, row := range rows {
+		var line strings.Builder
+		line.WriteString("  ")
+		for col := 0; col < min(len(row), last); col++ {
+			value := escapeDisplayLine(row[col])
+			styled := value
+			if stateColumn(col) {
+				styled = styleState(value, r.options)
+			}
+			line.WriteString(styled)
+			if col < len(row)-1 {
+				line.WriteString(strings.Repeat(" ", widths[col]-displayCellWidth(value)+3))
+			}
+		}
+		if len(row) <= last {
+			r.line(line.String())
+			continue
+		}
+		width := r.options.columns() - lead
+		for n, part := range wrapDisplayText(escapeDisplayLine(row[last]), width) {
+			if n == 0 {
+				r.emit(line.String()+part, displayCellWidth(part) <= width)
+				continue
+			}
+			r.emit(strings.Repeat(" ", lead)+part, displayCellWidth(part) <= width)
+		}
+	}
+	return true
 }
 
 func displayWidths(rows [][]string) []int {

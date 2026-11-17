@@ -37,7 +37,7 @@ func TestTrustReportNamesEveryEndpointActionAndFingerprint(t *testing.T) {
 		t.Fatalf("headline = %q", text)
 	}
 	for _, expected := range []string{
-		"MACHINE", "192.0.2.10", "[192.0.2.11]:2222", "add", "replace", "skip",
+		"node-a · add", "192.0.2.10", "[192.0.2.11]:2222", "add", "replace", "skip",
 		"SHA256:bbb (was SHA256:ccc)", "host key comes from its installation evidence",
 	} {
 		if !strings.Contains(text, expected) {
@@ -133,9 +133,9 @@ func TestTheTrustPlanNamesEveryPendingFingerprint(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "  Host-key trust plan for context lab: 3 machine(s) checked, 2 pending\n\n" +
-		"      MACHINE      node-a\n      ADDRESS      192.0.2.10\n      ACTION       add\n      KEY          ssh-ed25519\n      FINGERPRINT  SHA256:aaa\n\n" +
-		"      MACHINE      node-b\n      ADDRESS      [192.0.2.11]:2222\n      ACTION       replace\n      KEY          ssh-ed25519\n      FINGERPRINT  SHA256:bbb (was SHA256:ccc)\n\n" +
-		"      MACHINE      installed\n      ADDRESS      -\n      ACTION       skip\n      KEY          -\n      FINGERPRINT  host key comes from its installation evidence\n"
+		"  ○ machine | node-a · add\n      ADDRESS      192.0.2.10\n      KEY          ssh-ed25519\n      FINGERPRINT  SHA256:aaa\n\n" +
+		"  ○ machine | node-b · replace\n      ADDRESS      [192.0.2.11]:2222\n      KEY          ssh-ed25519\n      FINGERPRINT  SHA256:bbb (was SHA256:ccc)\n\n" +
+		"  ○ machine | installed · skip\n      ADDRESS      -\n      KEY          -\n      FINGERPRINT  host key comes from its installation evidence\n"
 	if out.String() != want {
 		t.Fatalf("plan = %q, want %q", out.String(), want)
 	}
@@ -258,8 +258,8 @@ func TestARemovalRowNamesTheKeyItRemovesAndWhy(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "  Host-key trust plan for context lab: 1 machine(s) checked, 2 pending\n\n" +
-		"      MACHINE      node-a\n      ADDRESS      192.0.2.10\n      ACTION       add\n      KEY          ssh-ed25519\n      FINGERPRINT  SHA256:aaa\n\n" +
-		"      MACHINE      retired\n      ADDRESS      192.0.2.10\n      ACTION       remove\n      KEY          ssh-ed25519\n      FINGERPRINT  SHA256:old (no longer declared; node-a now uses its address)\n"
+		"  ○ machine | node-a · add\n      ADDRESS      192.0.2.10\n      KEY          ssh-ed25519\n      FINGERPRINT  SHA256:aaa\n\n" +
+		"  ○ machine | retired · remove\n      ADDRESS      192.0.2.10\n      KEY          ssh-ed25519\n      FINGERPRINT  SHA256:old (no longer declared; node-a now uses its address)\n"
 	if plan.String() != want {
 		t.Fatalf("plan = %q, want %q", plan.String(), want)
 	}

@@ -78,7 +78,7 @@ func writeStoragePreflightText(out io.Writer, report *preflight.Report) error {
 			details = append(details, field{Label: "Capacity", Value: fmt.Sprintf("required %d %s; available %s; reserve %d; deficit %d", c.Required, c.Unit, available, c.Reserve, c.Deficit)})
 		}
 		if check.Next != "" {
-			details = append(details, field{Label: "Next", Value: check.Next})
+			details = append(details, field{Label: "Next", Value: check.Next, Tone: "command"})
 		}
 		text.mutedFields(details...)
 	}

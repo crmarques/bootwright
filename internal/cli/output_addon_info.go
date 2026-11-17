@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"io"
 	"strings"
 
@@ -47,13 +46,21 @@ func writeAddOnInfo(out io.Writer, command string, result *catalog.DescribeResul
 	if structured {
 		return writeStructuredResult(out, command, addOnInfoDocument{Package: shown}, []diagnostic{}, []string{}, 0)
 	}
-	var text strings.Builder
-	fmt.Fprintf(&text, "%s\n%s\n\n", shown.Name, shown.Summary)
-	fmt.Fprintf(&text, "Provides: %s\nRequires: %s\nRequires means: %s\n", joinedOrNone(shown.Provides), joinedOrNone(shown.Requires), shown.RequiresMeaning)
-	fmt.Fprintf(&text, "OLM package: %s\nDefault source: %s\nSecret namespaces: %s\nChannel and CSV lookup: %s\n\n", textOrNone(shown.OLMPackage), textOrNone(shown.DefaultSource), joinedOrNone(shown.Namespaces), textOrNone(shown.Lookup))
-	rows := [][4]string{{"FIELD", "TYPE", "REQUIRED", "DEFAULT"}}
-	widths := [3]int{}
-	for _, field := range shown.Configuration {
+	var text display
+	text.headline("", p.Name)
+	text.lines([]string{p.Summary})
+	text.section("")
+	text.fields(
+		field{Label: "Provides", Value: joinedOrNone(p.Provides)},
+		field{Label: "Requires", Value: joinedOrNone(p.Requires), Note: "  (" + addOnRequiresMeaning + ")"},
+		field{Label: "OLM package", Value: textOrNone(p.OLMPackage)},
+		field{Label: "Default source", Value: textOrNone(p.DefaultSource)},
+		field{Label: "Secret namespaces", Value: joinedOrNone(p.Namespaces)},
+	)
+	text.section("Channel and CSV lookup")
+	text.commands([]string{textOrNone(p.Lookup)})
+	rows := make([][]string, 0, len(p.Configuration))
+	for _, field := range p.Configuration {
 		required := "optional"
 		switch {
 		case field.Required:
@@ -65,19 +72,15 @@ func writeAddOnInfo(out io.Writer, command string, result *catalog.DescribeResul
 		if len(field.Values) > 0 {
 			kind += " (" + strings.Join(field.Values, "|") + ")"
 		}
-		rows = append(rows, [4]string{field.Path, kind, required, textOrNone(field.Default)})
+		rows = append(rows, []string{field.Path, kind, required, textOrNone(field.Default)})
 	}
-	for _, row := range rows {
-		for i := range widths {
-			widths[i] = max(widths[i], len(row[i]))
-		}
+	text.section("Configuration under spec.packages." + p.Name)
+	text.resourceTable([]string{"FIELD", "TYPE", "REQUIRED", "DEFAULT"}, rows, tableStyle{Kind: "field", Identity: 0})
+	text.section("Binding skeleton (replace each <field>)")
+	if err := text.writeTo(out); err != nil {
+		return err
 	}
-	fmt.Fprintf(&text, "Configuration under spec.packages.%s:\n", shown.Name)
-	for _, row := range rows {
-		fmt.Fprintf(&text, "  %-*s  %-*s  %-*s  %s\n", widths[0], row[0], widths[1], row[1], widths[2], row[2], row[3])
-	}
-	fmt.Fprintf(&text, "\nBinding skeleton (replace each <field>):\n%s", shown.Binding)
-	_, err := io.WriteString(out, text.String())
+	_, err := io.WriteString(out, p.Binding)
 	return err
 }
 

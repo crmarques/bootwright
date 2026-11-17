@@ -237,7 +237,7 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 	var text display
 	text.headline("OK", "Context "+result.Context.Name)
 	text.section("")
-	text.mutedFields(field{Label: "Mode", Value: displayValue(result.Context.Mode)})
+	text.mutedFields(field{Label: "Mode", Value: displayValue(result.Context.Mode), Tone: "state"})
 	writeStatusSetup(&text, result.SetupChecks)
 	writeStatusDesired(&text, result.Desired)
 	writeStatusClusters(&text, "Clusters", result.Clusters)
@@ -252,14 +252,15 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 	writeStatusReadiness(&text, result.Readiness)
 	if len(result.NextSteps) != 0 {
 		text.section("Next steps")
-		text.lines(result.NextSteps)
+		text.commands(result.NextSteps)
 	}
 	writeStatusLifecycle(&text, result)
 	text.section("Handoff")
 	if result.Handoff.Ready {
-		text.lines([]string{"ready"})
+		text.statusLine("ready", "ready")
 	} else {
-		text.lines(append([]string{"not ready"}, result.Handoff.Reasons...))
+		text.statusLine("not ready", "pending")
+		text.lines(result.Handoff.Reasons)
 	}
 	if len(result.Contradictions) != 0 {
 		text.section("Contradictions")
@@ -284,7 +285,7 @@ func writeStatusSetup(text *display, checks []lifecycle.SetupCheck) {
 		}
 		rows = append(rows, row)
 	}
-	text.rows(rows)
+	text.stateRows(rows, 0)
 }
 
 func writeStatusReadiness(text *display, gaps []lifecycle.ReadinessGap) {
@@ -296,7 +297,7 @@ func writeStatusReadiness(text *display, gaps []lifecycle.ReadinessGap) {
 	for _, gap := range gaps {
 		rows = append(rows, []string{gap.State, strings.ToUpper(gap.Kind[:1]) + gap.Kind[1:] + "/" + gap.Name})
 	}
-	text.rows(rows)
+	text.stateRows(rows, 0)
 }
 
 func writeStatusDesired(text *display, desired lifecycle.DesiredSummary) {
@@ -359,7 +360,7 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 	text.verbatimFields(
 		field{Label: "Operation", Value: displayValue(summary.Operation)},
 		field{Label: "Verb", Value: displayValue(summary.Verb)},
-		field{Label: "State", Value: displayValue(summary.State)},
+		field{Label: "State", Value: displayValue(summary.State), Tone: "state"},
 	)
 	if len(summary.Lineage) != 0 {
 		text.section("Lineage")

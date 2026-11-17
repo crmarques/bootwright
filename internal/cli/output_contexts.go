@@ -40,10 +40,10 @@ func contextSummaryFields(text *display, summary contexts.Summary) {
 	text.section("")
 	text.fields(
 		field{Label: "Name", Value: summary.Name},
-		field{Label: "Mode", Value: string(summary.Mode)},
+		field{Label: "Mode", Value: string(summary.Mode), Tone: "state"},
 		field{Label: "Current", Value: contextCurrent(summary.Current)},
 		field{Label: "Input", Value: contextInput(summary.Configured)},
-		field{Label: "Next", Value: contextNext(summary)},
+		field{Label: "Next", Value: contextNext(summary), Tone: "command"},
 	)
 }
 
@@ -98,7 +98,7 @@ func writeContextList(out io.Writer, result *contexts.ListResult) error {
 	for _, summary := range summaries {
 		rows = append(rows, []string{summary.Name, string(summary.Mode), contextCurrent(summary.Current), contextInput(summary.Configured)})
 	}
-	text.table([]string{"NAME", "MODE", "CURRENT", "INPUT"}, rows)
+	text.resourceTable([]string{"NAME", "MODE", "CURRENT", "INPUT"}, rows, tableStyle{Kind: "context", Identity: 0, States: []int{1}})
 	unfinished := [][]string{}
 	for _, summary := range summaries {
 		if summary.OperationsUnreadable {
@@ -114,7 +114,7 @@ func writeContextList(out io.Writer, result *contexts.ListResult) error {
 	}
 	if len(unfinished) != 0 {
 		text.section("Unfinished operations")
-		text.table([]string{"CONTEXT", "VERB", "STATE", "BUILD", "OPERATION"}, unfinished)
+		text.resourceTable([]string{"CONTEXT", "VERB", "STATE", "BUILD", "OPERATION"}, unfinished, tableStyle{Kind: "context", Identity: 0, States: []int{2}})
 	}
 	return text.writeTo(out)
 }

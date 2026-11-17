@@ -59,7 +59,7 @@ func TestMediaChangePresentationNamesWhatItCouldNotRead(t *testing.T) {
 			media.Change{Action: media.DeleteChange, Name: "demo.iso", Stored: true, Readable: true, Entry: managedos.MediaEntry{
 				Name: "demo.iso", Size: 4, SHA256: "abc", Source: "file:///images/de\x1bmo.iso", Added: "2026-09-15T09:00:00Z",
 			}},
-			"  Media deletion\n\n    Name    demo.iso\n    Size    4\n    Digest  sha256:abc\n    Added   2026-09-15T09:00:00Z\n    Source  file:///images/de\\u001bmo.iso\n",
+			"  Media deletion\n\n    Name    demo.iso\n    Size    4 bytes\n    Digest  sha256:abc\n    Added   2026-09-15T09:00:00Z\n    Source  file:///images/de\\u001bmo.iso\n",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

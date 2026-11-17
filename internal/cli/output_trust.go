@@ -82,7 +82,7 @@ func writeTrustTable(text *display, hosts []enrollment.HostReport) {
 			displayValue(trustDetail(host)),
 		})
 	}
-	text.table([]string{"MACHINE", "ADDRESS", "ACTION", "KEY", "FINGERPRINT"}, rows)
+	text.resourceTable([]string{"MACHINE", "ADDRESS", "ACTION", "KEY", "FINGERPRINT"}, rows, tableStyle{Kind: "machine", Identity: 0, States: []int{2}})
 }
 
 // trustHeadline reports what was recorded rather than what was examined, so a

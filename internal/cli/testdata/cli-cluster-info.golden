@@ -18,16 +18,16 @@
       Ingress domain        *.apps.edge.example.test
       Console user      kubeadmin
       Console password  hidden; rerun with --secrets --name edge
-      cluster exec  ready
+      cluster exec        ready
       bootwright cluster exec --context lab --name edge --node node-01 -- <command>...
-      cluster keyring  not-applicable
+      cluster keyring     not-applicable
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name edge
-      cluster kubectl  ready
+      cluster kubectl     ready
       bootwright cluster kubectl --context lab --name edge -- <command>...
-      cluster oc  ready
+      cluster oc          ready
       bootwright cluster oc --context lab --name edge -- <command>...
-      cluster rsh  ready
+      cluster rsh         ready
       bootwright cluster rsh --context lab --name edge --node node-01
     Nodes
       node-01  controlPlane  (Machine host-0)
@@ -61,16 +61,16 @@
       Ingress domain        *.apps.okd-lab.example.test
       Console user      kubeadmin
       Console password  hidden; rerun with --secrets --name okd-lab
-      cluster exec  ready
+      cluster exec        ready
       bootwright cluster exec --context lab --name okd-lab --node node-01 -- <command>...
-      cluster keyring  not-applicable
+      cluster keyring     not-applicable
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name okd-lab
-      cluster kubectl  ready
+      cluster kubectl     ready
       bootwright cluster kubectl --context lab --name okd-lab -- <command>...
-      cluster oc  ready
+      cluster oc          ready
       bootwright cluster oc --context lab --name okd-lab -- <command>...
-      cluster rsh  ready
+      cluster rsh         ready
       bootwright cluster rsh --context lab --name okd-lab --node node-01
     Nodes
       node-01  controlPlane  (Machine host-0)
@@ -88,12 +88,12 @@
     Topology
       Type  CephCluster
     Access
-      cluster exec  not-applicable
-      cluster keyring  not-applicable
+      cluster exec        not-applicable
+      cluster keyring     not-applicable
       cluster kubeconfig  not-applicable
-      cluster kubectl  not-applicable
-      cluster oc  not-applicable
-      cluster rsh  not-applicable
+      cluster kubectl     not-applicable
+      cluster oc          not-applicable
+      cluster rsh         not-applicable
 
   ○ cluster | storage · ready
     Topology
@@ -102,14 +102,14 @@
       Release     9.9.1.2
       Admin node  rhel-01
     Access
-      cluster exec  ready
+      cluster exec        ready
       bootwright cluster exec --context lab --name storage --node rhel-01 -- <command>...
-      cluster keyring  ready
+      cluster keyring     ready
       bootwright cluster keyring --context lab --name storage --client <client>
       cluster kubeconfig  not-applicable
-      cluster kubectl  not-applicable
-      cluster oc  not-applicable
-      cluster rsh  ready
+      cluster kubectl     not-applicable
+      cluster oc          not-applicable
+      cluster rsh         ready
       bootwright cluster rsh --context lab --name storage --node rhel-01
       Monitors  rhel-01  rhel-01.lab.test  192.0.2.11
                 rhel-02  rhel-02.lab.test  192.0.2.12
@@ -122,9 +122,9 @@
       Dashboard status     ready
       Certificate SHA-256  AB:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C
                            (self-signed; compare before accepting the browser warning)
-      Endpoint  mgmt-gateway  ready  (as the apply proved it; diff --observe reads it live)
-      Endpoint  nfs.files  ready  (as the apply proved it; diff --observe reads it live)
-      Endpoint  rgw.objects  unproved: the apply did not prove this endpoint reachable
+      Endpoint mgmt-gateway  ready  (as the apply proved it; diff --observe reads it live)
+      Endpoint nfs.files     ready  (as the apply proved it; diff --observe reads it live)
+      Endpoint rgw.objects   unproved: the apply did not prove this endpoint reachable
     Evidence
       Status  ready
     Resources
