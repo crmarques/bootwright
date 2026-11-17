@@ -291,7 +291,7 @@ func TestAProvidedHostOfAFIPSClusterIsPreparedOnlyWithItsObservedFIPSMode(t *tes
 func TestAClusterBlockReadsAProvidedHostsFIPSModeFromItsHostBlock(t *testing.T) {
 	scope := ClusterScope{Cluster: "example", Version: Version, Security: &Security{FIPS: true, CephXKeyType: "aes"}, Packages: &PackageRequest{Sources: []PackageSource{{Host: "tie"}}},
 		Hosts: []Host{{Name: "tie", Machine: "tie", Provided: true, Devices: []Device{}}}}
-	request, err := HostRequest{Version: HostVersion, Host: "tie", Cluster: scope, Pulls: []ImagePull{}}.canonical()
+	request, err := HostRequest{Version: HostVersion, Host: "tie", Cluster: scope, ImagesSeconds: hostImagesBudget, Pulls: []ImagePull{}}.canonical()
 	if err != nil {
 		t.Fatal(err)
 	}

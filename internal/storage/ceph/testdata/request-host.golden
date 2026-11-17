@@ -160,6 +160,7 @@
     "version": "ceph-core-v1"
   },
   "host": "node-1",
+  "imagesSeconds": 4285,
   "pulls": [],
   "version": "ceph-host-v1"
 }

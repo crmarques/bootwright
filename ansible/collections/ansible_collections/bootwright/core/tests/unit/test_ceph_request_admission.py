@@ -22,6 +22,7 @@ import pathlib
 import pytest
 import yaml
 from ansible.module_utils.common.arg_spec import ArgumentSpecValidator
+from ansible_collections.bootwright.core.tests.unit.ceph_goldens import IMAGES_SECONDS
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 DIGEST = "c" * 64
@@ -143,7 +144,7 @@ IMAGE = {
 }
 
 HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated", "gateway", "service", "settings")},
-        "host": "node-1", "pulls": [], "version": "ceph-host-v1"}
+        "host": "node-1", "imagesSeconds": IMAGES_SECONDS, "pulls": [], "version": "ceph-host-v1"}
 
 SMB = {
     "bindings": [],

@@ -18,7 +18,7 @@
     storage_ceph_host_changed: false
     storage_ceph_host_applied: []
     storage_ceph_host_plan_digest: ''
-    storage_ceph_host_pull_seconds: 4285
+    storage_ceph_host_pull_seconds: '{{ bootwright_ceph_host_request.imagesSeconds }}'
   no_log: true
 
 # Each step is one fixed module call that resumes from the host's own journals,

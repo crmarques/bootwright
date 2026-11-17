@@ -41,7 +41,7 @@ HOLDER_CALL = 60
 SSO_CALL = 120
 SSO_WINDOW = 600
 SSO_PAUSE = 10
-WORKER_CEILINGS = (640, 1920, 4285, 21600)
+WORKER_CEILINGS = (640, 1920, 21600)
 # The bootstrap call's own launcher ceiling and worker budget; the cluster block's Go deadline (cephDeadline) adds the call.
 BOOTSTRAP_CEILING = 1920
 BOOTSTRAP_BUDGET = 1800
@@ -484,12 +484,13 @@ def bootstrap_launcher(supervisor_source, host_source):
             "f.update(REMOTE_LIMIT=" + str(BOOTSTRAP_CEILING) + ",PHASE='bootstrap');f['main'](s)")
 
 
-def ssh_argv(host, key, known_hosts, source, worker_budget=None, *, worker_ceiling=640, ssh_config, host_key_algorithms):
+def ssh_argv(host, key, known_hosts, source, worker_budget=None, *, worker_ceiling=640, frozen_ceiling=False, ssh_config, host_key_algorithms):
     """SSH remote execution requires one string; quote only fixed worker code."""
     argv = ceph_ssh_policy.session_argv(ssh_config, known_hosts, host_key_algorithms, key, host["port"])
     arguments = ()
     if worker_budget is not None:
-        ceph_native.require(worker_ceiling in WORKER_CEILINGS and type(worker_budget) in (int, float) and 0 < worker_budget <= worker_ceiling, "transport")
+        fixed = worker_ceiling in WORKER_CEILINGS or frozen_ceiling and type(worker_ceiling) is int and 0 < worker_ceiling <= max(WORKER_CEILINGS)
+        ceph_native.require(fixed and type(worker_budget) in (int, float) and 0 < worker_budget <= worker_ceiling, "transport")
         arguments = (str(worker_budget),)
     argv.extend(["--", host["user"] + "@" + host["address"], remote_command.fixed_worker(source, *arguments)])
     return argv
@@ -543,7 +544,7 @@ class Transport:
         self.ssh_policy()
         self.preflight(ceph_native.read_regular(self.material["knownHosts"], private=True))
 
-    def _call(self, host, source, payload, timeout, worker_budget=None, *, worker_ceiling=640, failures=NATIVE_FAILURES):
+    def _call(self, host, source, payload, timeout, worker_budget=None, *, worker_ceiling=640, frozen_ceiling=False, failures=NATIVE_FAILURES):
         ceph_native.require(isinstance(self.material, dict), "material")
         package_material = {"packageCA" + str(i) for i in range(len(self.request.get("packages", {}).get("sources", [])))}
         allowed = {"sshKey", "knownHosts", "clusterPrivateKey", "clusterPublicKey", "registryJSON", "gatewayCertificate", "gatewayKey"}
@@ -563,7 +564,8 @@ class Transport:
             private_files.write(key, ceph_native.read_regular(self.material["sshKey"], private=True))
             private_files.write(known, known_bytes)
             private_files.write(config, self.ssh_policy()["configuration"].encode())
-            argv = ssh_argv(host, key, known, source, worker_budget, worker_ceiling=worker_ceiling, ssh_config=config, host_key_algorithms=algorithms)
+            argv = ssh_argv(host, key, known, source, worker_budget, worker_ceiling=worker_ceiling, frozen_ceiling=frozen_ceiling,
+                            ssh_config=config, host_key_algorithms=algorithms)
             sources = dict(payload.get("sources", {})) if isinstance(payload, dict) else {}
             private = payload.get("payload", {}).get("private", {}) if isinstance(payload, dict) else {}
             private = native_diagnostics.private_values(private)
@@ -706,9 +708,9 @@ class Transport:
             raise ceph_native.Refusal("material") from None
         return projection
 
-    def host_images(self, host, names, seconds):
-        """One long pull call under the share ``seconds`` of the images budget: the Ceph digest, or a batch of auxiliary digests."""
-        ceph_native.require(isinstance(names, list) and type(seconds) is int and 0 < seconds <= ceph_host_worker.REMOTE_LIMIT, "transport")
+    def host_images(self, host, names, seconds, ceiling):
+        """One long pull call under the share ``seconds`` of the frozen images budget ``ceiling``: the Ceph digest, or a batch of auxiliary digests."""
+        ceph_native.require(isinstance(names, list) and type(ceiling) is int and type(seconds) is int and 0 < seconds <= ceiling, "transport")
         materials = ("registryJSON", "registryCA") if "registryTrustBundleRef" in self.request else ("registryJSON",)
         ceph_native.require(all(name in self.material for name in materials), "material")
         try:
@@ -717,10 +719,11 @@ class Transport:
             raise ceph_native.Refusal("material") from None
         if "registryCA" in private:
             private["registryCA"] = self.trust_bundle(private["registryCA"])
-        payload = {"request": self.request, "host": host["name"], "phase": "images", "private": private, "pull": {"names": names, "seconds": seconds}}
-        source = ceph_host_worker.launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
+        payload = {"request": self.request, "host": host["name"], "phase": "images", "private": private,
+                   "pull": {"names": names, "seconds": seconds, "ceiling": ceiling}}
+        source = ceph_host_worker.launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker), ceiling)
         return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": seconds}, seconds + 60,
-                          worker_budget=seconds, worker_ceiling=ceph_host_worker.REMOTE_LIMIT)
+                          worker_budget=seconds, worker_ceiling=ceiling, frozen_ceiling=True)
 
     def packages(self, host):
         ceph_package_sources.source_for(self.request, host["name"])
@@ -1704,7 +1707,9 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
 
 def host_request(value):
     """A frozen host block request: its cluster's host scope and one of its hosts."""
-    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "pulls", "version"} and value["version"] == "ceph-host-v1")
+    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "imagesSeconds", "pulls", "version"}
+                        and value["version"] == "ceph-host-v1")
+    ceph_native.require(type(value["imagesSeconds"]) is int and 0 < value["imagesSeconds"] <= max(WORKER_CEILINGS))
     cluster = ceph_native.validate_scope(value["cluster"])
     ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)
@@ -1802,7 +1807,7 @@ def applied_ids(transport):
     return sorted(getattr(transport, "applied", None) or ())
 
 
-def host_step(request, step, request_digest, transport, *, plan_digest="", applied=(), pull=None, seconds=ceph_host_worker.REMOTE_LIMIT,
+def host_step(request, step, request_digest, transport, *, plan_digest="", applied=(), pull=None, seconds=None,
               clock=time.monotonic):
     """One phase of a host preparation apply, so its role reports each as a progress group.
 
@@ -1813,7 +1818,9 @@ def host_step(request, step, request_digest, transport, *, plan_digest="", appli
     cluster = request["cluster"]
     ceph_native.require(step in HOST_STEPS and ceph_native.digest(request_digest), "request")
     ceph_native.require((pull is not None) == (step == "images"), "request")
-    ceph_native.require(type(seconds) is int and 0 < seconds <= ceph_host_worker.REMOTE_LIMIT, "image-pull" if step == "images" else "request")
+    ceiling = request["imagesSeconds"]
+    seconds = ceiling if seconds is None else seconds
+    ceph_native.require(type(seconds) is int and 0 < seconds <= ceiling, "image-pull" if step == "images" else "request")
     host = next(item for item in cluster["hosts"] if item["name"] == request["host"])
     if step == "packages" and ceph_host_runtime.observes_fips(cluster, host):
         observed = transport.call(host, "fips_observe")
@@ -1825,7 +1832,7 @@ def host_step(request, step, request_digest, transport, *, plan_digest="", appli
     if step == "images":
         names = host_pull_names(request, pull)
         started = clock()
-        result = transport.host_images(host, names, seconds)
+        result = transport.host_images(host, names, seconds, ceiling)
         ceph_native.require(isinstance(result, dict) and set(result) == {"changed"} and type(result["changed"]) is bool, "evidence")
         remaining = seconds - int(clock() - started + 1)
         return {"changed": result["changed"], "specializations": applied_ids(transport), "seconds": max(remaining, 0)}
@@ -1865,7 +1872,7 @@ def execute_host(request, operation, request_digest, transport):
     if operation == "destroy":
         return {"changed": False, "evidence": host_evidence(released(request, request_digest), request_digest, request)}
     if operation == "apply":
-        changed, plan_digest, seconds = False, "", ceph_host_worker.REMOTE_LIMIT
+        changed, plan_digest, seconds = False, "", request["imagesSeconds"]
         pulls = [CEPH_IMAGE_GROUP] + [item["group"] for item in request["pulls"]]
         steps = [(step, None) for step in HOST_STEPS[:1]] + [("images", group) for group in pulls] + [(step, None) for step in HOST_STEPS[2:-1]]
         for step, group in steps:

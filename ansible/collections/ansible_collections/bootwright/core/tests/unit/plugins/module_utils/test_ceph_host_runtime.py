@@ -26,6 +26,7 @@ from pathlib import Path
 
 import pytest
 
+from ansible_collections.bootwright.core.tests.unit.ceph_goldens import IMAGES_SECONDS
 from ansible_collections.bootwright.core.plugins.module_utils import private_files
 from ansible_collections.bootwright.core.plugins.module_utils import (
     bounded_process, ceph_host_runtime as runtime, ceph_host_route_probe as probe, ceph_host_worker, ceph_native, ceph_native_observe as observe,
@@ -866,13 +867,13 @@ def prepared_image(worker, private):
     names = [entry["name"] for entry in worker.request.get("auxiliary", [])]
     changed = worker.images(private, ceph_pull())["changed"]
     if names:
-        changed = worker.images(private, {"names": names, "seconds": runtime.IMAGES_CALL_SECONDS})["changed"] or changed
+        changed = worker.images(private, {"names": names, "seconds": IMAGES_SECONDS, "ceiling": IMAGES_SECONDS})["changed"] or changed
     profiled = worker.profile(names)
     return {"changed": changed or profiled["changed"]}
 
 
-def ceph_pull(seconds=runtime.IMAGES_CALL_SECONDS):
-    return {"names": [], "seconds": seconds}
+def ceph_pull(seconds=IMAGES_SECONDS):
+    return {"names": [], "seconds": seconds, "ceiling": IMAGES_SECONDS}
 
 
 def concurrent_order(values):
@@ -1657,7 +1658,7 @@ def test_the_runtime_profile_pulls_nothing_and_needs_every_digest_the_images_cal
                                                 [probe_output(), probe_output()])
     names = ["haproxy", "keepalived"]
     assert worker.images({"registryJSON": registry(request_value)}, ceph_pull()) == {"changed": True}
-    assert worker.images({"registryJSON": registry(request_value)}, {"names": names, "seconds": 600}) == {"changed": True}
+    assert worker.images({"registryJSON": registry(request_value)}, {"names": names, "seconds": 600, "ceiling": IMAGES_SECONDS}) == {"changed": True}
     assert runtime.PROFILE not in markers.records
     pulled = markers.records.pop("auxiliary-keepalived-pulled.json")
     images.calls.clear()
@@ -1761,7 +1762,7 @@ def test_a_batch_pulls_its_images_at_once_each_with_its_own_broker_and_journal(r
 
     monkeypatch.setattr(ImageSet, "__call__", gated)
     names = ["haproxy", "keepalived", "prometheus"]
-    assert worker.images({"registryJSON": registry(request_value)}, {"names": names, "seconds": 900}) == {"changed": True}
+    assert worker.images({"registryJSON": registry(request_value)}, {"names": names, "seconds": 900, "ceiling": IMAGES_SECONDS}) == {"changed": True}
     assert timeouts == [900 - runtime.PULL_RESERVE] * 3
     assert sorted(broker.image for broker in auxiliary_brokers) == sorted([HAPROXY, KEEPALIVED, PROMETHEUS])
     scope = runtime.scope(request_value, "node-1")
@@ -1939,14 +1940,16 @@ def test_a_supervised_images_worker_cleans_up_an_interrupted_batch_before_its_su
 
 
 @pytest.mark.parametrize("pull", [
-    {"names": ["haproxy", "keepalived", "prometheus", "promtail"], "seconds": 900},
-    {"names": ["keepalived", "haproxy"], "seconds": 900},
-    {"names": ["haproxy", "haproxy"], "seconds": 900},
-    {"names": ["grafana"], "seconds": 900},
-    {"names": ["haproxy"], "seconds": runtime.IMAGES_CALL_SECONDS + 1},
-    {"names": ["haproxy"], "seconds": 0},
-    {"names": ["haproxy"], "seconds": 900.0},
+    {"names": ["haproxy", "keepalived", "prometheus", "promtail"], "seconds": 900, "ceiling": IMAGES_SECONDS},
+    {"names": ["keepalived", "haproxy"], "seconds": 900, "ceiling": IMAGES_SECONDS},
+    {"names": ["haproxy", "haproxy"], "seconds": 900, "ceiling": IMAGES_SECONDS},
+    {"names": ["grafana"], "seconds": 900, "ceiling": IMAGES_SECONDS},
+    {"names": ["haproxy"], "seconds": IMAGES_SECONDS + 1, "ceiling": IMAGES_SECONDS},
+    {"names": ["haproxy"], "seconds": 0, "ceiling": IMAGES_SECONDS},
+    {"names": ["haproxy"], "seconds": 900.0, "ceiling": IMAGES_SECONDS},
     {"names": ["haproxy"]},
+    {"names": ["haproxy"], "seconds": 900},
+    {"names": ["haproxy"], "seconds": 900, "ceiling": float(IMAGES_SECONDS)},
 ])
 def test_a_pull_outside_this_hosts_bounded_frozen_batch_or_budget_refuses_before_any_pull(request_value, tmp_path, monkeypatch, auxiliary_brokers,
                                                                                           pull):

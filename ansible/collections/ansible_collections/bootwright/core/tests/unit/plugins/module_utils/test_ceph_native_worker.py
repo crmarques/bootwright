@@ -17,6 +17,7 @@ import zipimport
 
 import pytest
 
+from ansible_collections.bootwright.core.tests.unit.ceph_goldens import IMAGES_SECONDS
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_core, ceph_host_worker, ceph_native, ceph_native_object, ceph_native_worker, native_diagnostics, native_specializations,
 )
@@ -526,7 +527,7 @@ def test_clean_supervisor_preserves_redacted_native_failure_through_each_launche
     supervisor = inspect.getsource(ceph_native_worker)
     host = inspect.getsource(ceph_host_worker)
     if phase == "images":
-        source = ceph_host_worker.launcher(supervisor, host)
+        source = ceph_host_worker.launcher(supervisor, host, IMAGES_SECONDS)
     elif phase == "bootstrap":
         source = ceph_core.bootstrap_launcher(supervisor, host)
     else:
@@ -551,7 +552,7 @@ def test_clean_supervisor_preserves_child_encoding_failure_through_each_launcher
     supervisor = inspect.getsource(ceph_native_worker)
     host = inspect.getsource(ceph_host_worker)
     if phase == "images":
-        source = ceph_host_worker.launcher(supervisor, host)
+        source = ceph_host_worker.launcher(supervisor, host, IMAGES_SECONDS)
     elif phase == "bootstrap":
         source = ceph_core.bootstrap_launcher(supervisor, host)
     else:

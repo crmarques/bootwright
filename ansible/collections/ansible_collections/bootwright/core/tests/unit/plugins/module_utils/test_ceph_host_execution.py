@@ -20,6 +20,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 from ansible_collections.bootwright.core.plugins.modules import ceph_host
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core_fixtures
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_host_runtime as host_fixtures
+from ansible_collections.bootwright.core.tests.unit.ceph_goldens import IMAGES_SECONDS
 
 DIGEST = "d" * 64
 PASSWORD = "REGISTRY-PASSWORD-SENTINEL"
@@ -40,7 +41,7 @@ def host_request(request_value):
          "certificateRef": "serving-tls"}
         for host in cluster["hosts"]]}
     cluster["auxiliary"] = [{"name": "haproxy", "image": host_fixtures.HAPROXY}, {"name": "keepalived", "image": host_fixtures.KEEPALIVED}]
-    return {"version": "ceph-host-v1", "cluster": cluster, "host": "node-2",
+    return {"version": "ceph-host-v1", "cluster": cluster, "host": "node-2", "imagesSeconds": IMAGES_SECONDS,
             "pulls": [{"group": "pull-haproxy-keepalived", "names": ["haproxy", "keepalived"]}]}
 
 
@@ -68,8 +69,8 @@ class Transport:
         self.calls.append((host["name"], "packages"))
         return {"changed": True, "ready": True, "planDigest": "a" * 64}
 
-    def host_images(self, host, names, seconds):
-        assert 0 < seconds <= ceph_host_worker.REMOTE_LIMIT
+    def host_images(self, host, names, seconds, ceiling):
+        assert 0 < seconds <= ceiling == self.request.get("imagesSeconds", IMAGES_SECONDS)
         self.calls.append((host["name"], " ".join(["images"] + names)))
         return {"changed": True}
 
@@ -209,17 +210,18 @@ def test_the_long_call_carries_the_credential_only_on_protected_stdin(host_reque
     material = {"sshKey": str(key), "knownHosts": str(known), "registryJSON": str(registry)}
     transport = ceph_core.Transport(host_request["cluster"], material, run=run, scope=True)
     host = host_request["cluster"]["hosts"][1]
-    assert transport.host_images(host, ["haproxy"], 1200) == {"changed": True}
+    assert transport.host_images(host, ["haproxy"], 1200, IMAGES_SECONDS) == {"changed": True}
     argv, data, timeout = calls[0]
     assert PASSWORD not in " ".join(argv) and "PRIVATE-KEY-SENTINEL" not in " ".join(argv)
     assert timeout == 1200 + 60 and argv[-1].endswith(" 1200")
     envelope = json.loads(data)
     assert envelope["budget"] == 1200 and set(envelope["sources"]) == set(ceph_native_worker.MODULES)
     assert envelope["payload"]["phase"] == "images" and set(envelope["payload"]["private"]) == {"registryJSON"}
-    assert envelope["payload"]["pull"] == {"names": ["haproxy"], "seconds": 1200}
-    for names, seconds in (([], ceph_host_worker.REMOTE_LIMIT + 1), ([], 0), (None, 1200)):
+    assert envelope["payload"]["pull"] == {"names": ["haproxy"], "seconds": 1200, "ceiling": IMAGES_SECONDS}
+    assert "REMOTE_LIMIT=%d)" % IMAGES_SECONDS in argv[-1]
+    for names, seconds in (([], IMAGES_SECONDS + 1), ([], 0), (None, 1200)):
         with pytest.raises(ceph_native.Refusal, match="^transport$"):
-            transport.host_images(host, names, seconds)
+            transport.host_images(host, names, seconds, IMAGES_SECONDS)
     with pytest.raises(ceph_native.Refusal, match="^transport$"):
         transport.call(host, "images")
     with pytest.raises(ceph_native.Refusal, match="^transport$"):
@@ -272,7 +274,7 @@ def test_the_long_launcher_raises_only_its_own_ceiling():
     sources = {name: '"""Fixed fixture."""\n' for name in ceph_native_worker.MODULES}
     sources["native_diagnostics"] = inspect.getsource(native_diagnostics)
     sources["ceph_native"] = "class Refusal(ValueError): pass\ndef dispatch(value):\n    return {'phase': value['phase']}\n"
-    source = ceph_host_worker.launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
+    source = ceph_host_worker.launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker), IMAGES_SECONDS)
     for phase, expected in (("images", {"ok": True, "result": {"phase": "images"}}), ("profile", {"ok": False, "reason": "native-refusal"})):
         payload = {"sources": sources, "payload": {"phase": phase}, "budget": 3}
         result = subprocess.run([sys.executable, "-I", "-c", source, "3"], input=json.dumps(payload).encode(), capture_output=True, timeout=10, check=False)

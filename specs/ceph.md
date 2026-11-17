@@ -540,8 +540,10 @@ container_image_alertmanager, container_image_grafana and
 container_image_node_exporter by digest together`, so the running row names
 every image then downloading; at most five batches keep a block within its 32
 groups. Only the pulls run under the longer host launcher, and together within
-its 4285 s: each pull call receives what the previous ones left of that budget
-and refuses `image-pull` once it is spent. The host block's apply deadline is
+its 4285 s, which the host request freezes as `imagesSeconds` and the role, the
+module and the launcher's remote ceiling read there: each pull call receives
+what the previous ones left of that budget and refuses `image-pull` once it
+is spent. The host block's apply deadline is
 the packages call's 1980 s, that budget with the last pull call's 60 s
 transport slack, the four later 660 s calls, and 10 s for each role step's own
 start-up and reports, counted for the largest pull plan (eleven steps with

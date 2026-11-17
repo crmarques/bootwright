@@ -42,9 +42,10 @@ options:
       - Only an C(images) step names one.
     type: str
   seconds:
-    description: What remains of the images budget for an C(images) step, as the previous C(images) step returned it.
+    description:
+      - What remains of the images budget for an C(images) step, as the previous C(images) step returned it.
+      - Omitted, the whole budget the frozen request's C(imagesSeconds) carries.
     type: int
-    default: 4285
   plan_digest:
     description: The package decision digest the C(packages) step returned, which C(verify) proves the host holds.
     type: str
@@ -119,7 +120,7 @@ def main():
             "operation": {"type": "str", "required": True, "choices": ["apply", "observe", "destroy"]},
             "step": {"type": "str", "choices": list(ceph_core.HOST_STEPS)},
             "pull": {"type": "str"},
-            "seconds": {"type": "int", "default": 4285},
+            "seconds": {"type": "int"},
             "plan_digest": {"type": "str", "default": ""},
             "applied": {"type": "list", "elements": "str", "default": []},
             "digest": {"type": "str", "required": True},

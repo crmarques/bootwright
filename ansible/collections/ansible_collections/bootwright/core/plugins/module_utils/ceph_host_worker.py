@@ -13,7 +13,7 @@ import sys
 import time
 import types
 
-REMOTE_LIMIT = 4285
+REMOTE_LIMIT = None
 PHASE = "images"
 # The worker's deadline signal comes this long before the supervisor's own deadline, so an interrupted batch stops its
 # pulls and leaves their brokers (the runtime's PULL_CANCEL_SECONDS) and returns its timeout while the worker still runs.
@@ -58,9 +58,12 @@ def main(supervisor):
         pass
 
 
-def launcher(supervisor_source, source):
-    """Only fixed launcher code enters argv; the native module bundle uses protected stdin."""
+def launcher(supervisor_source, source, ceiling):
+    """Only fixed launcher code enters argv; the native module bundle uses protected stdin.
+
+    The remote ceiling is the frozen request's images budget, set before the launcher's main runs."""
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker
 
     return (ceph_native_worker.launcher(supervisor_source)
-            + "f={'__name__':'fixed_ceph_host'};exec(compile(" + repr(source) + ",'<fixed-ceph-host>','exec'),f);f['main'](s)")
+            + "f={'__name__':'fixed_ceph_host'};exec(compile(" + repr(source) + ",'<fixed-ceph-host>','exec'),f);"
+            + "f.update(REMOTE_LIMIT=" + str(int(ceiling)) + ");f['main'](s)")

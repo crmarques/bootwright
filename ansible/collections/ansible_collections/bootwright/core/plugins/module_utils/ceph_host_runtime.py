@@ -77,7 +77,6 @@ PULL_SECONDS = 1200
 PULL_MINIMUM = 60
 PULL_RESERVE = 120
 PULL_PAUSE = 15
-IMAGES_CALL_SECONDS = 4285
 PULL_CONCURRENCY = 3
 # How long a batch interrupted in this thread waits for its pulls to stop: a broker's exit (1 s for its listener and 31 s
 # for its connections), each process and pause ending within a second of the cancellation. The images launcher's
@@ -767,9 +766,9 @@ class HostRuntime:
         The call's deadline is the share of the images step's budget the controller has left, never more than the launcher's.
         """
         ceph_native.prove_fips(self.request)
-        require(isinstance(pull, dict) and set(pull) == {"names", "seconds"} and isinstance(pull["names"], list), "request")
-        seconds = pull["seconds"]
-        require(type(seconds) is int and 0 < seconds <= IMAGES_CALL_SECONDS, "request")
+        require(isinstance(pull, dict) and set(pull) == {"names", "seconds", "ceiling"} and isinstance(pull["names"], list), "request")
+        seconds, ceiling = pull["seconds"], pull["ceiling"]
+        require(type(ceiling) is int and type(seconds) is int and 0 < seconds <= ceiling, "request")
         deadline = self.clock() + seconds
         expected = {"registryJSON"} | ({"registryCA"} if "registryTrustBundleRef" in self.request else set())
         require(isinstance(private, dict) and set(private) == expected, "material")

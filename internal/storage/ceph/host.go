@@ -58,10 +58,11 @@ type ClusterScope struct {
 }
 
 type HostRequest struct {
-	Cluster ClusterScope `json:"cluster"`
-	Host    string       `json:"host"`
-	Pulls   []ImagePull  `json:"pulls"`
-	Version string       `json:"version"`
+	Cluster       ClusterScope `json:"cluster"`
+	Host          string       `json:"host"`
+	ImagesSeconds int          `json:"imagesSeconds"`
+	Pulls         []ImagePull  `json:"pulls"`
+	Version       string       `json:"version"`
 }
 
 func (r HostRequest) canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph host") }
@@ -100,6 +101,9 @@ func DecodeHostRequest(data []byte) (HostRequest, error) {
 	}
 	if !validPulls(r) {
 		return HostRequest{}, failure("lifecycle.state", "the frozen Ceph host request's image pulls are not its cluster's auxiliary images in bounded name-ordered batches", "")
+	}
+	if r.ImagesSeconds != hostImagesBudget {
+		return HostRequest{}, failure("lifecycle.state", "the frozen Ceph host request's image pull budget is not the one this build derives", "")
 	}
 	return r, nil
 }
@@ -311,7 +315,8 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		}
 		candidates := pullCandidates(catalog, object, cluster.Auxiliary)
 		for _, host := range cluster.Hosts {
-			request := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host.Name, Pulls: hostPulls(candidates, cluster.Auxiliary, host.Name)}
+			request := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host.Name, ImagesSeconds: hostImagesBudget,
+				Pulls: hostPulls(candidates, cluster.Auxiliary, host.Name)}
 			index, _ := request.source()
 			source := cluster.Packages.Sources[index]
 			canonical, err := request.canonical()

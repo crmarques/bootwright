@@ -260,6 +260,7 @@
     "version": "ceph-core-v1"
   },
   "host": "tie",
+  "imagesSeconds": 4285,
   "pulls": [],
   "version": "ceph-host-v1"
 }

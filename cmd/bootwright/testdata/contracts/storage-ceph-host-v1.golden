@@ -103,6 +103,7 @@ request-schema:
   cluster.stretch.tiebreakerSite string
   cluster.version string
   host string
+  imagesSeconds int
   pulls []struct ceph.ImagePull
   pulls[].group string
   pulls[].names []string

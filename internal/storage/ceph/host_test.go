@@ -257,7 +257,7 @@ func hostExecution(t *testing.T, host string) (lifecycle.Execution, HostRequest,
 	for i := range cluster.Hosts {
 		cluster.Hosts[i].HostKeyRef = cluster.Hosts[i].Name + "-host-key"
 	}
-	r := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host, Pulls: []ImagePull{}}
+	r := HostRequest{Version: HostVersion, Cluster: scopeOf(cluster), Host: host, ImagesSeconds: hostImagesBudget, Pulls: []ImagePull{}}
 	canonical, err := r.canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -750,5 +750,26 @@ func TestSerialDeviceRefusalsNameTheMachineAndEverySerialItsHostSelects(t *testi
 	host.Devices = host.Devices[:1]
 	if len(serialDeviceRefusals(host)) != 0 {
 		t.Fatal("a host without serial selections names serial refusals")
+	}
+}
+
+func TestAHostRequestFreezesTheImagesBudgetItsDeadlineCovers(t *testing.T) {
+	_, r, _ := hostExecution(t, "node-1")
+	if r.ImagesSeconds != hostImagesBudget || hostDeadline("apply") < time.Duration(hostPackagesCall+r.ImagesSeconds)*time.Second {
+		t.Fatalf("the frozen images budget %d is not the one the apply deadline covers", r.ImagesSeconds)
+	}
+	canonical, err := r.canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeHostRequest(canonical); err != nil {
+		t.Fatalf("the frozen request does not decode: %v", diagnostics.Of(err))
+	}
+	r.ImagesSeconds++
+	if canonical, err = r.canonical(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeHostRequest(canonical); err == nil {
+		t.Fatal("a host request frozen with another images budget decodes")
 	}
 }

@@ -12,6 +12,9 @@ argument_specs:
           host:
             type: str
             required: true
+          imagesSeconds:
+            type: int
+            required: true
           pulls:
             type: list
             elements: dict

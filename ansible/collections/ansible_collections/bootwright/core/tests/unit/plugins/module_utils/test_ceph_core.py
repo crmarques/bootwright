@@ -17,6 +17,7 @@ import sys
 import pytest
 import yaml
 
+from ansible_collections.bootwright.core.tests.unit.ceph_goldens import IMAGES_SECONDS
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_core, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_resources, ceph_native_worker, ceph_pull_broker, ceph_registry_discovery,
     ceph_tunnel_staging,
@@ -373,7 +374,7 @@ def host_block(core_request):
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-hosted/example/services/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"} for host in cluster["hosts"]]}
-    request = {"version": "ceph-host-v1", "cluster": cluster, "host": "node-2", "pulls": []}
+    request = {"version": "ceph-host-v1", "cluster": cluster, "host": "node-2", "imagesSeconds": IMAGES_SECONDS, "pulls": []}
     record = {"version": "ceph-host-evidence-v1", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],
               "ready": False, "removed": False, "imageID": "", "uid": 0, "gid": 0, "label": "", "policySHA256": "", "cephadmSHA256": "",
               "planDigest": "", "route": False, "devices": []}
@@ -532,10 +533,16 @@ def test_ssh_uses_only_pinned_trust_and_literal_fixed_worker(core_request):
 def test_worker_budget_stays_within_a_fixed_launcher_ceiling(core_request):
     host = core_request["hosts"][0]
     session = {"ssh_config": "/private/ssh_config", "host_key_algorithms": "ssh-ed25519"}
-    assert ceph_core.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", 4285, worker_ceiling=4285, **session)[-1].endswith(" 4285")
-    for budget, ceiling in ((641, 640), (4285, 1920), (700, 700)):
+    images = IMAGES_SECONDS
+    assert ceph_core.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", images, worker_ceiling=images, frozen_ceiling=True,
+                              **session)[-1].endswith(" %d" % images)
+    for budget, ceiling in ((641, 640), (images, 1920), (700, 700), (images, images)):
         with pytest.raises(ceph_native.Refusal, match="transport"):
             ceph_core.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", budget, worker_ceiling=ceiling, **session)
+    for budget, ceiling in ((images + 1, images), (max(ceph_core.WORKER_CEILINGS) + 1,) * 2, (1, float(images))):
+        with pytest.raises(ceph_native.Refusal, match="transport"):
+            ceph_core.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", budget, worker_ceiling=ceiling, frozen_ceiling=True,
+                               **session)
 
 
 def test_authorize_refuses_an_excluded_tunnel_pin_before_any_effect(core_request, tmp_path, monkeypatch):
@@ -2395,7 +2402,7 @@ def test_host_images_relays_the_bound_bundle(core_request, tmp_path):
         calls.append((argv, data, timeout))
         return 0, b'{"ok":true,"result":{"changed":true}}'
 
-    assert ceph_core.Transport(bound, material, run=run, scope=True).host_images(bound["hosts"][0], [], 4285) == {"changed": True}
+    assert ceph_core.Transport(bound, material, run=run, scope=True).host_images(bound["hosts"][0], [], IMAGES_SECONDS, IMAGES_SECONDS) == {"changed": True}
     argv, data, unused_timeout = calls[0]
     assert json.loads(data)["payload"]["private"] == {"registryJSON": paths["registryJSON"], "registryCA": projection}
     assert projection.isascii() and "#" not in projection and ceph_pull_broker.bundle_context(projection).cert_store_stats()["x509_ca"] == 1
@@ -2403,7 +2410,7 @@ def test_host_images_relays_the_bound_bundle(core_request, tmp_path):
     unbound = {name: path for name, path in material.items() if name != "registryCA"}
     for request_value, private in ((scope, material), (bound, unbound)):
         with pytest.raises(ceph_native.Refusal, match="^material$"):
-            ceph_core.Transport(request_value, private, run=run, scope=True).host_images(request_value["hosts"][0], [], 4285)
+            ceph_core.Transport(request_value, private, run=run, scope=True).host_images(request_value["hosts"][0], [], IMAGES_SECONDS, IMAGES_SECONDS)
     assert len(calls) == 1
 
 
@@ -2435,13 +2442,13 @@ def test_every_bundle_consumer_reaches_the_same_verdict(core_request, tmp_path, 
             with ceph_registry_discovery.bundle_proof(str(tmp_path / "registryCA")):
                 pytest.fail("discovery accepted the bundle")
         with pytest.raises(ceph_native.Refusal, match="^material$"):
-            transport.host_images(scope["hosts"][0], [], 4285)
+            transport.host_images(scope["hosts"][0], [], IMAGES_SECONDS, IMAGES_SECONDS)
         assert calls == []
         return
     with ceph_registry_discovery.bundle_proof(str(tmp_path / "registryCA")) as (context, prove):
         prove()
         resolved = context.get_ca_certs()
-    assert transport.host_images(scope["hosts"][0], [], 4285) == {"changed": True}
+    assert transport.host_images(scope["hosts"][0], [], IMAGES_SECONDS, IMAGES_SECONDS) == {"changed": True}
     assert ceph_pull_broker.bundle_context(calls[0]).get_ca_certs() == resolved
 
 
@@ -2463,7 +2470,7 @@ def test_host_images_refuses_an_oversized_bound_bundle_before_the_run(core_reque
         (tmp_path / name).chmod(0o600)
     transport = ceph_core.Transport(scope, {name: str(tmp_path / name) for name in paths}, run=lambda *args: pytest.fail("run"), scope=True)
     with pytest.raises(ceph_native.Refusal, match="^material$"):
-        transport.host_images(scope["hosts"][0], [], 4285)
+        transport.host_images(scope["hosts"][0], [], IMAGES_SECONDS, IMAGES_SECONDS)
 
 
 @pytest.mark.parametrize("fips", [False, True])
