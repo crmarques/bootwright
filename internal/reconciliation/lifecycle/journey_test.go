@@ -2587,6 +2587,51 @@ func TestFreshDestroyProbesIndependentBlocksAtOnce(t *testing.T) {
 	}
 }
 
+type checkEvents struct {
+	mutex  sync.Mutex
+	events []ProgressEvent
+}
+
+func (c *checkEvents) ReportProgress(_ context.Context, event ProgressEvent) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if event.Phase == CheckPhase && event.Block == quiescenceCheck {
+		c.events = append(c.events, event)
+	}
+}
+
+func (c *checkEvents) ReportLogLocation(context.Context, LogLocation) {}
+
+// The gate's row advances as each probe settles, whichever finishes first, so
+// probes running at once still count up to every block before it closes.
+func TestTheQuiescenceGateCountsEachProbeAsItSettles(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab", "machine-rhel-01", "machine-rhel-02")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	h.service.options.Concurrency = 3
+	recorded := &checkEvents{}
+	h.service.options.Progress = recorded
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	events := recorded.events
+	if len(events) != 4 || events[3].Status != "ok" {
+		t.Fatalf("the gate reported %+v", events)
+	}
+	groups := []string{}
+	for index, event := range events[:3] {
+		if event.Status != "running" || event.Completed != index+1 || event.Declared != 3 || event.Detail != "ArtifactServer/"+event.Group {
+			t.Fatalf("row %d = %+v, want running with %d of 3 settled", index, event, index+1)
+		}
+		groups = append(groups, event.Group)
+	}
+	slices.Sort(groups)
+	if !slices.Equal(groups, []string{"artifact-server-lab", "machine-rhel-01", "machine-rhel-02"}) {
+		t.Fatalf("settled groups %v", groups)
+	}
+}
+
 // An environment that cannot prove it is idle is never assumed to be.
 func TestUnprovedActivityCountsAsLive(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")

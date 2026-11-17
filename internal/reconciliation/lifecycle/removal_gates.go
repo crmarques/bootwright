@@ -244,13 +244,13 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 		outcomes := fanout.Run(ctx, fanout.Options[reconciliation.Block, Quiescence]{
 			Limit: s.Concurrency(), Throttle: s.Throttle(),
 			Key: func(block reconciliation.Block) string { return block.Throttle },
-			Started: func(index int) {
+			Settled: func(index int, _ fanout.Outcome[Quiescence]) {
+				settled++
 				s.reportCheck(ctx, ProgressEvent{
 					Group: blocks[index].ID, Detail: blocks[index].Kind + "/" + blocks[index].Object, Status: "running",
 					Completed: settled, Declared: len(blocks),
 				})
 			},
-			Settled: func(int, fanout.Outcome[Quiescence]) { settled++ },
 		}, blocks, func(ctx context.Context, block reconciliation.Block) (Quiescence, error) {
 			return s.probeQuiescent(ctx, store, contextName, plan, phases, material, held, launch, block)
 		})
