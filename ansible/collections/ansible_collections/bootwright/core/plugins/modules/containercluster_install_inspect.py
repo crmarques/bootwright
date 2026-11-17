@@ -756,6 +756,8 @@ def installer_wait(module):
                               params["restored"])
     except OSError as error:
         module.fail_json(msg="the installer's kubeconfig could not be restored: %s" % error.strerror)
+    except waiting.NoHome:
+        module.fail_json(msg="the account running the installer wait has no absolute home directory")
     except (KeyError, TypeError, ValueError):
         module.fail_json(msg="the installer wait request is malformed")
     return result.pop("changed"), result

@@ -44,6 +44,7 @@ import json
 import pathlib
 import threading
 import time
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -261,18 +262,37 @@ def test_an_attempt_runs_the_installer_under_timeout_with_what_is_left(monkeypat
         return 124, b"", "level=fatal msg=\"bootstrap process timed out\"".encode()
 
     monkeypatch.setattr(waiting.bounded_process, "run", run)
+    monkeypatch.setenv("HOME", "/ambient/home")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example.test:3128")
+    monkeypatch.setattr(waiting.pwd, "getpwuid", lambda uid: SimpleNamespace(pw_dir="/var/lib/account"))
     assert waiting.installer("/installer", "bootstrap-complete", "/work")(17) == (124, TIMED_OUT)
     (argv, timeout, environment), = runs
     assert argv == ["/usr/bin/timeout", "--kill-after=30s", "17s", "/installer", "agent", "wait-for",
                     "bootstrap-complete", "--dir", "/work", "--log-level", "info"]
     assert 17 + 30 < timeout <= 17 + 60
-    assert "HTTPS_PROXY" not in environment and "KUBECONFIG" not in environment
+    # The account's own home from the password database, and nothing ambient.
+    assert environment == {"HOME": "/var/lib/account", "LANG": "C.UTF-8", "PATH": "/usr/bin:/bin"}
 
     def stalled(argv, data, timeout, limit, environment):
         raise waiting.bounded_process.Failure("timeout")
 
     monkeypatch.setattr(waiting.bounded_process, "run", stalled)
     assert waiting.installer("/installer", "install-complete", "/work")(17)[0] in SPENT
+
+
+# An account with no absolute home refuses before the installer runs.
+@pytest.mark.parametrize("entry", [SimpleNamespace(pw_dir=""), SimpleNamespace(pw_dir="relative/home"), None],
+                         ids=["empty", "relative", "no entry"])
+def test_an_account_without_an_absolute_home_runs_no_installer(monkeypatch, entry):
+    def getpwuid(uid):
+        if entry is None:
+            raise KeyError(uid)
+        return entry
+
+    monkeypatch.setattr(waiting.pwd, "getpwuid", getpwuid)
+    monkeypatch.setattr(waiting.bounded_process, "run", lambda *arguments, **keywords: pytest.fail("the installer ran"))
+    with pytest.raises(waiting.NoHome):
+        waiting.installer("/installer", "bootstrap-complete", "/work")
 
 
 class Clock:

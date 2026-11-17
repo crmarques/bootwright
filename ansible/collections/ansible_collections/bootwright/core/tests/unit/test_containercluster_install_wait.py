@@ -9,6 +9,8 @@ the inspection (B1513), and the outcome each one is classified as with them.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import containercluster_install_wait as waiting
@@ -261,3 +263,7 @@ def test_the_inspection_waits_through_the_bounded_runner(run_module, monkeypatch
     assert run_module(inspection, dict(arguments, wait="bootstrap-complete"))["outcome"] == "reached"
     refused = run_module(inspection, dict(arguments, registered=True))
     assert refused["failed"] is True and "exclusive" in refused["msg"]
+    monkeypatch.setattr(waiting.pwd, "getpwuid", lambda uid: SimpleNamespace(pw_dir=""))
+    homeless = run_module(inspection, arguments)
+    assert homeless["failed"] is True and homeless["msg"] == "the account running the installer wait has no absolute home directory"
+    assert len(runs) == 3

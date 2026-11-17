@@ -11,6 +11,8 @@ budget is the request's; nothing here chooses one.
 
 from __future__ import annotations
 
+import os
+import pwd
 import re
 import time
 
@@ -26,7 +28,27 @@ GRACE = 30
 # too, which a shell reports as 137 (128 + 9) and a process's return code as -9.
 SPENT = (124, 137, -9)
 MAX_OUTPUT = 64 << 20
-ENVIRONMENT = {"HOME": "/nonexistent", "LANG": "C.UTF-8", "PATH": "/usr/bin:/bin"}
+# The installer runs with no ambient proxy or kubeconfig, a fixed PATH and
+# LANG, and the running account's own home, where it may keep a cache or
+# configuration as it did under the command module.
+ENVIRONMENT = {"LANG": "C.UTF-8", "PATH": "/usr/bin:/bin"}
+
+
+class NoHome(ValueError):
+    """The account running the wait has no absolute home directory."""
+
+
+def home():
+    """The running account's home directory from the password database, never from the environment."""
+    try:
+        directory = pwd.getpwuid(os.geteuid()).pw_dir
+    except KeyError:
+        directory = ""
+    if not isinstance(directory, str) or not os.path.isabs(directory):
+        raise NoHome("home")
+    return directory
+
+
 MILESTONES = ("bootstrap-complete", "install-complete")
 OUTCOMES = ("reached", "host-error", "stalled", "budget-spent", "timeout", "unclassified", "restore-refused")
 # The give-ups the installer can be re-invoked after, and the one it cannot: a
@@ -83,12 +105,15 @@ def now():
 
 
 def installer(executable, milestone, work):
-    """One attempt: the installer's wait for the milestone under timeout with the seconds given, as (rc, stderr)."""
+    """One attempt: the installer's wait for the milestone under timeout with the seconds given, as (rc, stderr).
+    The home is resolved here, before any attempt, so an account without one refuses before the installer runs."""
+    environment = dict(ENVIRONMENT, HOME=home())
+
     def attempt(seconds):
         argv = ["/usr/bin/timeout", "--kill-after=%ds" % GRACE, "%ds" % seconds, executable, "agent", "wait-for",
                 milestone, "--dir", work, "--log-level", "info"]
         try:
-            code, unused, errors = bounded_process.run(argv, b"", seconds + GRACE + 5, MAX_OUTPUT, environment=dict(ENVIRONMENT))
+            code, unused, errors = bounded_process.run(argv, b"", seconds + GRACE + 5, MAX_OUTPUT, environment=dict(environment))
         except bounded_process.Failure as failure:
             return (-9, "") if failure.kind == "timeout" else (1, "")
         return code, errors.decode("utf-8", "replace")
