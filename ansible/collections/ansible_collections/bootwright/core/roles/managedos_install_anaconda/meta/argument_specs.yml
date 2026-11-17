@@ -114,6 +114,9 @@ argument_specs:
               entitlementRef:
                 type: str
                 required: true
+              installSource:
+                type: bool
+                required: false
               organizationRef:
                 type: str
                 required: true

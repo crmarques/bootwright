@@ -190,7 +190,7 @@ def write_targets(task):
 def test_every_task_naming_the_private_url_or_token_is_hidden_and_stays_private():
     work = expand("{{ managedos_install_anaconda_work }}")
     seen = []
-    for name in ("apply.yml", "private.yml", "boot.yml", "private_recovery.yml"):
+    for name in ("apply.yml", "private.yml", "boot.yml", "private_recovery.yml", "private_registration.yml"):
         for task in flattened(name):
             # The shared proof hides its own fetch (test_artifact_listener_proof.py).
             if listener_proof.includes(task):
@@ -210,7 +210,8 @@ def test_every_task_naming_the_private_url_or_token_is_hidden_and_stays_private(
                     "%s: %r writes %s" % (name, task.get("name"), written))
     for expected in ("Publish the installer image by atomic rename",
                      "Keep the private media URL in the invocation's protected scratch", "Publish the host key pair this installation delivers",
-                     "Publish the recovery passphrase only this machine may read"):
+                     "Publish the recovery passphrase only this machine may read",
+                     "Publish the registration material only this machine may read"):
         assert expected in seen, "the walk no longer sees %r" % expected
 
 

@@ -74,7 +74,7 @@ func packageSources(c api.Catalog, r Request, contextName string) (*PackageReque
 		tree := profile.Spec().Get("installer", "anaconda", "packageSource", "hostedTree")
 		media, local := strings.CutPrefix(tree.Get("fromMedia").Text(), "local-media:")
 		if !local || !managedos.ValidMediaName(media) {
-			return nil, failure("lifecycle.unsupported", "Ceph dependencies require the installed Machine's pinned hosted DVD", "import the provider DVD and select hostedTree; subscription registration is not an implemented package source")
+			return nil, failure("lifecycle.unsupported", "Ceph dependencies require the installed Machine's pinned hosted DVD", "import the provider DVD and select hostedTree; a subscription package source does not supply Ceph dependencies")
 		}
 		selection := tree.Get("artifactServerEndpoint")
 		server, err := artifactserver.Selected(c, selection, profile.Identity())

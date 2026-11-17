@@ -1,5 +1,5 @@
 implementation: os-install-anaconda-v1
-content-digest: 1bb65ca142b94a27f5118520140a23df15a4a38508ed5cf33b4682bbf7d14f99
+content-digest: 45baeff08c06011433ca9773f0efcb1df0704c97ae2c8b8f8eb5f2edd32b8c41
 request-version: os-install-anaconda-v1
 automation-formats: none
 mark-formats: none
@@ -17,6 +17,7 @@ effect-pins:
   proved-installation-disk-boot,replay-safe-unread-registration,bond-permanent-lower-links
   verified-media-default
   anaconda-home-partition-policy
+  subscription-package-source
 request-identity:
   identity.context
   identity.object
@@ -113,6 +114,7 @@ request-schema:
   registration *struct installation.Registration omitempty
   registration.activationKeyRef string
   registration.entitlementRef string
+  registration.installSource bool omitempty
   registration.organizationRef string
   registration.repositories struct installation.SubscriptionRepositories
   registration.repositories.disable []string

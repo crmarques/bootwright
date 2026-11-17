@@ -1,0 +1,64 @@
+---
+# The registration material the installer of a subscription package source
+# fetches in %pre: the organization, the activation key and the Satellite's CA
+# bundle, published beside the installer image only while that installer runs.
+# boot.yml includes this after the substrate proved the target and before the
+# media is inserted, and the withdrawal of the private subtree removes it before
+# the completion inspection. Each arrives as a file path, never as a value, and
+# its first byte is fetched through the listener the installer uses, so material
+# it could not fetch refuses before anything is booted.
+- name: Publish the registration material only this machine may read
+  ansible.builtin.copy:
+    src: '{{ item.source }}'
+    dest: '{{ managedos_install_anaconda_private_dir }}/.stage/{{ item.name }}'
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0640'
+  loop:
+    - name: rhsm-organization
+      source: '{{ bootwright_os_install_material.rhsmOrganization }}'
+    - name: rhsm-activation-key
+      source: '{{ bootwright_os_install_material.rhsmActivationKey }}'
+    - name: rhsm-satellite-ca
+      source: '{{ bootwright_os_install_material.rhsmSatelliteCA }}'
+  loop_control:
+    label: '{{ item.name }}'
+  no_log: true
+
+- name: Label the registration material so the serving process can read it
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/chcon
+      - --reference
+      - '{{ managedos_install_anaconda_served_root }}'
+      - '{{ managedos_install_anaconda_private_dir }}/.stage/{{ item }}'
+  loop: '{{ managedos_install_anaconda_registration_files }}'
+  changed_when: true
+  no_log: true
+
+- name: Atomically publish the protected registration material
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mv
+      - --no-target-directory
+      - '{{ managedos_install_anaconda_private_dir }}/.stage/{{ item }}'
+      - '{{ managedos_install_anaconda_private_dir }}/{{ item }}'
+  loop: '{{ managedos_install_anaconda_registration_files }}'
+  changed_when: true
+  no_log: true
+
+- name: Fetch the first byte of each registration file through its listener
+  ansible.builtin.include_role:
+    name: bootwright.core.infrastructureservices_artifact_listener
+    tasks_from: proof
+  vars:
+    infrastructureservices_artifact_listener_url: '{{ managedos_install_anaconda_private_url }}/{{ managedos_install_anaconda_registration_file }}'
+    infrastructureservices_artifact_listener_ca: '{{ bootwright_os_install_material.artifactCertificate }}'
+    infrastructureservices_artifact_listener_token: '{{ managedos_install_anaconda_token.stdout | trim }}'
+    infrastructureservices_artifact_listener_secret: '{{ bootwright_os_install_request.tlsCertificateRef | default("") }}'
+    infrastructureservices_artifact_listener_subject: the private {{ managedos_install_anaconda_registration_file }}
+    infrastructureservices_artifact_listener_consequence: so no machine was given media
+  loop: '{{ managedos_install_anaconda_registration_files }}'
+  loop_control:
+    loop_var: managedos_install_anaconda_registration_file

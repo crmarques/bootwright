@@ -464,6 +464,7 @@ func automationCapitalized() map[string]automationFormat {
 		"@@BOOTWRIGHT_MARKER@@":                             kickstart,
 		"@@BOOTWRIGHT_AUTHORIZED_KEY@@":                     kickstart,
 		"@@BOOTWRIGHT_PRIVATE_URL@@":                        kickstart,
+		"@@BOOTWRIGHT_REQUEST_DIGEST@@":                     kickstart,
 		"@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@":               kickstart,
 		"@@BOOTWRIGHT_PACKAGE_TREE_CERTIFICATE@@":           kickstart,
 		"BOOTWRIGHT_ERASE_DATA":                             eraseRuntime,

@@ -15,6 +15,7 @@ import builtins
 import io
 import json
 import os
+import pathlib
 import re
 import stat
 import sys
@@ -827,3 +828,27 @@ def test_live_selection_is_proved_before_adoption_repositories_or_release(tmp_pa
                                    ([SM, "repos", "--enable=rhel-9-for-x86_64-baseos-rpms"], worker.REPOSITORIES_CEILING)]
         assert setup.record_bytes() == (before if state == "owned" else canonical(UNEW))
     assert KEY not in text and "Production/" not in text
+
+
+def test_the_record_a_subscription_source_installer_leaves_is_adopted_and_registers_nothing(tmp_path):
+    """The Kickstart Go froze writes the record this worker reads as pending, so the installer's consumer is adopted."""
+    goldens = pathlib.Path(__file__).resolve().parents[2] / "goldens" / "managedos_request_goldens.json"
+    kickstart = json.loads(goldens.read_text(encoding="utf-8"))["requests"]["request-lab-rhel-subscription-source"]["kickstart"].splitlines()
+    written = [re.fullmatch(r"printf '(.+)\\n' '(@@BOOTWRIGHT_REQUEST_DIGEST@@)' > (\S+)", line) for line in kickstart]
+    written = [match for match in written if match is not None]
+    assert len(written) == 1 and written[0].group(3) == worker.RECORD
+    assert kickstart[kickstart.index(written[0].group(0)) + 1] == "chmod 0600 " + worker.RECORD
+    assert kickstart[kickstart.index(written[0].group(0)) - 1] == "test -s " + worker.CONSUMER_CERT
+    setup = Setup(tmp_path)
+    setup.with_cert(U1)
+    setup.with_record("", raw=(written[0].group(1).replace("%s", DIGEST) + "\n").encode("ascii"))
+    assert setup.guest.state(DIGEST)[0] == "pending"
+    answer = setup.call("register", satellite=SATELLITE)[0]
+    assert answer["ok"] is True and answer["result"]["state"] == "adopted" and answer["result"]["owned"] is True
+    assert answer["result"]["consumer"] == U1 and setup.bus.registrations() == []
+    assert setup.record_bytes() == canonical(U1)
+    assert Setup(tmp_path / "other").guest.state(OTHER)[0] == "absent"
+    stranger = Setup(tmp_path / "stranger")
+    stranger.with_cert(U2)
+    stranger.with_record("", raw=(written[0].group(1).replace("%s", OTHER) + "\n").encode("ascii"))
+    assert stranger.guest.state(DIGEST)[0] == "foreign"

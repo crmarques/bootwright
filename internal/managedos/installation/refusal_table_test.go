@@ -91,6 +91,8 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 
 		"A hostname artifact endpoint under disk encryption": {labCatalog(hostnameEndpointServer(), encryptingProfileOn("fqdn-https")),
 			"Machine/rhel-01", onProfile},
+		"A hostname artifact endpoint under a subscription package source": {
+			labCatalog(hostnameEndpointServer(), onEndpoint(subscriptionSourceProfile(), "fqdn-https"), satelliteEntitlement()), "Machine/rhel-01", onProfile},
 		"A generated recovery passphrase too long": {labCatalog(encryptingProfile(), recoverySecret(api.MapValue(field("generated", api.MapValue(number("bytes", "193")))))),
 			"Machine/rhel-01", map[string]string{"<recovery secret>": "Secret/rhel-luks-recovery", "<bytes>": "193", "<length>": "258"}},
 		"A DHCP-only install": {labCatalog(unselected), "Machine/rhel-01", onGuest},

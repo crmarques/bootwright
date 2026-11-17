@@ -180,8 +180,13 @@ def test_register_material_never_enters_a_task_variable():
         for task in flattened(name):
             if any(word in repr(task) for word in MATERIAL):
                 carriers.append((name, task))
-    assert [name for name, _task in carriers] == ["register.yml"]
-    task = carriers[0][1]
+    assert [name for name, _task in carriers] == ["private_registration.yml", "register.yml"]
+    published = carriers[0][1]
+    copied = published["ansible.builtin.copy"]
+    assert copied["src"] == "{{ item.source }}" and copied["remote_src"] is True and published["no_log"] is True
+    assert not any(word in repr({key: value for key, value in published.items() if key != "loop"}) for word in MATERIAL)
+    assert "lookup" not in repr(published) and "vars" not in published
+    task = carriers[1][1]
     arguments = task.get(REGISTRATION)
     assert arguments is not None and task["no_log"] is True
     assert arguments["organization_file"] == "{{ bootwright_os_install_material.rhsmOrganization }}"

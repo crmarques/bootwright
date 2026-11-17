@@ -90,18 +90,27 @@ managedos_install_anaconda_expected: >-
 # The subtree this block owns for material only the installing machine may read,
 # and the unguessable directory beneath it this attempt mints. The token is
 # generated here rather than frozen in the plan, so it appears in no request, no
-# evidence and no log. The private material is a delivered host key pair or an
-# encrypted root disk's recovery passphrase, and the installer image whose
+# evidence and no log. The private material is a delivered host key pair, an
+# encrypted root disk's recovery passphrase or the registration material of a
+# subscription package source, and the installer image whose
 # Kickstart names its URL travels with it.
 managedos_install_anaconda_private_root: >-
   {{ bootwright_os_install_request.private.path | default('') }}
 managedos_install_anaconda_delivers_private: >-
   {{ bootwright_os_install_request.private is defined }}
 # The private files published before the image is proved; recovery is published
-# later, inside the boot, by private_recovery.yml.
+# later, inside the boot, by private_recovery.yml, and so is the registration
+# material of a subscription package source, by private_registration.yml.
 managedos_install_anaconda_private_files: >-
   {{ ['install.iso'] + (['identity', 'identity.pub']
      if bootwright_os_install_request.target.channel == 'delivered-key' else []) }}
+managedos_install_anaconda_installer_registers: >-
+  {{ bootwright_os_install_request.registration is defined
+     and (bootwright_os_install_request.registration.installSource | default(false) | bool) }}
+managedos_install_anaconda_registration_files:
+  - rhsm-organization
+  - rhsm-activation-key
+  - rhsm-satellite-ca
 managedos_install_anaconda_private_dir: >-
   {{ managedos_install_anaconda_private_root }}/{{ managedos_install_anaconda_token.stdout | default('') | trim }}
 managedos_install_anaconda_private_url: >-

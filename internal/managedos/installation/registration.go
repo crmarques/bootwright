@@ -34,6 +34,19 @@ func externalRHSM(entitlement api.Object) bool {
 }
 
 func registrationFor(catalog api.Catalog, profile api.Object) (*Registration, error) {
+	registration, err := declaredRegistration(catalog, profile)
+	if err != nil || !subscriptionSourced(profile) {
+		return registration, err
+	}
+	if registration == nil || registration.Satellite == nil || registration.Satellite.ContentView != "" {
+		return nil, refusal("lifecycle.unsupported", "a subscription package source installs from the Satellite a managed registration declares, in the content view its activation key selects, and "+profile.Identity()+" declares no such registration",
+			"name a managed redhatRhel Entitlement that declares spec.rhsm.satellite without contentView in spec.subscription.entitlementRef on "+profile.Identity()+", or select another package source than "+subscriptionSourceField)
+	}
+	registration.InstallSource = true
+	return registration, nil
+}
+
+func declaredRegistration(catalog api.Catalog, profile api.Object) (*Registration, error) {
 	reference, entitlement, found := subscriptionEntitlement(catalog, profile)
 	if reference == "" {
 		return nil, nil
@@ -109,7 +122,7 @@ func refusedRegistration(catalog api.Catalog, machine, profile api.Object, deriv
 		return "this executable registers only over a direct route to the hosted subscription service or the declared Satellite, and " + machine.Identity() + " reaches the network through " + proxy.Identity(),
 			"select direct: {} in spec.proxy of " + machine.Identity() + " or of " + profile.Identity() + ", or " + withoutSubscription
 	}
-	return "", ""
+	return refusedSubscriptionSource(catalog, profile)
 }
 
 func registrationMaterial(operation string, request Request) []lifecycle.MaterialFile {
@@ -201,6 +214,13 @@ func registrationValues(execution lifecycle.Execution, request Request) error {
 			return refusal("api.value", secret+" holds an "+bound.subject+" for "+entitlement+
 				" that is not one line of 1 to 255 printable ASCII characters without whitespace, so this attempt changed nothing",
 				"replace "+secret+" with one line of 1 to 255 printable ASCII characters without whitespace, then run bootwright apply --context "+execution.Context+" again")
+		}
+		if request.Registration.InstallSource && !installerCarried(value) {
+			secret := "Secret/" + bound.reference
+			return refusal("api.value", secret+" holds an "+bound.subject+" for "+entitlement+
+				" with a quote, a backslash or '#', which the registration command of an installer that installs from its subscription cannot carry, so this attempt changed nothing",
+				"replace "+secret+" with a value free of double quotes, single quotes, backslashes and '#', or select another package source than "+subscriptionSourceField+
+					" on MachineInstallProfile/"+request.Identity.Profile+", then run bootwright apply --context "+execution.Context+" again")
 		}
 	}
 	if request.Registration.Satellite != nil {

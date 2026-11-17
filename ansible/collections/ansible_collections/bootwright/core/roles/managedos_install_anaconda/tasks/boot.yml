@@ -32,6 +32,12 @@
   ansible.builtin.include_tasks: private_recovery.yml
   when: bootwright_os_install_request.diskEncryption is defined
 
+# The same window holds the material an installer registers with to install
+# from its subscription.
+- name: Publish the registration material this machine's installer fetches
+  ansible.builtin.include_tasks: private_registration.yml
+  when: managedos_install_anaconda_installer_registers | bool
+
 # Media sensitivity is independent of the substrate that realizes the Machine.
 - name: Keep the private media URL in the invocation's protected scratch
   ansible.builtin.copy:

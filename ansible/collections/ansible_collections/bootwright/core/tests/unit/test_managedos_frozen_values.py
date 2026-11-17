@@ -57,7 +57,7 @@ def render(expression, **variables):
 
 
 def test_every_request_golden_is_read():
-    assert len(INSTALLS) == 18 and len(TREES) == 1
+    assert len(INSTALLS) == 19 and len(TREES) == 1
     assert any(request["requires"]["registration"] for request in INSTALLS.values())
     assert any(request["requires"]["update"] for request in INSTALLS.values())
     assert any(request["requires"]["fips"] for request in INSTALLS.values())

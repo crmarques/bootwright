@@ -155,6 +155,6 @@ func ContentDigest() string {
 		Implementation, requestVersion, kickstartVersion,
 		consumerPrefix, privatePrefix, servedRoot, MarkerPath, HostKeyPath,
 		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), provedDiskBoot, substrate.RedfishMediaPolicy,
-		"anaconda-home-partition-policy",
+		"anaconda-home-partition-policy", "subscription-package-source",
 	)
 }

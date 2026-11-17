@@ -189,7 +189,14 @@ only on the standard input of a fixed root worker and reach the subscription
 service only through the RHSM D-Bus API's private registration bus. They never
 enter an Ansible variable, an argument, an environment variable, evidence, a
 result or a log, and a value that is not one line of printable ASCII without
-whitespace is refused without being repeated. The lifecycle runner writes each such file once
+whitespace is refused without being repeated. A
+[subscription package source](managed-os-subscription-source.md) adds one
+route for those two values and the Satellite's CA bundle: copied as files into
+the attempt's [private publication](managed-os.md#physical-private-publication),
+fetched once by the installer over verified TLS, held in shell variables and a
+mode-0600 file in the installer's memory, given to the installer's own
+registration, and withdrawn with the private subtree; the same exclusions
+hold. The lifecycle runner writes each such file once
 and then clears its copy of the value, so a run request whose material list
 names one file twice, or binds one adapter variable to two files, refuses with
 `lifecycle.state` before the runner creates its job directory or writes any

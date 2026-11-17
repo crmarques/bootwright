@@ -211,7 +211,8 @@ registration; tracked as [B905](milestones/m1.md#b905).
 The profile's `anaconda` arm, with `packageSource` absent
 so the boot media is a DVD installed from `cdrom`, or `hostedTree`, so a boot
 image installs from a package tree the artifact server publishes over HTTP or
-[verified HTTPS](#https-package-sources). `bootMedia`
+[verified HTTPS](#https-package-sources), or
+[`subscription`](managed-os-subscription-source.md). `bootMedia`
 and `fromMedia` name entries of the media store as `local-media:<name>`, and
 validate refuses any other source, naming the import that fixes it. The
 profile an installed Machine selects names its `redfishVirtualMedia`
@@ -260,10 +261,10 @@ servers, as the [derived installation](#derived-installation) states;
 [network convergence](#network-convergence) applies the rest of the declared
 network after installation. Publicly
 served content remains secret-free by construction; an installation delivers
-confidentially only the host key it installs and the recovery passphrase of an
-encrypted root disk. The installer image whose Kickstart names their private
-URL travels with them, and all three travel only through the
-[private path](#physical-private-publication) below; every other secret-bearing arm
+confidentially only its host key, a root disk's recovery passphrase and a
+subscription source's registration material. The installer image whose
+Kickstart names their private URL travels with them, only through the
+[private path](#physical-private-publication); every other secret-bearing arm
 stays refused until it is separately specified.
 
 The Environment's
@@ -1414,8 +1415,7 @@ same verified-fetch proof as physical installation.
 
 Physical FIPS and TPM2 root encryption use this private delivered-key path
 and its pinned identity and completion proofs. Managed registration uses the
-[pinned registration session](#registration), keeping its credentials out of
-publications. Their real-hardware qualification remains
+[pinned registration session](#registration). Their real-hardware qualification remains
 [B78](milestones/m1.md#b78); in-tree delivery does not qualify a physical host.
 
 ### Physical data-disk clear
@@ -2019,6 +2019,7 @@ them.
 | Internal mirror in `repositories.configure` | `$releasever` expands to the minor; a snapshot mirror pins by content; the drift refusal catches a mirror of another minor. |
 | `external` Entitlement | Only configured repositories count; with none the profile refuses. |
 | Disconnected, DVD or `hostedTree` only | No update source, so `none` is required. |
+| Subscription package source | The installer installs the release its boot image names from the activation key's content view; the update then follows the Satellite rows below. |
 | Satellite, release offered | The release is set, as on the hosted service, and the content view serves that minor; the evidence pin is `release`. |
 | Satellite, release not offered | The release is unset and the selected content view (explicit or inherited from the activation key) is the pin; the evidence pin is `contentView`. A newer minor in the view stops the update at `update-release-drift`. |
 | Configured repositories beside a Satellite | No release variable is written, so `$releasever` expands to the major; a minor is written literally in `baseURL`. |
@@ -2034,8 +2035,8 @@ version (`TreeImplementation` in `internal/managedos/installation/tree.go`);
 each machine installation requires that profile
 publication alongside its own Machine realization and referenced services.
 An installation uses the request version `requestVersion` in
-`internal/managedos/installation/catalog.go`. Profiles using
-a URL package source contribute no publication block.
+`internal/managedos/installation/catalog.go`. A profile selecting no hosted
+tree contributes no publication block.
 
 The request freezes only context and profile identity, artifact-server
 placement, publication path and URL, serving certificate reference, the
@@ -2288,7 +2289,7 @@ the length of that many bytes in base64url without padding.
 | A physical Machine naming no root device | on a Machine on a `baremetal` provider, none of the forms of the [root-disk rule](api/machines.md#root-disk); a serial number without its size included | `a physical installation erases only a root disk named by its wwn, by its serial number and exact size, or by a volumeRef or bootVolume logical volume, and the Machine names none of them` | `set spec.hardware.rootDisk.wwn on <machine> to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root-disk field to default to bootVolume; a device path such as /dev/sda is refused` |
 | A root-device hint other than deviceName | any `spec.hardware.rootDisk.hints` field on a Machine on a `baremetal` provider; it may declare `wwn`, `serialNumber`, `sizeBytes`, `volumeRef` and `bootVolume` | `a managed-OS installation selects its root disk by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the root-disk hints the Machine declares` | `remove <hints> from <machine>` |
 | A root-device serial number the installer cannot compare | a `spec.hardware.rootDisk.serialNumber` other than 1 to 256 characters drawn from ASCII letters, digits, `.`, `_`, `:`, `+`, `/`, `=` and `-` | `a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare` | `set spec.hardware.rootDisk.serialNumber on <machine> to the disk's serial number, at most 256 ASCII letters, digits and ._:+/=- characters, or remove it` |
-| An unverified BMC leg for private delivery | a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase), with a non-https `spec.hardware.bmc.address` or `tls.verification: none` | `a Machine whose installation delivers private material hands its BMC the private installer image URL, so the BMC must be reached over https with its certificate verified` | `address the BMC of <machine> with an https:// spec.hardware.bmc.address and remove the tls.verification: none opt-out on <machine>; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it` |
+| An unverified BMC leg for private delivery | a Machine whose installation delivers private material (a delivered host key, an encrypted root disk's recovery passphrase or the registration material of a subscription package source), with a non-https `spec.hardware.bmc.address` or `tls.verification: none` | `a Machine whose installation delivers private material hands its BMC the private installer image URL, so the BMC must be reached over https with its certificate verified` | `address the BMC of <machine> with an https:// spec.hardware.bmc.address and remove the tls.verification: none opt-out on <machine>; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it` |
 | A DHCP-only install | an effective `spec.network.installAddressRef` naming no `spec.network.addresses` entry with an `interface` and an IPv4 address; admission refuses it first, so no validated graph reaches this row | `a managed-OS installation configures one static IPv4 install address, and the Machine selects none; DHCP installation is not supported` | `assign an IPv4 address to the install interface in spec.network.addresses of <machine> and select it with spec.network.installAddressRef` |
 | A kernel-style interface name | any available composed `ethernet` interface whose `name` matches `^eth[0-9]+$`, on any substrate | `a managed-OS installation names each ethernet interface after its hardware address, and a kernel-style name such as <name> can collide with the names the kernel assigns` | `rename interface <name> in the network of <machine> to a name outside the kernel's ethN scheme, such as its predictable name` |
 | An ethernet interface without a hardware address | on a `baremetal` provider, an available composed `ethernet` interface that resolves, through its `spec.network.interfaceMatches` `nicRef` or else the `spec.hardware.nics` entry of its own name, to no NIC, or to one whose `macAddress` differs from its authored `mac-address` | `a managed-OS installation names each ethernet interface after its hardware address, and interface <name> of <machine> resolves to no declared hardware NIC, or to one whose address differs from its mac-address` | `match interface <name> to its hardware NIC in spec.network.interfaceMatches of <machine>, or mark it absent in its network` |
@@ -2308,6 +2309,7 @@ the length of that many bytes in base64url without padding.
 | A generated recovery passphrase too long | a profile selecting `spec.customizations.security.diskEncryption` whose `recoveryPassphraseRef` names a `token` Secret generating more than 192 bytes | `the recovery passphrase is limited to 256 characters, and <recovery secret> generates <bytes> bytes, which encode to <length> characters` | `set spec.source.generated.bytes to at most 192 on <recovery secret>` |
 | Subscription repositories with external registration | a profile's `spec.customizations.repositories.subscription` with a `spec.subscription` Entitlement whose `spec.rhsm.management` is `external` | `subscription repositories are enabled on a registration this executable performs, and <entitlement> sets spec.rhsm.management to external` | `remove spec.customizations.repositories.subscription from <profile>, or set spec.rhsm.management to managed on <entitlement>` |
 | Registration through a proxy | a registering profile on a Machine whose effective `spec.proxy` names a Proxy | `this executable registers only over a direct route to the hosted subscription service or the declared Satellite, and <machine> reaches the network through <proxy>` | `select direct: {} in spec.proxy of <machine> or of <profile>, or remove spec.subscription from <profile>` |
+| A hostname artifact endpoint under a subscription package source | a profile selecting `spec.installer.anaconda.packageSource.subscription` whose `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` resolves to a URL whose host is not an IP literal | `the installer fetches its registration material before it configures name resolution, so the artifact server endpoint of <profile> must be addressed by IP` | `select an artifact server endpoint whose address is an IP literal in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A credentialed proxy | a Machine's effective `spec.proxy` naming a Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, while its profile configures a repository | `the installed system's repositories would reach <proxy> through a credential or private trust anchor, which an installation cannot carry` | `select direct: {} or an external Proxy without spec.connection.auth and spec.connection.trustBundleRef in spec.proxy of <machine> or of <profile>` |
 | An installer image server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation builds and publishes its installer image on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A package tree server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation extracts and publishes its package tree on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint on <profile>` |
@@ -2340,7 +2342,10 @@ or other secret enters the Kickstart, the image, the package tree, the evidence
 or the logs, and the delivered host key and the recovery passphrase reach the
 machine only through the private subtree; the passphrase is fetched by `%pre`
 and `%post` into a shell variable, written only to the installer's storage file
-and given to clevis on standard input. [Network convergence](#network-convergence) runs fixed
+and given to clevis on standard input. The organization and activation key of
+a [subscription package source](managed-os-subscription-source.md) reach the
+installer the same way, fetched by `%pre` into shell variables and written
+only to the installer's registration command file. [Network convergence](#network-convergence) runs fixed
 commands, those needing root through `sudo -n`, over the fleet connection
 pinned to the key the identity channel reported; the network document and the
 network marker reach the guest only on standard input, never in an argument.

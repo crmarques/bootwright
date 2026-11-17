@@ -177,7 +177,9 @@ published ordinary or composite content view; `lifecycleEnvironment` selects
 the environment containing its published version. Neither has a default.
 Omitting both uses the activation key's selection. Null, empty, invalid or
 unpaired values are refused; no name is trimmed or inferred. Environment kind
-defaults apply before the pair is validated.
+defaults apply before the pair is validated. A profile installing from its
+[subscription](machines.md#installer-arms) refuses an Entitlement that sets
+them, because its installer registers with the activation key alone.
 
 For example, within `spec.rhsm`:
 

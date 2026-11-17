@@ -97,7 +97,7 @@ func InstallationFor(catalog api.Catalog, machine, profile api.Object, request R
 	topology := readInstallTopology(template, iface)
 	installation.InterfaceType, installation.VLANBase, installation.VLANID = topology.Type, topology.VLANBase, topology.VLANID
 	installation.BondPorts, installation.BondOptions = topology.Ports, topology.Options
-	installation.HostKeyType = request.Target.HostKeyType
+	installation.HostKeyType, installation.Subscription = request.Target.HostKeyType, kickstartSubscriptionFor(request)
 	if request.Update != nil && !satelliteRegistration(request) {
 		installation.Release = request.Update.Release
 	}
@@ -134,9 +134,12 @@ func networkPackages() []string {
 	return []string{"nmstate"}
 }
 
-// packageSource is what Anaconda installs from: the boot media itself when the
-// profile names no source, or the tree this block publishes.
+// packageSource is what Anaconda installs from: the boot media itself, the tree
+// this block publishes, or the registration command its %pre writes.
 func packageSource(request Request) (string, error) {
+	if request.subscriptionSourced() {
+		return subscriptionSource, nil
+	}
 	if request.Tree == nil {
 		return "cdrom", nil
 	}

@@ -72,8 +72,8 @@
     "fingerprint": "c772f9d0c7030f5f8a98e059a0c7f38e17226fcc1394030955ba29cff88b8cf5"
   },
   "os-install-anaconda-v1": {
-    "contentDigest": "1bb65ca142b94a27f5118520140a23df15a4a38508ed5cf33b4682bbf7d14f99",
-    "fingerprint": "7d84f17c555a00196ed410da0e40327bc656cfc4b9466c0925932457173b1571"
+    "contentDigest": "45baeff08c06011433ca9773f0efcb1df0704c97ae2c8b8f8eb5f2edd32b8c41",
+    "fingerprint": "4fe07b2124ce452b2beb42be5fd16282fea76f0a8c7678aa401fdeb055ddcfa2"
   },
   "os-package-tree-v1": {
     "contentDigest": "62218223d7cca3604594c231a1265d351e6c12e0e9d6d8b31f2f51086a839445",
@@ -81,7 +81,7 @@
   },
   "physical-erase-v1": {
     "contentDigest": "6c1c49685138b533ada39706c004909f33a27c52b3694793cb4e121e09f6643e",
-    "fingerprint": "f3762bbffde837e2e966b1fa7b8d0d48d709e7e46fc8f9017d175221bb00fb02"
+    "fingerprint": "5ca9f7d513da6a6dc472aa2faaa6e8c7a23df52eaab3e9d58193a163c8383eea"
   },
   "proxy-squid-v1": {
     "contentDigest": "f6f3786ce9c60b6b307aa8169bc8e87ab296769ab62d47fcfc5e536479147c16",

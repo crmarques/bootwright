@@ -96,6 +96,7 @@ request-schema:
   install.registration *struct installation.Registration omitempty
   install.registration.activationKeyRef string
   install.registration.entitlementRef string
+  install.registration.installSource bool omitempty
   install.registration.organizationRef string
   install.registration.repositories struct installation.SubscriptionRepositories
   install.registration.repositories.disable []string

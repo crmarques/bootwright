@@ -16,6 +16,7 @@ def render_kickstart(kickstart, material):
         bootwright_os_install_material={"marker": "marker", "authorizedKey": "public-key", **material},
         managedos_install_anaconda_certificate="IMAGE-CERTIFICATE",
         managedos_install_anaconda_private_url="https://artifacts.example.test/private/example",
+        bootwright_os_install_digest="ab" * 32,
     )
     return Templar(loader=LOADER, variables=values).template(task["bootwright.core.private_file"]["content"])
 

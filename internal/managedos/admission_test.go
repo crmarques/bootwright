@@ -683,3 +683,46 @@ func TestHostedTreeAdmitsTheManagedHTTPSArtifactEndpoint(t *testing.T) {
 		t.Fatalf("HTTPS hosted tree was refused: %+v", issues)
 	}
 }
+
+// A subscription package source installs from the one registration an
+// installer can make: with a Satellite, through the activation key alone.
+func TestASubscriptionPackageSourceNeedsAManagedSatelliteRegistration(t *testing.T) {
+	const path = "$.spec.installer.anaconda.packageSource.subscription"
+	satellite := m("hostname", "satellite.example.test", "trustBundleRef", "satellite-ca")
+	entitled := func(rhsm api.Value) api.Catalog {
+		return api.NewCatalog([]api.Object{obj(api.MachineImage, "image", m("bootMedia", "local-media:boot.iso")),
+			NormalizeRHSM(obj(api.Entitlement, "rhel", m("type", "redhatRhel", "rhsm", rhsm)))})
+	}
+	sourced := anaconda()
+	sourced = sourced.WithSpec(sourced.Spec().WithPath(m(), "installer", "anaconda", "packageSource", "subscription"))
+	registering := sourced.WithSpec(sourced.Spec().With("subscription", m("entitlementRef", "rhel")))
+	managed := m("organizationRef", "org", "activationKeyRef", "key", "satellite", satellite)
+	if issues := Validate(registering, entitled(managed)); len(issues) != 0 {
+		t.Fatalf("a Satellite registration was refused as a package source: %+v", issues)
+	}
+	for name, test := range map[string]struct {
+		profile api.Object
+		catalog api.Catalog
+		message string
+	}{
+		"no registration": {sourced, entitled(managed),
+			"MachineInstallProfile/install installs from its subscription but declares no registration"},
+		"the hosted service": {registering, entitled(m("organizationRef", "org", "activationKeyRef", "key")),
+			"MachineInstallProfile/install installs from its subscription, which is the content of a Satellite this executable registers with, and Entitlement/rhel declares none"},
+		"an external registration": {registering, entitled(m("management", "external")),
+			"MachineInstallProfile/install installs from its subscription, which is the content of a Satellite this executable registers with, and Entitlement/rhel declares none"},
+		"an explicit content view": {registering, entitled(managed.With("satellite", satellite.With("contentView", api.StringValue("rhel9")).With("lifecycleEnvironment", api.StringValue("Library")))),
+			"the installer registers with the activation key alone, whose own content view it installs from, and Entitlement/rhel selects a content view explicitly"},
+		"a quoted content root": {registering, entitled(managed.With("satellite", satellite.With("contentBaseURL", api.StringValue("https://satellite.example.test/pulp/it's")))),
+			"the installer's registration command carries the content root of Entitlement/rhel as one token, and it holds a quote, a backslash or '#'"},
+	} {
+		issues := issuesAt(Validate(test.profile, test.catalog), path)
+		if len(issues) != 1 || issues[0].Message != test.message || !strings.Contains(issues[0].Remediation, "or select another package source on MachineInstallProfile/install") {
+			t.Fatalf("%s: issues = %+v", name, issues)
+		}
+	}
+	hosted, catalog := hostedTreeProfile("local-media:dvd.iso")
+	if issues := issuesAt(Validate(hosted, catalog), path); len(issues) != 0 {
+		t.Fatalf("a hosted tree was held to the subscription source's rule: %+v", issues)
+	}
+}

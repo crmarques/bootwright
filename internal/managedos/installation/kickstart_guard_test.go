@@ -91,6 +91,19 @@ func kickstartStrings(t *testing.T) []kickstartString {
 					t.Fatalf("KickstartEncryption.%s is a %s the Kickstart guard does not know", encryption.Field(inner).Name, encryption.Field(inner).Type)
 				}
 			}
+		case field.Type == reflect.TypeFor[*KickstartSubscription]():
+			subscription := reflect.TypeFor[KickstartSubscription]()
+			for inner := range subscription.NumField() {
+				if subscription.Field(inner).Type.Kind() != reflect.String {
+					t.Fatalf("KickstartSubscription.%s is a %s the Kickstart guard does not know", subscription.Field(inner).Name, subscription.Field(inner).Type)
+				}
+				found = append(found, kickstartString{field.Name + "." + subscription.Field(inner).Name, func(input *Installation, value string) {
+					if input.Subscription == nil {
+						input.Subscription = &KickstartSubscription{ContentBaseURL: "https://satellite.example.test/pulp/content", Hostname: "satellite.example.test"}
+					}
+					reflect.ValueOf(input.Subscription).Elem().Field(inner).SetString(value)
+				}})
+			}
 		case field.Type.Kind() == reflect.Bool || field.Type.Kind() == reflect.Int || field.Type.Kind() == reflect.Int64:
 		default:
 			t.Fatalf("Installation.%s is a %s the Kickstart guard does not know", field.Name, field.Type)

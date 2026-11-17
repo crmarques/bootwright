@@ -103,6 +103,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = api.AppendIssues(issues, validateUpdates(o, c)...)
 	issues = api.AppendIssues(issues, validateServiceChoices(custom)...)
 	issues = api.AppendIssues(issues, validateInstallerSources(o, c)...)
+	issues = api.AppendIssues(issues, validateSubscriptionSource(o, c)...)
 	issues = api.AppendIssues(issues, validateServedNames(o, c)...)
 	return api.AppendIssues(issues, validateConsumers(o, c)...)
 }
@@ -339,6 +340,38 @@ func validateInstallerSources(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	return issues
+}
+
+func validateSubscriptionSource(o api.Object, c api.Catalog) []api.Issue {
+	if !o.Spec().Has("installer", "anaconda", "packageSource", "subscription") {
+		return nil
+	}
+	const path = "$.spec.installer.anaconda.packageSource.subscription"
+	profile := o.Identity()
+	other := ", or select another package source on " + profile
+	reference := o.Spec().Get("subscription", "entitlementRef")
+	if !reference.Present() {
+		return []api.Issue{issue(path, profile+" installs from its subscription but declares no registration",
+			"set spec.subscription.entitlementRef on "+profile+" to a managed redhatRhel Entitlement that declares spec.rhsm.satellite"+other)}
+	}
+	entitlement, found := c.Find(api.Entitlement, reference.Text())
+	if !found || entitlement.Spec().Get("type").Text() != "redhatRhel" {
+		return nil
+	}
+	rhsm := entitlement.Spec().Get("rhsm")
+	if rhsm.Get("management").Text() == "external" || !rhsm.Has("satellite") {
+		return []api.Issue{issue(path, profile+" installs from its subscription, which is the content of a Satellite this executable registers with, and "+entitlement.Identity()+" declares none",
+			"declare spec.rhsm.satellite with managed registration on "+entitlement.Identity()+other)}
+	}
+	if rhsm.Has("satellite", "contentView") || rhsm.Has("satellite", "lifecycleEnvironment") {
+		return []api.Issue{issue(path, "the installer registers with the activation key alone, whose own content view it installs from, and "+entitlement.Identity()+" selects a content view explicitly",
+			"remove spec.rhsm.satellite.contentView and spec.rhsm.satellite.lifecycleEnvironment from "+entitlement.Identity()+" and give its activation key that view"+other)}
+	}
+	if strings.ContainsAny(rhsm.Get("satellite", "contentBaseURL").Text(), "\"'\\#") {
+		return []api.Issue{issue(path, "the installer's registration command carries the content root of "+entitlement.Identity()+" as one token, and it holds a quote, a backslash or '#'",
+			"set spec.rhsm.satellite.contentBaseURL on "+entitlement.Identity()+" to a URL without those characters"+other)}
+	}
+	return nil
 }
 
 // validateServedNames refuses a profile whose package tree would be published

@@ -39,6 +39,7 @@ CALLERS = {
     ("managedos_install_anaconda", "apply.yml", "Fetch the first byte of each private file through its listener"),
     ("managedos_install_anaconda", "apply.yml", "Fetch the first byte of the package tree marker through its listener"),
     ("managedos_install_anaconda", "private_recovery.yml", "Fetch the first byte of the recovery passphrase through its listener"),
+    ("managedos_install_anaconda", "private_registration.yml", "Fetch the first byte of each registration file through its listener"),
     ("managedos_package_tree", "apply.yml", "Prove the published tree answers through its trusted listener"),
     ("containercluster_media_agent", "publish.yml", "Fetch the first byte of the published image through the listener"),
     ("containercluster_install_agent", "boot.yml", "Prove the insert image through the verified serving listener"),

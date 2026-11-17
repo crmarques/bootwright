@@ -252,6 +252,7 @@ func TestTheFrozenRequestsMatchTheirGoldens(t *testing.T) {
 		"lab-rhel-updated":                labCatalog(updatingProfile(), rhelEntitlement()),
 		"lab-rhel-satellite":              labCatalog(updatingProfile(), satelliteEntitlement()),
 		"lab-rhel-satellite-content-view": labCatalog(updatingProfile(), selectedSatelliteEntitlement()),
+		"lab-rhel-subscription-source":    subscriptionSourceCatalog(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			request := pinnedRequest(t, catalog)

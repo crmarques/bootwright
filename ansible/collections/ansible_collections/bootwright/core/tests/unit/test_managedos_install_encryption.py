@@ -360,7 +360,7 @@ def test_private_material_is_protected_before_publication():
     staged = flattened("private.yml")
     stage = next(task[FILE] for task in staged if task.get(FILE, {}).get("path", "").endswith("/.stage"))
     assert stage["mode"] == "0700" and stage["owner"] == stage["group"] == "root"
-    for name in ("private.yml", "private_recovery.yml"):
+    for name in ("private.yml", "private_recovery.yml", "private_registration.yml"):
         tasks = LOADER.load_from_file(str(ROLE / "tasks" / name))
         copies = [task[COPY] for task in tasks if COPY in task]
         assert copies

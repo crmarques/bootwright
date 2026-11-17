@@ -118,7 +118,7 @@ func TestEncryptionBootstrapOptionalSettingsAndLiteralValues(t *testing.T) {
 		t.Fatalf("optional settings or literal bond value changed: %s", joined)
 	}
 	input.DiskEncryption = nil
-	if lines := encryptionNetworkLines(input); len(lines) != 0 {
+	if lines := append(encryptionPreLines(input), subscriptionPreLines(input)...); len(lines) != 0 {
 		t.Fatalf("plain installation carries a bootstrap helper: %q", lines)
 	}
 }

@@ -47,7 +47,7 @@ func privateInstallation(catalog api.Catalog, machine api.Object, channel string
 		return true
 	}
 	profile, ok := catalog.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(machine))
-	return ok && diskEncryption(profile).Present()
+	return ok && (diskEncryption(profile).Present() || subscriptionSourced(profile))
 }
 
 // refusedFIPS refuses generated fleet or delivered host keys that the installed

@@ -122,6 +122,7 @@ type Installation struct {
 	RootWWN            string
 	InventoriedSerials []string
 	SELinux            string
+	Subscription       *KickstartSubscription
 	Timezone           string
 	User               string
 	VLANBase           string
@@ -140,6 +141,9 @@ func RenderKickstart(input Installation) (string, error) {
 		return "", err
 	}
 	if err := packageTrustRefusal(input); err != nil {
+		return "", err
+	}
+	if err := subscriptionSourceRefusal(input); err != nil {
 		return "", err
 	}
 	// Only a disk its substrate created may be left for the installer to
@@ -205,6 +209,7 @@ func RenderKickstart(input Installation) (string, error) {
 	lines = append(lines, targetProofLines(input)...)
 	lines = append(lines, packageTrustLines(input)...)
 	lines = append(lines, encryptionPreLines(input)...)
+	lines = append(lines, subscriptionPreLines(input)...)
 	lines = append(lines, storageLines(input)...)
 	lines = append(lines, "")
 	lines = append(lines, securityLines(input)...)
@@ -214,6 +219,7 @@ func RenderKickstart(input Installation) (string, error) {
 	lines = append(lines, encryptionPostLines(input)...)
 	lines = append(lines, postSection(input)...)
 	lines = append(lines, rootWWNPostLines(input)...)
+	lines = append(lines, subscriptionPostLines(input)...)
 	return strings.Join(compact(lines), "\n") + "\n", nil
 }
 
@@ -277,6 +283,8 @@ var kickstartFields = []struct {
 	{"the root disk WWN", "spec.hardware.rootDisk.wwn of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootWWN} }},
 	{"an inventoried disk serial number", "the BMC drive inventory of the Machine's root-disk discovery", kickstartToken, func(i Installation) []string { return i.InventoriedSerials }},
 	{"the SELinux mode", "spec.customizations.security.selinux.mode of the install profile", kickstartToken, func(i Installation) []string { return []string{i.SELinux} }},
+	{"the Satellite host name", "spec.rhsm.satellite.hostname of the Entitlement the install profile's spec.subscription names", kickstartToken, subscriptionValue(func(s KickstartSubscription) string { return s.Hostname })},
+	{"the Satellite content root", "spec.rhsm.satellite.contentBaseURL of the Entitlement the install profile's spec.subscription names", kickstartToken, subscriptionValue(func(s KickstartSubscription) string { return s.ContentBaseURL })},
 	{"the time zone", "spec.customizations.localization.timezone of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Timezone} }},
 	{"the install account", "the product-owned install account", kickstartToken, func(i Installation) []string { return []string{i.User} }},
 	{"the weak-dependency choice", "spec.customizations.packages.installWeakDeps of the install profile", kickstartToken, func(i Installation) []string { return []string{i.WeakDeps} }},
@@ -346,7 +354,7 @@ func kickstartCarries(shape kickstartShape, value string) bool {
 			tree = strings.TrimSuffix(tree, " --sslcacert="+packageTrustPath)
 			return found && strings.HasPrefix(tree, "https://") && oneKickstartToken(tree, false)
 		}
-		return value == "cdrom" || found && tree != "" && oneKickstartToken(tree, false)
+		return value == "cdrom" || value == subscriptionSource || found && tree != "" && oneKickstartToken(tree, false)
 	case kickstartListElement:
 		return oneKickstartToken(value, true)
 	case kickstartPackage:
@@ -574,6 +582,7 @@ func postSection(input Installation) []string {
 		lines = append(lines, repositoryFileLines(repository)...)
 	}
 	lines = append(lines, releaseVariableLines(input.Release)...)
+	lines = append(lines, subscriptionRecordLines(input)...)
 	lines = append(lines, []string{
 		"install -d -m 0750 /etc/sudoers.d",
 		"printf '%s\\n' '" + input.User + " ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/60-bootwright",

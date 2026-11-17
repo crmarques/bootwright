@@ -998,7 +998,7 @@ The `anaconda` arm contains:
 | `partitioning.home` | string | no | `automatic` (default) or `none`; optional `partitioning` is closed. Selects the [installation partitioning policy](../managed-os.md#installation-partitioning). |
 | `redfishVirtualMedia.artifactServerEndpoint.serverRef` | string | with endpoint block | Global managed ArtifactServer; required and never inferred. |
 | `redfishVirtualMedia.artifactServerEndpoint.endpointRef` | string | with endpoint block | Endpoint name on the selected managed ArtifactServer. |
-| `packageSource` | object | no | Absent installs from the boot media; otherwise exactly `hostedTree`. |
+| `packageSource` | object | no | Absent installs from the boot media; otherwise exactly one of `hostedTree` and `subscription`. |
 
 `redfishVirtualMedia` is optional in the standalone install-profile shape. If
 its endpoint block is present, both `serverRef` and `endpointRef` are required.
@@ -1008,7 +1008,8 @@ Machine selects the profile, on any substrate.
 
 The optional package source is exact: a mirror's repositories belong to
 `customizations.repositories.configure`, and registration belongs to top-level
-`subscription`.
+`subscription`, which the `subscription` source installs from and never
+replaces.
 
 - `hostedTree` has required `fromMedia` naming a DVD image of the media store
   as `local-media:<filename.iso>` only, under the same grammar as
@@ -1019,6 +1020,14 @@ The optional package source is exact: a mirror's repositories belong to
   installer image of a Bootwright-installed Machine of the same name would be
   published through one server, because both are published beneath
   `os/<name>/` there.
+- `subscription` is the empty object `{}`: the installer registers with the
+  Satellite the profile's `spec.subscription` Entitlement declares and installs
+  from the content its activation key selects, so the boot image is the only
+  media the profile names. It requires `spec.subscription`, whose Entitlement
+  is `managed`, declares `spec.rhsm.satellite` and selects neither
+  `contentView` nor `lifecycleEnvironment`; any other shape refuses at
+  `spec.installer.anaconda.packageSource.subscription`
+  ([managed OS](../managed-os-subscription-source.md)).
 
 ### Installation network services
 

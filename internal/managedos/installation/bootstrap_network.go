@@ -10,10 +10,7 @@ import (
 
 const bootstrapConnections = "/run/NetworkManager/system-connections"
 
-func encryptionNetworkLines(input Installation) []string {
-	if input.DiskEncryption == nil {
-		return nil
-	}
+func bootstrapNetworkLines(input Installation) []string {
 	var profiles [][]string
 	var activate []string
 	add := func(name, kind, master string, settings []string) {

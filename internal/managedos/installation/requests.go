@@ -223,8 +223,8 @@ type Request struct {
 	Network            Network              `json:"network"`
 	Placement          machineref.Placement `json:"placement"`
 	// Private is the subtree this block owns for material only the installing
-	// machine may read: the delivered key pair or the recovery passphrase, and
-	// the installer image. The
+	// machine may read: the delivered key pair, the recovery passphrase or a
+	// subscription source's registration material, and the installer image. The
 	// attempt mints the unguessable final segment, so this names the parent
 	// it owns and never the path itself.
 	Private      *Publication  `json:"private,omitempty"`
@@ -251,6 +251,7 @@ type DiskEncryption struct {
 type Registration struct {
 	ActivationKeyRef string                   `json:"activationKeyRef"`
 	EntitlementRef   string                   `json:"entitlementRef"`
+	InstallSource    bool                     `json:"installSource,omitempty"`
 	OrganizationRef  string                   `json:"organizationRef"`
 	Repositories     SubscriptionRepositories `json:"repositories"`
 	Satellite        *Satellite               `json:"satellite,omitempty"`

@@ -27,7 +27,9 @@
 
 # ansible-core keeps nothing of a failure under no_log but that it failed, so
 # what ended the wait is reported here, where no credential is: the power
-# state the controller last reported, or its own refusal of the last read.
+# state the controller last reported, or its own refusal of the last read. An
+# installer that registers stops on its own console when registration fails,
+# so its wait names what the Satellite decides.
 - name: Stop at an installer that did not finish within its budget
   ansible.builtin.assert:
     that:
@@ -39,7 +41,13 @@
       its management controller last answered
       {{ ('power ' ~ (managedos_install_anaconda_installer.power | string | bootwright.core.printable)[:32])
          if managedos_install_anaconda_installer.power is defined
-         else (managedos_install_anaconda_installer.msg | default('') | string | bootwright.core.printable)[:512] }}
+         else (managedos_install_anaconda_installer.msg | default('') | string | bootwright.core.printable)[:512] }}{{
+         '; an installer that installs from its subscription also stops, with its reason on the console of the Machine, when the Satellite'
+         ~ ' refuses the organization or activation key, presents a certificate its CA bundle does not verify, cannot be resolved or'
+         ~ ' reached from the install network, serves no BaseOS and AppStream repositories for the release in the content view of'
+         ~ ' the activation key, or already holds a host with the hardware identity of this Machine, which an earlier installation'
+         ~ ' that registered and then failed leaves until it is removed there'
+         if managedos_install_anaconda_installer_registers | default(false) | bool else '' }}
     quiet: true
 
 - name: Eject the installer image now that the installation is written

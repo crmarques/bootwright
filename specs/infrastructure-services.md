@@ -632,7 +632,9 @@ generated, and the installer image whose Kickstart names where that key is
 fetched; neither outlives the boot that installs it. A managed-OS installation
 that [encrypts its root disk](managed-os.md#root-disk-encryption) delivers the
 same way its recovery passphrase and the installer image whose Kickstart names
-where it is fetched, both withdrawn when its installation completes. A
+where it is fetched, both withdrawn when its installation completes; one that
+installs from its [subscription](managed-os-subscription-source.md)
+delivers its registration material so. A
 [container cluster](openshift-clusters.md#boot-media) publishes its agent boot
 image, which embeds the operator's own pull secret in its ignition and is
 retained while the cluster's media block is, because a node may be booted from
