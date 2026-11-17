@@ -81,6 +81,10 @@ def test_the_frozen_sessions_are_what_the_role_chose(name):
         "update": 1800 if updating else 0,
         "updateCompletion": 120 if updating else 0,
     }
+    # registration_observe.yml and update_observe.yml each ran 120 s; a request
+    # that observes neither omits the session.
+    if registering or updating:
+        chosen["inspection"] = 120
     assert request["budgets"]["sessions"] == chosen
 
 

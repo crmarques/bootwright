@@ -13,6 +13,9 @@ argument_specs:
             type: dict
             required: true
             options:
+              inspection:
+                type: int
+                required: true
               session:
                 type: int
                 required: true

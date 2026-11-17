@@ -156,9 +156,9 @@ options:
     description: The lent CA bundle file that signs the Satellite's certificate; register only.
     type: path
   timeout:
-    description: Seconds the whole session may take, from 1 to 900.
+    description: Seconds the whole session may take, from 1 to 900, as the frozen request's session budget names them.
     type: int
-    default: 630
+    required: true
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -181,6 +181,7 @@ EXAMPLES = r"""
       - "*"
     enable:
       - rhel-9-for-x86_64-baseos-rpms
+    timeout: "{{ request.budgets.sessions.registration }}"
 """
 
 RETURN = r"""
@@ -460,7 +461,7 @@ def main():
             "satellite_hostname": {"type": "str"},
             "satellite_content_base_url": {"type": "str"},
             "satellite_ca_file": {"type": "path"},
-            "timeout": {"type": "int", "default": 630},
+            "timeout": {"type": "int", "required": True},
         },
         required_if=[("operation", "register", ("organization_file", "activation_key_file"))],
         supports_check_mode=False,

@@ -74,7 +74,7 @@ def module(name):
 
 # Distinct worker session timeouts, so each session is proved to read the one
 # the request froze; Go derives them (internal/managedos/installation).
-FROZEN_SESSIONS = {"registration": 611, "unregistration": 322, "update": 1777, "updateCompletion": 133}
+FROZEN_SESSIONS = {"inspection": 144, "registration": 611, "unregistration": 322, "update": 1777, "updateCompletion": 133}
 
 
 def scope(registering=True, **extra):
@@ -525,3 +525,9 @@ def test_explicit_satellite_selection_lends_labels_and_runs_its_frozen_session(u
     assert render(arguments["satellite_content_view"], **variables) == "composite_rhel9_ceph"
     assert render(arguments["satellite_lifecycle_environment"], **variables) == "Production"
     assert int(render(arguments["timeout"], **variables)) == FROZEN_SESSIONS["registration"]
+
+
+def test_an_observation_reads_the_registration_within_its_frozen_inspection_session():
+    arguments = module("registration_observe.yml")[REGISTRATION]
+    assert arguments["operation"] == "inspect"
+    assert int(render(arguments["timeout"])) == FROZEN_SESSIONS["inspection"]

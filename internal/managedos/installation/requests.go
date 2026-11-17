@@ -158,6 +158,7 @@ type Budgets struct {
 }
 
 type Sessions struct {
+	Inspection       int `json:"inspection,omitempty"`
 	Registration     int `json:"registration"`
 	Unregistration   int `json:"unregistration"`
 	Update           int `json:"update"`
@@ -300,6 +301,9 @@ func (r Request) sessions() Sessions {
 	}
 	if r.Update != nil {
 		sessions.Update, sessions.UpdateCompletion = seconds(updateSession), seconds(updateCompletionSession)
+	}
+	if r.Registration != nil || r.Update != nil {
+		sessions.Inspection = seconds(inspectionSession)
 	}
 	return sessions
 }

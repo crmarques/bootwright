@@ -69,11 +69,11 @@
   },
   "os-host-firewall-v1": {
     "contentDigest": "ef74fbe8098b01389b0dcef264da682b89702c0bc590db7d5a40412626a3c9cd",
-    "fingerprint": "dac599a2301a0ae4bc7f5043fcb380e38c4269619875eac7ac43a41b7debb833"
+    "fingerprint": "c772f9d0c7030f5f8a98e059a0c7f38e17226fcc1394030955ba29cff88b8cf5"
   },
   "os-install-anaconda-v1": {
     "contentDigest": "1bb65ca142b94a27f5118520140a23df15a4a38508ed5cf33b4682bbf7d14f99",
-    "fingerprint": "06c623b8f14ee1385e5c02d3ac05f0f25f42c7d1b691c3202497a8018252c38c"
+    "fingerprint": "7d84f17c555a00196ed410da0e40327bc656cfc4b9466c0925932457173b1571"
   },
   "os-package-tree-v1": {
     "contentDigest": "62218223d7cca3604594c231a1265d351e6c12e0e9d6d8b31f2f51086a839445",
@@ -81,7 +81,7 @@
   },
   "physical-erase-v1": {
     "contentDigest": "6c1c49685138b533ada39706c004909f33a27c52b3694793cb4e121e09f6643e",
-    "fingerprint": "67d4e5dd2587652836d77a984c3a1a7ca945ea12be4f2eab5b5a6b28d3d0436e"
+    "fingerprint": "f3762bbffde837e2e966b1fa7b8d0d48d709e7e46fc8f9017d175221bb00fb02"
   },
   "proxy-squid-v1": {
     "contentDigest": "f6f3786ce9c60b6b307aa8169bc8e87ab296769ab62d47fcfc5e536479147c16",

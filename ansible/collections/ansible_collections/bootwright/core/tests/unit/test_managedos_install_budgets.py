@@ -147,8 +147,8 @@ def test_every_entry_point_requires_every_budget():
         sessions = budgets["options"]["sessions"]
         assert sessions["type"] == "dict" and sessions["required"] is True, entry
         assert {field: (option["type"], option["required"]) for field, option in sessions["options"].items()} == {
-            "registration": ("int", True), "unregistration": ("int", True), "update": ("int", True),
-            "updateCompletion": ("int", True)}, entry
+            "inspection": ("int", False), "registration": ("int", True), "unregistration": ("int", True),
+            "update": ("int", True), "updateCompletion": ("int", True)}, entry
         for name, budget in budgets["options"].items():
             if name == "sessions":
                 continue

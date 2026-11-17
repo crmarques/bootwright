@@ -49,14 +49,14 @@ func TestTheSessionBudgetsAndTheRunBoundsShareTheirConstants(t *testing.T) {
 		want    Sessions
 	}{
 		"none":                {Request{}, Sessions{}},
-		"updating":            {Request{Update: update}, Sessions{Update: 1800, UpdateCompletion: 120}},
-		"registering":         {Request{Registration: hosted}, Sessions{Registration: 630, Unregistration: 330}},
-		"registering updates": {Request{Registration: hosted, Update: update}, Sessions{Registration: 750, Unregistration: 330, Update: 1800, UpdateCompletion: 120}},
-		"satellite":           {Request{Registration: satellite}, Sessions{Registration: 690, Unregistration: 330}},
-		"satellite updates":   {Request{Registration: satellite, Update: update}, Sessions{Registration: 810, Unregistration: 330, Update: 1800, UpdateCompletion: 120}},
-		"content view":        {Request{Registration: selected}, Sessions{Registration: 750, Unregistration: 330}},
+		"updating":            {Request{Update: update}, Sessions{Inspection: 120, Update: 1800, UpdateCompletion: 120}},
+		"registering":         {Request{Registration: hosted}, Sessions{Inspection: 120, Registration: 630, Unregistration: 330}},
+		"registering updates": {Request{Registration: hosted, Update: update}, Sessions{Inspection: 120, Registration: 750, Unregistration: 330, Update: 1800, UpdateCompletion: 120}},
+		"satellite":           {Request{Registration: satellite}, Sessions{Inspection: 120, Registration: 690, Unregistration: 330}},
+		"satellite updates":   {Request{Registration: satellite, Update: update}, Sessions{Inspection: 120, Registration: 810, Unregistration: 330, Update: 1800, UpdateCompletion: 120}},
+		"content view":        {Request{Registration: selected}, Sessions{Inspection: 120, Registration: 750, Unregistration: 330}},
 		"content view updates": {Request{Registration: selected, Update: update},
-			Sessions{Registration: 870, Unregistration: 330, Update: 1800, UpdateCompletion: 120}},
+			Sessions{Inspection: 120, Registration: 870, Unregistration: 330, Update: 1800, UpdateCompletion: 120}},
 	} {
 		got := test.request.sessions()
 		if got != test.want {

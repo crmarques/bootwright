@@ -22,7 +22,7 @@
     host_key_algorithms: '{{ managedos_install_anaconda_registration_observe_session.host_key_algorithms }}'
     policy_host_key_algorithms: '{{ managedos_install_anaconda_registration_observe_session.policy_host_key_algorithms }}'
     request: '{{ bootwright_os_install_digest }}'
-    timeout: 120
+    timeout: '{{ bootwright_os_install_request.budgets.sessions.inspection | int }}'
   register: managedos_install_anaconda_registration_read
   failed_when: false
   changed_when: false

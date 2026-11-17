@@ -43,6 +43,10 @@ argument_specs:
                   unregistration: *seconds
                   update: *seconds
                   updateCompletion: *seconds
+                  # Present only where an observation reads a registration or an update.
+                  inspection:
+                    type: int
+                    required: false
           discoveryProof:
             type: dict
             required: false

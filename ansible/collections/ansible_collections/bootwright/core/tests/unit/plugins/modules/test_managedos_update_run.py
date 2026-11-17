@@ -14,7 +14,7 @@ from ansible_collections.bootwright.core.plugins.modules import managedos_update
 DIGEST = "0123456789abcdef" * 4
 ARGUMENTS = {"operation": "inspect", "address": "192.0.2.10", "user": "fleet", "identity": "/run/lent/key", "ssh_config": "/run/lent/ssh_config",
              "known_hosts": "/run/lent/known_hosts", "host_key_algorithms": "ssh-ed25519", "policy_host_key_algorithms": "ssh-ed25519",
-             "request": DIGEST, "release": "9.8"}
+             "request": DIGEST, "release": "9.8", "timeout": 120}
 
 
 @pytest.fixture(name="seen")
@@ -36,7 +36,7 @@ def test_the_defaults_reach_the_session_and_its_outcome_ends_the_task(seen, run_
     result = run_module(module, ARGUMENTS)
     assert result["changed"] is False and result["ok"] is True and result["evidence"] == {"state": "current"}
     (params,) = seen["params"]
-    assert params["pin"] == "" and params["timeout"] == 1800 and params["release"] == "9.8" and params["request"] == DIGEST
+    assert params["pin"] == "" and params["timeout"] == 120 and params["release"] == "9.8" and params["request"] == DIGEST
 
 
 def test_an_apply_reports_the_update_the_session_made(seen, run_module):
@@ -53,3 +53,10 @@ def test_an_argument_the_module_refuses_and_an_operation_it_does_not_know_fail_t
     unknown = run_module(module, dict(ARGUMENTS, operation="downgrade"))
     assert unknown["failed"] is True and "operation" in unknown["msg"]
     assert len(seen["params"]) == 1
+
+
+# The session's length is the frozen request's budget; the module chooses none.
+def test_a_session_without_its_frozen_timeout_fails_before_the_session(seen, run_module):
+    result = run_module(module, {key: value for key, value in ARGUMENTS.items() if key != "timeout"})
+    assert result["failed"] is True and "timeout" in result["msg"]
+    assert seen["params"] == []

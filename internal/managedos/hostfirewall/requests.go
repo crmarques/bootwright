@@ -20,6 +20,7 @@ import (
 
 const (
 	firewallSession         = 300 * time.Second
+	firewallInspection      = 120 * time.Second
 	firewallDeadline        = firewallSession + 5*time.Minute
 	FirewallFamily          = machineref.FirewallFamily
 	FirewallImplementation  = "os-host-firewall-v1"
@@ -64,7 +65,8 @@ type FirewallService struct {
 }
 
 type FirewallBudgets struct {
-	Session int `json:"session"`
+	Inspection int `json:"inspection"`
+	Session    int `json:"session"`
 }
 
 type FirewallRequest struct {
@@ -78,6 +80,10 @@ type FirewallRequest struct {
 	Services    []FirewallService    `json:"services"`
 	User        string               `json:"user"`
 	Version     string               `json:"version"`
+}
+
+func firewallBudgets() FirewallBudgets {
+	return FirewallBudgets{Inspection: int(firewallInspection / time.Second), Session: int(firewallSession / time.Second)}
 }
 
 func (r FirewallRequest) Canonical() ([]byte, error) {
@@ -235,7 +241,7 @@ func firewallRequestFor(install installation.Request, contextName string, requir
 	}
 	slices.SortFunc(requirements, func(a, b HostPortRequirement) int { return strings.Compare(a.Publisher, b.Publisher) })
 	request := FirewallRequest{
-		Address: install.Address, Budgets: FirewallBudgets{Session: int(firewallSession / time.Second)}, FleetKeyRef: install.FleetKeyRef, Placement: install.Placement, User: install.User, Version: FirewallImplementation,
+		Address: install.Address, Budgets: firewallBudgets(), FleetKeyRef: install.FleetKeyRef, Placement: install.Placement, User: install.User, Version: FirewallImplementation,
 		Identity: FirewallIdentity{Block: FirewallBlockID(machine), Context: contextName, Object: machine},
 		Services: []FirewallService{},
 	}
@@ -279,7 +285,7 @@ func validFirewallRequest(request FirewallRequest) error {
 	if request.Version != FirewallImplementation || request.Identity.Block != firewallRequestBlockID(request) || !api.ValidLexical(api.LexicalName, request.Identity.Context) {
 		return invalid("names another block or version")
 	}
-	if request.Budgets != (FirewallBudgets{Session: int(firewallSession / time.Second)}) {
+	if request.Budgets != firewallBudgets() {
 		return invalid("freezes another worker session budget")
 	}
 	if request.Preparation && (!request.Direct || len(request.Services) != 0) {

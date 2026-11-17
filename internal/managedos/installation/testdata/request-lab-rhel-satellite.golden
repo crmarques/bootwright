@@ -31,6 +31,7 @@
       "delaySeconds": 10
     },
     "sessions": {
+      "inspection": 120,
       "registration": 810,
       "unregistration": 330,
       "update": 1800,

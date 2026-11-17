@@ -62,6 +62,7 @@ request-schema:
   budgets.reboot.attempts int
   budgets.reboot.delaySeconds int
   budgets.sessions struct installation.Sessions
+  budgets.sessions.inspection int omitempty
   budgets.sessions.registration int
   budgets.sessions.unregistration int
   budgets.sessions.update int

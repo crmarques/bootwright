@@ -20,6 +20,7 @@ request-identity:
 request-schema:
   address string
   budgets struct hostfirewall.FirewallBudgets
+  budgets.inspection int
   budgets.session int
   direct bool
   fleetKeyRef string

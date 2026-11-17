@@ -14,7 +14,8 @@ from ansible_collections.bootwright.core.plugins.modules import managedos_regist
 
 DIGEST = "a" * 64
 INSPECT = {"operation": "inspect", "address": "192.0.2.10", "user": "fleet", "identity": "/run/lent/key", "ssh_config": "/run/lent/ssh_config",
-           "known_hosts": "/run/lent/known_hosts", "host_key_algorithms": "ssh-ed25519", "policy_host_key_algorithms": "ssh-ed25519", "request": DIGEST}
+           "known_hosts": "/run/lent/known_hosts", "host_key_algorithms": "ssh-ed25519", "policy_host_key_algorithms": "ssh-ed25519", "request": DIGEST,
+           "timeout": 120}
 REGISTER = dict(INSPECT, operation="register", organization_file="/run/lent/organization", activation_key_file="/run/lent/activation",
                 enable=["rhel-9-for-x86_64-baseos-rpms"], disable=["*"])
 
@@ -39,8 +40,15 @@ def test_an_inspection_reads_its_defaults_and_returns_the_sessions_outcome(seen,
     result = run_module(module, INSPECT)
     assert result["changed"] is False and result["ok"] is True and result["registered"] is False
     (params,) = seen["params"]
-    assert params["timeout"] == 630 and params["enable"] == [] and params["disable"] == [] and params["release"] == ""
+    assert params["timeout"] == 120 and params["enable"] == [] and params["disable"] == [] and params["release"] == ""
     assert params["operation"] == "inspect" and params["identity"] == "/run/lent/key"
+
+
+# The session's length is the frozen request's budget; the module chooses none.
+def test_a_session_without_its_frozen_timeout_fails_before_the_session(seen, run_module):
+    result = run_module(module, {key: value for key, value in INSPECT.items() if key != "timeout"})
+    assert result["failed"] is True and "timeout" in result["msg"]
+    assert seen["params"] == []
 
 
 def test_a_registration_hands_the_session_the_material_paths_and_never_their_content(seen, run_module):

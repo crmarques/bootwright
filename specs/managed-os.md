@@ -569,8 +569,8 @@ of the reads that hour allows for.
 
 A physical installation whose deadline passes `MaxDeadline` runs to it.
 
-The request freezes each worker session's timeout in `budgets.sessions`, from
-the constants of the registration and update bounds.
+The request freezes each worker session's timeout, an observation's
+`inspection` too, in `budgets.sessions` from the registration and update bounds.
 
 Not yet met: the update's reboot return does not count each attempt's
 10-second SSH connect timeout; tracked as [B878](milestones/m1.md#b878).
@@ -2142,7 +2142,8 @@ one with no listener, and a grant block `os-firewall-<machine>` per host
 holding requirements. Each publisher
 becomes one owned firewalld service with exactly its protocols and ports.
 The request freezes its worker session's timeout as `budgets.session`, from
-the constant its run deadline is derived from.
+the constant its run deadline is derived from, and an observation's session as
+`budgets.inspection`.
 Infrastructure services wait for that block. The installed-host block runs
 in the machines stage after OS installation and before consumers. Provided-host blocks run in infrastructure-services. The controller stage
 requires daemon preparation and grants for already-existing interfaces, so a

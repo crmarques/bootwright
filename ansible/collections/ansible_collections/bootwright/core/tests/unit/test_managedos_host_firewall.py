@@ -763,12 +763,13 @@ def calls(name, fqcn):
 # A distinct worker session timeout, so the session is proved to read the one
 # the request froze; Go derives it and the run's deadline from one constant.
 SESSION = 277
+INSPECTION = 133
 
 
 def variables(**extra):
     services = [service(), service(NFS, port=2049)]
     request = {"version": "os-host-firewall-v1", "direct": False, "preparation": False, "address": "192.0.2.10", "user": "fleet", "fleetKeyRef": "fleet-key",
-               "budgets": {"session": SESSION},
+               "budgets": {"inspection": INSPECTION, "session": SESSION},
                "identity": {"block": "os-firewall-ceph-01", "context": "lab", "object": "ceph-01"},
                "placement": {"connection": "ssh"}, "services": [{"name": RGW}, {"name": NFS}]}
     values = dict(DEFAULTS, bootwright_run_scratch="/var/tmp/bootwright-scratch-1-1", bootwright_os_firewall_request=request,
@@ -813,7 +814,8 @@ def test_the_argument_specification_declares_the_same_request_for_every_entry_po
     assert all(declared[name]["options"] == options for name in declared)
     request = options["bootwright_os_firewall_request"]["options"]
     assert sorted(request) == ["address", "budgets", "direct", "fleetKeyRef", "identity", "placement", "preparation", "services", "user", "version"]
-    assert request["budgets"]["required"] is True and request["budgets"]["options"] == {"session": {"type": "int", "required": True}}
+    assert request["budgets"]["required"] is True and request["budgets"]["options"] == {
+        "inspection": {"type": "int", "required": True}, "session": {"type": "int", "required": True}}
     assert request["version"]["choices"] == ["os-host-firewall-v1"]
     assert options["bootwright_os_firewall_digest"]["type"] == "str" and options["bootwright_os_firewall_material"]["type"] == "dict"
 
@@ -1268,3 +1270,15 @@ def test_the_worker_session_runs_for_the_budget_the_request_froze():
     worker = [task for task in flattened(tasks("session.yml")) if "bootwright.core.managedos_firewall" in task]
     assert len(worker) == 1
     assert int(render(worker[0]["bootwright.core.managedos_firewall"]["timeout"])) == SESSION
+
+
+def test_an_observation_inspects_within_its_frozen_inspection_session():
+    def walk(items):
+        for task in items:
+            yield task
+            for key in ("block", "rescue", "always"):
+                yield from walk(task.get(key) or [])
+    inspect = [task["bootwright.core.managedos_firewall"] for task in walk(tasks("observe.yml"))
+               if "bootwright.core.managedos_firewall" in task]
+    assert len(inspect) == 1 and inspect[0]["operation"] == "inspect"
+    assert int(render(inspect[0]["timeout"])) == INSPECTION

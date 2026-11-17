@@ -124,6 +124,7 @@ const (
 	updateGuestRead         = 120 * time.Second
 	updateCompletionSession = 120 * time.Second
 	updateMarkerRead        = 60 * time.Second
+	inspectionSession       = 120 * time.Second
 )
 
 const registrationBound = max(registrationSession+releasePinSession+satelliteSession+contentViewSession, unregistrationSession) + registrationInspection

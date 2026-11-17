@@ -27,7 +27,7 @@
         policy_host_key_algorithms: '{{ managedos_host_firewall_observe_session.policy_host_key_algorithms }}'
         mark: '{{ bootwright_os_firewall_material.mark }}'
         services: '{{ managedos_host_firewall_services }}'
-        timeout: 120
+        timeout: '{{ bootwright_os_firewall_request.budgets.inspection | int }}'
       register: managedos_host_firewall_answer
       failed_when: false
       changed_when: false

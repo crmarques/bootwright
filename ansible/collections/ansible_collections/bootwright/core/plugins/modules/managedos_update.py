@@ -97,9 +97,9 @@ options:
     type: str
     default: ""
   timeout:
-    description: Seconds the whole session may take, from 1 to 1800.
+    description: Seconds the whole session may take, from 1 to 1800, as the frozen request's session budget names them.
     type: int
-    default: 1800
+    required: true
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -117,6 +117,7 @@ EXAMPLES = r"""
     policy_host_key_algorithms: ssh-ed25519,ecdsa-sha2-nistp256
     request: "{{ request_digest }}"
     release: "9.8"
+    timeout: "{{ request.budgets.sessions.update }}"
 """
 
 RETURN = r"""
@@ -335,7 +336,7 @@ def main():
             "request": {"type": "str", "required": True},
             "release": {"type": "str", "required": True},
             "pin": {"type": "str", "default": ""},
-            "timeout": {"type": "int", "default": 1800},
+            "timeout": {"type": "int", "required": True},
         },
         supports_check_mode=False,
     )

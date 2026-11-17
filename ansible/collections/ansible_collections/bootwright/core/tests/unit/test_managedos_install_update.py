@@ -63,7 +63,7 @@ def included(name, **variables):
 
 # Distinct worker session timeouts, so each session is proved to read the one
 # the request froze; Go derives them (internal/managedos/installation).
-FROZEN_SESSIONS = {"registration": 611, "unregistration": 322, "update": 1777, "updateCompletion": 133}
+FROZEN_SESSIONS = {"inspection": 144, "registration": 611, "unregistration": 322, "update": 1777, "updateCompletion": 133}
 
 
 def scope(updating=True, **extra):
@@ -187,7 +187,7 @@ def test_update_session_is_the_guest_connection(name):
 
 def test_observe_only_inspects_the_update():
     observe = module("update_observe.yml")
-    assert observe[UPDATE]["operation"] == "inspect" and observe[UPDATE]["timeout"] == 120
+    assert observe[UPDATE]["operation"] == "inspect" and int(render(observe[UPDATE]["timeout"])) == FROZEN_SESSIONS["inspection"]
     applied = module("update_session.yml")[UPDATE]
     for operation, timeout in (("apply", FROZEN_SESSIONS["update"]), ("complete", FROZEN_SESSIONS["updateCompletion"])):
         assert render(applied["operation"], managedos_install_anaconda_update_operation=operation) == operation
