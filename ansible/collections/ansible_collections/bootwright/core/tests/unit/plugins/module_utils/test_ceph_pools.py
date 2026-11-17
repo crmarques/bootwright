@@ -539,7 +539,7 @@ def test_pool_max_pgs_below_the_default_caps_pg_num():
     assert creates == [("osd", "pool", "create", "volumes", "16", "16", "replicated", "replicated_rule", "--autoscale_mode", "on", "--pg_num_max", "16")]
     assert ready(native)[0] is True
     with pytest.raises(ceph_native.Refusal, match="^request$"):
-        resource(World(), "pool", pool_value(autoscale=autoscale, pgNum=32))
+        resource(World(), "pool", pool_value(autoscale=autoscale, pgNum=32769))
 
 
 @pytest.mark.parametrize("role,metadata,expected", [
@@ -768,7 +768,7 @@ def test_pool_create_passes_explicit_pg_and_autoscale():
     world.entry("volumes")["flags_names"] = "hashpspool"
     assert ready(native)[0] is False
     with pytest.raises(ceph_native.Refusal, match="^request$"):
-        resource(World(), "pool", pool_value(autoscale=autoscale, pgNum=32))
+        resource(World(), "pool", pool_value(autoscale=autoscale, pgNum=True))
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         resource(World(), "pool", pool_value(autoscale=dict(autoscale, targetBytes=1), pgNum=64))
 
@@ -837,7 +837,7 @@ def test_a_policy_without_daemons_reports_only_its_own_retained_ownership(owned)
 
 
 @pytest.mark.parametrize("change", [
-    {"application": "cephfs"}, {"role": "mirror"}, {"role": ["rbd"]}, {"pgNum": 33},
+    {"application": "cephfs"}, {"role": "mirror"}, {"role": ["rbd"]}, {"pgNum": 0},
     {"compression": {"algorithm": "zstd", "maxBlob": 0, "minBlob": 0, "mode": "", "requiredRatio": ""}},
     {"compression": {"algorithm": "", "maxBlob": 0, "minBlob": 0, "mode": "force", "requiredRatio": "1.5"}}, {"quota": {"maxBytes": -1, "maxObjects": 0}},
     {"autoscale": {"bulk": False, "maxPGs": 0, "minPGs": 0, "mode": "warn", "targetBytes": 0, "targetRatio": ""}}, {"overwrites": True}, {"size": 6},

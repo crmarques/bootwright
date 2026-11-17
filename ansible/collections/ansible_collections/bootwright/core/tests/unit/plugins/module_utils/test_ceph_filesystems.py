@@ -530,7 +530,7 @@ def test_groups_prove_the_owned_filesystem_before_any_group_command(case, reason
     assert marks.writes == before and effects(world) == [FS_NEW] and world.groups == {}
 
 
-@pytest.mark.parametrize("change", ["name", "reserved", "unsorted", "mode", "pool", "service", "coverage", "default", "dot", "metadata-in-data"])
+@pytest.mark.parametrize("change", ["name", "reserved", "unsorted", "mode", "pool", "service", "default", "dot", "metadata-in-data"])
 def test_validation_refuses_a_filesystem_go_never_freezes(change):
     filesystem, count, service = fs_value(groups=[group_value("a"), group_value("b")]), None, "files"
     if change == "name":
@@ -546,8 +546,6 @@ def test_validation_refuses_a_filesystem_go_never_freezes(change):
         filesystem["groups"][0]["pool"] = "cephfs-extra"
     elif change == "service":
         filesystem["mdsService"] = "mds.other"
-    elif change == "coverage":
-        filesystem["standbyCountWanted"], count = 1, 1
     elif change == "default":
         filesystem["defaultDataPool"] = "cephfs-extra"
     elif change == "dot":

@@ -195,7 +195,7 @@ func TestProducedDashboardPasswordIsBoundedToTheGeneratorsShape(t *testing.T) {
 func TestProducedClientMaterialRejectsAdminOrForeignCaps(t *testing.T) {
 	r := coreRequest()
 	r.Action = "client"
-	r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "readOnly"}
+	r.Client = frozenClient(Client{Name: "consumer", Pool: "volumes", Access: "readOnly"})
 	caps := map[string]string{"mon": "profile rbd", "mgr": "profile rbd-read-only pool=volumes", "osd": "profile rbd-read-only pool=volumes"}
 	entries := []clientCredential{{Entity: "client.consumer", Key: base64.StdEncoding.EncodeToString([]byte("private-key")), Caps: caps}}
 	encode := func() []lifecycle.Produced {
@@ -311,7 +311,7 @@ func (dependencyProofs) PhysicalMachine(reconciliation.Block, []byte) (PhysicalI
 func TestAnObservationNoOperationRecordsDeclaresAndTakesOverNoOutput(t *testing.T) {
 	cluster := coreRequest()
 	client := coreRequest()
-	client.Action, client.Client = "client", &Client{Name: "consumer", Pool: "volumes", Access: "readOnly"}
+	client.Action, client.Client = "client", frozenClient(Client{Name: "consumer", Pool: "volumes", Access: "readOnly"})
 	user := coreRequest()
 	user.Action, user.ObjectUser = "object-user", &ObjectUser{DisplayName: "app-writer", Gateway: "objects", Name: "app-writer", Realm: "objects", Zone: "objects", ZoneGroup: "objects"}
 	caps := map[string]string{"mon": "profile rbd", "mgr": "profile rbd-read-only pool=volumes", "osd": "profile rbd-read-only pool=volumes"}

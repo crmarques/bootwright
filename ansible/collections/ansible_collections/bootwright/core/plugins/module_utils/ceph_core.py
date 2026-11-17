@@ -1499,14 +1499,15 @@ def observe_nvmeof(request, request_digest, bootstrap, transport, timeout, now, 
 
 
 def execute_nvmeof(request, operation, request_digest, transport, bootstrap, *, now, pause):
-    ceph_native.require(ceph_native_nvmeof.execution_budget(request, "apply") <= 21600, "nvmeof-budget")
+    budgets = request["nvmeof"]["budgets"]
+    ceph_native.require(budgets["apply"] <= ceph_native_nvmeof.MAX_BUDGET, "nvmeof-budget")
     changed = False
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
         produced = transport.call(bootstrap, "nvmeof", timeout=ceph_native_nvmeof.phase_budget(request, "nvmeof") + 20)
         ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
         changed = produced["changed"]
-    observation_budget = 660 + ceph_native_nvmeof.phase_budget(request, "nvmeof_observe") + 20
+    observation_budget = budgets["observation"]
     deadline = now() + observation_budget + (READINESS_TIMEOUT if operation == "apply" else 0)
     blocking = []
     while True:

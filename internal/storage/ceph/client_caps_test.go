@@ -17,6 +17,11 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
+func frozenClient(c Client) *Client {
+	c.Caps, _ = scopeCaps(c)
+	return &c
+}
+
 func consumerClient() api.Object {
 	return childOf(api.CephClient, "consumer", "poolRef", "volumes", "access", "readWrite")
 }
@@ -92,7 +97,7 @@ func clientProduced(t *testing.T, entity string, caps map[string]string) []lifec
 func TestProducedClientRejectsWiderCaps(t *testing.T) {
 	r := coreRequest()
 	r.Action = "client"
-	r.Client = &Client{Access: "readWrite", DataPools: []string{"archive", "ec-data"}, Name: "consumer", Pool: "volumes"}
+	r.Client = frozenClient(Client{Access: "readWrite", DataPools: []string{"archive", "ec-data"}, Name: "consumer", Pool: "volumes"})
 	derived := map[string]string{"mon": "profile rbd", "mgr": "profile rbd pool=volumes", "osd": "profile rbd pool=volumes, profile rbd pool=archive, profile rbd pool=ec-data"}
 	good := clientProduced(t, "client.consumer", derived)
 	defer lifecycle.ClearProduced(good)
@@ -169,7 +174,7 @@ func TestUnchangedRequestContinuesAfterImpactText(t *testing.T) {
 // none (B829).
 func TestEveryCephOutputPresentsItsClusterFSIDAndPrincipal(t *testing.T) {
 	r := runtimeRequest()
-	r.Client = &Client{Access: "readWrite", Name: "consumer", Pool: "volumes"}
+	r.Client = frozenClient(Client{Access: "readWrite", Name: "consumer", Pool: "volumes"})
 	r.ObjectUser = &ObjectUser{Name: "app-writer"}
 	identify := func(request Request, incarnation string, names ...string) ([]lifecycle.Produced, error) {
 		t.Helper()

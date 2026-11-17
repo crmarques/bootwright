@@ -16,7 +16,7 @@ import (
 func clientExecution(t *testing.T) lifecycle.Execution {
 	t.Helper()
 	r := coreRequest()
-	r.Action, r.Client = "client", &Client{Name: "consumer", Pool: "volumes", Access: "readWrite"}
+	r.Action, r.Client = "client", frozenClient(Client{Name: "consumer", Pool: "volumes", Access: "readWrite"})
 	e := executionFor(t, r)
 	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-client-consumer", string(api.CephClient), "consumer"
 	return e

@@ -2574,7 +2574,8 @@ Evidence carries the stable subsystem serial and no key material. Native
 readiness is not an initiator login, I/O, failover or physical qualification
 claim. The request-derived deadline includes preparation, bounded resource
 creation, separate cluster and resource observation, and the readiness retry
-window. B491 continues to refuse online individual removal; whole-owned-cluster
+window; Go freezes it, the two phase budgets and the observation window as the
+request's `budgets`, and the worker uses them without deriving them. B491 continues to refuse online individual removal; whole-owned-cluster
 retirement remains supported.
 
 `nvmeof-native` names unavailable/refused qualified native commands;

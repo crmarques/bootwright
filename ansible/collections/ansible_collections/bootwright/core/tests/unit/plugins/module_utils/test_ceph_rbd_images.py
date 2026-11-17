@@ -67,7 +67,8 @@ def pool_value():
 
 
 def client_value():
-    return {"name": "canary", "pool": "volumes", "access": "readWrite", "dataPools": [], "filesystem": "", "group": "", "subvolume": ""}
+    return {"name": "canary", "pool": "volumes", "access": "readWrite", "dataPools": [], "filesystem": "", "group": "", "subvolume": "",
+            "caps": {"mon": "profile rbd", "mgr": "profile rbd pool=volumes", "osd": "profile rbd pool=volumes"}}
 
 
 def policy_value():

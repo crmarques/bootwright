@@ -389,7 +389,7 @@ or within `(0,1]`) and the blob sizes `minBlobSize` and `maxBlobSize`
 maximum when both are positive). Another compression field requires a `mode`.
 
 The initial `pg_num` is `clamp(32, pgNumMin, pgNumMax)` over the positive
-bounds. `autoscale.mode` is `on` when omitted or `off`; `warn` refuses at plan
+bounds, which Go freezes as the pool request's `pgNum`; the worker applies it. `autoscale.mode` is `on` when omitted or `off`; `warn` refuses at plan
 (D160, OD26). `targetSizeBytes` converts with 1024-based units,
 `targetSizeRatio` and `compression.requiredRatio` freeze as decimal strings,
 and quota and compression values freeze as native values, with 0 and empty
@@ -585,8 +585,12 @@ CephClient.
 The native principal is `client.<metadata.name>`, with collision and ownership
 checks before the key is applied with `auth add` (never `auth import`,
 `auth get-or-create`, `auth caps` or `fs authorize`) and read back exactly with
-`auth get`. The capabilities are derived from the selected access and the
-frozen scope, frozen and observed. The RBD permission covers the declared pool,
+`auth get`. Go derives the capabilities from the selected access and the
+frozen scope and freezes them as the client request's `caps`; for the subvolume
+arm Go's prepare step binds the proved path into the frozen `mds` grant. The
+worker applies the frozen grants without deriving them, and Go judges the
+created principal against the same value
+([language responsibility](architecture.md#language-responsibility)). The RBD permission covers the declared pool,
 not only one image; the plan reports each arm's scope from the frozen request.
 
 The client has no data-pool field: a CephRBDImage's `spec.dataPoolRef` is

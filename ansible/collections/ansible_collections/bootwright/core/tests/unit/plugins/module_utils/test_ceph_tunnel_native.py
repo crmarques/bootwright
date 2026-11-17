@@ -287,7 +287,8 @@ def test_supported_transport_is_the_pinned_release_over_verified_tunnel_only(clu
 def test_remote_dispatch_refuses_the_native_transport_before_any_effect(cluster_request, phase):
     cluster_request["clusterSSHTransport"] = "native"
     resources = {"pool": copy.deepcopy(POOL),
-                 "client": {"name": "reader", "pool": "volumes", "access": "readOnly", "dataPools": [], "filesystem": "", "group": "", "subvolume": ""},
+                 "client": {"name": "reader", "pool": "volumes", "access": "readOnly", "dataPools": [], "filesystem": "", "group": "", "subvolume": "",
+                            "caps": {"mon": "profile rbd", "mgr": "profile rbd-read-only pool=volumes", "osd": "profile rbd-read-only pool=volumes"}},
                  "policy": {"deviceClass": "", "failureDomain": "host", "name": "fast", "root": "default", "rule": "fast", "size": 2}}
     if phase in resources:
         cluster_request.update({"action": phase, phase: resources[phase]})

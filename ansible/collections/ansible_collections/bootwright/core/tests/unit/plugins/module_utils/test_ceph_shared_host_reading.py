@@ -19,6 +19,7 @@ DIGEST = "d" * 64
 APPLIED = "ceph-call-home-opt-in"
 PENDING = "mgr.node-2.ghijkl"
 NATIVE_ERROR = {"coordinate": "synthetic image; host package synthetic", "cause": "synthetic cause"}
+READ_ONLY_CAPS = {"mon": "profile rbd", "mgr": "profile rbd-read-only pool=volumes", "osd": "profile rbd-read-only pool=volumes"}
 
 
 def resources():
@@ -213,7 +214,7 @@ def test_only_a_resource_observation_reads_or_replays_hosts(case, tmp_path):
         operation = "apply"
     elif case == "outputs":
         request.update(action="client", client={"name": "consumer", "pool": "volumes", "access": "readOnly", "dataPools": [], "filesystem": "",
-                                                "group": "", "subvolume": ""})
+                                                "group": "", "subvolume": "", "caps": READ_ONLY_CAPS})
         request.pop("pool")
         outputs = {"client": str(tmp_path / "client")}
     else:
@@ -256,7 +257,7 @@ SHARED_ACTIONS = {
     "zone-pool": ("pool", pools.pool_value(name="objects.rgw.log", object="objects", role="rgw")),
     "policy": ("policy", pools.policy_value()),
     "client": ("client", {"name": "consumer", "pool": "volumes", "access": "readOnly", "dataPools": [], "filesystem": "", "group": "",
-                          "subvolume": ""}),
+                          "subvolume": "", "caps": READ_ONLY_CAPS}),
     "rbd": ("rbd", {"dataPool": "", "features": ["layering"], "name": "disk", "pool": "data", "sizeBytes": 1073741824}),
     "filesystem": ("filesystem", fs.fs_value()),
     "subvolume": ("subvolume", {"filesystem": "files", "gid": 0, "group": "csi", "mode": "755", "name": "docs", "pool": "cephfs-data",

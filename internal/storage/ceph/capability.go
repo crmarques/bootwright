@@ -2,6 +2,7 @@ package ceph
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 
@@ -389,6 +390,11 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if action == "" || r.Action != action || !onlyOwnArm(r) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || r.Client != nil && r.Client.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
 		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 	}
+	if r.Client != nil {
+		if caps, _ := scopeCaps(*r.Client); !maps.Equal(caps, r.Client.Caps) {
+			return Request{}, failure("lifecycle.state", "CephClient "+r.Client.Name+" froze capability grants this build does not derive", "destroy it with the build that applied it, then apply with this build")
+		}
+	}
 	if r.Owner != "" || r.FSID != "" || e.ApplyOperation == "" {
 		return Request{}, failure("lifecycle.state", "Ceph requires the immutable original apply identity", "")
 	}
@@ -451,6 +457,8 @@ func (c Capability) prepare(ctx context.Context, e lifecycle.Execution) (Request
 		}
 		client := *r.Client
 		client.SubvolumePath = path
+		client.Caps = maps.Clone(client.Caps)
+		client.Caps["mds"] += " path=" + path
 		r.Client = &client
 	}
 	return r, nil

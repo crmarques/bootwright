@@ -88,19 +88,35 @@ func validateProduced(produced []lifecycle.Produced, r Request, present bool) er
 		}
 	}
 	caps, ok := clientCaps(*r.Client)
-	if !ok || !strictlyAscending(r.Client.DataPools) || slices.Contains(r.Client.DataPools, r.Client.Pool) {
+	if !ok || !maps.Equal(caps, r.Client.Caps) || !strictlyAscending(r.Client.DataPools) || slices.Contains(r.Client.DataPools, r.Client.Pool) {
 		return evidenceFailure()
 	}
 	key, err := base64.StdEncoding.DecodeString(entries[0].Key)
 	defer clear(key)
-	if err != nil || len(key) == 0 || entries[0].Entity != "client."+r.Client.Name || !maps.Equal(entries[0].Caps, caps) {
+	if err != nil || len(key) == 0 || entries[0].Entity != "client."+r.Client.Name || !maps.Equal(entries[0].Caps, r.Client.Caps) {
 		return evidenceFailure()
 	}
 	return nil
 }
 
 func clientCaps(c Client) (map[string]string, bool) {
-	if c.Pool != "" && c.Filesystem != "" || c.Group != "" && c.Subvolume == "" || c.Subvolume != "" && c.Filesystem == "" || (c.Subvolume != "") != (c.SubvolumePath != "") {
+	if (c.Subvolume != "") != (c.SubvolumePath != "") {
+		return nil, false
+	}
+	return scopeCaps(c)
+}
+
+func withCaps(r Request) (Request, error) {
+	caps, ok := scopeCaps(*r.Client)
+	if !ok {
+		return Request{}, failure("api.invariant", "CephClient "+r.Client.Name+" declares no scope this build grants", "set spec.access to readOnly or readWrite and exactly one of spec.poolRef, spec.filesystemRef or spec.subvolumeRef")
+	}
+	r.Client.Caps = caps
+	return r, nil
+}
+
+func scopeCaps(c Client) (map[string]string, bool) {
+	if c.Pool != "" && c.Filesystem != "" || c.Group != "" && c.Subvolume == "" || c.Subvolume != "" && c.Filesystem == "" || c.Subvolume == "" && c.SubvolumePath != "" {
 		return nil, false
 	}
 	if c.Filesystem != "" {
@@ -128,7 +144,7 @@ func cephFSClientCaps(c Client) (map[string]string, bool) {
 		return nil, false
 	}
 	mds := "allow " + grant + " fsname=" + c.Filesystem
-	if c.Subvolume != "" {
+	if c.SubvolumePath != "" {
 		mds += " path=" + c.SubvolumePath
 	}
 	return map[string]string{"mds": mds, "mon": "allow r fsname=" + c.Filesystem, "osd": "allow " + grant + " tag cephfs data=" + c.Filesystem}, true

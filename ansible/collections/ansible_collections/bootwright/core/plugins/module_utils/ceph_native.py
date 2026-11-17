@@ -756,9 +756,8 @@ def scope_checks(request):
     require(bool(request["publicNetworks"]))
     validate_config(request)
     hosts, seen = validate_hosts(request)
-    if "singleHostDefaults" in request:
-        require(type(request["singleHostDefaults"]) is bool and request["singleHostDefaults"] is True)
-        require(len(hosts) == 1 and "stretch" not in request and len(hosts[0]["devices"]) >= 2, "request")
+    # One non-stretch host with two selected OSD disks is Go's admission (internal/storage/cephcluster/topology.go).
+    require("singleHostDefaults" not in request or request["singleHostDefaults"] is True)
     package = request.get("packages")
     if package is not None:
         require(isinstance(package, dict) and {"version", "licenseAccepted", "sources"} <= set(package)
@@ -784,22 +783,27 @@ def scope_checks(request):
 
 
 def validate_config(request):
-    """Admit explicit native memory and two-replica pool-default pairs."""
+    """Admit the closed native memory and pool-default option pairs as canonical decimal strings.
+
+    Their qualified values (the 2 GiB memory floor, autotuning off, the 2 and 2 pool defaults) are Go's admission
+    (internal/storage/cephcluster/config.go)."""
     if "config" not in request:
         return
     config = request["config"]
     require(isinstance(config, dict) and bool(config) and set(config) <= {"osd", "global"}, "config-unqualified")
     if "global" in config:
         global_options = config["global"]
-        require(isinstance(global_options, dict) and global_options == {"osd_pool_default_size": "2", "osd_pool_default_min_size": "2"}, "config-unqualified")
+        require(isinstance(global_options, dict) and set(global_options) == {"osd_pool_default_size", "osd_pool_default_min_size"}, "config-unqualified")
+        require(all(isinstance(value, str) and re.fullmatch(r"[1-9][0-9]{0,2}", value) is not None for value in global_options.values()),
+                "config-unqualified")
     if "osd" not in config:
         return
     osd = config["osd"]
     require(isinstance(osd, dict) and set(osd) == {"osd_memory_target", "osd_memory_target_autotune"}, "config-unqualified")
-    require(osd["osd_memory_target_autotune"] == "false", "config-unqualified")
+    require(osd["osd_memory_target_autotune"] in ("true", "false"), "config-unqualified")
     target = osd["osd_memory_target"]
     require(isinstance(target, str) and re.fullmatch(r"[1-9][0-9]{0,19}", target) is not None, "config-unqualified")
-    require(2 * 1024 ** 3 <= int(target) <= 2 ** 64 - 1, "config-unqualified")
+    require(int(target) <= 2 ** 64 - 1, "config-unqualified")
 
 
 def cluster_config(request):
@@ -944,7 +948,9 @@ def validate_services(request, hosts, seen):
         require(all(isinstance(h, str) and h in seen for h in placement["hosts"]))
         require(len(set(placement["hosts"])) == len(placement["hosts"]))
         require("count" not in placement or type(placement["count"]) is int and 1 <= placement["count"] <= len(placement["hosts"]), "placement-unqualified")
-        require("count_per_host" not in placement or type(placement["count_per_host"]) is int and placement["count_per_host"] == 1, "placement-unqualified")
+        # One daemon per host is Go's admission (internal/storage/ceph/services.go).
+        require("count_per_host" not in placement or type(placement["count_per_host"]) is int and 1 <= placement["count_per_host"] <= 128,
+                "placement-unqualified")
         if kind == "mds":
             identifier = service.get("service_id")
             require(named(identifier) and not identifier[0].isdigit(), "service-unqualified")
@@ -962,7 +968,6 @@ def validate_services(request, hosts, seen):
         require(all(type(spec.get(field, False)) is bool for field in ("encrypted", "tpm2")), "osd-unqualified")
         require("crush_device_class" not in spec or isinstance(spec["crush_device_class"], str)
                 and DEVICE_CLASS.fullmatch(spec["crush_device_class"]) is not None, "osd-unqualified")
-        require(not spec.get("tpm2") or spec.get("encrypted"), "osd-unqualified")
         for field in ("data_devices", "db_devices", "wal_devices"):
             if field not in spec:
                 continue

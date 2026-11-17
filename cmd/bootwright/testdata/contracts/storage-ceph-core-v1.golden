@@ -46,6 +46,7 @@ request-schema:
   cephadm.path string
   client *struct ceph.Client omitempty
   client.access string
+  client.caps map[string]string
   client.dataPools []string
   client.filesystem string
   client.group string
@@ -175,6 +176,11 @@ request-schema:
   objectUser.zone string
   objectUser.zoneGroup string
   nvmeof *struct ceph.NVMeOFSubsystem omitempty
+  nvmeof.budgets struct ceph.NVMeOFBudgets
+  nvmeof.budgets.apply int
+  nvmeof.budgets.nvmeof int
+  nvmeof.budgets.nvmeofObserve int
+  nvmeof.budgets.observation int
   nvmeof.gateways []struct ceph.NVMeOFEndpoint
   nvmeof.gateways[].address string
   nvmeof.gateways[].host string

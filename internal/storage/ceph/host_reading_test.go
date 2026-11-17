@@ -85,7 +85,7 @@ func clientExecutions(t *testing.T, cluster string, count int, runner *readingRu
 		r := coreRequest()
 		r.Cluster = cluster
 		name := fmt.Sprintf("consumer-%d", i)
-		r.Action, r.Client = "client", &Client{Name: name, Pool: "volumes", Access: "readOnly"}
+		r.Action, r.Client = "client", frozenClient(Client{Name: name, Pool: "volumes", Access: "readOnly"})
 		e := executionFor(t, r)
 		e.Block.ID, e.Block.Kind, e.Block.Object = ClientBlockID(name), string(api.CephClient), name
 		e.Block.RequestDigest = fmt.Sprintf("%s%02d%s", cluster[:1], i, strings.Repeat("0", 61))

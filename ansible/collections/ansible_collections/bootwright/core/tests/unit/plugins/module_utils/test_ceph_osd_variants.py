@@ -31,7 +31,7 @@ def test_variants_project_every_device_to_its_stable_identity(core_request):
     assert calls == []
 
 
-@pytest.mark.parametrize("damage", ["data-db", "db-wal", "other-service", "dynamic", "unencrypted", "boolean"])
+@pytest.mark.parametrize("damage", ["data-db", "db-wal", "other-service", "dynamic", "boolean"])
 def test_variant_request_refuses_overlap_and_unqualified_options(core_request, damage):
     variants(core_request)
     spec = core_request["services"][-1]["spec"]
@@ -45,8 +45,6 @@ def test_variant_request_refuses_overlap_and_unqualified_options(core_request, d
         core_request["services"].append(service)
     elif damage == "dynamic":
         spec["db_devices"] = {"all": True}
-    elif damage == "unencrypted":
-        spec["encrypted"] = False
     else:
         spec["encrypted"] = 1
     with pytest.raises(ceph_native.Refusal):

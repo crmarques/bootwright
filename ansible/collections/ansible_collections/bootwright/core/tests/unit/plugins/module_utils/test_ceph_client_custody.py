@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_resources
+from ansible_collections.bootwright.core.tests.unit import test_ceph_request_goldens as goldens
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 
@@ -54,17 +55,20 @@ FS_DUMP = {"epoch": 9, "feature_flags": {"enable_multiple": True, "ever_enabled_
                                                 "flags_state": {"allow_standby_replay": False}, "info": {}}}]}
 
 
-def scoped_client(arm):
-    """The frozen client of one arm: a list names an RBD pool's derived data pools, a word names a CephFS arm."""
+def scoped_client(arm, access="readWrite"):
+    """The prepared client of one arm with the grants Go froze: a list names an RBD pool's derived data pools, a word names a CephFS arm."""
     if arm == "filesystem":
-        return {"name": "consumer", "pool": "", "access": "readWrite", "dataPools": [], "filesystem": "files", "group": "", "subvolume": ""}
-    if arm == "subvolume":
-        return {"name": "consumer", "pool": "", "access": "readWrite", "dataPools": [], "filesystem": "files", "group": "csi", "subvolume": "docs",
-                "subvolumePath": SUBVOLUME_PATH}
-    if arm == "subvolume-nogroup":
-        return {"name": "consumer", "pool": "", "access": "readWrite", "dataPools": [], "filesystem": "files", "group": "", "subvolume": "docs",
-                "subvolumePath": NOGROUP_PATH}
-    return {"name": "consumer", "pool": "volumes", "access": "readWrite", "dataPools": list(arm), "filesystem": "", "group": "", "subvolume": ""}
+        value = {"name": "consumer", "pool": "", "access": access, "dataPools": [], "filesystem": "files", "group": "", "subvolume": ""}
+    elif arm == "subvolume":
+        value = {"name": "consumer", "pool": "", "access": access, "dataPools": [], "filesystem": "files", "group": "csi", "subvolume": "docs",
+                 "subvolumePath": SUBVOLUME_PATH}
+    elif arm == "subvolume-nogroup":
+        value = {"name": "consumer", "pool": "", "access": access, "dataPools": [], "filesystem": "files", "group": "", "subvolume": "docs",
+                 "subvolumePath": NOGROUP_PATH}
+    else:
+        value = {"name": "consumer", "pool": "volumes", "access": access, "dataPools": list(arm), "filesystem": "", "group": "", "subvolume": ""}
+    value["caps"] = goldens.legacy_caps(value)
+    return value
 
 
 @pytest.fixture
@@ -634,9 +638,18 @@ def test_cephfs_client_refuses_an_unproved_scope_before_any_key(client, change, 
     ("subvolume-nogroup", "readWrite",
      {"mds": "allow rw fsname=files path=" + NOGROUP_PATH, "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
 ], indirect=["client"])
-def test_client_caps_per_arm(client, access, caps):
-    client.native.request["client"]["access"] = access
+def test_client_caps_per_arm(client, access, caps, request):
+    client.native.request["client"] = scoped_client(request.node.callspec.params["client"], access)
     assert client.native.caps() == caps
+
+
+def test_the_worker_applies_the_frozen_grants_without_deriving_them(client):
+    frozen = {"mon": "profile rbd", "mgr": "profile rbd-read-only pool=volumes", "osd": "profile rbd-read-only pool=volumes"}
+    client.native.request["client"]["caps"] = dict(frozen)
+    assert client.native.caps() == frozen
+    client.native.client()
+    added = [data for argv, data in client.state.calls if argv[-5:] == ["auth", "add", "client.consumer", "-i", "-"]]
+    assert len(added) == 1 and b'caps mgr = "profile rbd-read-only pool=volumes"' in added[0]
 
 
 def shaped(arm, **changes):
@@ -667,6 +680,15 @@ def shaped(arm, **changes):
     shaped([], filesystem="files"),
     shaped("filesystem", filesystem=None),
     shaped("filesystem", extra=""),
+    shaped("filesystem", caps=None),
+    shaped([], caps=None),
+    shaped([], caps={"mon": "profile rbd", "osd": "profile rbd pool=volumes"}),
+    shaped([], caps={"mds": "allow rw", "mon": "profile rbd", "mgr": "profile rbd pool=volumes", "osd": "profile rbd pool=volumes"}),
+    shaped("filesystem", caps={"mgr": "allow r", "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
+    shaped("filesystem", caps={"mds": 1, "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
+    shaped("filesystem", caps={"mds": "", "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
+    shaped("filesystem", caps={"mds": "allow rw\n", "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
+    shaped("filesystem", caps=[]),
 ])
 def test_client_request_shape_per_arm(value):
     with pytest.raises(ceph_native.Refusal, match="^request$"):

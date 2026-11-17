@@ -323,7 +323,7 @@ func clientRequest(c api.Catalog, client api.Object, contextName string) (Reques
 		return poolClientRequest(c, client, contextName)
 	}
 	r.Action, r.Pool, r.Filesystem, r.Subvolume, r.Client = "client", nil, nil, nil, frozen
-	return r, nil
+	return withCaps(r)
 }
 
 func poolClientRequest(c api.Catalog, client api.Object, contextName string) (Request, error) {
@@ -342,7 +342,7 @@ func poolClientRequest(c api.Catalog, client api.Object, contextName string) (Re
 	r.Action = "client"
 	r.Pool = nil
 	r.Client = &Client{Access: client.Spec().Get("access").Text(), DataPools: dataPools, Name: client.Name(), Pool: cephcluster.PoolName(pool)}
-	return r, nil
+	return withCaps(r)
 }
 
 func clientDataPools(c api.Catalog, cluster, pool, contextName string) ([]string, error) {

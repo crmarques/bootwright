@@ -55,6 +55,8 @@ argument_specs:
               access:
                 type: str
                 required: true
+              caps:
+                type: dict
               dataPools:
                 type: list
                 elements: str
@@ -282,6 +284,22 @@ argument_specs:
           nvmeof:
             type: dict
             options:
+              budgets:
+                type: dict
+                required: true
+                options:
+                  apply:
+                    type: int
+                    required: true
+                  nvmeof:
+                    type: int
+                    required: true
+                  nvmeofObserve:
+                    type: int
+                    required: true
+                  observation:
+                    type: int
+                    required: true
               gateways:
                 type: list
                 elements: dict

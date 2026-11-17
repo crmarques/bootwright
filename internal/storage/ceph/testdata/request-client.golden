@@ -9,6 +9,11 @@
   },
   "client": {
     "access": "readOnly",
+    "caps": {
+      "mgr": "profile rbd-read-only pool=volumes",
+      "mon": "profile rbd",
+      "osd": "profile rbd-read-only pool=volumes, profile rbd-read-only pool=archive, profile rbd-read-only pool=ec-data"
+    },
     "dataPools": [
       "archive",
       "ec-data"

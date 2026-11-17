@@ -155,8 +155,25 @@ func TestNVMeOFExecutionBoundRefusesOversizedRequest(t *testing.T) {
 	for len(r.NVMeOF.Namespaces) < 128 {
 		r.NVMeOF.Namespaces = append(r.NVMeOF.Namespaces, r.NVMeOF.Namespaces[0])
 	}
-	if _, err := cephDeadline(r, "apply"); err == nil {
-		t.Fatal("accepted a request exceeding the six-hour execution ceiling")
+	r.NVMeOF.Budgets = nvmeofBudgets(r.NVMeOF)
+	if _, err := cephDeadline(r, "apply"); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.unsupported" {
+		t.Fatalf("a request exceeding the six-hour execution ceiling refused with %v", err)
+	}
+}
+
+func TestNVMeOFRequestFreezesItsBudgetsAndRefusesOthers(t *testing.T) {
+	r, err := planned(t, nvmeCatalog(), api.CephNVMeoFSubsystem, "subsystem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (NVMeOFBudgets{Apply: 5024, NVMeOF: 1680, NVMeOFObserve: 1024, Observation: 1704}); r.NVMeOF.Budgets != want {
+		t.Fatalf("the request froze budgets %+v, want %+v", r.NVMeOF.Budgets, want)
+	}
+	for _, stale := range []NVMeOFBudgets{{}, {Apply: 5024, NVMeOF: 1680, NVMeOFObserve: 1024, Observation: 1705}} {
+		r.NVMeOF.Budgets = stale
+		if _, err := cephDeadline(r, "apply"); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+			t.Errorf("budgets %+v were not refused: %v", stale, err)
+		}
 	}
 }
 
@@ -177,6 +194,7 @@ func TestNVMeOFExecutionBound(t *testing.T) {
 	n := r.NVMeOF.Namespaces[0]
 	n.Image.DataPool = "data"
 	r.NVMeOF.Namespaces = append(r.NVMeOF.Namespaces, n)
+	r.NVMeOF.Budgets = nvmeofBudgets(r.NVMeOF)
 	grown, _ := cephDeadline(r, "apply")
 	if grown-baseline != 570*time.Second {
 		t.Fatalf("namespace increment %s", grown-baseline)
@@ -191,10 +209,12 @@ func TestNVMeOFExecutionCeilingBoundary(t *testing.T) {
 	for len(r.NVMeOF.Namespaces) < 37 {
 		r.NVMeOF.Namespaces = append(r.NVMeOF.Namespaces, r.NVMeOF.Namespaces[0])
 	}
+	r.NVMeOF.Budgets = nvmeofBudgets(r.NVMeOF)
 	if got, err := cephDeadline(r, "apply"); err != nil || got != 21224*time.Second {
 		t.Fatalf("largest shape %s %v", got, err)
 	}
 	r.NVMeOF.Namespaces = append(r.NVMeOF.Namespaces, r.NVMeOF.Namespaces[0])
+	r.NVMeOF.Budgets = nvmeofBudgets(r.NVMeOF)
 	for _, operation := range []string{"apply", "observe", "destroy"} {
 		if _, err := cephDeadline(r, operation); err == nil {
 			t.Fatalf("oversized %s accepted", operation)

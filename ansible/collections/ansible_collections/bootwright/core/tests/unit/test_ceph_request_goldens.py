@@ -61,13 +61,84 @@ def prepared(request):
         request["auxiliary"] = [{"name": name, "image": request["registry"] + "/" + name + DIGEST} for name in ("haproxy", "keepalived")]
     client = request.get("client")
     if client and client.get("subvolume") and "subvolumePath" not in client:
+        # Go's prepare binds the proved path into the frozen mds grant (internal/storage/ceph/capability.go).
         client["subvolumePath"] = "/volumes/%s/%s/11111111-2222-4333-8444-555555555555" % (client["group"] or "_nogroup", client["subvolume"])
+        client["caps"]["mds"] += " path=" + client["subvolumePath"]
     export = request.get("nfsExport")
     if export and export["subvolume"] and "subvolumePath" not in export:
         export["subvolumePath"] = "/volumes/%s/%s/11111111-2222-4333-8444-555555555555" % (export["group"] or "_nogroup", export["subvolume"])
     if export and "sectype" not in export["native"]:
         export["native"]["sectype"] = ["sys"]
     return request
+
+
+# What the collection derived before Go froze these values (B1505). The pins below hold every golden to them, so the move changed
+# no grant, budget or placement-group count; fixtures elsewhere build their frozen values from them.
+def legacy_caps(client):
+    """The caps `ceph fs authorize` renders for a CephFS scope (doc/cephfs/client-auth.rst); RBD's profiles otherwise."""
+    if client["filesystem"]:
+        grant = "r" if client["access"] == "readOnly" else "rw"
+        mds = "allow " + grant + " fsname=" + client["filesystem"]
+        if client["subvolume"]:
+            mds += " path=" + client["subvolumePath"]
+        return {"mds": mds, "mon": "allow r fsname=" + client["filesystem"], "osd": "allow " + grant + " tag cephfs data=" + client["filesystem"]}
+    profile = "rbd-read-only" if client["access"] == "readOnly" else "rbd"
+    osd = ", ".join("profile " + profile + " pool=" + name for name in [client["pool"]] + client["dataPools"])
+    return {"mon": "profile rbd", "mgr": "profile " + profile + " pool=" + client["pool"], "osd": osd}
+
+
+def legacy_pg_num(autoscale):
+    pgs = 32
+    if autoscale["minPGs"] and pgs < autoscale["minPGs"]:
+        pgs = autoscale["minPGs"]
+    if autoscale["maxPGs"] and pgs > autoscale["maxPGs"]:
+        pgs = autoscale["maxPGs"]
+    return pgs
+
+
+def legacy_nvmeof_budgets(frozen):
+    """60 seconds per CLI command, 30 per held image probe, plus local work; the controller bound adds an observation and a retry window."""
+    gateways, namespaces = len(frozen["gateways"]), len(frozen["namespaces"])
+    listeners, hosts = len(frozen["listeners"]), len(frozen["hosts"])
+    data_pools = sum(bool(n["image"]["dataPool"]) for n in frozen["namespaces"])
+    scope = 5 + gateways + 3 * namespaces + data_pools
+    apply = 60 * (scope + 10 + namespaces + listeners + hosts) + 30 * (2 + namespaces + listeners + hosts) + 60
+    observe = 60 * (scope + 4 + gateways) + 2 * listeners + 60
+    observation = 660 + observe + 20
+    return {"apply": 660 + apply + 20 + observation + 900 + 60, "nvmeof": apply, "nvmeofObserve": observe, "observation": observation}
+
+
+def pools_of(value):
+    if isinstance(value, dict):
+        if "autoscale" in value and "pgNum" in value:
+            yield value
+        for member in value.values():
+            yield from pools_of(member)
+    elif isinstance(value, list):
+        for member in value:
+            yield from pools_of(member)
+
+
+def test_the_frozen_grants_budgets_and_pg_counts_equal_what_the_collection_derived():
+    clients = [name for name, request in REQUESTS.items() if "client" in request]
+    nvmeof = [name for name, request in REQUESTS.items() if "nvmeof" in request]
+    pools = [pool for request in REQUESTS.values() for pool in pools_of(request)]
+    assert len(clients) == 3 and nvmeof == ["nvmeof"] and len(pools) >= 5
+    for name in clients:
+        client = prepared(REQUESTS[name])["client"]
+        assert client["caps"] == legacy_caps(client), name
+    for name in nvmeof:
+        assert REQUESTS[name]["nvmeof"]["budgets"] == legacy_nvmeof_budgets(REQUESTS[name]["nvmeof"])
+    for pool in pools:
+        assert pool["pgNum"] == legacy_pg_num(pool["autoscale"]), pool["name"]
+
+
+@pytest.mark.parametrize("name, member", [("client", "caps"), ("client-filesystem", "caps"), ("client-subvolume", "caps"), ("nvmeof", "budgets")])
+def test_the_validator_refuses_a_request_lacking_a_frozen_value(name, member):
+    request = prepared(REQUESTS[name])
+    del request["client" if member == "caps" else "nvmeof"][member]
+    with pytest.raises(ceph_native.Refusal):
+        ceph_native.validate(request)
 
 
 def versions(version):

@@ -880,7 +880,7 @@ def test_an_unproved_pool_id_still_refuses_observation(core_request, case):
 
 def test_client_caps_and_a_hash_only_binding_refuse_unproved_identity(core_request, monkeypatch):
     core_request.update(action="client", client={"name": "reader", "pool": "volumes", "access": "readOnly", "dataPools": [],
-                                                 "filesystem": "", "group": "", "subvolume": ""})
+                                                 "filesystem": "", "group": "", "subvolume": "", "caps": READ_ONLY_CAPS})
     marks = Markers()
     marks.records["pool-volumes.json"] = {"name": "volumes"}
     marks.records["client-reader.json"] = core_request["client"]
@@ -930,11 +930,12 @@ def test_bounded_process_timeout_never_returns_a_native_transcript():
 
 def test_client_recovery_reads_only_the_owned_principal(core_request, monkeypatch):
     core_request["action"] = "client"
-    core_request["client"] = {"name": "consumer", "pool": "volumes", "access": "readOnly", "dataPools": [], "filesystem": "", "group": "", "subvolume": ""}
+    caps = {"mon": "profile rbd", "mgr": "profile rbd-read-only pool=volumes", "osd": "profile rbd-read-only pool=volumes"}
+    core_request["client"] = {"name": "consumer", "pool": "volumes", "access": "readOnly", "caps": dict(caps), "dataPools": [], "filesystem": "",
+                              "group": "", "subvolume": ""}
     markers = Markers()
     markers.records["client-consumer.json"] = core_request["client"]
     key = "PRIVATE-KEY-SENTINEL"
-    caps = {"mon": "profile rbd", "mgr": "profile rbd-read-only pool=volumes", "osd": "profile rbd-read-only pool=volumes"}
     material = [{"entity": "client.consumer", "key": key, "caps": caps}]
     native, calls = worker(core_request, {("auth", "get", "client.consumer"): copy.deepcopy(material)}, markers)
     scope = {"owner": core_request["owner"], "fsid": core_request["fsid"], "host": core_request["bootstrap"], "client": core_request["client"], "poolID": 4}
@@ -997,7 +998,7 @@ class ClientTransport:
 @pytest.mark.parametrize("outputs, read", [({}, False), ({"client": "client"}, True)])
 def test_a_client_observe_reads_its_keyring_only_when_it_declares_the_output(core_request, tmp_path, outputs, read):
     core_request.update(action="client", client={"name": "consumer", "pool": "volumes", "access": "readOnly", "dataPools": [],
-                                                 "filesystem": "", "group": "", "subvolume": ""})
+                                                 "filesystem": "", "group": "", "subvolume": "", "caps": READ_ONLY_CAPS})
     outputs = {name: str(tmp_path / path) for name, path in outputs.items()}
     transport = ClientTransport(core_request)
     result = ceph_core.execute(core_request, "observe", "d" * 64, transport, outputs)
@@ -1007,7 +1008,7 @@ def test_a_client_observe_reads_its_keyring_only_when_it_declares_the_output(cor
 
 def test_a_client_apply_still_requires_its_output(core_request, monkeypatch):
     core_request.update(action="client", client={"name": "consumer", "pool": "volumes", "access": "readOnly", "dataPools": [],
-                                                 "filesystem": "", "group": "", "subvolume": ""})
+                                                 "filesystem": "", "group": "", "subvolume": "", "caps": READ_ONLY_CAPS})
     with pytest.raises(ceph_native.Refusal, match="^material$"):
         ceph_core.execute(core_request, "apply", "d" * 64, ClientTransport(core_request), {})
 
@@ -1016,7 +1017,7 @@ def test_a_client_apply_still_requires_its_output(core_request, monkeypatch):
 def test_native_reads_require_unchanged_artifacts_before_observation(core_request, phase):
     if phase == "client_read":
         core_request.update(action="client", client={"name": "consumer", "pool": "volumes", "access": "readOnly", "dataPools": [],
-                                                     "filesystem": "", "group": "", "subvolume": ""})
+                                                     "filesystem": "", "group": "", "subvolume": "", "caps": READ_ONLY_CAPS})
     native, calls = worker(core_request, {})
 
     def refuse_artifact():
@@ -1053,6 +1054,9 @@ def test_artifact_verification_refuses_drift_and_missing_owned_manifest(core_req
     assert markers.writes == []
 
 
+READ_ONLY_CAPS = {"mon": "profile rbd", "mgr": "profile rbd-read-only pool=volumes", "osd": "profile rbd-read-only pool=volumes"}
+
+
 def memory_config(target="2147483648"):
     return {"osd": {"osd_memory_target_autotune": "false", "osd_memory_target": target}}
 
@@ -1066,9 +1070,9 @@ def memory_database():
 @pytest.mark.parametrize("config", [
     None, {}, {"global": {"osd_memory_target": "2147483648"}}, {"osd": {"osd_memory_target": "2147483648"}},
     {"osd": {"osd_memory_target_autotune": True, "osd_memory_target": "2147483648"}},
-    {"osd": {"osd_memory_target_autotune": "true", "osd_memory_target": "2147483648"}},
+    {"osd": {"osd_memory_target_autotune": "off", "osd_memory_target": "2147483648"}},
     {"osd": {"osd_memory_target_autotune": "false", "osd_memory_target": "2147483648", "password": "never-echo-this"}},
-    *[memory_config(value) for value in (2147483648, "2147483647", "2G", "02147483648", "18446744073709551616",
+    *[memory_config(value) for value in (2147483648, "0", "2G", "02147483648", "18446744073709551616",
                                          "2147483648\n[global]\nauth_client_required=none")],
 ])
 def test_unqualified_memory_input_refuses_before_native_calls(core_request, config):
@@ -1110,8 +1114,7 @@ def test_memory_intent_is_part_of_exact_durable_owner_identity(core_request, tmp
 
 @pytest.mark.parametrize("global_options", [
     {}, {"osd_pool_default_size": "2"}, {"osd_pool_default_size": 2, "osd_pool_default_min_size": "2"},
-    {"osd_pool_default_size": "3", "osd_pool_default_min_size": "2"},
-    {"osd_pool_default_size": "2", "osd_pool_default_min_size": "1"},
+    {"osd_pool_default_size": "2", "osd_pool_default_min_size": "0"},
     {"osd_pool_default_size": "2", "osd_pool_default_min_size": "02"},
     {"osd_pool_default_size": "2", "osd_pool_default_min_size": "2", "password": "never-echo-this"},
 ])
@@ -1120,6 +1123,24 @@ def test_unqualified_pool_defaults_refuse_before_native_calls(core_request, glob
     with pytest.raises(ceph_native.Refusal, match="^config-unqualified$") as refused:
         worker(core_request, {})
     assert "never-echo-this" not in str(refused.value)
+
+
+def osd_service(request):
+    return next(service for service in request["services"] if service["service_type"] == "osd")
+
+
+# Product qualifications Go's admission owns (B1505): the validator keeps their closed keys, exact types and bounds only.
+@pytest.mark.parametrize("change", [
+    lambda r: r.update(config=memory_config("1073741824")),
+    lambda r: r.update(config={"osd": {"osd_memory_target_autotune": "true", "osd_memory_target": "2147483648"}}),
+    lambda r: r.update(config={"global": {"osd_pool_default_size": "3", "osd_pool_default_min_size": "1"}}),
+    lambda r: r["services"][0]["placement"].update(count_per_host=2),
+    lambda r: osd_service(r)["spec"].update(tpm2=True),
+    lambda r: r.update(singleHostDefaults=True),
+], ids=["memory-floor", "autotune", "pool-defaults", "count-per-host", "tpm2-unencrypted", "single-host-defaults"])
+def test_the_validator_leaves_go_admission_rules_to_go(core_request, change):
+    change(core_request)
+    assert ceph_native.validate(core_request) is core_request
 
 
 @pytest.mark.parametrize("with_memory", [False, True])
@@ -1366,7 +1387,7 @@ def test_absent_native_resource_retains_owned_cleanup_work(core_request, action,
     core_request.update(action=action, config=memory_config())
     resource = (replicated_pool()
                 if action == "pool" else {"name": "consumer", "pool": "volumes", "access": "readOnly", "dataPools": [],
-                                          "filesystem": "", "group": "", "subvolume": ""})
+                                          "filesystem": "", "group": "", "subvolume": "", "caps": READ_ONLY_CAPS})
     core_request[action] = resource
     answers = memory_observation_answers(core_request)
     answers[("osd", "pool", "ls", "detail") if action == "pool" else ("auth", "ls")] = [] if action == "pool" else {"auth_dump": []}
@@ -2692,14 +2713,3 @@ def test_single_host_option_refuses_non_true_or_non_boolean(core_request, invali
     single_host_request(core_request)["singleHostDefaults"] = invalid
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_native.validate(core_request)
-
-
-def test_single_host_option_refuses_extra_hosts_or_a_single_disk(core_request):
-    original = copy.deepcopy(core_request)
-    core_request["singleHostDefaults"] = True
-    with pytest.raises(ceph_native.Refusal, match="^request$"):
-        ceph_native.validate(core_request)
-    single_host_request(original)
-    original["hosts"][0]["devices"].pop()
-    with pytest.raises(ceph_native.Refusal, match="^request$"):
-        ceph_native.validate(original)

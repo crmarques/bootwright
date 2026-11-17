@@ -95,6 +95,7 @@ func TestProducedCephFSClientRejectsWiderCaps(t *testing.T) {
 		r := coreRequest()
 		r.Action, r.Client = "client", &client
 		derived, _ := clientCaps(client)
+		client.Caps = derived
 		good := clientProduced(t, "client.writer", derived)
 		if err := validateProduced(good, r, true); err != nil {
 			t.Fatalf("the derived caps of %+v were refused: %v", client, err)
@@ -154,6 +155,7 @@ func TestClientPlanStatesScope(t *testing.T) {
 			t.Fatalf("the %s client froze data pools %v", tt.name, got.DataPools)
 		}
 		got.DataPools = nil
+		tt.frozen.Caps, _ = scopeCaps(tt.frozen)
 		if !reflect.DeepEqual(got, tt.frozen) {
 			t.Fatalf("the %s client froze %+v", tt.name, got)
 		}
@@ -196,9 +198,17 @@ func TestClientPrepareBindsTheProvedSubvolumePath(t *testing.T) {
 	if err != nil || prepared.Client.SubvolumePath != clientSubvolumePath || r.Client.SubvolumePath != "" {
 		t.Fatalf("the client bound %+v (%v)", prepared.Client, diagnostics.Of(err))
 	}
-	if decoded, err := DecodeRequest(e.Block.Request); err != nil || decoded.Client.SubvolumePath != "" {
+	if decoded, err := DecodeRequest(e.Block.Request); err != nil || decoded.Client.SubvolumePath != "" || decoded.Client.Caps["mds"] != "allow rw fsname=files" {
 		t.Fatalf("the frozen request carries %+v (%v)", decoded.Client, err)
 	}
+	if want, _ := clientCaps(*prepared.Client); !maps.Equal(prepared.Client.Caps, want) || prepared.Client.Caps["mds"] != "allow rw fsname=files path="+clientSubvolumePath || r.Client.Caps["mds"] != "allow rw fsname=files" {
+		t.Fatalf("the prepared client grants %v, the frozen one %v", prepared.Client.Caps, r.Client.Caps)
+	}
+	altered := r
+	altered.Client = frozenClient(*r.Client)
+	altered.Client.Caps["mds"] = "allow rw"
+	_, err = New(api.CephClient, nil).identity(context.Background(), cephfsClientExecution(t, altered))
+	refusedWith(t, err, "lifecycle.state", "CephClient writer froze capability grants this build does not derive", "destroy it with the build that applied it, then apply with this build")
 	const other, otherRemedy = "the creation proof of CephSubvolume docs names another filesystem or group than CephClient writer froze", "restore the original apply evidence"
 	e = cephfsClientExecution(t, r)
 	e.ApplyProved = append(e.ApplyProved, subvolumeProof(t, "docs", "other", "/volumes/other/docs/"+subvolumeID))

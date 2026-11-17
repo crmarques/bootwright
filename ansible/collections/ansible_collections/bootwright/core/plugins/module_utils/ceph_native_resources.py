@@ -41,7 +41,10 @@ DERIVED_MODULES = (
 )
 SUBVOLUME_MEMBERS = frozenset(("filesystem", "gid", "group", "mode", "name", "pool", "sizeBytes", "uid"))
 # One scope per principal: an RBD pool, a CephFS filesystem or a CephFS subvolume, whose path prepare binds from its creation proof.
-CLIENT_MEMBERS = frozenset(("access", "dataPools", "filesystem", "group", "name", "pool", "subvolume"))
+CLIENT_MEMBERS = frozenset(("access", "caps", "dataPools", "filesystem", "group", "name", "pool", "subvolume"))
+# The cap sections Go grants each arm (internal/storage/ceph/produced.go scopeCaps); the worker applies them as frozen.
+RBD_CAPS = frozenset(("mgr", "mon", "osd"))
+CEPHFS_CAPS = frozenset(("mds", "mon", "osd"))
 # A subvolume's user metadata key: printable ASCII, stored lower case (doc/cephfs/fs-volumes.rst:572-575).
 OWNER_KEY = "bootwright-owner"
 FILESYSTEM_MEMBERS = frozenset(("activeCount", "dataPools", "defaultDataPool", "groups", "mdsService", "metadataPool", "name", "standbyCountWanted",
@@ -118,6 +121,9 @@ def validate_client(client):
     """The one scope the Go plan froze: an RBD pool with its derived data pools, a filesystem, or a subvolume with the path its creation proved."""
     require(isinstance(client, dict) and CLIENT_MEMBERS <= set(client) <= CLIENT_MEMBERS | {"subvolumePath"})
     require(named(client["name"]) and client["access"] in ("readOnly", "readWrite"))
+    caps = client["caps"]
+    require(isinstance(caps, dict) and set(caps) == (RBD_CAPS if client["pool"] != "" else CEPHFS_CAPS))
+    require(all(isinstance(grant, str) and 0 < len(grant) <= 65536 and grant.isascii() and grant.isprintable() for grant in caps.values()))
     data_pools = client["dataPools"]
     require(isinstance(data_pools, list) and all(named(pool) for pool in data_pools))
     if client["pool"] != "":
@@ -183,18 +189,20 @@ def mds_needed(filesystem):
 
 
 def validate_filesystem(filesystem, services):
-    """The frozen filesystem the Go admission proved: its own MDS service covers it, its default data pool leads its data pools."""
+    """The frozen filesystem the Go admission proved: its own MDS service exists, its default data pool leads its data pools.
+
+    Whether that service places enough daemons is Go's admission (internal/storage/cephcluster/filesystems.go); the live MDS
+    map check at effect time stays here."""
     require(isinstance(filesystem, dict) and set(filesystem) == FILESYSTEM_MEMBERS)
     name = filesystem["name"]
     require(named(name) and "." not in name and not name[0].isdigit() and len(name) <= 47)
     require(filesystem["mdsService"] == "mds." + name)
-    service = mds_service(filesystem, services)
+    mds_service(filesystem, services)
     pools = filesystem["dataPools"]
     require(isinstance(pools, list) and bool(pools) and all(named(pool) for pool in pools) and len(set(pools)) == len(pools))
     require(named(filesystem["metadataPool"]) and filesystem["metadataPool"] not in pools and filesystem["defaultDataPool"] == pools[0])
     require(type(filesystem["activeCount"]) is int and 1 <= filesystem["activeCount"] <= 256 and type(filesystem["standbyReplay"]) is bool)
     require(bounded(filesystem["standbyCountWanted"], 2147483647))
-    require(service["placement"].get("count", len(service["placement"]["hosts"])) >= mds_needed(filesystem))
     groups = filesystem["groups"]
     require(isinstance(groups, list) and all(isinstance(group, dict) and set(group) == GROUP_MEMBERS for group in groups))
     names = [group["name"] for group in groups]
@@ -274,12 +282,7 @@ def validate_autoscale(pool):
     require(type(autoscale["bulk"]) is bool and autoscale["mode"] in ("on", "off"))
     require(bounded(autoscale["minPGs"], 32768) and bounded(autoscale["maxPGs"], 32768) and bounded(autoscale["targetBytes"], INT64))
     require(ratio(autoscale["targetRatio"]) and not (autoscale["targetBytes"] and autoscale["targetRatio"]))
-    pgs = 32
-    if autoscale["minPGs"] and pgs < autoscale["minPGs"]:
-        pgs = autoscale["minPGs"]
-    if autoscale["maxPGs"] and pgs > autoscale["maxPGs"]:
-        pgs = autoscale["maxPGs"]
-    require(type(pool["pgNum"]) is int and 1 <= pool["pgNum"] <= 32768 and pool["pgNum"] == pgs)
+    require(type(pool["pgNum"]) is int and 1 <= pool["pgNum"] <= 32768)
 
 
 def take_name(device_class_name):
@@ -291,17 +294,8 @@ class ResourceWorker(ceph_native.Worker):
     """The core worker with one pool, placement policy or client resource's phases and observation."""
 
     def caps(self):
-        """The caps `ceph fs authorize` renders for a CephFS scope (doc/cephfs/client-auth.rst); RBD's profiles otherwise."""
-        client = self.request["client"]
-        if client["filesystem"]:
-            grant = "r" if client["access"] == "readOnly" else "rw"
-            mds = "allow " + grant + " fsname=" + client["filesystem"]
-            if client["subvolume"]:
-                mds += " path=" + client["subvolumePath"]
-            return {"mds": mds, "mon": "allow r fsname=" + client["filesystem"], "osd": "allow " + grant + " tag cephfs data=" + client["filesystem"]}
-        profile = "rbd-read-only" if client["access"] == "readOnly" else "rbd"
-        osd = ", ".join("profile " + profile + " pool=" + name for name in [client["pool"]] + client["dataPools"])
-        return {"mon": "profile rbd", "mgr": "profile " + profile + " pool=" + client["pool"], "osd": osd}
+        """The grants Go froze for this client; prepare binds a subvolume's proved path into its mds grant."""
+        return dict(self.request["client"]["caps"])
 
     def pools(self):
         result = self.ceph("osd", "pool", "ls", "detail")

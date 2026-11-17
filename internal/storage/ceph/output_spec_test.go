@@ -85,8 +85,8 @@ func TestScopeTableSpellsEveryRenderedClientAndImageScope(t *testing.T) {
 		kind    string
 		request Request
 	}{
-		{"CephClient", Request{Client: &Client{Name: "consumer", Access: "readWrite", Pool: "volumes"}}},
-		{"CephClient", Request{Client: &Client{Name: "consumer", Access: "readWrite", Pool: "volumes", DataPools: []string{"archive", "ec-data"}}}},
+		{"CephClient", Request{Client: frozenClient(Client{Name: "consumer", Access: "readWrite", Pool: "volumes"})}},
+		{"CephClient", Request{Client: frozenClient(Client{Name: "consumer", Access: "readWrite", Pool: "volumes", DataPools: []string{"archive", "ec-data"}})}},
 		{"CephRBDImage", Request{RBD: &RBDImage{Name: "disk", Pool: "volumes", SizeBytes: 1024}}},
 		{"CephRBDImage", Request{RBD: &RBDImage{Name: "disk", Pool: "volumes", SizeBytes: 1024, DataPool: "ec-data"}}},
 	}

@@ -101,6 +101,12 @@
   "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
   "monIP": "192.0.2.1",
   "nvmeof": {
+    "budgets": {
+      "apply": 5024,
+      "nvmeof": 1680,
+      "nvmeofObserve": 1024,
+      "observation": 1704
+    },
     "gateways": [
       {
         "address": "192.0.2.1",

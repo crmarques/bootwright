@@ -93,7 +93,7 @@
   },
   "storage-ceph-core-v1": {
     "contentDigest": "36df5d9340708fbe7420c946057dfc09548e3e870f8431a06157718186c137c3",
-    "fingerprint": "143abd407591d9b3dac77d423a0cac417883aeee6ea6298e8168f4d75b4d79d2"
+    "fingerprint": "3a06712808e0376935b950673b13cf45587d2023cacd754c915d0f44e44dbbb2"
   },
   "storage-ceph-host-v1": {
     "contentDigest": "2469d1ad9c460f12913d7d2eb465d6605722b1ff5f6fc2cb47cc7ba64d1f05b6",

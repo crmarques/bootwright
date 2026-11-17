@@ -126,14 +126,15 @@ type Pool struct {
 }
 
 type Client struct {
-	Access        string   `json:"access"`
-	DataPools     []string `json:"dataPools"`
-	Filesystem    string   `json:"filesystem"`
-	Group         string   `json:"group"`
-	Name          string   `json:"name"`
-	Pool          string   `json:"pool"`
-	Subvolume     string   `json:"subvolume"`
-	SubvolumePath string   `json:"subvolumePath,omitempty"`
+	Access        string            `json:"access"`
+	Caps          map[string]string `json:"caps"`
+	DataPools     []string          `json:"dataPools"`
+	Filesystem    string            `json:"filesystem"`
+	Group         string            `json:"group"`
+	Name          string            `json:"name"`
+	Pool          string            `json:"pool"`
+	Subvolume     string            `json:"subvolume"`
+	SubvolumePath string            `json:"subvolumePath,omitempty"`
 }
 
 type RBDImage struct {

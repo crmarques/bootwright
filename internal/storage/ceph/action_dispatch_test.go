@@ -36,6 +36,7 @@ var dispatchArms = map[string]func(*Request){
 	"subvolume":  func(r *Request) { r.Subvolume = &Subvolume{Name: "object", Filesystem: "files"} },
 	"nvmeof": func(r *Request) {
 		r.NVMeOF = &NVMeOFSubsystem{Name: "object", Service: "block", NQN: "nqn.2014-08.org.example:object"}
+		r.NVMeOF.Budgets = nvmeofBudgets(r.NVMeOF)
 	},
 	"nfs-export": func(r *Request) {
 		r.NFSExport = &NFSExport{Name: "object", Service: "files", Native: NFSExportNative{Pseudo: "/pseudo"}}

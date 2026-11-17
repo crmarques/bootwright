@@ -9,6 +9,11 @@
   },
   "client": {
     "access": "readOnly",
+    "caps": {
+      "mds": "allow r fsname=files",
+      "mon": "allow r fsname=files",
+      "osd": "allow r tag cephfs data=files"
+    },
     "dataPools": [],
     "filesystem": "files",
     "group": "",

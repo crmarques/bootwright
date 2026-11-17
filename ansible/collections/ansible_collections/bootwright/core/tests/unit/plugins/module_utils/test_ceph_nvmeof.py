@@ -5,6 +5,7 @@ import copy
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_nvmeof as nvmeof
+from ansible_collections.bootwright.core.tests.unit import test_ceph_request_goldens as goldens
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as fixtures
 
 core_request = fixtures.core_request
@@ -21,6 +22,7 @@ def nvme_request(core_request):
         "listeners": [{"host": "node-1", "address": "192.0.2.1", "port": 4420}, {"host": "node-2", "address": "192.0.2.2", "port": 4420}],
         "namespaces": [{"id": 1, "image": {"name": "image", "pool": "images", "dataPool": "", "sizeBytes": 1024 ** 3, "features": ["layering"]}}],
     }
+    core_request["nvmeof"]["budgets"] = goldens.legacy_nvmeof_budgets(core_request["nvmeof"])
     return core_request
 
 
@@ -324,16 +326,38 @@ def test_execution_bound_covers_first_apply_replay_and_observation(world, interr
     assert native.nvmeof_observe()["ready"]
     assert len(calls) == 16
     assert nvmeof.phase_budget(native.request, "nvmeof_observe") == 16 * 60 + 4 + 60
-    assert nvmeof.execution_budget(native.request, "apply") == 5024
+    assert native.request["nvmeof"]["budgets"]["apply"] == 5024
 
 
 def test_execution_width_is_rejected_before_native_work(nvme_request):
-    template = nvme_request["nvmeof"]["namespaces"][0]
-    nvme_request["nvmeof"]["namespaces"] = [dict(copy.deepcopy(template), id=index + 1) for index in range(128)]
-    for index, namespace in enumerate(nvme_request["nvmeof"]["namespaces"]):
-        namespace["image"]["name"] = "image-" + str(index)
+    nvme_request["nvmeof"]["budgets"]["apply"] = 21601
     with pytest.raises(ceph_native.Refusal, match="nvmeof-budget"):
         ceph_native.validate(nvme_request)
+
+
+@pytest.mark.parametrize("budgets", [None, [], {}, {"apply": 5024}, "extra", "float", "bool", "zero"])
+def test_frozen_budgets_are_closed_exact_and_positive(nvme_request, budgets):
+    frozen = nvme_request["nvmeof"]
+    if budgets == "extra":
+        frozen["budgets"]["retry"] = 1
+    elif budgets == "float":
+        frozen["budgets"]["nvmeof"] = 1680.0
+    elif budgets == "bool":
+        frozen["budgets"]["observation"] = True
+    elif budgets == "zero":
+        frozen["budgets"]["nvmeofObserve"] = 0
+    else:
+        frozen["budgets"] = budgets
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(nvme_request)
+
+
+def test_the_worker_uses_the_frozen_phase_budgets_without_deriving_them(nvme_request):
+    nvme_request["nvmeof"]["budgets"].update(nvmeof=111, nvmeofObserve=222)
+    assert nvmeof.phase_budget(nvme_request, "nvmeof") == 111
+    assert nvmeof.phase_budget(nvme_request, "nvmeof_observe") == 222
+    with pytest.raises(ceph_native.Refusal):
+        nvmeof.phase_budget(nvme_request, "nvmeof_cluster")
 
 
 def test_cluster_phase_does_not_spend_resource_observation_budget(world, monkeypatch):
@@ -426,7 +450,7 @@ def test_controller_retry_window_cannot_extend_execution_bound(nvme_request):
 
     with pytest.raises(ceph_core.ReadinessRefusal):
         ceph_core.execute_nvmeof(nvme_request, "apply", "d" * 64, Transport(), nvme_request["hosts"][0], now=lambda: clock[0], pause=pause)
-    assert clock[0] == nvmeof.execution_budget(nvme_request, "apply") - 60
+    assert clock[0] == nvme_request["nvmeof"]["budgets"]["apply"] - 60
     assert calls[-1][0] == "nvmeof_observe" and 0 < calls[-1][1] < 1044
 
 

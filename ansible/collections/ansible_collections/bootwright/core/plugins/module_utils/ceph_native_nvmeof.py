@@ -24,47 +24,33 @@ READ_ONLY_PHASES = PHASES - {"nvmeof"}
 DOMAIN = r"[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
 NQN = re.compile(r"(?:nqn\.2014-08\.org\.nvmexpress:uuid:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}"
                  r"|nqn\.[0-9]{4}-(?:0[1-9]|1[0-2])\." + DOMAIN + r"(?:\." + DOMAIN + r")*:[!-~]+)\Z")
-MEMBERS = frozenset(("name", "service", "group", "pool", "mtls", "nqn", "hosts", "gateways", "listeners", "namespaces"))
+MEMBERS = frozenset(("budgets", "name", "service", "group", "pool", "mtls", "nqn", "hosts", "gateways", "listeners", "namespaces"))
+# The seconds Go froze (internal/storage/ceph/nvmeof.go nvmeofBudgets): the two phases, the observation window and the whole apply.
+BUDGETS = frozenset(("apply", "nvmeof", "nvmeofObserve", "observation"))
+PHASE_BUDGETS = {"nvmeof": "nvmeof", "nvmeof_observe": "nvmeofObserve"}
+# The six-hour adapter ceiling every run is held to (lifecycle.MaxDeadline).
+MAX_BUDGET = 21600
 TLS_FIELDS = ("root_ca_cert", "server_cert", "server_key", "client_cert", "client_key")
 COMMANDS = frozenset((("gateway", "info"), ("gateway", "listener_info"), ("subsystem", "list"), ("subsystem", "add"),
                       ("listener", "list"), ("listener", "add"), ("namespace", "list"), ("namespace", "add"), ("host", "list"), ("host", "add")))
 
 
 def phase_budget(request, phase):
-    """60 seconds per CLI command, 30 per held image probe, plus local work.
-
-    Scope: 5+G+3N+D commands. First apply: 10+N+L+H more;
-    replay is shorter. Each add holds its cache image (one 30-second probe),
-    and the first transport hold probes the manager image once. Resource
-    observation adds four snapshot reads, G ANA reads and L two-second TCP
-    probes. Manager retries belong to the separate 640-second cluster phase.
-    """
+    """The frozen worker bound of one NVMe-oF phase; the unit observer keeps its own read bound."""
     if phase == "nvmeof_unit_observe":
         require(request.get("action") == "service" and request["service"]["type"] == "nvmeof")
         # Preserve the shared observer's 640-second bound and add every gateway read.
         return 640 + 60 * len(request["service"]["documents"][0]["placement"]["hosts"]) + 60
-    frozen = request["nvmeof"]
-    gateways, namespaces = len(frozen["gateways"]), len(frozen["namespaces"])
-    listeners, hosts = len(frozen["listeners"]), len(frozen["hosts"])
-    data_pools = sum(bool(n["image"]["dataPool"]) for n in frozen["namespaces"])
-    scope = 5 + gateways + 3 * namespaces + data_pools
-    if phase == "nvmeof":
-        return 60 * (scope + 10 + namespaces + listeners + hosts) + 30 * (2 + namespaces + listeners + hosts) + 60
-    require(phase == "nvmeof_observe")
-    return 60 * (scope + 4 + gateways) + 2 * listeners + 60
-
-
-def execution_budget(request, operation):
-    """The full controller bound includes a complete observation and a retry window."""
-    observation = 660 + phase_budget(request, "nvmeof_observe") + 20
-    if operation == "apply":
-        return 660 + phase_budget(request, "nvmeof") + 20 + observation + 900 + 60
-    return observation + 60
+    require(phase in PHASE_BUDGETS)
+    return request["nvmeof"]["budgets"][PHASE_BUDGETS[phase]]
 
 
 def validate(request, hosts):
     frozen = request.get("nvmeof")
     require(isinstance(frozen, dict) and set(frozen) == MEMBERS)
+    budgets = frozen["budgets"]
+    require(isinstance(budgets, dict) and set(budgets) == BUDGETS and all(type(value) is int and 0 < value for value in budgets.values()))
+    require(budgets["apply"] <= MAX_BUDGET, "nvmeof-budget")
     require(all(named(frozen[key]) for key in ("name", "service", "group", "pool")))
     require(frozen["mtls"] in ("enable_auth", "enable_mtls"))
     require(isinstance(frozen["nqn"], str) and 11 <= len(frozen["nqn"]) <= 223 and NQN.fullmatch(frozen["nqn"]) is not None)
@@ -97,8 +83,6 @@ def validate(request, hosts):
         ceph_native_resources.validate_rbd(namespace["image"])
     require(len({n["id"] for n in namespaces}) == len(namespaces)
             and len({(n["image"]["pool"], n["image"]["name"]) for n in namespaces}) == len(namespaces))
-
-    require(execution_budget(request, "apply") <= 21600, "nvmeof-budget")
 
 
 class NVMeOFWorker(ceph_native_resources.ResourceWorker):

@@ -28,7 +28,15 @@ type NVMeOFNamespace struct {
 	Image RBDImage `json:"image"`
 }
 
+type NVMeOFBudgets struct {
+	Apply         int `json:"apply"`
+	NVMeOF        int `json:"nvmeof"`
+	NVMeOFObserve int `json:"nvmeofObserve"`
+	Observation   int `json:"observation"`
+}
+
 type NVMeOFSubsystem struct {
+	Budgets    NVMeOFBudgets     `json:"budgets"`
 	Gateways   []NVMeOFEndpoint  `json:"gateways"`
 	Group      string            `json:"group"`
 	Hosts      []string          `json:"hosts"`
@@ -230,6 +238,7 @@ func nvmeofRequest(catalog api.Catalog, object api.Object, contextName string) (
 	}
 	slices.SortFunc(frozen.Gateways, less)
 	slices.SortFunc(frozen.Listeners, less)
+	frozen.Budgets = nvmeofBudgets(frozen)
 	request.Action, request.NVMeOF = "nvmeof", frozen
 	return request, nil
 }
@@ -243,8 +252,7 @@ func nvmeofSerial(r Request) string {
 	return "bw" + hex.EncodeToString(sum[:])[:18]
 }
 
-func nvmeofPhaseBudget(r Request, apply bool) int {
-	n := r.NVMeOF
+func nvmeofPhaseBudget(n *NVMeOFSubsystem, apply bool) int {
 	gateways, namespaces, listeners, hosts := len(n.Gateways), len(n.Namespaces), len(n.Listeners), len(n.Hosts)
 	dataPools := 0
 	for _, namespace := range n.Namespaces {
@@ -259,14 +267,24 @@ func nvmeofPhaseBudget(r Request, apply bool) int {
 	return 60*(scope+4+gateways) + 2*listeners + 60
 }
 
+func nvmeofBudgets(n *NVMeOFSubsystem) NVMeOFBudgets {
+	b := NVMeOFBudgets{NVMeOF: nvmeofPhaseBudget(n, true), NVMeOFObserve: nvmeofPhaseBudget(n, false)}
+	b.Observation = 660 + b.NVMeOFObserve + 20
+	b.Apply = 660 + b.NVMeOF + 20 + b.Observation + 900 + 60
+	return b
+}
+
 func nvmeofDeadline(r Request, operation string) (time.Duration, error) {
-	observation := 660 + nvmeofPhaseBudget(r, false) + 20
-	apply := 660 + nvmeofPhaseBudget(r, true) + 20 + observation + 900 + 60
-	if time.Duration(apply)*time.Second > lifecycle.MaxDeadline {
-		return 0, failure("lifecycle.unsupported", fmt.Sprintf("CephNVMeoFSubsystem %s needs a bounded apply deadline of %s, past the 6h0m0s adapter limit", r.NVMeOF.Name, time.Duration(apply)*time.Second), "declare fewer namespaces or initiator hosts in this subsystem")
+	budgets := r.NVMeOF.Budgets
+	if budgets != nvmeofBudgets(r.NVMeOF) {
+		return 0, failure("lifecycle.state", "CephNVMeoFSubsystem "+r.NVMeOF.Name+" froze budgets this build does not derive", "destroy it with the build that applied it, then apply with this build")
+	}
+	apply := time.Duration(budgets.Apply) * time.Second
+	if apply > lifecycle.MaxDeadline {
+		return 0, failure("lifecycle.unsupported", fmt.Sprintf("CephNVMeoFSubsystem %s needs a bounded apply deadline of %s, past the 6h0m0s adapter limit", r.NVMeOF.Name, apply), "declare fewer namespaces or initiator hosts in this subsystem")
 	}
 	if operation == "apply" {
-		return time.Duration(apply) * time.Second, nil
+		return apply, nil
 	}
-	return time.Duration(observation+60) * time.Second, nil
+	return time.Duration(budgets.Observation+60) * time.Second, nil
 }
