@@ -115,7 +115,7 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 	var requests []HostRequest
 	owners := map[string]string{}
 	for _, provider := range providers(catalog) {
-		arm := provider.Spec().Get(substrate.ArmKubeVirt)
+		arm := provider.Spec().Get("kubevirt")
 		request := HostRequest{
 			Access:        slices.Clone(verbs),
 			HostCluster:   substrate.HostCluster(provider),
@@ -204,7 +204,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 		return MachineRequest{}, refusal("api.reference", "the Machine's KubeVirt profile does not resolve to a sized profile",
 			"correct "+substrate.MachineProfilePath(machine)+" on "+machine.Identity())
 	}
-	arm := provider.Spec().Get(substrate.ArmKubeVirt)
+	arm := provider.Spec().Get("kubevirt")
 	vm := substrate.KubeVirtName(contextName, name)
 	cpu, _ := profile.Get("cpu").Int64()
 	memory, _ := profile.Get("memoryMiB").Int64()
@@ -256,8 +256,8 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 // name in the provider's namespace, or the declared one. Any other kind is
 // not realized.
 func networkOf(provider api.Object, segment api.Value) (Network, bool) {
-	ref := segment.Get(substrate.ArmKubeVirt, "networkRef")
-	namespace := provider.Spec().Get(substrate.ArmKubeVirt, "namespace").Text()
+	ref := segment.Get("kubevirt", "networkRef")
+	namespace := provider.Spec().Get("kubevirt", "namespace").Text()
 	group, kind, name := ref.Get("apiGroup").Text(), ref.Get("kind").Text(), ref.Get("name").Text()
 	network := Network{Attachment: segment.Get("name").Text(), Name: name, Namespace: namespace}
 	switch {

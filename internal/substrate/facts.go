@@ -22,7 +22,7 @@ type facts struct {
 
 var account = [2]secrets.Part{secrets.UsernamePart, secrets.PasswordPart}
 
-var armFacts = map[string]facts{
+var armFacts = map[Arm]facts{
 	ArmBaremetal: {deliveredHostKey: true, delivery: DeliveryFetch, accessCredential: true, credential: account},
 	ArmLibvirt:   {deliveredHostKey: true, delivery: DeliveryFetch, bridgedGuests: true, credential: account, emulatedBMC: true, hypervisorClient: true},
 	ArmVSphere:   {delivery: DeliveryFetch, tools: []string{"govc"}, credential: account},
@@ -33,11 +33,11 @@ func SupportsDeliveredHostKey(provider api.Object) bool {
 	return armFacts[Variant(provider)].deliveredHostKey
 }
 
-func PortPinned(arm string) bool { return armFacts[arm].portPinned }
+func PortPinned(arm Arm) bool { return armFacts[arm].portPinned }
 
-func EmulatedBMC(arm string) bool { return armFacts[arm].emulatedBMC }
+func EmulatedBMC(arm Arm) bool { return armFacts[arm].emulatedBMC }
 
-func ControllerCredential(arm string) (user, password secrets.Part) {
+func ControllerCredential(arm Arm) (user, password secrets.Part) {
 	credential, ok := armFacts[arm]
 	if !ok {
 		return secrets.UsernamePart, secrets.PasswordPart
@@ -45,28 +45,28 @@ func ControllerCredential(arm string) (user, password secrets.Part) {
 	return credential.credential[0], credential.credential[1]
 }
 
-func DeliveryOf(arm string) string {
+func DeliveryOf(arm Arm) string {
 	if fact, ok := armFacts[arm]; ok {
 		return fact.delivery
 	}
 	return DeliveryFetch
 }
 
-func ControllerCredentialIsAccess(arm string) bool { return armFacts[arm].accessCredential }
+func ControllerCredentialIsAccess(arm Arm) bool { return armFacts[arm].accessCredential }
 
-func BridgedGuests(arm string) bool { return armFacts[arm].bridgedGuests }
+func BridgedGuests(arm Arm) bool { return armFacts[arm].bridgedGuests }
 
 func ProviderTools(provider api.Object) []string { return armFacts[Variant(provider)].tools }
 
 // ClientsOf names the controller clients one substrate arm runs its effects with.
-func ClientsOf(arm string) []string { return slices.Clone(armFacts[arm].tools) }
+func ClientsOf(arm Arm) []string { return slices.Clone(armFacts[arm].tools) }
 
 func IsRealized(provider api.Object) bool {
 	return slices.Contains(Realized(), Variant(provider))
 }
 
 func HostMachine(provider api.Object) string {
-	return provider.Spec().Get(ArmLibvirt, "machineRef").Text()
+	return provider.Spec().Get("libvirt", "machineRef").Text()
 }
 
 func ProvidersHostedOn(catalog api.Catalog, machine string) []string {
@@ -80,7 +80,7 @@ func ProvidersHostedOn(catalog api.Catalog, machine string) []string {
 }
 
 func NeedsHypervisorClient(provider api.Object) bool {
-	return slices.ContainsFunc(Arms(), func(arm string) bool { return armFacts[arm].hypervisorClient && provider.Spec().Has(arm) })
+	return slices.ContainsFunc(Arms(), func(arm Arm) bool { return armFacts[arm].hypervisorClient && provider.Spec().Has(string(arm)) })
 }
 
 func NamesHostCluster(provider api.Object) bool { return HostCluster(provider) != "" }
@@ -89,7 +89,7 @@ func HostCluster(provider api.Object) string {
 	if Variant(provider) != ArmKubeVirt {
 		return ""
 	}
-	return provider.Spec().Get(ArmKubeVirt, "hostClusterRef").Text()
+	return provider.Spec().Get("kubevirt", "hostClusterRef").Text()
 }
 
 type ManagedNetwork struct {
@@ -114,7 +114,7 @@ func ManagedSegmentNetwork(segment api.Value) (ManagedNetwork, bool) {
 	}
 	vlan, _ := managed.Get("vlan").Int64()
 	return ManagedNetwork{Prefix: managed.Get("address").Text(), CIDR: managed.Get("cidr").Text(), Addressless: managed.Get("hostAddressing").Text() == "none",
-		Bridge: segment.Get(ArmLibvirt, "bridge").Text(), Forward: managed.Get("forward").Text(), VLAN: int(vlan)}, true
+		Bridge: segment.Get("libvirt", "bridge").Text(), Forward: managed.Get("forward").Text(), VLAN: int(vlan)}, true
 }
 
 func SegmentMTU(segment api.Value) int64 {
@@ -136,15 +136,15 @@ type AddressClaim struct{ Path, Address string }
 func AddressClaims(o api.Object) []AddressClaim {
 	if IsManagedNetwork(o) {
 		if address, ok := HostAddress(o); ok {
-			return []AddressClaim{{Path: "spec." + ArmLibvirt + ".hostAddress", Address: address.Addr().String()}}
+			return []AddressClaim{{Path: "spec.libvirt.hostAddress", Address: address.Addr().String()}}
 		}
 		return nil
 	}
 	if o.Kind() != api.InfraProvider {
 		return nil
 	}
-	return []AddressClaim{{Path: "spec." + ArmLibvirt + ".bmcEmulation.bindAddress",
-		Address: o.Spec().Get(ArmLibvirt, "bmcEmulation", "bindAddress").Text()}}
+	return []AddressClaim{{Path: "spec.libvirt.bmcEmulation.bindAddress",
+		Address: o.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text()}}
 }
 
 func SelectedProfile(catalog api.Catalog, machine api.Object) (api.Object, api.Value, bool) {
@@ -153,7 +153,7 @@ func SelectedProfile(catalog api.Catalog, machine api.Object) (api.Object, api.V
 	if !found || arm == "" {
 		return provider, api.Value{}, false
 	}
-	for _, profile := range provider.Spec().Get(arm, "machineProfiles").Items() {
+	for _, profile := range provider.Spec().Get(string(arm), "machineProfiles").Items() {
 		if profile.Get("name").Text() == MachineProfileRef(machine) {
 			return provider, profile, true
 		}
@@ -161,9 +161,9 @@ func SelectedProfile(catalog api.Catalog, machine api.Object) (api.Object, api.V
 	return provider, api.Value{}, false
 }
 
-func ClusterBounds(arms ...string) (fanout int, allowance, margin time.Duration) {
+func ClusterBounds(arms ...Arm) (fanout int, allowance, margin time.Duration) {
 	if len(arms) == 0 {
-		arms = []string{ArmLibvirt}
+		arms = []Arm{ArmLibvirt}
 	}
 	fanout = 16
 	for _, arm := range arms {
@@ -178,9 +178,9 @@ func ClusterBounds(arms ...string) (fanout int, allowance, margin time.Duration)
 	return fanout, allowance, margin
 }
 
-func MachineArm(machine api.Object) string {
+func MachineArm(machine api.Object) Arm {
 	for _, arm := range Arms() {
-		if machine.Spec().Has("substrate", arm) {
+		if machine.Spec().Has("substrate", string(arm)) {
 			return arm
 		}
 	}
@@ -188,7 +188,7 @@ func MachineArm(machine api.Object) string {
 }
 
 func MachineProfileRef(machine api.Object) string {
-	return machine.Spec().Get("substrate", MachineArm(machine), "profileRef").Text()
+	return machine.Spec().Get("substrate", string(MachineArm(machine)), "profileRef").Text()
 }
 
 func MachineProfilePath(machine api.Object) string {
@@ -196,18 +196,18 @@ func MachineProfilePath(machine api.Object) string {
 	if arm == "" {
 		return "spec.substrate"
 	}
-	return "spec.substrate." + arm + ".profileRef"
+	return "spec.substrate." + string(arm) + ".profileRef"
 }
 
-const BMCPath = "spec.substrate." + ArmBaremetal + ".bmc"
+const BMCPath = "spec.substrate.baremetal.bmc"
 
 func MachineBMC(machine api.Object) api.Value {
-	return machine.Spec().Get("substrate", ArmBaremetal, "bmc")
+	return machine.Spec().Get("substrate", "baremetal", "bmc")
 }
 
 func MachineMACs(machine api.Object) api.Value {
 	if arm := MachineArm(machine); arm == ArmBaremetal || arm == ArmVSphere {
-		return machine.Spec().Get("substrate", arm, "nics")
+		return machine.Spec().Get("substrate", string(arm), "nics")
 	}
 	return api.Value{}
 }

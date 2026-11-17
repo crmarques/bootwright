@@ -41,12 +41,12 @@ func TestASyntheticArmAnswersThroughItsFactsRowAlone(t *testing.T) {
 
 func TestOnlyAProviderOfAnArmWithAHypervisorNeedsItsClient(t *testing.T) {
 	for _, arm := range Arms() {
-		provider := obj(api.InfraProvider, "p", m(arm, m()))
+		provider := obj(api.InfraProvider, "p", m(string(arm), m()))
 		if got, want := NeedsHypervisorClient(provider), arm == ArmLibvirt; got != want {
 			t.Errorf("%s needs the hypervisor client = %t, want %t", arm, got, want)
 		}
 	}
-	both := obj(api.InfraProvider, "p", m(ArmLibvirt, m(), ArmVSphere, m()))
+	both := obj(api.InfraProvider, "p", m("libvirt", m(), "vsphere", m()))
 	if !NeedsHypervisorClient(both) || NeedsHypervisorClient(obj(api.InfraProvider, "p", m())) {
 		t.Error("the answer follows the declared arms, not the selected variant")
 	}

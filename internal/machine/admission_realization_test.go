@@ -348,11 +348,11 @@ func TestALibvirtMachineAuthorsOnlyItsOwnArm(t *testing.T) {
 			}
 		})
 	}
-	for _, arm := range []string{substrate.ArmLibvirt, substrate.ArmKubeVirt, substrate.ArmVSphere} {
-		armless := api.Issue{Code: "api.invariant", Field: "$.spec.substrate." + arm,
-			Message:     "a " + arm + " arm requires the provider whose arm it matches; only a bare-metal arm stands without a provider",
-			Remediation: "set spec.substrate.providerRef on Machine/guest, or remove spec.substrate." + arm}
-		if issues := admission(with(nics, m(arm, m("profileRef", "small"))), lab...); !slices.Contains(issues, armless) {
+	for _, arm := range []substrate.Arm{substrate.ArmLibvirt, substrate.ArmKubeVirt, substrate.ArmVSphere} {
+		armless := api.Issue{Code: "api.invariant", Field: "$.spec.substrate." + string(arm),
+			Message:     "a " + string(arm) + " arm requires the provider whose arm it matches; only a bare-metal arm stands without a provider",
+			Remediation: "set spec.substrate.providerRef on Machine/guest, or remove spec.substrate." + string(arm)}
+		if issues := admission(with(nics, m(string(arm), m("profileRef", "small"))), lab...); !slices.Contains(issues, armless) {
 			t.Fatalf("a %s arm without a provider: %#v", arm, issues)
 		}
 	}

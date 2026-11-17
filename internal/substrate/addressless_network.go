@@ -8,14 +8,14 @@ import (
 )
 
 func HostAddressingDisabled(o api.Object) bool {
-	return o.Spec().Get(ArmLibvirt, "hostAddressing").Text() == "none"
+	return o.Spec().Get("libvirt", "hostAddressing").Text() == "none"
 }
 
 func validateAddresslessNetwork(o api.Object) []api.Issue {
 	if !HostAddressingDisabled(o) {
 		return nil
 	}
-	arm := o.Spec().Get(ArmLibvirt)
+	arm := o.Spec().Get("libvirt")
 	var issues []api.Issue
 	for _, rule := range []struct {
 		invalid bool
@@ -40,7 +40,7 @@ func validateHostNetworkAddress(o api.Object) []api.Issue {
 	if HostAddressingDisabled(o) {
 		return validateAddresslessNetwork(o)
 	}
-	arm := o.Spec().Get(ArmLibvirt)
+	arm := o.Spec().Get("libvirt")
 	const path = "$.spec.libvirt"
 	var issues []api.Issue
 	if !arm.Has("hostAddress") {

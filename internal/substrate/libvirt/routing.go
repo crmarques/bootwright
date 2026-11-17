@@ -61,7 +61,7 @@ func routingFor(catalog api.Catalog, provider api.Object, contextName string, ne
 	}
 	for _, leg := range legs {
 		network, _ := catalog.Find(api.Network, leg.Network)
-		for _, peer := range network.Spec().Get(substrate.ArmLibvirt, "routedNetworkRefs").Strings() {
+		for _, peer := range network.Spec().Get("libvirt", "routedNetworkRefs").Strings() {
 			if device, ok := devices[peer]; ok && device != leg.Device {
 				routing.Routed = append(routing.Routed, RoutedPair{From: leg.Device, To: device}, RoutedPair{From: device, To: leg.Device})
 			}

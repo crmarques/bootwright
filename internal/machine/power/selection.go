@@ -21,9 +21,13 @@ type realizations func(name string) (machine.OwnershipState, bool, error)
 // learns which substrate answered. Whether the Machine is physical travels
 // beside the request rather than in it: it decides whether the operation holds
 // the Machine to a proved identity first, never what the adapter is asked.
-func requestFor(catalog api.Catalog, contextName, name, verb string, force bool, realized realizations) (Request, bool, bool, error) {
-	if !slices.Contains([]string{Start, Stop, Restart}, verb) {
+func requestFor(catalog api.Catalog, contextName, name string, verb Verb, force bool, realized realizations) (Request, bool, bool, error) {
+	if !slices.Contains([]Verb{Start, Stop, Restart}, verb) {
 		return Request{}, false, false, failure("lifecycle.state", "unsupported power verb", "")
+	}
+	context, valid := api.ParseContextName(contextName)
+	if !valid {
+		return Request{}, false, false, failure("lifecycle.state", "the context name is not a lowercase DNS label", "")
 	}
 	if err := undeclared(catalog, contextName, []string{name}); err != nil {
 		return Request{}, false, false, err
@@ -39,12 +43,12 @@ func requestFor(catalog api.Catalog, contextName, name, verb string, force bool,
 	}
 	if removed && verb != Stop {
 		return Request{}, false, false, failure("access.unavailable",
-			"the destroy current in this context removed the realization of "+object.Identity()+", so there is nothing to "+verb,
+			"the destroy current in this context removed the realization of "+object.Identity()+", so there is nothing to "+string(verb),
 			"finish the removal with bootwright destroy --context "+contextName+", then bootwright apply --context "+contextName+" realizes "+object.Identity()+" again")
 	}
 	return Request{
 		Arm: target.Port, Controller: controller, Force: force, MachinePort: target.MachinePort(""),
-		Identity:  Identity{Context: contextName, Object: object.Name()},
+		Identity:  Identity{Context: context, Object: object.Name()},
 		Placement: placement, Verb: verb, Version: RequestVersion,
 	}, physical, removed, nil
 }

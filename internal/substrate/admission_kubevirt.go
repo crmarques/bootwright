@@ -8,13 +8,13 @@ import (
 
 func normalizeKubeVirt(spec, arm api.Value, catalog api.Catalog) api.Value {
 	segments := spec.Get("segments").Items()
-	host, hosted := catalog.Find(api.OpenShiftCluster, spec.Get(ArmKubeVirt, "hostClusterRef").Text())
+	host, hosted := catalog.Find(api.OpenShiftCluster, spec.Get("kubevirt", "hostClusterRef").Text())
 	for index, segment := range segments {
-		ref := segment.Get(ArmKubeVirt, "networkRef")
+		ref := segment.Get("kubevirt", "networkRef")
 		if !ref.Present() {
 			continue
 		}
-		segment = segment.WithPath(defaultedNetworkRef(ref, arm.Get("namespace")), ArmKubeVirt, "networkRef")
+		segment = segment.WithPath(defaultedNetworkRef(ref, arm.Get("namespace")), "kubevirt", "networkRef")
 		if !hosted {
 			segments[index] = segment
 			continue
@@ -32,7 +32,7 @@ func normalizeKubeVirt(spec, arm api.Value, catalog api.Catalog) api.Value {
 
 func validateKubeVirtSegment(path string, segment, _ api.Value) []api.Issue {
 	var issues []api.Issue
-	ref := segment.Get(ArmKubeVirt, "networkRef")
+	ref := segment.Get("kubevirt", "networkRef")
 	kind := ref.Get("kind").Text()
 	if kind == "ClusterUserDefinedNetwork" && ref.Has("namespace") {
 		issues = api.AppendIssues(issues, issue(path+".kubevirt.networkRef.namespace", "cluster-scoped networks forbid a namespace"))

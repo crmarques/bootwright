@@ -183,7 +183,7 @@ func TestEveryPowerVerbOnAHostedMachineIsLentOneTokenItClears(t *testing.T) {
 // power request, naming the provider's access as what to correct, and the
 // token is still cleared.
 func TestASwappedClusterOrForeignVirtualMachineRefusesEveryHostedVerb(t *testing.T) {
-	for _, verb := range []string{Start, Stop, Restart} {
+	for _, verb := range []Verb{Start, Stop, Restart} {
 		for _, force := range []bool{false, true} {
 			if verb == Start && force {
 				continue

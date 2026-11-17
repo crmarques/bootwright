@@ -16,7 +16,7 @@ func (t Target) MachinePort(suffix string) MachinePort {
 	return NewMachinePort(t.Port, t.Controller, suffix)
 }
 
-func NewMachinePort(arm string, controller Controller, suffix string) MachinePort {
+func NewMachinePort(arm Arm, controller Controller, suffix string) MachinePort {
 	port := MachinePort{
 		Endpoint: controller.Endpoint, Verify: controller.TLSVerify, Verification: controller.TLSVerification,
 		MediaVolume:  controller.MediaVolume,

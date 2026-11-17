@@ -31,14 +31,14 @@ func SegmentLabel(c api.Catalog, provider api.Object, name string) string {
 	}
 	if o, found := c.Find(api.Network, name); found && IsManagedNetwork(o) {
 		if _, leg := TaggedManagedNetwork(o); leg {
-			return "segment " + name + " (tagged managed " + o.Identity() + " on trunk " + o.Spec().Get(ArmLibvirt, "bridge").Text() + " of " + provider.Identity() + ")"
+			return "segment " + name + " (tagged managed " + o.Identity() + " on trunk " + o.Spec().Get("libvirt", "bridge").Text() + " of " + provider.Identity() + ")"
 		}
 		return "segment " + name + " (managed " + o.Identity() + " of " + provider.Identity() + ")"
 	}
 	return "segment " + name + " of " + provider.Identity()
 }
 
-func validateCarriage(o api.Object, c api.Catalog, segment api.Value, variant string, index int) []api.Issue {
+func validateCarriage(o api.Object, c api.Catalog, segment api.Value, variant Arm, index int) []api.Issue {
 	var issues []api.Issue
 	entry := fmt.Sprintf("spec.segments[%d]", index)
 	path := "$." + entry
@@ -47,14 +47,14 @@ func validateCarriage(o api.Object, c api.Catalog, segment api.Value, variant st
 	fabric := !TaggedCarriage(variant)
 	if fabric && untagged == "" {
 		issues = api.AppendIssues(issues, api.Issue{Code: "api.required", Field: path + ".untaggedNetworkRef",
-			Message:     "a " + variant + " segment delivers exactly one network to each NIC on it, and segment " + name + " of " + o.Identity() + " names none",
-			Remediation: "set " + entry + ".untaggedNetworkRef on " + o.Identity() + " to the Network its " + variant + " network carries"})
+			Message:     "a " + string(variant) + " segment delivers exactly one network to each NIC on it, and segment " + name + " of " + o.Identity() + " names none",
+			Remediation: "set " + entry + ".untaggedNetworkRef on " + o.Identity() + " to the Network its " + string(variant) + " network carries"})
 	}
 	for i, tagged := range SegmentTagged(segment) {
 		field := fmt.Sprintf("%s.taggedNetworkRefs[%d]", path, i)
 		if fabric {
 			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: field,
-				Message:     "a " + variant + " segment carries its one network untagged, and tagged carriage over a " + variant + " network is not yet admitted (B1172), so segment " + name + " of " + o.Identity() + " cannot carry Network/" + tagged + " tagged",
+				Message:     "a " + string(variant) + " segment carries its one network untagged, and tagged carriage over a " + string(variant) + " network is not yet admitted (B1172), so segment " + name + " of " + o.Identity() + " cannot carry Network/" + tagged + " tagged",
 				Remediation: "remove taggedNetworkRefs from " + entry + " of " + o.Identity() + ", and give Network/" + tagged + " a segment of its own with untaggedNetworkRef"})
 			continue
 		}
@@ -84,11 +84,11 @@ func validateHostedSegmentMTUs(o api.Object, c api.Catalog) []api.Issue {
 	}
 	var issues []api.Issue
 	for index, segment := range o.Spec().Get("segments").Items() {
-		ref := segment.Get(ArmKubeVirt, "networkRef")
+		ref := segment.Get("kubevirt", "networkRef")
 		if !segment.Has("mtu") || !ref.Present() {
 			continue
 		}
-		resolved := segment.WithPath(defaultedNetworkRef(ref, o.Spec().Get(ArmKubeVirt, "namespace")), ArmKubeVirt, "networkRef")
+		resolved := segment.WithPath(defaultedNetworkRef(ref, o.Spec().Get("kubevirt", "namespace")), "kubevirt", "networkRef")
 		if name, _, ok := HostNetworkMTU(host, resolved); ok {
 			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: fmt.Sprintf("$.spec.segments[%d].mtu", index),
 				Message:     "segment " + segment.Get("name").Text() + " of " + o.Identity() + " is secondary network " + name + " of " + host.Identity() + ", whose mtu is the segment's capacity, so the segment declares none of its own",
@@ -113,7 +113,7 @@ func CapacityField(c api.Catalog, provider api.Object, name string) string {
 	return "spec.mtu of Network/" + name
 }
 
-func TaggedCarriage(arm string) bool { return arm != ArmKubeVirt && arm != ArmVSphere }
+func TaggedCarriage(arm Arm) bool { return arm != ArmKubeVirt && arm != ArmVSphere }
 
 func CarriageField(c api.Catalog, provider api.Object, name string, tagged bool) string {
 	for index, segment := range provider.Spec().Get("segments").Items() {

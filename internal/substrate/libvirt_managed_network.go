@@ -11,7 +11,7 @@ import (
 )
 
 func normalizeNetworkArm(o api.Object) api.Object {
-	arm := o.Spec().Get(ArmLibvirt)
+	arm := o.Spec().Get("libvirt")
 	if !arm.Present() || HostAddressingDisabled(o) {
 		return o
 	}
@@ -23,11 +23,11 @@ func normalizeNetworkArm(o api.Object) api.Object {
 	if address, err := netip.ParseAddr(arm.Get("hostAddress").Text()); err == nil {
 		arm = arm.With("hostAddress", api.StringValue(address.String()))
 	}
-	return o.WithSpec(o.Spec().With(ArmLibvirt, arm))
+	return o.WithSpec(o.Spec().With("libvirt", arm))
 }
 
 func validateNetworkArm(o api.Object, c api.Catalog) []api.Issue {
-	arm := o.Spec().Get(ArmLibvirt)
+	arm := o.Spec().Get("libvirt")
 	if !arm.Present() || o.Spec().Get("provided").Bool() {
 		return nil
 	}
@@ -82,7 +82,7 @@ func validateLegConnectionName(o api.Object, c api.Catalog) []api.Issue {
 		if _, tagged := TaggedManagedNetwork(peer); !tagged {
 			continue
 		}
-		provider, bridge := ManagedNetworkProvider(peer), peer.Spec().Get(ArmLibvirt, "bridge").Text()
+		provider, bridge := ManagedNetworkProvider(peer), peer.Spec().Get("libvirt", "bridge").Text()
 		if trunk := provider + "-trunk-" + bridge; o.Name() == trunk {
 			return []api.Issue{{Code: "api.invariant", Field: "$.metadata.name",
 				Message:     "the VLAN leg connection of tagged managed " + o.Identity() + " would take the name and UUID of the NetworkManager connection of trunk " + bridge + " of InfraProvider/" + provider + ", which is named after " + trunk,
@@ -94,7 +94,7 @@ func validateLegConnectionName(o api.Object, c api.Catalog) []api.Issue {
 
 func validateRoutedNetworks(o api.Object, c api.Catalog) []api.Issue {
 	const path = "$.spec.libvirt.routedNetworkRefs"
-	refs := o.Spec().Get(ArmLibvirt, "routedNetworkRefs").Strings()
+	refs := o.Spec().Get("libvirt", "routedNetworkRefs").Strings()
 	if len(refs) == 0 {
 		return nil
 	}
@@ -155,7 +155,7 @@ func validateLeg(o api.Object) []api.Issue {
 			Message:     fmt.Sprintf("tagged managed %s is a host VLAN leg on a trunk, and an MTU other than %d on a trunk or leg is not yet admitted (B1285), so its mtu %d is refused", o.Identity(), defaultMTU, mtu),
 			Remediation: fmt.Sprintf("set spec.mtu of %s to %d, or remove spec.vlan to realize it as an untagged libvirt network", o.Identity(), defaultMTU)})
 	}
-	bridge := o.Spec().Get(ArmLibvirt, "bridge").Text()
+	bridge := o.Spec().Get("libvirt", "bridge").Text()
 	if strings.Contains(bridge, ".") {
 		issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
 			Message:     "the trunk " + bridge + " of tagged managed " + o.Identity() + " is a bridge Bootwright creates, and a dot in a bridge name reads as the VLAN device of another link",
@@ -173,11 +173,11 @@ const defaultMTU = 1500
 
 func IsManagedNetwork(o api.Object) bool {
 	provided := o.Spec().Get("provided")
-	return o.Kind() == api.Network && provided.Present() && !provided.Bool() && o.Spec().Has(ArmLibvirt)
+	return o.Kind() == api.Network && provided.Present() && !provided.Bool() && o.Spec().Has("libvirt")
 }
 
 func ManagedNetworkProvider(o api.Object) string {
-	return o.Spec().Get(ArmLibvirt, "providerRef").Text()
+	return o.Spec().Get("libvirt", "providerRef").Text()
 }
 
 func ManagedNetworksOf(c api.Catalog, provider api.Object) []api.Object {
@@ -195,7 +195,7 @@ func HostAddress(o api.Object) (netip.Prefix, bool) {
 	if HostAddressingDisabled(o) {
 		return netip.Prefix{}, false
 	}
-	arm := o.Spec().Get(ArmLibvirt)
+	arm := o.Spec().Get("libvirt")
 	address, err := netip.ParseAddr(arm.Get("hostAddress").Text())
 	if !arm.Has("hostAddress") {
 		for _, family := range []string{"ipv4", "ipv6"} {
@@ -216,7 +216,7 @@ func HostAddress(o api.Object) (netip.Prefix, bool) {
 }
 
 func NetworkSegment(o api.Object) api.Value {
-	arm := o.Spec().Get(ArmLibvirt)
+	arm := o.Spec().Get("libvirt")
 	forward := arm.Get("forward")
 	if !forward.Present() {
 		forward = api.StringValue("nat")
@@ -244,7 +244,7 @@ func NetworkSegment(o api.Object) api.Value {
 			managed = managed.With("hostAddressing", api.StringValue("none"))
 		}
 	}
-	return segment.With("mtu", mtu).With(ArmLibvirt, api.MapValue(api.FieldValue{Name: "bridge", Value: arm.Get("bridge")})).With("managed", managed)
+	return segment.With("mtu", mtu).With("libvirt", api.MapValue(api.FieldValue{Name: "bridge", Value: arm.Get("bridge")})).With("managed", managed)
 }
 
 func Segments(c api.Catalog, provider api.Object) api.Value {
@@ -301,13 +301,13 @@ func segmentsOnHost(c api.Catalog, host string) (managed, external []hostSegment
 			continue
 		}
 		for index, segment := range provider.Spec().Get("segments").Items() {
-			if bridge := segment.Get(ArmLibvirt, "bridge").Text(); api.ValidLexical(api.LexicalBridge, bridge) {
+			if bridge := segment.Get("libvirt", "bridge").Text(); api.ValidLexical(api.LexicalBridge, bridge) {
 				external = append(external, hostSegment{owner: provider, provider: provider, index: index, bridge: bridge})
 			}
 		}
 		for _, o := range ManagedNetworksOf(c, provider) {
 			segment := hostSegment{owner: o, provider: provider}
-			if bridge := o.Spec().Get(ArmLibvirt, "bridge").Text(); api.ValidLexical(api.LexicalBridge, bridge) {
+			if bridge := o.Spec().Get("libvirt", "bridge").Text(); api.ValidLexical(api.LexicalBridge, bridge) {
 				segment.bridge = bridge
 			}
 			if vlan, leg := TaggedManagedNetwork(o); leg {

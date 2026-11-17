@@ -17,7 +17,7 @@ func validateSegments(c api.Catalog, o, provider api.Object, native api.Value) [
 	if substrate.VirtualArm(variant) {
 		issues = api.AppendIssues(issues, validateVirtualMACs(o, native, variant)...)
 	}
-	issues = api.AppendIssues(issues, validateBondSegments(o, native, "$.spec.substrate."+variant+".nics")...)
+	issues = api.AppendIssues(issues, validateBondSegments(o, native, "$.spec.substrate."+string(variant)+".nics")...)
 	issues = api.AppendIssues(issues, validateNICSegmentSelection(c, o, provider, native)...)
 	return api.AppendIssues(issues, validateCapacities(c, o, provider, native)...)
 }
@@ -42,12 +42,12 @@ func validateNICSegmentSelection(c api.Catalog, o, provider api.Object, native a
 		if !slices.Contains(substrate.MachineNICs(o), nic) || substrate.NICSegment(c, provider, o, nic) != "" {
 			continue
 		}
-		field := "$.spec.substrate." + variant + ".nics"
-		remedy := "add an entry {nicRef: " + nic + ", macAddress: <its MAC>, segmentRef: <segment>} to spec.substrate." + variant + ".nics of " + o.Identity() + ", with segmentRef one of " + strings.Join(names, ", ")
+		field := "$.spec.substrate." + string(variant) + ".nics"
+		remedy := "add an entry {nicRef: " + nic + ", macAddress: <its MAC>, segmentRef: <segment>} to spec.substrate." + string(variant) + ".nics of " + o.Identity() + ", with segmentRef one of " + strings.Join(names, ", ")
 		for i, entry := range substrate.MachineNICSegments(o).Items() {
 			if entry.Get("nicRef").Text() == nic {
 				field = fmt.Sprintf("%s[%d]", field, i)
-				remedy = "set segmentRef on the spec.substrate." + variant + ".nics entry of NIC " + nic + " on " + o.Identity() + " to one of " + strings.Join(names, ", ")
+				remedy = "set segmentRef on the spec.substrate." + string(variant) + ".nics entry of NIC " + nic + " on " + o.Identity() + " to one of " + strings.Join(names, ", ")
 			}
 		}
 		issues = api.AppendIssues(issues, invariant(field, "NIC "+nic+" of "+o.Identity()+" carries interface "+match.Get("interface").Text()+", and "+provider.Identity()+" declares segments "+strings.Join(names, ", ")+", so the NIC needs its segment", remedy))
@@ -285,14 +285,14 @@ func moveNIC(c api.Catalog, provider, o api.Object, nic, carries string) string 
 		case entry.Has("segmentRef") && !sole:
 			return "move NIC " + nic + " with its segmentRef on " + o.Identity() + " to a segment that " + carries
 		case !entry.Has("segmentRef") || entry.Has("macAddress"):
-			return "set segmentRef on the spec.substrate." + variant + ".nics entry of NIC " + nic + " on " + o.Identity() + " to a segment that " + carries
+			return "set segmentRef on the spec.substrate." + string(variant) + ".nics entry of NIC " + nic + " on " + o.Identity() + " to a segment that " + carries
 		}
 	}
 	entry := "{nicRef: " + nic + ", segmentRef: <segment>}"
 	if !substrate.VirtualArm(variant) {
 		entry = "{nicRef: " + nic + ", macAddress: <its MAC>, segmentRef: <segment>}"
 	}
-	return "add an entry " + entry + " to spec.substrate." + variant + ".nics of " + o.Identity() + " naming a segment that " + carries
+	return "add an entry " + entry + " to spec.substrate." + string(variant) + ".nics of " + o.Identity() + " naming a segment that " + carries
 }
 
 func carriageChecked(o api.Object, c api.Catalog, native api.Value) map[string]bool {

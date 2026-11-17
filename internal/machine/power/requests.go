@@ -1,6 +1,7 @@
 package power
 
 import (
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -10,15 +11,15 @@ import (
 type PowerRequest struct {
 	ContextName      string
 	Names            []string
-	Verb             string
+	Verb             Verb
 	Force            bool
 	SkipConfirmation bool
 }
 
 // Identity names the context and Machine one request acts on.
 type Identity struct {
-	Context string `json:"context"`
-	Object  string `json:"object"`
+	Context api.ContextName `json:"context"`
+	Object  string          `json:"object"`
 }
 
 // Access is the management endpoint the Machine's arm reaches it through, the
@@ -43,13 +44,13 @@ type Access struct {
 // operation-scoped file at execution.
 type Request struct {
 	// Arm keys the substrate machine port that answers this request.
-	Arm         string                `json:"arm"`
+	Arm         substrate.Arm         `json:"arm"`
 	Controller  Access                `json:"controller"`
 	Force       bool                  `json:"force"`
 	Identity    Identity              `json:"identity"`
 	MachinePort substrate.MachinePort `json:"machinePort"`
 	Placement   machineref.Placement  `json:"placement"`
-	Verb        string                `json:"verb"`
+	Verb        Verb                  `json:"verb"`
 	// Version is the request shape the adapter validates before it acts, so
 	// automation never runs against a request it does not understand.
 	Version string `json:"version"`
@@ -62,7 +63,7 @@ type Request struct {
 type Result struct {
 	Context  string
 	Machine  string
-	Verb     string
+	Verb     Verb
 	Power    string
 	Previous string
 	Changed  bool
@@ -77,7 +78,7 @@ type Result struct {
 // Results holds a row per admitted Machine, in ascending name order.
 type Results struct {
 	Context  string
-	Verb     string
+	Verb     Verb
 	Machines []Result
 }
 

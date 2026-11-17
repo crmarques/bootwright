@@ -14,7 +14,7 @@ import (
 // has no --force, and a forced request already cuts power.
 func TestPowerEvidenceRemediesNameTheExactCommand(t *testing.T) {
 	for _, test := range []struct {
-		verb      string
+		verb      Verb
 		force     bool
 		command   string
 		state     string

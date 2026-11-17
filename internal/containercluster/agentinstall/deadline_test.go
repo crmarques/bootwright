@@ -301,7 +301,7 @@ func TestAClusterOfAnySizePlansUnderTheDeadlineItsRoundsDerive(t *testing.T) {
 	for name, test := range map[string]struct {
 		catalog api.Catalog
 		nodes   int
-		arm     string
+		arm     substrate.Arm
 	}{
 		"emulated": {largeCatalog(29), 29, substrate.ArmLibvirt},
 		"kubevirt": {kubevirtCatalog(3, 6, true), 9, substrate.ArmKubeVirt},

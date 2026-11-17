@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-func validateDiscoveryRoot(o api.Object, variant string) []api.Issue {
+func validateDiscoveryRoot(o api.Object, variant substrate.Arm) []api.Issue {
 	const path = "$.spec.substrate.baremetal.rootDevice.discover"
 	root := o.Spec().Get("substrate", "baremetal", "rootDevice")
 	if variant != substrate.ArmBaremetal || !installed(o) || len(substrate.MachineRootDeviceHints(o).Names()) != 1 {

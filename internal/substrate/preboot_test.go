@@ -44,7 +44,7 @@ func eachPreBootRefusal(t *testing.T, continuation string) {
 	}
 	running := refusal("Machine/metal-01 is running, and its installation erases its disk, so no media was inserted into it and it was not booted",
 		"stop it with bootwright machine stop --context lab-b --name metal-01, then run "+next)
-	for arm, want := range map[string]map[string][]diagnostics.Diagnostic{
+	for arm, want := range map[Arm]map[string][]diagnostics.Diagnostic{
 		ArmLibvirt: {RefusalMachineRunning: running},
 		ArmBaremetal: {
 			RefusalTargetUnanswered: diagnostics.Of(UnansweredTarget("metal-01", preBootEndpoint)),
@@ -76,7 +76,7 @@ func eachPreBootRefusal(t *testing.T, continuation string) {
 		ArmVSphere: nil,
 		"":         nil,
 	} {
-		t.Run(arm, func(t *testing.T) {
+		t.Run(string(arm), func(t *testing.T) {
 			found := PreBootRefusals(arm, "lab-b", continuation, "metal-01", preBootEndpoint)
 			got := map[string][]diagnostics.Diagnostic{}
 			for reason, err := range found {
@@ -95,7 +95,7 @@ func eachPreBootRefusal(t *testing.T, continuation string) {
 // it was given no diagnostic for.
 func TestEachArmsPreBootEntryPointNamesExactlyTheseRefusals(t *testing.T) {
 	for _, arm := range Realized() {
-		role := "substrate_" + arm + "_machine"
+		role := "substrate_" + string(arm) + "_machine"
 		tasks := "collections/ansible_collections/bootwright/core/roles/" + role + "/tasks/"
 		named := preBootRefusalsNamed(t, tasks, "pre_boot.yml", role+"_refusal", map[string]bool{})
 		if len(named) < 2 || named[0] != "" || named[len(named)-1] != "" {

@@ -386,7 +386,7 @@ func validateConsumers(o api.Object, c api.Catalog) []api.Issue {
 		}
 		variant := substrate.Variant(provider)
 		profileName := substrate.MachineProfileRef(machine)
-		profile, profileOK := localProfile(provider.Spec().Get(variant, "machineProfiles"), profileName)
+		profile, profileOK := localProfile(provider.Spec().Get(string(variant), "machineProfiles"), profileName)
 		if s.Has("installer", "templateClone") && (variant != substrate.ArmVSphere || profileOK && !profile.Has("template")) {
 			issues = api.AppendIssues(issues, issue("$.spec.installer.templateClone", "template clone consumers require a vSphere profile with a template",
 				"select spec.installer.anaconda, or place each consumer on a vSphere provider profile with a template"))

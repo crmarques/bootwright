@@ -125,9 +125,9 @@ type Target struct {
 	MachinePort substrate.MachinePort `json:"machinePort"`
 	// Physical is operator-owned hardware: what it already held is what this
 	// installation erases, and its removal retains it.
-	Physical  bool   `json:"physical"`
-	Substrate string `json:"substrate"`
-	URI       string `json:"uri,omitempty"`
+	Physical  bool          `json:"physical"`
+	Substrate substrate.Arm `json:"substrate"`
+	URI       string        `json:"uri,omitempty"`
 }
 
 // Budget is one wait the installation performs: at most Attempts retries of

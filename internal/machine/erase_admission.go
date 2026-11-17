@@ -14,7 +14,7 @@ const MaxEraseTargets = 16
 
 const MaxLogicalOverwriteBytes int64 = 896 << 30
 
-func validateErase(o api.Object, variant string) []api.Issue {
+func validateErase(o api.Object, variant substrate.Arm) []api.Issue {
 	policy := o.Spec().Get("hardware", "eraseOnRemoval")
 	if !policy.Present() {
 		return nil

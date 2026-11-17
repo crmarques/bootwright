@@ -34,7 +34,7 @@ func TestAPowerCommandRefusesAServerAnotherContextReserves(t *testing.T) {
 	pinned := machine.HardwareIdentity{UUID: "4C4C4544-0042-3510-8052-B4C04F4D4E31", Serial: "SN1"}
 	for name, test := range map[string]struct {
 		machine string
-		verb    string
+		verb    Verb
 		force   bool
 		pin     machine.HardwareIdentity
 		held    infrastructureservices.HostReservation

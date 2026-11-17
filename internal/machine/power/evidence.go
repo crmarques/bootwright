@@ -36,8 +36,8 @@ func validate(data []byte, request Request, digest string) (Evidence, error) {
 	if evidence.Machine != request.Identity.Object {
 		return Evidence{}, failure("lifecycle.state", "the power evidence names another Machine", "")
 	}
-	command := powerCommand(request.Identity.Context, request)
-	reread := "once its BMC answers, read its power state with bootwright machine list --context " + request.Identity.Context +
+	command := powerCommand(string(request.Identity.Context), request)
+	reread := "once its BMC answers, read its power state with bootwright machine list --context " + string(request.Identity.Context) +
 		" --power-status, and repeat " + command + " if it is not " + expected(request.Verb)
 	if !evidence.Postcondition {
 		return Evidence{}, failure("lifecycle.unknown", "the management controller did not prove the power state this operation asked for", reread)
@@ -65,7 +65,7 @@ func unreached(command string, request Request) string {
 
 // expected is the state each verb converges to. A restart ends powered on, so
 // an interrupted restart is never reported as settled.
-func expected(verb string) string {
+func expected(verb Verb) string {
 	if verb == Stop {
 		return machine.PowerOff
 	}

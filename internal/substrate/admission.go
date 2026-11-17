@@ -7,28 +7,28 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-var armNormalizers = map[string]func(arm api.Value) api.Value{
+var armNormalizers = map[Arm]func(arm api.Value) api.Value{
 	ArmBaremetal: normalizeBaremetal,
 	ArmLibvirt:   normalizeLibvirt,
 	ArmVSphere:   normalizeVSphere,
 }
 
-var providerNormalizers = map[string]func(spec, arm api.Value, catalog api.Catalog) api.Value{
+var providerNormalizers = map[Arm]func(spec, arm api.Value, catalog api.Catalog) api.Value{
 	ArmKubeVirt: normalizeKubeVirt,
 }
 
-var authoredValidators = map[string]func(o api.Object) []api.Issue{
+var authoredValidators = map[Arm]func(o api.Object) []api.Issue{
 	ArmBaremetal: validateBaremetalAuthored,
 	ArmVSphere:   validateVSphereAuthored,
 }
 
-var armValidators = map[string]func(o api.Object, c api.Catalog) []api.Issue{
+var armValidators = map[Arm]func(o api.Object, c api.Catalog) []api.Issue{
 	ArmBaremetal: validateBaremetal,
 	ArmLibvirt:   validateLibvirt,
 	ArmVSphere:   validateVSphere,
 }
 
-var segmentValidators = map[string]func(path string, segment, arm api.Value) []api.Issue{
+var segmentValidators = map[Arm]func(path string, segment, arm api.Value) []api.Issue{
 	ArmVSphere:  validateVSphereSegment,
 	ArmKubeVirt: validateKubeVirtSegment,
 }
@@ -45,11 +45,11 @@ func Normalize(o api.Object, catalog api.Catalog) (api.Object, []api.Issue) {
 		return o, nil
 	}
 	spec := o.Spec()
-	arm := spec.Get(variant)
+	arm := spec.Get(string(variant))
 	if normalize, ok := armNormalizers[variant]; ok {
 		arm = normalize(arm)
 	}
-	spec = spec.With(variant, arm)
+	spec = spec.With(string(variant), arm)
 	if normalize, ok := providerNormalizers[variant]; ok {
 		spec = normalize(spec, arm, catalog)
 	}
@@ -62,7 +62,7 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 	}
 	issues := validateHostedSegmentMTUs(o, c)
 	for _, arm := range Arms() {
-		if validate, ok := authoredValidators[arm]; ok && o.Spec().Has(arm) {
+		if validate, ok := authoredValidators[arm]; ok && o.Spec().Has(string(arm)) {
 			issues = api.AppendIssues(issues, validate(o)...)
 		}
 	}
@@ -84,13 +84,13 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if variant == "" {
 		return issues
 	}
-	arm := o.Spec().Get(variant)
+	arm := o.Spec().Get(string(variant))
 	if validate, ok := armValidators[variant]; ok {
 		issues = api.AppendIssues(issues, validate(o, c)...)
 	}
 	for index, segment := range o.Spec().Get("segments").Items() {
 		path := fmt.Sprintf("$.spec.segments[%d]", index)
-		if !segment.Has(variant) {
+		if !segment.Has(string(variant)) {
 			issues = api.AppendIssues(issues, issue(path, "segment arm must match its provider substrate"))
 		}
 		if validate, ok := segmentValidators[variant]; ok {
@@ -102,10 +102,10 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	return api.BoundIssues(issues)
 }
 
-func Variant(o api.Object) string {
-	selected := ""
+func Variant(o api.Object) Arm {
+	selected := Arm("")
 	for _, name := range Arms() {
-		if o.Spec().Has(name) {
+		if o.Spec().Has(string(name)) {
 			if selected != "" {
 				return ""
 			}
@@ -118,7 +118,7 @@ func Variant(o api.Object) string {
 // requirePositiveCapacity refuses a profile size its arm cannot create a
 // machine with. The schema materializes 0 for an omitted size, so an omitted
 // size refuses here too.
-func requirePositiveCapacity(arm api.Value, variant, label string) []api.Issue {
+func requirePositiveCapacity(arm api.Value, variant Arm, label string) []api.Issue {
 	issues := []api.Issue{}
 	for index, profile := range arm.Get("machineProfiles").Items() {
 		for _, size := range []string{"cpu", "memoryMiB", "diskGiB"} {
@@ -132,7 +132,7 @@ func requirePositiveCapacity(arm api.Value, variant, label string) []api.Issue {
 }
 
 func validateFirmware(o api.Object) []api.Issue {
-	block := o.Spec().Get("substrate", ArmBaremetal, "firmware")
+	block := o.Spec().Get("substrate", "baremetal", "firmware")
 	if !block.Present() {
 		return nil
 	}

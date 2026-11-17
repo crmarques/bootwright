@@ -59,7 +59,7 @@ const (
 )
 
 // MachineBoundsFor refuses arms that have no qualified machine port.
-func MachineBoundsFor(arm string) (MachineBounds, bool) {
+func MachineBoundsFor(arm Arm) (MachineBounds, bool) {
 	if arm == ArmKubeVirt {
 		return MachineBounds{
 			ControllerKind: "api", StateRead: KubeVirtStateReadBound, PowerRead: KubeVirtPowerReadBound,

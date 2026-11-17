@@ -22,7 +22,7 @@ func TestEraseAdmissionRetainsOmissionAndRequiresExplicitRootIdentity(t *testing
 	if issues := validateErase(machine, substrate.ArmBaremetal); len(issues) != 0 {
 		t.Fatal(issues)
 	}
-	for _, variant := range []string{substrate.ArmLibvirt, substrate.ArmKubeVirt, ""} {
+	for _, variant := range []substrate.Arm{substrate.ArmLibvirt, substrate.ArmKubeVirt, ""} {
 		if issues := validateErase(machine, variant); len(issues) == 0 {
 			t.Fatalf("nonphysical %q admitted erase", variant)
 		}

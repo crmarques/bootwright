@@ -16,9 +16,9 @@ import (
 // rather than as an adapter failure. A removal and an observation boot
 // nothing, so they name none.
 func TestAnApplyRemediesItsTargetsPreBootRefusalsByName(t *testing.T) {
-	for _, arm := range []string{substrate.ArmLibvirt, substrate.ArmBaremetal} {
+	for _, arm := range []substrate.Arm{substrate.ArmLibvirt, substrate.ArmBaremetal} {
 		for _, operation := range []string{"apply", "destroy", "observe"} {
-			t.Run(arm+" "+operation, func(t *testing.T) {
+			t.Run(string(arm)+" "+operation, func(t *testing.T) {
 				call, request := execution(t, "digest")
 				request.Target.Substrate, request.Target.Physical = arm, arm == substrate.ArmBaremetal
 				call.Proved, call.Context = dependencyProof(), "lab-b"

@@ -15,7 +15,7 @@ func issueLines(issues []api.Issue) []string {
 	return lines
 }
 
-func armDefects() map[string]api.Value {
+func armDefects() map[Arm]api.Value {
 	domains := list(
 		m("name", "a", "server", "missing.example.test", "topology", m("datacenter", "dc")),
 		m("name", "b", "server", "vcenter.example.test", "topology", m("datacenter", "elsewhere")),
@@ -25,7 +25,7 @@ func armDefects() map[string]api.Value {
 		"failureDomains", domains,
 		"machineProfiles", list(m("name", "small", "cpu", api.IntegerValue("0"), "memoryMiB", api.IntegerValue("4096"), "diskGiB", api.IntegerValue("20"))),
 	), "segments", list(m("name", "plain", "vsphere", m()), m("name", "wrong", "kubevirt", m())))
-	return map[string]api.Value{
+	return map[Arm]api.Value{
 		"baremetal": m("baremetal", m("defaults", m("bmc", m("address", "http://10.0.0.1",
 			"tls", m("verification", "certificate", "verify", false, "trustBundleRef", "ca"),
 			"virtualMedia", m("tls", m("trust", "importCertificate", "restoreVerificationAfterBoot", true, "enableVerification", true))))),
@@ -44,9 +44,9 @@ func TestEachArmRefusesItsOwnDefectsInOrder(t *testing.T) {
 	host := obj(api.Machine, "host", m())
 	one := obj(api.Machine, "one", m("substrate", m("providerRef", "libvirt")))
 	two := obj(api.Machine, "two", m("substrate", m("providerRef", "libvirt")))
-	got := map[string][]string{}
+	got := map[Arm][]string{}
 	for arm, spec := range armDefects() {
-		provider := obj(api.InfraProvider, arm, spec)
+		provider := obj(api.InfraProvider, string(arm), spec)
 		got[arm] = issueLines(Validate(provider, api.NewCatalog([]api.Object{provider, host, one, two})))
 	}
 	want := armDefectIssues()
@@ -94,7 +94,7 @@ func TestAProviderNormalizesOnlyItsOwnArm(t *testing.T) {
 
 func TestAPartialProviderRefusesASegmentOfAnotherArm(t *testing.T) {
 	for arm, spec := range armDefects() {
-		issues := ValidatePartial(obj(api.InfraProvider, arm, spec), api.Catalog{})
+		issues := ValidatePartial(obj(api.InfraProvider, string(arm), spec), api.Catalog{})
 		mismatched := 0
 		for _, found := range issues {
 			if found.Field == "$.spec.segments" && found.Message == "segment arm must match its provider substrate" {
@@ -107,8 +107,8 @@ func TestAPartialProviderRefusesASegmentOfAnotherArm(t *testing.T) {
 	}
 }
 
-func armDefectIssues() map[string][]string {
-	return map[string][]string{
+func armDefectIssues() map[Arm][]string {
+	return map[Arm][]string{
 		"baremetal": {
 			"$.spec.baremetal.defaults.bmc.tls.verification: certificate verification requires an HTTPS controller endpoint",
 			"$.spec.baremetal.defaults.bmc.tls.trustBundleRef: a BMC trust bundle requires verification, and tls.verify is false here, whether authored or inherited",

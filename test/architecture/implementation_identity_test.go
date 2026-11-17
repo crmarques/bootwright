@@ -125,7 +125,7 @@ func implementationIdentityUses(rule identityRule, source sourceFile) []string {
 				return true
 			}
 			imported := aliases[qualifier.Name]
-			if imported == substratePackage && strings.HasPrefix(node.Sel.Name, "Arm") {
+			if imported == substratePackage && strings.HasPrefix(node.Sel.Name, "Arm") && node.Sel.Name != "Arm" {
 				uses = append(uses, "substrate."+node.Sel.Name)
 			}
 			if _, identity := rule.identities[imported+"."+node.Sel.Name]; identity {
@@ -224,7 +224,7 @@ func TestTheImplementationIdentityRuleRejectsAnArmComparison(t *testing.T) {
 
 import "github.com/crmarques/bootwright/internal/substrate"
 
-func pushed(arm, endpoint string) bool {
+func pushed(arm substrate.Arm, endpoint string) bool {
 	return arm == substrate.ArmKubeVirt || arm == "machine-libvirt-v1" || strings.HasPrefix(endpoint, "kubevirt:")
 }
 `, 0)

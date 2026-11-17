@@ -52,7 +52,7 @@ func (r Request) secretClasses() secrets.Classes {
 	return classes
 }
 
-func controllerCredentialClass(target string) secrets.Class {
+func controllerCredentialClass(target substrate.Arm) secrets.Class {
 	if substrate.ControllerCredentialIsAccess(target) {
 		return secrets.AccessCredential
 	}

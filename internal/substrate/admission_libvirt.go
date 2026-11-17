@@ -19,7 +19,7 @@ func normalizeLibvirt(arm api.Value) api.Value {
 }
 
 func validateLibvirt(o api.Object, c api.Catalog) []api.Issue {
-	arm := o.Spec().Get(ArmLibvirt)
+	arm := o.Spec().Get("libvirt")
 	bmc := arm.Get("bmcEmulation")
 	issues := []api.Issue{}
 	issues = api.AppendIssues(issues, validateEmulatedListener(bmc)...)
@@ -31,7 +31,7 @@ func validateLibvirt(o api.Object, c api.Catalog) []api.Issue {
 		issues = api.AppendIssues(issues, issue("$.spec.libvirt.bmcEmulation.port", "the emulated BMC port range must end at or below 65535"))
 	}
 	for _, other := range c.OfKind(api.InfraProvider) {
-		peer := other.Spec().Get(ArmLibvirt)
+		peer := other.Spec().Get("libvirt")
 		if other.Identity() == o.Identity() || !peer.Present() || !peer.Get("machineRef").Equal(arm.Get("machineRef")) {
 			continue
 		}
@@ -67,7 +67,7 @@ func NameableListener(address string) bool {
 func CertificateNames(c api.Catalog, secret string) []string {
 	var names []string
 	for _, provider := range ProvidersOn(c, ArmLibvirt) {
-		bmc := provider.Spec().Get(ArmLibvirt, "bmcEmulation")
+		bmc := provider.Spec().Get("libvirt", "bmcEmulation")
 		if bmc.Get("certificateRef").Text() == secret && NameableListener(bmc.Get("bindAddress").Text()) {
 			names = append(names, bmc.Get("bindAddress").Text())
 		}
@@ -109,7 +109,7 @@ func validateEmulatedCertificate(bmc api.Value, c api.Catalog) []api.Issue {
 // port per hosted Machine in canonical name order, or the base port alone while
 // no Machine selects the provider.
 func bmcPortRange(provider api.Object, c api.Catalog) (int64, int64, bool) {
-	first, ok := provider.Spec().Get(ArmLibvirt, "bmcEmulation", "port").Int64()
+	first, ok := provider.Spec().Get("libvirt", "bmcEmulation", "port").Int64()
 	if !ok {
 		return 0, 0, false
 	}
@@ -144,7 +144,7 @@ func validateLibvirtDataDisks(o api.Object, arm api.Value) []api.Issue {
 func ExternalBridges(provider api.Object) []string {
 	var bridges []string
 	for _, segment := range provider.Spec().Get("segments").Items() {
-		if bridge := segment.Get(ArmLibvirt, "bridge").Text(); bridge != "" {
+		if bridge := segment.Get("libvirt", "bridge").Text(); bridge != "" {
 			bridges = append(bridges, bridge)
 		}
 	}

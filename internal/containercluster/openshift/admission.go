@@ -702,8 +702,8 @@ func derivePlatform(o api.Object, c api.Catalog) (api.Value, bool) {
 	}
 	return api.Value{}, false
 }
-func providerTypes(o api.Object, c api.Catalog) ([]string, bool) {
-	types := []string{}
+func providerTypes(o api.Object, c api.Catalog) ([]substrate.Arm, bool) {
+	types := []substrate.Arm{}
 	ready := o.Spec().Get("nodes").Len() > 0
 	for _, node := range o.Spec().Get("nodes").Items() {
 		bound, ok := c.Find(api.Machine, node.Get("machineRef").Text())

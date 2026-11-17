@@ -15,7 +15,7 @@ const (
 	FirmwareNameBytes   = 128
 	FirmwareStringBytes = 256
 
-	FirmwarePath = "spec.substrate." + ArmBaremetal + ".firmware"
+	FirmwarePath = "spec.substrate.baremetal.firmware"
 )
 
 type Firmware struct {
@@ -33,7 +33,7 @@ type BIOSAttribute struct {
 }
 
 func MachineFirmware(machine api.Object) *Firmware {
-	block := machine.Spec().Get("substrate", ArmBaremetal, "firmware")
+	block := machine.Spec().Get("substrate", "baremetal", "firmware")
 	if !block.Present() {
 		return nil
 	}

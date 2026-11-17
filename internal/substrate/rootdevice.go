@@ -21,11 +21,11 @@ type RootDeviceHints struct {
 }
 
 func MachineDiscoveryPolicy(machine api.Object) api.Value {
-	return machine.Spec().Get("substrate", ArmBaremetal, "rootDevice", "discover")
+	return machine.Spec().Get("substrate", "baremetal", "rootDevice", "discover")
 }
 
 func WithMachineDiscoveryPolicy(machine api.Object, policy api.Value) api.Object {
-	return machine.WithSpec(machine.Spec().WithPath(policy, "substrate", ArmBaremetal, "rootDevice", "discover"))
+	return machine.WithSpec(machine.Spec().WithPath(policy, "substrate", "baremetal", "rootDevice", "discover"))
 }
 
 // Names are the admitted names of the hints present, sorted.
@@ -59,7 +59,7 @@ func (h RootDeviceHints) Names() []string {
 
 func rootDeviceHints(machine api.Object) RootDeviceHints {
 	declared := machine.Spec().Get("hardware", "rootDevice")
-	physical := machine.Spec().Get("substrate", ArmBaremetal, "rootDevice")
+	physical := machine.Spec().Get("substrate", "baremetal", "rootDevice")
 	hints := RootDeviceHints{
 		Discovery:  physical.Has("discover"),
 		DeviceName: declared.Get("deviceName").Text(), HCTL: physical.Get("hctl").Text(),
@@ -82,7 +82,7 @@ func rootDeviceHints(machine api.Object) RootDeviceHints {
 
 func RootDeviceHintPath(name string) string {
 	if slices.Contains([]string{"hctl", "serialNumber", "sizeBytes", "wwn", "volumeRef", "bootVolume", "discover"}, name) {
-		return "spec.substrate." + ArmBaremetal + ".rootDevice." + name
+		return "spec.substrate.baremetal.rootDevice." + name
 	}
 	return "spec.hardware.rootDevice." + name
 }
@@ -93,7 +93,7 @@ func RootDevicePath(machine api.Object) string {
 	if declared := machine.Spec().Get("hardware", "rootDevice", "deviceName").Text(); declared != "" {
 		return declared
 	}
-	return WWNDevicePath(machine.Spec().Get("substrate", ArmBaremetal, "rootDevice", "wwn").Text())
+	return WWNDevicePath(machine.Spec().Get("substrate", "baremetal", "rootDevice", "wwn").Text())
 }
 
 // WWNDevicePath is the /dev/disk/by-id path of a root wwn, or nothing when

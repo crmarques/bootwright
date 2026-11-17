@@ -17,7 +17,7 @@ func refusedPrefixes(catalog api.Catalog, provider api.Object) []string {
 	host := substrate.HostMachine(provider)
 	var found []netip.Prefix
 	for _, managed := range substrate.ManagedNetworksOf(catalog, provider) {
-		for _, name := range managed.Spec().Get(substrate.ArmLibvirt, "taggedNetworkRefs").Strings() {
+		for _, name := range managed.Spec().Get("libvirt", "taggedNetworkRefs").Strings() {
 			tagged, ok := catalog.Find(api.Network, name)
 			if !ok {
 				continue

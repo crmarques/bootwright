@@ -85,11 +85,11 @@ type Node struct {
 	// already held, so the block consumes that authorization on apply.
 	Physical bool `json:"physical"`
 	// PortPinned nodes carry their Machine's recorded identity to every entry point.
-	PortPinned       bool    `json:"portPinned,omitempty"`
-	RequireTPM       bool    `json:"requireTPM,omitempty"`
-	StateReadSeconds int     `json:"stateReadSeconds"`
-	Substrate        string  `json:"substrate"`
-	Taints           []Taint `json:"taints,omitempty"`
+	PortPinned       bool          `json:"portPinned,omitempty"`
+	RequireTPM       bool          `json:"requireTPM,omitempty"`
+	StateReadSeconds int           `json:"stateReadSeconds"`
+	Substrate        substrate.Arm `json:"substrate"`
+	Taints           []Taint       `json:"taints,omitempty"`
 }
 
 type Taint struct {
@@ -254,7 +254,7 @@ var mediaBudgets = MediaBudgets{BuildSeconds: 1800}
 
 const minBootSeconds = 900
 
-func installBudgets(nodes int, enforced []string, arms ...string) InstallBudgets {
+func installBudgets(nodes int, enforced []substrate.Arm, arms ...substrate.Arm) InstallBudgets {
 	fanout, allowance, margin := substrate.ClusterBounds(arms...)
 	rounds := (nodes + fanout - 1) / fanout
 	boot := rounds*int(allowance/time.Second) + int(firmwareShare(rounds, enforced)/time.Second)
@@ -262,7 +262,7 @@ func installBudgets(nodes int, enforced []string, arms ...string) InstallBudgets
 		BootSeconds: max(minBootSeconds, boot), BootstrapSeconds: 5400, InstallSeconds: 5400}
 }
 
-func firmwareShare(rounds int, enforced []string) time.Duration {
+func firmwareShare(rounds int, enforced []substrate.Arm) time.Duration {
 	bounds := make([]time.Duration, 0, len(enforced))
 	for _, arm := range enforced {
 		machine, _ := substrate.MachineBoundsFor(arm)

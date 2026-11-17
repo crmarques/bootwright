@@ -38,7 +38,7 @@ const (
 // plan consumes, as the lifecycle's execution carries it; when it is empty the
 // remedy names the plain apply of the context. An arm with no pre-boot entry
 // point refuses nothing here, because its installation fails before any proof.
-func PreBootRefusals(arm, contextName, continuation, machine, endpoint string) map[string]error {
+func PreBootRefusals(arm Arm, contextName, continuation, machine, endpoint string) map[string]error {
 	identity := string(api.Machine) + "/" + machine
 	refused := func(message, remediation string) error {
 		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{

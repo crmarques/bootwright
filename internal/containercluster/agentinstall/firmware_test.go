@@ -154,7 +154,7 @@ func TestTheFirmwareBootShareGrowsWithTheRoundsEnforcedNodesCanFill(t *testing.T
 		enforced int
 		rounds   int
 	}{{0, 0}, {1, 1}, {2, 2}, {3, 3}, {40, 3}} {
-		enforced := slices.Repeat([]string{substrate.ArmBaremetal}, test.enforced)
+		enforced := slices.Repeat([]substrate.Arm{substrate.ArmBaremetal}, test.enforced)
 		budgets := installBudgets(40, enforced, substrate.ArmBaremetal)
 		want := plain
 		want.BootSeconds += test.rounds * int(substrate.BaremetalFirmwareBound/time.Second)
@@ -162,10 +162,10 @@ func TestTheFirmwareBootShareGrowsWithTheRoundsEnforcedNodesCanFill(t *testing.T
 			t.Errorf("%d enforced of 40 nodes: %+v, want %+v", test.enforced, budgets, want)
 		}
 	}
-	if emulated := installBudgets(4, []string{substrate.ArmLibvirt}, substrate.ArmLibvirt); emulated != installBudgets(4, nil, substrate.ArmLibvirt) {
+	if emulated := installBudgets(4, []substrate.Arm{substrate.ArmLibvirt}, substrate.ArmLibvirt); emulated != installBudgets(4, nil, substrate.ArmLibvirt) {
 		t.Errorf("an emulated arm grew its boot budget by a firmware bound it does not publish: %+v", emulated)
 	}
-	enforced := installBudgets(32, slices.Repeat([]string{substrate.ArmBaremetal}, 32), substrate.ArmBaremetal)
+	enforced := installBudgets(32, slices.Repeat([]substrate.Arm{substrate.ArmBaremetal}, 32), substrate.ArmBaremetal)
 	if installDeadline(enforced, 32) <= installDeadline(installBudgets(32, nil, substrate.ArmBaremetal), 32) {
 		t.Error("enforced firmware did not lengthen the installation's deadline")
 	}

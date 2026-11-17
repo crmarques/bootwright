@@ -491,14 +491,14 @@ func cliGoldens() []cliGolden {
 		}
 		return "/var/log/bootwright/contexts/lab/runs/" + id + ".output", []string{"contexts/lab/runs/" + id + ".output"}, id
 	}
-	powerRow := func(name, verb, now, previous string, changed bool) power.Result {
+	powerRow := func(name string, verb power.Verb, now, previous string, changed bool) power.Result {
 		location, logs, run := retainedBy(name)
 		return power.Result{
 			Context: "lab", Machine: name, Verb: verb, Power: now, Previous: previous, Changed: changed,
 			LogLocation: location, Logs: logs, Run: run,
 		}
 	}
-	powered := func(verb, now, previous string, changed bool) *power.Results {
+	powered := func(verb power.Verb, now, previous string, changed bool) *power.Results {
 		return &power.Results{Context: "lab", Verb: verb, Machines: []power.Result{powerRow("rhel-01", verb, now, previous, changed)}}
 	}
 	poweredSeveral := func(r *dispatchRecord) {

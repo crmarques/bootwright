@@ -15,10 +15,12 @@ const Variable = "bootwright_machine_power"
 
 // The verbs a power request carries. Each converges the Machine to the power
 // state its name means; a request is never evidence that it arrived.
+type Verb string
+
 const (
-	Start   = "start"
-	Stop    = "stop"
-	Restart = "restart"
+	Start   Verb = "start"
+	Stop    Verb = "stop"
+	Restart Verb = "restart"
 )
 
 // ReadImplementation is the automation identity a power reading runs through.

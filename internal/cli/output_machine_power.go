@@ -55,7 +55,7 @@ func displayMachinePower(result *power.Results) machinePowerPresentation {
 		})
 	}
 	return machinePowerPresentation{
-		Context: escapeDisplayLine(result.Context), Verb: escapeDisplayLine(result.Verb), Machines: rows,
+		Context: escapeDisplayLine(result.Context), Verb: escapeDisplayLine(string(result.Verb)), Machines: rows,
 	}
 }
 

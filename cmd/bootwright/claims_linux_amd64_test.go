@@ -35,7 +35,7 @@ import (
 func TestEveryExampleObjectIsClaimedOncePerFamily(t *testing.T) {
 	t.Parallel()
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
-	bound := map[string]bool{}
+	bound := map[substrate.Arm]bool{}
 	for _, binding := range resolver.Bindings() {
 		if binding.Family == "" {
 			t.Errorf("%s/%s names no capability family", binding.Kind, binding.Implementation)
@@ -134,7 +134,7 @@ var noBlockClaims = map[string]string{
 }
 
 // substrateArm is the arm of the provider one Machine is placed on.
-func substrateArm(t *testing.T, catalog api.Catalog, name string) string {
+func substrateArm(t *testing.T, catalog api.Catalog, name string) substrate.Arm {
 	t.Helper()
 	object, found := catalog.Find(api.Machine, name)
 	if !found {

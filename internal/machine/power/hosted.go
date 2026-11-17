@@ -37,7 +37,7 @@ func hostedNamespace(access Access) string {
 
 const runOverhead = 5 * time.Minute
 
-func powerDeadline(arm string) time.Duration {
+func powerDeadline(arm substrate.Arm) time.Duration {
 	bounds, _ := substrate.MachineBoundsFor(arm)
 	return bounds.Power + 2*bounds.StateRead + runOverhead
 }

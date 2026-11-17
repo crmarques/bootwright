@@ -52,7 +52,7 @@ const mediaMargin = time.Hour + controllerCalls
 const controllerCalls = substrate.LibvirtPreBootBound + substrate.LibvirtMediaInsertBound +
 	substrate.LibvirtBootMediaBound + 2*substrate.LibvirtBootDiskBound + 2*substrate.LibvirtMediaEjectBound
 
-func machineMediaMargin(arm string, firmware *Firmware) time.Duration {
+func machineMediaMargin(arm substrate.Arm, firmware *Firmware) time.Duration {
 	bounds, ok := substrate.MachineBoundsFor(arm)
 	if !ok {
 		return mediaMargin
@@ -128,7 +128,7 @@ const updateBound = updateSession + updateRebootBound + updateGuestRead + update
 
 const updateRebootBound = 600 * time.Second
 
-func machineBootDisk(arm string) time.Duration {
+func machineBootDisk(arm substrate.Arm) time.Duration {
 	if bounds, ok := substrate.MachineBoundsFor(arm); ok {
 		return bounds.BootDisk
 	}

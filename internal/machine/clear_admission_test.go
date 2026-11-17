@@ -36,7 +36,7 @@ func TestClearOnInstallIsAdmittedOnlyOnAnInstalledPhysicalMachine(t *testing.T) 
 	if issues := validateClear(clearMachine(upper), true); len(issues) != 0 {
 		t.Fatalf("a WWN in another case was refused: %v", issues)
 	}
-	for _, variant := range []string{substrate.ArmLibvirt, substrate.ArmKubeVirt, ""} {
+	for _, variant := range []substrate.Arm{substrate.ArmLibvirt, substrate.ArmKubeVirt, ""} {
 		issues := validateClear(machine, variant == substrate.ArmBaremetal)
 		if len(issues) != 1 || issues[0].Field != "$.spec.hardware.clearOnInstall" {
 			t.Fatalf("nonphysical %q admitted clearOnInstall: %v", variant, issues)

@@ -17,7 +17,7 @@ import (
 func TestTheMachinePortDispatcherBindsExactlyTheRealizedArms(t *testing.T) {
 	t.Parallel()
 	var defaults struct {
-		Arms map[string]string `yaml:"substrate_machine_arms"`
+		Arms map[substrate.Arm]string `yaml:"substrate_machine_arms"`
 	}
 	if err := yaml.Unmarshal(ansible.Assets()[observeRoleRoot+"substrate_machine/defaults/main.yml"], &defaults); err != nil {
 		t.Fatal(err)

@@ -690,17 +690,17 @@ func refusalAt(code, field, message, remediation string) error {
 	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: code, Field: field, Message: message, Remediation: remediation}}}
 }
 
-func clusterArms(catalog api.Catalog, cluster api.Object) []string {
+func clusterArms(catalog api.Catalog, cluster api.Object) []substrate.Arm {
 	arms, _ := nodeArms(catalog, cluster)
 	return arms
 }
 
-func enforcedArms(catalog api.Catalog, cluster api.Object) []string {
+func enforcedArms(catalog api.Catalog, cluster api.Object) []substrate.Arm {
 	_, enforced := nodeArms(catalog, cluster)
 	return enforced
 }
 
-func nodeArms(catalog api.Catalog, cluster api.Object) (arms, enforced []string) {
+func nodeArms(catalog api.Catalog, cluster api.Object) (arms, enforced []substrate.Arm) {
 	for _, node := range cluster.Spec().Get("nodes").Items() {
 		bound, ok := catalog.Find(api.Machine, node.Get("machineRef").Text())
 		if !ok {
@@ -718,7 +718,7 @@ func nodeArms(catalog api.Catalog, cluster api.Object) (arms, enforced []string)
 	return arms, enforced
 }
 
-func controllerKind(arm string) string {
+func controllerKind(arm substrate.Arm) string {
 	bounds, _ := substrate.MachineBoundsFor(arm)
 	return bounds.ControllerKind
 }
@@ -731,7 +731,7 @@ func featureRefusal(err error) (string, string) {
 	return "the installation feature could not be derived", "correct the cluster installation selection"
 }
 
-func stateReadSeconds(arm string) int {
+func stateReadSeconds(arm substrate.Arm) int {
 	bounds, _ := substrate.MachineBoundsFor(arm)
 	return int(bounds.StateRead.Seconds())
 }

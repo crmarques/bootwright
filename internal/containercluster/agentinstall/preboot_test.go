@@ -42,8 +42,8 @@ func TestAnApplyRemediesEachNodesPreBootRefusalsUnderItsPosition(t *testing.T) {
 						want[reason+"-node-"+strconv.Itoa(index)] = diagnostics.Of(err)
 					}
 				}
-				arms := []string{request.Nodes[0].Substrate, request.Nodes[1].Substrate, request.Nodes[2].Substrate}
-				if len(want) != 15 || !reflect.DeepEqual(arms, []string{substrate.ArmBaremetal, substrate.ArmLibvirt, substrate.ArmBaremetal}) {
+				arms := []substrate.Arm{request.Nodes[0].Substrate, request.Nodes[1].Substrate, request.Nodes[2].Substrate}
+				if len(want) != 15 || !reflect.DeepEqual(arms, []substrate.Arm{substrate.ArmBaremetal, substrate.ArmLibvirt, substrate.ArmBaremetal}) {
 					t.Fatalf("nodes on %v name %d refusals, want 15", arms, len(want))
 				}
 				if refused := got["machine-running-node-2"]; len(refused) != 1 || refused[0].Object.Name != "metal-03" ||

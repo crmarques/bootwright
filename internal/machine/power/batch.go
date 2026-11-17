@@ -179,7 +179,7 @@ func (s Service) confirm(ctx context.Context, contextName string, request PowerR
 		return failure("machine.power", "this operation requires confirmation",
 			"repeat "+batchCommand(contextName, request.Verb, names, request.Force)+" with --yes")
 	}
-	action := request.Verb + " machine"
+	action := string(request.Verb) + " machine"
 	if len(names) > 1 {
 		action += "s"
 	}
@@ -201,7 +201,7 @@ func (s Service) confirm(ctx context.Context, contextName string, request PowerR
 
 // executeAll runs at most lifecycle.MaxRunningBlocks Machines at once inside
 // one invocation scope, or one at a time without a scope.
-func (s Service) executeAll(ctx context.Context, contextName, verb string, targets []target) (*Results, error) {
+func (s Service) executeAll(ctx context.Context, contextName string, verb Verb, targets []target) (*Results, error) {
 	results := &Results{Context: contextName, Verb: verb}
 	if len(targets) == 1 {
 		row, err := s.execute(ctx, contextName, targets[0], 1, 1)

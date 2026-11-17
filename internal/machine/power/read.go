@@ -25,7 +25,7 @@ const maxReadingBytes = 64 << 10
 // controllers and no two may resolve to the same material. The port names a CA
 // variable only when there is a bundle; a pin variable unpinned reads empty.
 type ReadTarget struct {
-	Arm         string                `json:"arm"`
+	Arm         substrate.Arm         `json:"arm"`
 	Controller  Access                `json:"controller"`
 	MachinePort substrate.MachinePort `json:"machinePort"`
 	Object      string                `json:"object"`
@@ -37,7 +37,7 @@ type ReadTarget struct {
 // Machine one placement host reaches a management controller for. It carries
 // no secret value and asks for no effect, so repeating it changes nothing.
 type ReadSurvey struct {
-	Context   string            `json:"context"`
+	Context   api.ContextName   `json:"context"`
 	Placement machine.Placement `json:"placement"`
 	Targets   []ReadTarget      `json:"targets"`
 	// Version is the survey shape the adapter validates before it reads, so
@@ -66,6 +66,10 @@ func ReadContentDigest() string {
 // realization or pin that cannot be read refuses.
 func readSurveysFor(catalog api.Catalog, contextName string, names []string, realized realizations,
 	pinned func(string) (machine.HardwareIdentity, error)) ([]ReadSurvey, error) {
+	context, valid := api.ParseContextName(contextName)
+	if !valid {
+		return nil, failure("lifecycle.state", "the context name is not a lowercase DNS label", "")
+	}
 	controllerMachine, err := lifecycle.ControllerMachine(catalog)
 	if err != nil {
 		return nil, err
@@ -98,7 +102,7 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, rea
 			key += "\x00" + controller.HostCluster + "\x00" + hostedNamespace(controller)
 		}
 		survey := grouped[key]
-		survey.Context, survey.Placement, survey.Version = contextName, placement, ReadRequestVersion
+		survey.Context, survey.Placement, survey.Version = context, placement, ReadRequestVersion
 		index := strconv.Itoa(len(survey.Targets))
 		target := ReadTarget{Arm: managed.Port, Controller: controller, MachinePort: managed.MachinePort(index), Object: object.Name()}
 		if substrate.PortPinned(managed.Port) && pinned != nil {

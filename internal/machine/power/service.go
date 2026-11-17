@@ -293,8 +293,8 @@ func powerCommand(contextName string, frozen Request) string {
 }
 
 // batchCommand is the command that repeats a power request for every Machine.
-func batchCommand(contextName, verb string, names []string, force bool) string {
-	command := "bootwright machine " + verb + " --context " + contextName + " --name " + strings.Join(names, ",")
+func batchCommand(contextName string, verb Verb, names []string, force bool) string {
+	command := "bootwright machine " + string(verb) + " --context " + contextName + " --name " + strings.Join(names, ",")
 	if force {
 		command += " --force"
 	}
@@ -404,7 +404,7 @@ func readStep(survey ReadSurvey, position, total int) lifecycle.ProgressEvent {
 // are its sub-steps; it declares no count of them, because a stop skips the
 // shutdown of a Machine that is already off.
 func powerStep(frozen Request, position, total int) lifecycle.ProgressEvent {
-	action := map[string]string{Start: "Start", Stop: "Stop", Restart: "Restart"}[frozen.Verb]
+	action := map[Verb]string{Start: "Start", Stop: "Stop", Restart: "Restart"}[frozen.Verb]
 	if frozen.Verb == Stop && frozen.Force {
 		action = "Force off"
 	}
@@ -576,7 +576,7 @@ func identityRefusal(frozen Request, output string) error {
 		correct = "correct the kubeconfigRef or hostClusterRef of " + identity + "'s provider so it reaches the cluster that Machine was realized on"
 	}
 	remediation := correct + ", or run bootwright destroy --context " +
-		frozen.Identity.Context + " and bootwright apply --context " + frozen.Identity.Context + " so the machine is proved again"
+		string(frozen.Identity.Context) + " and bootwright apply --context " + string(frozen.Identity.Context) + " so the machine is proved again"
 	if output != "" {
 		remediation += "; " + output + " for both identities"
 	}

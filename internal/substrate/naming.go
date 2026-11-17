@@ -80,11 +80,11 @@ func KubeVirtName(contextName, machine string) string {
 }
 
 func KubeVirtEndpoint(namespace, name string) string {
-	return ArmKubeVirt + ":" + namespace + "/" + name
+	return string(ArmKubeVirt) + ":" + namespace + "/" + name
 }
 
 func KubeVirtNamespace(endpoint string) string {
-	namespace, _, _ := strings.Cut(strings.TrimPrefix(endpoint, ArmKubeVirt+":"), "/")
+	namespace, _, _ := strings.Cut(strings.TrimPrefix(endpoint, string(ArmKubeVirt)+":"), "/")
 	return namespace
 }
 
@@ -125,7 +125,7 @@ func HostedMachines(catalog api.Catalog, provider string) []api.Object {
 // provider's base port and that Machine's position in the provider's own order,
 // which is the allocation the API contract fixes.
 func ControllerPort(catalog api.Catalog, provider api.Object, machine string) (int, bool) {
-	base, ok := provider.Spec().Get(ArmLibvirt, "bmcEmulation", "port").Int64()
+	base, ok := provider.Spec().Get("libvirt", "bmcEmulation", "port").Int64()
 	if !ok || base < 1 {
 		return 0, false
 	}

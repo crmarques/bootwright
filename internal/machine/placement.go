@@ -10,24 +10,27 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
+type Connection string
+
 const (
-	ConnectionLocal     = "local"
-	ConnectionSSH       = "ssh"
-	ConnectionInstalled = "installed"
-	InstallFamily       = "os-install"
+	ConnectionLocal     Connection = "local"
+	ConnectionSSH       Connection = "ssh"
+	ConnectionInstalled Connection = "installed"
 )
+
+const InstallFamily = "os-install"
 
 // Placement fixes where one block's effect runs. The local arm needs no
 // address or credential; the SSH arm names exactly one target and connects as
 // root without escalation.
 type Placement struct {
-	Address       string `json:"address,omitempty"`
-	Connection    string `json:"connection"`
-	KnownHostsRef string `json:"knownHostsRef,omitempty"`
-	Machine       string `json:"machine"`
-	Port          int    `json:"port,omitempty"`
-	PrivateKeyRef string `json:"privateKeyRef,omitempty"`
-	User          string `json:"user,omitempty"`
+	Address       string     `json:"address,omitempty"`
+	Connection    Connection `json:"connection"`
+	KnownHostsRef string     `json:"knownHostsRef,omitempty"`
+	Machine       string     `json:"machine"`
+	Port          int        `json:"port,omitempty"`
+	PrivateKeyRef string     `json:"privateKeyRef,omitempty"`
+	User          string     `json:"user,omitempty"`
 }
 
 func (p Placement) Local() bool { return p.Connection == ConnectionLocal }

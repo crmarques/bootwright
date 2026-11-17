@@ -33,7 +33,7 @@ func HostedNamespaces(catalog api.Catalog, cluster string) []HostedNamespace {
 	host, declared := catalog.Find(api.OpenShiftCluster, cluster)
 	var namespaces []HostedNamespace
 	for _, provider := range HostedProviders(catalog, cluster) {
-		name := provider.Spec().Get(ArmKubeVirt, "namespace").Text()
+		name := provider.Spec().Get("kubevirt", "namespace").Text()
 		index := slices.IndexFunc(namespaces, func(namespace HostedNamespace) bool { return namespace.Name == name })
 		if index < 0 {
 			namespaces = append(namespaces, HostedNamespace{Name: name, Labels: map[string]string{}})
@@ -65,7 +65,7 @@ func SegmentNetworkKind(provider api.Object, segment string) string {
 	kind := ""
 	for _, declared := range provider.Spec().Get("segments").Items() {
 		if declared.Get("name").Text() == segment {
-			kind = declared.Get(ArmKubeVirt, "networkRef", "kind").Text()
+			kind = declared.Get("kubevirt", "networkRef", "kind").Text()
 		}
 	}
 	return kind
@@ -97,7 +97,7 @@ func HostNetworkMTU(host api.Object, segment api.Value) (string, int64, bool) {
 }
 
 func hostNetwork(host api.Object, segment api.Value) (api.Value, bool) {
-	ref := segment.Get(ArmKubeVirt, "networkRef")
+	ref := segment.Get("kubevirt", "networkRef")
 	if ref.Get("apiGroup").Text() != "k8s.ovn.org" || ref.Get("kind").Text() != "ClusterUserDefinedNetwork" {
 		return api.Value{}, false
 	}
@@ -115,7 +115,7 @@ func validateHostedProvider(o api.Object, c api.Catalog) []api.Issue {
 	}
 	var issues []api.Issue
 	namespaces := HostedNamespaces(c, cluster)
-	name := o.Spec().Get(ArmKubeVirt, "namespace").Text()
+	name := o.Spec().Get("kubevirt", "namespace").Text()
 	for _, namespace := range namespaces {
 		if namespace.Name == name && namespace.Conflict != "" {
 			issues = api.AppendIssues(issues, issue("$.spec.kubevirt.namespace", "namespace "+name+" cannot carry the selector of every secondary network its providers attach to: "+namespace.Conflict))

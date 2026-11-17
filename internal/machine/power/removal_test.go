@@ -41,13 +41,13 @@ func TestAMachineTheCurrentDestroyRemovedIsOffAndCannotBeStarted(t *testing.T) {
 			t.Fatalf("a removed Machine's stop entered %d runtimes, lent %d, ran %d, read pins %v", runtime.entered, len(access.lends), len(runner.runs), identities.asked)
 		}
 	}
-	for _, verb := range []string{Start, Restart} {
+	for _, verb := range []Verb{Start, Restart} {
 		runtime, runner, access := &boundary{}, &hostedAdapter{}, &hostLender{}
 		_, err := removalService(runtime, runner, access, &pins{identity: vmPin, found: true}).converge(context.Background(),
 			PowerRequest{ContextName: "lab", Names: []string{"node-0"}, Verb: verb, SkipConfirmation: true})
 		reported := diagnostics.Of(err)
 		if len(reported) != 1 || reported[0].Code != "access.unavailable" ||
-			reported[0].Message != "the destroy current in this context removed the realization of Machine/node-0, so there is nothing to "+verb ||
+			reported[0].Message != "the destroy current in this context removed the realization of Machine/node-0, so there is nothing to "+string(verb) ||
 			reported[0].Remediation != "finish the removal with bootwright destroy --context lab, then bootwright apply --context lab realizes Machine/node-0 again" {
 			t.Fatalf("%s of a removed Machine = %+v", verb, reported)
 		}
@@ -61,7 +61,7 @@ func TestAMachineTheCurrentDestroyRemovedIsOffAndCannotBeStarted(t *testing.T) {
 // to its pin: every verb reaches its VirtualMachine with the pin the apply
 // recorded, and a stop of it beside a removed one runs for it alone.
 func TestAMachineTheCurrentDestroyHasNotRemovedIsReachedWithItsPin(t *testing.T) {
-	for _, verb := range []string{Start, Stop, Restart} {
+	for _, verb := range []Verb{Start, Stop, Restart} {
 		runner, access, identities := &hostedAdapter{}, &hostLender{}, &pins{identity: vmPin, found: true}
 		_, err := removalService(&boundary{}, runner, access, identities).converge(context.Background(),
 			PowerRequest{ContextName: "lab", Names: []string{"node-1"}, Verb: verb, SkipConfirmation: true})

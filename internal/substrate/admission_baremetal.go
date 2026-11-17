@@ -15,11 +15,11 @@ func normalizeBaremetal(arm api.Value) api.Value {
 }
 
 func validateBaremetal(o api.Object, _ api.Catalog) []api.Issue {
-	return ValidateBMCDefaults(o.Spec().Get(ArmBaremetal, "defaults", "bmc"), "$.spec.baremetal.defaults.bmc", false)
+	return ValidateBMCDefaults(o.Spec().Get("baremetal", "defaults", "bmc"), "$.spec.baremetal.defaults.bmc", false)
 }
 
 func validateBaremetalAuthored(o api.Object) []api.Issue {
-	bmc := o.Spec().Get(ArmBaremetal, "defaults", "bmc")
+	bmc := o.Spec().Get("baremetal", "defaults", "bmc")
 	issues := ValidateBMCDefaults(bmc, "$.spec.baremetal.defaults.bmc", true)
 	return api.AppendIssues(issues, validateProviderMediaTrust(bmc, "$.spec.baremetal.defaults.bmc")...)
 }

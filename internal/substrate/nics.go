@@ -12,11 +12,11 @@ func MachineNICs(machine api.Object) []string {
 	return names
 }
 
-func VirtualArm(arm string) bool { return arm == ArmLibvirt || arm == ArmKubeVirt }
+func VirtualArm(arm Arm) bool { return arm == ArmLibvirt || arm == ArmKubeVirt }
 
 func MachineNICSegments(machine api.Object) api.Value {
 	if arm := MachineArm(machine); arm != "" {
-		return machine.Spec().Get("substrate", arm, "nics")
+		return machine.Spec().Get("substrate", string(arm), "nics")
 	}
 	return api.Value{}
 }

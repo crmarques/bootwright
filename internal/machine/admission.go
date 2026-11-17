@@ -21,34 +21,34 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 		return o, nil
 	}
 	s := o.Spec()
-	if arm := substrate.MachineArm(o); s.Has("substrate", arm, "nics") {
-		nics := s.Get("substrate", arm, "nics").Items()
+	if arm := substrate.MachineArm(o); s.Has("substrate", string(arm), "nics") {
+		nics := s.Get("substrate", string(arm), "nics").Items()
 		for i, nic := range nics {
 			if mac, ok := canonicalMAC(nic.Get("macAddress").Text()); ok {
 				nics[i] = nic.With("macAddress", api.StringValue(mac))
 			}
 		}
-		s = s.WithPath(api.ListValue(nics...), "substrate", arm, "nics")
+		s = s.WithPath(api.ListValue(nics...), "substrate", string(arm), "nics")
 	}
 	network := normalizedContacts(o, c, s.Get("network"))
 	provider, found := Provider(o, c)
 	if arm := substrate.MachineArm(o); found && substrate.VirtualArm(arm) && s.Get("hardware", "nics").Len() > 0 && !s.Get("os", "provided").Bool() {
 		if entries, ok := defaultedNICSegments(c, o, provider); ok {
-			s = s.WithPath(entries, "substrate", arm, "nics")
+			s = s.WithPath(entries, "substrate", string(arm), "nics")
 		}
 	}
 	if network.Present() {
 		s = s.With("network", network)
 	}
-	if bmc := s.Get("substrate", substrate.ArmBaremetal, "bmc"); bmc.Present() {
+	if bmc := s.Get("substrate", "baremetal", "bmc"); bmc.Present() {
 		if found && substrate.RealizesPhysicalNICs(provider) {
 			bmc = inherit(bmc, providerBMCDefaults(bmc, provider))
 		}
 		bmc = substrate.NormalizeBMCDefaults(bmc).Default("protocol", api.StringValue("redfish"))
-		s = s.WithPath(bmc, "substrate", substrate.ArmBaremetal, "bmc")
+		s = s.WithPath(bmc, "substrate", "baremetal", "bmc")
 	}
 	if found && substrate.RealizesPhysicalNICs(provider) && !s.Get("os", "provided").Bool() && len(substrate.MachineRootDeviceHints(o.WithSpec(s)).Names()) == 0 {
-		s = s.WithPath(api.MapValue(), "substrate", substrate.ArmBaremetal, "rootDevice", "bootVolume")
+		s = s.WithPath(api.MapValue(), "substrate", "baremetal", "rootDevice", "bootVolume")
 	}
 	o = o.WithSpec(s)
 	if native, issues := ComposeNetwork(o, c); native.Present() && len(issues) == 0 {
@@ -319,8 +319,8 @@ func validateProvision(o api.Object) []api.Issue {
 				issues = api.AppendIssues(issues, invariant("$.spec.network."+key, "OS-ready Machines declare contacts only", "remove spec.network."+key+"; an OS-ready Machine declares contacts only"))
 			}
 		}
-		if arm := substrate.MachineArm(o); substrate.VirtualArm(arm) && s.Has("substrate", arm, "nics") {
-			path := "spec.substrate." + arm + ".nics"
+		if arm := substrate.MachineArm(o); substrate.VirtualArm(arm) && s.Has("substrate", string(arm), "nics") {
+			path := "spec.substrate." + string(arm) + ".nics"
 			issues = api.AppendIssues(issues, invariant("$."+path, "OS-ready Machines declare contacts only", "remove "+path+"; an OS-ready Machine declares contacts only"))
 		}
 		for _, name := range substrate.MachineRootDeviceHints(o).Names() {
@@ -336,29 +336,29 @@ func validateProvision(o api.Object) []api.Issue {
 	return issues
 }
 
-func validateArm(o, provider api.Object, found bool, variant string) []api.Issue {
+func validateArm(o, provider api.Object, found bool, variant substrate.Arm) []api.Issue {
 	arm := substrate.MachineArm(o)
 	if arm == "" {
 		return nil
 	}
-	path := "$.spec.substrate." + arm
+	path := "$.spec.substrate." + string(arm)
 	if !o.Spec().Has("substrate", "providerRef") && arm != substrate.ArmBaremetal {
-		return []api.Issue{invariant(path, "a "+arm+" arm requires the provider whose arm it matches; only a bare-metal arm stands without a provider",
-			"set spec.substrate.providerRef on "+o.Identity()+", or remove spec.substrate."+arm)}
+		return []api.Issue{invariant(path, "a "+string(arm)+" arm requires the provider whose arm it matches; only a bare-metal arm stands without a provider",
+			"set spec.substrate.providerRef on "+o.Identity()+", or remove spec.substrate."+string(arm))}
 	}
 	if found && variant != "" && arm != variant {
-		return []api.Issue{invariant(path, "the Machine's substrate arm "+arm+" does not match the "+variant+" arm of its provider "+provider.Identity(),
-			"move the fields of spec.substrate."+arm+" to spec.substrate."+variant+" on "+o.Identity()+", or select a provider with the "+arm+" arm")}
+		return []api.Issue{invariant(path, "the Machine's substrate arm "+string(arm)+" does not match the "+string(variant)+" arm of its provider "+provider.Identity(),
+			"move the fields of spec.substrate."+string(arm)+" to spec.substrate."+string(variant)+" on "+o.Identity()+", or select a provider with the "+string(arm)+" arm")}
 	}
 	return nil
 }
 
-func validateSubstrate(c api.Catalog, o, provider api.Object, variant string) []api.Issue {
+func validateSubstrate(c api.Catalog, o, provider api.Object, variant substrate.Arm) []api.Issue {
 	var issues []api.Issue
 	s := o.Spec()
 	provided := s.Get("os", "provided")
-	path := "$.spec.substrate." + variant + ".profileRef"
-	profileRef := s.Get("substrate", variant, "profileRef")
+	path := "$.spec.substrate." + string(variant) + ".profileRef"
+	profileRef := s.Get("substrate", string(variant), "profileRef")
 	if variant != substrate.ArmBaremetal {
 		if provided.Present() && !provided.Bool() && !profileRef.Present() {
 			issues = api.AppendIssues(issues, invariant(path, "virtual installation requires a provider-local machine profile", "set "+path[2:]+" to a machine profile of the selected provider"))
@@ -422,7 +422,7 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 	return issues
 }
 
-func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, found bool, variant string, configured bool) []api.Issue {
+func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, found bool, variant substrate.Arm, configured bool) []api.Issue {
 	var issues []api.Issue
 	native, compositionIssues := ComposeNetwork(o, c)
 	issues = api.AppendIssues(issues, compositionIssues...)
@@ -676,7 +676,7 @@ func validateBaremetal(o api.Object) []api.Issue {
 	if reason, remedy := PhysicalRootDeviceNameRefusal(o); reason != "" {
 		return api.AppendIssues(issues, invariant("$.spec.hardware.rootDevice.deviceName", reason, remedy))
 	}
-	if wwn := s.Get("substrate", substrate.ArmBaremetal, "rootDevice", "wwn"); wwn.Present() && !substrate.ValidRootWWN(wwn.Text()) {
+	if wwn := s.Get("substrate", "baremetal", "rootDevice", "wwn"); wwn.Present() && !substrate.ValidRootWWN(wwn.Text()) {
 		return api.AppendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice.wwn", "a root disk's wwn is 0x followed by 16 or 32 lowercase hexadecimal digits",
 			"set spec.substrate.baremetal.rootDevice.wwn on "+o.Identity()+" to the disk's WWN in that form, as its /dev/disk/by-id/wwn-0x link names it"))
 	}
@@ -686,7 +686,7 @@ func validateBaremetal(o api.Object) []api.Issue {
 		}
 		return issues
 	}
-	physical := s.Get("substrate", substrate.ArmBaremetal, "rootDevice")
+	physical := s.Get("substrate", "baremetal", "rootDevice")
 	bySerial := physical.Has("serialNumber") && physical.Has("sizeBytes")
 	if !physical.Has("wwn") && !bySerial && !physical.Has("volumeRef") && !physical.Has("bootVolume") && !physical.Has("discover") {
 		issues = api.AppendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice", "bare-metal installation requires a root selector: a wwn, serialNumber with sizeBytes, or a volumeRef or bootVolume logical volume",
@@ -744,7 +744,7 @@ func AgentRootDeviceRefusal(o api.Object) (string, string) {
 	return "", ""
 }
 
-func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
+func validateHardware(o api.Object, c api.Catalog, variant substrate.Arm) []api.Issue {
 	issues := []api.Issue{}
 	arm := substrate.MachineArm(o)
 	seen, bound := map[string]bool{}, map[string]bool{}
@@ -825,33 +825,33 @@ func validateSegmentRefs(c api.Catalog, o, provider api.Object, found bool) []ap
 				"set spec.substrate.providerRef on "+o.Identity()+" to the InfraProvider that declares the segment, or remove "+field[2:]))
 			continue
 		}
-		if segment, ok := namedValue(substrate.Segments(c, provider), entry.Get("segmentRef").Text()); found && ok && !segment.Has(arm) {
-			issues = api.AppendIssues(issues, api.ReferenceIssue(field, "segment must name a matching arm on the selected provider", "set "+field[2:]+" to a spec.segments entry of "+provider.Identity()+" that has its "+arm+" arm"))
+		if segment, ok := namedValue(substrate.Segments(c, provider), entry.Get("segmentRef").Text()); found && ok && !segment.Has(string(arm)) {
+			issues = api.AppendIssues(issues, api.ReferenceIssue(field, "segment must name a matching arm on the selected provider", "set "+field[2:]+" to a spec.segments entry of "+provider.Identity()+" that has its "+string(arm)+" arm"))
 		}
 	}
 	return issues
 }
 
-func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant string) []api.Issue {
+func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant substrate.Arm) []api.Issue {
 	nics := substrate.MachineNICs(o)
 	if len(nics) == 0 {
-		return []api.Issue{invariant("$.spec.hardware.nics", "a "+variant+" provider creates one vNIC per spec.hardware.nics entry, in order, and "+o.Identity()+" declares none",
+		return []api.Issue{invariant("$.spec.hardware.nics", "a "+string(variant)+" provider creates one vNIC per spec.hardware.nics entry, in order, and "+o.Identity()+" declares none",
 			"declare each vNIC of "+o.Identity()+" in spec.hardware.nics, in device order, such as one entry named enp1s0")}
 	}
 	segments := substrate.Segments(c, provider)
-	path := "$.spec.substrate." + variant + ".nics"
+	path := "$.spec.substrate." + string(variant) + ".nics"
 	issues := []api.Issue{}
 	for i, nic := range nics {
 		if !api.ValidLexical(api.LexicalIfname, nic) {
 			field := fmt.Sprintf("$.spec.hardware.nics[%d].name", i)
-			issues = api.AppendIssues(issues, invariant(field, "NIC "+nic+" of "+o.Identity()+" is a "+variant+" vNIC the installer pins under its NIC name unless an interface matches it, and "+interfaceNameRule,
+			issues = api.AppendIssues(issues, invariant(field, "NIC "+nic+" of "+o.Identity()+" is a "+string(variant)+" vNIC the installer pins under its NIC name unless an interface matches it, and "+interfaceNameRule,
 				"rename NIC "+nic+" in spec.hardware.nics on "+o.Identity()+" to an interface name the guest may use, such as enp"+strconv.Itoa(i+1)+"s0, and update every nicRef that names it"))
 		}
 	}
 	if segments.Len() == 0 && !c.UndecodableOfKind(api.Network) {
-		remedy := "declare a segment with a " + variant + " arm in spec.segments of " + provider.Identity()
+		remedy := "declare a segment with a " + string(variant) + " arm in spec.segments of " + provider.Identity()
 		if variant == substrate.ArmLibvirt {
-			remedy += ", or a Network with spec.provided false whose spec." + variant + ".providerRef names " + provider.Name()
+			remedy += ", or a Network with spec.provided false whose spec." + string(variant) + ".providerRef names " + provider.Name()
 		}
 		return append(issues, invariant(path, o.Identity()+" cannot attach its vNICs: "+provider.Identity()+" declares no segment", remedy))
 	}
@@ -869,7 +869,7 @@ func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant string) 
 	return issues
 }
 
-func validateVirtualMACs(o api.Object, native api.Value, variant string) []api.Issue {
+func validateVirtualMACs(o api.Object, native api.Value, variant substrate.Arm) []api.Issue {
 	issues := []api.Issue{}
 	for _, iface := range native.Get("interfaces").Items() {
 		if iface.Get("type").Text() == "ethernet" && iface.Has("mac-address") {
@@ -878,7 +878,7 @@ func validateVirtualMACs(o api.Object, native api.Value, variant string) []api.I
 			if override, found := namedValue(o.Spec().Get("network", "overrides", "interfaces"), name); found && override.Has("mac-address") {
 				field, where = "$.spec.network.overrides", "in spec.network.overrides of "+o.Identity()
 			}
-			issues = api.AppendIssues(issues, invariant(field, "ethernet interface "+name+" of "+o.Identity()+" authors a mac-address, but a "+variant+" provider derives each vNIC's MAC from the context, Machine and NIC names",
+			issues = api.AppendIssues(issues, invariant(field, "ethernet interface "+name+" of "+o.Identity()+" authors a mac-address, but a "+string(variant)+" provider derives each vNIC's MAC from the context, Machine and NIC names",
 				"remove mac-address from interface "+name+" "+where+", and match the interface to its NIC with spec.network.interfaceMatches if their names differ"))
 		}
 	}
@@ -1127,7 +1127,7 @@ func validateBondSegments(o api.Object, native api.Value, nicsPath string) []api
 	return issues
 }
 
-func validateVolumeRoot(o api.Object, variant string) []api.Issue {
+func validateVolumeRoot(o api.Object, variant substrate.Arm) []api.Issue {
 	if o.Spec().Has("substrate", "baremetal", "rootDevice", "discover") {
 		return validateDiscoveryRoot(o, variant)
 	}

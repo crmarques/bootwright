@@ -49,7 +49,7 @@ func (s Service) ready(ctx context.Context) error {
 }
 
 func validName(name string) error {
-	if !namePattern.MatchString(name) {
+	if _, ok := api.ParseContextName(name); !ok {
 		return StateError("context name must be a lowercase DNS label of at most 63 characters")
 	}
 	return nil

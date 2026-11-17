@@ -6,7 +6,7 @@ import "testing"
 // each consumer writes, exactly as the roles derived them before it was frozen.
 func TestTheMachinePortFreezesTheControllerAccessAndItsMaterialNames(t *testing.T) {
 	for _, row := range []struct {
-		arm        string
+		arm        Arm
 		controller Controller
 		suffix     string
 		want       MachinePort

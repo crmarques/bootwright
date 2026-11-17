@@ -12,22 +12,24 @@ import (
 // The substrate arms an InfraProvider may declare. The arm is authored intent
 // rather than an implementation identity, so deriving from it here is the same
 // reading admission performs.
+type Arm string
+
 const (
-	ArmLibvirt   = "libvirt"
-	ArmBaremetal = "baremetal"
-	ArmVSphere   = "vsphere"
-	ArmKubeVirt  = "kubevirt"
+	ArmLibvirt   Arm = "libvirt"
+	ArmBaremetal Arm = "baremetal"
+	ArmVSphere   Arm = "vsphere"
+	ArmKubeVirt  Arm = "kubevirt"
 )
 
 const MachineFamily = "substrate-machine"
 
 // Arms lists every arm an InfraProvider may declare, in the order admission
 // reads them. Declaring more than one selects none.
-func Arms() []string { return []string{ArmBaremetal, ArmLibvirt, ArmVSphere, ArmKubeVirt} }
+func Arms() []Arm { return []Arm{ArmBaremetal, ArmLibvirt, ArmVSphere, ArmKubeVirt} }
 
 // Realized lists the arms this executable can realize, in canonical order.
 // Every other arm refuses before an operation registers.
-func Realized() []string { return []string{ArmBaremetal, ArmKubeVirt, ArmLibvirt} }
+func Realized() []Arm { return []Arm{ArmBaremetal, ArmKubeVirt, ArmLibvirt} }
 
 // RealizesPhysicalNICs reports whether a provider's machines are operator-owned
 // hardware whose interfaces exist before Bootwright realizes anything. A
@@ -125,8 +127,8 @@ const (
 type Target struct {
 	Delivery  string
 	Provider  string
-	Substrate string
-	Port      string
+	Substrate Arm
+	Port      Arm
 	// Physical is an operator-owned machine that exists before Bootwright and
 	// outlives this context: its installation erases what is already there and
 	// its removal retains it.
@@ -234,22 +236,22 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 		return Target{}, refusal("api.value", "the Machine's emulated BMC port does not allocate",
 			"correct spec.libvirt.bmcEmulation.port on "+provider.Identity())
 	}
-	credentials := provider.Spec().Get(ArmLibvirt, "bmcEmulation", "auth", "credentialsRef").Text()
+	credentials := provider.Spec().Get("libvirt", "bmcEmulation", "auth", "credentialsRef").Text()
 	if credentials == "" {
 		return Target{}, refusal("api.required", "the provider declares no emulated BMC credential",
 			"set spec.libvirt.bmcEmulation.auth.credentialsRef on "+provider.Identity())
 	}
-	certificate := provider.Spec().Get(ArmLibvirt, "bmcEmulation", "certificateRef").Text()
+	certificate := provider.Spec().Get("libvirt", "bmcEmulation", "certificateRef").Text()
 	if certificate == "" {
 		return Target{}, refusal("api.required", "the provider declares no emulated BMC serving certificate",
 			"set spec.libvirt.bmcEmulation.certificateRef on "+provider.Identity())
 	}
-	host, ok := catalog.Find(api.Machine, provider.Spec().Get(ArmLibvirt, "machineRef").Text())
+	host, ok := catalog.Find(api.Machine, provider.Spec().Get("libvirt", "machineRef").Text())
 	if !ok {
 		return Target{}, refusal("api.reference", "the provider's host Machine is not in the selected graph",
 			"declare it or correct spec.libvirt.machineRef on "+provider.Identity())
 	}
-	address := provider.Spec().Get(ArmLibvirt, "bmcEmulation", "bindAddress").Text()
+	address := provider.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text()
 	target.Controller = Controller{
 		Endpoint:       ControllerEndpoint(address, port, DomainUUID(contextName, machine.Name())),
 		CredentialsRef: credentials,
@@ -261,7 +263,7 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 	}
 	target.Identity = Identity{
 		Channel: ChannelGuestAgent,
-		URI:     provider.Spec().Get(ArmLibvirt, "uri").Text(),
+		URI:     provider.Spec().Get("libvirt", "uri").Text(),
 		Domain:  DomainName(contextName, machine.Name()),
 	}
 	if key := machine.Spec().Get("os", "install", "hostKeyRef").Text(); key != "" {
@@ -278,7 +280,7 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 }
 
 func kubevirtTarget(catalog api.Catalog, provider, machine api.Object, contextName, controllerMachine string, target Target) (Target, error) {
-	arm := provider.Spec().Get(ArmKubeVirt)
+	arm := provider.Spec().Get("kubevirt")
 	credentials, cluster := arm.Get("kubeconfigRef").Text(), HostCluster(provider)
 	if credentials == "" && cluster == "" {
 		return Target{}, refusal("api.required", "the KubeVirt provider names no kubeconfig and no host cluster",
@@ -436,7 +438,7 @@ func bracketed(host string) string {
 }
 
 // ProvidersOn lists the providers of one substrate arm in canonical name order.
-func ProvidersOn(catalog api.Catalog, arm string) []api.Object {
+func ProvidersOn(catalog api.Catalog, arm Arm) []api.Object {
 	var found []api.Object
 	for _, provider := range catalog.OfKind(api.InfraProvider) {
 		if Variant(provider) == arm {
@@ -448,7 +450,7 @@ func ProvidersOn(catalog api.Catalog, arm string) []api.Object {
 }
 
 // HostedOn lists the Machines the providers of one arm realize.
-func HostedOn(catalog api.Catalog, arm string) []string {
+func HostedOn(catalog api.Catalog, arm Arm) []string {
 	var hosted []string
 	for _, provider := range ProvidersOn(catalog, arm) {
 		for _, machine := range HostedMachines(catalog, provider.Name()) {
@@ -471,7 +473,10 @@ type Unrealized struct {
 // non-provided Machine hosted on one. It has one owner so that adding an arm
 // narrows the refusal in exactly one place.
 func Unrealizable(catalog api.Catalog) []Unrealized {
-	arms := Realized()
+	var arms []string
+	for _, arm := range Realized() {
+		arms = append(arms, string(arm))
+	}
 	realized := "a " + strings.Join(arms[:len(arms)-1], ", ") + " or " + arms[len(arms)-1] + " provider"
 	var found []Unrealized
 	for _, provider := range catalog.OfKind(api.InfraProvider) {

@@ -28,7 +28,7 @@ func normalizeVSphere(arm api.Value) api.Value {
 }
 
 func validateVSphereAuthored(o api.Object) []api.Issue {
-	staging := o.Spec().Get(ArmVSphere, "isoStaging")
+	staging := o.Spec().Get("vsphere", "isoStaging")
 	if staging.Present() && !staging.Has("datastore") && !staging.Has("folder") {
 		return []api.Issue{issue("$.spec.vsphere.isoStaging", "an authored staging block must set datastore or folder")}
 	}
@@ -36,7 +36,7 @@ func validateVSphereAuthored(o api.Object) []api.Issue {
 }
 
 func validateVSphere(o api.Object, _ api.Catalog) []api.Issue {
-	arm := o.Spec().Get(ArmVSphere)
+	arm := o.Spec().Get("vsphere")
 	issues := []api.Issue{}
 	domains := arm.Get("failureDomains").Items()
 	for index, domain := range domains {
@@ -59,7 +59,7 @@ func validateVSphere(o api.Object, _ api.Catalog) []api.Issue {
 }
 
 func validateVSphereSegment(path string, segment, arm api.Value) []api.Issue {
-	if arm.Get("failureDomains").Len() > 1 && !segment.Get(ArmVSphere).Has("distributedSwitch") {
+	if arm.Get("failureDomains").Len() > 1 && !segment.Get("vsphere").Has("distributedSwitch") {
 		return []api.Issue{issue(path+".vsphere.distributedSwitch", "multiple failure domains require an explicit distributed switch")}
 	}
 	return nil
