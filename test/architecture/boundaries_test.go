@@ -53,6 +53,7 @@ func packageRoles() map[string]packageRole {
 		"internal/controller/firewalllocal":        adapterRole,
 		"internal/controller/bundlelocal":          adapterRole,
 		"internal/acquisition":                     technicalRole,
+		"internal/vulnerabilityexceptions":         domainRole,
 		"internal/controller/ansiblelocal":         adapterRole,
 		"internal/controller/runtimelock":          domainRole,
 		"internal/controller/hostdnf":              adapterRole,

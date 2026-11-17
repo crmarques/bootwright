@@ -27,31 +27,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	reviewed "github.com/crmarques/bootwright/internal/vulnerabilityexceptions"
 )
 
 const (
-	exceptionsFormat = "bootwright.vulnerability-exceptions-v1"
-	maxValidity      = 90 * 24 * time.Hour
-	warnAhead        = 14 * 24 * time.Hour
-	maxResponse      = 16 << 20
+	warnAhead   = 14 * 24 * time.Hour
+	maxResponse = 16 << 20
 )
 
 type finding struct{ ID, Ref, Detail string }
-
-type exception struct {
-	ID            string   `json:"id"`
-	Aliases       []string `json:"aliases"`
-	Component     string   `json:"component"`
-	State         string   `json:"state"`
-	Justification string   `json:"justification"`
-	Reason        string   `json:"reason"`
-	Expires       string   `json:"expires"`
-}
-
-type exceptions struct {
-	Format     string      `json:"format"`
-	Exceptions []exception `json:"exceptions"`
-}
 
 type lockFile struct {
 	Name     string `json:"name"`
@@ -86,8 +71,6 @@ type options struct {
 }
 
 var releaseVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
-
-var justifications = []string{"code_not_present", "code_not_reachable", "requires_configuration", "requires_dependency", "requires_environment", "protected_by_compiler", "protected_at_runtime", "protected_at_perimeter", "protected_by_mitigating_control"}
 
 var toolModules = map[string]string{
 	"govc":    "github.com/vmware/govmomi",
@@ -176,38 +159,22 @@ func run(o options, out io.Writer) error {
 	return os.WriteFile(o.verdict, []byte(verdict+"\n"), 0o644)
 }
 
-func readExceptions(path string, today time.Time) ([]exception, error) {
+func readExceptions(path string, today time.Time) ([]reviewed.Exception, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	var document exceptions
-	if err := decoder.Decode(&document); err != nil || document.Format != exceptionsFormat {
-		return nil, fmt.Errorf("%s is no %s document: %v", path, exceptionsFormat, err)
+	document, err := reviewed.Decode(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s is %w", path, err)
 	}
-	for _, entry := range document.Exceptions {
-		expires, err := time.Parse(time.DateOnly, entry.Expires)
-		switch {
-		case entry.ID == "" || entry.Component == "" || strings.TrimSpace(entry.Reason) == "":
-			return nil, fmt.Errorf("an exception for %q names no advisory, component or reason", entry.ID)
-		case entry.State != "not_affected" && entry.State != "no_fix":
-			return nil, fmt.Errorf("the exception for %s is %q, not not_affected or no_fix", entry.ID, entry.State)
-		case (entry.State == "not_affected") != slices.Contains(justifications, entry.Justification):
-			return nil, fmt.Errorf("the exception for %s states %s with justification %q; not_affected takes one of %v and no_fix none", entry.ID, entry.State, entry.Justification, justifications)
-		case err != nil:
-			return nil, fmt.Errorf("the exception for %s expires on no YYYY-MM-DD date", entry.ID)
-		case expires.Before(today):
-			return nil, fmt.Errorf("the exception for %s expired on %s; decide it anew", entry.ID, entry.Expires)
-		case expires.Sub(today) > maxValidity:
-			return nil, fmt.Errorf("the exception for %s expires on %s, more than 90 days after %s", entry.ID, entry.Expires, today.Format(time.DateOnly))
-		}
+	if err := document.Check(today); err != nil {
+		return nil, err
 	}
 	return document.Exceptions, nil
 }
 
-func warnExpiring(out io.Writer, allowed []exception, today time.Time) {
+func warnExpiring(out io.Writer, allowed []reviewed.Exception, today time.Time) {
 	expiring := map[string][]string{}
 	for _, entry := range allowed {
 		if expires, err := time.Parse(time.DateOnly, entry.Expires); err == nil && expires.Sub(today) <= warnAhead {
@@ -539,11 +506,11 @@ func queryBatch(o options, targets []osvTarget) ([]finding, error) {
 	return found, nil
 }
 
-func judge(found []finding, allowed []exception) []string {
+func judge(found []finding, allowed []reviewed.Exception) []string {
 	var failures []string
 	used := make([]bool, len(allowed))
 	for _, item := range found {
-		index := slices.IndexFunc(allowed, func(entry exception) bool {
+		index := slices.IndexFunc(allowed, func(entry reviewed.Exception) bool {
 			return entry.Component == item.Ref && (entry.ID == item.ID || slices.Contains(entry.Aliases, item.ID))
 		})
 		if index < 0 {

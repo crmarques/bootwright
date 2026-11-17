@@ -9,6 +9,7 @@ tool (
 )
 
 require (
+	github.com/crmarques/bootwright v0.0.0
 	golang.org/x/mod v0.42.0
 	golang.org/x/vuln v1.9.0
 )
@@ -22,3 +23,5 @@ require (
 	golang.org/x/tools v0.52.0 // indirect
 	honnef.co/go/tools v0.8.2 // indirect
 )
+
+replace github.com/crmarques/bootwright => ../..

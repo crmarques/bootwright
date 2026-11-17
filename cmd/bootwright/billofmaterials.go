@@ -2,13 +2,13 @@ package main
 
 import (
 	_ "embed"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"runtime"
 	"runtime/debug"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/acquisition"
@@ -21,6 +21,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
+	"github.com/crmarques/bootwright/internal/vulnerabilityexceptions"
 )
 
 const collectionName = "bootwright.core"
@@ -29,26 +30,15 @@ const collectionName = "bootwright.core"
 var vulnerabilityExceptions []byte
 
 func reviewedExceptions() ([]cli.BOMVulnerability, error) {
-	var document struct {
-		Format     string `json:"format"`
-		Exceptions []struct {
-			ID            string   `json:"id"`
-			Aliases       []string `json:"aliases"`
-			Component     string   `json:"component"`
-			State         string   `json:"state"`
-			Justification string   `json:"justification"`
-			Reason        string   `json:"reason"`
-			Expires       string   `json:"expires"`
-		} `json:"exceptions"`
+	document, err := vulnerabilityexceptions.Decode(vulnerabilityExceptions)
+	if err != nil {
+		return nil, errors.New("the embedded vulnerability exceptions are " + err.Error())
 	}
-	if err := json.Unmarshal(vulnerabilityExceptions, &document); err != nil || document.Format != "bootwright.vulnerability-exceptions-v1" {
-		return nil, errors.New("the embedded vulnerability exceptions are no bootwright.vulnerability-exceptions-v1 document")
+	if err := document.Check(time.Time{}); err != nil {
+		return nil, errors.New("the embedded vulnerability exceptions are refused: " + err.Error())
 	}
 	exceptions := make([]cli.BOMVulnerability, 0, len(document.Exceptions))
 	for _, entry := range document.Exceptions {
-		if entry.State != "not_affected" && entry.State != "no_fix" || entry.State == "not_affected" && entry.Justification == "" {
-			return nil, errors.New("the embedded vulnerability exception " + entry.ID + " states neither not_affected with a justification nor no_fix")
-		}
 		exceptions = append(exceptions, cli.BOMVulnerability{ID: entry.ID, Aliases: entry.Aliases, Ref: entry.Component, State: entry.State, Justification: entry.Justification, Reason: entry.Reason, Expires: entry.Expires})
 	}
 	return exceptions, nil

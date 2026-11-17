@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	reviewed "github.com/crmarques/bootwright/internal/vulnerabilityexceptions"
 )
 
 type fixture struct {
@@ -27,11 +29,11 @@ const (
 	moduleOnly    = `{"finding":{"osv":"GO-2025-3521","trace":[{"module":"k8s.io/kubernetes","version":"v1.37.2"}]}}` + "\n"
 )
 
-func newFixture(t *testing.T, vulns map[string][]string, govulncheck string, entries []exception) fixture {
+func newFixture(t *testing.T, vulns map[string][]string, govulncheck string, entries []reviewed.Exception) fixture {
 	return newClientFixture(t, vulns, govulncheck, entries, map[string]string{"helm": namedModules, "virtctl": stdlibOnly})
 }
 
-func newClientFixture(t *testing.T, vulns map[string][]string, govulncheck string, entries []exception, clients map[string]string) fixture {
+func newClientFixture(t *testing.T, vulns map[string][]string, govulncheck string, entries []reviewed.Exception, clients map[string]string) fixture {
 	t.Helper()
 	dir := t.TempDir()
 	write := func(name, data string) string {
@@ -65,7 +67,7 @@ func newClientFixture(t *testing.T, vulns map[string][]string, govulncheck strin
 		_ = json.NewEncoder(w).Encode(answer)
 	}))
 	t.Cleanup(server.Close)
-	data, err := json.Marshal(exceptions{Format: exceptionsFormat, Exceptions: entries})
+	data, err := json.Marshal(reviewed.Document{Format: reviewed.Format, Exceptions: entries})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,8 +100,8 @@ const scanned = `{"config":{"db_last_modified":"2026-11-05T23:49:57Z"}}
 {"finding":{"osv":"GO-2026-1111","trace":[{"module":"golang.org/x/crypto","version":"v0.58.0"}]}}
 `
 
-func excepted(id, component, expires string) exception {
-	return exception{ID: id, Component: component, State: "not_affected", Justification: "code_not_present", Reason: "the affected code runs elsewhere", Expires: expires}
+func excepted(id, component, expires string) reviewed.Exception {
+	return reviewed.Exception{ID: id, Component: component, State: "not_affected", Justification: "code_not_present", Reason: "the affected code runs elsewhere", Expires: expires}
 }
 
 func TestAModuleLevelGoFindingAndACleanTablePass(t *testing.T) {
@@ -123,7 +125,7 @@ func TestAReachableGoFindingNeedsAnException(t *testing.T) {
 	if _, err := os.Stat(f.options.verdict); err == nil {
 		t.Fatal("a failing gate wrote a verdict")
 	}
-	covered := newFixture(t, nil, reached, []exception{excepted("GO-2026-2222", "go:stdlib@1.26.10", "2027-01-01")})
+	covered := newFixture(t, nil, reached, []reviewed.Exception{excepted("GO-2026-2222", "go:stdlib@1.26.10", "2027-01-01")})
 	if err := run(covered.options, &out); err != nil {
 		t.Fatalf("a covered finding failed: %v", err)
 	}
@@ -133,12 +135,12 @@ func TestAPinnedFindingIsCoveredByItsIDOrAnAliasOnItsComponent(t *testing.T) {
 	vulns := map[string][]string{"kubevirt.io/kubevirt@1.9.1": {"GO-2026-6914", "GHSA-q3jc-42cq-33fj"}, "jinja2@3.1.6": {"PYSEC-2026-1"}}
 	entry := excepted("GHSA-q3jc-42cq-33fj", "tool:virtctl@1.9.1", "2027-02-08")
 	entry.Aliases = []string{"GO-2026-6914"}
-	f := newFixture(t, vulns, scanned, []exception{entry, excepted("PYSEC-2026-1", "pypi:jinja2.whl", "2027-02-08")})
+	f := newFixture(t, vulns, scanned, []reviewed.Exception{entry, excepted("PYSEC-2026-1", "pypi:jinja2.whl", "2027-02-08")})
 	var out strings.Builder
 	if err := run(f.options, &out); err != nil {
 		t.Fatalf("covered findings failed: %v\n%s", err, out.String())
 	}
-	wrong := newFixture(t, vulns, scanned, []exception{entry, excepted("PYSEC-2026-1", "pypi:pip.whl", "2027-02-08")})
+	wrong := newFixture(t, vulns, scanned, []reviewed.Exception{entry, excepted("PYSEC-2026-1", "pypi:pip.whl", "2027-02-08")})
 	out.Reset()
 	if err := run(wrong.options, &out); err == nil || !strings.Contains(out.String(), "PYSEC-2026-1 in pypi:jinja2.whl has no exception") || !strings.Contains(out.String(), "matches no finding") {
 		t.Fatalf("an exception on another component covered a finding: %v\n%s", err, out.String())
@@ -147,7 +149,7 @@ func TestAPinnedFindingIsCoveredByItsIDOrAnAliasOnItsComponent(t *testing.T) {
 
 func TestAnExceptionThatIsExpiredTooDistantOrIncompleteFails(t *testing.T) {
 	vulns := map[string][]string{"kubevirt.io/kubevirt@1.9.1": {"GO-2026-3333"}}
-	for name, entry := range map[string]exception{
+	for name, entry := range map[string]reviewed.Exception{
 		"expired":            excepted("GO-2026-3333", "tool:virtctl@1.9.1", "2026-11-09"),
 		"too distant":        excepted("GO-2026-3333", "tool:virtctl@1.9.1", "2027-02-09"),
 		"no reason":          {ID: "GO-2026-3333", Component: "tool:virtctl@1.9.1", State: "not_affected", Expires: "2027-01-01"},
@@ -155,12 +157,12 @@ func TestAnExceptionThatIsExpiredTooDistantOrIncompleteFails(t *testing.T) {
 		"no justification":   {ID: "GO-2026-3333", Component: "tool:virtctl@1.9.1", State: "not_affected", Reason: "r", Expires: "2027-01-01"},
 		"a justified no_fix": {ID: "GO-2026-3333", Component: "tool:virtctl@1.9.1", State: "no_fix", Justification: "code_not_present", Reason: "r", Expires: "2027-01-01"},
 	} {
-		f := newFixture(t, vulns, scanned, []exception{entry})
+		f := newFixture(t, vulns, scanned, []reviewed.Exception{entry})
 		if err := run(f.options, &strings.Builder{}); err == nil {
 			t.Errorf("an exception that is %s passed", name)
 		}
 	}
-	f := newFixture(t, vulns, scanned, []exception{excepted("GO-2026-3333", "tool:virtctl@1.9.1", "2027-02-08")})
+	f := newFixture(t, vulns, scanned, []reviewed.Exception{excepted("GO-2026-3333", "tool:virtctl@1.9.1", "2027-02-08")})
 	if err := run(f.options, &strings.Builder{}); err != nil {
 		t.Fatalf("an exception at the 90-day bound failed: %v", err)
 	}
@@ -168,7 +170,7 @@ func TestAnExceptionThatIsExpiredTooDistantOrIncompleteFails(t *testing.T) {
 
 func TestAnExceptionThatExpiresWithinTwoWeeksWarnsWithoutFailing(t *testing.T) {
 	vulns := map[string][]string{"kubevirt.io/kubevirt@1.9.1": {"GO-2026-3333", "GO-2026-4444", "GO-2026-5555"}}
-	f := newFixture(t, vulns, scanned, []exception{
+	f := newFixture(t, vulns, scanned, []reviewed.Exception{
 		excepted("GO-2026-3333", "tool:virtctl@1.9.1", "2026-11-24"),
 		excepted("GO-2026-4444", "tool:virtctl@1.9.1", "2026-11-24"),
 		excepted("GO-2026-5555", "tool:virtctl@1.9.1", "2026-11-25"),
@@ -203,7 +205,7 @@ func TestAClientIsJudgedByTheModulesItsBinaryNames(t *testing.T) {
 	if strings.Contains(out.String(), "GO-2025-3521") || strings.Contains(out.String(), "GO-2026-9999") {
 		t.Fatalf("a module-level finding or the top-level module of a client whose binary names modules failed the gate:\n%s", out.String())
 	}
-	covered := newClientFixture(t, vulns, scanned, []exception{excepted("GO-2026-6603", "tool:helm@4.3.1", "2027-01-01")}, map[string]string{"helm": namedModules + moduleOnly + symbolFinding, "virtctl": stdlibOnly})
+	covered := newClientFixture(t, vulns, scanned, []reviewed.Exception{excepted("GO-2026-6603", "tool:helm@4.3.1", "2027-01-01")}, map[string]string{"helm": namedModules + moduleOnly + symbolFinding, "virtctl": stdlibOnly})
 	if err := run(covered.options, &out); err != nil {
 		t.Fatalf("a covered binary finding failed: %v", err)
 	}
@@ -255,7 +257,7 @@ func TestAModuleWithNoReleaseVersionIsAskedOfOSVAtTheClientsRelease(t *testing.T
 			t.Fatalf("a finding of a module with no release version passed (%q): %v\n%s", want, err, out.String())
 		}
 	}
-	covered := newClientFixture(t, vulns, scanned, []exception{excepted("GO-2026-7777", "tool:kubectl@1.9.1", "2027-01-01"), excepted("GO-2026-8888", "tool:govc@0.56.2", "2027-01-01")}, scans)
+	covered := newClientFixture(t, vulns, scanned, []reviewed.Exception{excepted("GO-2026-7777", "tool:kubectl@1.9.1", "2027-01-01"), excepted("GO-2026-8888", "tool:govc@0.56.2", "2027-01-01")}, scans)
 	tableOf(t, covered, `{"tools":[{"kind":"govc","default":{"version":"0.56.2"}},{"kind":"kubectl","default":{"version":"1.9.1"}}]}`)
 	if err := run(covered.options, &out); err != nil {
 		t.Fatalf("covered findings failed: %v", err)
@@ -296,7 +298,7 @@ func TestAClientWhoseBinaryNamesNoModuleHasTheDependenciesOfItsReleaseJudged(t *
 	}
 	netEntry := excepted("GO-2026-6603", "tool:virtctl@1.9.1", "2027-01-01")
 	netEntry.Aliases = []string{"GHSA-aaaa-bbbb-cccc"}
-	covered := newClientFixture(t, vulns, scanned, []exception{netEntry, excepted("GO-2026-4444", "tool:virtctl@1.9.1", "2027-01-01"), excepted("GO-2026-5555", "tool:virtctl@1.9.1", "2027-01-01")}, map[string]string{"helm": namedModules, "virtctl": stdlibOnly})
+	covered := newClientFixture(t, vulns, scanned, []reviewed.Exception{netEntry, excepted("GO-2026-4444", "tool:virtctl@1.9.1", "2027-01-01"), excepted("GO-2026-5555", "tool:virtctl@1.9.1", "2027-01-01")}, map[string]string{"helm": namedModules, "virtctl": stdlibOnly})
 	if err := run(covered.options, &out); err != nil {
 		t.Fatalf("covered dependencies failed: %v", err)
 	}
