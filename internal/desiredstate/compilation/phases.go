@@ -107,6 +107,7 @@ func (r *run) inheritDefaults() bool {
 func (r *run) validateAuthored() bool {
 	intent := catalogOf(r.records)
 	budget := expansionBudget{}
+	roots := sourceRoots(r.sources)
 	for _, record := range r.records {
 		for _, rules := range r.compiler.rules {
 			if r.ds.stopped() {
@@ -119,7 +120,7 @@ func (r *run) validateAuthored() bool {
 				r.ds.issue(record, issue)
 			}
 		}
-		validateSourcePaths(record, r.sources, r.ds)
+		validateSourcePaths(record, roots, r.ds)
 		record.inheritedSpec = record.object.Spec()
 		record.object = record.object.WithSpec(builtInDefaults(record.object.Spec(), api.Schema(record.object.Kind())))
 		record.builtInSpec = record.object.Spec()
@@ -222,7 +223,15 @@ func (r *run) normalize() bool {
 	return withinExpansionBudget(r.records, r.ds)
 }
 
+func sameObject(a, b api.Object) bool {
+	return a.Kind() == b.Kind() && a.Name() == b.Name() && a.Labels().Equal(b.Labels()) && a.Spec().Equal(b.Spec())
+}
+
 func (r *run) normalizeRecord(record *objectRecord, catalog api.Catalog, byIdentity map[string]*objectRecord, budget *expansionBudget) bool {
+	admitted := expansionBudget{}
+	if !admitted.admit(record, r.ds) {
+		return false
+	}
 	for _, rules := range r.compiler.rules {
 		if r.ds.stopped() {
 			return false
@@ -230,19 +239,18 @@ func (r *run) normalizeRecord(record *objectRecord, catalog api.Catalog, byIdent
 		if rules.Normalize == nil {
 			continue
 		}
-		previous := expansionBudget{}
-		if !previous.admit(record, r.ds) {
-			return false
-		}
 		before := record.object
 		object, issues := rules.Normalize(before, catalog)
-		previousSpec := record.object.Spec()
 		record.object = object
-		budget.nodes -= previous.nodes
-		if !budget.admit(record, r.ds) {
-			return false
+		if !sameObject(before, object) {
+			budget.nodes -= admitted.nodes
+			counted := budget.nodes
+			if !budget.admit(record, r.ds) {
+				return false
+			}
+			admitted.nodes = budget.nodes - counted
+			record.recordReordering(before.Spec(), object.Spec(), api.Schema(object.Kind()))
 		}
-		record.recordReordering(previousSpec, object.Spec(), api.Schema(object.Kind()))
 		if rules.NormalizationOrigins != nil {
 			record.recordOrigins(rules.NormalizationOrigins(before, object, catalog), byIdentity)
 		}

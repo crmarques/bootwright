@@ -66,7 +66,7 @@ func otherClusterKinds(record *objectRecord, collisions []*objectRecord) []strin
 	return others
 }
 
-func validateSourcePaths(record *objectRecord, sources desiredstate.Sources, ds *diagnosticSink) {
+func sourceRoots(sources desiredstate.Sources) []string {
 	roots := append([]string{}, sources.Roots...)
 	for i, root := range roots {
 		for _, file := range sources.Files {
@@ -76,6 +76,10 @@ func validateSourcePaths(record *objectRecord, sources desiredstate.Sources, ds 
 			}
 		}
 	}
+	return roots
+}
+
+func validateSourcePaths(record *objectRecord, roots []string, ds *diagnosticSink) {
 	for _, source := range customplaybooks.ExternalSourcePaths(record.object) {
 		resolved := filepath.Clean(source.Path)
 		for _, root := range roots {
