@@ -7,6 +7,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/fanout"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -122,14 +123,20 @@ func (s Service) copySessions(ctx context.Context, request CopyRequest, sessions
 			}
 		}
 	}()
-	for i, session := range sessions {
-		p, err := s.options.Copier.Prepare(ctx, session, request, request.Source.Remote && len(sessions) > 1)
-		if err != nil {
-			result.Machines = nil
-			return failure("access.copy", "Machine "+session.Machine+": copy preflight failed: "+err.Error(), "correct the paths, permissions or Python 3 availability, then retry")
+	preflights := fanout.Run(ctx, fanout.Options[machine.Session, PreparedCopy]{Limit: maxConcurrentSessions}, sessions, func(ctx context.Context, session machine.Session) (PreparedCopy, error) {
+		return s.options.Copier.Prepare(ctx, session, request, request.Source.Remote && len(sessions) > 1)
+	})
+	for i, preflight := range preflights {
+		if preflight.Err == nil {
+			prepared[i] = preflight.Value
 		}
-		prepared[i] = p
-		result.Machines = append(result.Machines, CopyRow{Machine: session.Machine, Destination: p.Destination(), Status: "skipped"})
+	}
+	for i, preflight := range preflights {
+		if preflight.Err != nil {
+			result.Machines = nil
+			return failure("access.copy", "Machine "+sessions[i].Machine+": copy preflight failed: "+preflight.Err.Error(), "correct the paths, permissions or Python 3 availability, then retry")
+		}
+		result.Machines = append(result.Machines, CopyRow{Machine: sessions[i].Machine, Destination: preflight.Value.Destination(), Status: "skipped"})
 	}
 	var group sync.WaitGroup
 	slots := make(chan struct{}, maxConcurrentSessions)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -25,6 +26,8 @@ func (c *copyFake) Prepare(_ context.Context, session machine.Session, _ CopyReq
 			return nil, err
 		}
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.prepared = append(c.prepared, session.Machine)
 	return &preparedFake{copy: c, name: session.Machine}, nil
 }
@@ -65,6 +68,31 @@ func TestCopyPreflightsEveryMachineBeforeAnyPayloadWrite(t *testing.T) {
 	result, err := h.service.Copy(context.Background(), downloadRequest("host", "guest"))
 	if err == nil || len(result.Machines) != 0 || len(c.closed) != 1 || c.closed[0] != "guest" {
 		t.Fatalf("result %+v error %v prepared %v closed %v", result, err, c.prepared, c.closed)
+	}
+}
+
+func TestCopyPreflightsOfSeveralMachinesRunAtOnce(t *testing.T) {
+	h := newHarness(t, nil)
+	var arrived sync.WaitGroup
+	arrived.Add(2)
+	both := make(chan struct{})
+	go func() {
+		arrived.Wait()
+		close(both)
+	}()
+	c := &copyFake{prepare: func(machine.Session, bool) error {
+		arrived.Done()
+		select {
+		case <-both:
+		case <-time.After(5 * time.Second):
+			t.Error("a preflight waited alone: the preflights ran one at a time")
+		}
+		return nil
+	}, run: func(context.Context, string) (CopyProgress, error) { return CopyProgress{Files: 1}, nil }}
+	h.service.options.Copier = c
+	result, err := h.service.Copy(context.Background(), downloadRequest("host", "guest"))
+	if err != nil || len(result.Machines) != 2 || result.Machines[0].Machine != "guest" || result.Machines[1].Machine != "host" {
+		t.Fatalf("result %+v error %v", result, err)
 	}
 }
 
