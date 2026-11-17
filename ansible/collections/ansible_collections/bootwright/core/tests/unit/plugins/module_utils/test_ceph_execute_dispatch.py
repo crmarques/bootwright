@@ -7,7 +7,7 @@ import pathlib
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_resources
 from ansible_collections.bootwright.core.tests.unit import test_ceph_request_goldens as goldens
 
 GOLDENS = {"cluster": "cluster", "cluster-stretch": "cluster-stretch", "pool": "pool", "policy": "policy", "client": "client", "rbd": "rbd",
@@ -92,6 +92,11 @@ def test_execute_dispatches_each_action_as_before(monkeypatch, name, operation, 
     result, trace = run(monkeypatch, name, operation, outputs_for(name, operation, declared), ready)
     key = "%s/%s/%s/%s" % (name, operation, "outputs" if declared else "none", "ready" if ready else "unready")
     assert "; ".join([repr(result), *trace]) == PINNED[key], key
+
+
+def test_every_action_the_validator_admits_has_one_procedure():
+    assert set(ceph_core.PROCEDURES) == set(GOLDENS) - {"cluster-stretch"}
+    assert set(ceph_core.PROCEDURES) >= set(ceph_native_resources.ACTIONS)
 
 
 def test_the_pins_cover_exactly_the_cases():

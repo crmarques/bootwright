@@ -1215,6 +1215,13 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
     if retirement is not None:
         return execute_tiebreaker(request, operation, request_digest, transport, outputs)
     bootstrap = next(h for h in request["hosts"] if h["name"] == request["bootstrap"])
+    outputs = admit_outputs(request, operation, outputs)
+    return PROCEDURES[request["action"]](request, operation, request_digest, transport, bootstrap, outputs, now=now, pause=pause, connect=connect,
+                                         reading=reading, shared=shared)
+
+
+def admit_outputs(request, operation, outputs):
+    """The produced-material outputs an action's apply declares and its observation declares or omits; every other run declares none."""
     outputs = outputs or {}
     ceph_native.require(set(outputs) <= set(OUTPUTS.values()))
     if request["action"] in OUTPUTS and operation == "apply":
@@ -1224,36 +1231,44 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         ceph_native.require(set(outputs) in ({OUTPUTS[request["action"]]}, set()), "material")
     elif operation in ("apply", "observe"):
         ceph_native.require(not outputs, "material")
-    if request["action"] == "service":
-        return execute_unit(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
-    if request["action"] == "nvmeof":
-        return execute_nvmeof(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
-    if request["action"] == "nfs-export":
-        return execute_unit(request, operation, request_digest, transport, bootstrap, now=now, pause=pause, phases=ceph_native_nfs.EXPORT_APPLY_PHASES)
-    if request["action"] == "gateway":
-        return execute_gateway(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
-    if request["action"] == "object-user":
-        return execute_user(request, operation, request_digest, transport, bootstrap, outputs, now=now, pause=pause)
-    if request["action"] == "object-bucket":
-        return execute_bucket(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
+    return outputs
+
+
+def execute_cluster(request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, connect, reading, shared):
+    """The cluster prepares every host in one round and bootstraps through the tunnel, stretches before readiness, then proves its
+    dashboard."""
     changed = False
     if operation == "apply":
-        preparations = (host_round(transport, request["hosts"], "prerequisites") if request["action"] == "cluster"
-                        else [transport.call(host, "prerequisites") for host in request["hosts"]])
-        cluster = request["action"] == "cluster"
-        state = transport.call(bootstrap, "bootstrap_state") if cluster else None
-        stage = None
-        if cluster:
-            stage, before = tunnel_before(request, request_digest, bootstrap, state, preparations)
-        else:
-            before = transport.call(bootstrap, "observe")
+        preparations = host_round(transport, request["hosts"], "prerequisites")
+        state = transport.call(bootstrap, "bootstrap_state")
+        stage, before = tunnel_before(request, request_digest, bootstrap, state, preparations)
         if not before["ready"]:
-            if cluster:
-                if stage != "complete":
-                    changed = apply_tunnel_cluster(request, bootstrap, transport, state, preparations) or changed
-                if "stretch" in request:
-                    changed = activate_stretch(request, request_digest, bootstrap, transport, now, pause) or changed
-            elif request["action"] in ("pool", "policy", "rbd", "subvolume", "settings"):
+            if stage != "complete":
+                changed = apply_tunnel_cluster(request, bootstrap, transport, state, preparations) or changed
+            if "stretch" in request:
+                changed = activate_stretch(request, request_digest, bootstrap, transport, now, pause) or changed
+    elif operation == "destroy":
+        changed = transport.call(bootstrap, "destroy")["changed"]
+    pending = []
+    observation = postcondition(request, operation, request_digest, transport, bootstrap, pending, now=now, pause=pause, reading=reading,
+                                shared=shared)
+    if operation in ("apply", "observe") and observation["ready"]:
+        observation, effect = dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, outputs.get("dashboard"),
+                                              now=now, pause=pause, connect=connect)
+        changed = effect or changed
+    return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
+
+
+def execute_resource(request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, reading, shared, **_):
+    """A pool, policy, client, RBD image, filesystem, subvolume or settings block prepares each host, then runs its own phase on the
+    bootstrap host; a client writes its key to its output."""
+    changed = False
+    if operation == "apply":
+        for host in request["hosts"]:
+            transport.call(host, "prerequisites")
+        before = transport.call(bootstrap, "observe")
+        if not before["ready"]:
+            if request["action"] in ("pool", "policy", "rbd", "subvolume", "settings"):
                 changed = transport.call(bootstrap, request["action"])["changed"] or changed
             elif request["action"] == "filesystem":
                 changed = apply_filesystem(request, bootstrap, transport, now, pause) or changed
@@ -1266,6 +1281,17 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
     elif operation == "destroy":
         changed = transport.call(bootstrap, "destroy")["changed"]
     pending = []
+    observation = postcondition(request, operation, request_digest, transport, bootstrap, pending, now=now, pause=pause, reading=reading,
+                                shared=shared)
+    if operation == "observe" and request["action"] == "client" and observation["ready"] and outputs:
+        value = transport.call(bootstrap, "client_read").get("private")
+        ceph_native.require(isinstance(value, str) and 0 < len(value.encode()) <= 65536, "material")
+        private_files.write(outputs["client"], value.encode())
+    return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
+
+
+def postcondition(request, operation, request_digest, transport, bootstrap, pending, *, now, pause, reading, shared):
+    """An apply waits for readiness and a destroy proves removal; an observation reads once, its blocking checks into pending."""
     observation = (wait_ready(request, request_digest, bootstrap, transport, now, pause) if operation == "apply"
                    else observe_state(request, request_digest, bootstrap, transport, blocking=pending, unrecorded=reading == UNRECORDED_READING,
                                       shared=shared))
@@ -1275,15 +1301,7 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         ceph_native.require(observation["ready"], "not-ready")
     elif operation == "destroy":
         ceph_native.require(observation["removed"], "not-removed")
-    if operation == "observe" and request["action"] == "client" and observation["ready"] and outputs:
-        value = transport.call(bootstrap, "client_read").get("private")
-        ceph_native.require(isinstance(value, str) and 0 < len(value.encode()) <= 65536, "material")
-        private_files.write(outputs["client"], value.encode())
-    if request["action"] == "cluster" and operation in ("apply", "observe") and observation["ready"]:
-        observation, effect = dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, outputs.get("dashboard"),
-                                              now=now, pause=pause, connect=connect)
-        changed = effect or changed
-    return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
+    return observation
 
 
 def nvmeof_unit(request):
@@ -1624,6 +1642,31 @@ def execute_gateway(request, operation, request_digest, transport, bootstrap, *,
         bound = hashlib.sha256(ceph_native_observability.leaf(seen["gatewayCertificate"])).hexdigest()
         ceph_native.require(observation["endpoint"]["certificateSHA256"] in ("", bound), "evidence")
     return observed({"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}, operation, pending)
+
+
+# Each action's procedure; a unit's is looked up when it runs and takes only what it reads.
+PROCEDURES = {
+    "cluster": execute_cluster,
+    "pool": execute_resource,
+    "policy": execute_resource,
+    "client": execute_resource,
+    "rbd": execute_resource,
+    "filesystem": execute_resource,
+    "subvolume": execute_resource,
+    "settings": execute_resource,
+    "service": lambda request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, **_: execute_unit(
+        request, operation, request_digest, transport, bootstrap, now=now, pause=pause),
+    "nvmeof": lambda request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, **_: execute_nvmeof(
+        request, operation, request_digest, transport, bootstrap, now=now, pause=pause),
+    "nfs-export": lambda request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, **_: execute_unit(
+        request, operation, request_digest, transport, bootstrap, now=now, pause=pause, phases=ceph_native_nfs.EXPORT_APPLY_PHASES),
+    "gateway": lambda request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, **_: execute_gateway(
+        request, operation, request_digest, transport, bootstrap, now=now, pause=pause),
+    "object-user": lambda request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, **_: execute_user(
+        request, operation, request_digest, transport, bootstrap, outputs, now=now, pause=pause),
+    "object-bucket": lambda request, operation, request_digest, transport, bootstrap, outputs, *, now, pause, **_: execute_bucket(
+        request, operation, request_digest, transport, bootstrap, now=now, pause=pause),
+}
 
 
 def dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, output, *, now, pause, connect):

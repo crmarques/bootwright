@@ -486,21 +486,20 @@ func gatewayEndpoint(r Request) (endpointCandidate, bool) {
 	}, true
 }
 
-var scopeRows = map[api.Kind]func(api.Catalog, string, []reconciliation.Block) string{
-	api.CephPlacementPolicy: frozenScope(api.CephPlacementPolicy, "policy", policyScopeText),
-	api.CephPool:            frozenScope(api.CephPool, "pool", poolScopeText),
-	api.CephRBDImage:        frozenScope(api.CephRBDImage, "rbd", rbdScopeText),
-	api.CephClient:          frozenScope(api.CephClient, "client", clientScopeText),
-	api.CephFilesystem:      frozenScope(api.CephFilesystem, "filesystem", filesystemScopeText),
-	api.CephSubvolume:       frozenScope(api.CephSubvolume, "subvolume", subvolumeScopeText),
-	api.CephObjectGateway:   frozenScope(api.CephObjectGateway, "gateway", gatewayScopeText),
-	api.CephObjectUser:      frozenScope(api.CephObjectUser, "object-user", objectUserScopeText),
-	api.CephObjectBucket:    frozenScope(api.CephObjectBucket, "object-bucket", objectBucketScopeText),
-	api.CephNFSExport:       frozenScope(api.CephNFSExport, "nfs-export", nfsExportScopeText),
-	api.CephSMBResource:     smbFrozenScope,
-	api.CephNVMeoFSubsystem: frozenScope(api.CephNVMeoFSubsystem, "nvmeof", nvmeofScopeText),
-	api.CephReplication:     replicationFrozenScope,
-	api.CephConsumer:        declaredScope(api.CephConsumer, exportScopeText),
+var scopeRows = frozenScopeRows()
+
+func frozenScopeRows() map[api.Kind]func(api.Catalog, string, []reconciliation.Block) string {
+	rows := map[api.Kind]func(api.Catalog, string, []reconciliation.Block) string{
+		api.CephSMBResource: smbFrozenScope,
+		api.CephReplication: replicationFrozenScope,
+		api.CephConsumer:    declaredScope(api.CephConsumer, exportScopeText),
+	}
+	for action, row := range actions {
+		if row.scopeText != nil {
+			rows[row.scopeKind] = frozenScope(row.scopeKind, action, row.scopeText)
+		}
+	}
+	return rows
 }
 
 func smbFrozenScope(_ api.Catalog, name string, frozen []reconciliation.Block) string {

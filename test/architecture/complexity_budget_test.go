@@ -238,10 +238,7 @@ func goFunctionsAwaitingSplit() []string {
 		"internal/managedos/installation/erase_unstarted.go.PhysicalEraseUnstarted",
 		"internal/secrets/localkeyring/localkeyring.go.validateIndex",
 		"internal/secrets/material/generation.go.Service.validateGeneratedCertificate",
-		"internal/storage/ceph/capability.go.Capability.identity",
 		"internal/storage/ceph/evidence.go.EvaluateEvidence",
-		"internal/storage/ceph/evidence.go.validateReady",
-		"internal/storage/ceph/evidence.go.validateScope",
 		"internal/storage/ceph/export_evidence.go.validateExportProduced",
 		"internal/storage/ceph/replication_evidence.go.EvaluateReplicationEvidence",
 		"internal/storage/ceph/requests.go.bindHosts",
@@ -257,7 +254,6 @@ func goFunctionsAwaitingSplit() []string {
 func pythonFunctionsAwaitingSplit() []string {
 	return []string{
 		"ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py:evidence",
-		"ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py:execute",
 		"ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_host_runtime.py:HostRuntime.block_device",
 		"ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:Worker.dashboard_repair_ports",
 		"ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:Worker.observe_cluster",

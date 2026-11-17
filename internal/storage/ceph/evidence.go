@@ -500,43 +500,11 @@ func validateScope(e Evidence, r Request) bool {
 	if !subsetNames(e.Monitors, mons) || !subsetNames(append(active, e.MGRStandbys...), mgrs) {
 		return false
 	}
-	if r.Action == "subvolume" {
-		return e.Client == "" && r.Subvolume != nil && (e.Resource == ResourceEvidence{} || subvolumeResource(e, r))
+	row, found := actions[r.Action]
+	if !found {
+		return e.Resource.Path == "" && e.Client == ""
 	}
-	if r.Action == "gateway" {
-		return e.Client == "" && r.Gateway != nil && (e.Resource == ResourceEvidence{} || zoneID.MatchString(e.Resource.ID) && e.Resource.Path == r.Gateway.Endpoint)
-	}
-	if r.Action == "nvmeof" {
-		return e.Client == "" && r.NVMeOF != nil && (e.Resource == ResourceEvidence{} || nvmeofResource(e, r))
-	}
-	if r.Action == "nfs-export" {
-		return e.Client == "" && r.NFSExport != nil && (e.Resource == ResourceEvidence{} || exportID.MatchString(e.Resource.ID) && e.Resource.Path == r.NFSExport.Native.Pseudo)
-	}
-	if r.Action == "object-user" {
-		return e.Client == "" && r.ObjectUser != nil && (e.Resource == ResourceEvidence{} || e.Resource == ResourceEvidence{ID: r.ObjectUser.Name})
-	}
-	if r.Action == "object-bucket" {
-		return e.Client == "" && r.ObjectBucket != nil && (e.Resource == ResourceEvidence{} || e.Resource == ResourceEvidence{ID: r.ObjectBucket.Name})
-	}
-	if e.Resource.Path != "" {
-		return false
-	}
-	if r.Action == "client" {
-		return r.Client != nil && (e.Client == "" || e.Client == "client."+r.Client.Name) && e.Resource == (ResourceEvidence{})
-	}
-	if e.Client != "" {
-		return false
-	}
-	if (r.Action == "cluster" || r.Action == "settings" || r.Action == "service") && e.Resource != (ResourceEvidence{}) {
-		return false
-	}
-	if (r.Action == "pool" || r.Action == "policy" || r.Action == "filesystem") && e.Resource.ID != "" && !resourceID.MatchString(e.Resource.ID) {
-		return false
-	}
-	if r.Action == "rbd" && e.Resource.ID != "" && !rbdImageID.MatchString(e.Resource.ID) {
-		return false
-	}
-	return true
+	return row.scope(e, r)
 }
 
 func validateReady(e Evidence, r Request) bool {
@@ -548,37 +516,8 @@ func validateReady(e Evidence, r Request) bool {
 	if monCount <= 0 || len(e.Monitors) != monCount || mgrCount <= 0 || e.MGRActive == "" || len(e.MGRStandbys)+1 != mgrCount || !validOSDs(e, r, true) || !slices.Contains([]string{"HEALTH_OK", "HEALTH_WARN", "HEALTH_ERR"}, e.Health) {
 		return false
 	}
-	switch r.Action {
-	case "cluster":
-		return stretchReady(e, r)
-	case "settings":
-		return r.Settings != nil
-	case "service":
-		return r.Service != nil && everyDocumentRuns(e, r) && (r.Service.Type != "mgmt-gateway" || e.Endpoint.Reachable) && (!unitProxied(*r.Service) || e.SSO == "oauth2")
-	case "policy":
-		return r.Policy != nil && resourceID.MatchString(e.Resource.ID)
-	case "pool":
-		return r.Pool != nil && resourceID.MatchString(e.Resource.ID)
-	case "client":
-		return r.Client != nil && e.Client == "client."+r.Client.Name
-	case "rbd":
-		return r.RBD != nil && rbdImageID.MatchString(e.Resource.ID)
-	case "filesystem":
-		return r.Filesystem != nil && resourceID.MatchString(e.Resource.ID)
-	case "subvolume":
-		return subvolumeResource(e, r)
-	case "nvmeof":
-		return nvmeofResource(e, r)
-	case "nfs-export":
-		return r.NFSExport != nil && exportID.MatchString(e.Resource.ID) && e.Resource.Path == r.NFSExport.Native.Pseudo
-	case "object-user":
-		return r.ObjectUser != nil && e.Resource == ResourceEvidence{ID: r.ObjectUser.Name}
-	case "object-bucket":
-		return r.ObjectBucket != nil && e.Resource == ResourceEvidence{ID: r.ObjectBucket.Name}
-	case "gateway":
-		return r.Gateway != nil && zoneID.MatchString(e.Resource.ID) && e.Resource.Path == r.Gateway.Endpoint && everyDocumentRuns(e, r) && e.Endpoint.Reachable
-	}
-	return false
+	row, found := actions[r.Action]
+	return found && row.ready(e, r)
 }
 
 // EvaluateEvidence rejects foreign, incomplete or contradictory identity

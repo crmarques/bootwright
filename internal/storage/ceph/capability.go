@@ -374,38 +374,8 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	}
 	action := map[api.Kind]string{api.CephCluster: "cluster", api.CephPlacementPolicy: "policy", api.CephPool: "pool", api.CephClient: "client", api.CephRBDImage: "rbd", api.CephFilesystem: "filesystem", api.CephSubvolume: "subvolume", api.CephObjectGateway: "pool", api.CephNFSExport: "nfs-export", api.CephObjectUser: "object-user", api.CephObjectBucket: "object-bucket", api.CephNVMeoFSubsystem: "nvmeof"}[c.kind]
 	object := r.Cluster
-	if r.Action == "policy" && r.Policy != nil {
-		object = r.Policy.Name
-	}
-	if r.Action == "pool" && r.Pool != nil {
-		object = r.Pool.Name
-		if r.Pool.Object != "" {
-			object = r.Pool.Object
-		}
-	}
-	if r.Action == "client" && r.Client != nil {
-		object = r.Client.Name
-	}
-	if r.Action == "rbd" && r.RBD != nil {
-		object = r.RBD.Name
-	}
-	if r.Action == "filesystem" && r.Filesystem != nil {
-		object = r.Filesystem.Name
-	}
-	if r.Action == "subvolume" && r.Subvolume != nil {
-		object = r.Subvolume.Name
-	}
-	if r.Action == "nvmeof" && r.NVMeOF != nil {
-		object = r.NVMeOF.Name
-	}
-	if r.Action == "nfs-export" && r.NFSExport != nil {
-		object = r.NFSExport.Name
-	}
-	if r.Action == "object-user" && r.ObjectUser != nil {
-		object = r.ObjectUser.Name
-	}
-	if r.Action == "object-bucket" && r.ObjectBucket != nil {
-		object = r.ObjectBucket.Name
+	if row := actions[r.Action]; row.object != nil && row.arm(r) {
+		object = row.object(r)
 	}
 	if c.kind == api.CephObjectGateway {
 		object = gatewayPoolObject(e.Block, r)
@@ -431,11 +401,8 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 }
 
 func onlyOwnArm(r Request) bool {
-	arms := map[string]bool{"settings": r.Settings != nil, "service": r.Service != nil, "gateway": r.Gateway != nil, "policy": r.Policy != nil, "pool": r.Pool != nil,
-		"client": r.Client != nil, "rbd": r.RBD != nil, "filesystem": r.Filesystem != nil, "subvolume": r.Subvolume != nil, "nvmeof": r.NVMeOF != nil,
-		"nfs-export": r.NFSExport != nil, "object-user": r.ObjectUser != nil, "object-bucket": r.ObjectBucket != nil}
-	for action, present := range arms {
-		if present != (action == r.Action) {
+	for action, row := range actions {
+		if row.arm != nil && row.arm(r) != (action == r.Action) {
 			return false
 		}
 	}

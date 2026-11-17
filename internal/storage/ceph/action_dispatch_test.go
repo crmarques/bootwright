@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/ansible"
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -205,4 +208,65 @@ func TestActionDispatchIsPinned(t *testing.T) {
 		lines = append(lines, dispatchLine(t, c))
 	}
 	matchesTextGolden(t, "action-dispatch", []byte(strings.Join(lines, "\n")+"\n"))
+}
+
+func TestEveryAdmittedActionHasACompleteRow(t *testing.T) {
+	const path = "collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py"
+	_, tuple, found := strings.Cut(string(ansible.Assets()[path]), "\n    actions = (")
+	tuple, _, closed := strings.Cut(tuple, ")\n")
+	if !found || !closed {
+		t.Fatal("ceph_core.py's evidence schema declares no actions tuple")
+	}
+	admitted := []string{}
+	for _, match := range regexp.MustCompile(`"([a-z-]+)"`).FindAllStringSubmatch(tuple, -1) {
+		admitted = append(admitted, match[1])
+	}
+	held := slices.Sorted(maps.Keys(actions))
+	if slices.Sort(admitted); !slices.Equal(admitted, held) || !slices.Equal(admitted, slices.Sorted(slices.Values(admittedActions))) {
+		t.Fatalf("the evidence schema admits %q, the action table holds %q", admitted, held)
+	}
+	armless := []string{"cluster"}
+	unnamed := []string{"cluster", "settings", "service", "gateway"}
+	unresourced := []string{"cluster", "settings", "service"}
+	budgeted := []string{"service", "gateway", "nvmeof", "nfs-export", "object-user", "object-bucket"}
+	for action, row := range actions {
+		if row.scope == nil || row.ready == nil || (row.arm == nil) != slices.Contains(armless, action) || (row.object == nil) != slices.Contains(unnamed, action) ||
+			(row.resource == nil) != slices.Contains(unresourced, action) || (row.deadline != nil) != slices.Contains(budgeted, action) ||
+			(row.scopeText == nil) != (row.scopeKind == "") || (row.scopeText == nil) != slices.Contains(unresourced, action) {
+			t.Errorf("the %s row is incomplete", action)
+		}
+		if row.scopeText != nil && scopeRows[row.scopeKind] == nil {
+			t.Errorf("the %s row's scope text reaches no %s scope row", action, row.scopeKind)
+		}
+	}
+}
+
+func TestARequestWithTheWrongArmIsRefused(t *testing.T) {
+	kinds := map[string]api.Kind{"settings": api.CephCluster, "service": api.CephCluster, "gateway": api.CephObjectGateway, "policy": api.CephPlacementPolicy,
+		"pool": api.CephPool, "client": api.CephClient, "rbd": api.CephRBDImage, "filesystem": api.CephFilesystem, "subvolume": api.CephSubvolume,
+		"nvmeof": api.CephNVMeoFSubsystem, "nfs-export": api.CephNFSExport, "object-user": api.CephObjectUser, "object-bucket": api.CephObjectBucket}
+	for action, kind := range kinds {
+		for other, arm := range dispatchArms {
+			r := coreRequest()
+			r.Action = action
+			if other != action {
+				arm(&r)
+			}
+			if onlyOwnArm(r) {
+				t.Errorf("a %s request carrying only the %s arm passes the arm check", action, other)
+			}
+			e := executionFor(t, r)
+			e.Block.Kind, e.Block.Object = string(kind), "object"
+			if action == "gateway" {
+				e.Block.ID = GatewayBlockID("object")
+			}
+			if kind == api.CephCluster {
+				e.Block.Object = r.Cluster
+			}
+			_, err := New(kind, nil).identity(context.Background(), e)
+			if d := diagnostics.Of(err); len(d) != 1 || d[0].Message != "Ceph request does not match its frozen resource identity" {
+				t.Errorf("a %s request carrying only the %s arm passes its identity: %+v", action, other, d)
+			}
+		}
+	}
 }

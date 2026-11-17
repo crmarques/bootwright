@@ -219,23 +219,8 @@ const (
 )
 
 func cephDeadline(r Request, operation string) (time.Duration, error) {
-	if r.Action == "service" {
-		return unitDeadline(r, operation)
-	}
-	if r.Action == "gateway" {
-		return gatewayDeadline(operation), nil
-	}
-	if r.Action == "nvmeof" {
-		return nvmeofDeadline(r, operation)
-	}
-	if r.Action == "nfs-export" {
-		return nfsExportDeadline(operation), nil
-	}
-	if r.Action == "object-user" {
-		return objectUserDeadline(operation), nil
-	}
-	if r.Action == "object-bucket" {
-		return objectBucketDeadline(operation), nil
+	if row := actions[r.Action]; row.deadline != nil {
+		return row.deadline(r, operation)
 	}
 	if len(r.Hosts) > hostBound(r.Stretch != nil) {
 		return 0, clusterBudgetFailure(r.Cluster, len(r.Hosts), r.Stretch != nil)
