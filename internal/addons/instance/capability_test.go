@@ -49,7 +49,7 @@ func fixtureEvidence(t *testing.T, r Request, digest string) Evidence {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := Evidence{Version: evidenceVersion, Request: digest, Postcondition: true, Classification: "completed", Evidence: co.Evidence{Receipts: []co.Receipt{}, Observations: []co.ObjectObservation{}, Checks: []co.CheckResult{}, OLM: []co.OLMFacts{}, Dependents: []co.DependentFacts{}}}
+	e := Evidence{Version: evidenceVersion, Request: digest, Postcondition: true, Evidence: co.Evidence{Receipts: []co.Receipt{}, Observations: []co.ObjectObservation{}, Checks: []co.CheckResult{}, OLM: []co.OLMFacts{}, Dependents: []co.DependentFacts{}}}
 	checks := len(p.Checks)
 	for _, s := range p.Steps {
 		checks += len(s.Wait)

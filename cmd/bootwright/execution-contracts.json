@@ -1,7 +1,7 @@
 {
   "addon-instance-v1": {
     "contentDigest": "993b57e89d799b7d6b525517aa2dd88e8f31ece5cba2c1f1dcf19e590385f16c",
-    "fingerprint": "34f85969cff6f2e380b7ba97cae54cbe8c76a00c56306efd76d5bded79a994a6"
+    "fingerprint": "72301c09d2944e81dd7410d4708dcc6787d22c6973e9ee3467d85c125ece3766"
   },
   "artifact-server-nginx-v1": {
     "contentDigest": "2f2f45093fa223e22af8ec602c85eb355793c1fc91528dc93bd2e68c2a79e283",
@@ -21,7 +21,7 @@
   },
   "cluster-network-v1": {
     "contentDigest": "afe1ceb61b97e6e1db46f9f8cdbd258e943fc721257cb7753b63aab63457e366",
-    "fingerprint": "b57e88294b3b12ee1131d930dd70745b471b6903c7859f15aaa35944ecd7b7c7"
+    "fingerprint": "1823d159dbfadd8b2395741aa516a000ca5447ffa993b93050e8a1326e9f64d2"
   },
   "controller-prerequisites": {
     "contentDigest": "83a06f61907914bc84f5e220bc80bdba04d44b636af0780c2ae6626ca2c0e341",

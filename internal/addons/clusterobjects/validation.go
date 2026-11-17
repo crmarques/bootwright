@@ -187,6 +187,9 @@ func validateObject(object ObjectEntry) error {
 	if err := canonicaljson.ProveObject(object.Body); err != nil {
 		return fmt.Errorf("object %s body is not canonical", object.Name)
 	}
+	if exact, err := exactPaths(object); err != nil || !slices.Equal(exact, object.Exact) {
+		return fmt.Errorf("object %s exact comparison differs", object.Name)
+	}
 	if object.DesiredDigest != DesiredDigest(object.Body) {
 		return fmt.Errorf("object %s desired digest differs", object.Name)
 	}

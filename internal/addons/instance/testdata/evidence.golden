@@ -1,5 +1,4 @@
 {
-  "absent": false,
   "checks": [
     {
       "index": 0,
@@ -20,7 +19,6 @@
       "stale": false
     }
   ],
-  "classification": "completed",
   "dependents": [],
   "observations": [
     {
@@ -125,5 +123,6 @@
     }
   ],
   "request": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "unknown": false,
   "version": "addon-instance-evidence-v1"
 }

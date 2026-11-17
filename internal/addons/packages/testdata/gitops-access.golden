@@ -89,6 +89,9 @@
           ]
         },
         "desiredDigest": "44e36baad38e26789aa564219152037afe14a010b9aad6f0935b9a3b36f1af3e",
+        "exact": [
+          "subjects"
+        ],
         "kind": "ClusterRoleBinding",
         "name": "bootwright-gitops-bootstrap",
         "namespace": "",

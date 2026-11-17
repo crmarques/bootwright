@@ -165,6 +165,9 @@
               }
             },
             "desiredDigest": "929956311ff36aa8ecf40a9622704398d6f128d5dc0a040803b8c3a7b36434af",
+            "exact": [
+              "spec"
+            ],
             "kind": "Subscription",
             "name": "odf-operator",
             "namespace": "openshift-storage",

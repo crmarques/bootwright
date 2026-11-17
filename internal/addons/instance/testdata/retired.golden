@@ -1,7 +1,5 @@
 {
-  "absent": false,
   "checks": null,
-  "classification": "retired",
   "dependents": null,
   "observations": null,
   "olm": null,
@@ -9,5 +7,6 @@
   "receipts": null,
   "request": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "retired": true,
+  "unknown": false,
   "version": "addon-instance-evidence-v1"
 }

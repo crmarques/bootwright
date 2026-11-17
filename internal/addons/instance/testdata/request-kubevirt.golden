@@ -118,6 +118,9 @@
               }
             },
             "desiredDigest": "0bfc0ae57742a3090528fea496f97f9d66fdce26070be32906b2afb02aad0387",
+            "exact": [
+              "spec"
+            ],
             "kind": "Subscription",
             "name": "hco-operatorhub",
             "namespace": "openshift-cnv",

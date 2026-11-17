@@ -112,8 +112,7 @@ evidence-schema:
   observations[].namespaced bool
   observations[].ownership string
   observations[].equal bool
-  absent bool
-  classification string
+  unknown bool
   postcondition bool
   request string
   retired bool omitempty

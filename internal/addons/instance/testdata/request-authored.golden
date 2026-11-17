@@ -143,6 +143,9 @@
               }
             },
             "desiredDigest": "56e085e73771cb196f41e25e3499947efa1599e49360e20cd9fa74bcc4a2af20",
+            "exact": [
+              "spec"
+            ],
             "kind": "Subscription",
             "name": "widget",
             "namespace": "widget-ns",

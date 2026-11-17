@@ -197,7 +197,7 @@ func TestSubscriptionAndDependentValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry := ObjectEntry{Ref: Ref{APIVersion: "operators.coreos.com/v1alpha1", Kind: "Subscription", Namespace: "operators", Name: "operator", Namespaced: true}, Body: data, DesiredDigest: DesiredDigest(data)}
+	entry := ObjectEntry{Ref: Ref{APIVersion: "operators.coreos.com/v1alpha1", Kind: "Subscription", Namespace: "operators", Name: "operator", Namespaced: true}, Body: data, DesiredDigest: DesiredDigest(data), Exact: []string{"spec"}}
 	subscription := Subscription{Object: entry, Approval: Exact, CSV: "operator.v1.0.0"}
 	p.Steps = []Step{{Kind: "subscribe", Subscribe: &subscription}}
 	if _, err := Freeze(p, Options{}); err != nil {

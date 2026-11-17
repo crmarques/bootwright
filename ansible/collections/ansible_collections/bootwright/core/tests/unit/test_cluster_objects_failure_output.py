@@ -23,8 +23,7 @@ def publication(tmp_path, request):
     postcondition = mode != "refused"
     tasks = yaml.safe_load((ROLE / "tasks" / "apply.yml").read_text())
     publish = tasks[-1]
-    state = {"postcondition": postcondition, "classification": "completed" if postcondition else "unknown",
-             "absent": False, "receipts": [{"uid": PRIVATE_UID}], "observations": [], "olm": [], "checks": []}
+    state = {"postcondition": postcondition, "unknown": False, "receipts": [{"uid": PRIVATE_UID}], "observations": [], "olm": [], "checks": []}
     result = {"state": state, "changed": True}
     if not postcondition:
         result.update(failed=True, msg=REFUSAL)

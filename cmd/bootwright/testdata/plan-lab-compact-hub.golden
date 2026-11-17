@@ -274,6 +274,9 @@
                   }
                 },
                 "desiredDigest": "d1eb58dfa0206b15a706c68a735bd48782e5abf9fb1586d6ff9917eaf71133fa",
+                "exact": [
+                  "spec"
+                ],
                 "kind": "Subscription",
                 "name": "acm-operator-subscription",
                 "namespace": "open-cluster-management",
@@ -485,6 +488,9 @@
                   }
                 },
                 "desiredDigest": "3fabaf2e1538d641848894c643ecc8230a44238a284f7a1ef9eb48a62f850d38",
+                "exact": [
+                  "spec"
+                ],
                 "kind": "Subscription",
                 "name": "openshift-gitops-operator",
                 "namespace": "openshift-gitops-operator",

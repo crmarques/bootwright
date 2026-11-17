@@ -113,6 +113,9 @@
               }
             },
             "desiredDigest": "1b9845f2ac51ca78962c1567add57320bf6c819b44f26eacadb8f8f49b7cb73a",
+            "exact": [
+              "spec"
+            ],
             "kind": "Subscription",
             "name": "acm-operator-subscription",
             "namespace": "open-cluster-management",

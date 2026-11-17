@@ -45,5 +45,5 @@ class ActionModule(ActionBase):
 
     @staticmethod
     def _partial(engine, message):
-        engine.state.update(classification="unknown", postcondition=False, absent=False)
+        engine.state.update(unknown=engine.unknown, postcondition=False)
         return {"failed": True, "changed": engine.changed, "msg": message, "state": engine.state}

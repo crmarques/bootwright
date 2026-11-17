@@ -119,6 +119,9 @@
               }
             },
             "desiredDigest": "20f44a215cf3fb4f39a7b299325382f26821b2629ec9876b5689730206c98fb3",
+            "exact": [
+              "spec"
+            ],
             "kind": "Subscription",
             "name": "openshift-gitops-operator",
             "namespace": "openshift-gitops-operator",

@@ -299,7 +299,9 @@ kind, plural or short name. A create uses `--filename=-` with the explicit
    except that an owned Secret's data key set and an RBAC object's `subjects`
    and `rules` must equal the declared ones exactly, and a Subscription's
    whole `spec` must equal the rendered spec, with no undeclared member, before
-   any plan of it is approved; equal is `unchanged`, and a difference fails the attempt
+   any plan of it is approved; Bootwright names those top-level members on each
+   program object as its `exact` list, and the adapter compares exactly only
+   the members it names; equal is `unchanged`, and a difference fails the attempt
    naming the object and the first differing field.
 
 Every read and create projects only the fields the evaluators need: identity,
@@ -473,6 +475,10 @@ declared field, is that partial realization: the observation records which
 object differs and repairs nothing, and the first differing field is named
 only by the apply attempt that finds it. A continuation never re-renders: it
 runs the frozen program, whose comparisons report what is done `unchanged`.
+The evidence records each object's ownership as it was read and carries a
+failed read as its top-level `unknown` field, which reads unknown even when no
+object was observed; Bootwright alone judges the realization from it, and the
+adapter publishes no classification of its own.
 `bootwright diff --observe` reads the same observation and reports the block's
 realization, never repairs it and shows no field values for an instance.
 

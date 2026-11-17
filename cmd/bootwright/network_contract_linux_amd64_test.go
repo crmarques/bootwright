@@ -50,7 +50,6 @@ func contractNetworkPresence(t *testing.T, execution lifecycle.Execution) map[st
 	}
 	fields["version"] = "cluster-network-evidence-v1"
 	fields["postcondition"] = true
-	fields["classification"] = "completed"
 	return fields
 }
 func contractNetworkExample(t *testing.T, resolver capabilityResolver) contractExample {

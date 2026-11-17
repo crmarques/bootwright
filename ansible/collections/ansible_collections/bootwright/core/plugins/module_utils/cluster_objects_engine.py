@@ -582,15 +582,9 @@ class Engine:
             else:
                 raise Refused("unsupported cluster object step")
         self.checks(program.get("checks", []), observe)
-        readings = self.state["observations"]
-        if self.unknown and readings:
-            readings[0]["ownership"] = "unknown"
-            readings[0]["equal"] = False
-        unknown = self.unknown or self.unproved or any(r["ownership"] in ("unknown", "foreign") for r in readings)
-        complete = (not self.not_ready and all(r["ownership"] == "own" and r["equal"] for r in readings)
+        complete = (not self.unknown and not self.unproved and not self.not_ready
+                    and all(r["ownership"] == "own" and r["equal"] for r in self.state["observations"])
                     and all(c["satisfied"] for c in self.state["checks"])
                     and all(d.get("uid") for d in self.state["dependents"]))
-        absent = bool(readings) and all(r["ownership"] == "absent" for r in readings) and not self.state["dependents"]
-        classification = "unknown" if unknown else "completed" if complete else "noEffect" if absent else "partial"
-        self.state.update(classification=classification, postcondition=classification == "completed", absent=classification == "noEffect")
+        self.state.update(unknown=self.unknown, postcondition=complete)
         return {"changed": self.changed, "state": self.state}

@@ -125,6 +125,9 @@
           ]
         },
         "desiredDigest": "f3dad829b0e17b42a64c112d083a3152d3c20fab0ef43ae69fb42ba4ced7ffe7",
+        "exact": [
+          "subjects"
+        ],
         "kind": "RoleBinding",
         "name": "bootwright-kubevirt",
         "namespace": "guests-a",
@@ -193,6 +196,9 @@
           ]
         },
         "desiredDigest": "5d5747385570238cd678bdf5bd76bdda9d282475137b2b28e8f9bdcdbc63b4ea",
+        "exact": [
+          "subjects"
+        ],
         "kind": "RoleBinding",
         "name": "bootwright-kubevirt",
         "namespace": "guests-b",
@@ -307,6 +313,9 @@
           ]
         },
         "desiredDigest": "6f9abccdcba47e9a26e0392dbc70dcc0f0c395b34acec75d879ed462efca2410",
+        "exact": [
+          "rules"
+        ],
         "kind": "ClusterRole",
         "name": "bootwright-kubevirt-machines",
         "namespace": "",
@@ -402,6 +411,9 @@
           ]
         },
         "desiredDigest": "bf9a6faa68df9743bfbec087b2a64479660b70562474ba524e62e6dd7998d3a5",
+        "exact": [
+          "rules"
+        ],
         "kind": "ClusterRole",
         "name": "bootwright-kubevirt-proof",
         "namespace": "",
@@ -437,6 +449,9 @@
           ]
         },
         "desiredDigest": "d14f88fb5c0f95897e8e02b195d5120decdc5e8bb39a0e209f77ddd0729a5ab4",
+        "exact": [
+          "subjects"
+        ],
         "kind": "ClusterRoleBinding",
         "name": "bootwright-kubevirt-proof",
         "namespace": "",
@@ -472,6 +487,9 @@
           ]
         },
         "desiredDigest": "2ce47f8e9734e415b3202dd696313f63d060a958c990fa2412488b1ba44abdd9",
+        "exact": [
+          "rules"
+        ],
         "kind": "Role",
         "name": "bootwright-kubevirt-proof",
         "namespace": "openshift-config-managed",
@@ -508,6 +526,9 @@
           ]
         },
         "desiredDigest": "0f074e2fcb0f8de9b257db61942fe57a7aa7a5aec71cc8d7c0b49c51314f4d9e",
+        "exact": [
+          "subjects"
+        ],
         "kind": "RoleBinding",
         "name": "bootwright-kubevirt-proof",
         "namespace": "openshift-config-managed",
@@ -543,6 +564,9 @@
           ]
         },
         "desiredDigest": "c3933de84c4681006d42e7191e29358ead7fc75a191c225f3719c9bfbff6cfdb",
+        "exact": [
+          "rules"
+        ],
         "kind": "Role",
         "name": "bootwright-kubevirt-proof",
         "namespace": "openshift-cnv",
@@ -579,6 +603,9 @@
           ]
         },
         "desiredDigest": "9f0233c7d47ddf8e8cf8638fb0c8b78da8148e6d68a595a107a37bf8eb9784e0",
+        "exact": [
+          "subjects"
+        ],
         "kind": "RoleBinding",
         "name": "bootwright-kubevirt-proof",
         "namespace": "openshift-cnv",

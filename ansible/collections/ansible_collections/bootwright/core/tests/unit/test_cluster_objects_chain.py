@@ -7,7 +7,7 @@ import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import cluster_objects_model as model
 from ansible_collections.bootwright.core.plugins.module_utils.cluster_objects_engine import Engine, Refused
-from ansible_collections.bootwright.core.tests.unit.test_cluster_objects import owned
+from ansible_collections.bootwright.core.tests.unit.test_cluster_objects import owned, reads_unknown
 from ansible_collections.bootwright.core.tests.unit.test_cluster_objects import object_request  # pylint: disable=unused-import
 
 SOURCE = {"name": "catalog", "namespace": "marketplace"}
@@ -27,7 +27,7 @@ class Cluster:
         self.request = request
         self.creator = request["program"]["steps"][0]["create"]
         self.subscription = {"apiVersion": "operators.coreos.com/v1alpha1", "kind": "Subscription", "namespace": "operators",
-                             "name": "sample", "namespaced": True, "desiredDigest": "d" * 64,
+                             "name": "sample", "namespaced": True, "desiredDigest": "d" * 64, "exact": ["spec"],
                              "body": {"spec": {"name": "sample", "channel": "stable", "source": "catalog", "sourceNamespace": "marketplace",
                                                "startingCSV": "sample.v1", "installPlanApproval": "Manual"}, "metadata": {"name": "sample"}}}
         self.live = owned(request, self.subscription)
@@ -77,7 +77,7 @@ def test_chain_through_approved_plans_reads_complete(object_request, links, inst
     cluster = Cluster(object_request, installed, two_links()[:links], replaces="sample.v%d" % (links - 1))
     cluster.program(check=True)
     state = cluster.observe()
-    assert state["classification"] == "completed"
+    assert state["postcondition"] is True
     fact = state["olm"][0]
     assert fact["installedCSV"] == installed and fact["csvVersion"] == installed.split(".v")[1] + ".0"
     assert fact["installPlan"] == {"name": "initial", "uid": "initial-uid", "csvs": ["sample.v1"]}
@@ -91,7 +91,7 @@ def test_skip_upgrade_records_its_replaced_csv(object_request):
     cluster = Cluster(object_request, "sample.v3", [plan("initial", 1, "sample.v1"), plan("upgrade-b", 2, "sample.v3", "sample.v1")], replaces="sample.v1")
     cluster.program()
     state = cluster.observe()
-    assert state["classification"] == "completed"
+    assert state["postcondition"] is True
     assert state["olm"][0]["chain"] == [{"plan": "initial", "csv": "sample.v1"}, {"plan": "upgrade-b", "csv": "sample.v3"}]
 
 
@@ -99,7 +99,7 @@ def test_pinned_install_records_no_chain(object_request):
     cluster = Cluster(object_request, "sample.v1", [plan("initial", 1, "sample.v1")])
     cluster.program()
     state = cluster.observe()
-    assert state["classification"] == "completed" and state["olm"][0]["chain"] == []
+    assert state["postcondition"] is True and state["olm"][0]["chain"] == []
 
 
 def broken(name):
@@ -136,10 +136,10 @@ def test_unproved_chain_stays_unknown(object_request, name, approval):
     cluster = Cluster(object_request, "sample.v3", plans, replaces=replaces)
     cluster.program(approval=approval, check=True)
     state = cluster.observe()
-    assert state["classification"] == "unknown"
+    assert reads_unknown(state)
     gap = RETENTION.get(name)
     assert state["olm"][0].get("chainGap") == gap if gap else "chainGap" not in (state["olm"] or [{}])[0]
-    assert state["observations"][0]["ownership"] == ("own" if gap else "unknown")
+    assert state["observations"][0]["ownership"] == "own" and state["unknown"] is not gap
     if gap:
         assert state["olm"][0]["chain"] == [] and state["olm"][0]["installedCSV"] == "sample.v3"
         assert state["checks"][0]["satisfied"] is False and not state["checks"][0].get("unknown")
@@ -159,7 +159,7 @@ def test_a_link_olm_collected_is_a_retention_gap(object_request, deleted, missin
     cluster = Cluster(object_request, "sample.v7", seven_links()[deleted:], replaces="sample.v6")
     cluster.program(approval=approval, check=True)
     state = cluster.observe()
-    assert state["classification"] == "unknown" and state["observations"][0]["ownership"] == "own"
+    assert reads_unknown(state) and state["observations"][0]["ownership"] == "own"
     assert state["olm"][0]["chainGap"] == {"cause": "planCollected", "csv": missing} and state["olm"][0]["chain"] == []
     assert state["checks"][0]["satisfied"] is False and not state["checks"][0].get("unknown")
 
@@ -177,7 +177,7 @@ def test_a_missing_link_olm_would_not_have_collected_is_no_retention_gap(object_
     cluster = Cluster(object_request, "sample.v7", plans, replaces="sample.v6")
     cluster.program(check=True)
     state = cluster.observe()
-    assert state["classification"] == "unknown" and state["observations"][0]["ownership"] == "unknown"
+    assert state["unknown"] is True and state["observations"][0]["ownership"] == "own"
     assert all("chainGap" not in fact for fact in state["olm"])
 
 
@@ -186,7 +186,7 @@ def test_a_retention_gap_needs_a_succeeded_installed_csv(object_request, phase):
     cluster = Cluster(object_request, "sample.v7", seven_links()[2:], replaces="sample.v6", phase=phase)
     cluster.program(check=True)
     state = cluster.observe()
-    assert state["classification"] == "unknown" and state["observations"][0]["ownership"] == "unknown"
+    assert state["unknown"] is True and state["observations"][0]["ownership"] == "own"
     assert all("chainGap" not in fact for fact in state["olm"])
 
 
@@ -195,7 +195,7 @@ def test_a_chain_past_sixteen_csvs_is_a_retention_gap(object_request):
     cluster = Cluster(object_request, "sample.v17", plans, replaces="sample.v16")
     cluster.program(check=True)
     state = cluster.observe()
-    assert state["classification"] == "unknown" and state["olm"][0]["chainGap"] == {"cause": "chainTooLong"}
+    assert reads_unknown(state) and state["olm"][0]["chainGap"] == {"cause": "chainTooLong"}
     assert state["observations"][0]["ownership"] == "own"
 
 
@@ -204,7 +204,7 @@ def test_the_installed_csvs_own_plan_missing_is_no_retention_gap(object_request)
     cluster = Cluster(object_request, "sample.v3", plans, replaces="sample.v2")
     cluster.program(check=True)
     state = cluster.observe()
-    assert state["classification"] == "unknown" and state["observations"][0]["ownership"] == "unknown"
+    assert state["unknown"] is True and state["observations"][0]["ownership"] == "own"
     assert all("chainGap" not in fact for fact in state["olm"])
 
 
@@ -212,7 +212,7 @@ def test_the_installed_csvs_own_plan_missing_is_no_retention_gap(object_request)
 def test_chain_to_unsucceeded_csv_stays_unknown(object_request, phase):
     cluster = Cluster(object_request, "sample.v3", two_links(), replaces="sample.v2", phase=phase)
     cluster.program()
-    assert cluster.observe()["classification"] == "unknown"
+    assert reads_unknown(cluster.observe())
 
 
 def test_pending_upgrade_past_chain_is_reported_and_left(object_request):
@@ -220,7 +220,7 @@ def test_pending_upgrade_past_chain_is_reported_and_left(object_request):
     cluster = Cluster(object_request, "sample.v2", plans, replaces="sample.v1", current="sample.v3")
     cluster.program()
     state = cluster.observe()
-    assert state["classification"] == "completed"
+    assert state["postcondition"] is True
     assert state["olm"][0]["upgradePending"] is True and [link["csv"] for link in state["olm"][0]["chain"]] == ["sample.v1", "sample.v2"]
     assert plans[2]["spec"]["approved"] is False
 
@@ -229,7 +229,7 @@ def test_operator_managed_chain_reads_complete(object_request):
     cluster = Cluster(object_request, "sample.v3", two_links(), replaces="sample.v2")
     cluster.program(approval="operatorManaged")
     state = cluster.observe()
-    assert state["classification"] == "completed"
+    assert state["postcondition"] is True
     assert [link["plan"] for link in state["olm"][0]["chain"]] == ["initial", "upgrade-a", "upgrade-b"]
     assert [p["name"] for p in state["olm"][0]["plans"]] == ["initial", "upgrade-a", "upgrade-b"]
 
@@ -241,10 +241,10 @@ def test_dependent_chain(object_request, name):
     cluster.program(dependent=True, check=False)
     state = cluster.observe()
     if name:
-        assert state["classification"] == "unknown"
+        assert reads_unknown(state)
         assert state["dependents"][0].get("chainGap") == RETENTION.get(name)
         return
-    assert state["classification"] == "completed"
+    assert state["postcondition"] is True
     fact = state["dependents"][0]
     assert fact["installedCSV"] == "sample.v3" and fact["csvVersion"] == "3.0" and fact["uid"] == "uid-1"
     assert [link["csv"] for link in fact["chain"]] == ["sample.v1", "sample.v2", "sample.v3"]
@@ -267,7 +267,7 @@ def test_operator_approved_multi_csv_plan_reads_complete(object_request):
     cluster = Cluster(object_request, "sample.v3", plans, replaces="sample.v2")
     cluster.program(approval="operatorManaged")
     state = cluster.observe()
-    assert state["classification"] == "completed"
+    assert state["postcondition"] is True
     assert [link["plan"] for link in state["olm"][0]["chain"]] == ["initial", "upgrade-a", "upgrade-b"]
 
 
@@ -280,7 +280,7 @@ def test_plans_owned_by_every_subscription_keep_the_chain(object_request):
     plans = [shared(p) for p in two_links()] + [shared(plan("other-upgrade", 4, "other.v2", "other.v1"))]
     cluster = Cluster(object_request, "sample.v3", plans, replaces="sample.v2")
     cluster.program()
-    assert cluster.observe()["classification"] == "completed"
+    assert cluster.observe()["postcondition"] is True
 
 
 @pytest.mark.parametrize("replaces", ["other.v1", "sample.v1"])
@@ -290,7 +290,7 @@ def test_another_subscriptions_plan_never_splices(object_request, replaces):
     plans.append(shared(plan("other-upgrade", 2, "other.v2", replaces)))
     cluster = Cluster(object_request, "sample.v3", plans, replaces="sample.v2")
     cluster.program()
-    assert cluster.observe()["classification"] == "unknown"
+    assert reads_unknown(cluster.observe())
 
 
 def test_lookup_without_replaces_stays_unknown(object_request):
@@ -298,11 +298,11 @@ def test_lookup_without_replaces_stays_unknown(object_request):
     del plans[2]["status"]["bundleLookups"][0]["replaces"]
     cluster = Cluster(object_request, "sample.v3", plans, replaces="sample.v2")
     cluster.program()
-    assert cluster.observe()["classification"] == "unknown"
+    assert reads_unknown(cluster.observe())
 
 
 def test_absent_head_csv_stays_unknown(object_request):
     cluster = Cluster(object_request, "sample.v3", two_links(), replaces="sample.v2")
     cluster.csv["metadata"]["name"] = "sample.v9"
     cluster.program()
-    assert cluster.observe()["classification"] == "unknown"
+    assert reads_unknown(cluster.observe())

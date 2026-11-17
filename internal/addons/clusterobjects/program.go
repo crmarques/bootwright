@@ -35,7 +35,33 @@ func NewObjectEntry(object Object) (ObjectEntry, error) {
 		return ObjectEntry{}, err
 	}
 	entry := ObjectEntry{Ref: object.Ref, Body: body, DesiredDigest: DesiredDigest(body)}
+	entry.Exact, err = exactPaths(entry)
+	if err != nil {
+		return ObjectEntry{}, err
+	}
 	return entry, validateObject(entry)
+}
+
+var exactMembers = map[string][]string{
+	"Subscription":       {"spec"},
+	"Role":               {"rules", "subjects"},
+	"ClusterRole":        {"rules", "subjects"},
+	"RoleBinding":        {"rules", "subjects"},
+	"ClusterRoleBinding": {"rules", "subjects"},
+}
+
+func exactPaths(entry ObjectEntry) ([]string, error) {
+	var body map[string]json.RawMessage
+	if err := canonicaljson.DecodeClosed(entry.Body, &body); err != nil {
+		return nil, fmt.Errorf("invalid object body")
+	}
+	var paths []string
+	for _, member := range exactMembers[entry.Kind] {
+		if _, ok := body[member]; ok {
+			paths = append(paths, member)
+		}
+	}
+	return paths, nil
 }
 
 func DesiredDigest(body []byte) string {

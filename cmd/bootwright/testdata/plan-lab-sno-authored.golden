@@ -267,6 +267,9 @@
                   }
                 },
                 "desiredDigest": "d48ba15f385a0d5c4c1a9fad96ce63d8b6c1608a02a9d83ecd98cb2727415fa6",
+                "exact": [
+                  "spec"
+                ],
                 "kind": "Subscription",
                 "name": "example-operator",
                 "namespace": "example-operator",

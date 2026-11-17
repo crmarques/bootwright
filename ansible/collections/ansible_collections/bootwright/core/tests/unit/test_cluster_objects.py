@@ -27,6 +27,14 @@ def owned(request, obj=None):
     return live
 
 
+def reads_unknown(state):
+    """Whether the evidence carries what Go's evaluation reads as unknown: the engine's unknown read, an object of unknown or
+    foreign ownership, or an upgrade chain gap; such evidence never proves its postcondition."""
+    signal = (state["unknown"] or any(o["ownership"] in ("unknown", "foreign") for o in state["observations"])
+              or any(fact.get("chainGap") for fact in state["olm"] + state["dependents"]))
+    return signal and not state["postcondition"]
+
+
 class ScriptedOC:
     def __init__(self, tmp_path, answers):
         self.responses = tmp_path / "responses.json"
@@ -133,15 +141,17 @@ def test_ownership_receipt_mark_and_time(object_request):
 def test_observation_starts_only_get(tmp_path, object_request):
     oc = ScriptedOC(tmp_path, [response(owned(object_request))])
     result = Engine(object_request, oc.read).execute(observe=True)
-    assert result["state"]["classification"] == "completed"
+    assert result["state"]["postcondition"] is True
     assert not result["changed"]
     assert [c["argv"][3] for c in oc.calls()] == ["get"]
 
 
 @pytest.mark.parametrize("kind,path", [("ClusterRoleBinding", "subjects"), ("ClusterRole", "rules"), ("Subscription", "spec")])
 def test_security_sensitive_fields_compare_exactly(kind, path):
-    wanted = {"kind": kind, "body": {path: {"a": 1}}}
+    wanted = {"kind": kind, "body": {path: {"a": 1}}, "exact": [path]}
     assert model.compare(wanted, {path: {"a": 1, "b": 2}}) == path
+    # The program names the members compared exactly; the adapter decides none by kind.
+    assert model.compare(dict(wanted, exact=[]), {path: {"a": 1, "b": 2}}) == ""
     assert model.difference([1], [1, 2], "items") == "items"
 
 
@@ -191,7 +201,7 @@ def test_first_apply_accepts_the_null_receipts_of_empty_evidence(tmp_path, objec
     object_request["receipts"] = None
     oc = ScriptedOC(tmp_path, [response(), response(owned(object_request))])
     result = Engine(object_request, oc.read, oc.write, clock=lambda: 0).execute()
-    assert result["state"]["classification"] == "completed"
+    assert result["state"]["postcondition"] is True
     assert [r["uid"] for r in result["state"]["receipts"]] == ["uid-1"]
 
 

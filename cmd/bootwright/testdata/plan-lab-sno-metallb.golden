@@ -223,6 +223,9 @@
                   }
                 },
                 "desiredDigest": "b1047980264cdeeab0c4cf60936ca81de59c1a6c25a71b80cf3ffdbd43a43bef",
+                "exact": [
+                  "spec"
+                ],
                 "kind": "Subscription",
                 "name": "metallb-operator-sub",
                 "namespace": "metallb-system",

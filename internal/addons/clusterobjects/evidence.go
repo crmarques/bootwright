@@ -116,6 +116,7 @@ type Evidence struct {
 	Dependents   []DependentFacts    `json:"dependents"`
 	Checks       []CheckResult       `json:"checks"`
 	Observations []ObjectObservation `json:"observations"`
+	Unknown      bool                `json:"unknown"`
 }
 
 type Probe struct {
@@ -348,7 +349,7 @@ func BoundedObservation(value string) string {
 }
 
 func EvaluateEvidence(program Program, evidence Evidence) Realization {
-	if ValidateEvidence(evidence) != nil {
+	if ValidateEvidence(evidence) != nil || evidence.Unknown {
 		return UnknownRealization
 	}
 	wanted := map[string]string{}

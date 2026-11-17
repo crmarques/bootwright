@@ -9,12 +9,10 @@ import (
 
 type Evidence struct {
 	co.Evidence
-	Absent         bool   `json:"absent"`
-	Classification string `json:"classification"`
-	Postcondition  bool   `json:"postcondition"`
-	Request        string `json:"request"`
-	Retired        bool   `json:"retired,omitempty"`
-	Version        string `json:"version"`
+	Postcondition bool   `json:"postcondition"`
+	Request       string `json:"request"`
+	Retired       bool   `json:"retired,omitempty"`
+	Version       string `json:"version"`
 }
 
 func DecodeEvidence(data []byte, digest, version string) (Evidence, error) {
@@ -53,7 +51,7 @@ func Effect(data []byte, program co.Program, digest, version string) (reconcilia
 	}
 }
 func Retirement(digest, version string) (json.RawMessage, error) {
-	return co.Canonical(Evidence{Version: version, Request: digest, Postcondition: true, Retired: true, Classification: "retired"})
+	return co.Canonical(Evidence{Version: version, Request: digest, Postcondition: true, Retired: true})
 }
 
 func SafeEvidence(data []byte, digest, version string) json.RawMessage {

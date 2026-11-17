@@ -143,15 +143,14 @@ func TestAnUpgradeChainOLMRetentionBrokeIsNamedAndNeverAnInvitationToDestroy(t *
 	capability := New(nil, fixtureRegistry(t), nil)
 	collected := func(e *Evidence) {
 		e.OLM[0].InstalledCSV, e.OLM[0].Gap = "fixture.v2.0.0", &co.ChainGap{Cause: co.PlanCollected, CSV: "fixture.v1.0.0"}
-		e.Postcondition, e.Classification = false, "unknown"
+		e.Postcondition = false
 		for i := range e.Checks {
 			e.Checks[i].Satisfied = false
 		}
 	}
 	unproved := func(e *Evidence) {
 		e.OLM[0].InstalledCSV = "fixture.v2.0.0"
-		e.Observations[0].Ownership, e.Observations[0].Equal = co.Unknown, false
-		e.Postcondition, e.Classification = false, "unknown"
+		e.Unknown, e.Postcondition = true, false
 	}
 	explain := func(e Evidence) []lifecycle.Unresolved {
 		var out []lifecycle.Unresolved

@@ -9,7 +9,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import cluster_obj
 from ansible_collections.bootwright.core.plugins.module_utils import cluster_objects_native as native
 from ansible_collections.bootwright.core.plugins.module_utils import cluster_objects_secrets as secrets
 from ansible_collections.bootwright.core.plugins.module_utils.cluster_objects_engine import Engine, Refused
-from ansible_collections.bootwright.core.tests.unit.test_cluster_objects import ScriptedOC, owned, response
+from ansible_collections.bootwright.core.tests.unit.test_cluster_objects import ScriptedOC, owned, reads_unknown, response
 from ansible_collections.bootwright.core.tests.unit.test_cluster_objects import object_request  # pylint: disable=unused-import
 
 
@@ -19,7 +19,7 @@ from ansible_collections.bootwright.core.tests.unit.test_cluster_objects import 
 def test_healthy_exact_pin_ignores_pending_upgrade(object_request, observe, resolution_failed, dependent):
     creator = object_request["program"]["steps"][0]["create"]
     obj = {"apiVersion": "operators.coreos.com/v1alpha1", "kind": "Subscription", "namespace": "operators",
-           "name": "sample", "namespaced": True, "desiredDigest": "d" * 64,
+           "name": "sample", "namespaced": True, "desiredDigest": "d" * 64, "exact": ["spec"],
            "body": {"spec": {"source": "catalog", "sourceNamespace": "marketplace"}, "metadata": {"name": "sample"}}}
     obj["body"]["spec"].update(name="sample", channel="stable", startingCSV="sample.v1", installPlanApproval="Manual")
     live = owned(object_request, obj)
@@ -49,7 +49,7 @@ def test_healthy_exact_pin_ignores_pending_upgrade(object_request, observe, reso
         return {"answered": True, "object": value}
 
     result = Engine(object_request, read, lambda *args: writes.append(args), clock=lambda: 0).execute(observe)
-    assert result["state"]["classification"] == "completed"
+    assert result["state"]["postcondition"] is True
     if not dependent:
         assert result["state"]["olm"][0]["upgradePending"] is True
     assert not writes and upgrade["spec"]["approved"] is False
@@ -205,7 +205,7 @@ def test_secret_transient_failure_recovers_without_duplicate_create(tmp_path, ob
 @pytest.mark.parametrize("observe", [False, True])
 def test_resolution_failed_is_not_ignored_without_healthy_pin(object_request, phase, observe):
     obj = {"apiVersion": "operators.coreos.com/v1alpha1", "kind": "Subscription", "namespace": "operators",
-           "name": "sample", "namespaced": True, "desiredDigest": "d" * 64,
+           "name": "sample", "namespaced": True, "desiredDigest": "d" * 64, "exact": ["spec"],
            "body": {"metadata": {"name": "sample"}, "spec": {"source": "catalog", "sourceNamespace": "marketplace"}}}
     live = owned(object_request, obj)
     live["status"] = {"installedCSV": "sample.v1", "conditions": [{"type": "ResolutionFailed", "status": "True"}]}
@@ -217,7 +217,7 @@ def test_resolution_failed_is_not_ignored_without_healthy_pin(object_request, ph
 
     engine = Engine(object_request, read, lambda *_: pytest.fail("unhealthy pin wrote"))
     if observe:
-        assert engine.execute(True)["state"]["classification"] == "unknown"
+        assert reads_unknown(engine.execute(True)["state"])
     else:
         with pytest.raises(Refused, match="resolution failed"):
             engine.execute()

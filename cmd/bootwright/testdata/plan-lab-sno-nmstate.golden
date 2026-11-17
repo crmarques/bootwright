@@ -239,6 +239,9 @@
                   }
                 },
                 "desiredDigest": "ac419d6a9718d0228918d08baa14e8b13e0201e1af185f656bdf2746ef3d4d26",
+                "exact": [
+                  "spec"
+                ],
                 "kind": "Subscription",
                 "name": "kubernetes-nmstate-operator",
                 "namespace": "openshift-nmstate",

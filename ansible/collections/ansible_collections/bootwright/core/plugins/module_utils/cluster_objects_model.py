@@ -110,11 +110,9 @@ def difference(wanted, live, path="", strict=False):
 
 
 def compare(obj, live):
-    wanted = obj["body"]
+    wanted, exact = obj["body"], obj.get("exact", [])
     for key in sorted(wanted):
-        strict = ((obj["kind"] == "Subscription" and key == "spec")
-                  or (obj["kind"] in ("Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding")
-                      and key in ("subjects", "rules")))
+        strict = key in exact
         if key not in live:
             return key
         found = difference(wanted[key], live[key], key, strict)

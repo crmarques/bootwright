@@ -134,6 +134,7 @@ type ObjectEntry struct {
 	Ref
 	Body          json.RawMessage `json:"body"`
 	DesiredDigest string          `json:"desiredDigest"`
+	Exact         []string        `json:"exact,omitempty"`
 }
 
 type PlacementEntry struct {
