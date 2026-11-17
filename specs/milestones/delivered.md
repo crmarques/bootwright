@@ -16407,3 +16407,20 @@ request, digest or golden moved; the collection's content changed, so the
 next live setup rebuilds its bundle. An independent review approved the
 supply-chain commits.
 
+## X518 — Compute once per decision
+
+### B1486
+
+Split from B1468 under [D274](backlog.md#d274) (audit 005 W7.3). A decision
+compiles each revision once, remembered for that read only by its content
+digest, file split, order, roots and skipped Secrets, and takes its additive
+admission once, so a plan of an addition compiles twice instead of five times
+and lends custody material once instead of twice. Normalization re-admits a
+record only when a rule changes it (52 ms to 30 ms per compile); CephCluster
+admission resolves each placement once; the scheduler counts each block's
+unfinished dependencies (357 µs to 8.7 µs over 256 blocks); installation,
+agent-based installation and add-ons derive their requests once per plan.
+Every plan, refusal, frozen request and golden is unchanged. The Ceph base
+request (G18-08) and the remaining repeats stay on B1468. An independent
+review found no stale or shared-mutable memo; its key note is applied.
+
