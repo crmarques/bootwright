@@ -324,7 +324,10 @@ In an application package no file but `contracts.go` declares an exported
 interface. `api/v1alpha1` is a domain package; `internal/cli`, `cmd/bootwright`
 and the embedded `ansible` assets have roles of their own.
 `applicationDependencies` names every application package another consumes, and
-why. A consumer of a realized Machine reads `substrate.TargetFor` and imports no
+why. `contextDependencies` (`test/architecture/context_dependencies_test.go`)
+names, for every domain, application and adapter package, each
+[bounded context](#bounded-contexts) another context's package imports, and why;
+a new edge fails until it has its row. A consumer of a realized Machine reads `substrate.TargetFor` and imports no
 substrate arm package.
 
 Storage's dependency-proof port reads detached original-apply facts.
@@ -766,10 +769,13 @@ crosses the fixed Ansible `controller_prerequisites` role through
 contacting a managed remote component belongs inside Ansible. Go reaches a
 network endpoint only when it is no managed component, read-only, bounded and
 through the admitted egress route: target-tool publisher metadata
-(`controller/bundlelocal`) and installer media import
-(`managedos/medialocal`). Every contact with a managed component, apart from
-[Machine's direct SSH sessions](#named-exceptions), and every target-tool
-installation runs in an adapter.
+(`controller/bundlelocal`), installer media import
+(`managedos/medialocal`) and the controller's own name-service read of a
+cluster name in [cluster preflight](openshift-clusters.md#preflight). Every contact with a managed component, apart from
+[Machine's direct SSH sessions](#named-exceptions) and the read-only preflight
+probe of the [artifact mirror](api/environment.md#artifact-mirror), which a
+managed ArtifactServer may serve, and every target-tool installation runs in an
+adapter.
 
 Operator-supplied automation and add-on package content are not internal
 adapters. A schema declaration or package origin grants no execution authority.
@@ -1286,6 +1292,12 @@ owning spec, which names the check.
   per run and share it.
 - Check every production Go package for inward dependencies, declared context
   ownership, and no direct adapter-to-adapter calls or domain vendor/I/O leaks.
+- Resolve every literal field path production code reads from an API value
+  with `Get` or `Has` against the [schema registry](#named-exceptions), so a
+  renamed or removed field fails the build instead of reading as absent
+  (`TestEveryLiteralAPIFieldReadIsDeclaredBySomeSchema`). A path outside every
+  schema is listed with the foreign vocabulary that owns it, or recorded as a
+  defect.
 - Reject concrete service types and their constructors outside composition,
   regardless of their names, and reject concrete component dependencies in
   same-package service fields. Test replacement through consumer interfaces and
