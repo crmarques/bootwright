@@ -397,7 +397,7 @@ func (s Service) AddsTo(ctx context.Context, name string, candidate desiredstate
 		if err != nil {
 			return err
 		}
-		if added, _ := s.additive(ctx, candidateView{View: view, inputs: candidate}, store, operation, frozen, states, false); added != nil {
+		if added, _ := s.deciding().additive(ctx, candidateView{View: view, inputs: candidate}, store, operation, frozen, states, false); added != nil {
 			adds = operation.ID
 		}
 		return nil

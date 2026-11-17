@@ -71,6 +71,7 @@ type Service struct {
 	guard        ExecutionGuard
 	capabilities CapabilityResolver
 	options      Options
+	compiled     *compilations
 }
 
 func New(workspace Workspace, compiler Compiler, binder SecretBinder, host HostIdentity, automation AutomationIdentity, guard ExecutionGuard, capabilities CapabilityResolver, options Options) Service {
@@ -134,6 +135,7 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 	var decided operationPlan
 	var read basis
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
+		s := s.deciding()
 		previewed, from, durable, err := s.preview(ctx, view, selection)
 		if err != nil {
 			return err

@@ -1344,8 +1344,10 @@ type testBinder struct {
 	bound    []string
 	released []string
 	issued   int
-	material map[string]secrets.Material
-	bindErr  error
+	// producedReads counts each produced entry custody unseals.
+	producedReads int
+	material      map[string]secrets.Material
+	bindErr       error
 	// releaseErr fails every Release, as a custody store that cannot drop a
 	// binding does, before anything is released.
 	releaseErr error

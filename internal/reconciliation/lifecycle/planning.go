@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -36,7 +37,49 @@ func (s Service) compile(ctx context.Context, view View) (*compilation.State, er
 	return s.compileSources(ctx, view.Inputs())
 }
 
+type compilations struct {
+	mutex  sync.Mutex
+	states map[string]*compilation.State
+}
+
+func (s Service) deciding() Service {
+	if s.compiled == nil {
+		s.compiled = &compilations{states: map[string]*compilation.State{}}
+	}
+	return s
+}
+
+func compiledKey(sources desiredstate.Sources) string {
+	order := make([]string, 0, len(sources.Files)+len(sources.Markers))
+	for _, file := range slices.Concat(sources.Files, sources.Markers) {
+		order = append(order, file.Path())
+	}
+	key, _ := json.Marshal([]any{digestOf(sources), order, sources.Roots, sources.SkippedSecrets})
+	return string(key)
+}
+
 func (s Service) compileSources(ctx context.Context, sources desiredstate.Sources) (*compilation.State, error) {
+	if s.compiled == nil {
+		return s.compileFresh(ctx, sources)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	key := compiledKey(sources)
+	s.compiled.mutex.Lock()
+	defer s.compiled.mutex.Unlock()
+	if state, found := s.compiled.states[key]; found {
+		return state, nil
+	}
+	state, err := s.compileFresh(ctx, sources)
+	if err != nil {
+		return nil, err
+	}
+	s.compiled.states[key] = state
+	return state, nil
+}
+
+func (s Service) compileFresh(ctx context.Context, sources desiredstate.Sources) (*compilation.State, error) {
 	state, report, err := s.compiler.Compile(ctx, sources)
 	if err != nil {
 		return nil, err

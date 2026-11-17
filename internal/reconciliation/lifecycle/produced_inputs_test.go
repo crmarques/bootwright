@@ -73,6 +73,7 @@ func (b *testBinder) ReadProduced(ctx context.Context, request custody.ReadProdu
 	if request.ContextName != testContextName {
 		return secretstore.ProducedMaterial{}, false, errors.New("wrong context")
 	}
+	b.producedReads++
 	key := request.Block + "/" + request.Name
 	if err := b.readErr[key]; err != nil {
 		return secretstore.ProducedMaterial{}, false, err

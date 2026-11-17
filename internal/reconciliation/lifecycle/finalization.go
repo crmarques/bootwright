@@ -68,7 +68,7 @@ func (s Service) afterFinalization(ctx context.Context, view View, verb reconcil
 	}
 	operation := marked.operation
 	operation.State = next
-	decided, err := s.decideOver(ctx, view, s.store(view), verb, selection, operation, marked.plan, marked.states, marked.basis.attempts)
+	decided, err := s.decideOver(ctx, view, s.store(view), verb, selection, operation, marked.plan, marked.states, marked.basis.attempts, nil)
 	return s.withPhases(decided, err), err
 }
 

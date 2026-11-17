@@ -23,7 +23,7 @@ func (s Service) decideShared(ctx context.Context, name string, verb reconciliat
 	err := s.workspace.ReadLifecycle(ctx, name, func(view View) error {
 		var err error
 		identity = view.Identity()
-		decided, err = s.decide(ctx, view, verb, selection)
+		decided, err = s.deciding().decide(ctx, view, verb, selection)
 		return err
 	})
 	return decided, identity, err
@@ -86,9 +86,11 @@ func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.
 	if err != nil {
 		return operationPlan{}, verb, err
 	}
+	var known *additiveVerdict
 	if verb == "" {
 		held := standing{held: true, verb: operation.Verb, state: operation.State}
-		admitted, _ := s.additive(ctx, view, store, operation, frozen, states, true)
+		admitted, refused := s.additive(ctx, view, store, operation, frozen, states, true)
+		known = &additiveVerdict{admitted: admitted, refused: refused}
 		held.additive = admitted != nil
 		if verb = chosenVerb(held); verb == reconciliation.Destroy {
 			selection = reconciliation.Selection{}
@@ -97,22 +99,27 @@ func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.
 	if marked, err := finalization(ctx, view, store, verb, operation, frozen, states, attempts); err != nil || marked.finalize {
 		return marked, verb, err
 	}
-	decided, err := s.decideOver(ctx, view, store, verb, selection, operation, frozen, states, attempts)
+	decided, err := s.decideOver(ctx, view, store, verb, selection, operation, frozen, states, attempts, known)
 	return decided, verb, err
 }
 
 // decideOver is the decision over a current operation whose finalization is
 // not due. A preview also takes it over the record a due finalization would
 // leave, so it decides as the verb does once that finalization is done.
-func (s Service) decideOver(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (operationPlan, error) {
-	decided, err := s.decideBy(ctx, view, store, verb, selection, operation, frozen, states, attempts)
+func (s Service) decideOver(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int, known *additiveVerdict) (operationPlan, error) {
+	decided, err := s.decideBy(ctx, view, store, verb, selection, operation, frozen, states, attempts, known)
 	if err != nil {
 		return decided, err
 	}
 	return withLineagePlan(ctx, store, decided, operation, frozen, states)
 }
 
-func (s Service) decideBy(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (operationPlan, error) {
+type additiveVerdict struct {
+	admitted *additiveAdmission
+	refused  error
+}
+
+func (s Service) decideBy(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int, known *additiveVerdict) (operationPlan, error) {
 	if verb == reconciliation.Apply {
 		if err := s.admitPreparationCommand(frozen, operation); err != nil {
 			return operationPlan{}, err
@@ -123,7 +130,11 @@ func (s Service) decideBy(ctx context.Context, view View, store OperationStore, 
 	var admitted *additiveAdmission
 	var refused error
 	if verb == reconciliation.Apply {
-		admitted, refused = s.additive(ctx, view, store, operation, frozen, states, true)
+		if known == nil {
+			admitted, refused = s.additive(ctx, view, store, operation, frozen, states, true)
+		} else {
+			admitted, refused = known.admitted, known.refused
+		}
 		if refused != nil && (s.preparation != nil || frozen.Preparation != nil) {
 			return operationPlan{}, refused
 		}
