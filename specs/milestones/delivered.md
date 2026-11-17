@@ -16598,3 +16598,19 @@ wiring asserts that the custody service satisfies the port, and the producer
 identity check always runs: through a wrapping binder it had been skipped, as
 a new test shows. Every plan, journal, refusal and golden is unchanged.
 
+## X530 — Host reservations in Infrastructure services
+
+### B1500
+
+Split from B1469 under [D274](backlog.md#d274) (the first part of audit 005
+W8.2). The host reservation value, `Conflicts` with its diagnostics and
+release guards, and every key builder (controller, controller media, system,
+MAC, media, SSH-address and host-key qualifiers) live in
+`internal/infrastructureservices`, the glossary owner, with a typed `Key` and
+`Qualifier` whose text form is pinned byte for byte; stored keys stay text.
+Substrate, Machine, Managed OS and the infrastructure capabilities no longer
+import controller setup for it, four context edges left
+`contextDependencies`, and the workspace's private copy of the key bound
+(B464's duplicate) is gone. Every plan, digest, stored record, refusal and
+golden is unchanged.
+
