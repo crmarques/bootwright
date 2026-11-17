@@ -11,8 +11,7 @@ import (
 func ProvedSubvolume(proofs []lifecycle.BlockEvidence, name string) (path, filesystem, group string, err error) {
 	found := false
 	for _, proof := range proofs {
-		if proof.Kind != string(api.CephSubvolume) || proof.Object != name || proof.Implementation != Implementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone ||
-			proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation {
+		if !completedApply(proof, string(api.CephSubvolume), name, Implementation) {
 			continue
 		}
 		if found {
@@ -47,8 +46,7 @@ type ProvedClusterScope struct {
 func provedClusterProof(proofs []lifecycle.BlockEvidence, cluster string) (lifecycle.BlockEvidence, error) {
 	var found *lifecycle.BlockEvidence
 	for i, proof := range proofs {
-		if proof.Kind != string(api.CephCluster) || proof.Object != cluster || proof.Implementation != Implementation || proof.Block.ID != ClusterBlockID(cluster) || proof.Verb != reconciliation.Apply ||
-			proof.State != reconciliation.BlockDone || proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation {
+		if !completedApply(proof, string(api.CephCluster), cluster, Implementation) || proof.Block.ID != ClusterBlockID(cluster) {
 			continue
 		}
 		if found != nil {

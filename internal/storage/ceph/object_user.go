@@ -31,7 +31,7 @@ func ObjectUserProved(catalog api.Catalog, user api.Object, proofs []lifecycle.B
 	}
 	matched := 0
 	for _, proof := range proofs {
-		if proof.Kind != string(api.CephObjectUser) || proof.Object != user.Name() || proof.Implementation != Implementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone || proof.Block.ID != ObjectUserBlockID(user.Name()) || proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != Implementation {
+		if !completedApply(proof, string(api.CephObjectUser), user.Name(), Implementation) || proof.Block.ID != ObjectUserBlockID(user.Name()) {
 			return false
 		}
 		r, err := DecodeRequest(proof.Block.Request)

@@ -8,7 +8,6 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
-	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -99,7 +98,7 @@ func bindPhysicalHosts(hosts []Host, e lifecycle.Execution, readers DependencyPr
 		}
 		var found *PhysicalIdentity
 		for _, proof := range provedFor(e) {
-			if proof.Kind != "Machine" || proof.Object != host.Machine || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone || proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation {
+			if !completedApplyAnyImplementation(proof, "Machine", host.Machine) {
 				continue
 			}
 			value, recognized, err := readers.PhysicalMachine(proof.Block, proof.Evidence)

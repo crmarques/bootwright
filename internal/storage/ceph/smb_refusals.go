@@ -24,9 +24,7 @@ func smbRefusals() map[string]error {
 			"find it with ceph smb cluster ls, ceph orch ls --service_type smb and ceph orch ps --daemon_type smb; remove it outside Bootwright, then apply again with the same input; Bootwright never adopts an SMB cluster, service or daemon it did not create"),
 		"foreign-image": adapterRefusals()["foreign-image"],
 	}
-	for _, reason := range []string{"request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command", "native-timeout", "native-output", "unknown", "foreign-cluster"} {
-		out[reason] = failure("lifecycle.unknown", "the Ceph SMB adapter could not prove its "+reason+" boundary", "inspect the retained operation evidence before continuing")
-	}
+	maps.Copy(out, boundaryRefusals("the Ceph SMB adapter", "inspect the retained operation evidence before continuing"))
 	maps.Copy(out, sshPolicyRefusals())
 	return out
 }

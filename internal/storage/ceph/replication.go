@@ -5,9 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"maps"
 	"slices"
-	"strings"
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -210,12 +208,8 @@ func (c ReplicationCapability) prepare(ctx context.Context, e lifecycle.Executio
 	return r, scopes, nil
 }
 func replicationMaterial(e lifecycle.Execution, scopes []ClusterScope, readers DependencyProofs) (lifecycle.Execution, []lifecycle.MaterialFile, func(), error) {
-	bound := maps.Clone(e.Material)
-	if bound == nil {
-		bound = map[string]secrets.Material{}
-	}
 	files := []lifecycle.MaterialFile{}
-	known := strings.Builder{}
+	known := knownHostsLines{gap: "\n"}
 	for i, scope := range scopes {
 		prefix := []string{"primary", "secondary"}[i]
 		bootstrap := slices.IndexFunc(scope.Hosts, func(host Host) bool { return host.Name == scope.Bootstrap })
@@ -223,19 +217,12 @@ func replicationMaterial(e lifecycle.Execution, scopes []ClusterScope, readers D
 			return e, nil, func() {}, failure("lifecycle.state", "replication bootstrap host is absent from its proved cluster scope", "")
 		}
 		files = append(files, lifecycle.MaterialFile{Name: prefix + "-key", Secret: scope.Hosts[bootstrap].SSHKeyRef, Part: secrets.PrivateKeyPart, Variable: prefix + "SSHKey"})
-		for _, h := range scope.Hosts {
-			key, err := fleetHostKey(h, scope.Security, e, readers)
-			if err != nil {
-				return e, nil, func() {}, err
-			}
-			known.WriteString(key.Line(h.Address, h.Port))
-			known.WriteByte('\n')
+		if err := known.add(e, scope.Hosts, scope.Security, readers); err != nil {
+			return e, nil, func() {}, err
 		}
 	}
-	bound[knownHostsMaterial] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(known.String())})
-	e.Material = bound
-	files = append(files, lifecycle.MaterialFile{Name: "known-hosts", Secret: knownHostsMaterial, Part: secrets.ValuePart, Variable: "knownHosts"})
-	return e, files, func() { bound[knownHostsMaterial].Clear() }, nil
+	bound, knownFile, cleanup := known.bind(e)
+	return bound, append(files, knownFile), cleanup, nil
 }
 func replicationDeadline(r ReplicationRequest, operation string) time.Duration {
 	calls := 2 + 2*len(r.Images)

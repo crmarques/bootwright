@@ -1,7 +1,6 @@
 package ceph
 
 import (
-	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -25,7 +24,7 @@ func proveDisks(e lifecycle.Execution, r Request, readers DependencyProofs) erro
 		for _, disk := range host.Devices {
 			matched := false
 			for _, proof := range proofs {
-				if proof.Kind != "Machine" || proof.Object != host.Machine || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone || proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation {
+				if !completedApplyAnyImplementation(proof, "Machine", host.Machine) {
 					continue
 				}
 				if readers.DataDisk(proof.Block, proof.Evidence, disk.Path, disk.Serial, disk.SizeBytes, disk.Rotational) {

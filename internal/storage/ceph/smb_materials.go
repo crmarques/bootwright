@@ -2,9 +2,7 @@ package ceph
 
 import (
 	"bytes"
-	"maps"
 	"strconv"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -31,29 +29,18 @@ func smbMaterial(e lifecycle.Execution, r SMBRequest, scope ClusterScope, operat
 	if len(scope.Hosts) == 0 {
 		return e, nil, cleanup, failure("lifecycle.state", "Ceph has no frozen hosts", "")
 	}
-	files := []lifecycle.MaterialFile{{Name: "fleet-key", Secret: scope.Hosts[0].SSHKeyRef, Part: secrets.PrivateKeyPart, Variable: "sshKey"}, {Name: "known-hosts", Secret: knownHostsMaterial, Part: secrets.ValuePart, Variable: "knownHosts"}}
+	bindings := []lifecycle.MaterialFile{}
 	if operation == "apply" {
 		for i, b := range r.Bindings {
 			if err := smbSecretValue(e, r.Object, b); err != nil {
 				return e, nil, cleanup, err
 			}
-			files = append(files, lifecycle.MaterialFile{Name: "smb-secret-" + strconv.Itoa(i), Secret: b.SecretRef, Part: secrets.ValuePart, Variable: "smbSecret" + strconv.Itoa(i)})
+			bindings = append(bindings, lifecycle.MaterialFile{Name: "smb-secret-" + strconv.Itoa(i), Secret: b.SecretRef, Part: secrets.ValuePart, Variable: "smbSecret" + strconv.Itoa(i)})
 		}
 	}
-	known := strings.Builder{}
-	for _, h := range scope.Hosts {
-		key, err := fleetHostKey(h, scope.Security, e, readers)
-		if err != nil {
-			return e, nil, cleanup, err
-		}
-		known.WriteString(key.Line(h.Address, h.Port))
-		known.WriteByte('\n')
+	bound, knownFile, clearKnown, err := bindKnownHosts(e, scope.Hosts, scope.Security, readers)
+	if err != nil {
+		return e, nil, cleanup, err
 	}
-	bound := maps.Clone(e.Material)
-	if bound == nil {
-		bound = map[string]secrets.Material{}
-	}
-	bound[knownHostsMaterial] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(known.String())})
-	e.Material = bound
-	return e, files, func() { bound[knownHostsMaterial].Clear() }, nil
+	return bound, append([]lifecycle.MaterialFile{fleetKeyFile(scope.Hosts[0].SSHKeyRef), knownFile}, bindings...), clearKnown, nil
 }

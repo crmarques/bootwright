@@ -434,9 +434,7 @@ func hostRefusals() map[string]error {
 		out[reason] = refusal
 	}
 	maps.Copy(out, sshPolicyRefusals())
-	for _, reason := range []string{"request", "artifact", "ownership", "evidence", "material", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport", "remote-refusal", "adapter-exception"} {
-		out[reason] = failure("lifecycle.unknown", "the Ceph host preparation could not prove its "+reason+" boundary", "inspect the retained operation evidence before continuing")
-	}
+	maps.Copy(out, boundaryRefusals("the Ceph host preparation", "inspect the retained operation evidence before continuing"))
 	return out
 }
 
@@ -497,17 +495,14 @@ func packageRefusals() map[string]error {
 
 func hostMaterial(e lifecycle.Execution, r HostRequest, operation string, readers DependencyProofs) (lifecycle.Execution, []lifecycle.MaterialFile, func(), error) {
 	host, _ := r.target()
-	key, err := fleetHostKey(host, r.Cluster.Security, e, readers)
-	if err != nil {
+	var known knownHostsLines
+	if err := known.add(e, []Host{host}, r.Cluster.Security, readers); err != nil {
 		return e, nil, func() {}, err
 	}
-	bound := maps.Clone(e.Material)
-	if bound == nil {
-		bound = map[string]secrets.Material{}
-	}
-	bound[knownHostsMaterial] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(key.Line(host.Address, host.Port))})
-	cleanup := func() { bound[knownHostsMaterial].Clear(); bound[registryMaterial].Clear() }
-	files := []lifecycle.MaterialFile{{Name: "fleet-key", Secret: host.SSHKeyRef, Part: secrets.PrivateKeyPart, Variable: "sshKey"}, {Name: "known-hosts", Secret: knownHostsMaterial, Part: secrets.ValuePart, Variable: "knownHosts"}}
+	boundExecution, knownFile, clearKnown := known.bind(e)
+	bound := boundExecution.Material
+	cleanup := func() { clearKnown(); bound[registryMaterial].Clear() }
+	files := []lifecycle.MaterialFile{fleetKeyFile(host.SSHKeyRef), knownFile}
 	if operation == "apply" {
 		index, _ := r.source()
 		files = append(files, lifecycle.MaterialFile{Name: "package-ca-" + host.Name, Secret: r.Cluster.Packages.Sources[index].CertificateRef, Part: secrets.CertificatePart, Variable: packageCertificateVariable(index)})
@@ -736,8 +731,7 @@ func preparedHostProof(proofs []lifecycle.BlockEvidence, cluster, machineName st
 	var found *HostEvidence
 	var request HostRequest
 	for _, proof := range proofs {
-		if proof.Kind != string(api.CephCluster) || proof.Object != cluster || proof.Implementation != HostImplementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone ||
-			proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation {
+		if !completedApply(proof, string(api.CephCluster), cluster, HostImplementation) {
 			continue
 		}
 		r, err := DecodeHostRequest(proof.Block.Request)

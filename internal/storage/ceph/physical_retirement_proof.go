@@ -224,6 +224,15 @@ func originalRemovalPair(pair lifecycle.RemovalEvidence) bool {
 	return pair.Applied.State == reconciliation.BlockDone && matchingRemovalPair(pair)
 }
 
+func completedApply(p lifecycle.BlockEvidence, kind, object, implementation string) bool {
+	return p.Implementation == implementation && completedApplyAnyImplementation(p, kind, object)
+}
+
+func completedApplyAnyImplementation(p lifecycle.BlockEvidence, kind, object string) bool {
+	return p.Kind == kind && p.Object == object && p.Verb == reconciliation.Apply && p.State == reconciliation.BlockDone &&
+		p.Block.Kind == p.Kind && p.Block.Object == p.Object && p.Block.Implementation == p.Implementation
+}
+
 func matchingRemovalPair(pair lifecycle.RemovalEvidence) bool {
 	a, r := pair.Applied, pair.Removed
 	return a.Verb == reconciliation.Apply && r.Verb == reconciliation.Destroy && r.State == reconciliation.BlockDone &&
@@ -338,8 +347,7 @@ func authorizePhysicalRetirement(e lifecycle.Execution, r Request) error {
 		if err != nil {
 			return err
 		}
-		if found != nil || policy.Cluster != r.Cluster || proof.Kind != string(api.CephCluster) || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone ||
-			proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation ||
+		if found != nil || policy.Cluster != r.Cluster || !completedApply(proof, string(api.CephCluster), r.Cluster, PhysicalRetirementImplementation) ||
 			proof.Block.ID != PhysicalRetirementBlockID(r.Cluster) || evidence.Version != PhysicalRetirementImplementation || evidence.Cluster != r.Cluster ||
 			!hex64(proof.Block.RequestDigest) || evidence.Request != proof.Block.RequestDigest || !evidence.Prepared || evidence.Retired || len(evidence.Receipts) != 0 ||
 			evidence.Owner != e.ApplyOperation || evidence.FSID != FSIDFor(e.ApplyOperation, r.Cluster) {

@@ -414,8 +414,7 @@ func provedResolution(proofs []lifecycle.BlockEvidence, cluster string) (ImageRe
 	var request ImageRequest
 	var resolved ImageEvidence
 	for _, proof := range proofs {
-		if proof.Kind != string(api.CephCluster) || proof.Object != cluster || proof.Implementation != ImageImplementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone ||
-			proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation {
+		if !completedApply(proof, string(api.CephCluster), cluster, ImageImplementation) {
 			continue
 		}
 		if found {

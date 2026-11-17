@@ -60,9 +60,7 @@ func EvaluateReplicationEvidence(data []byte, r ReplicationRequest, owner, diges
 }
 func replicationRefusals() map[string]error {
 	out := map[string]error{}
-	for _, reason := range []string{"request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command", "native-timeout", "native-output", "unknown", "foreign-cluster", "foreign-pool", "pool-identity", "foreign-image", "image-identity", "replication-identity", "replication-unavailable", "replication-token"} {
-		out[reason] = failure("lifecycle.unknown", "the Ceph replication adapter could not prove its "+reason+" boundary", "inspect the retained operation evidence and both clusters; restore peer reachability or the original owned state, then retry the same apply; Bootwright does not adopt foreign pools, images, peers or bootstrap credentials")
-	}
+	maps.Copy(out, boundaryRefusals("the Ceph replication adapter", "inspect the retained operation evidence and both clusters; restore peer reachability or the original owned state, then retry the same apply; Bootwright does not adopt foreign pools, images, peers or bootstrap credentials", "foreign-pool", "pool-identity", "foreign-image", "image-identity", "replication-identity", "replication-unavailable", "replication-token"))
 	maps.Copy(out, sshPolicyRefusals())
 	return out
 }
