@@ -128,6 +128,19 @@
   when:
     - bootwright_machine_power_material.expectedMACsBase64 | default('') | length > 0
     - not (machine_power_reports_declared | bool)
+    - machine_power_verdict.unproved != 'identity'
+  no_log: true
+
+# Its declared addresses held, but the controller names no system UUID or
+# serial number a proof can carry, so nothing proves which system it is.
+- name: Name the refusal of an unpinned machine that reports no system identity to the runner
+  bootwright.core.machine_power_protocol:
+    phase: refused
+    reason: identity-unproved
+  when:
+    - bootwright_machine_power_material.expectedMACsBase64 | default('') | length > 0
+    - not (machine_power_reports_declared | bool)
+    - machine_power_verdict.unproved == 'identity'
   no_log: true
 
 - name: Refuse an unpinned machine that does not report exactly its declared MAC set
@@ -136,10 +149,20 @@
       - machine_power_reports_declared | bool
     quiet: true
     fail_msg: >-
+      {{ machine_power_unidentified if machine_power_verdict.unproved == 'identity' else machine_power_mismatched }}
+  vars:
+    machine_power_mismatched: >-
       Machine/{{ bootwright_machine_power_request.identity.object }} at
       {{ bootwright_machine_power_request.controller.endpoint }} does not report
       exactly the hardware addresses it declares in a complete inventory, so no
       power request was sent.
+    machine_power_unidentified: >-
+      Machine/{{ bootwright_machine_power_request.identity.object }} at
+      {{ bootwright_machine_power_request.controller.endpoint }} reports its
+      declared hardware addresses but no system UUID or serial number of at most
+      128 printable characters, so nothing proves which system it is and no
+      power request was sent. Make that management controller report the
+      system's UUID or serial number, or correct spec.substrate.baremetal.bmc.address.
   when: bootwright_machine_power_material.expectedMACsBase64 | default('') | length > 0
 
 # The runner is told of the refusal before the run fails, so the operator's

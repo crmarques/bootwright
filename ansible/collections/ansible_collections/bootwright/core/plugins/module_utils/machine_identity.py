@@ -60,18 +60,25 @@ def identity(value):
     return value if len(value) <= IDENTITY_LIMIT and value.isprintable() else None
 
 
-def declared(observation, expected):
-    """Whether a complete inventory reports exactly the declared address set and names the system.
+def unproved(observation, expected):
+    """Which declared-set rule refuses: "addresses", "identity" or "" for none.
 
-    The inventory names no failure, its reported addresses equal the declared
-    ones both ways, at least one is declared, and the system reports a UUID or
-    serial the evidence may carry."""
+    "addresses" the inventory names a failure or its reported addresses do not
+    equal the declared ones both ways, or none is declared; "identity" the
+    addresses hold but the system reports no UUID or serial the evidence may
+    carry."""
     observation = observation if isinstance(observation, dict) else {}
     failures = observation.get("failures")
     reported, wanted = addresses(observation.get("addresses")), addresses(list(expected or []))
+    if not (isinstance(failures, list) and not failures and wanted and reported == wanted):
+        return "addresses"
     uuid, serial = identity(observation.get("uuid")), identity(observation.get("serial"))
-    return bool(isinstance(failures, list) and not failures and wanted and reported == wanted
-                and uuid is not None and serial is not None and (uuid or serial))
+    return "" if uuid is not None and serial is not None and (uuid or serial) else "identity"
+
+
+def declared(observation, expected):
+    """Whether a complete inventory reports exactly the declared address set and names the system."""
+    return unproved(observation, expected) == ""
 
 
 def pinned(observation, uuid_pin, serial_pin):
@@ -102,13 +109,15 @@ def controller_host(observation, host_uuid, host_macs):
 
 def verdict(observation, expected=None, expected_base64="", pinned_uuid_base64="", pinned_serial_base64="",
             host_uuid_base64="", host_macs_base64=""):
-    """Every identity rule over one observation: pinned, controllerHost and declared."""
+    """Every identity rule over one observation: pinned, controllerHost, declared and the rule that refused it, unproved."""
     wanted = list(expected or [])
     if expected_base64:
         more = listed(expected_base64)
         wanted = None if more is None else wanted + more
+    cause = "addresses" if wanted is None else unproved(observation, wanted)
     return {
         "pinned": pinned(observation, pinned_uuid_base64, pinned_serial_base64),
         "controllerHost": controller_host(observation, host_uuid_base64, host_macs_base64),
-        "declared": wanted is not None and declared(observation, wanted),
+        "declared": cause == "",
+        "unproved": cause,
     }

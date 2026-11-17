@@ -333,6 +333,49 @@ def test_an_unpinned_machine_must_report_exactly_its_declared_set(tmp_path, obse
     assert all(rendering.evaluate_conditional(item) for item in named["when"]) is (not proved)
 
 
+def refusal_message(variables, asserted):
+    rendering = Templar(loader=LOADER, variables=dict(variables, **asserted.get("vars", {})))
+    return rendering.template(asserted[ASSERT]["fail_msg"])
+
+
+def names(variables, reason):
+    loaded = tasks()
+    named = loaded[indexed(lambda task: (task.get(PROTOCOL) or {}).get("reason") == reason, "name " + reason)]
+    rendering = Templar(loader=LOADER, variables=variables)
+    return all(rendering.evaluate_conditional(item) for item in named["when"])
+
+
+# The unpinned refusal names the rule that refused: a MAC set that differs keeps
+# its wording byte for byte; declared addresses with no system identity name
+# that cause and its remedy, to the runner and in the run's output alike.
+@pytest.mark.parametrize("observation, cause", [
+    (dict(reported(), addresses=["52:54:00:9a:1b:01"]), "addresses"),
+    (dict(reported(uuid="", serial=""), addresses=["52:54:00:9a:1b:01", "52:54:00:9a:1b:02"]), "identity"),
+    (dict(reported(uuid="U" * 129, serial=" "), addresses=["52:54:00:9a:1b:01", "52:54:00:9a:1b:02"]), "identity"),
+], ids=["a MAC set that differs", "no system identity", "an identity past its bound"])
+def test_an_unpinned_refusal_names_its_cause_and_remedy(tmp_path, observation, cause):
+    variables = scope(tmp_path, observation, expectedMACsBase64=encoded(DECLARED), controllerHostMACsBase64=encoded(HOST_MACS))
+    asserted = check("hardware-mismatch")[1]
+    assert holds(variables, asserted) is False
+    assert names(variables, "hardware-mismatch") is (cause == "addresses")
+    assert names(variables, "identity-unproved") is (cause == "identity")
+    message = refusal_message(variables, asserted)
+    if cause == "addresses":
+        assert message == ("Machine/metal at %s does not report exactly the hardware addresses it declares in a "
+                           "complete inventory, so no power request was sent." % ENDPOINT)
+    else:
+        assert message == ("Machine/metal at %s reports its declared hardware addresses but no system UUID or serial "
+                           "number of at most 128 printable characters, so nothing proves which system it is and no "
+                           "power request was sent. Make that management controller report the system's UUID or "
+                           "serial number, or correct spec.substrate.baremetal.bmc.address." % ENDPOINT)
+
+
+def test_a_proved_unpinned_machine_names_no_refusal(tmp_path):
+    variables = scope(tmp_path, dict(reported(), addresses=["52:54:00:9a:1b:02", "52:54:00:9a:1b:01"]),
+                      expectedMACsBase64=encoded(DECLARED), controllerHostMACsBase64=encoded(HOST_MACS))
+    assert names(variables, "hardware-mismatch") is False and names(variables, "identity-unproved") is False
+
+
 def test_a_pinned_machine_skips_the_unpinned_proof(tmp_path):
     variables = scope(tmp_path, dict(reported(), addresses=["52:54:00:9a:1b:09"]), UUID, SERIAL,
                       controllerHostMACsBase64=encoded(HOST_MACS))

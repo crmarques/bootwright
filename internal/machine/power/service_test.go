@@ -703,6 +703,16 @@ func TestAnUnprovedMachineCarriesItsDeclaredMACSet(t *testing.T) {
 	if !maps.Equal(runner.seen.MaterialValues, want) {
 		t.Fatalf("material values = %v", runner.seen.MaterialValues)
 	}
+	for reason, cause := range map[string]string{
+		"hardware-mismatch": "does not report exactly the hardware addresses Machine/metal declares in a complete inventory, so no power request was sent",
+		"identity-unproved": "reports the hardware addresses Machine/metal declares but no system UUID or serial number a proof can carry, so no power request was sent",
+	} {
+		var failure *diagnostics.Failure
+		if !errors.As(runner.seen.Refusals[reason], &failure) || !strings.HasSuffix(failure.Diagnostics[0].Message, cause) ||
+			failure.Diagnostics[0].Remediation == "" {
+			t.Fatalf("refusal %s = %v, want it to name %q", reason, runner.seen.Refusals[reason], cause)
+		}
+	}
 	if !slices.Equal(proved.asked, [][2]string{{"lab", "metal"}}) {
 		t.Fatalf("pins asked = %v", proved.asked)
 	}

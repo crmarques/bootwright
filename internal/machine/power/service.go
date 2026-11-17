@@ -547,12 +547,16 @@ func physicalProofs(request *lifecycle.RunRequest, resolved target) {
 		request.Refusals[hardwareMismatch] = refusedOn(name, "the machine answering at "+resolved.frozen.Controller.Endpoint+
 			" does not report exactly the hardware addresses Machine/"+name+" declares in a complete inventory, so no power request was sent",
 			"correct spec.substrate.baremetal.bmc.address or spec.substrate.baremetal.nics on Machine/"+name+", or apply the context so its bare-metal block proves it")
+		request.Refusals[identityUnproved] = refusedOn(name, "the machine answering at "+resolved.frozen.Controller.Endpoint+
+			" reports the hardware addresses Machine/"+name+" declares but no system UUID or serial number a proof can carry, so no power request was sent",
+			"make that management controller report the system's UUID or serial number, or correct spec.substrate.baremetal.bmc.address on Machine/"+name)
 	}
 }
 
 const (
 	controllerHost   = "controller-host"
 	hardwareMismatch = "hardware-mismatch"
+	identityUnproved = "identity-unproved"
 )
 
 // identityMismatch is the refusal a power run names when the machine's

@@ -194,7 +194,9 @@ def open_session(directory, address, host_key, policy):
     require_directory(directory)
     require_address(address)
     line = host_key.strip() if isinstance(host_key, str) else ""
-    if not line or not line.isprintable() or not line.isascii():
+    if not line:
+        raise SessionError("the pinned SSH host key is empty or missing; restore its identity proof before connecting")
+    if not line.isprintable() or not line.isascii():
         raise SessionError("the pinned host key is not one printable line")
     algorithms = ssh_key_policy.pinned_algorithms(line, policy["hostKeyAlgorithms"])
     paths = {name: os.path.join(directory, name) for name in SESSION_FILES}

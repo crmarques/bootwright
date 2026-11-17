@@ -96,8 +96,8 @@ def execute(params, policy=lambda: ssh_key_policy.effective_policy(ssh_key_polic
     if params["state"] == "absent":
         managedos_guest_ssh.close_session(params["directory"])
         return {"changed": False}
-    if not params.get("address") or not params.get("host_key"):
-        raise managedos_guest_ssh.SessionError("opening a session requires address and host_key")
+    if not params.get("address"):
+        raise managedos_guest_ssh.SessionError("opening a session requires an address")
     session = managedos_guest_ssh.open_session(params["directory"], params["address"], params["host_key"], policy())
     return dict(session, changed=False)
 

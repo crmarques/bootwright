@@ -74,6 +74,19 @@ def test_a_refused_session_writes_nothing(tmp_path, values):
     assert os.listdir(tmp_path) == []
 
 
+@pytest.mark.parametrize("key", ["", " \t\n", None])
+def test_a_missing_pinned_key_names_the_missing_identity_proof(run_module, monkeypatch, tmp_path, key):
+    monkeypatch.setattr(ssh_key_policy, "read_policy", lambda: "")
+    monkeypatch.setattr(ssh_key_policy, "effective_policy", lambda data: dict(POLICY))
+    arguments = {"state": "present", "directory": str(tmp_path), "address": "192.0.2.10"}
+    if key is not None:
+        arguments["host_key"] = key
+    result = run_module(module, arguments)
+    assert result["failed"] is True
+    assert result["msg"] == "the pinned SSH host key is empty or missing; restore its identity proof before connecting"
+    assert os.listdir(tmp_path) == []
+
+
 def test_a_directory_that_is_a_link_or_missing_is_refused(tmp_path):
     (tmp_path / "real").mkdir()
     (tmp_path / "link").symlink_to(tmp_path / "real")

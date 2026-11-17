@@ -121,6 +121,21 @@ def test_the_physical_protocol_publishes_its_proof_from_the_same_rule():
         assert evidence["postcondition"] is (proved and bool(evidence["power"]))
 
 
+UNIDENTIFIED = ("no system identity", "only blank identities", "an identity past its bound", "an identity that is not printable")
+
+
+@pytest.mark.parametrize("name", list(DECLARED_CASES), ids=list(DECLARED_CASES))
+def test_the_verdict_names_the_rule_that_refused(name):
+    observation, proved = DECLARED_CASES[name]
+    cause = machine_identity_verdict(observation, expected=DECLARED)["unproved"]
+    assert cause == ("" if proved else "identity" if name in UNIDENTIFIED else "addresses")
+
+
+def test_an_address_mismatch_is_named_before_a_missing_identity():
+    assert machine_identity.unproved(reported(uuid="", serial="", addresses=DECLARED[:1]), DECLARED) == "addresses"
+    assert machine_identity_verdict(reported(), expected_base64="%%%")["unproved"] == "addresses"
+
+
 @pytest.mark.parametrize("expected", [[], [""], None])
 def test_no_declared_address_proves_nothing(expected):
     # Machine power accepted an empty decoded list (a value of only commas)
@@ -137,4 +152,4 @@ def test_the_verdict_names_every_rule():
     verdict = machine_identity_verdict(reported(), expected=DECLARED, pinned_uuid_base64=encoded(UUID),
                                        pinned_serial_base64=encoded(SERIAL), host_uuid_base64=encoded(HOST_UUID),
                                        host_macs_base64=encoded(HOST_MACS))
-    assert verdict == {"pinned": True, "controllerHost": False, "declared": True}
+    assert verdict == {"pinned": True, "controllerHost": False, "declared": True, "unproved": ""}
