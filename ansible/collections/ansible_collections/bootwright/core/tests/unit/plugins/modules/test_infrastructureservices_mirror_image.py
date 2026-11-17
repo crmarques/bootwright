@@ -168,3 +168,10 @@ def test_a_copy_that_does_not_finish_names_the_origin_unreachable(monkeypatch, k
         mirror_image.run(COPY, mirror_image.environment(EGRESS, MIRROR))
     assert refused.value.reason == "image-unreachable"
     assert str(refused.value) == "%s could not be copied into the image mirror: %s" % (IMAGES[1]["source"], cause)
+
+
+def test_a_refused_mirror_credential_names_the_whole_rule_and_writes_nothing(tmp_path):
+    with pytest.raises(ValueError) as refused:
+        mirror_image.lend(str(tmp_path), "mirror.example.test:8443", "org:robot", "secret", "anchor")
+    assert all(rule in str(refused.value) for rule in ("colon", "line feed", "32 KiB", "1 MiB", "non-empty"))
+    assert list(tmp_path.iterdir()) == []

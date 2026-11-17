@@ -110,7 +110,7 @@ def auth_document(host, username, password, auth):
     try:
         return json.dumps(registry_auth.document(host, username, password))
     except registry_auth.Refused:
-        raise ValueError("the mirror credential is not a registry credential: a user name without a colon, both without line breaks") from None
+        raise ValueError("the mirror credential is refused: " + registry_auth.CREDENTIAL_RULE) from None
 
 
 def environment(egress):

@@ -160,7 +160,7 @@ def lend(scratch, mirror, username, password, trust):
     try:
         registry_auth.write(os.path.join(scratch, "auth.json"), mirror, username, password)
     except registry_auth.Refused:
-        raise ValueError("the image mirror's credential is not a registry credential: a user name without a colon, both without line breaks") from None
+        raise ValueError("the image mirror's credential is refused: " + registry_auth.CREDENTIAL_RULE) from None
     certificates = os.path.join(scratch, "certificates")
     os.mkdir(certificates, 0o700)
     private_files.write(os.path.join(certificates, "ca.crt"), trust)

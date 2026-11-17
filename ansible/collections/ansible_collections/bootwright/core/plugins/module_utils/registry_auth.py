@@ -38,6 +38,11 @@ TOKEN_FIELDS = frozenset(("token", "access_token", "expires_in", "issued_at"))
 TOKEN = re.compile(r"[A-Za-z0-9._~+/=-]+\Z")
 
 
+# Every reason credential() and document() refuse, in words a refusal message can carry.
+CREDENTIAL_RULE = ("a registry credential needs a registry address, a non-empty user name of at most 1 MiB without a colon, "
+                   "and a non-empty password of at most 32 KiB, neither holding a NUL, carriage return or line feed")
+
+
 class Refused(ValueError):
     """A credential, challenge or token outside its contract; the text names no value."""
 

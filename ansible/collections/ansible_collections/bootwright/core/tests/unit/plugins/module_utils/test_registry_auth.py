@@ -100,3 +100,11 @@ def test_discovery_and_the_pull_broker_apply_the_same_rules():
     with pytest.raises(ceph_pull_broker.BrokerError):
         ceph_pull_broker.Upstream(REGISTRY, REGISTRY + "/" + NAMESPACE, {"url": REGISTRY, "username": long_user, "password": "secret"},
                                   0, connection=lambda host, **options: None)
+
+
+def test_the_rule_text_states_the_bounds_the_rule_applies():
+    assert registry_auth.MAX_USERNAME == 1 << 20 and "1 MiB" in registry_auth.CREDENTIAL_RULE
+    assert registry_auth.MAX_PASSWORD == 32 << 10 and "32 KiB" in registry_auth.CREDENTIAL_RULE
+    with pytest.raises(registry_auth.Refused):
+        registry_auth.document("", "robot", "secret")
+    assert "registry address" in registry_auth.CREDENTIAL_RULE

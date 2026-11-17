@@ -123,3 +123,11 @@ def test_a_podman_run_that_does_not_finish_is_a_named_failure(monkeypatch, kind,
     monkeypatch.setattr(bounded_process, "run", run)
     with pytest.raises(RuntimeError, match="^%s$" % message):
         image_acquire.run(["/usr/bin/podman", "pull", ORIGIN], image_acquire.environment(EGRESS))
+
+
+@pytest.mark.parametrize("username, password", [("org:robot", "secret"), ("robot", "se\ncret"), ("robot", "p" * 40000)])
+def test_a_refused_mirror_credential_names_every_rule_it_breaks(username, password):
+    with pytest.raises(ValueError) as refused:
+        image_acquire.auth_document("mirror.example.test:8443", username, password, "")
+    message = str(refused.value)
+    assert all(rule in message for rule in ("colon", "line feed", "32 KiB", "1 MiB", "non-empty"))
