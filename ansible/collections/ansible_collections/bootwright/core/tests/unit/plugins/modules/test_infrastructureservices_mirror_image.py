@@ -157,7 +157,7 @@ def test_skopeo_runs_bounded_with_the_fixed_environment_and_the_route_alone(monk
     assert calls == [(COPY, mirror_image.COPY_SECONDS, mirror_image.COPY_OUTPUT, {"environment": dict(mirror_image.ENVIRONMENT, **route)})]
 
 
-@pytest.mark.parametrize("kind, cause", [("timeout", "skopeo did not finish within 1800 seconds"),
+@pytest.mark.parametrize("kind, cause", [("timeout", "skopeo did not finish within 1200 seconds"),
                                          ("command", "skopeo could not be run within its bounds")])
 def test_a_copy_that_does_not_finish_names_the_origin_unreachable(monkeypatch, kind, cause):
     def run(*args, **kwargs):

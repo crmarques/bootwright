@@ -90,9 +90,9 @@ from ansible_collections.bootwright.core.plugins.module_utils import bounded_pro
 
 SKOPEO = "/usr/bin/skopeo"
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
-# COPY_SECONDS bounds one skopeo copy of every platform of one image. Neither the request nor the task carries
-# a budget, so it is the one the release mirror gives one transfer (infrastructureservices_mirror_release.READ_BUDGET).
-COPY_SECONDS = 30 * 60
+# COPY_SECONDS bounds one skopeo copy of every platform of one image: the per-image budget Go grants the fill
+# (imageBudget in internal/infrastructureservices/mirrorfill/images.go).
+COPY_SECONDS = 20 * 60
 COPY_OUTPUT = 4 << 20
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 REPOSITORY = re.compile(r"[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?(/[a-z0-9]+([._-]+[a-z0-9]+)*)+\Z")
