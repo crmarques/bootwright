@@ -42,7 +42,7 @@
 - name: Install the hypervisor closure this provider runs
   ansible.builtin.command:
     argv: >-
-      {{ ['/usr/bin/dnf', '--assumeyes', '--setopt=install_weak_deps=False', 'install']
+      {{ ['/usr/bin/dnf', '--assumeyes', '--setopt=install_weak_deps=False', 'install', '--']
          + bootwright_substrate_host_request.packages }}
   environment:
     LC_ALL: C

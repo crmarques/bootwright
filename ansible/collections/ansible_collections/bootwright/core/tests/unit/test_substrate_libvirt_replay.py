@@ -539,7 +539,7 @@ def test_the_hypervisor_closure_is_one_dnf_transaction_over_every_requested_pack
     variables = {"bootwright_substrate_host_request": {"packages": packages, "provisioned": True}}
     rendered = Templar(loader=LOADER, variables=variables).template(task["ansible.builtin.command"]["argv"])
     assert "loop" not in task
-    assert rendered == ["/usr/bin/dnf", "--assumeyes", "--setopt=install_weak_deps=False", "install"] + packages
+    assert rendered == ["/usr/bin/dnf", "--assumeyes", "--setopt=install_weak_deps=False", "install", "--"] + packages
 
 
 @pytest.mark.parametrize("stdout, changed", [("Nothing to do.\nComplete!\n", False), ("Installing:\n qemu-kvm\nComplete!\n", True), ("", True)])
