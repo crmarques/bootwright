@@ -309,6 +309,7 @@ class Worker(unittest.TestCase):
     def test_a_hung_download_ends_at_its_own_deadline(self):
         if not Path("/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem").is_file():
             pytest.skip("no system trust store")
+        pytest.importorskip("urllib3")
         with silent_proxy() as proxy:
             refusal, elapsed = self.run_worker(dict(EGRESS, httpsProxy=proxy), 1)
         self.assert_deadline(refusal)
