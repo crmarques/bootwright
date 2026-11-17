@@ -148,30 +148,14 @@
     status: running
   no_log: true
 
-# The pull is pinned by digest and takes the frozen egress route alone; under
-# a declared image mirror it binds that mirror's credential and trust anchor,
-# lent for this one pull. A host already holding the reference pulls nothing.
-# The pull's own output stays hidden, and its failure, from which the module
-# has already masked every secret argument, is reported by the task after it.
-- name: Acquire the pinned service image
-  bootwright.core.image_acquire:
-    image: '{{ bootwright_managed_service_request.image }}'
-    egress: '{{ bootwright_managed_service_request.egress }}'
-    host: '{{ bootwright_managed_service_request.imageSource.host | default("") }}'
-    username: "{{ lookup('ansible.builtin.file', material.imageUsername, rstrip=false) if material.imageUsername is defined else '' }}"
-    password: "{{ lookup('ansible.builtin.file', material.imagePassword, rstrip=false) if material.imagePassword is defined else '' }}"
-    auth: "{{ lookup('ansible.builtin.file', material.imageAuth, rstrip=false) if material.imageAuth is defined else '' }}"
-    trust: "{{ lookup('ansible.builtin.file', material.imageTrust, rstrip=false) if material.imageTrust is defined else '' }}"
+- name: Acquire the pinned image
+  ansible.builtin.include_tasks: image_pull.yml
   vars:
-    material: '{{ bootwright_managed_service_material }}'
-  register: infra_managed_service_pull
-  failed_when: false
-  no_log: true
-
-- name: Report why the pinned service image could not be acquired
-  ansible.builtin.fail:
-    msg: '{{ infra_managed_service_pull.msg | default("the image pull failed") }}'
-  when: infra_managed_service_pull.image is not defined
+    infra_managed_service_image:
+      image: '{{ bootwright_managed_service_request.image }}'
+      egress: '{{ bootwright_managed_service_request.egress }}'
+      host: '{{ bootwright_managed_service_request.imageSource.host | default("") }}'
+      material: '{{ bootwright_managed_service_material }}'
 
 - name: Report image acquisition completion
   bootwright.core.infra_service_protocol:
@@ -350,61 +334,19 @@
     request: '{{ bootwright_managed_service_request }}'
   register: infra_managed_service_before
 
-# A running service keeps what it started with: its unit takes effect at a
-# start and its configuration is mounted on its own, so publishing one replaces
-# the host's file while the daemon keeps the one it read. An attempt stopped
-# between publishing and restarting leaves the service on the earlier files
-# while the next attempt finds the published ones unchanged, so a running
-# service restarts whenever a file it runs from is newer than its start.
-- name: Observe the files the service runs from
-  ansible.builtin.stat:
-    path: '{{ item }}'
-    get_checksum: false
-  loop: '{{ infra_managed_service_runs_from + [infra_managed_service_unit_path] }}'
-  register: infra_managed_service_runs_from_files
-  when: infra_managed_service_before.observation.unit == 'active'
-
-# A start that cannot be read proves nothing, so the service then restarts.
-# The format is podman's own template, handed to it as a literal.
-- name: Observe when the running service started
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - inspect
-      - --type
-      - container
-      - --format
-      - "{{ '{{.State.StartedAt.UnixNano}}' }}"
-      - '{{ bootwright_managed_service_request.unit }}'
-  register: infra_managed_service_started
-  when: infra_managed_service_before.observation.unit == 'active'
-  changed_when: false
-  failed_when: false
-
-- name: Start the managed service
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/systemctl
-      - start
-      - '{{ infra_managed_service_service }}'
-  when: infra_managed_service_before.observation.unit != 'active'
-  changed_when: infra_managed_service_before.observation.unit != 'active'
-
-- name: Restart the managed service when a file it runs from changed since it started
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/systemctl
-      - restart
-      - '{{ infra_managed_service_service }}'
-  register: infra_managed_service_restart
-  when:
-    - infra_managed_service_before.observation.unit == 'active'
-    - infra_managed_service_configuration is changed or infra_managed_service_unit is changed
-      or infra_managed_service_certificate is changed or infra_managed_service_key is changed
-      or infra_managed_service_password_publication is changed
-      or (infra_managed_service_started.stdout | default('') | trim | int)
-      < (infra_managed_service_runs_from_files.results | map(attribute='stat.mtime') | max) * 1000000000
-  changed_when: true
+- name: Start the service, or restart it on a file newer than its start
+  ansible.builtin.include_tasks: unit_start.yml
+  vars:
+    infra_managed_service_start:
+      unit: '{{ bootwright_managed_service_request.unit }}'
+      service: '{{ infra_managed_service_service }}'
+      active: "{{ infra_managed_service_before.observation.unit == 'active' }}"
+      runs_from: >-
+        {{ infra_managed_service_runs_from + [infra_managed_service_unit_path] }}
+      published: >-
+        {{ infra_managed_service_configuration is changed or infra_managed_service_unit is changed
+           or infra_managed_service_certificate is changed or infra_managed_service_key is changed
+           or infra_managed_service_password_publication is changed }}
 
 - name: Report service start completion
   bootwright.core.infra_service_protocol:

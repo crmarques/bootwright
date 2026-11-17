@@ -26,4 +26,5 @@ def test_no_role_runs_a_bare_podman_pull():
             if argv[:2] == ["/usr/bin/podman", "pull"] or argv[:2] == ["podman", "pull"]:
                 bare.append("%s: %s" % (path, task.get("name")))
     assert bare == []
-    assert acquiring == {"infra_artifact_server_nginx", "infra_managed_service", "substrate_libvirt_machine"}
+    # The artifact server pulls through the managed service's shared image_pull.yml.
+    assert acquiring == {"infra_managed_service", "substrate_libvirt_machine"}

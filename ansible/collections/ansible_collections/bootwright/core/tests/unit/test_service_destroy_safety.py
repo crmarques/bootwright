@@ -20,10 +20,12 @@ from ansible_collections.bootwright.core.tests.unit.test_managed_service_role im
     LOADER,
     MANAGED,
     ROLES,
+    SHARED,
     argv_of,
     holds,
     index_of,
     load_tasks,
+    shared_variables,
     validate_of,
     variables,
 )
@@ -118,6 +120,7 @@ def test_a_request_without_a_unit_refuses_before_any_effect(role, entry, prefix,
 def role_variables(role, prefix, request_):
     found = variables(prefix, request_)
     found.update(LOADER.load_from_file(str(ROLES / role / "defaults" / "main.yml"), trusted_as_template=True))
+    found.update(shared_variables(role))
     return found
 
 
@@ -143,8 +146,8 @@ def test_a_destroy_resets_a_unit_it_finds_failed(role, prefix, request_):
     templar = Templar(loader=LOADER, variables=role_variables(role, prefix, request_))
     assert templar.template(tasks[reset]["ansible.builtin.command"]["argv"][2]) == request_["unit"] + ".service"
     assert templar.template(tasks[show]["ansible.builtin.command"]["argv"][-1]) == request_["unit"] + ".service"
-    assert tasks[show]["register"] == role + "_listed"
-    listed = Templar(loader=LOADER, variables={role + "_listed": {"stdout": "failed"}})
+    assert tasks[show]["register"] == SHARED + "_listed"
+    listed = Templar(loader=LOADER, variables={SHARED + "_listed": {"stdout": "failed"}})
     assert evaluate(listed, tasks[reset]["when"])
 
 
@@ -153,14 +156,14 @@ def test_a_destroy_ignores_a_unit_that_is_not_loaded(role):
     tasks = load_tasks(role, "destroy.yml")
     reset = tasks[index_of(tasks, is_reset, "resets the failed unit")]
     for shown in ("inactive", "active", ""):
-        listed = Templar(loader=LOADER, variables={role + "_listed": {"stdout": shown}})
+        listed = Templar(loader=LOADER, variables={SHARED + "_listed": {"stdout": shown}})
         assert not evaluate(listed, reset["when"]), shown
     for result, failed, changed in [
         ({"rc": 1, "stderr": NOT_LOADED}, False, False),
         ({"rc": 1, "stderr": "Access denied"}, True, False),
         ({"rc": 0, "stderr": ""}, False, True),
     ]:
-        templar = Templar(loader=LOADER, variables={role + "_reset": result})
+        templar = Templar(loader=LOADER, variables={SHARED + "_reset": result})
         assert evaluate(templar, reset["failed_when"]) is failed, result
         assert evaluate(templar, reset["changed_when"]) is changed, result
 
@@ -172,11 +175,11 @@ def test_a_destroy_counts_a_reset_as_a_change(role):
     module = next(value for key, value in completion.items() if key.endswith("_protocol"))
     unchanged = {"changed": False}
     base = {
-        role + "_unit_removed": unchanged,
-        role + "_root_removed": unchanged,
-        role + "_parents": unchanged,
+        SHARED + "_unit_removed": unchanged,
+        SHARED + "_root_removed": unchanged,
+        SHARED + "_parents": unchanged,
         role + "_before": {"observation": {"unit": ""}},
     }
     for reset, outcome in [({"changed": True}, "changed"), ({"changed": False, "skipped": True}, "unchanged")]:
-        templar = Templar(loader=LOADER, variables=dict(base, **{role + "_reset": reset}))
+        templar = Templar(loader=LOADER, variables=dict(base, **{SHARED + "_reset": reset}))
         assert str(templar.template(module["outcome"])).strip() == outcome, reset

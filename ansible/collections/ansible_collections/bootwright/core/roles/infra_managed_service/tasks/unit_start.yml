@@ -1,0 +1,61 @@
+---
+# Starts one managed unit, or restarts it when a file it runs from changed
+# since it started. Every role running a managed container unit starts it
+# through this file, keyed by infra_managed_service_start (unit, service,
+# active, runs_from, published) alone: `runs_from` is every file the daemon
+# reads at its start, its unit definition included, and `published` whether
+# this attempt published any of them again.
+#
+# A running service keeps what it started with: its unit takes effect at a
+# start and its configuration is mounted on its own, so publishing one replaces
+# the host's file while the daemon keeps the one it read. An attempt stopped
+# between publishing and restarting leaves the service on the earlier files
+# while the next attempt finds the published ones unchanged, so a running
+# service restarts whenever a file it runs from is newer than its start.
+- name: Observe the files the service runs from
+  ansible.builtin.stat:
+    path: '{{ item }}'
+    get_checksum: false
+  loop: '{{ infra_managed_service_start.runs_from }}'
+  register: infra_managed_service_runs_from_files
+  when: infra_managed_service_start.active
+
+# A start that cannot be read proves nothing, so the service then restarts.
+# The format is podman's own template, handed to it as a literal.
+- name: Observe when the running service started
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - inspect
+      - --type
+      - container
+      - --format
+      - "{{ '{{.State.StartedAt.UnixNano}}' }}"
+      - '{{ infra_managed_service_start.unit }}'
+  register: infra_managed_service_started
+  when: infra_managed_service_start.active
+  changed_when: false
+  failed_when: false
+
+- name: Start the managed service
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - start
+      - '{{ infra_managed_service_start.service }}'
+  when: not infra_managed_service_start.active
+  changed_when: not infra_managed_service_start.active
+
+- name: Restart the managed service when a file it runs from changed since it started
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - restart
+      - '{{ infra_managed_service_start.service }}'
+  register: infra_managed_service_restart
+  when:
+    - infra_managed_service_start.active
+    - infra_managed_service_start.published
+      or (infra_managed_service_started.stdout | default('') | trim | int)
+      < (infra_managed_service_runs_from_files.results | map(attribute='stat.mtime') | max) * 1000000000
+  changed_when: true

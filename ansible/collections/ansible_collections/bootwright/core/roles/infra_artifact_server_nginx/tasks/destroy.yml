@@ -66,79 +66,19 @@
     status: running
   no_log: true
 
-- name: Remove the container unit definition
-  ansible.builtin.file:
-    path: '{{ infra_artifact_server_nginx_unit_path }}'
-    state: absent
-  register: infra_artifact_server_nginx_unit_removed
-
-- name: Reload the host service manager so the unit generator runs
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/systemctl
-      - daemon-reload
-  changed_when: false
-
-# As systemd documents, a unit whose daemon exited at every start until its
-# start limit stays listed failed after its stop and its definition's removal,
-# until it is reset. `systemctl show` prints ActiveState=inactive for a unit
-# that is not loaded, so such a unit is never reset, and a reset that finds the
-# unit unloaded meanwhile ("Unit ... not loaded.") is tolerated.
-- name: Observe whether systemd still lists the removed unit failed
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/systemctl
-      - show
-      - --property=ActiveState
-      - --value
-      - '{{ infra_artifact_server_nginx_service }}'
-  environment:
-    LC_ALL: C
-  register: infra_artifact_server_nginx_listed
-  changed_when: false
-
-- name: Reset the failed state the removed unit is still listed in
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/systemctl
-      - reset-failed
-      - '{{ infra_artifact_server_nginx_service }}'
-  environment:
-    LC_ALL: C
-  when: infra_artifact_server_nginx_listed.stdout == 'failed'
-  register: infra_artifact_server_nginx_reset
-  changed_when: infra_artifact_server_nginx_reset.rc == 0
-  failed_when:
-    - infra_artifact_server_nginx_reset.rc != 0
-    - '"not loaded" not in infra_artifact_server_nginx_reset.stderr'
-
-- name: Remove a container the stopped unit left behind
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - rm
-      - --force
-      - --ignore
-      - '{{ bootwright_artifact_server_request.unit }}'
-  when: infra_artifact_server_nginx_before.observation.containerPresent
-  changed_when: infra_artifact_server_nginx_before.observation.containerPresent
-
-- name: Remove the owned content root
-  ansible.builtin.file:
-    path: '{{ bootwright_artifact_server_request.contentRoot }}'
-    state: absent
-  register: infra_artifact_server_nginx_root_removed
-
-# The content root is <hosted root>/<context>/services/<kind>/<name>, as the
-# validation above requires, so these are the kind's, the services' and the
-# context's directories, each removed only once empty and never recursively;
-# the hosted root itself is never reached.
-- name: Remove the service's and the context's directories once empty
-  bootwright.core.hosted_area:
-    context: '{{ bootwright_artifact_server_request.identity.context }}'
-    path: '{{ infra_artifact_server_nginx_area }}'
-    state: absent
-  register: infra_artifact_server_nginx_parents
+- name: Take back the unit, its container and its content root
+  ansible.builtin.include_role:
+    name: bootwright.core.infra_managed_service
+    tasks_from: unit_removal
+  vars:
+    infra_managed_service_owned:
+      unit: '{{ bootwright_artifact_server_request.unit }}'
+      service: '{{ infra_artifact_server_nginx_service }}'
+      unit_path: '{{ infra_artifact_server_nginx_unit_path }}'
+      content_root: '{{ bootwright_artifact_server_request.contentRoot }}'
+      context: '{{ bootwright_artifact_server_request.identity.context }}'
+      area: '{{ infra_artifact_server_nginx_area }}'
+      container_present: '{{ infra_artifact_server_nginx_before.observation.containerPresent }}'
 
 - name: Report configuration removal completion
   bootwright.core.artifact_server_protocol:
@@ -171,10 +111,10 @@
     phase: completed
     outcome: >-
       {{ 'changed'
-         if (infra_artifact_server_nginx_unit_removed is changed
-             or infra_artifact_server_nginx_root_removed is changed
-             or infra_artifact_server_nginx_parents is changed
-             or infra_artifact_server_nginx_reset is changed
+         if (infra_managed_service_unit_removed is changed
+             or infra_managed_service_root_removed is changed
+             or infra_managed_service_parents is changed
+             or infra_managed_service_reset is changed
              or infra_artifact_server_nginx_before.observation.unit | length > 0)
          else 'unchanged' }}
     digest: '{{ bootwright_artifact_server_digest }}'

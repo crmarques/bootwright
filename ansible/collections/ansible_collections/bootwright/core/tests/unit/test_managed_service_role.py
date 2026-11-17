@@ -295,9 +295,52 @@ def test_the_apply_refuses_a_destination_that_could_write_another_squid_directiv
         assert not holds(validate, dict(scope, bootwright_managed_service_request=request)), tampered
 
 
+# The managed unit lifecycle every role running a managed container unit shares,
+# keyed by the role-owned variables its include passes.
+SHARED = "infra_managed_service"
+SHARED_FILES = ("unit_removal.yml", "unit_start.yml", "image_pull.yml")
+
+
+def shared_file(task):
+    """The shared lifecycle file a task includes, or None."""
+    included = task.get("ansible.builtin.include_tasks")
+    if isinstance(included, str) and included in SHARED_FILES:
+        return included
+    role = task.get("ansible.builtin.include_role")
+    if isinstance(role, dict) and role.get("name") == "bootwright.core." + SHARED and role.get("tasks_from", "") + ".yml" in SHARED_FILES:
+        return role["tasks_from"] + ".yml"
+    return None
+
+
 def load_tasks(role, name):
+    """A task file's tasks, each shared lifecycle file it includes read in its place."""
     loaded = LOADER.load_from_file(str(ROLES / role / "tasks" / name), trusted_as_template=True)
-    return [task for task in loaded if isinstance(task, dict)]
+    tasks = []
+    for task in (task for task in loaded if isinstance(task, dict)):
+        shared = shared_file(task)
+        tasks.extend(load_tasks(SHARED, shared) if shared else [task])
+    return tasks
+
+
+# The artifact server and the managed services pull, start and remove their
+# unit through one shared lifecycle, so a fix to it reaches both.
+@pytest.mark.parametrize("role", ["infra_managed_service", "infra_artifact_server_nginx"])
+def test_each_managed_unit_role_runs_the_one_shared_lifecycle(role):
+    included = []
+    for entry in ("apply.yml", "destroy.yml"):
+        loaded = LOADER.load_from_file(str(ROLES / role / "tasks" / entry), trusted_as_template=True)
+        included.extend((entry, shared_file(task)) for task in loaded if isinstance(task, dict) and shared_file(task))
+    assert included == [("apply.yml", "image_pull.yml"), ("apply.yml", "unit_start.yml"), ("destroy.yml", "unit_removal.yml")]
+
+
+def shared_variables(role):
+    """The role-owned variables each shared lifecycle include of a role passes."""
+    found = {}
+    for entry in ("apply.yml", "destroy.yml"):
+        loaded = LOADER.load_from_file(str(ROLES / role / "tasks" / entry), trusted_as_template=True)
+        for task in (task for task in loaded if isinstance(task, dict) and shared_file(task)):
+            found.update(task.get("vars") or {})
+    return found
 
 
 def argv_of(task):
@@ -353,6 +396,7 @@ def variables(prefix, request):
 def role_scope(role, prefix, request_):
     found = variables(prefix, request_)
     found.update(LOADER.load_from_file(str(ROLES / role / "defaults" / "main.yml"), trusted_as_template=True))
+    found.update(shared_variables(role))
     return found
 
 
@@ -365,7 +409,7 @@ def test_a_destroy_removes_each_empty_parent_never_recursively(role, prefix, req
     templar = Templar(loader=LOADER, variables=role_scope(role, prefix, request_))
     assert templar.template(tasks[removal][HOSTED]["path"]) == area
     assert templar.template(tasks[removal][HOSTED]["context"]) == "lab"
-    assert tasks[removal]["register"] == role + "_parents"
+    assert tasks[removal]["register"] == SHARED + "_parents"
     validate = validate_of(tasks)
     assert holds(validate, variables(prefix, request_))
     shallow = dict(request_, contentRoot="/var/lib/bootwright-hosted/lab/services/resolver")
@@ -401,7 +445,7 @@ def test_a_destroy_reports_a_removed_parent_as_a_change():
         tasks = load_tasks(role, "destroy.yml")
         completion = tasks[index_of(tasks, lambda task: "removal evidence" in str(task.get("name", "")), "publishes the evidence")]
         module = next(value for key, value in completion.items() if key.endswith("_protocol"))
-        assert ("%s_parents is changed" % role) in str(module["outcome"]), role
+        assert ("%s_parents is changed" % SHARED) in str(module["outcome"]), role
 
 
 def test_the_apply_refuses_a_content_root_outside_its_context_and_kind():

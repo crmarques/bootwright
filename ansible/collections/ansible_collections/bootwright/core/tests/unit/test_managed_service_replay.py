@@ -22,6 +22,7 @@ import pytest
 from ansible.template import Templar, trust_as_template
 from ansible_collections.bootwright.core.plugins.module_utils.infra_service import UNIT_DIRECTORY
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
+from ansible_collections.bootwright.core.tests.unit.test_managed_service_role import load_tasks, shared_variables
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 DIGEST = "d" * 64
@@ -89,8 +90,7 @@ SKIPPED = {"changed": False, "skipped": True}
 
 
 def load(role):
-    loaded = LOADER.load_from_file(str(ROLES / SERVICES[role]["role"] / "tasks" / "apply.yml"), trusted_as_template=True)
-    return [task for task in loaded if isinstance(task, dict)]
+    return load_tasks(SERVICES[role]["role"], "apply.yml")
 
 
 def only(tasks, predicate, what):
@@ -119,9 +119,10 @@ def runs(variables, task):
     return all(templar.evaluate_conditional(condition) for condition in conditions(task))
 
 
-def reading(task, other):
-    """Whether the task's conditions read what the other task registers."""
-    return bool(other.get("register")) and other["register"] in " ".join(str(condition) for condition in conditions(task))
+def reading(task, other, through=None):
+    """Whether the task's conditions, or the shared lifecycle variables `through` they read, read what the other task registers."""
+    read = " ".join(str(condition) for condition in conditions(task)) + str(through or "")
+    return bool(other.get("register")) and other["register"] in read
 
 
 def in_order(tasks, *steps):
@@ -134,6 +135,7 @@ def scope(role, tls):
     service = SERVICES[role]
     directory = ROLES / service["role"]
     variables = dict(LOADER.load_from_file(str(directory / "defaults" / "main.yml"), trusted_as_template=True))
+    variables.update(shared_variables(service["role"]))
     if (directory / "vars" / "main.yml").is_file():
         variables.update(LOADER.load_from_file(str(directory / "vars" / "main.yml"), trusted_as_template=True))
     request = {"bindAddress": "192.0.2.10", "contentRoot": service["contentRoot"], "image": IMAGE, "unit": service["unit"],
@@ -179,7 +181,8 @@ def service_steps(tasks, role):
     files = only(tasks, lambda task: "ansible.builtin.stat" in task and reading(restart, task), "observes its files")
     started = only(tasks, lambda task: argv_of(task)[:2] == ["/usr/bin/podman", "inspect"] and reading(restart, task),
                    "reads its start")
-    before = only(tasks, lambda task: action(task, "_inspect") is not None and reading(start, task), "observes the unit")
+    shared = shared_variables(SERVICES[role]["role"])
+    before = only(tasks, lambda task: action(task, "_inspect") is not None and reading(start, task, shared), "observes the unit")
     completion = only(tasks, lambda task: (action(task, "_protocol") or {}).get("phase") == "completed",
                       "publishes the completion")
     published = publishers(tasks, role)
