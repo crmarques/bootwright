@@ -16357,3 +16357,19 @@ an upper-case `sha256:` prefix). An independent check found the lifecycle's
 value comparison equivalent to the old comparison of encoded documents for
 every object it builds.
 
+## X514 — One owner for each collection file and credential primitive
+
+### B1463
+
+The rest of audit 005 W2 under [D274](backlog.md#d274). In the collection,
+`held_directory` walks the fixed directories with no-follow opens and owner
+checks, `atomic_publish` publishes units, keyfiles and rulesets with a file
+and directory sync, `private_files` is the one reader and writer of a lent or
+private file, `registry_auth` owns registry credentials and `auth.json`, and
+`ceph_tunnel` is the one owner of the OpenSSH crypto-policy reduction, which
+`ssh_key_policy` imports. Container-cluster administrator credentials are now
+read and written under the effective account with the same owner-only rule as
+the Ceph ones. A registry user name may be as long as a Secret part allows.
+With this, W2 is complete. An independent review found no blocking defect;
+its follow-ups are applied.
+
