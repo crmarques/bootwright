@@ -27,7 +27,7 @@ import urllib.parse
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_native_worker, ceph_package_sources, ceph_pull_broker, ceph_registry_proxy, controller_files,
-    native_diagnostics, transport_faults, tls_trust,
+    native_diagnostics, registry_auth, transport_faults, tls_trust,
 )
 
 PLATFORM = "linux/amd64"
@@ -271,12 +271,16 @@ def protected_file(path, maximum, *, private=False, root=False):
 def basic_material(raw, registry):
     """The Basic credential of the selected registry entitlement."""
     value = decode(raw, "material")
-    require(isinstance(value, dict) and set(value) == {"url", "username", "password"}
-            and value["url"] == registry and isinstance(value["username"], str) and bool(value["username"]), "material")
-    require(len(value["username"].encode()) <= 256 and not any(character in value["username"] for character in ":\x00\r\n"), "material")
-    password = value["password"]
-    require(isinstance(password, str) and 0 < len(password.encode()) <= 32768 and not any(character in password for character in "\x00\r\n"), "material")
-    return "Basic " + base64.b64encode((value["username"] + ":" + password).encode()).decode("ascii")
+    require(isinstance(value, dict) and set(value) == {"url", "username", "password"} and value["url"] == registry, "material")
+    return authenticated(registry_auth.basic, "material", value["username"], value["password"])
+
+
+def authenticated(rule, reason, *arguments):
+    """One registry authentication rule's answer; its refusal is this module's reason."""
+    try:
+        return rule(*arguments)
+    except registry_auth.Refused:
+        raise DiscoveryRefusal(reason) from None
 
 
 def certificates(data):
@@ -392,37 +396,11 @@ def bounded_lifetime(seconds=TOTAL_SECONDS):
 
 
 def challenge(value, registry, namespace):
-    scope = "repository:" + namespace + ":pull"
-    require(isinstance(value, str) and len(value) <= 4096 and value.startswith("Bearer "), "discovery")
-    remaining, parameters = value[7:], {}
-    pattern = re.compile(r'([A-Za-z_]+)="([^"\\\x00-\x1f\x7f]*)"(?:,\s*|$)')
-    while remaining:
-        match = pattern.match(remaining)
-        require(match is not None and match[1] not in parameters, "discovery")
-        parameters[match[1]] = match[2]
-        remaining = remaining[match.end() :]
-    require(
-        {"realm", "service"} <= set(parameters) <= {"realm", "service", "scope"}
-        and bool(parameters["service"])
-        and parameters.get("scope", scope) == scope,
-        "discovery",
-    )
-    realm = urllib.parse.urlsplit(parameters["realm"])
-    require(realm.scheme == "https" and realm.netloc == registry and realm.username is None and realm.password is None
-            and realm.path.startswith("/") and not realm.query and not realm.fragment, "discovery")
-    return realm.path + "?" + urllib.parse.urlencode({"service": parameters["service"], "scope": scope})
+    return authenticated(registry_auth.challenge, "discovery", value, registry, namespace)
 
 
 def token(raw):
-    # Exact JSON numbers exclude bool and float at this boundary.
-    # pylint: disable=unidiomatic-typecheck
-    value = decode(raw, "discovery")
-    require(isinstance(value, dict) and set(value) <= {"token", "access_token", "expires_in", "issued_at"}, "discovery")
-    selected = value.get("token", value.get("access_token"))
-    require(isinstance(selected, str) and 0 < len(selected) <= MAX_TOKEN and re.fullmatch(r"[A-Za-z0-9._~+/=-]+", selected) is not None, "discovery")
-    require("token" not in value or "access_token" not in value or value["token"] == value["access_token"], "discovery")
-    require("expires_in" not in value or type(value["expires_in"]) is int and 0 < value["expires_in"] <= 86400, "discovery")
-    return "Bearer " + selected
+    return "Bearer " + authenticated(registry_auth.token, "discovery", raw)
 
 
 def delivery_answers(host):

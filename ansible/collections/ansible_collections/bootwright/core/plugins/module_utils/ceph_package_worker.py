@@ -16,7 +16,7 @@ import types
 
 PREFIX = "ansible_collections.bootwright.core.plugins.module_utils"
 MODULES = ("native_diagnostics", "canonical_json", "bounded_process", "tls_trust", "ceph_native_worker",
-           "private_files", "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native_observe", "ceph_native",
+           "private_files", "registry_auth", "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native_observe", "ceph_native",
            "ceph_native_stretch", "native_resolution", "native_signatures", "native_apply", "transport_faults",
            "ceph_package_sources", "ceph_crypto_policy", "ceph_packages")
 # The closed reasons a package failure names; any other refusal is packages.

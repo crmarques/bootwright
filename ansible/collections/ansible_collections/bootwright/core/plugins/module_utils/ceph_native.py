@@ -33,7 +33,7 @@ import tempfile
 import time
 import uuid
 
-from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, private_files
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, private_files, registry_auth
 from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 MAX_INPUT = 2 * 1024 * 1024
@@ -330,11 +330,7 @@ def registry_material(request, value):
         require(isinstance(material, dict) and set(material) == {"url", "username", "password"}, "material")
         authority = registry_authority(request)
         require(material["url"] == authority, "material")
-        username, password = material["username"], material["password"]
-        require(isinstance(username, str) and 0 < len(username.encode()) <= 1024 and not any(c in username for c in ":\x00\r\n"), "material")
-        require(isinstance(password, str) and 0 < len(password.encode()) <= 32768 and not any(c in password for c in "\x00\r\n"), "material")
-        auth = base64.b64encode((username + ":" + password).encode()).decode("ascii")
-        return canonical({"auths": {authority: {"auth": auth}}}) + b"\n"
+        return canonical(registry_auth.document(authority, material["username"], material["password"])) + b"\n"
     except (ValueError, UnicodeError, TypeError):
         raise Refusal("material") from None
 
@@ -349,10 +345,7 @@ def registry_scope(request, data):
         require(isinstance(entries, dict) and set(entries) == {authority}, "registry-ownership")
         entry = entries[authority]
         require(isinstance(entry, dict) and set(entry) == {"auth"} and isinstance(entry["auth"], str), "registry-ownership")
-        decoded = base64.b64decode(entry["auth"], validate=True).decode("utf-8")
-        username, separator, password = decoded.partition(":")
-        require(separator and username and password and not any(c in decoded for c in "\x00\r\n"), "registry-ownership")
-        require(len(username.encode()) <= 1024 and len(password.encode()) <= 32768, "registry-ownership")
+        registry_auth.decoded(entry["auth"])
     except (ValueError, UnicodeError, TypeError):
         raise Refusal("registry-ownership") from None
 

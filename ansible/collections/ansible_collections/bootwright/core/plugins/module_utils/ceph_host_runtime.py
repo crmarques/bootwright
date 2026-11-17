@@ -33,7 +33,7 @@ import uuid
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_host_route_probe as probe, ceph_native, ceph_native_observe as observe, ceph_tunnel, ceph_tunnel_custody as custody, ceph_pull_broker,
-    native_diagnostics, physical_erase_worker, physical_machine_identity, private_files,
+    native_diagnostics, physical_erase_worker, physical_machine_identity, private_files, registry_auth,
 )
 
 ROOT = "/var/lib/bootwright/ceph-host"
@@ -292,27 +292,13 @@ def discard_residue(parent, prefix, *, retained=(), reserved=()):
 @contextlib.contextmanager
 def authfile(directory):
     """Override native ambient authentication with a proved empty authfile."""
-    data = b'{"auths":{}}'
-    path = os.path.join(directory, "auth.json")
-    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
     try:
-        with os.fdopen(fd, "w+b", closefd=False) as stream:
-            stream.write(data)
-            stream.flush()
-            os.fsync(fd)
-            info = os.fstat(fd)
-            before = identity(info)
-            require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) == 0o600, "material")
+        # The wrapped context removes the file on any exit; the proof after the yield is deliberately success-only.
+        # pylint: disable-next=contextmanager-generator-missing-cleanup
+        with registry_auth.lent(os.path.join(directory, "auth.json"), {"auths": {}}) as path:
             yield path
-            require(identity(os.fstat(fd)) == before and identity(os.stat(path, follow_symlinks=False)) == before, "material")
-            stream.seek(0)
-            require(stream.read(len(data) + 1) == data, "material")
-    finally:
-        try:
-            require(identity(os.stat(path, follow_symlinks=False)) == identity(os.fstat(fd)), "material")
-            os.unlink(path)
-        finally:
-            os.close(fd)
+    except registry_auth.Refused:
+        raise ceph_native.Refusal("material") from None
 
 
 def signature_policy(image):

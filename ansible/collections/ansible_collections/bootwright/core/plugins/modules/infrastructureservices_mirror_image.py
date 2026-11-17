@@ -75,8 +75,6 @@ reason:
   type: str
 """
 
-import base64
-import json
 import os
 import re
 import shutil
@@ -86,7 +84,7 @@ from urllib.error import HTTPError, URLError
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.urls import open_url
-from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, private_files
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, private_files, registry_auth
 
 SKOPEO = "/usr/bin/skopeo"
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
@@ -159,8 +157,10 @@ def environment(egress, mirror):
 
 def lend(scratch, mirror, username, password, trust):
     """Write the mirror's auth file and certificate directory beneath scratch."""
-    token = base64.b64encode(("%s:%s" % (username, password)).encode("utf-8")).decode("ascii")
-    private_files.write(os.path.join(scratch, "auth.json"), json.dumps({"auths": {mirror: {"auth": token}}}))
+    try:
+        registry_auth.write(os.path.join(scratch, "auth.json"), mirror, username, password)
+    except registry_auth.Refused:
+        raise ValueError("the image mirror's credential is not a registry credential: a user name without a colon, both without line breaks") from None
     certificates = os.path.join(scratch, "certificates")
     os.mkdir(certificates, 0o700)
     private_files.write(os.path.join(certificates, "ca.crt"), trust)

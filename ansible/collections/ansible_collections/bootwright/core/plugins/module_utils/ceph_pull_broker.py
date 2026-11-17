@@ -13,7 +13,6 @@ connection, file or directory.
 
 from __future__ import annotations
 
-import base64
 import contextlib
 import http.client
 import ipaddress
@@ -28,7 +27,7 @@ import threading
 import time
 import urllib.parse
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, native_diagnostics, tls_trust
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, native_diagnostics, registry_auth, tls_trust
 
 MAX_HEADERS = 16384
 MAX_METADATA = 1 << 20
@@ -140,6 +139,14 @@ class TokenRefused(BrokerError):
 def require(value):
     if not value:
         raise BrokerError("registry credential boundary")
+
+
+def authenticated(rule, *arguments):
+    """One registry authentication rule's answer; its refusal is this boundary's."""
+    try:
+        return rule(*arguments)
+    except registry_auth.Refused:
+        raise BrokerError("registry credential boundary") from None
 
 
 def bundle_context(bundle):
@@ -293,12 +300,9 @@ class Upstream:
         else:
             self.connection = connection
         require(isinstance(credential, dict) and set(credential) == {"url", "username", "password"} and credential["url"] == registry)
-        user, password = credential["username"], credential["password"]
-        require(all(isinstance(value, str) and 0 < len(value.encode()) <= 32768 and not any(char in value for char in "\x00\r\n")
-                    for value in (user, password)) and ":" not in user)
-        self.private = [password]
-        self.basic = "Basic " + base64.b64encode((user + ":" + password).encode()).decode("ascii")
-        self.private.append(self.basic)
+        password = credential["password"]
+        self.basic = authenticated(registry_auth.basic, credential["username"], password)
+        self.private = [password, self.basic]
         self.bearer = None
         self.lock = threading.Lock()
         self.connections = set()
@@ -374,21 +378,7 @@ class Upstream:
             connection.close()
 
     def token_path(self, challenge):
-        require(isinstance(challenge, str) and len(challenge) <= 4096 and challenge.startswith("Bearer "))
-        fields, remaining = {}, challenge[7:]
-        while remaining:
-            match = re.match(r'([A-Za-z_]+)="([^"\\\x00-\x1f\x7f]*)"(?:,\s*|$)', remaining)
-            require(match is not None and match[1] not in fields)
-            fields[match[1]] = match[2]
-            remaining = remaining[match.end():]
-        scope = "repository:" + self.namespace + ":pull"
-        # RFC 6750 section 3 error attributes (an expired bearer) are admitted; their values are ignored.
-        admitted = {"realm", "service", "scope", "error", "error_description", "error_uri"}
-        require({"realm", "service"} <= set(fields) <= admitted and fields.get("scope", scope) == scope)
-        realm = urllib.parse.urlsplit(fields["realm"])
-        require(realm.scheme == "https" and realm.netloc == self.registry and realm.username is None and realm.password is None
-                and realm.path.startswith("/") and not realm.query and not realm.fragment)
-        return realm.path + "?" + urllib.parse.urlencode({"service": fields["service"], "scope": scope})
+        return authenticated(registry_auth.challenge, challenge, self.registry, self.namespace)
 
     def authenticate(self, challenge):
         path = self.token_path(challenge)
@@ -396,11 +386,8 @@ class Upstream:
             with self.request("GET", path, self.basic) as response:
                 if response.status != 200:
                     raise TokenRefused(int(response.status))
-                raw = response.read(65537)
-                require(len(raw) <= 65536)
-                value = json.loads(raw)
-                bearer = value.get("token", value.get("access_token"))
-                require(isinstance(bearer, str) and 0 < len(bearer) <= 32768 and re.fullmatch(r"[A-Za-z0-9._~+/=-]+", bearer) is not None)
+                raw = response.read(2 * registry_auth.MAX_TOKEN + 1)
+                bearer = authenticated(registry_auth.token, raw)
                 self.bearer = "Bearer " + bearer
                 self.private.extend((bearer, self.bearer))
 

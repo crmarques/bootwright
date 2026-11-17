@@ -623,7 +623,7 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
                                             "ceph_tunnel_custody", "ceph_host_route_probe", "ceph_host_runtime", "ceph_admin_credentials_native",
                                             "native_diagnostics",
                                             "canonical_json", "bounded_process", "tls_trust", "ceph_monitoring_template",
-                                            "native_specializations", "ceph_pull_broker", "private_files", "ceph_native_nfs", "ceph_native_nvmeof", "ceph_native_observability",
+                                            "native_specializations", "ceph_pull_broker", "registry_auth", "private_files", "ceph_native_nfs", "ceph_native_nvmeof", "ceph_native_observability",
                                             "ceph_native_units", "ceph_native_object", "ceph_smb_native", "ceph_replication_native",
                                             "ceph_export_dns", "ceph_export_native",
                                             "physical_machine_identity", "physical_erase_worker"}

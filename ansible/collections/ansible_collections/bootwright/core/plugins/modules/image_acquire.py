@@ -62,7 +62,6 @@ image:
   type: str
 """
 
-import base64
 import json
 import os
 import re
@@ -70,7 +69,7 @@ import shutil
 import tempfile
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, private_files
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, private_files, registry_auth
 
 PODMAN = "/usr/bin/podman"
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
@@ -108,8 +107,10 @@ def auth_document(host, username, password, auth):
         return json.dumps({"auths": {}}) if host else None
     if not username or not password:
         raise ValueError("the mirror credential is missing its user name or its password")
-    token = base64.b64encode(("%s:%s" % (username, password)).encode("utf-8")).decode("ascii")
-    return json.dumps({"auths": {host: {"auth": token}}})
+    try:
+        return json.dumps(registry_auth.document(host, username, password))
+    except registry_auth.Refused:
+        raise ValueError("the mirror credential is not a registry credential: a user name without a colon, both without line breaks") from None
 
 
 def environment(egress):
