@@ -245,7 +245,7 @@ def test_gateway_unit_closed_tls_binding_and_custody(nvme_request, mode):
     request["auxiliary"] = [{"name": "nvmeof", "image": request["registry"] + "/nvmeof-synthetic@sha256:" + "c" * 64}]
     spec = {"pool": "config", "group": "group", "port": 5500, mode: True}
     unit = {"type": "nvmeof", "id": "config.group", "documents": [{"service_type": "nvmeof", "service_id": "config.group",
-            "placement": {"hosts": ["node-1", "node-2"]}, "spec": spec}]}
+            "placement": {"hosts": ["node-1", "node-2"]}, "spec": spec}], "observeBudget": 820}
     if mode == "enable_auth":
         unit["bindings"] = [{"serviceRef": "nvmeof.config.group", "path": "/spec/" + field,
                              "secretRef": "tls-" + ("ca" if field == "root_ca_cert" else field.split("_")[0])}
@@ -462,7 +462,7 @@ def nvme_unit_request(nvme_request):
     request["auxiliary"] = [{"name": "nvmeof", "image": request["registry"] + "/nvmeof-synthetic@sha256:" + "c" * 64}]
     request["service"] = {"type": "nvmeof", "id": "config.group", "documents": [
         {"service_type": "nvmeof", "service_id": "config.group", "placement": {"hosts": ["node-1", "node-2"]},
-         "spec": {"pool": "config", "group": "group", "port": 5500, "enable_mtls": True}}]}
+         "spec": {"pool": "config", "group": "group", "port": 5500, "enable_mtls": True}}], "observeBudget": 820}
     return request
 
 
@@ -486,6 +486,18 @@ def test_service_gateway_reads_have_their_own_additional_budget(nvme_unit_reques
     assert native.nvmeof_unit_observe() == {"ready": True, "blocking": []}
     assert len(calls) == 2
     assert nvmeof.phase_budget(nvme_unit_request, "nvmeof_unit_observe") == 640 + len(calls) * 60 + 60
+    for budget in (0, True, "820", nvmeof.MAX_BUDGET + 1):
+        refused = copy.deepcopy(nvme_unit_request)
+        refused["service"]["observeBudget"] = budget
+        with pytest.raises(ceph_native.Refusal):
+            ceph_native.validate(refused)
+    for unfrozen, unit_type in ((True, "nvmeof"), (False, "crash")):
+        other = copy.deepcopy(nvme_unit_request)
+        other["service"]["type"] = unit_type
+        if unfrozen:
+            del other["service"]["observeBudget"]
+        with pytest.raises(ceph_native.Refusal):
+            ceph_native.validate(other)
     transport = ceph_transport.Transport(nvme_unit_request, {})
     captured = []
     monkeypatch.setattr(transport, "_call", lambda *args, **kwargs: captured.append((args, kwargs)))

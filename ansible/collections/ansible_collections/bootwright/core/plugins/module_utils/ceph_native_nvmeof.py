@@ -36,11 +36,10 @@ COMMANDS = frozenset((("gateway", "info"), ("gateway", "listener_info"), ("subsy
 
 
 def phase_budget(request, phase):
-    """The frozen worker bound of one NVMe-oF phase; the unit observer keeps its own read bound."""
+    """The frozen worker bound of one NVMe-oF phase, the unit observer's read bound included."""
     if phase == "nvmeof_unit_observe":
         require(request.get("action") == "service" and request["service"]["type"] == "nvmeof")
-        # Preserve the shared observer's 640-second bound and add every gateway read.
-        return 640 + 60 * len(request["service"]["documents"][0]["placement"]["hosts"]) + 60
+        return request["service"]["observeBudget"]
     require(phase in PHASE_BUDGETS)
     return request["nvmeof"]["budgets"][PHASE_BUDGETS[phase]]
 

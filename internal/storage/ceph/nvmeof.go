@@ -83,6 +83,9 @@ func nvmeofUnits(cluster api.Object) ([]ServiceUnit, error) {
 			return nil, err
 		}
 		unit := ServiceUnit{ID: service.Get("service_id").Text(), Type: "nvmeof", Documents: []json.RawMessage{document}}
+		if unit.ObserveBudget, err = nvmeofUnitObservation(unit); err != nil {
+			return nil, err
+		}
 		for _, binding := range gatewayBindings(cluster, cephcluster.NativeServiceName(service)) {
 			unit.Bindings = append(unit.Bindings, ServiceBinding(binding))
 		}
@@ -112,8 +115,19 @@ func projectNVMeOFPools(catalog api.Catalog, cluster api.Object, requests []Requ
 			return err
 		}
 		unit.Documents = []json.RawMessage{document}
+		if unit.ObserveBudget, err = nvmeofUnitObservation(*unit); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func nvmeofUnitObservation(unit ServiceUnit) (int, error) {
+	documents := unitDocuments(Request{Service: &unit})
+	if len(documents) != 1 {
+		return 0, failure("lifecycle.state", "the NVMe-oF service has no frozen placement", "")
+	}
+	return 640 + 60*len(documents[0].Placement.Hosts) + 60, nil
 }
 
 func nvmeofPoolName(cluster api.Object, id string, service api.Value) (string, error) {

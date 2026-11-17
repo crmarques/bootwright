@@ -27,6 +27,7 @@ type ServiceUnit struct {
 	Documents     []json.RawMessage            `json:"documents"`
 	ID            string                       `json:"id"`
 	IngressPorts  []int                        `json:"ingressPorts,omitempty"`
+	ObserveBudget int                          `json:"observeBudget,omitempty"`
 	ScrapeIngress map[string]string            `json:"scrapeIngress,omitempty"`
 	Type          string                       `json:"type"`
 }
@@ -118,12 +119,14 @@ func unitDeadline(r Request, operation string) (time.Duration, error) {
 		return 0, failure("lifecycle.state", "the Ceph service unit type is not known to this build", "")
 	}
 	if r.Service.Type == "nvmeof" {
-		documents := unitDocuments(r)
-		if len(documents) != 1 {
-			return 0, failure("lifecycle.state", "the NVMe-oF service has no frozen placement", "")
+		observation, err := nvmeofUnitObservation(*r.Service)
+		if err != nil {
+			return 0, err
 		}
-		observation := 640 + 60*len(documents[0].Placement.Hosts) + 60 + 20
-		seconds := observation + 60
+		if r.Service.ObserveBudget != observation {
+			return 0, failure("lifecycle.state", "the NVMe-oF service "+r.Service.ID+" froze an observation bound this build does not derive", "destroy it with the build that applied it, then apply with this build")
+		}
+		seconds := observation + 20 + 60
 		if operation == "apply" {
 			seconds += 2*nativeCall + readinessWait
 		}

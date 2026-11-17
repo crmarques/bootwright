@@ -765,6 +765,8 @@ argument_specs:
               ingressPorts:
                 type: list
                 elements: int
+              observeBudget:
+                type: int
               type:
                 type: str
                 required: true

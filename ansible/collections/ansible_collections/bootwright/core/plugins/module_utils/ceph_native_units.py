@@ -306,10 +306,13 @@ def validate(request, hosts):
     """One unit of a known type: 1 to 8 placed documents, each listed in `delegated` with exactly its hosts."""
     unit = request.get("service")
     require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <=
-            {"bindings", "config", "documents", "id", "ingressPorts", "scrapeIngress", "type"})
+            {"bindings", "config", "documents", "id", "ingressPorts", "observeBudget", "scrapeIngress", "type"})
     require(isinstance(unit["type"], str) and unit["type"] in UNIT_TYPES)
     require("config" not in unit or unit["type"] == "monitoring")
     require("scrapeIngress" not in unit or unit["type"] == "monitoring")
+    # Go freezes the NVMe-oF unit observer's read bound (service_unit.go unitDeadline).
+    require(("observeBudget" in unit) == (unit["type"] == "nvmeof"))
+    require("observeBudget" not in unit or type(unit["observeBudget"]) is int and 0 < unit["observeBudget"] <= ceph_native_nvmeof.MAX_BUDGET)
     ingress_ports(unit)
     singletons = UNIT_TYPES[unit["type"]].singletons
     require(unit["id"] == "" or isinstance(unit["id"], str) and ceph_native.NAME.fullmatch(unit["id"]) is not None)

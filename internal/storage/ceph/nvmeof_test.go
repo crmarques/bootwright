@@ -414,3 +414,38 @@ func TestNVMeOFDependenciesRefuseAGatewayServiceWithoutAPool(t *testing.T) {
 	refusedWith(t, err, "api.required", "the nvmeof service config.primary of CephCluster example declares no spec.pool, the CephPool that keeps its gateway state",
 		"set spec.pool of that nvmeof service to a replicated CephPool with role rbd of this cluster")
 }
+
+func TestNVMeOFServiceUnitFreezesItsObservationBound(t *testing.T) {
+	catalog := nvmeCatalog()
+	cluster, _ := catalog.Find(api.CephCluster, "example")
+	base, err := New(api.CephCluster, nil).request(catalog, cluster, "synthetic")
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	units, err := serviceUnitRequests(base, cluster)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	index := slices.IndexFunc(units, func(r Request) bool { return r.Service.Type == "nvmeof" })
+	if index < 0 {
+		t.Fatalf("no NVMe-oF unit among %v", unitTypesOf(units))
+	}
+	unit := units[index]
+	if unit.Service.ObserveBudget != 640+60*2+60 {
+		t.Fatalf("the unit froze an observation bound of %d", unit.Service.ObserveBudget)
+	}
+	if got, err := cephDeadline(unit, "observe"); err != nil || got != 900*time.Second {
+		t.Fatalf("observe %s %v", got, err)
+	}
+	for _, other := range units {
+		if other.Service.Type != "nvmeof" && other.Service.ObserveBudget != 0 {
+			t.Fatalf("the %s unit froze an observation bound", other.Service.Type)
+		}
+	}
+	stale := *unit.Service
+	stale.ObserveBudget++
+	unit.Service = &stale
+	if _, err := cephDeadline(unit, "observe"); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+		t.Fatalf("a stale observation bound was not refused: %v", err)
+	}
+}

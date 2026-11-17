@@ -290,6 +290,7 @@ request-schema:
   service.documents []opaque
   service.id string
   service.ingressPorts []int omitempty
+  service.observeBudget int omitempty
   service.scrapeIngress map[string]string omitempty
   service.type string
   services []opaque
