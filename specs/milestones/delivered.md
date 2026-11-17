@@ -16724,3 +16724,16 @@ vfork, which it does unless a fork asks for a new user namespace; no
 production fork does. Tests that hold the fork lock with a duplicated
 descriptor, as a fork in flight does, failed before and pass now.
 
+## X539 — Request goldens follow the Kickstart time source
+
+### B1508
+
+Gate repair found while landing X535: the example request goldens still held
+the Kickstart `timezone --ntpservers` line that 5384aedb7 replaced with
+`timesource --ntp-server`, and the package tree certificate token 687440207
+added was not classified among the automation literals, and its comment put
+the installation package over its comment ceiling. The goldens are
+regenerated, moving only that line, the token is classified as a Kickstart
+token, and the comment goes, since the managed OS spec states its rationale. Fixed under the owner's 2026-11-16 rule that gate failures from other
+work are fixed where they block.
+
