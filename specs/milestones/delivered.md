@@ -16990,3 +16990,18 @@ the request identity check refuses a request that carries any arm besides its ac
 
 a quiescence probe that fails or is cancelled reports that cause, distinct from an unproved quiescence.
 
+## X550 — The composition root binds; owners decide
+
+### B1520
+
+Split from B1469 under [D274](backlog.md#d274) (part of audit 005 W8.6). The
+acquisition list and the mirror fill sets are derived in
+`internal/acquisition/listing`, a new application package with its own
+context row, and the composition root only binds them; 38 per-example
+acquisition goldens written before the move hold every list unchanged.
+Discovery, the installed client, Ceph object-user and keyring material, and
+power's realization reading moved from the wiring to their owners;
+`discoveryPreparations` and `realizesMachine` stay in composition because they
+name implementation identities. Substrate admission dispatches per arm from
+tables in arm-named files, with the hypervisor-client need as a facts row.
+
