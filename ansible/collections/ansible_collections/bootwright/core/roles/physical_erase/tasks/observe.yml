@@ -22,6 +22,7 @@
 - name: Publish physical erase observation
   bootwright.core.physical_erase_protocol:
     phase: completed
+    outcome: unchanged
     digest: '{{ bootwright_physical_erase_digest }}'
     evidence: '{{ physical_erase_observed.evidence }}'
     observed: true
