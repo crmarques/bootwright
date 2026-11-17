@@ -15,11 +15,10 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -66,7 +65,7 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 		{
 			name: "a wildcard beside its own endpoint socket", definitions: nestedDefinitions(),
 			prepare: func(h *harness) {
-				h.capability.reservations = append(reservationOf("alpha"), prerequisites.HostReservation{
+				h.capability.reservations = append(reservationOf("alpha"), infrastructureservices.HostReservation{
 					Context: testContextName, Kind: "proxy", Service: "beta", Keys: []string{"socket:0.0.0.0:3128", "socket:192.0.2.1:3128"},
 				})
 			},
@@ -134,8 +133,8 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 
 // conflictingSockets is two of one context's own services on one port, one of
 // them bound to a wildcard, so they could never both listen.
-func conflictingSockets() []prerequisites.HostReservation {
-	return append(reservationOf("alpha"), prerequisites.HostReservation{
+func conflictingSockets() []infrastructureservices.HostReservation {
+	return append(reservationOf("alpha"), infrastructureservices.HostReservation{
 		Context: testContextName, Kind: "proxy", Service: "beta", Keys: []string{"socket::::8443", "socket:fd00::1:8443"},
 	})
 }
@@ -171,7 +170,7 @@ var sshEndpoints = map[string]struct {
 }
 
 // sshClaim is one claim placed through a test Machine's SSH access.
-func sshClaim(machine string, reservation prerequisites.HostReservation) SSHReservation {
+func sshClaim(machine string, reservation infrastructureservices.HostReservation) SSHReservation {
 	endpoint := sshEndpoints[machine]
 	return SSHReservation{Machine: machine, Address: endpoint.address, Port: endpoint.port, KnownHostsRef: machine + "-known-hosts", Reservation: reservation}
 }
@@ -211,8 +210,8 @@ func pinnedHostMaterial() map[string]secrets.Material {
 // to a wildcard, each placed on the SSH host its Machine reaches.
 func sshSockets(first, second string) []SSHReservation {
 	return []SSHReservation{
-		sshClaim(first, prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{"socket:0.0.0.0:3128"}}),
-		sshClaim(second, prerequisites.HostReservation{Context: testContextName, Kind: "dns", Service: "delta", Keys: []string{"socket:192.0.2.9:3128"}}),
+		sshClaim(first, infrastructureservices.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{"socket:0.0.0.0:3128"}}),
+		sshClaim(second, infrastructureservices.HostReservation{Context: testContextName, Kind: "dns", Service: "delta", Keys: []string{"socket:192.0.2.9:3128"}}),
 	}
 }
 
@@ -257,7 +256,7 @@ func TestTwoMachinesReachingOneSSHHostConflictThere(t *testing.T) {
 func TestAMachineReachingTheControllerConflictsThere(t *testing.T) {
 	t.Parallel()
 	for name, tc := range map[string]struct {
-		reservations []prerequisites.HostReservation
+		reservations []infrastructureservices.HostReservation
 		claims       []SSHReservation
 		host         string
 	}{
@@ -316,18 +315,18 @@ func TestAnApplyPublishesItsSSHClaimsQualifiedByTheirHost(t *testing.T) {
 	h.service.compiler = testCompiler{state: withControllerAddress()}
 	h.capability.reservations = reservationOf("alpha")
 	h.capability.sshClaims = append(sshSockets("services", "storage"),
-		sshClaim("declared", prerequisites.HostReservation{Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"path:/srv/ntp", "socket:192.0.2.1:123"}}),
-		sshClaim("forwarded", prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "zeta", Keys: []string{"socket:0.0.0.0:3128", "unit:bootwright-zeta"}}))
+		sshClaim("declared", infrastructureservices.HostReservation{Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"path:/srv/ntp", "socket:192.0.2.1:123"}}),
+		sshClaim("forwarded", infrastructureservices.HostReservation{Context: testContextName, Kind: "proxy", Service: "zeta", Keys: []string{"socket:0.0.0.0:3128", "unit:bootwright-zeta"}}))
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
 	want := append(reservationOf("alpha"),
-		prerequisites.HostReservation{Context: testContextName, Kind: "dns", Service: "delta", Keys: []string{
+		infrastructureservices.HostReservation{Context: testContextName, Kind: "dns", Service: "delta", Keys: []string{
 			"ssh/192.0.2.20:22/socket:192.0.2.9:3128", pinnedQualifier("storage") + "socket:192.0.2.9:3128"}},
-		prerequisites.HostReservation{Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"path:/srv/ntp", "socket:192.0.2.1:123"}},
-		prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{
+		infrastructureservices.HostReservation{Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"path:/srv/ntp", "socket:192.0.2.1:123"}},
+		infrastructureservices.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{
 			"ssh/192.0.2.10:22/socket:0.0.0.0:3128", pinnedQualifier("services") + "socket:0.0.0.0:3128"}},
-		prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "zeta", Keys: []string{
+		infrastructureservices.HostReservation{Context: testContextName, Kind: "proxy", Service: "zeta", Keys: []string{
 			"ssh/192.0.2.10:2222/socket:0.0.0.0:3128", "ssh/192.0.2.10:2222/unit:bootwright-zeta",
 			pinnedQualifier("forwarded") + "socket:0.0.0.0:3128", pinnedQualifier("forwarded") + "unit:bootwright-zeta"}},
 	)
@@ -343,7 +342,7 @@ func TestAnSSHAddressTooLongToQualifyItsClaimsRefuses(t *testing.T) {
 	h := newPlannedHarness(t, nestedDefinitions())
 	long := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + ".example"
 	h.capability.sshClaims = []SSHReservation{{Machine: "services", Address: long, Port: 22,
-		Reservation: prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{"path:/srv/bootwright/proxies/gamma/" + strings.Repeat("d", 24)}}}}
+		Reservation: infrastructureservices.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{"path:/srv/bootwright/proxies/gamma/" + strings.Repeat("d", 24)}}}}
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "api.value" || !strings.Contains(reported[0].Message, "of Machine/services is too long") {
 		t.Fatalf("refusal = %+v (%v)", reported, err)
@@ -355,8 +354,8 @@ func TestAnSSHAddressTooLongToQualifyItsClaimsRefuses(t *testing.T) {
 func TestAClaimTooLongToKeyByItsHostKeyRefuses(t *testing.T) {
 	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
-	h.capability.sshClaims = []SSHReservation{sshClaim("services", prerequisites.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma",
-		Keys: []string{"path:/srv/" + strings.Repeat("d", 256-machine.SSHHostKeyQualifierBytes-len("path:/srv/")+1)}})}
+	h.capability.sshClaims = []SSHReservation{sshClaim("services", infrastructureservices.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma",
+		Keys: []string{"path:/srv/" + strings.Repeat("d", 256-infrastructureservices.SSHHostKeyQualifierBytes-len("path:/srv/")+1)}})}
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "api.value" ||
 		!strings.Contains(reported[0].Message, "of proxy gamma, placed on Machine/services, is too long to be keyed by that host's SSH host key") {
@@ -409,15 +408,15 @@ func (k controllerKeys) SSHHostKeys(context.Context) ([]trust.HostKey, error) {
 // readable sshd key refuses nothing.
 func TestTheControllerReachedByAnUndeclaredAddressRefusesBeforeReservation(t *testing.T) {
 	t.Parallel()
-	claim := prerequisites.HostReservation{Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"socket:192.0.2.1:123"}}
+	claim := infrastructureservices.HostReservation{Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"socket:192.0.2.1:123"}}
 	for name, tc := range map[string]struct {
 		machine string
 		keys    controllerKeys
-		want    []prerequisites.HostReservation
+		want    []infrastructureservices.HostReservation
 		refused string
 		remedy  string
 	}{
-		"at a declared address": {machine: "declared", keys: controllerKeys{5}, want: []prerequisites.HostReservation{claim}},
+		"at a declared address": {machine: "declared", keys: controllerKeys{5}, want: []infrastructureservices.HostReservation{claim}},
 		"by an undeclared address": {machine: "services", keys: controllerKeys{9, 1},
 			refused: "Machine/services reaches the controller, whose SSH host key its access.ssh.knownHostsRef pins, at 192.0.2.10:22, which is not port 22 at an address the controller Machine/controller declares (it declares controller.lab.example.test, 192.0.2.1), so its claims would not meet the controller's own",
 			remedy:  "reach Machine/controller at port 22 on an address it declares, declare 192.0.2.10 on Machine/controller, place the work on Machine/controller, or give Machine/services its own SSH host keys"},
@@ -427,7 +426,7 @@ func TestTheControllerReachedByAnUndeclaredAddressRefusesBeforeReservation(t *te
 		"at a forwarded port": {machine: "forwarded", keys: controllerKeys{3},
 			refused: "Machine/forwarded reaches the controller, whose SSH host key its access.ssh.knownHostsRef pins, at 192.0.2.10:2222, which is not port 22 at an address the controller Machine/controller declares (it declares controller.lab.example.test, 192.0.2.1), so its claims would not meet the controller's own",
 			remedy:  "reach Machine/controller at port 22 on an address it declares, place the work on Machine/controller, or give Machine/forwarded its own SSH host keys"},
-		"by an undeclared address of a controller with no sshd key": {machine: "services", want: []prerequisites.HostReservation{{
+		"by an undeclared address of a controller with no sshd key": {machine: "services", want: []infrastructureservices.HostReservation{{
 			Context: testContextName, Kind: "ntp", Service: "epsilon", Keys: []string{"ssh/192.0.2.10:22/socket:192.0.2.1:123", pinnedQualifier("services") + "socket:192.0.2.1:123"}}}},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -79,7 +80,7 @@ func sameLifecycleController(before, after controllerStored, name string) bool {
 	own := func(value prerequisites.HostState) prerequisites.HostState {
 		value = cloneControllerState(value)
 		value.Bindings = slices.DeleteFunc(value.Bindings, func(item prerequisites.ControllerBinding) bool { return item.Context != name })
-		value.Reservations = slices.DeleteFunc(value.Reservations, func(item prerequisites.HostReservation) bool { return item.Context != name })
+		value.Reservations = slices.DeleteFunc(value.Reservations, func(item infrastructureservices.HostReservation) bool { return item.Context != name })
 		value.ToolSources = nil
 		return value
 	}
@@ -97,16 +98,16 @@ func sameLifecycleController(before, after controllerStored, name string) bool {
 func (l *leasedLifecycle) Bind(ctx context.Context, machine string, host controller.InstalledHostIdentity) error {
 	return l.shared(ctx, func(ctx context.Context) error { return l.lifecycleTransaction.Bind(ctx, machine, host) })
 }
-func (l *leasedLifecycle) Reserve(ctx context.Context, reservations []prerequisites.HostReservation) error {
+func (l *leasedLifecycle) Reserve(ctx context.Context, reservations []infrastructureservices.HostReservation) error {
 	return l.shared(ctx, func(ctx context.Context) error { return l.lifecycleTransaction.Reserve(ctx, reservations) })
 }
-func (l *leasedLifecycle) Claim(ctx context.Context, reservation prerequisites.HostReservation) error {
+func (l *leasedLifecycle) Claim(ctx context.Context, reservation infrastructureservices.HostReservation) error {
 	return l.shared(ctx, func(ctx context.Context) error { return l.lifecycleTransaction.Claim(ctx, reservation) })
 }
 func (l *leasedLifecycle) ReleaseReservations(ctx context.Context) error {
 	return l.shared(ctx, func(ctx context.Context) error { return l.lifecycleTransaction.ReleaseReservations(ctx) })
 }
-func (l *leasedLifecycle) ReproveReservations(ctx context.Context, check func([]prerequisites.HostReservation) error, releasing func(prerequisites.HostReservation) bool) error {
+func (l *leasedLifecycle) ReproveReservations(ctx context.Context, check func([]infrastructureservices.HostReservation) error, releasing func(infrastructureservices.HostReservation) bool) error {
 	return l.shared(ctx, func(ctx context.Context) error {
 		return l.lifecycleTransaction.ReproveReservations(ctx, check, releasing)
 	})

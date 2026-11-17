@@ -30,6 +30,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -1628,7 +1629,7 @@ func checkpointBindingScenario() checkpointScenario {
 	return scenario
 }
 
-var checkpointClaim = []prerequisites.HostReservation{{
+var checkpointClaim = []infrastructureservices.HostReservation{{
 	Context: checkpointContext, Kind: "proxy", Service: "lab-proxy",
 	Keys: []string{"socket:192.0.2.1:3128", "unit:bootwright-proxy"},
 }}

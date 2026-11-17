@@ -23,6 +23,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -351,9 +352,9 @@ type testWorkspace struct {
 	logArea      *memoryArea
 	runArea      *memoryArea
 	evidence     []byte
-	reservations []prerequisites.HostReservation
+	reservations []infrastructureservices.HostReservation
 	// foreign are the reservations other contexts hold, which a claim conflicts with.
-	foreign     []prerequisites.HostReservation
+	foreign     []infrastructureservices.HostReservation
 	controller  prerequisites.StorageView
 	inputs      desiredstate.Sources
 	mutations   int
@@ -665,7 +666,7 @@ func (v *testView) Bind(_ context.Context, machine string, host controller.Insta
 	return nil
 }
 
-func (v *testView) Reserve(_ context.Context, reservations []prerequisites.HostReservation) error {
+func (v *testView) Reserve(_ context.Context, reservations []infrastructureservices.HostReservation) error {
 	for _, reservation := range reservations {
 		if reservation.Context != v.Identity().Name {
 			return errors.New("a lifecycle reservation must belong to its own context")
@@ -678,7 +679,7 @@ func (v *testView) Reserve(_ context.Context, reservations []prerequisites.HostR
 	return nil
 }
 
-func (v *testView) Claim(_ context.Context, reservation prerequisites.HostReservation) error {
+func (v *testView) Claim(_ context.Context, reservation infrastructureservices.HostReservation) error {
 	if reservation.Context != v.Identity().Name {
 		return errors.New("a lifecycle reservation must belong to its own context")
 	}
@@ -697,13 +698,13 @@ func (v *testView) Claim(_ context.Context, reservation prerequisites.HostReserv
 			reservation.Releasing = held.Releasing
 		}
 	}
-	next := []prerequisites.HostReservation{reservation}
+	next := []infrastructureservices.HostReservation{reservation}
 	for _, held := range v.workspace.reservations {
 		if held.Kind != reservation.Kind || held.Service != reservation.Service {
 			next = append(next, held)
 		}
 	}
-	slices.SortFunc(next, func(x, y prerequisites.HostReservation) int {
+	slices.SortFunc(next, func(x, y infrastructureservices.HostReservation) int {
 		return strings.Compare(x.Kind+"\x00"+x.Service, y.Kind+"\x00"+y.Service)
 	})
 	v.workspace.reservations = next
@@ -718,7 +719,7 @@ func (v *testView) ReleaseReservations(context.Context) error {
 	return nil
 }
 
-func (v *testView) ReproveReservations(_ context.Context, check func([]prerequisites.HostReservation) error, releasing func(prerequisites.HostReservation) bool) error {
+func (v *testView) ReproveReservations(_ context.Context, check func([]infrastructureservices.HostReservation) error, releasing func(infrastructureservices.HostReservation) bool) error {
 	if err := v.killed("reprove reservations"); err != nil {
 		return err
 	}
@@ -951,7 +952,7 @@ type testCapability struct {
 	requestOnly  bool
 	mutex        sync.Mutex
 	definitions  []reconciliation.BlockDefinition
-	reservations []prerequisites.HostReservation
+	reservations []infrastructureservices.HostReservation
 	sshClaims    []SSHReservation
 	secrets      []string
 	unsupported  []Refusal
@@ -1208,11 +1209,11 @@ func (c *testCapability) next(outcomes *[]Result) Result {
 	return value
 }
 
-func (c *testCapability) ProvedClaim(contextName string, block reconciliation.Block, _ json.RawMessage) (prerequisites.HostReservation, bool, error) {
+func (c *testCapability) ProvedClaim(contextName string, block reconciliation.Block, _ json.RawMessage) (infrastructureservices.HostReservation, bool, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	keys, found := c.claims[block.ID]
-	return prerequisites.HostReservation{Context: contextName, Kind: "substrate-physical", Service: block.ID, Keys: keys}, found, nil
+	return infrastructureservices.HostReservation{Context: contextName, Kind: "substrate-physical", Service: block.ID, Keys: keys}, found, nil
 }
 
 func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result, error) {

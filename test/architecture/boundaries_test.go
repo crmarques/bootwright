@@ -150,7 +150,7 @@ func applicationDependencies() map[string][]string {
 		// exactly as a managed service's does; the arm projects its Machines
 		// into the capacity budget's allocations.
 		"internal/substrate/libvirt":   append(capabilityDependencies(), "internal/infrastructureservices/managedservice", "internal/substrate/capacity"),
-		"internal/substrate/baremetal": {"internal/controller/prerequisites", "internal/reconciliation/lifecycle"},
+		"internal/substrate/baremetal": {"internal/reconciliation/lifecycle"},
 		"internal/substrate/kubevirt":  capabilityDependencies(),
 		// Storage derives its DVD package endpoint through ArtifactServer's
 		// published selection/path rules rather than reconstructing publication,
@@ -162,12 +162,12 @@ func applicationDependencies() map[string][]string {
 		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/substrate/capacity"),
 		"internal/containercluster/agentinstall":         append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
 		"internal/infrastructureservices/artifactserver": append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
-		"internal/infrastructureservices/managedservice": {"internal/controller/prerequisites", "internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
+		"internal/infrastructureservices/managedservice": {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
 		"internal/infrastructureservices/mirrorfill":     {"internal/reconciliation/lifecycle", "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"},
 		"internal/machine/access":                        {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
 		"internal/machine/power":                         {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
 		"internal/machine/inventory":                     {"internal/desiredstate/compilation"},
-		"internal/machine/hardware":                      {"internal/controller/prerequisites", "internal/reconciliation/lifecycle"},
+		"internal/machine/hardware":                      {"internal/reconciliation/lifecycle"},
 		"internal/trust/enrollment":                      {"internal/desiredstate/compilation"},
 		"internal/managedos/media":                       {},
 		"internal/controller/prerequisites":              {"internal/desiredstate/compilation"},
@@ -218,8 +218,7 @@ func applicationDependencies() map[string][]string {
 
 func capabilityDependencies() []string {
 	return []string{
-		"internal/controller/prerequisites", "internal/desiredstate/compilation",
-		"internal/reconciliation/lifecycle",
+		"internal/desiredstate/compilation", "internal/reconciliation/lifecycle",
 	}
 }
 

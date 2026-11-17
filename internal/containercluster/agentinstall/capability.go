@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	controllerscope "github.com/crmarques/bootwright/internal/controller"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -76,8 +75,8 @@ func (c MediaCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		}
 		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
-			Context: input.Context.Name, Kind: prerequisites.ClusterMediaReservation,
+		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{
+			Context: input.Context.Name, Kind: infrastructureservices.ClusterMediaReservation,
 			Service: request.Identity.Cluster, ObjectKind: Kind, Keys: request.ReservationKeys(),
 		})
 	}

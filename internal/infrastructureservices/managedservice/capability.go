@@ -8,7 +8,6 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -128,7 +127,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 				plan.Secrets = append(plan.Secrets, reference)
 			}
 		}
-		claim := prerequisites.HostReservation{
+		claim := infrastructureservices.HostReservation{
 			Context: input.Context.Name, Kind: c.definition.Slug,
 			Service: request.Identity.Service, Keys: request.ReservationKeys(),
 		}

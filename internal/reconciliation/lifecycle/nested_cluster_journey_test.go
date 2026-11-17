@@ -12,9 +12,9 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -354,7 +354,7 @@ func nestedClusterJourney(t *testing.T, physical bool) (*lifecycle.CapabilityJou
 			ContentDigest: strings.Repeat("d", 64), Request: canonical,
 			Groups: []reconciliation.Group{{ID: "realize-machine", Description: "realize the machine", Machines: []string{machine}}},
 		})
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{Context: lifecycle.JourneyContext, Kind: "substrate-machine", Service: machine, Keys: keys})
+		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{Context: lifecycle.JourneyContext, Kind: "substrate-machine", Service: machine, Keys: keys})
 		plan.Secrets = append(plan.Secrets, references...)
 		hostNodes = append(hostNodes, reconciliation.ObjectRef{Kind: libvirt.MachineKind, Object: machine})
 	}

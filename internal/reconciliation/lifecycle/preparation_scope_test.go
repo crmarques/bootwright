@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -165,7 +165,7 @@ func TestPreparationAdditionAcquiresAndRetainsReservations(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, claim := range append(old, reservationOf("beta")...) {
-		if !slices.ContainsFunc(h.workspace.reservations, func(held prerequisites.HostReservation) bool { return reflect.DeepEqual(held, claim) }) {
+		if !slices.ContainsFunc(h.workspace.reservations, func(held infrastructureservices.HostReservation) bool { return reflect.DeepEqual(held, claim) }) {
 			t.Fatalf("lost claim %+v from %+v", claim, h.workspace.reservations)
 		}
 	}
@@ -195,7 +195,7 @@ func (w conflictingPreparationWorkspace) MutateLifecycle(ctx context.Context, na
 	return w.Workspace.MutateLifecycle(ctx, name, func(tx Transaction) error { return callback(conflictingPreparationTransaction{tx}) })
 }
 
-func (tx conflictingPreparationTransaction) Reserve(ctx context.Context, claims []prerequisites.HostReservation) error {
+func (tx conflictingPreparationTransaction) Reserve(ctx context.Context, claims []infrastructureservices.HostReservation) error {
 	for _, claim := range claims {
 		if claim.Service == "beta" {
 			return errors.New("fixture foreign context owns beta")

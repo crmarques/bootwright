@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
@@ -78,8 +79,8 @@ func TestConcurrentContextReservationsRebaseWithoutLosingAnotherOwner(t *testing
 	publish(t, store, "example", sources)
 	publish(t, store, "other", sources)
 	publishControllerState(t, store, syntheticControllerState(t))
-	claim := func(name, key string) []prerequisites.HostReservation {
-		return []prerequisites.HostReservation{{Context: name, Kind: "test", Service: "service", Keys: []string{key}}}
+	claim := func(name, key string) []infrastructureservices.HostReservation {
+		return []infrastructureservices.HostReservation{{Context: name, Kind: "test", Service: "service", Keys: []string{key}}}
 	}
 	if err := store.MutateLifecycle(ctx, "example", func(first lifecycle.Transaction) error {
 		if err := first.Reserve(ctx, claim("example", "path:/var/lib/example")); err != nil {
@@ -176,7 +177,7 @@ func TestLifecycleControllerSnapshotRejectsOwnMeaningChanges(t *testing.T) {
 	t.Parallel()
 	before := controllerStored{data: []byte("before"), value: syntheticControllerState(t)}
 	before.value.Bindings = []prerequisites.ControllerBinding{{Context: "example", Machine: "controller"}}
-	before.value.Reservations = []prerequisites.HostReservation{{Context: "example", Kind: "test", Service: "service", Keys: []string{"path:/var/lib/example"}}}
+	before.value.Reservations = []infrastructureservices.HostReservation{{Context: "example", Kind: "test", Service: "service", Keys: []string{"path:/var/lib/example"}}}
 	before.value.ToolSources = []prerequisites.DependencySource{{ID: "client"}}
 	for _, test := range []struct {
 		name    string
@@ -187,7 +188,7 @@ func TestLifecycleControllerSnapshotRejectsOwnMeaningChanges(t *testing.T) {
 			after.value.Bindings = append(after.value.Bindings, prerequisites.ControllerBinding{Context: "other", Machine: "controller"})
 		}, true},
 		{"other reservation", func(after *controllerStored) {
-			after.value.Reservations = append(after.value.Reservations, prerequisites.HostReservation{Context: "other"})
+			after.value.Reservations = append(after.value.Reservations, infrastructureservices.HostReservation{Context: "other"})
 		}, true},
 		{"new dependency", func(after *controllerStored) {
 			after.value.ToolSources = append(after.value.ToolSources, prerequisites.DependencySource{ID: "new"})

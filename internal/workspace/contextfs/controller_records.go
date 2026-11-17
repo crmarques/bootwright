@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -39,11 +40,10 @@ const controllerVersionRemedy = "with a build that reads it, destroy each enviro
 const ControllerRecordVersion = 1
 
 const (
-	maxControllerState           = 4 << 20
-	maxControllerToolSources     = 4096
-	maxControllerStages          = 32
-	maxControllerReservations    = 256
-	maxControllerReservationKeys = prerequisites.MaxPublishedReservationKeys
+	maxControllerState        = 4 << 20
+	maxControllerToolSources  = 4096
+	maxControllerStages       = 32
+	maxControllerReservations = 256
 )
 
 type controllerHostRecord struct {
@@ -54,12 +54,12 @@ type controllerHostRecord struct {
 }
 
 type controllerStateRecord struct {
-	Version      int                               `json:"version"`
-	Host         controllerHostRecord              `json:"host"`
-	Bindings     []prerequisites.ControllerBinding `json:"bindings"`
-	ToolSources  []prerequisites.DependencySource  `json:"toolSources"`
-	ToolAreas    []controllerBundleReservation     `json:"toolAreas"`
-	Reservations []prerequisites.HostReservation   `json:"reservations,omitempty"`
+	Version      int                                      `json:"version"`
+	Host         controllerHostRecord                     `json:"host"`
+	Bindings     []prerequisites.ControllerBinding        `json:"bindings"`
+	ToolSources  []prerequisites.DependencySource         `json:"toolSources"`
+	ToolAreas    []controllerBundleReservation            `json:"toolAreas"`
+	Reservations []infrastructureservices.HostReservation `json:"reservations,omitempty"`
 }
 
 type controllerBundleReservation struct {
@@ -228,14 +228,14 @@ func validateControllerReferences(value prerequisites.HostState, registry contex
 // validateControllerReservations keeps the stored claim set canonical and one
 // key to one context. The wildcard socket relation is enforced where a claim
 // is published.
-func validateControllerReservations(values []prerequisites.HostReservation) error {
+func validateControllerReservations(values []infrastructureservices.HostReservation) error {
 	if len(values) > maxControllerReservations {
 		return state("controller host reservations exceed their bound")
 	}
 	previous := [3]string{}
 	claimed := map[string]string{}
 	for _, reservation := range values {
-		if !contextName(reservation.Context) || !contextName(reservation.Kind) || !contextName(reservation.Service) || reservation.ObjectKind != "" && (!objectKindName(reservation.ObjectKind) || prerequisites.ClaimKindNamesObject(reservation.Kind)) {
+		if !contextName(reservation.Context) || !contextName(reservation.Kind) || !contextName(reservation.Service) || reservation.ObjectKind != "" && (!objectKindName(reservation.ObjectKind) || infrastructureservices.ClaimKindNamesObject(reservation.Kind)) {
 			return state("controller host reservation identity is invalid")
 		}
 		current := [3]string{reservation.Context, reservation.Kind, reservation.Service}
@@ -243,7 +243,7 @@ func validateControllerReservations(values []prerequisites.HostReservation) erro
 			return state("controller host reservations are unordered or duplicated")
 		}
 		previous = current
-		if len(reservation.Keys) == 0 || len(reservation.Keys) > maxControllerReservationKeys {
+		if len(reservation.Keys) == 0 || len(reservation.Keys) > infrastructureservices.MaxPublishedReservationKeys {
 			return state("controller host reservation key count is invalid")
 		}
 		if !slices.IsSorted(reservation.Keys) {

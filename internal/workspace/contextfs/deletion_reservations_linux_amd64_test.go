@@ -11,6 +11,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -31,11 +32,11 @@ func TestADeletedContextsReservationsAreReleasedForAnotherContext(t *testing.T) 
 	machine := []string{"libvirt-domain:lab-rhel-01", "path:/var/lib/bootwright/machines/rhel-01", "socket:192.0.2.1:8000", "unit:bootwright-bmc-lab-rhel-01"}
 	reserve := func(name string, keys []string) error {
 		return store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error {
-			return tx.Reserve(ctx, []prerequisites.HostReservation{{Context: name, Kind: "substrate-machine", Service: "rhel-01", Keys: keys}})
+			return tx.Reserve(ctx, []infrastructureservices.HostReservation{{Context: name, Kind: "substrate-machine", Service: "rhel-01", Keys: keys}})
 		})
 	}
 	if err := store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
-		if err := tx.Reserve(ctx, []prerequisites.HostReservation{{Context: record.Name, Kind: "substrate-machine", Service: "rhel-01", Keys: machine}}); err != nil {
+		if err := tx.Reserve(ctx, []infrastructureservices.HostReservation{{Context: record.Name, Kind: "substrate-machine", Service: "rhel-01", Keys: machine}}); err != nil {
 			return err
 		}
 		return tx.PublishEvidence(ctx, []byte(`{"version":1,"operation":"unknown","ownership":"retained"}`))
@@ -95,11 +96,11 @@ func TestReservationsPastTheRecordBoundRefuseBeforePublication(t *testing.T) {
 	_, sources := fixture(t)
 	publish(t, store, "second", sources)
 	reserveFixture(t, store, record)
-	claims := func(name string, count int) []prerequisites.HostReservation {
-		claimed := make([]prerequisites.HostReservation, count)
+	claims := func(name string, count int) []infrastructureservices.HostReservation {
+		claimed := make([]infrastructureservices.HostReservation, count)
 		for index := range claimed {
 			service := fmt.Sprintf("machine-%03d", index)
-			claimed[index] = prerequisites.HostReservation{Context: name, Kind: "substrate-machine", Service: service, Keys: []string{"unit:bootwright-bmc-" + name + "-" + service}}
+			claimed[index] = infrastructureservices.HostReservation{Context: name, Kind: "substrate-machine", Service: service, Keys: []string{"unit:bootwright-bmc-" + name + "-" + service}}
 		}
 		return claimed
 	}
@@ -140,21 +141,21 @@ func TestADeletionNamesEachInstallerWorkAreaAndItsMachine(t *testing.T) {
 	_, sources := fixture(t)
 	publish(t, store, "second", sources)
 	reserveFixture(t, store, record)
-	claim := func(name, kind, service string, keys ...string) prerequisites.HostReservation {
-		return prerequisites.HostReservation{Context: name, Kind: kind, Service: service, Keys: keys}
+	claim := func(name, kind, service string, keys ...string) infrastructureservices.HostReservation {
+		return infrastructureservices.HostReservation{Context: name, Kind: kind, Service: service, Keys: keys}
 	}
-	reserve := func(name string, claims ...prerequisites.HostReservation) {
+	reserve := func(name string, claims ...infrastructureservices.HostReservation) {
 		t.Helper()
 		if err := store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error { return tx.Reserve(ctx, claims) }); err != nil {
 			t.Fatalf("reserving for %s failed: %#v", name, diagnostics.Of(err))
 		}
 	}
 	reserve(record.Name,
-		claim(record.Name, prerequisites.ClusterMediaReservation, "sno", "path:/var/lib/bootwright-hosted/"+record.Name+"/clusters/sno", "path:/srv/artifacts/private/sno"),
-		claim(record.Name, prerequisites.ClusterMediaReservation, "compact", "path:/var/lib/bootwright-hosted/"+record.Name+"/clusters/compact"),
-		claim(record.Name, prerequisites.OSInstallReservation, "rhel-01", "path:/srv/artifacts/private/rhel-01"),
+		claim(record.Name, infrastructureservices.ClusterMediaReservation, "sno", "path:/var/lib/bootwright-hosted/"+record.Name+"/clusters/sno", "path:/srv/artifacts/private/sno"),
+		claim(record.Name, infrastructureservices.ClusterMediaReservation, "compact", "path:/var/lib/bootwright-hosted/"+record.Name+"/clusters/compact"),
+		claim(record.Name, infrastructureservices.OSInstallReservation, "rhel-01", "path:/srv/artifacts/private/rhel-01"),
 		claim(record.Name, "substrate-machine", "rhel-01", "unit:bootwright-bmc-rhel-01"))
-	reserve("second", claim("second", prerequisites.ClusterMediaReservation, "other", "path:/var/lib/bootwright-hosted/second/clusters/other"))
+	reserve("second", claim("second", infrastructureservices.ClusterMediaReservation, "other", "path:/var/lib/bootwright-hosted/second/clusters/other"))
 	if err := store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
 		return tx.Bind(ctx, "controller", syntheticHost(t))
 	}); err != nil {

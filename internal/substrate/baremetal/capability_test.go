@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -478,7 +478,7 @@ func TestAProvedMachineClaimsItsSystemUUID(t *testing.T) {
 // declared MAC within one reservation's key bound, and a MAC set that would
 // exceed it refuses rather than claim the machine by a part of its addresses.
 func TestAProvedClaimRefusesMoreMACsThanOneReservationHolds(t *testing.T) {
-	claim := func(count int) (prerequisites.HostReservation, error) {
+	claim := func(count int) (infrastructureservices.HostReservation, error) {
 		t.Helper()
 		request := fixtureRequest(t)
 		request.Hardware = nil
@@ -493,11 +493,11 @@ func TestAProvedClaimRefusesMoreMACsThanOneReservationHolds(t *testing.T) {
 		held, _, err := NewMachine(nil).ProvedClaim("lab", reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: frozen}}, evidence)
 		return held, err
 	}
-	held, err := claim(prerequisites.MaxReservationKeys - 2)
-	if err != nil || len(held.Keys) != prerequisites.MaxReservationKeys {
-		t.Fatalf("the largest MAC set claimed %d keys (%v), want %d", len(held.Keys), err, prerequisites.MaxReservationKeys)
+	held, err := claim(infrastructureservices.MaxReservationKeys - 2)
+	if err != nil || len(held.Keys) != infrastructureservices.MaxReservationKeys {
+		t.Fatalf("the largest MAC set claimed %d keys (%v), want %d", len(held.Keys), err, infrastructureservices.MaxReservationKeys)
 	}
-	_, err = claim(prerequisites.MaxReservationKeys - 1)
+	_, err = claim(infrastructureservices.MaxReservationKeys - 1)
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "more than 62 MAC addresses") {
 		t.Fatalf("a MAC set beyond the bound = %+v", reported)
 	}
@@ -513,7 +513,7 @@ func TestTwoSpellingsOfOneUUIDLessServerConflict(t *testing.T) {
 			spelled[index] = object.WithSpec(object.Spec().WithPath(api.StringValue("https://192.0.2.10/redfish/v1/Systems/1"), "substrate", "baremetal", "bmc", "address"))
 		}
 	}
-	claimed := func(contextName string, catalog api.Catalog) prerequisites.HostReservation {
+	claimed := func(contextName string, catalog api.Catalog) infrastructureservices.HostReservation {
 		t.Helper()
 		definition := planIn(t, reconciliation.Apply, catalog).Definitions[0]
 		var request Request
@@ -531,11 +531,11 @@ func TestTwoSpellingsOfOneUUIDLessServerConflict(t *testing.T) {
 	if held.Keys[0] == wanted.Keys[0] {
 		t.Fatalf("the two spellings share the key %s", held.Keys[0])
 	}
-	conflicts := prerequisites.Conflicts([]prerequisites.HostReservation{held}, []prerequisites.HostReservation{wanted})
+	conflicts := infrastructureservices.Conflicts([]infrastructureservices.HostReservation{held}, []infrastructureservices.HostReservation{wanted})
 	if len(conflicts) != 1 || conflicts[0].Held.Context != "first" || !strings.HasPrefix(conflicts[0].HeldKey, "bmc-mac:") {
 		t.Fatalf("conflicts = %+v, want one bmc-mac conflict with context first", conflicts)
 	}
-	if diagnostic := prerequisites.ConflictDiagnostic(conflicts[0]); diagnostic.Code != "controller.conflict" || strings.Contains(diagnostic.Message, "aa:bb") {
+	if diagnostic := infrastructureservices.ConflictDiagnostic(conflicts[0]); diagnostic.Code != "controller.conflict" || strings.Contains(diagnostic.Message, "aa:bb") {
 		t.Fatalf("diagnostic = %+v", diagnostic)
 	}
 }

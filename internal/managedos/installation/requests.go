@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -346,7 +347,7 @@ func (r Request) MediaNames() []string {
 func (r Request) ReservationKeys() []string {
 	var keys []string
 	if r.Target.Physical {
-		keys = append(keys, substrate.ControllerMediaReservationKey(r.Target.Controller.Endpoint))
+		keys = append(keys, infrastructureservices.ControllerMediaReservationKey(r.Target.Controller.Endpoint).String())
 	}
 	if r.Image != nil {
 		keys = append(keys, "path:"+r.Image.Path)
@@ -363,7 +364,7 @@ func (r Request) ReservationKeys() []string {
 // Shared package trees have their own publication block.
 func (r Request) ExclusiveKeys() []string {
 	if r.Target.Physical {
-		return []string{substrate.ControllerMediaReservationKey(r.Target.Controller.Endpoint)}
+		return []string{infrastructureservices.ControllerMediaReservationKey(r.Target.Controller.Endpoint).String()}
 	}
 	return nil
 }

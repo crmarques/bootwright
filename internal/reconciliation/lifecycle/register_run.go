@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -185,7 +185,7 @@ func (s Service) reserve(ctx context.Context, tx Transaction, decided operationP
 	if decided.verb == reconciliation.Destroy {
 		return reproveRelease(ctx, tx, "", "")
 	}
-	var controllerKeys []string
+	var controllerKeys []infrastructureservices.Qualifier
 	if len(decided.binding.hostKeyed) != 0 {
 		keys, err := controllerKeyQualifiers(ctx, s.options.HostKeys)
 		if err != nil {
@@ -206,19 +206,19 @@ func (s Service) reserve(ctx context.Context, tx Transaction, decided operationP
 }
 
 func reproveRelease(ctx context.Context, tx Transaction, kind, object string) error {
-	var releasing func(prerequisites.HostReservation) bool
+	var releasing func(infrastructureservices.HostReservation) bool
 	if kind != "" {
-		releasing = func(reservation prerequisites.HostReservation) bool {
-			return prerequisites.Releases(reservation, kind, object)
+		releasing = func(reservation infrastructureservices.HostReservation) bool {
+			return infrastructureservices.Releases(reservation, kind, object)
 		}
 	}
-	return tx.ReproveReservations(ctx, func(held []prerequisites.HostReservation) error {
-		return prerequisites.ReleaseFailure(held, tx.Identity().Name, kind, object)
+	return tx.ReproveReservations(ctx, func(held []infrastructureservices.HostReservation) error {
+		return infrastructureservices.ReleaseFailure(held, tx.Identity().Name, kind, object)
 	}, releasing)
 }
 
-func keepProved(held []prerequisites.HostReservation, contextName string, planned []prerequisites.HostReservation) []prerequisites.HostReservation {
-	kept := make([]prerequisites.HostReservation, 0, len(planned))
+func keepProved(held []infrastructureservices.HostReservation, contextName string, planned []infrastructureservices.HostReservation) []infrastructureservices.HostReservation {
+	kept := make([]infrastructureservices.HostReservation, 0, len(planned))
 	for _, reservation := range planned {
 		reservation.Keys = slices.Clone(reservation.Keys)
 		for _, own := range held {
@@ -252,12 +252,12 @@ func (s Service) establishBinding(ctx context.Context, tx Transaction, machine s
 	return tx.Bind(ctx, machine, host)
 }
 
-func retainReservations(held []prerequisites.HostReservation, name string, planned []prerequisites.HostReservation) []prerequisites.HostReservation {
+func retainReservations(held []infrastructureservices.HostReservation, name string, planned []infrastructureservices.HostReservation) []infrastructureservices.HostReservation {
 	for _, old := range held {
 		if old.Context != name {
 			continue
 		}
-		index := slices.IndexFunc(planned, func(next prerequisites.HostReservation) bool {
+		index := slices.IndexFunc(planned, func(next infrastructureservices.HostReservation) bool {
 			return next.Kind == old.Kind && next.Service == old.Service
 		})
 		if index < 0 {

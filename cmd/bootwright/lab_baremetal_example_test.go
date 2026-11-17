@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -33,12 +33,12 @@ func baremetalInput(t *testing.T, verb reconciliation.Verb) lifecycle.PlanInput 
 	}
 }
 
-func baremetalPlan(t *testing.T, verb reconciliation.Verb) ([]reconciliation.BlockDefinition, []prerequisites.HostReservation) {
+func baremetalPlan(t *testing.T, verb reconciliation.Verb) ([]reconciliation.BlockDefinition, []infrastructureservices.HostReservation) {
 	t.Helper()
 	input := baremetalInput(t, verb)
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	var definitions []reconciliation.BlockDefinition
-	var claims []prerequisites.HostReservation
+	var claims []infrastructureservices.HostReservation
 	for _, binding := range resolver.Bindings() {
 		capability, ok := resolver.Resolve(binding.Kind, binding.Implementation)
 		if !ok {

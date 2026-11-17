@@ -11,7 +11,7 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -116,7 +116,7 @@ func (c DiscoveryCapability) Plan(ctx context.Context, input lifecycle.PlanInput
 			Description: discoveryDescription(r),
 			Groups:      discoveryGroups(r.Identity.Object, input.Verb == reconciliation.Destroy),
 			Impacts:     discoveryImpacts(r),
-			Requires:    dependencies, Exclusive: []string{substrate.ControllerMediaReservationKey(r.Controller.Endpoint), substrate.ControllerReservationKey(r.Controller.Endpoint)}})
+			Requires:    dependencies, Exclusive: []string{infrastructureservices.ControllerMediaReservationKey(r.Controller.Endpoint).String(), infrastructureservices.ControllerReservationKey(r.Controller.Endpoint).String()}})
 		if r.Controller.VirtualMedia.EnableVerification {
 			plan.Definitions[len(plan.Definitions)-1].Impacts = append(plan.Definitions[len(plan.Definitions)-1].Impacts,
 				"enable-bmc-media-verification "+r.Identity.Object+" (BMC-wide; retained)")
@@ -138,9 +138,9 @@ func (c DiscoveryCapability) Plan(ctx context.Context, input lifecycle.PlanInput
 			last.Description, last.Impacts = removal.Description, removal.Impacts
 		}
 		plan.Secrets = append(plan.Secrets, r.SecretReferences()...)
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
+		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{
 			Context: input.Context.Name, Kind: DiscoveryFamily, Service: r.Identity.Object, ObjectKind: Kind,
-			Keys: []string{substrate.ControllerMediaReservationKey(r.Controller.Endpoint)},
+			Keys: []string{infrastructureservices.ControllerMediaReservationKey(r.Controller.Endpoint).String()},
 		})
 		media = append(media, r.BootMedia.Name)
 	}

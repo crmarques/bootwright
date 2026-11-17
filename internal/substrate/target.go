@@ -1,7 +1,6 @@
 package substrate
 
 import (
-	"net"
 	"net/netip"
 	"net/url"
 	"slices"
@@ -423,51 +422,6 @@ func unreservedSystemIdentity(identity string) bool {
 		}
 	}
 	return true
-}
-
-// ControllerReservationKey claims one physical machine by its controller, so
-// two contexts never drive one server. The host and port come from the
-// endpoint itself, which is already normalized.
-func ControllerReservationKey(endpoint string) string {
-	parsed, err := url.Parse(endpoint)
-	if err != nil {
-		return "bmc:" + endpoint
-	}
-	return "bmc:" + controllerAuthority(parsed) + strings.TrimPrefix(parsed.Path, "/redfish/v1/Systems")
-}
-
-// ControllerMediaReservationKey serializes media and shared security settings
-// across Systems on the same BMC origin, within and across contexts.
-func ControllerMediaReservationKey(endpoint string) string {
-	parsed, err := url.Parse(endpoint)
-	if err != nil {
-		return "bmc-media:" + endpoint
-	}
-	return "bmc-media:" + controllerAuthority(parsed)
-}
-
-func controllerAuthority(parsed *url.URL) string {
-	host := parsed.Host
-	if parsed.Port() == "" {
-		port := "80"
-		if parsed.Scheme == "https" {
-			port = "443"
-		}
-		host = bracketed(parsed.Hostname()) + ":" + port
-	}
-	return host
-}
-
-func SystemReservationKey(uuid string) string {
-	return "bmc-system:" + strings.ToLower(strings.TrimSpace(uuid))
-}
-
-func MACReservationKey(mac string) string {
-	address := strings.TrimSpace(mac)
-	if parsed, err := net.ParseMAC(address); err == nil {
-		address = parsed.String()
-	}
-	return "bmc-mac:" + strings.ToLower(address)
 }
 
 // bracketed wraps a literal IPv6 address so the colon separating host from

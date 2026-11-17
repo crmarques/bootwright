@@ -13,6 +13,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -227,7 +228,7 @@ func claimForBeta(t *testing.T, store *Store, beta contexts.Record) ([]string, f
 	value.Bindings = []prerequisites.ControllerBinding{{Context: beta.Name, Machine: scope.Machine, HostDigest: hostDigest}}
 	publishControllerState(t, store, value)
 	if err := store.MutateLifecycle(ctx, beta.Name, func(tx lifecycle.Transaction) error {
-		return tx.Reserve(ctx, []prerequisites.HostReservation{{Context: beta.Name, Kind: "substrate-machine", Service: "beta", Keys: keys}})
+		return tx.Reserve(ctx, []infrastructureservices.HostReservation{{Context: beta.Name, Kind: "substrate-machine", Service: "beta", Keys: keys}})
 	}); err != nil {
 		t.Fatalf("reserving for beta failed: %#v", diagnostics.Of(err))
 	}
@@ -235,7 +236,7 @@ func claimForBeta(t *testing.T, store *Store, beta contexts.Record) ([]string, f
 		t.Helper()
 		if err := store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
 			bindings = len(slices.DeleteFunc(slices.Clone(view.State.Bindings), func(binding prerequisites.ControllerBinding) bool { return binding.Context != beta.Name }))
-			reservations = len(slices.DeleteFunc(slices.Clone(view.State.Reservations), func(reservation prerequisites.HostReservation) bool { return reservation.Context != beta.Name }))
+			reservations = len(slices.DeleteFunc(slices.Clone(view.State.Reservations), func(reservation infrastructureservices.HostReservation) bool { return reservation.Context != beta.Name }))
 			return nil
 		}); err != nil {
 			t.Fatal(err)

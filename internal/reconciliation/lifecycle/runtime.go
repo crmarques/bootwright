@@ -8,6 +8,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
@@ -32,12 +33,12 @@ type Drive struct {
 	Shared bool
 }
 
-func RefuseHeldDrives(contextName string, held []prerequisites.HostReservation, drives []Drive) error {
+func RefuseHeldDrives(contextName string, held []infrastructureservices.HostReservation, drives []Drive) error {
 	var found []diagnostics.Diagnostic
 	for _, drive := range drives {
-		use := prerequisites.HostReservation{Context: contextName, Kind: drive.Kind, Service: drive.Object, Keys: drive.Keys, Shared: drive.Shared}
-		for _, conflict := range prerequisites.UseConflicts(held, use) {
-			found = append(found, prerequisites.UseDiagnostic(conflict))
+		use := infrastructureservices.HostReservation{Context: contextName, Kind: drive.Kind, Service: drive.Object, Keys: drive.Keys, Shared: drive.Shared}
+		for _, conflict := range infrastructureservices.UseConflicts(held, use) {
+			found = append(found, infrastructureservices.UseDiagnostic(conflict))
 		}
 	}
 	if len(found) == 0 {

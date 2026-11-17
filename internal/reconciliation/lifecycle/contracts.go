@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -72,10 +73,10 @@ type Transaction interface {
 	// Bind records this context's controller relationship on the prepared host.
 	// A first apply establishes it; every later one revalidates exactly it.
 	Bind(context.Context, string, controller.InstalledHostIdentity) error
-	Reserve(context.Context, []prerequisites.HostReservation) error
-	Claim(context.Context, prerequisites.HostReservation) error
+	Reserve(context.Context, []infrastructureservices.HostReservation) error
+	Claim(context.Context, infrastructureservices.HostReservation) error
 	ReleaseReservations(context.Context) error
-	ReproveReservations(ctx context.Context, check func([]prerequisites.HostReservation) error, releasing func(prerequisites.HostReservation) bool) error
+	ReproveReservations(ctx context.Context, check func([]infrastructureservices.HostReservation) error, releasing func(infrastructureservices.HostReservation) bool) error
 	// ClientArea opens the shared host area one exact client closure a context
 	// selects is published into, creating and attributing it under a durable
 	// reservation. A sealed area reopens read-only.
@@ -238,7 +239,7 @@ type Keeper interface {
 }
 
 type ProvingClaimer interface {
-	ProvedClaim(contextName string, block reconciliation.Block, evidence json.RawMessage) (prerequisites.HostReservation, bool, error)
+	ProvedClaim(contextName string, block reconciliation.Block, evidence json.RawMessage) (infrastructureservices.HostReservation, bool, error)
 }
 
 // KeptEntry is the custody entry a kept copy enters: the block that captures
@@ -580,7 +581,7 @@ type PlanInput struct {
 // claims on SSH hosts, which planning compares within this context alone.
 type CapabilityPlan struct {
 	Definitions     []reconciliation.BlockDefinition
-	Reservations    []prerequisites.HostReservation
+	Reservations    []infrastructureservices.HostReservation
 	SSHReservations []SSHReservation
 	Secrets         []string
 }
@@ -595,7 +596,7 @@ type SSHReservation struct {
 	Port          int
 	KnownHostsRef string
 	Installed     bool
-	Reservation   prerequisites.HostReservation
+	Reservation   infrastructureservices.HostReservation
 }
 
 // Execution lends bounded material for one frozen attempt and clears it afterward.

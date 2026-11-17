@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -19,25 +19,25 @@ import (
 func TestARemovalThatWouldStrandAnotherContextsUseRefuses(t *testing.T) {
 	t.Parallel()
 	for name, claims := range map[string]struct {
-		ours, theirs prerequisites.HostReservation
+		ours, theirs infrastructureservices.HostReservation
 	}{
 		"a managed bridge another context's external attachment uses": {
-			prerequisites.HostReservation{Context: testContextName, Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}},
-			prerequisites.HostReservation{Context: "other", Kind: "substrate-host-use", Service: "lab-b", Keys: []string{"bridge-use:virbr-lab"}, Shared: true},
+			infrastructureservices.HostReservation{Context: testContextName, Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}},
+			infrastructureservices.HostReservation{Context: "other", Kind: "substrate-host-use", Service: "lab-b", Keys: []string{"bridge-use:virbr-lab"}, Shared: true},
 		},
 		"an emulated BMC another context drives as a physical machine": {
-			prerequisites.HostReservation{Context: testContextName, Kind: "substrate-machine-bmc", Service: "rhel-01", Keys: []string{"bmc:192.0.2.1:8000/1"}, Shared: true},
-			prerequisites.HostReservation{Context: "other", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:192.0.2.1:8000/1"}},
+			infrastructureservices.HostReservation{Context: testContextName, Kind: "substrate-machine-bmc", Service: "rhel-01", Keys: []string{"bmc:192.0.2.1:8000/1"}, Shared: true},
+			infrastructureservices.HostReservation{Context: "other", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:192.0.2.1:8000/1"}},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t, "alpha")
-			h.capability.reservations = []prerequisites.HostReservation{claims.ours}
+			h.capability.reservations = []infrastructureservices.HostReservation{claims.ours}
 			if _, err := apply(h); err != nil {
 				t.Fatal(err)
 			}
 			applied := currentOperation(t, h)
-			h.workspace.foreign = []prerequisites.HostReservation{claims.theirs}
+			h.workspace.foreign = []infrastructureservices.HostReservation{claims.theirs}
 			_, err := destroy(h)
 			reported := diagnostics.Of(err)
 			if len(reported) != 1 || reported[0].Code != "controller.conflict" || !strings.Contains(reported[0].Message, "context other") ||
@@ -64,15 +64,15 @@ func TestAClaimMadeAfterTheDestroyRegisteredRefusesTheRemovalsEffect(t *testing.
 	t.Parallel()
 	for name, claims := range map[string]struct {
 		kind, object string
-		ours, theirs prerequisites.HostReservation
+		ours, theirs infrastructureservices.HostReservation
 	}{
 		"a bridge use": {"InfraProvider", "lab",
-			prerequisites.HostReservation{Context: testContextName, Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}},
-			prerequisites.HostReservation{Context: "other", Kind: "substrate-host-use", Service: "lab-b", Keys: []string{"bridge-use:virbr-lab"}, Shared: true},
+			infrastructureservices.HostReservation{Context: testContextName, Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}},
+			infrastructureservices.HostReservation{Context: "other", Kind: "substrate-host-use", Service: "lab-b", Keys: []string{"bridge-use:virbr-lab"}, Shared: true},
 		},
 		"an exclusive bmc key": {"Machine", "rhel-01",
-			prerequisites.HostReservation{Context: testContextName, Kind: "substrate-machine-bmc", Service: "rhel-01", Keys: []string{"bmc:192.0.2.1:8000/1"}, Shared: true},
-			prerequisites.HostReservation{Context: "other", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:192.0.2.1:8000/1"}},
+			infrastructureservices.HostReservation{Context: testContextName, Kind: "substrate-machine-bmc", Service: "rhel-01", Keys: []string{"bmc:192.0.2.1:8000/1"}, Shared: true},
+			infrastructureservices.HostReservation{Context: "other", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:192.0.2.1:8000/1"}},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -83,7 +83,7 @@ func TestAClaimMadeAfterTheDestroyRegisteredRefusesTheRemovalsEffect(t *testing.
 			h.service.capabilities = sharedResolver{bound: []BoundCapability{
 				{Binding: CapabilityBinding{Kind: "ArtifactServer", Implementation: guarded.Implementation}, Capability: h.capability},
 				{Binding: CapabilityBinding{Kind: claims.kind, Implementation: guarded.Implementation}, Capability: h.capability},
-			}, plan: CapabilityPlan{Definitions: definitions, Reservations: []prerequisites.HostReservation{claims.ours}}}
+			}, plan: CapabilityPlan{Definitions: definitions, Reservations: []infrastructureservices.HostReservation{claims.ours}}}
 			if _, err := apply(h); err != nil {
 				t.Fatalf("%#v", diagnostics.Of(err))
 			}
@@ -93,7 +93,7 @@ func TestAClaimMadeAfterTheDestroyRegisteredRefusesTheRemovalsEffect(t *testing.
 				if point == "reprove reservations" {
 					reproofs++
 					if reproofs == 2 {
-						h.workspace.foreign = []prerequisites.HostReservation{claims.theirs}
+						h.workspace.foreign = []infrastructureservices.HostReservation{claims.theirs}
 					}
 				}
 				return nil
@@ -123,18 +123,18 @@ func TestARemovalsEffectRunsWithItsReleasedClaimMarked(t *testing.T) {
 	guarded := definition("guarded")
 	guarded.Kind, guarded.Object = "InfraProvider", "lab"
 	definitions := []reconciliation.BlockDefinition{definition("alpha"), guarded}
-	ours := prerequisites.HostReservation{Context: testContextName, Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}}
+	ours := infrastructureservices.HostReservation{Context: testContextName, Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}}
 	h := newPlannedHarness(t, definitions)
 	h.service.capabilities = sharedResolver{bound: []BoundCapability{
 		{Binding: CapabilityBinding{Kind: "ArtifactServer", Implementation: guarded.Implementation}, Capability: h.capability},
 		{Binding: CapabilityBinding{Kind: "InfraProvider", Implementation: guarded.Implementation}, Capability: h.capability},
-	}, plan: CapabilityPlan{Definitions: definitions, Reservations: []prerequisites.HostReservation{ours}}}
+	}, plan: CapabilityPlan{Definitions: definitions, Reservations: []infrastructureservices.HostReservation{ours}}}
 	if _, err := apply(h); err != nil {
 		t.Fatalf("%#v", diagnostics.Of(err))
 	}
 	marked := map[string]bool{}
 	h.capability.destroyHold = func(block string) {
-		marked[block] = slices.ContainsFunc(h.workspace.reservations, func(held prerequisites.HostReservation) bool { return held.Releasing })
+		marked[block] = slices.ContainsFunc(h.workspace.reservations, func(held infrastructureservices.HostReservation) bool { return held.Releasing })
 	}
 	if _, err := destroy(h); err != nil {
 		t.Fatalf("%#v", diagnostics.Of(err))

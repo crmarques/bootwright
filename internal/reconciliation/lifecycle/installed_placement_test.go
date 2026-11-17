@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/trust"
@@ -73,10 +73,10 @@ func TestAnInstalledPlacementIsPinnedToTheHostKeyItsInstallationProved(t *testin
 func TestAnInstalledHostsClaimsAreQualifiedByItsAddressAlone(t *testing.T) {
 	t.Parallel()
 	catalog := api.NewCatalog([]api.Object{api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue())})
-	reservation := prerequisites.HostReservation{Context: "lab", Kind: "artifact-server", Service: "mirror", Keys: []string{"unit:bootwright-lab-artifacts-mirror"}}
+	reservation := infrastructureservices.HostReservation{Context: "lab", Kind: "artifact-server", Service: "mirror", Keys: []string{"unit:bootwright-lab-artifacts-mirror"}}
 	published, keyed, err := publishedSSHClaims(catalog, "controller", []SSHReservation{{Machine: "mirror", Address: "198.51.100.20", Port: 22, Installed: true, Reservation: reservation}})
 	if err != nil || len(keyed) != 0 || len(published) != 1 ||
-		!slices.Equal(published[0].Keys, prerequisites.QualifiedKeys(machineref.SSHReservationQualifier("198.51.100.20", 22), reservation.Keys)) {
+		!slices.Equal(published[0].Keys, infrastructureservices.QualifiedKeys(infrastructureservices.SSHReservationQualifier("198.51.100.20", 22), reservation.Keys)) {
 		t.Fatalf("published %+v, keyed %+v (%v)", published, keyed, err)
 	}
 	if _, _, err := publishedSSHClaims(catalog, "controller", []SSHReservation{{Machine: "mirror", Address: "198.51.100.20", Port: 22, Reservation: reservation}}); err == nil {

@@ -6,7 +6,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
@@ -80,7 +79,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 				plan.Secrets = append(plan.Secrets, reference)
 			}
 		}
-		claim := prerequisites.HostReservation{
+		claim := infrastructureservices.HostReservation{
 			Context: input.Context.Name, Kind: "artifact-server", Service: request.Identity.Service, Keys: request.reservationKeys(),
 		}
 		if request.Placement.Connection != connectionLocal {

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -281,7 +281,7 @@ func TestAFreshDestroyCapturesWhatItsResolutionOfTheApplyProves(t *testing.T) {
 func TestACompletedRemovalWithdrawsEveryEntryBeforeReleasingReservations(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, "install", "media")
-	h.capability.reservations = []prerequisites.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: "install", Keys: []string{"socket:192.0.2.1:8443"}}}
+	h.capability.reservations = []infrastructureservices.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: "install", Keys: []string{"socket:192.0.2.1:8443"}}}
 	h.capability.outcomes = []Result{changedWithKubeconfig(), {Outcome: reconciliation.OutcomeChanged, Evidence: json.RawMessage(`{"ok":true}`), Produced: []Produced{{Name: "password", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("secret")})}}}}
 	if _, err := apply(h); err != nil {
 		t.Fatal(err)

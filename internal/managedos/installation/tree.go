@@ -9,8 +9,8 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -137,7 +137,7 @@ func appendTreePlan(plan *lifecycle.CapabilityPlan, catalog api.Catalog, input l
 		plan.Secrets = append(plan.Secrets, request.Publication.CertificateRef)
 	}
 	if request.Placement.Local() {
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
+		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{
 			Context: input.Context.Name, Kind: "os-package-tree", Service: request.Identity.Profile, Keys: []string{"path:" + request.Publication.Path},
 		})
 	}

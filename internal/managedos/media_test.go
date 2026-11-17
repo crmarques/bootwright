@@ -144,9 +144,3 @@ func TestStagedMediaRecordsDecodeByTheNameTheyState(t *testing.T) {
 		}
 	}
 }
-
-func TestMediaReservationKeyNamesItsImage(t *testing.T) {
-	if got := MediaReservationKey("rhel.iso"); got != "media:rhel.iso" {
-		t.Fatalf("key = %q", got)
-	}
-}

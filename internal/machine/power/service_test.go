@@ -12,9 +12,9 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -52,7 +52,7 @@ type boundary struct {
 	requested []string
 	entered   int
 	retaining []bool
-	held      []prerequisites.HostReservation
+	held      []infrastructureservices.HostReservation
 	drives    [][]lifecycle.Drive
 }
 

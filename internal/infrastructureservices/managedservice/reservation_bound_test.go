@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
@@ -27,13 +26,13 @@ func TestTheReservationSocketBoundKeepsAClaimWithinItsKeys(t *testing.T) {
 		t.Fatalf("requests = %d (%v)", len(requests), err)
 	}
 	keys := requests[0].ReservationKeys()
-	if len(keys) != prerequisites.MaxReservationKeys {
-		t.Fatalf("%d distinct endpoint addresses claim %d keys, want the %d one reservation holds", addresses, len(keys), prerequisites.MaxReservationKeys)
+	if len(keys) != infrastructureservices.MaxReservationKeys {
+		t.Fatalf("%d distinct endpoint addresses claim %d keys, want the %d one reservation holds", addresses, len(keys), infrastructureservices.MaxReservationKeys)
 	}
 	if infrastructureservices.ReservationSockets(object, machine)+2 != len(keys) {
 		t.Fatalf("the bound counts %d sockets, the claim holds %d keys", infrastructureservices.ReservationSockets(object, machine), len(keys))
 	}
-	if infrastructureservices.MaxReservationSockets+2 != prerequisites.MaxReservationKeys {
-		t.Fatalf("%d sockets beside the unit and the content root are not the %d keys one reservation holds", infrastructureservices.MaxReservationSockets, prerequisites.MaxReservationKeys)
+	if infrastructureservices.MaxReservationSockets+2 != infrastructureservices.MaxReservationKeys {
+		t.Fatalf("%d sockets beside the unit and the content root are not the %d keys one reservation holds", infrastructureservices.MaxReservationSockets, infrastructureservices.MaxReservationKeys)
 	}
 }

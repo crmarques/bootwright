@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -66,7 +66,7 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		if !request.Placement.Local() {
 			continue
 		}
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
+		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{
 			Context: input.Context.Name, Kind: "substrate-physical", Service: request.Identity.Object,
 			Keys: request.ReservationKeys(),
 		})
@@ -222,40 +222,40 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 
 var systemToken = regexp.MustCompile(`^[0-9a-z][0-9a-z._-]{0,127}$`)
 
-func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Block, evidence json.RawMessage) (prerequisites.HostReservation, bool, error) {
+func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Block, evidence json.RawMessage) (infrastructureservices.HostReservation, bool, error) {
 	request, err := DecodeRequest(block.Request)
 	if err != nil || !request.Placement.Local() {
-		return prerequisites.HostReservation{}, false, err
+		return infrastructureservices.HostReservation{}, false, err
 	}
 	identity, err := ProvedIdentity(evidence)
 	if err != nil {
-		return prerequisites.HostReservation{}, false, err
+		return infrastructureservices.HostReservation{}, false, err
 	}
-	claim := prerequisites.HostReservation{Context: contextName, Kind: "substrate-physical", Service: request.Identity.Object, Keys: request.ReservationKeys()}
+	claim := infrastructureservices.HostReservation{Context: contextName, Kind: "substrate-physical", Service: request.Identity.Object, Keys: request.ReservationKeys()}
 	if identity.UUID != "" {
 		system := strings.ToLower(identity.UUID)
 		if !systemToken.MatchString(system) {
-			return prerequisites.HostReservation{}, false, refusal("lifecycle.state",
+			return infrastructureservices.HostReservation{}, false, refusal("lifecycle.state",
 				"the system UUID the management controller at "+request.Controller.Endpoint+" reported cannot name a host claim",
 				"correct spec.substrate.baremetal.bmc.address on Machine/"+request.Identity.Object+" so it names a BMC that reports a standard UUID")
 		}
-		claim.Keys = append(claim.Keys, substrate.SystemReservationKey(system))
+		claim.Keys = append(claim.Keys, infrastructureservices.SystemReservationKey(system).String())
 	}
 	addresses := request.Addresses()
-	if len(claim.Keys)+len(addresses) > prerequisites.MaxReservationKeys {
-		return prerequisites.HostReservation{}, false, refusal("lifecycle.state",
-			"Machine/"+request.Identity.Object+" declares more than "+strconv.Itoa(prerequisites.MaxReservationKeys-len(claim.Keys))+" MAC addresses to claim the machine by",
+	if len(claim.Keys)+len(addresses) > infrastructureservices.MaxReservationKeys {
+		return infrastructureservices.HostReservation{}, false, refusal("lifecycle.state",
+			"Machine/"+request.Identity.Object+" declares more than "+strconv.Itoa(infrastructureservices.MaxReservationKeys-len(claim.Keys))+" MAC addresses to claim the machine by",
 			"correct spec.substrate.baremetal.nics on Machine/"+request.Identity.Object)
 	}
 	if identity.UUID == "" && len(addresses) == 0 {
-		return prerequisites.HostReservation{}, false, refusal("lifecycle.state",
+		return infrastructureservices.HostReservation{}, false, refusal("lifecycle.state",
 			"the management controller at "+request.Controller.Endpoint+" reported no system UUID, and Machine/"+request.Identity.Object+
 				" declares no MAC address to claim the machine by",
 			"correct spec.substrate.baremetal.nics on Machine/"+request.Identity.Object)
 	}
 	hardware := make([]string, 0, len(addresses))
 	for _, address := range addresses {
-		hardware = append(hardware, substrate.MACReservationKey(address))
+		hardware = append(hardware, infrastructureservices.MACReservationKey(address).String())
 	}
 	slices.Sort(hardware)
 	claim.Keys = append(claim.Keys, slices.Compact(hardware)...)

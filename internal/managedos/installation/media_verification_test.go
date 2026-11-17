@@ -7,11 +7,10 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func TestDiscoveryPlanFreezesVerificationSetupWithoutRunningIt(t *testing.T) {
@@ -33,8 +32,8 @@ func TestDiscoveryPlanFreezesVerificationSetupWithoutRunningIt(t *testing.T) {
 	if err != nil || !request.Controller.VirtualMedia.EnableVerification {
 		t.Fatalf("frozen verification policy: %+v %v", request.Controller, err)
 	}
-	key := substrate.ControllerMediaReservationKey(request.Controller.Endpoint)
-	if !slices.Contains(block.Exclusive, key) || !slices.ContainsFunc(plan.Reservations, func(claim prerequisites.HostReservation) bool { return slices.Contains(claim.Keys, key) }) {
+	key := infrastructureservices.ControllerMediaReservationKey(request.Controller.Endpoint).String()
+	if !slices.Contains(block.Exclusive, key) || !slices.ContainsFunc(plan.Reservations, func(claim infrastructureservices.HostReservation) bool { return slices.Contains(claim.Keys, key) }) {
 		t.Fatalf("shared-manager reservation absent: %v %v", block.Exclusive, plan.Reservations)
 	}
 	if !slices.ContainsFunc(block.Impacts, func(impact string) bool { return strings.HasPrefix(impact, "enable-bmc-media-verification ") }) {
@@ -49,9 +48,9 @@ func TestPhysicalMediaReservationsCoverOtherSystemsAndContexts(t *testing.T) {
 	if !slices.Equal(first.ExclusiveKeys(), second.ExclusiveKeys()) {
 		t.Fatalf("shared manager is not serialized: %v %v", first.ExclusiveKeys(), second.ExclusiveKeys())
 	}
-	held := []prerequisites.HostReservation{{Context: "first", Kind: "os-install", Service: "node-a", Keys: first.ReservationKeys()}}
-	wanted := []prerequisites.HostReservation{{Context: "second", Kind: "os-install", Service: "node-b", Keys: second.ReservationKeys()}}
-	if len(prerequisites.Conflicts(held, wanted)) != 1 {
+	held := []infrastructureservices.HostReservation{{Context: "first", Kind: "os-install", Service: "node-a", Keys: first.ReservationKeys()}}
+	wanted := []infrastructureservices.HostReservation{{Context: "second", Kind: "os-install", Service: "node-b", Keys: second.ReservationKeys()}}
+	if len(infrastructureservices.Conflicts(held, wanted)) != 1 {
 		t.Fatal("different contexts could concurrently mutate one manager")
 	}
 	if got := (Request{}).ExclusiveKeys(); len(got) != 0 {

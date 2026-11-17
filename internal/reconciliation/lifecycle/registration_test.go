@@ -12,8 +12,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore/areadouble"
@@ -138,8 +138,8 @@ func (unopenable) Reopen(context.Context, custody.BindingRequest) ([]secretstore
 	return nil, errors.New("the bound material cannot be reopened")
 }
 
-func reservationOf(service string) []prerequisites.HostReservation {
-	return []prerequisites.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: service, Keys: []string{"socket:192.0.2.1:8443"}}}
+func reservationOf(service string) []infrastructureservices.HostReservation {
+	return []infrastructureservices.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: service, Keys: []string{"socket:192.0.2.1:8443"}}}
 }
 
 // A fresh apply raises its running evidence before it binds a Secret, claims

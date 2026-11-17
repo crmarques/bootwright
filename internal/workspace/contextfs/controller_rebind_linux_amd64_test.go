@@ -15,6 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -57,7 +58,7 @@ func TestARebindKeepsEveryBindingAndReservation(t *testing.T) {
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
 	if err := store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
-		return tx.Reserve(ctx, []prerequisites.HostReservation{{Context: record.Name, Kind: "listener", Service: "lab-dns", Keys: []string{"udp/53"}}})
+		return tx.Reserve(ctx, []infrastructureservices.HostReservation{{Context: record.Name, Kind: "listener", Service: "lab-dns", Keys: []string{"udp/53"}}})
 	}); err != nil {
 		t.Fatalf("the reservation failed: %#v", diagnostics.Of(err))
 	}
@@ -73,7 +74,7 @@ func TestARebindKeepsEveryBindingAndReservation(t *testing.T) {
 	}
 	if !after.Host.Equal(next) || len(after.Bindings) != 1 || after.Bindings[0].Context != before.Bindings[0].Context ||
 		after.Bindings[0].Machine != before.Bindings[0].Machine || after.Bindings[0].Tools != before.Bindings[0].Tools || after.Bindings[0].HostDigest != digest ||
-		!slices.EqualFunc(after.Reservations, before.Reservations, func(a, b prerequisites.HostReservation) bool {
+		!slices.EqualFunc(after.Reservations, before.Reservations, func(a, b infrastructureservices.HostReservation) bool {
 			return a.Context == b.Context && a.Kind == b.Kind && a.Service == b.Service && slices.Equal(a.Keys, b.Keys)
 		}) {
 		t.Fatalf("the rebind left %+v, from %+v", after, before)

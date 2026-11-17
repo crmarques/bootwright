@@ -12,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -491,7 +492,7 @@ func (t *transaction) InstallerWorkAreas(ctx context.Context, name string) ([]co
 			machine = binding.Machine
 		}
 	}
-	kinds := map[string]string{prerequisites.ClusterMediaReservation: "cluster", prerequisites.OSInstallReservation: "machine"}
+	kinds := map[string]string{infrastructureservices.ClusterMediaReservation: "cluster", infrastructureservices.OSInstallReservation: "machine"}
 	areas := []contexts.WorkArea{}
 	for _, reservation := range stored.value.Reservations {
 		if kind, named := kinds[reservation.Kind]; named && reservation.Context == name {
@@ -518,7 +519,7 @@ func (t *transaction) dropContextClaims(ctx context.Context, name string) error 
 	}
 	value := cloneControllerState(stored.value)
 	value.Bindings = slices.DeleteFunc(value.Bindings, func(binding prerequisites.ControllerBinding) bool { return binding.Context == name })
-	value.Reservations = slices.DeleteFunc(value.Reservations, func(reservation prerequisites.HostReservation) bool { return reservation.Context == name })
+	value.Reservations = slices.DeleteFunc(value.Reservations, func(reservation infrastructureservices.HostReservation) bool { return reservation.Context == name })
 	// Dropping the binding releases the tool area only it named, so the same
 	// publication begins that area's retirement.
 	current, err := t.retireToolAreas(ctx, stored, value, nil, deletionRetry(name))

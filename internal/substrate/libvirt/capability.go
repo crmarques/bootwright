@@ -5,8 +5,8 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -76,11 +76,11 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			Request:        canonical,
 		})
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
-		claims := []prerequisites.HostReservation{{
+		claims := []infrastructureservices.HostReservation{{
 			Context: input.Context.Name, Kind: "substrate-host", Service: request.Identity.Object, Keys: request.ReservationKeys(),
 		}}
 		if shared := request.SharedReservationKeys(); len(shared) != 0 {
-			claims = append(claims, prerequisites.HostReservation{
+			claims = append(claims, infrastructureservices.HostReservation{
 				Context: input.Context.Name, Kind: "substrate-host-use", Service: request.Identity.Object, Keys: shared, Shared: true,
 			})
 		}
@@ -213,7 +213,7 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		}
 		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
-		claim := prerequisites.HostReservation{
+		claim := infrastructureservices.HostReservation{
 			Context: input.Context.Name, Kind: "substrate-machine", Service: request.Identity.Object, Keys: request.ReservationKeys(),
 		}
 
@@ -225,7 +225,7 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		} else {
 			plan.Reservations = append(plan.Reservations, claim)
 		}
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
+		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{
 			Context: input.Context.Name, Kind: "substrate-machine-bmc", Service: request.Identity.Object,
 			Keys: request.SharedReservationKeys(), Shared: true,
 		})

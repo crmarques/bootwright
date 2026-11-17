@@ -14,9 +14,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -333,7 +333,7 @@ func TestEveryE2ECaseContextsClaimDisjointHostReservations(t *testing.T) {
 	for _, name := range e2eCaseNames(t) {
 		for _, render := range e2eRenders[name] {
 			t.Run(name+"/"+render.name, func(t *testing.T) {
-				var contexts [][]prerequisites.HostReservation
+				var contexts [][]infrastructureservices.HostReservation
 				var names []string
 				for _, directory := range renderE2ECase(t, script, name, render) {
 					refusal, reservations := planE2EInput(t, directory)
@@ -348,8 +348,8 @@ func TestEveryE2ECaseContextsClaimDisjointHostReservations(t *testing.T) {
 						if i == j {
 							continue
 						}
-						for _, conflict := range prerequisites.Conflicts(contexts[i], contexts[j]) {
-							t.Errorf("%s then %s: %s", names[i], names[j], prerequisites.ConflictDiagnostic(conflict).Message)
+						for _, conflict := range infrastructureservices.Conflicts(contexts[i], contexts[j]) {
+							t.Errorf("%s then %s: %s", names[i], names[j], infrastructureservices.ConflictDiagnostic(conflict).Message)
 						}
 					}
 				}
@@ -358,7 +358,7 @@ func TestEveryE2ECaseContextsClaimDisjointHostReservations(t *testing.T) {
 	}
 }
 
-func planE2EInput(t *testing.T, directory string) (string, []prerequisites.HostReservation) {
+func planE2EInput(t *testing.T, directory string) (string, []infrastructureservices.HostReservation) {
 	t.Helper()
 	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{directory})
 	if err != nil {
@@ -371,7 +371,7 @@ func planE2EInput(t *testing.T, directory string) (string, []prerequisites.HostR
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, State: state, Controller: "controller", Context: lifecycle.ContextIdentity{Name: filepath.Base(directory)}}
 	var definitions []reconciliation.BlockDefinition
-	var reservations []prerequisites.HostReservation
+	var reservations []infrastructureservices.HostReservation
 	for _, binding := range resolver.Bindings() {
 		capability, ok := resolver.Resolve(binding.Kind, binding.Implementation)
 		if !ok {

@@ -18,6 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -422,11 +423,11 @@ func (t *lifecycleTransaction) PublishEvidence(ctx context.Context, data []byte)
 
 // Reserve replaces this context's claims after proving no other context holds
 // any requested key. A key another context owns refuses; it is never taken.
-func (t *lifecycleTransaction) Reserve(ctx context.Context, reservations []prerequisites.HostReservation) error {
+func (t *lifecycleTransaction) Reserve(ctx context.Context, reservations []infrastructureservices.HostReservation) error {
 	if err := t.base.available(ctx); err != nil {
 		return err
 	}
-	next := make([]prerequisites.HostReservation, 0, len(reservations))
+	next := make([]infrastructureservices.HostReservation, 0, len(reservations))
 	for _, reservation := range reservations {
 		if reservation.Context != t.identity.Name {
 			return state("a lifecycle reservation must belong to its own context")
@@ -436,7 +437,7 @@ func (t *lifecycleTransaction) Reserve(ctx context.Context, reservations []prere
 		reservation.Keys = keys
 		next = append(next, reservation)
 	}
-	slices.SortFunc(next, func(x, y prerequisites.HostReservation) int {
+	slices.SortFunc(next, func(x, y infrastructureservices.HostReservation) int {
 		if order := strings.Compare(x.Kind, y.Kind); order != 0 {
 			return order
 		}
@@ -447,7 +448,7 @@ func (t *lifecycleTransaction) Reserve(ctx context.Context, reservations []prere
 
 // Claim adds one reservation to this context's claims, replacing the one of
 // its kind and service, and writes nothing when it is already held exactly.
-func (t *lifecycleTransaction) Claim(ctx context.Context, reservation prerequisites.HostReservation) error {
+func (t *lifecycleTransaction) Claim(ctx context.Context, reservation infrastructureservices.HostReservation) error {
 	if err := t.base.available(ctx); err != nil {
 		return err
 	}
@@ -455,7 +456,7 @@ func (t *lifecycleTransaction) Claim(ctx context.Context, reservation prerequisi
 		return state("a lifecycle reservation must belong to its own context")
 	}
 	reservation.Keys = slices.Sorted(slices.Values(reservation.Keys))
-	next := []prerequisites.HostReservation{reservation}
+	next := []infrastructureservices.HostReservation{reservation}
 	if t.stored.data != nil {
 		for _, held := range t.stored.value.Reservations {
 			if held.Context != t.identity.Name {
@@ -471,7 +472,7 @@ func (t *lifecycleTransaction) Claim(ctx context.Context, reservation prerequisi
 			next = append(next, held)
 		}
 	}
-	slices.SortFunc(next, func(x, y prerequisites.HostReservation) int {
+	slices.SortFunc(next, func(x, y infrastructureservices.HostReservation) int {
 		if order := strings.Compare(x.Kind, y.Kind); order != 0 {
 			return order
 		}
@@ -491,7 +492,7 @@ func (t *lifecycleTransaction) ReleaseReservations(ctx context.Context) error {
 // that follows the admitting check, so no claim lands between the proof and
 // the mark. The mark is durable: a removal interrupted during its effect
 // leaves it, and only the claim's release or its replacement clears it.
-func (t *lifecycleTransaction) ReproveReservations(ctx context.Context, check func([]prerequisites.HostReservation) error, releasing func(prerequisites.HostReservation) bool) error {
+func (t *lifecycleTransaction) ReproveReservations(ctx context.Context, check func([]infrastructureservices.HostReservation) error, releasing func(infrastructureservices.HostReservation) bool) error {
 	if err := t.base.available(ctx); err != nil {
 		return err
 	}
@@ -573,23 +574,23 @@ func (t *lifecycleTransaction) initializeController(ctx context.Context, host co
 	return nil
 }
 
-func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []prerequisites.HostReservation, retry string) error {
+func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []infrastructureservices.HostReservation, retry string) error {
 	if t.stored.data == nil {
 		if len(next) == 0 {
 			return nil
 		}
 		return controllerFailure("controller.identity", "locally hosted services require a completed controller setup on this host", completeSetup)
 	}
-	retained := []prerequisites.HostReservation{}
+	retained := []infrastructureservices.HostReservation{}
 	for _, reservation := range t.stored.value.Reservations {
 		if reservation.Context != t.identity.Name {
 			retained = append(retained, reservation)
 		}
 	}
-	if conflicts := prerequisites.Conflicts(retained, next); len(conflicts) > 0 {
+	if conflicts := infrastructureservices.Conflicts(retained, next); len(conflicts) > 0 {
 		found := make([]diagnostics.Diagnostic, 0, len(conflicts))
 		for _, conflict := range conflicts {
-			found = append(found, prerequisites.ConflictDiagnostic(conflict))
+			found = append(found, infrastructureservices.ConflictDiagnostic(conflict))
 		}
 		return &diagnostics.Failure{Diagnostics: found}
 	}
@@ -599,7 +600,7 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 			"take back a context this host no longer needs with bootwright destroy --context <name>, or delete it with bootwright context delete --name <name> --purge, then repeat the apply")
 	}
 	combined := append(retained, next...)
-	slices.SortFunc(combined, func(x, y prerequisites.HostReservation) int {
+	slices.SortFunc(combined, func(x, y infrastructureservices.HostReservation) int {
 		if order := strings.Compare(x.Context, y.Context); order != 0 {
 			return order
 		}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -40,8 +41,8 @@ func holdRoot(t *testing.T, store *Store, how int) func() {
 	}
 }
 
-func rootWaitClaim() []prerequisites.HostReservation {
-	return []prerequisites.HostReservation{{Context: "example", Kind: "test", Service: "service", Keys: []string{"path:/var/lib/example"}}}
+func rootWaitClaim() []infrastructureservices.HostReservation {
+	return []infrastructureservices.HostReservation{{Context: "example", Kind: "test", Service: "service", Keys: []string{"path:/var/lib/example"}}}
 }
 
 func reservationsHeld(t *testing.T, store *Store) int {

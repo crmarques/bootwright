@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/controller"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -30,7 +30,7 @@ func TestControllerRefusalsNameTheirOwnRemedies(t *testing.T) {
 			return err
 		},
 		"host reservation": func(tx lifecycle.Transaction) error {
-			return tx.Reserve(ctx, []prerequisites.HostReservation{{Context: "example", Kind: "listener", Service: "lab-dns", Keys: []string{"udp/53"}}})
+			return tx.Reserve(ctx, []infrastructureservices.HostReservation{{Context: "example", Kind: "listener", Service: "lab-dns", Keys: []string{"udp/53"}}})
 		},
 	} {
 		err := store.MutateLifecycle(ctx, "example", call)

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -240,7 +241,7 @@ func (r HostRequest) SharedReservationKeys() []string {
 }
 
 func (r MachineRequest) SharedReservationKeys() []string {
-	return []string{substrate.ControllerReservationKey(r.Controller.Endpoint)}
+	return []string{infrastructureservices.ControllerReservationKey(r.Controller.Endpoint).String()}
 }
 
 func (r MachineRequest) ReservationKeys() []string {

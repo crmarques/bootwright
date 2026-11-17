@@ -1,4 +1,4 @@
-package prerequisites
+package infrastructureservices
 
 import (
 	"net/netip"
@@ -17,6 +17,28 @@ const MaxReservationKeys = 64
 const MaxPublishedReservationKeys = 2 * MaxReservationKeys
 
 const MaxReservationKeyBytes = 256
+
+const (
+	ClusterMediaReservation = "cluster-media"
+	OSInstallReservation    = "os-install"
+)
+
+// HostReservation records the host resources one context's locally hosted
+// service claims. Workspace stores the keys and compares them through
+// Conflicts, which reads no key beyond its class, a socket's address and port,
+// and a prefix; only the owning capability knows what a key means. Setup
+// reserves nothing. ObjectKind is the API kind of the object a claim names.
+// A shared claim is held by any number of contexts at once and conflicts with
+// nothing; it records that a resource is still in use rather than who owns it.
+type HostReservation struct {
+	Context    string   `json:"context"`
+	Kind       string   `json:"kind"`
+	Service    string   `json:"service"`
+	ObjectKind string   `json:"objectKind,omitempty"`
+	Keys       []string `json:"keys"`
+	Shared     bool     `json:"shared,omitempty"`
+	Releasing  bool     `json:"releasing,omitempty"`
+}
 
 // Conflict is one exclusive key another context holds and the key of this
 // context's claim it conflicts with.
@@ -103,8 +125,8 @@ func UseConflicts(held []HostReservation, use HostReservation) []Conflict {
 }
 
 func UseDiagnostic(c Conflict) diagnostics.Diagnostic {
-	_, heldKey := unqualified(c.HeldKey)
-	class, _, _ := strings.Cut(heldKey, ":")
+	held, _ := ParseKey(c.HeldKey)
+	class := held.Class
 	object := conflictObject(c.Wanted)
 	used := map[string]string{
 		"bmc":        "the management controller endpoint " + object + " is driven through",
@@ -123,14 +145,6 @@ func UseDiagnostic(c Conflict) diagnostics.Diagnostic {
 		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: c.Wanted.Service}
 	}
 	return diagnostic
-}
-
-func QualifiedKeys(qualifier string, keys []string) []string {
-	qualified := make([]string, 0, len(keys))
-	for _, key := range keys {
-		qualified = append(qualified, qualifier+key)
-	}
-	return qualified
 }
 
 func unqualified(key string) (string, string) {
@@ -219,8 +233,8 @@ func ConflictDiagnostic(c Conflict) diagnostics.Diagnostic {
 	if c.Releasing {
 		return releasingDiagnostic(c)
 	}
-	_, heldKey := unqualified(c.HeldKey)
-	class, _, _ := strings.Cut(heldKey, ":")
+	held, _ := ParseKey(c.HeldKey)
+	class := held.Class
 	wantedPart := "the same " + class + " reservation"
 	switch class {
 	case "socket", "bridge", "prefix":

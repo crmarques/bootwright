@@ -19,6 +19,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -654,7 +655,7 @@ func TestARecordHoldsUnqualifiedAndSSHQualifiedKeys(t *testing.T) {
 		t.Fatalf("an unqualified record was refused: %#v", diagnostics.Of(err))
 	}
 	value := syntheticControllerState(t)
-	value.Reservations = []prerequisites.HostReservation{
+	value.Reservations = []infrastructureservices.HostReservation{
 		{Context: "lab", Kind: "proxy", Service: "local-proxy", Keys: []string{"socket:0.0.0.0:3128", "unit:bootwright-proxy"}},
 		{Context: "lab", Kind: "proxy", Service: "remote-proxy", Keys: []string{"ssh/fd00::10:22/socket:0.0.0.0:3128", "ssh/fd00::10:22/unit:bootwright-proxy"}},
 		{Context: "second", Kind: "proxy", Service: "other-proxy", Keys: []string{"ssh/proxy.example.test:22/socket:0.0.0.0:3128"}},
@@ -678,8 +679,8 @@ func TestARecordHoldsUnqualifiedAndSSHQualifiedKeys(t *testing.T) {
 func TestARecordHoldsTheAPIKindAClaimReservesFor(t *testing.T) {
 	t.Parallel()
 	value := syntheticControllerState(t)
-	value.Reservations = []prerequisites.HostReservation{
-		{Context: "lab", Kind: prerequisites.ClusterMediaReservation, Service: "sno", ObjectKind: "OpenShiftCluster", Keys: []string{"path:/var/lib/bootwright/media/sno"}},
+	value.Reservations = []infrastructureservices.HostReservation{
+		{Context: "lab", Kind: infrastructureservices.ClusterMediaReservation, Service: "sno", ObjectKind: "OpenShiftCluster", Keys: []string{"path:/var/lib/bootwright/media/sno"}},
 		{Context: "lab", Kind: "proxy", Service: "local-proxy", Keys: []string{"socket:0.0.0.0:3128"}},
 	}
 	encoded, err := encodeRecord(controllerRecord(value, nil), maxControllerState)

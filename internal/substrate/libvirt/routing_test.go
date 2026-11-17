@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -63,7 +63,7 @@ func TestTheManagedNetworkBoundWithATrunkKeepsTheHostReservationWithinItsKeys(t 
 	objects = append(objects, legNetwork("leg", "10.250.0.1/24", "140"))
 	request := taggedHostRequest(t, objects...)
 	keys := request.ReservationKeys()
-	if want := 4 + 1 + 3*(substrate.MaxManagedNetworks-2) + 3 + 2; len(keys) != want || len(keys) > prerequisites.MaxReservationKeys {
+	if want := 4 + 1 + 3*(substrate.MaxManagedNetworks-2) + 3 + 2; len(keys) != want || len(keys) > infrastructureservices.MaxReservationKeys {
 		t.Fatalf("%d keys, want %d: %v", len(keys), want, keys)
 	}
 	if issues := substrate.Validate(objects[len(objects)-1], catalogOf(objects...)); len(issues) != 0 {
@@ -73,8 +73,8 @@ func TestTheManagedNetworkBoundWithATrunkKeepsTheHostReservationWithinItsKeys(t 
 	for index := range substrate.MaxManagedNetworks - 1 {
 		legs = append(legs, legNetwork(fmt.Sprintf("leg-%02d", index), fmt.Sprintf("10.%d.0.1/24", 100+index), strconv.Itoa(100+index)))
 	}
-	if keys := taggedHostRequest(t, legs...).ReservationKeys(); len(keys) != 4+1+3*(substrate.MaxManagedNetworks-1)+2 || len(keys) > prerequisites.MaxReservationKeys {
-		t.Fatalf("%d legs on one trunk claim %d keys, of the %d one reservation holds", substrate.MaxManagedNetworks-1, len(keys), prerequisites.MaxReservationKeys)
+	if keys := taggedHostRequest(t, legs...).ReservationKeys(); len(keys) != 4+1+3*(substrate.MaxManagedNetworks-1)+2 || len(keys) > infrastructureservices.MaxReservationKeys {
+		t.Fatalf("%d legs on one trunk claim %d keys, of the %d one reservation holds", substrate.MaxManagedNetworks-1, len(keys), infrastructureservices.MaxReservationKeys)
 	}
 }
 

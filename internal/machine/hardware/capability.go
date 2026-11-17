@@ -7,12 +7,11 @@ import (
 	"strconv"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
-	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 type Capability struct{ runner Runner }
@@ -41,7 +40,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			Impacts: impacts(input.Verb, request), Groups: groups(input.Verb, request), Consumes: []string{},
 			Kind: Kind, Object: request.Identity.Object, Family: Family, Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical,
 		})
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{Context: input.Context.Name, Kind: ClaimKind, Service: request.Identity.Object})
+		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{Context: input.Context.Name, Kind: ClaimKind, Service: request.Identity.Object})
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
 	}
 	plan.Secrets = lifecycle.SecretNames(plan.Secrets...)
@@ -179,35 +178,35 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	return result, request, err
 }
 
-func (Capability) ProvedClaim(contextName string, block reconciliation.Block, evidence json.RawMessage) (prerequisites.HostReservation, bool, error) {
+func (Capability) ProvedClaim(contextName string, block reconciliation.Block, evidence json.RawMessage) (infrastructureservices.HostReservation, bool, error) {
 	request, err := DecodeRequest(block.Request)
 	if err != nil {
-		return prerequisites.HostReservation{}, false, err
+		return infrastructureservices.HostReservation{}, false, err
 	}
 	reservation, err := claim(contextName, request, evidence)
 	return reservation, err == nil && len(reservation.Keys) != 0, err
 }
 
-func claim(contextName string, request Request, data []byte) (prerequisites.HostReservation, error) {
+func claim(contextName string, request Request, data []byte) (infrastructureservices.HostReservation, error) {
 	evidence, err := decodeEvidence(data)
 	if err != nil {
-		return prerequisites.HostReservation{}, err
+		return infrastructureservices.HostReservation{}, err
 	}
 	if evidence.Absent || !evidence.Postcondition {
-		return prerequisites.HostReservation{}, refusal("lifecycle.state", "the machine hardware evidence proves no read of its host", "")
+		return infrastructureservices.HostReservation{}, refusal("lifecycle.state", "the machine hardware evidence proves no read of its host", "")
 	}
-	if len(evidence.Addresses) > prerequisites.MaxReservationKeys {
-		return prerequisites.HostReservation{}, refusal("lifecycle.state",
+	if len(evidence.Addresses) > infrastructureservices.MaxReservationKeys {
+		return infrastructureservices.HostReservation{}, refusal("lifecycle.state",
 			"Machine/"+request.Identity.Object+" reports "+strconv.Itoa(len(evidence.Addresses))+" permanent hardware addresses, more than the "+
-				strconv.Itoa(prerequisites.MaxReservationKeys)+" one claim holds, so the server behind it cannot be claimed",
-			"place the work on a Machine whose host reports at most "+strconv.Itoa(prerequisites.MaxReservationKeys)+" physical network interfaces")
+				strconv.Itoa(infrastructureservices.MaxReservationKeys)+" one claim holds, so the server behind it cannot be claimed",
+			"place the work on a Machine whose host reports at most "+strconv.Itoa(infrastructureservices.MaxReservationKeys)+" physical network interfaces")
 	}
 	keys := make([]string, 0, len(evidence.Addresses))
 	for _, address := range evidence.Addresses {
-		keys = append(keys, substrate.MACReservationKey(address))
+		keys = append(keys, infrastructureservices.MACReservationKey(address).String())
 	}
 	slices.Sort(keys)
-	return prerequisites.HostReservation{Context: contextName, Kind: ClaimKind, Service: request.Identity.Object, Keys: slices.Compact(keys)}, nil
+	return infrastructureservices.HostReservation{Context: contextName, Kind: ClaimKind, Service: request.Identity.Object, Keys: slices.Compact(keys)}, nil
 }
 
 func (Capability) SecretReferences(block reconciliation.Block) ([]string, error) {

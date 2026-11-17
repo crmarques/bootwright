@@ -20,6 +20,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
@@ -61,7 +62,7 @@ func copySources(t *testing.T, sources desiredstate.Sources, destination string)
 // registration, so two capabilities claiming one kind and service — or one
 // capability emitting a claim per key — refuses the whole apply before any
 // effect. No single capability's own tests can see that.
-func requireCanonicalReservations(t *testing.T, claims []prerequisites.HostReservation) {
+func requireCanonicalReservations(t *testing.T, claims []infrastructureservices.HostReservation) {
 	t.Helper()
 	seen := map[string]bool{}
 	for _, claim := range claims {
@@ -251,7 +252,7 @@ func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 		Context: lifecycle.ContextIdentity{Name: "lab-rhel"},
 	}
 	var definitions []reconciliation.BlockDefinition
-	var claims []prerequisites.HostReservation
+	var claims []infrastructureservices.HostReservation
 	reservations := map[string][]string{}
 	for _, binding := range resolver.Bindings() {
 		capability, ok := resolver.Resolve(binding.Kind, binding.Implementation)

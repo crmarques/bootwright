@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
@@ -172,8 +172,8 @@ func (s Service) refuseNewReservations(ctx context.Context, view View, before *c
 	if err != nil {
 		return verdict(err)
 	}
-	unheld := func(reservation prerequisites.HostReservation) bool {
-		return !slices.ContainsFunc(held.reservations, func(other prerequisites.HostReservation) bool { return reflect.DeepEqual(reservation, other) })
+	unheld := func(reservation infrastructureservices.HostReservation) bool {
+		return !slices.ContainsFunc(held.reservations, func(other infrastructureservices.HostReservation) bool { return reflect.DeepEqual(reservation, other) })
 	}
 	unkeyed := func(claim hostKeyedClaim) bool {
 		return !slices.ContainsFunc(held.hostKeyed, func(other hostKeyedClaim) bool { return reflect.DeepEqual(claim, other) })

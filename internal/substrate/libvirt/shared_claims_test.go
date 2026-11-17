@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -25,7 +25,7 @@ func externalAttachments(bridges ...string) api.FieldValue {
 
 func planned(t *testing.T, capability interface {
 	Plan(context.Context, lifecycle.PlanInput) (lifecycle.CapabilityPlan, error)
-}, catalog api.Catalog) []prerequisites.HostReservation {
+}, catalog api.Catalog) []infrastructureservices.HostReservation {
 	t.Helper()
 	plan, err := capability.Plan(context.Background(), lifecycle.PlanInput{
 		Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
@@ -63,7 +63,7 @@ func TestAnEmulatedBMCClaimsItsControllerKeyShared(t *testing.T) {
 		t.Fatalf("requests = %+v (%v)", requests, err)
 	}
 	reservations := planned(t, NewMachine(nil), labCatalog())
-	want := substrate.ControllerReservationKey(requests[0].Controller.Endpoint)
+	want := infrastructureservices.ControllerReservationKey(requests[0].Controller.Endpoint).String()
 	if len(reservations) != 2 || reservations[1].Kind != "substrate-machine-bmc" || !reservations[1].Shared ||
 		reservations[1].Service != "rhel-01" || !slices.Equal(reservations[1].Keys, []string{want}) || want != "bmc:192.0.2.1:8000/"+substrate.DomainUUID(testContext, "rhel-01") {
 		t.Fatalf("reservations = %+v, want the shared %s", reservations, want)
@@ -73,15 +73,15 @@ func TestAnEmulatedBMCClaimsItsControllerKeyShared(t *testing.T) {
 // The external bridges a provider uses travel in a reservation of their own,
 // bounded by the keys one reservation holds.
 func TestTheExternalBridgeBoundKeepsTheUseReservationWithinItsKeys(t *testing.T) {
-	if substrate.MaxExternalBridges != prerequisites.MaxReservationKeys {
-		t.Fatalf("%d external bridges against the %d keys one reservation holds", substrate.MaxExternalBridges, prerequisites.MaxReservationKeys)
+	if substrate.MaxExternalBridges != infrastructureservices.MaxReservationKeys {
+		t.Fatalf("%d external bridges against the %d keys one reservation holds", substrate.MaxExternalBridges, infrastructureservices.MaxReservationKeys)
 	}
 	var bridges []string
 	for index := range substrate.MaxExternalBridges {
 		bridges = append(bridges, fmt.Sprintf("br-%02d", index))
 	}
 	reservations := planned(t, NewHost(nil), catalogOf(controller(), provider(externalAttachments(bridges...)), networkConfig()))
-	if len(reservations) != 2 || len(reservations[1].Keys) != prerequisites.MaxReservationKeys {
+	if len(reservations) != 2 || len(reservations[1].Keys) != infrastructureservices.MaxReservationKeys {
 		t.Fatalf("%d external bridges claim %+v", len(bridges), reservations)
 	}
 }

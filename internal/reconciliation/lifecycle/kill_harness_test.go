@@ -16,8 +16,8 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -168,7 +168,7 @@ func (h *killHost) Plan(_ context.Context, input PlanInput) (CapabilityPlan, err
 	}
 	return CapabilityPlan{
 		Definitions: definitions,
-		Reservations: []prerequisites.HostReservation{{
+		Reservations: []infrastructureservices.HostReservation{{
 			Context: testContextName, Kind: "artifact-server", Service: "a", Keys: []string{"socket:192.0.2.1:8443"},
 		}},
 		Secrets: []string{"artifact-server-tls"},
@@ -421,11 +421,11 @@ func killCloneArea(area, live *memoryArea, files map[string][]byte) *memoryArea 
 	return copied
 }
 
-func killCloneReservations(reservations []prerequisites.HostReservation) []prerequisites.HostReservation {
+func killCloneReservations(reservations []infrastructureservices.HostReservation) []infrastructureservices.HostReservation {
 	if reservations == nil {
 		return nil
 	}
-	out := make([]prerequisites.HostReservation, 0, len(reservations))
+	out := make([]infrastructureservices.HostReservation, 0, len(reservations))
 	for _, reservation := range reservations {
 		reservation.Keys = slices.Clone(reservation.Keys)
 		out = append(out, reservation)

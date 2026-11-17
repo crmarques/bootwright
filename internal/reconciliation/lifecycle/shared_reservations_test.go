@@ -7,18 +7,18 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
-func sharedMedia(keys ...string) prerequisites.HostReservation {
-	return prerequisites.HostReservation{Context: testContextName, Kind: "media", Service: "media", Shared: true, Keys: keys}
+func sharedMedia(keys ...string) infrastructureservices.HostReservation {
+	return infrastructureservices.HostReservation{Context: testContextName, Kind: "media", Service: "media", Shared: true, Keys: keys}
 }
 
 func TestSharedReservationsUniteKeysWithoutChangingContributions(t *testing.T) {
 	t.Parallel()
 	for _, reverse := range []bool{false, true} {
-		claims := []prerequisites.HostReservation{
+		claims := []infrastructureservices.HostReservation{
 			sharedMedia("media:boot.iso"),
 			{Context: testContextName, Kind: "os-install", Service: "node", Keys: []string{"path:/srv/node"}},
 			sharedMedia("media:dvd.iso", "media:boot.iso"),
@@ -26,13 +26,13 @@ func TestSharedReservationsUniteKeysWithoutChangingContributions(t *testing.T) {
 		if reverse {
 			slices.Reverse(claims)
 		}
-		before := make([]prerequisites.HostReservation, len(claims))
+		before := make([]infrastructureservices.HostReservation, len(claims))
 		for i, claim := range claims {
 			before[i] = claim
 			before[i].Keys = slices.Clone(claim.Keys)
 		}
 		got, err := hostKeyedReservations(capabilityBinding{reservations: claims}, nil, nil)
-		want := []prerequisites.HostReservation{sharedMedia("media:boot.iso", "media:dvd.iso"),
+		want := []infrastructureservices.HostReservation{sharedMedia("media:boot.iso", "media:dvd.iso"),
 			{Context: testContextName, Kind: "os-install", Service: "node", Keys: []string{"path:/srv/node"}}}
 		if err != nil || !reflect.DeepEqual(got, want) {
 			t.Fatalf("shared claim composition = %+v (%v), want %+v", got, err, want)
@@ -48,7 +48,7 @@ func TestSharedReservationsRefuseConflictingIdentityMetadataBeforeEffects(t *tes
 	t.Parallel()
 	for _, field := range []string{"exclusive", "mixed", "object kind", "releasing"} {
 		t.Run(field, func(t *testing.T) {
-			claims := []prerequisites.HostReservation{sharedMedia("media:boot.iso"), sharedMedia("media:dvd.iso")}
+			claims := []infrastructureservices.HostReservation{sharedMedia("media:boot.iso"), sharedMedia("media:dvd.iso")}
 			switch field {
 			case "exclusive":
 				claims[0].Shared, claims[1].Shared = false, false
@@ -82,7 +82,7 @@ func TestPreparationAdvancesWithOneSharedMediaReservation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	h := prepareHarness(t, "inventory")
-	h.capability.reservations = []prerequisites.HostReservation{sharedMedia("media:boot.iso")}
+	h.capability.reservations = []infrastructureservices.HostReservation{sharedMedia("media:boot.iso")}
 	if _, err := h.service.Prepare(ctx, requestPreparation()); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestPreparationAdvancesWithOneSharedMediaReservation(t *testing.T) {
 		if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
 			t.Fatal(err)
 		}
-		if want := []prerequisites.HostReservation{sharedMedia("media:boot.iso", "media:dvd.iso")}; !reflect.DeepEqual(h.workspace.reservations, want) {
+		if want := []infrastructureservices.HostReservation{sharedMedia("media:boot.iso", "media:dvd.iso")}; !reflect.DeepEqual(h.workspace.reservations, want) {
 			t.Fatalf("preparation advancement did not retain exactly one complete claim: %+v", h.workspace.reservations)
 		}
 	}
@@ -105,13 +105,13 @@ func TestSharedReservationsKeepEverySSHHostQualifierAfterComposition(t *testing.
 	t.Parallel()
 	h := newPlannedHarness(t, nestedDefinitions())
 	h.service.compiler = testCompiler{state: withControllerAddress()}
-	h.capability.reservations = []prerequisites.HostReservation{sharedMedia("media:boot.iso"), sharedMedia("media:dvd.iso")}
-	claim := prerequisites.HostReservation{Context: testContextName, Kind: "host-use", Service: "files", Shared: true, Keys: []string{"path:/srv/files"}}
+	h.capability.reservations = []infrastructureservices.HostReservation{sharedMedia("media:boot.iso"), sharedMedia("media:dvd.iso")}
+	claim := infrastructureservices.HostReservation{Context: testContextName, Kind: "host-use", Service: "files", Shared: true, Keys: []string{"path:/srv/files"}}
 	h.capability.sshClaims = []SSHReservation{sshClaim("services", claim), sshClaim("storage", claim)}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	want := []prerequisites.HostReservation{
+	want := []infrastructureservices.HostReservation{
 		{Context: testContextName, Kind: "host-use", Service: "files", Shared: true, Keys: []string{
 			"ssh/192.0.2.10:22/path:/srv/files", "ssh/192.0.2.20:22/path:/srv/files",
 			pinnedQualifier("services") + "path:/srv/files", pinnedQualifier("storage") + "path:/srv/files"}},
@@ -129,12 +129,12 @@ func TestSharedReservationsPreserveContextAndMetadataAndBoundTheUnion(t *testing
 	claim.ObjectKind, claim.Releasing = "Machine", true
 	other := claim
 	other.Context = "other"
-	got, err := hostKeyedReservations(capabilityBinding{reservations: []prerequisites.HostReservation{other, claim, claim}}, nil, nil)
-	if err != nil || !reflect.DeepEqual(got, []prerequisites.HostReservation{claim, other}) {
+	got, err := hostKeyedReservations(capabilityBinding{reservations: []infrastructureservices.HostReservation{other, claim, claim}}, nil, nil)
+	if err != nil || !reflect.DeepEqual(got, []infrastructureservices.HostReservation{claim, other}) {
 		t.Fatalf("composition changed context or matching metadata: %+v (%v)", got, err)
 	}
-	claims := []prerequisites.HostReservation{sharedMedia(), sharedMedia()}
-	for i := range prerequisites.MaxPublishedReservationKeys {
+	claims := []infrastructureservices.HostReservation{sharedMedia(), sharedMedia()}
+	for i := range infrastructureservices.MaxPublishedReservationKeys {
 		claims[i%2].Keys = append(claims[i%2].Keys, fmt.Sprintf("media:image-%03d.iso", i))
 	}
 	if _, err := hostKeyedReservations(capabilityBinding{reservations: claims}, nil, nil); err != nil {
@@ -144,7 +144,7 @@ func TestSharedReservationsPreserveContextAndMetadataAndBoundTheUnion(t *testing
 	if _, err := hostKeyedReservations(capabilityBinding{reservations: claims}, nil, nil); err == nil {
 		t.Fatal("composition exceeded the published key bound")
 	}
-	if _, err := hostKeyedReservations(capabilityBinding{reservations: []prerequisites.HostReservation{sharedMedia("media:boot.iso", "media:boot.iso")}}, nil, nil); err == nil {
+	if _, err := hostKeyedReservations(capabilityBinding{reservations: []infrastructureservices.HostReservation{sharedMedia("media:boot.iso", "media:boot.iso")}}, nil, nil); err == nil {
 		t.Fatal("composition hid duplicate keys within one contribution")
 	}
 }

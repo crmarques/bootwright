@@ -9,6 +9,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -118,15 +119,15 @@ func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextNam
 }
 
 func drives(frozen Request, physical bool, pin machine.HardwareIdentity, macs []string) []lifecycle.Drive {
-	endpoint := substrate.ControllerReservationKey(frozen.Controller.Endpoint)
+	endpoint := infrastructureservices.ControllerReservationKey(frozen.Controller.Endpoint).String()
 	switch {
 	case physical:
 		keys := []string{endpoint}
 		for _, mac := range macs {
-			keys = append(keys, substrate.MACReservationKey(mac))
+			keys = append(keys, infrastructureservices.MACReservationKey(mac).String())
 		}
 		if strings.TrimSpace(pin.UUID) != "" {
-			keys = append(keys, substrate.SystemReservationKey(pin.UUID))
+			keys = append(keys, infrastructureservices.SystemReservationKey(pin.UUID).String())
 		}
 		return []lifecycle.Drive{{Kind: "substrate-physical", Object: frozen.Identity.Object, Keys: keys}}
 	case substrate.EmulatedBMC(frozen.Arm):

@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -148,7 +148,7 @@ func lostMachineJourney(t *testing.T) (*lifecycle.CapabilityJourney, *hypervisor
 				ContentDigest: strings.Repeat("d", 64), Request: canonical,
 				Groups: []reconciliation.Group{{ID: "define-domain", Description: "define the domain", Machines: []string{"rhel-01"}}},
 			}},
-			Reservations: []prerequisites.HostReservation{{Context: lifecycle.JourneyContext, Kind: "substrate-machine", Service: "rhel-01", Keys: request.ReservationKeys()}},
+			Reservations: []infrastructureservices.HostReservation{{Context: lifecycle.JourneyContext, Kind: "substrate-machine", Service: "rhel-01", Keys: request.ReservationKeys()}},
 			Secrets:      request.SecretReferences(),
 		})
 	if _, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}); err == nil {
@@ -201,7 +201,7 @@ func requireRefusal(t *testing.T, journey *lifecycle.CapabilityJourney, adapter 
 	if calls := adapter.took(); !slices.Equal(calls, []string{"observe", "observe"}) {
 		t.Fatalf("the refused removal ran %v, want only its resolution's observations, the apply's and then the removal's", calls)
 	}
-	if !slices.EqualFunc(journey.Reservations(), before, func(x, y prerequisites.HostReservation) bool {
+	if !slices.EqualFunc(journey.Reservations(), before, func(x, y infrastructureservices.HostReservation) bool {
 		return x.Context == y.Context && slices.Equal(x.Keys, y.Keys)
 	}) || len(before) != 1 {
 		t.Fatalf("the refused removal changed the reservations %v to %v", before, journey.Reservations())

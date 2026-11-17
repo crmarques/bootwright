@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -252,10 +252,10 @@ func TestAnIPv6ControllerIsBracketedAndClaimsTheSharedSocketKey(t *testing.T) {
 	if !slices.Equal(service, []string{"socket:fd00::1:8000"}) || !slices.Contains(requests[0].ReservationKeys(), service[0]) {
 		t.Fatalf("machine keys = %v, managed service keys = %v", requests[0].ReservationKeys(), service)
 	}
-	held := []prerequisites.HostReservation{{Context: "other", Kind: "proxy", Service: "proxy",
+	held := []infrastructureservices.HostReservation{{Context: "other", Kind: "proxy", Service: "proxy",
 		Keys: managedservice.ReservationKeys("bootwright-other-proxy", "/var/lib/bootwright-hosted/other/services/proxy", service)}}
-	wanted := []prerequisites.HostReservation{{Context: testContext, Kind: "substrate-machine", Service: "rhel-01", Keys: requests[0].ReservationKeys()}}
-	conflicts := prerequisites.Conflicts(held, wanted)
+	wanted := []infrastructureservices.HostReservation{{Context: testContext, Kind: "substrate-machine", Service: "rhel-01", Keys: requests[0].ReservationKeys()}}
+	conflicts := infrastructureservices.Conflicts(held, wanted)
 	if len(conflicts) != 1 || conflicts[0].Held.Context != "other" || conflicts[0].HeldKey != service[0] || conflicts[0].WantedKey != service[0] {
 		t.Fatalf("conflicts = %+v", conflicts)
 	}
@@ -273,9 +273,9 @@ func TestTwoContextsOverlappingManagedPrefixesConflict(t *testing.T) {
 		}
 		return requests[0]
 	}
-	held := []prerequisites.HostReservation{{Context: "other", Kind: "substrate-host", Service: "lab-libvirt", Keys: hostOf("other", "virbr-a").ReservationKeys()}}
-	wanted := []prerequisites.HostReservation{{Context: "lab", Kind: "substrate-host", Service: "lab-libvirt", Keys: hostOf("lab", "virbr-b").ReservationKeys()}}
-	conflicts := prerequisites.Conflicts(held, wanted)
+	held := []infrastructureservices.HostReservation{{Context: "other", Kind: "substrate-host", Service: "lab-libvirt", Keys: hostOf("other", "virbr-a").ReservationKeys()}}
+	wanted := []infrastructureservices.HostReservation{{Context: "lab", Kind: "substrate-host", Service: "lab-libvirt", Keys: hostOf("lab", "virbr-b").ReservationKeys()}}
+	conflicts := infrastructureservices.Conflicts(held, wanted)
 	if len(conflicts) != 1 || conflicts[0].HeldKey != "prefix:198.51.100.0/24" || conflicts[0].WantedKey != "prefix:198.51.100.0/24" {
 		t.Fatalf("conflicts = %+v, want exactly the one prefix", conflicts)
 	}

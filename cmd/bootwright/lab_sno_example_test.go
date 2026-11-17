@@ -14,10 +14,10 @@ import (
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/clients"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -258,7 +258,7 @@ func TestLabSNOExamplePlansTheWholeGraph(t *testing.T) {
 		t.Fatalf("the example declares objects no capability claims: %v", unsupported)
 	}
 	var definitions []reconciliation.BlockDefinition
-	var claims []prerequisites.HostReservation
+	var claims []infrastructureservices.HostReservation
 	for _, binding := range resolver.Bindings() {
 		capability, ok := resolver.Resolve(binding.Kind, binding.Implementation)
 		if !ok {

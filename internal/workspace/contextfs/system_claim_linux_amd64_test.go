@@ -12,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -31,8 +32,8 @@ func TestTwoSpellingsOfOneControllerRefuseTheSecondSystemClaim(t *testing.T) {
 	reserveFixture(t, store, record)
 	claim := func(name, endpoint string) error {
 		return store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error {
-			planned := prerequisites.HostReservation{Context: name, Kind: "substrate-physical", Service: "metal-01", Keys: []string{endpoint}}
-			if err := tx.Reserve(ctx, []prerequisites.HostReservation{planned}); err != nil {
+			planned := infrastructureservices.HostReservation{Context: name, Kind: "substrate-physical", Service: "metal-01", Keys: []string{endpoint}}
+			if err := tx.Reserve(ctx, []infrastructureservices.HostReservation{planned}); err != nil {
 				return err
 			}
 			planned.Keys = append(planned.Keys, "bmc-system:4c4c4544-0042-3510-8052-b4c04f4d4e31")
@@ -71,10 +72,10 @@ func TestAnAbandonedContextsBridgeUseIsReleasedWithItsDeletion(t *testing.T) {
 	_, sources := fixture(t)
 	publish(t, store, "second", sources)
 	reserveFixture(t, store, record)
-	reserve := func(name string, reservation prerequisites.HostReservation) {
+	reserve := func(name string, reservation infrastructureservices.HostReservation) {
 		t.Helper()
 		if err := store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error {
-			if err := tx.Reserve(ctx, []prerequisites.HostReservation{reservation}); err != nil {
+			if err := tx.Reserve(ctx, []infrastructureservices.HostReservation{reservation}); err != nil {
 				return err
 			}
 			return tx.PublishEvidence(ctx, []byte(`{"version":1,"operation":"unknown","ownership":"retained"}`))
@@ -82,13 +83,13 @@ func TestAnAbandonedContextsBridgeUseIsReleasedWithItsDeletion(t *testing.T) {
 			t.Fatalf("%s's reservation failed: %#v", name, diagnostics.Of(err))
 		}
 	}
-	reserve(record.Name, prerequisites.HostReservation{Context: record.Name, Kind: "substrate-host-use", Service: "edge",
+	reserve(record.Name, infrastructureservices.HostReservation{Context: record.Name, Kind: "substrate-host-use", Service: "edge",
 		Keys: []string{"bridge-use:virbr-lab"}, Shared: true})
-	reserve("second", prerequisites.HostReservation{Context: "second", Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}})
-	stranded := func() []prerequisites.Conflict {
-		var found []prerequisites.Conflict
+	reserve("second", infrastructureservices.HostReservation{Context: "second", Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}})
+	stranded := func() []infrastructureservices.Conflict {
+		var found []infrastructureservices.Conflict
 		if err := store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
-			found = prerequisites.ReleaseConflicts(view.State.Reservations, "second")
+			found = infrastructureservices.ReleaseConflicts(view.State.Reservations, "second")
 			return nil
 		}); err != nil {
 			t.Fatal(err)
@@ -121,23 +122,23 @@ func TestAReproofReadsAClaimPublishedAfterTheTransactionOpened(t *testing.T) {
 	_, sources := fixture(t)
 	publish(t, store, "second", sources)
 	reserveFixture(t, store, record)
-	use := prerequisites.HostReservation{Context: record.Name, Kind: "substrate-host-use", Service: "edge",
+	use := infrastructureservices.HostReservation{Context: record.Name, Kind: "substrate-host-use", Service: "edge",
 		Keys: []string{"bridge-use:virbr-lab"}, Shared: true}
 	var found error
 	if err := store.MutateLifecycle(ctx, "second", func(tx lifecycle.Transaction) error {
-		if err := tx.Reserve(ctx, []prerequisites.HostReservation{{Context: "second", Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}}}); err != nil {
+		if err := tx.Reserve(ctx, []infrastructureservices.HostReservation{{Context: "second", Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}}}); err != nil {
 			return err
 		}
 		if err := store.MutateLifecycle(ctx, record.Name, func(other lifecycle.Transaction) error {
-			return other.Reserve(ctx, []prerequisites.HostReservation{use})
+			return other.Reserve(ctx, []infrastructureservices.HostReservation{use})
 		}); err != nil {
 			return err
 		}
-		if len(prerequisites.ReleaseConflicts(tx.Controller().State.Reservations, "second")) != 0 {
+		if len(infrastructureservices.ReleaseConflicts(tx.Controller().State.Reservations, "second")) != 0 {
 			t.Fatal("the transaction's snapshot already held the later claim")
 		}
-		found = tx.ReproveReservations(ctx, func(held []prerequisites.HostReservation) error {
-			return prerequisites.ReleaseFailure(held, "second", "InfraProvider", "lab")
+		found = tx.ReproveReservations(ctx, func(held []infrastructureservices.HostReservation) error {
+			return infrastructureservices.ReleaseFailure(held, "second", "InfraProvider", "lab")
 		}, nil)
 		return nil
 	}); err != nil {
@@ -156,18 +157,18 @@ func TestAClaimOnAKeyARemovalIsReleasingRefusesUntilTheRemovalCompletes(t *testi
 	t.Parallel()
 	ctx := context.Background()
 	scenarios := map[string]struct {
-		removing, using     prerequisites.HostReservation
+		removing, using     infrastructureservices.HostReservation
 		kind, object, named string
 	}{
 		"a bridge another context starts using": {
-			removing: prerequisites.HostReservation{Context: "second", Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}},
-			using:    prerequisites.HostReservation{Kind: "substrate-host-use", Service: "edge", Keys: []string{"bridge-use:virbr-lab"}, Shared: true},
+			removing: infrastructureservices.HostReservation{Context: "second", Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}},
+			using:    infrastructureservices.HostReservation{Kind: "substrate-host-use", Service: "edge", Keys: []string{"bridge-use:virbr-lab"}, Shared: true},
 			kind:     "InfraProvider", object: "lab", named: "is removing bridge virbr-lab that InfraProvider/lab holds",
 		},
 		"an emulated BMC endpoint another context drives": {
-			removing: prerequisites.HostReservation{Context: "second", Kind: "substrate-machine-bmc", Service: "node-01",
+			removing: infrastructureservices.HostReservation{Context: "second", Kind: "substrate-machine-bmc", Service: "node-01",
 				Keys: []string{"bmc:192.0.2.1:8000/node-01"}, Shared: true},
-			using: prerequisites.HostReservation{Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:192.0.2.1:8000/node-01"}},
+			using: infrastructureservices.HostReservation{Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:192.0.2.1:8000/node-01"}},
 			kind:  "Machine", object: "node-01", named: "is removing the management controller endpoint that Machine/node-01 holds",
 		},
 	}
@@ -182,7 +183,7 @@ func TestAClaimOnAKeyARemovalIsReleasingRefusesUntilTheRemovalCompletes(t *testi
 				using.Context = record.Name
 				use := func() error {
 					return store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
-						return tx.Reserve(ctx, []prerequisites.HostReservation{using})
+						return tx.Reserve(ctx, []infrastructureservices.HostReservation{using})
 					})
 				}
 				refused := func(err error) {
@@ -194,15 +195,15 @@ func TestAClaimOnAKeyARemovalIsReleasingRefusesUntilTheRemovalCompletes(t *testi
 					}
 				}
 				if err := store.MutateLifecycle(ctx, "second", func(tx lifecycle.Transaction) error {
-					return tx.Reserve(ctx, []prerequisites.HostReservation{scenario.removing})
+					return tx.Reserve(ctx, []infrastructureservices.HostReservation{scenario.removing})
 				}); err != nil {
 					t.Fatalf("the removing context's claim failed: %#v", diagnostics.Of(err))
 				}
 				if err := store.MutateLifecycle(ctx, "second", func(tx lifecycle.Transaction) error {
-					if err := tx.ReproveReservations(ctx, func(held []prerequisites.HostReservation) error {
-						return prerequisites.ReleaseFailure(held, "second", scenario.kind, scenario.object)
-					}, func(held prerequisites.HostReservation) bool {
-						return prerequisites.Releases(held, scenario.kind, scenario.object)
+					if err := tx.ReproveReservations(ctx, func(held []infrastructureservices.HostReservation) error {
+						return infrastructureservices.ReleaseFailure(held, "second", scenario.kind, scenario.object)
+					}, func(held infrastructureservices.HostReservation) bool {
+						return infrastructureservices.Releases(held, scenario.kind, scenario.object)
 					}); err != nil {
 						return err
 					}
@@ -244,15 +245,15 @@ func TestTwoSpellingsOfOneSSHHostConflictByItsPinnedHostKey(t *testing.T) {
 		blob = binary.BigEndian.AppendUint32(blob, 32)
 		return base64.StdEncoding.EncodeToString(append(blob, bytes.Repeat([]byte{seed}, 32)...))
 	}
-	claim := func(t *testing.T, name, address, socket string, seed byte) prerequisites.HostReservation {
+	claim := func(t *testing.T, name, address, socket string, seed byte) infrastructureservices.HostReservation {
 		t.Helper()
 		pinned, err := machine.SSHHostKeyQualifier(address+" ssh-ed25519 "+key(seed)+"\n", address, 22)
 		if err != nil {
 			t.Fatal(err)
 		}
 		keys := []string{"socket:" + socket + ":3128", "unit:bootwright-" + name}
-		return prerequisites.HostReservation{Context: name, Kind: "proxy", Service: "gamma",
-			Keys: append(prerequisites.QualifiedKeys(machine.SSHReservationQualifier(address, 22), keys), prerequisites.QualifiedKeys(pinned, keys)...)}
+		return infrastructureservices.HostReservation{Context: name, Kind: "proxy", Service: "gamma",
+			Keys: append(infrastructureservices.QualifiedKeys(infrastructureservices.SSHReservationQualifier(address, 22), keys), infrastructureservices.QualifiedKeys(pinned, keys)...)}
 	}
 	for name, test := range map[string]struct {
 		seed     byte
@@ -266,9 +267,9 @@ func TestTwoSpellingsOfOneSSHHostConflictByItsPinnedHostKey(t *testing.T) {
 			_, sources := fixture(t)
 			publish(t, store, "second", sources)
 			reserveFixture(t, store, record)
-			reserve := func(reservation prerequisites.HostReservation) error {
+			reserve := func(reservation infrastructureservices.HostReservation) error {
 				return store.MutateLifecycle(ctx, reservation.Context, func(tx lifecycle.Transaction) error {
-					return tx.Reserve(ctx, []prerequisites.HostReservation{reservation})
+					return tx.Reserve(ctx, []infrastructureservices.HostReservation{reservation})
 				})
 			}
 			if err := reserve(claim(t, record.Name, "192.0.2.10", "0.0.0.0", 1)); err != nil {

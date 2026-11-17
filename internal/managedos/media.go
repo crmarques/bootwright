@@ -205,9 +205,5 @@ func DecodeStagedMediaRecord(data []byte) (MediaEntry, error) {
 	return DecodeMediaRecord(data, stated.Name)
 }
 
-// MediaReservationKey is the shared host claim a context holds while an
-// operation of its plan needs one image to stay exactly as it froze it.
-func MediaReservationKey(name string) string { return "media:" + name }
-
 // MediaSizeText renders a size for presentation without inventing units.
 func MediaSizeText(size int64) string { return strconv.FormatInt(size, 10) }

@@ -12,10 +12,10 @@ import (
 	"sync"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -25,7 +25,7 @@ import (
 // their blocks may run: the host resources they claim and the Secrets their
 // execution consumes.
 type capabilityBinding struct {
-	reservations []prerequisites.HostReservation
+	reservations []infrastructureservices.HostReservation
 	hostKeyed    []hostKeyedClaim
 	secrets      []string
 	// controller is the Machine this Environment selects: on a first apply, the host it runs on.
@@ -286,7 +286,7 @@ func (s Service) planInput(view View, state *compilation.State, controller strin
 // two Machines reaching one host share it and one reaching the controller
 // shares the controller's. The controller is compared first, then each SSH
 // host in the name order of the first Machine reaching it.
-func refuseOwnSocketConflicts(catalog api.Catalog, controller string, reservations []prerequisites.HostReservation, placed []SSHReservation) error {
+func refuseOwnSocketConflicts(catalog api.Catalog, controller string, reservations []infrastructureservices.HostReservation, placed []SSHReservation) error {
 	own, _ := catalog.Find(api.Machine, controller)
 	local := &hostClaims{claims: slices.Clone(reservations), through: make([]string, len(reservations))}
 	remote := map[string]*hostClaims{}
@@ -306,7 +306,7 @@ func refuseOwnSocketConflicts(catalog api.Catalog, controller string, reservatio
 		return strings.Compare(slices.Min(first.through), slices.Min(second.through))
 	})
 	for _, host := range append([]*hostClaims{local}, ordered...) {
-		if conflict, found := prerequisites.ConflictingSockets(host.claims); found {
+		if conflict, found := infrastructureservices.ConflictingSockets(host.claims); found {
 			return socketConflict(conflict, host.name(conflict))
 		}
 	}
@@ -325,9 +325,9 @@ type hostKeyedClaim struct {
 }
 
 // publishedSSHClaims qualifies each SSH-placed claim's keys by its host unless that host is the controller (Q96).
-func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHReservation) ([]prerequisites.HostReservation, []hostKeyedClaim, error) {
+func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHReservation) ([]infrastructureservices.HostReservation, []hostKeyedClaim, error) {
 	own, _ := catalog.Find(api.Machine, controller)
-	published := make([]prerequisites.HostReservation, 0, len(placed))
+	published := make([]infrastructureservices.HostReservation, 0, len(placed))
 	var keyed []hostKeyedClaim
 	for _, claim := range placed {
 		reservation := claim.Reservation
@@ -337,19 +337,19 @@ func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHRese
 			continue
 		}
 		claimed := slices.Clone(reservation.Keys)
-		reservation.Keys = prerequisites.QualifiedKeys(machine.SSHReservationQualifier(claim.Address, claim.Port), reservation.Keys)
-		if slices.ContainsFunc(reservation.Keys, func(key string) bool { return len(key) > prerequisites.MaxReservationKeyBytes }) {
+		reservation.Keys = infrastructureservices.QualifiedKeys(infrastructureservices.SSHReservationQualifier(claim.Address, claim.Port), reservation.Keys)
+		if slices.ContainsFunc(reservation.Keys, func(key string) bool { return len(key) > infrastructureservices.MaxReservationKeyBytes }) {
 			return nil, nil, failure("api.value",
 				"the SSH address "+claim.Address+" of Machine/"+claim.Machine+" is too long to qualify the host reservations "+
-					reservation.Kind+" "+reservation.Service+" publishes, which hold at most "+strconv.Itoa(prerequisites.MaxReservationKeyBytes)+" bytes each",
+					reservation.Kind+" "+reservation.Service+" publishes, which hold at most "+strconv.Itoa(infrastructureservices.MaxReservationKeyBytes)+" bytes each",
 				"reach Machine/"+claim.Machine+" by a shorter address")
 		}
 		if slices.ContainsFunc(claimed, func(key string) bool {
-			return len(key)+machine.SSHHostKeyQualifierBytes > prerequisites.MaxReservationKeyBytes
+			return len(key)+infrastructureservices.SSHHostKeyQualifierBytes > infrastructureservices.MaxReservationKeyBytes
 		}) {
 			return nil, nil, failure("api.value",
 				"a host reservation key of "+reservation.Kind+" "+reservation.Service+", placed on Machine/"+claim.Machine+
-					", is too long to be keyed by that host's SSH host key as well, within the "+strconv.Itoa(prerequisites.MaxReservationKeyBytes)+" bytes each key holds",
+					", is too long to be keyed by that host's SSH host key as well, within the "+strconv.Itoa(infrastructureservices.MaxReservationKeyBytes)+" bytes each key holds",
 				"place "+reservation.Kind+" "+reservation.Service+" on the controller Machine, or give it a shorter name")
 		}
 		if claim.Installed {
@@ -368,7 +368,7 @@ func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHRese
 	return published, keyed, nil
 }
 
-func hostKeyedReservations(binding capabilityBinding, material map[string]secrets.Material, controllerKeys []string) ([]prerequisites.HostReservation, error) {
+func hostKeyedReservations(binding capabilityBinding, material map[string]secrets.Material, controllerKeys []infrastructureservices.Qualifier) ([]infrastructureservices.HostReservation, error) {
 	reservations := slices.Clone(binding.reservations)
 	for _, claim := range binding.hostKeyed {
 		qualifier, err := pinnedHostQualifier(claim, material)
@@ -383,7 +383,7 @@ func hostKeyedReservations(binding capabilityBinding, material map[string]secret
 			return nil, undeclaredControllerAddress(claim)
 		}
 		reservation := reservations[claim.reservation]
-		reservation.Keys = append(slices.Clone(reservation.Keys), prerequisites.QualifiedKeys(qualifier, claim.keys)...)
+		reservation.Keys = append(slices.Clone(reservation.Keys), infrastructureservices.QualifiedKeys(qualifier, claim.keys)...)
 		reservations[claim.reservation] = reservation
 	}
 	return canonicalReservations(reservations)
@@ -405,7 +405,7 @@ func undeclaredControllerAddress(claim hostKeyedClaim) error {
 		remediation+"place the work on Machine/"+claim.controller+", or give Machine/"+claim.machine+" its own SSH host keys")
 }
 
-func controllerKeyQualifiers(ctx context.Context, keys ControllerHostKeys) ([]string, error) {
+func controllerKeyQualifiers(ctx context.Context, keys ControllerHostKeys) ([]infrastructureservices.Qualifier, error) {
 	if keys == nil {
 		return nil, nil
 	}
@@ -413,23 +413,23 @@ func controllerKeyQualifiers(ctx context.Context, keys ControllerHostKeys) ([]st
 	if err != nil {
 		return nil, err
 	}
-	var qualifiers []string
+	var qualifiers []infrastructureservices.Qualifier
 	for _, key := range found {
-		if qualifier, ok := machine.HostKeyQualifier(key); ok {
+		if qualifier, ok := infrastructureservices.HostKeyQualifier(key.Fingerprint()); ok {
 			qualifiers = append(qualifiers, qualifier)
 		}
 	}
 	return qualifiers, nil
 }
 
-func pinnedHostQualifier(claim hostKeyedClaim, material map[string]secrets.Material) (string, error) {
+func pinnedHostQualifier(claim hostKeyedClaim, material map[string]secrets.Material) (infrastructureservices.Qualifier, error) {
 	bound, found := material[claim.knownHostsRef]
 	if !found {
-		return "", failure("access.unavailable", "the Secret is not bound", "")
+		return infrastructureservices.Qualifier{}, failure("access.unavailable", "the Secret is not bound", "")
 	}
 	value, found := bound.Part(secrets.ValuePart)
 	if !found || len(value) == 0 {
-		return "", failure("access.unavailable", "the Secret carries no material", "")
+		return infrastructureservices.Qualifier{}, failure("access.unavailable", "the Secret carries no material", "")
 	}
 	defer clear(value)
 	return machine.SSHHostKeyQualifier(string(value), claim.address, claim.port)
@@ -440,7 +440,7 @@ func pinnedHostQualifier(claim hostKeyedClaim, material map[string]secrets.Mater
 // on the controller, and endpoint is where an SSH host is reached.
 type hostClaims struct {
 	endpoint string
-	claims   []prerequisites.HostReservation
+	claims   []infrastructureservices.HostReservation
 	through  []string
 }
 
@@ -449,10 +449,10 @@ type hostClaims struct {
 // either claim reaches that host over SSH when it is not the host's own name,
 // so an operator sees why two Machines' services meet. A claim is found by the
 // kind and service the refusal names it by.
-func (h *hostClaims) name(conflict prerequisites.SocketConflict) string {
+func (h *hostClaims) name(conflict infrastructureservices.SocketConflict) string {
 	var machines []string
-	for _, claim := range []prerequisites.HostReservation{conflict.First, conflict.Second} {
-		index := slices.IndexFunc(h.claims, func(held prerequisites.HostReservation) bool {
+	for _, claim := range []infrastructureservices.HostReservation{conflict.First, conflict.Second} {
+		index := slices.IndexFunc(h.claims, func(held infrastructureservices.HostReservation) bool {
 			return held.Kind == claim.Kind && held.Service == claim.Service
 		})
 		name := string(api.Machine) + "/" + h.through[index]
@@ -474,7 +474,7 @@ func (h *hostClaims) name(conflict prerequisites.SocketConflict) string {
 	return "the SSH host at " + h.endpoint + ", which " + strings.Join(machines, " and ") + " both reach"
 }
 
-func socketConflict(conflict prerequisites.SocketConflict, host string) error {
+func socketConflict(conflict infrastructureservices.SocketConflict, host string) error {
 	return failure("api.invariant",
 		"this context's "+conflict.First.Kind+" "+conflict.First.Service+" at "+conflict.FirstSocket+" and "+
 			conflict.Second.Kind+" "+conflict.Second.Service+" at "+conflict.SecondSocket+" cannot both listen on "+host,

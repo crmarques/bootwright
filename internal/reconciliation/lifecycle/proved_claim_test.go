@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 // A done block whose evidence names a host resource is claimed before any
@@ -24,7 +24,7 @@ func TestAProvedClaimIsTakenBeforeItsDependentStarts(t *testing.T) {
 			h := newPlannedHarness(t, chainedDefinitions())
 			h.capability.claims = map[string][]string{"alpha": {"bmc:198.51.100.21:443/1", system}}
 			if holder != "" {
-				h.workspace.foreign = []prerequisites.HostReservation{{Context: holder, Kind: "substrate-physical", Service: "metal-01",
+				h.workspace.foreign = []infrastructureservices.HostReservation{{Context: holder, Kind: "substrate-physical", Service: "metal-01",
 					Keys: []string{"bmc:bmc-01.metal.example.test:443/1", system}}}
 			}
 			_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
@@ -32,7 +32,7 @@ func TestAProvedClaimIsTakenBeforeItsDependentStarts(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !slices.ContainsFunc(h.workspace.reservations, func(held prerequisites.HostReservation) bool {
+				if !slices.ContainsFunc(h.workspace.reservations, func(held infrastructureservices.HostReservation) bool {
 					return held.Service == "alpha" && slices.Contains(held.Keys, system)
 				}) {
 					t.Fatalf("the proved claim was not taken: %+v", h.workspace.reservations)
@@ -56,8 +56,8 @@ func TestAProvedClaimIsTakenBeforeItsDependentStarts(t *testing.T) {
 // and service, and nothing another context or another service holds.
 func TestKeepProvedCarriesOnlyTheOwnProvedSystemKey(t *testing.T) {
 	t.Parallel()
-	planned := []prerequisites.HostReservation{{Context: "lab", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:a:443/1"}}}
-	held := []prerequisites.HostReservation{
+	planned := []infrastructureservices.HostReservation{{Context: "lab", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:a:443/1"}}}
+	held := []infrastructureservices.HostReservation{
 		{Context: "lab", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc-system:u1", "bmc:a:443/1", "bmc-mac:52:54:00:9a:1b:01"}},
 		{Context: "other", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc-system:u2"}},
 		{Context: "lab", Kind: "substrate-physical", Service: "metal-02", Keys: []string{"bmc-system:u3"}},
@@ -74,12 +74,12 @@ func TestKeepProvedCarriesOnlyTheOwnProvedSystemKey(t *testing.T) {
 // claim of a server it has not read yet rather than an empty one (D257 (2)).
 func TestKeepProvedKeepsAnSSHServerClaimAndPublishesNoEmptyOne(t *testing.T) {
 	t.Parallel()
-	planned := []prerequisites.HostReservation{
+	planned := []infrastructureservices.HostReservation{
 		{Context: "lab", Kind: "machine-hardware", Service: "mirror"},
 		{Context: "lab", Kind: "machine-hardware", Service: "services"},
 		{Context: "lab", Kind: "proxy", Service: "lab-proxy", Keys: []string{"unit:bootwright-lab-proxy"}},
 	}
-	held := []prerequisites.HostReservation{
+	held := []infrastructureservices.HostReservation{
 		{Context: "lab", Kind: "machine-hardware", Service: "mirror", Keys: []string{"bmc-mac:52:54:00:9a:1b:01", "bmc-mac:52:54:00:9a:1b:02"}},
 		{Context: "other", Kind: "machine-hardware", Service: "services", Keys: []string{"bmc-mac:52:54:00:9a:1b:03"}},
 	}

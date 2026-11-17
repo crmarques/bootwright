@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -127,15 +127,15 @@ func TestAnSSHHostedEmulatedBMCConflictsWithAPhysicalMachineAtItsEndpoint(t *tes
 	if !emulated.Shared || len(emulated.Keys) != 1 || !strings.HasPrefix(emulated.Keys[0], "bmc:") {
 		t.Fatalf("the emulated BMC claims %+v, want one unqualified shared bmc: key", emulated)
 	}
-	physical := prerequisites.HostReservation{Context: "metal", Kind: "substrate-physical", Service: "metal-01", Keys: emulated.Keys}
-	if found := prerequisites.Conflicts([]prerequisites.HostReservation{physical}, []prerequisites.HostReservation{emulated}); len(found) != 1 || found[0].Held.Context != "metal" {
+	physical := infrastructureservices.HostReservation{Context: "metal", Kind: "substrate-physical", Service: "metal-01", Keys: emulated.Keys}
+	if found := infrastructureservices.Conflicts([]infrastructureservices.HostReservation{physical}, []infrastructureservices.HostReservation{emulated}); len(found) != 1 || found[0].Held.Context != "metal" {
 		t.Fatalf("the emulated BMC under a physical holder = %+v", found)
 	}
-	if found := prerequisites.Conflicts([]prerequisites.HostReservation{emulated}, []prerequisites.HostReservation{physical}); len(found) != 1 || found[0].Held.Context != testContext {
+	if found := infrastructureservices.Conflicts([]infrastructureservices.HostReservation{emulated}, []infrastructureservices.HostReservation{physical}); len(found) != 1 || found[0].Held.Context != testContext {
 		t.Fatalf("a physical Machine registering under the emulated BMC = %+v", found)
 	}
-	driving := prerequisites.HostReservation{Context: "metal", Kind: "substrate-physical", Service: "metal-01", Keys: emulated.Keys}
-	if found := prerequisites.UseConflicts([]prerequisites.HostReservation{emulated}, driving); len(found) != 1 || found[0].Held.Context != testContext {
+	driving := infrastructureservices.HostReservation{Context: "metal", Kind: "substrate-physical", Service: "metal-01", Keys: emulated.Keys}
+	if found := infrastructureservices.UseConflicts([]infrastructureservices.HostReservation{emulated}, driving); len(found) != 1 || found[0].Held.Context != testContext {
 		t.Fatalf("a physical Machine driving the emulated endpoint = %+v", found)
 	}
 }

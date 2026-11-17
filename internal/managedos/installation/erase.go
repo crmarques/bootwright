@@ -12,7 +12,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/canonicaljson"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -104,9 +104,9 @@ func (c EraseCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		}
 		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, install.SecretReferences()...)
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
+		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{
 			Context: input.Context.Name, Kind: EraseFamily, Service: machine.Name(), ObjectKind: Kind,
-			Keys: []string{substrate.ControllerMediaReservationKey(install.Target.Controller.Endpoint)},
+			Keys: []string{infrastructureservices.ControllerMediaReservationKey(install.Target.Controller.Endpoint).String()},
 		})
 	}
 	if len(selected) > 0 {

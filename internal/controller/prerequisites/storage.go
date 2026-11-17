@@ -5,6 +5,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 // SetupContext names the context a setup attempt is bound to. A context's name
@@ -69,7 +70,7 @@ type HostState struct {
 	Host         controller.InstalledHostIdentity
 	Bindings     []ControllerBinding
 	ToolSources  []DependencySource
-	Reservations []HostReservation
+	Reservations []infrastructureservices.HostReservation
 }
 
 // ControllerBinding records a context against this host; Tools is the tool
@@ -79,28 +80,6 @@ type ControllerBinding struct {
 	Machine    string `json:"machine"`
 	HostDigest string `json:"hostDigest"`
 	Tools      string `json:"tools,omitempty"`
-}
-
-const (
-	ClusterMediaReservation = "cluster-media"
-	OSInstallReservation    = "os-install"
-)
-
-// HostReservation records the host resources one context's locally hosted
-// service claims. Workspace stores the keys and compares them through
-// Conflicts, which reads no key beyond its class, a socket's address and port,
-// and a prefix; only the owning capability knows what a key means. Setup
-// reserves nothing. ObjectKind is the API kind of the object a claim names.
-// A shared claim is held by any number of contexts at once and conflicts with
-// nothing; it records that a resource is still in use rather than who owns it.
-type HostReservation struct {
-	Context    string   `json:"context"`
-	Kind       string   `json:"kind"`
-	Service    string   `json:"service"`
-	ObjectKind string   `json:"objectKind,omitempty"`
-	Keys       []string `json:"keys"`
-	Shared     bool     `json:"shared,omitempty"`
-	Releasing  bool     `json:"releasing,omitempty"`
 }
 
 type SetupEgress struct {

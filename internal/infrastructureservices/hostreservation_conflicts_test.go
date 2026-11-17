@@ -1,4 +1,4 @@
-package prerequisites
+package infrastructureservices
 
 import (
 	"strings"

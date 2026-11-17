@@ -6,6 +6,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 // targetCatalog holds one provider of each realized arm, a guest on the
@@ -115,7 +116,7 @@ func TestAnIPv6EmulatedControllerEndpointBracketsItsAddress(t *testing.T) {
 	if endpoint, ok := NormalizeControllerEndpoint(want); !ok || endpoint != want {
 		t.Fatalf("the controller address grammar read %q as %q, ok = %v", want, endpoint, ok)
 	}
-	if key := ControllerReservationKey(want); key != "bmc:[fd00::1]:8000/"+uuid {
+	if key := infrastructureservices.ControllerReservationKey(want).String(); key != "bmc:[fd00::1]:8000/"+uuid {
 		t.Fatalf("claim key = %q", key)
 	}
 	if socket := ControllerSocket("fd00::1", 8000); socket != "[fd00::1]:8000" {
@@ -248,23 +249,6 @@ func TestAControllerAddressMustNameOneExactSystem(t *testing.T) {
 		t.Run(address, func(t *testing.T) {
 			if endpoint, ok := NormalizeControllerEndpoint(address); !ok || endpoint != address {
 				t.Fatalf("endpoint = %q, ok = %v, want the address unchanged", endpoint, ok)
-			}
-		})
-	}
-}
-
-// One physical machine is one claim, whichever spelling of its endpoint the
-// declaration used, so two contexts cannot both drive it.
-func TestOneControllerIsOneClaimHoweverItIsSpelled(t *testing.T) {
-	for address, key := range map[string]string{
-		"https://bmc.example.test/redfish/v1/Systems/1":              "bmc:bmc.example.test:443/1",
-		"http://bmc.example.test/redfish/v1/Systems/1":               "bmc:bmc.example.test:80/1",
-		"https://bmc.example.test:8443/redfish/v1/Systems/1":         "bmc:bmc.example.test:8443/1",
-		"https://[2001:db8::1]/redfish/v1/Systems/System.Embedded.1": "bmc:[2001:db8::1]:443/System.Embedded.1",
-	} {
-		t.Run(address, func(t *testing.T) {
-			if got := ControllerReservationKey(address); got != key {
-				t.Fatalf("key = %q, want %q", got, key)
 			}
 		})
 	}

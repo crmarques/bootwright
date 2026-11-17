@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -100,7 +100,7 @@ func TestAnOSReadyMachineReachedOverSSHIsClaimedByItsHardware(t *testing.T) {
 		!slices.Equal(definition.Impacts, []string{"claim-machine 192.0.2.9:22"}) || definition.ContentDigest != ContentDigest() {
 		t.Fatalf("definition = %+v", definition)
 	}
-	if want := []prerequisites.HostReservation{{Context: "lab", Kind: ClaimKind, Service: "services"}}; !slices.EqualFunc(plan.Reservations, want, func(x, y prerequisites.HostReservation) bool {
+	if want := []infrastructureservices.HostReservation{{Context: "lab", Kind: ClaimKind, Service: "services"}}; !slices.EqualFunc(plan.Reservations, want, func(x, y infrastructureservices.HostReservation) bool {
 		return x.Context == y.Context && x.Kind == y.Kind && x.Service == y.Service && len(x.Keys) == 0
 	}) || len(plan.SSHReservations) != 0 {
 		t.Fatalf("reservations = %+v, SSH %+v", plan.Reservations, plan.SSHReservations)
@@ -133,11 +133,11 @@ func TestTheProvedClaimIsOneBMCMACKeyPerPermanentAddress(t *testing.T) {
 	if _, found, err := New(nil).ProvedClaim("lab", block, evidenceOf(t, block.RequestDigest)); err != nil || found {
 		t.Fatalf("a host with no permanent address claimed %v (%v)", found, err)
 	}
-	many := make([]string, 0, prerequisites.MaxReservationKeys+1)
-	for index := range prerequisites.MaxReservationKeys + 1 {
+	many := make([]string, 0, infrastructureservices.MaxReservationKeys+1)
+	for index := range infrastructureservices.MaxReservationKeys + 1 {
 		many = append(many, fmt.Sprintf("52:54:00:00:%02x:%02x", index/256, index%256))
 	}
-	if _, found, err := New(nil).ProvedClaim("lab", block, evidenceOf(t, block.RequestDigest, many[:prerequisites.MaxReservationKeys]...)); err != nil || !found {
+	if _, found, err := New(nil).ProvedClaim("lab", block, evidenceOf(t, block.RequestDigest, many[:infrastructureservices.MaxReservationKeys]...)); err != nil || !found {
 		t.Fatalf("the largest address set was refused: %v", err)
 	}
 	_, _, err = New(nil).ProvedClaim("lab", block, evidenceOf(t, block.RequestDigest, many...))
@@ -158,7 +158,7 @@ func TestTheProvedClaimIsOneBMCMACKeyPerPermanentAddress(t *testing.T) {
 	}
 }
 
-func physicalClaim(t *testing.T, contextName, endpoint string, macs ...string) prerequisites.HostReservation {
+func physicalClaim(t *testing.T, contextName, endpoint string, macs ...string) infrastructureservices.HostReservation {
 	t.Helper()
 	request := baremetal.Request{
 		Controller: baremetal.Controller{CredentialsRef: "metal-bmc", Endpoint: endpoint, TLSVerify: true},
@@ -196,23 +196,23 @@ func TestAnSSHReachedServerAndItsBMCDriverConflictInEitherOrder(t *testing.T) {
 		t.Fatalf("claim = %v (%v)", found, err)
 	}
 	driven := physicalClaim(t, "bmc", "https://192.0.2.40/redfish/v1/Systems/1", "52-54-00-9A-1B-01", "52:54:00:9A:1B:02")
-	for name, pair := range map[string][2]prerequisites.HostReservation{
+	for name, pair := range map[string][2]infrastructureservices.HostReservation{
 		"the BMC context holds the server": {driven, reached},
 		"the SSH context holds the server": {reached, driven},
 	} {
 		held, wanted := pair[0], pair[1]
-		conflicts := prerequisites.Conflicts([]prerequisites.HostReservation{held}, []prerequisites.HostReservation{wanted})
+		conflicts := infrastructureservices.Conflicts([]infrastructureservices.HostReservation{held}, []infrastructureservices.HostReservation{wanted})
 		if len(conflicts) != 1 || conflicts[0].Held.Context != held.Context || !strings.HasPrefix(conflicts[0].HeldKey, "bmc-mac:") {
 			t.Fatalf("%s: conflicts = %+v", name, conflicts)
 		}
-		diagnostic := prerequisites.ConflictDiagnostic(conflicts[0])
+		diagnostic := infrastructureservices.ConflictDiagnostic(conflicts[0])
 		if diagnostic.Code != "controller.conflict" || !strings.HasPrefix(diagnostic.Message, "context "+held.Context+" holds ") ||
 			!strings.Contains(diagnostic.Message, "Machine/") || strings.Contains(diagnostic.Message, "52:54") || diagnostic.Object == nil || diagnostic.Object.Kind != "Machine" {
 			t.Fatalf("%s: diagnostic = %+v", name, diagnostic)
 		}
 	}
 	other := physicalClaim(t, "bmc", "https://192.0.2.41/redfish/v1/Systems/1", "52:54:00:9a:1b:03")
-	if conflicts := prerequisites.Conflicts([]prerequisites.HostReservation{other}, []prerequisites.HostReservation{reached}); len(conflicts) != 0 {
+	if conflicts := infrastructureservices.Conflicts([]infrastructureservices.HostReservation{other}, []infrastructureservices.HostReservation{reached}); len(conflicts) != 0 {
 		t.Fatalf("another server conflicts: %+v", conflicts)
 	}
 }
@@ -309,8 +309,8 @@ func TestACephNodeOnAnOSReadyServerIsClaimedAndMeetsItsBMCDriver(t *testing.T) {
 		t.Fatalf("claim = %v (%v)", found, err)
 	}
 	driven := physicalClaim(t, "bmc", "https://bmc.example.test/redfish/v1/Systems/1", "52:54:00:9A:1B:01", "52:54:00:9a:1b:02")
-	for _, pair := range [][2]prerequisites.HostReservation{{driven, reached}, {reached, driven}} {
-		if conflicts := prerequisites.Conflicts(pair[:1], pair[1:]); len(conflicts) != 1 || conflicts[0].Held.Context != pair[0].Context {
+	for _, pair := range [][2]infrastructureservices.HostReservation{{driven, reached}, {reached, driven}} {
+		if conflicts := infrastructureservices.Conflicts(pair[:1], pair[1:]); len(conflicts) != 1 || conflicts[0].Held.Context != pair[0].Context {
 			t.Fatalf("held by %s: conflicts = %+v", pair[0].Context, conflicts)
 		}
 	}

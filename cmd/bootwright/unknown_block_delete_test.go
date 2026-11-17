@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -52,7 +53,7 @@ func publishCompletedSetup(t *testing.T, repository *contextfs.Store, names ...s
 func reserveFor(t *testing.T, repository *contextfs.Store, name string, keys ...string) {
 	t.Helper()
 	if err := repository.MutateLifecycle(context.Background(), name, func(tx lifecycle.Transaction) error {
-		return tx.Reserve(context.Background(), []prerequisites.HostReservation{{Context: name, Kind: "artifact-server", Service: name, Keys: keys}})
+		return tx.Reserve(context.Background(), []infrastructureservices.HostReservation{{Context: name, Kind: "artifact-server", Service: name, Keys: keys}})
 	}); err != nil {
 		t.Fatalf("reserving for %s: %+v", name, diagnostics.Of(err))
 	}
@@ -106,9 +107,9 @@ func registerUnknownApply(t *testing.T, repository *contextfs.Store) {
 	}
 }
 
-func heldReservations(t *testing.T, repository *contextfs.Store) []prerequisites.HostReservation {
+func heldReservations(t *testing.T, repository *contextfs.Store) []infrastructureservices.HostReservation {
 	t.Helper()
-	var held []prerequisites.HostReservation
+	var held []infrastructureservices.HostReservation
 	if err := repository.ReadController(context.Background(), "", func(view prerequisites.StorageView) error {
 		held = slices.Clone(view.State.Reservations)
 		return nil
@@ -143,7 +144,7 @@ func TestDeletingAContextHoldingAnUnknownBlockReleasesItsReservations(t *testing
 	if !strings.Contains(stderr, "--allow-orphans") {
 		t.Fatalf("the unacknowledged deletion refused with %s", stderr)
 	}
-	if held := heldReservations(t, repository); !slices.EqualFunc(held, before, func(x, y prerequisites.HostReservation) bool {
+	if held := heldReservations(t, repository); !slices.EqualFunc(held, before, func(x, y infrastructureservices.HostReservation) bool {
 		return x.Context == y.Context && slices.Equal(x.Keys, y.Keys)
 	}) {
 		t.Fatalf("the refused deletion changed the reservations %+v to %+v", before, held)

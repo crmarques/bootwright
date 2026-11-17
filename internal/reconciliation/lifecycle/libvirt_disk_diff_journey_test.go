@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
@@ -71,7 +71,7 @@ func diskDiffJourney(t *testing.T, hypervisor resizingHypervisor) *lifecycle.Cap
 				ContentDigest: strings.Repeat("d", 64), Request: canonical,
 				Groups: []reconciliation.Group{{ID: "define-domain", Description: "define the domain", Machines: []string{"rhel-01"}}},
 			}},
-			Reservations: []prerequisites.HostReservation{{Context: lifecycle.JourneyContext, Kind: "substrate-machine", Service: "rhel-01", Keys: request.ReservationKeys()}},
+			Reservations: []infrastructureservices.HostReservation{{Context: lifecycle.JourneyContext, Kind: "substrate-machine", Service: "rhel-01", Keys: request.ReservationKeys()}},
 			Secrets:      request.SecretReferences(),
 		})
 	if _, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}); err != nil {

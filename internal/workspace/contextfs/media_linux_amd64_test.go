@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -319,9 +319,9 @@ func TestSharedMediaReservationsAreVisibleAndNeverConflict(t *testing.T) {
 	publishControllerState(t, store, syntheticControllerState(t))
 	for _, name := range []string{"example", "second"} {
 		err := store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error {
-			return tx.Reserve(ctx, []prerequisites.HostReservation{{
+			return tx.Reserve(ctx, []infrastructureservices.HostReservation{{
 				Context: name, Kind: "media", Service: "media",
-				Keys: []string{managedos.MediaReservationKey("demo.iso")}, Shared: true,
+				Keys: []string{infrastructureservices.MediaReservationKey("demo.iso").String()}, Shared: true,
 			}})
 		})
 		if err != nil {
@@ -1358,9 +1358,9 @@ func TestMediaDeleteDiscardsARetainedStage(t *testing.T) {
 		retainStage(t, store, "demo.iso", "installer bytes")
 		publishControllerState(t, store, syntheticControllerState(t))
 		if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
-			return tx.Reserve(ctx, []prerequisites.HostReservation{{
+			return tx.Reserve(ctx, []infrastructureservices.HostReservation{{
 				Context: "example", Kind: "media", Service: "media",
-				Keys: []string{managedos.MediaReservationKey("demo.iso")}, Shared: true,
+				Keys: []string{infrastructureservices.MediaReservationKey("demo.iso").String()}, Shared: true,
 			}})
 		}); err != nil {
 			t.Fatalf("reservation: %#v", diagnostics.Of(err))

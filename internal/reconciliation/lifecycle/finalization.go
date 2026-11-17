@@ -5,7 +5,7 @@ import (
 	"context"
 	"slices"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
@@ -95,7 +95,7 @@ func finalized(view View, operation operationstore.Operation) (bool, error) {
 
 func holdsReservation(view View) bool {
 	name := view.Identity().Name
-	return slices.ContainsFunc(view.Controller().State.Reservations, func(reservation prerequisites.HostReservation) bool {
+	return slices.ContainsFunc(view.Controller().State.Reservations, func(reservation infrastructureservices.HostReservation) bool {
 		return reservation.Context == name
 	})
 }

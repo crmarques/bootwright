@@ -15,6 +15,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -307,7 +308,7 @@ func TestReservationsRetainBundleAttribution(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	digest := sealedBundleFixture(t, store, record)
-	claim := []prerequisites.HostReservation{{
+	claim := []infrastructureservices.HostReservation{{
 		Context: record.Name, Kind: "proxy", Service: "lab-proxy",
 		Keys: []string{"socket:192.0.2.1:3128", "unit:bootwright-proxy"},
 	}}
@@ -340,7 +341,7 @@ func TestReservationsRefuseAnotherContextsKeys(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	reserveFixture(t, store, record)
-	claim := []prerequisites.HostReservation{{
+	claim := []infrastructureservices.HostReservation{{
 		Context: record.Name, Kind: "artifact-server", Service: "lab-artifacts",
 		Keys: []string{"socket:192.0.2.1:8443", "unit:bootwright-artifacts"},
 	}}
@@ -388,7 +389,7 @@ func TestAWildcardSocketReservationRefusesEveryAddressAtItsPort(t *testing.T) {
 	reserveFixture(t, store, record)
 	reserve := func(name, key string) error {
 		return store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error {
-			return tx.Reserve(ctx, []prerequisites.HostReservation{{
+			return tx.Reserve(ctx, []infrastructureservices.HostReservation{{
 				Context: name, Kind: "proxy", Service: "lab-proxy", Keys: []string{key},
 			}})
 		})
@@ -431,7 +432,7 @@ func TestSSHQualifiedReservationsConflictOnTheirHostAlone(t *testing.T) {
 	reserveFixture(t, store, record)
 	reserve := func(name, service string, keys ...string) error {
 		return store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error {
-			return tx.Reserve(ctx, []prerequisites.HostReservation{{Context: name, Kind: "proxy", Service: service, Keys: keys}})
+			return tx.Reserve(ctx, []infrastructureservices.HostReservation{{Context: name, Kind: "proxy", Service: service, Keys: keys}})
 		})
 	}
 	if err := reserve(record.Name, "remote-proxy", "ssh/fd00::10:22/socket:0.0.0.0:3128", "ssh/fd00::10:22/unit:bootwright-remote-proxy"); err != nil {
@@ -460,8 +461,8 @@ func TestEveryConflictingClaimIsNamedAndAContinuationKeepsRefusing(t *testing.T)
 	_, sources := fixture(t)
 	publish(t, store, "second", sources)
 	reserveFixture(t, store, record)
-	claims := func(name string) []prerequisites.HostReservation {
-		return []prerequisites.HostReservation{
+	claims := func(name string) []infrastructureservices.HostReservation {
+		return []infrastructureservices.HostReservation{
 			{Context: name, Kind: "substrate-host", Service: "lab-libvirt", Keys: []string{"bridge:virbr-lab", "prefix:198.51.100.0/24"}},
 			{Context: name, Kind: "substrate-machine", Service: "rhel-01", Keys: []string{"socket:192.0.2.1:8000"}},
 		}
@@ -506,7 +507,7 @@ func TestReservationRequiresACompletedSetup(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
-		return tx.Reserve(ctx, []prerequisites.HostReservation{{
+		return tx.Reserve(ctx, []infrastructureservices.HostReservation{{
 			Context: record.Name, Kind: "artifact-server", Service: "lab-artifacts", Keys: []string{"unit:x"},
 		}})
 	})
@@ -562,7 +563,7 @@ func TestLifecyclePublicationCheckpointsFireAndFailClosed(t *testing.T) {
 				if err := tx.PublishEvidence(ctx, pending); err != nil {
 					return err
 				}
-				return tx.Reserve(ctx, []prerequisites.HostReservation{{
+				return tx.Reserve(ctx, []infrastructureservices.HostReservation{{
 					Context: record.Name, Kind: "artifact-server", Service: "lab-artifacts", Keys: []string{"unit:x"},
 				}})
 			})
@@ -967,7 +968,7 @@ func TestDestroyedContextIsDeletable(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
-	claim := []prerequisites.HostReservation{{
+	claim := []infrastructureservices.HostReservation{{
 		Context: record.Name, Kind: "proxy", Service: "lab-proxy",
 		Keys: []string{"socket:192.0.2.1:3128", "unit:bootwright-proxy"},
 	}}

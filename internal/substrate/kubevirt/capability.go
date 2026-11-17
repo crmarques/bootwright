@@ -8,8 +8,8 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -675,20 +675,20 @@ func (MachineCapability) Claimed(catalog api.Catalog) []string {
 // ProvedClaim claims the VirtualMachine by the server its proof reached, once
 // its evidence proves it this block's, so two contexts of one controller store
 // never realize it.
-func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Block, evidence json.RawMessage) (prerequisites.HostReservation, bool, error) {
+func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Block, evidence json.RawMessage) (infrastructureservices.HostReservation, bool, error) {
 	request, err := DecodeMachineRequest(block.Request)
 	if err != nil {
-		return prerequisites.HostReservation{}, false, err
+		return infrastructureservices.HostReservation{}, false, err
 	}
 	observed, err := decodeMachineEvidence(evidence, block.RequestDigest)
 	if err != nil || !observed.Owned || observed.Absent {
-		return prerequisites.HostReservation{}, false, nil
+		return infrastructureservices.HostReservation{}, false, nil
 	}
 	key, ok := ClaimKey(observed.Server, request.Namespace, request.Name)
 	if !ok {
-		return prerequisites.HostReservation{}, false, refusal("lifecycle.state", "the KubeVirt machine evidence names no server to claim its VirtualMachine by", "")
+		return infrastructureservices.HostReservation{}, false, refusal("lifecycle.state", "the KubeVirt machine evidence names no server to claim its VirtualMachine by", "")
 	}
-	return prerequisites.HostReservation{Context: contextName, Kind: "substrate-machine", Service: request.Identity.Object, Keys: []string{key}}, true, nil
+	return infrastructureservices.HostReservation{Context: contextName, Kind: "substrate-machine", Service: request.Identity.Object, Keys: []string{key}}, true, nil
 }
 
 // ClaimKey names one VirtualMachine by its host's API server, written as its

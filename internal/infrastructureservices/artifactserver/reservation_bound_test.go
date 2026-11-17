@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
@@ -64,8 +63,8 @@ func TestTheArtifactSocketBoundKeepsAClaimWithinItsKeys(t *testing.T) {
 		t.Fatalf("requests = %d (%v)", len(requests), err)
 	}
 	keys := requests[0].reservationKeys()
-	if len(keys) != prerequisites.MaxReservationKeys {
-		t.Fatalf("the largest admitted claim holds %d keys, want the %d one reservation holds", len(keys), prerequisites.MaxReservationKeys)
+	if len(keys) != infrastructureservices.MaxReservationKeys {
+		t.Fatalf("the largest admitted claim holds %d keys, want the %d one reservation holds", len(keys), infrastructureservices.MaxReservationKeys)
 	}
 	if infrastructureservices.ReservationSockets(server, machine)+2 != len(keys) {
 		t.Fatalf("the bound counts %d sockets, the claim holds %d keys", infrastructureservices.ReservationSockets(server, machine), len(keys))

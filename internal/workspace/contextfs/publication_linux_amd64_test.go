@@ -15,6 +15,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -198,7 +199,7 @@ func TestAFailureAfterTheRenameIsAnUnknownOutcome(t *testing.T) {
 		t.Fatalf("the renamed receipt is not in place (%v)", err)
 	}
 	err = store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
-		if !slices.ContainsFunc(view.State.Reservations, func(reservation prerequisites.HostReservation) bool {
+		if !slices.ContainsFunc(view.State.Reservations, func(reservation infrastructureservices.HostReservation) bool {
 			return reservation.Context == checkpointContext && reservation.Service == checkpointClaim[0].Service
 		}) {
 			return errors.New("the published receipt does not hold the reservation")

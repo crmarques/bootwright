@@ -3,6 +3,7 @@ package baremetal
 import (
 	"slices"
 
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -61,7 +62,7 @@ func DecodeRequest(data []byte) (Request, error) {
 // itself, named by its controller. It owns no path, unit or socket, because it
 // creates none of those.
 func (r Request) ReservationKeys() []string {
-	return []string{substrate.ControllerReservationKey(r.Controller.Endpoint)}
+	return []string{infrastructureservices.ControllerReservationKey(r.Controller.Endpoint).String()}
 }
 
 // SecretReferences names every declaration this request's execution needs

@@ -9,10 +9,9 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/managedos"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -164,7 +163,7 @@ func TestPlanRequiresTheMachineAndEveryServiceItUses(t *testing.T) {
 // store refuses at registration.
 func TestPlanFreezesEveryMediaEntryUnderOneClaim(t *testing.T) {
 	plan, _ := New(nil).WithMedia(labMedia()).Plan(context.Background(), planInput(reconciliation.Apply))
-	var media []prerequisites.HostReservation
+	var media []infrastructureservices.HostReservation
 	for _, reservation := range plan.Reservations {
 		if reservation.Shared {
 			media = append(media, reservation)
@@ -177,8 +176,8 @@ func TestPlanFreezesEveryMediaEntryUnderOneClaim(t *testing.T) {
 		t.Fatalf("media reservation = %+v", media[0])
 	}
 	want := []string{
-		managedos.MediaReservationKey("rhel-9.8-x86_64-boot.iso"),
-		managedos.MediaReservationKey("rhel-9.8-x86_64-dvd.iso"),
+		infrastructureservices.MediaReservationKey("rhel-9.8-x86_64-boot.iso").String(),
+		infrastructureservices.MediaReservationKey("rhel-9.8-x86_64-dvd.iso").String(),
 	}
 	if !slices.Equal(media[0].Keys, want) {
 		t.Fatalf("media claims = %v", media[0].Keys)

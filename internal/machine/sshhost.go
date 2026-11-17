@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/trust"
 )
 
@@ -22,36 +23,16 @@ func SSHHost(address string, port int) string {
 	return host + ":" + strconv.Itoa(port)
 }
 
-func SSHReservationQualifier(address string, port int) string {
-	return "ssh/" + sshAddress(address) + ":" + strconv.Itoa(port) + "/"
-}
-
-// SSHHostKeyQualifierBytes is the length of every host-key qualifier: the
-// SHA-256 digest is 43 characters of unpadded base64.
-const SSHHostKeyQualifierBytes = len("sshkey/SHA256:") + 43 + len("/")
-
-// SSHHostKeyQualifier names an SSH host by the key its declared known-hosts
-// entry pins, so two addresses of one host qualify claims alike (D188). The
-// fingerprint is OpenSSH's SHA256 form in URL-safe base64, which holds no
-// slash to end the qualifier early.
-func SSHHostKeyQualifier(knownHosts, address string, port int) (string, error) {
+func SSHHostKeyQualifier(knownHosts, address string, port int) (infrastructureservices.Qualifier, error) {
 	key, err := trust.ParseKnownHostsLine(knownHosts, address, port)
 	if err != nil {
-		return "", err
+		return infrastructureservices.Qualifier{}, err
 	}
-	qualifier, ok := HostKeyQualifier(key)
+	qualifier, ok := infrastructureservices.HostKeyQualifier(key.Fingerprint())
 	if !ok {
-		return "", placementFailure("trust.identity", "the known-hosts entry carries no SSH host key whose fingerprint can be read", "")
+		return infrastructureservices.Qualifier{}, placementFailure("trust.identity", "the known-hosts entry carries no SSH host key whose fingerprint can be read", "")
 	}
 	return qualifier, nil
-}
-
-func HostKeyQualifier(key trust.HostKey) (string, bool) {
-	fingerprint := key.Fingerprint()
-	if len(fingerprint) != SSHHostKeyQualifierBytes-len("sshkey/")-len("/") {
-		return "", false
-	}
-	return "sshkey/" + strings.NewReplacer("+", "-", "/", "_").Replace(fingerprint) + "/", true
 }
 
 func DeclaredAddresses(controller api.Object) []string {

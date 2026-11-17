@@ -10,6 +10,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
@@ -192,19 +193,19 @@ func TestABoundedRunRefusesAMachineAnotherContextHolds(t *testing.T) {
 	drive := Drive{Kind: "substrate-physical", Object: "metal", Keys: []string{"bmc:bmc.example.test:443/1", "bmc-mac:52:54:00:9a:1b:01"}}
 	shared := Drive{Kind: "substrate-machine-bmc", Object: "guest", Keys: []string{"bmc:192.0.2.10:8000/1"}, Shared: true}
 	for name, test := range map[string]struct {
-		held    prerequisites.HostReservation
+		held    infrastructureservices.HostReservation
 		drive   Drive
 		refused bool
 	}{
-		"a MAC another context holds":          {held: prerequisites.HostReservation{Context: "other", Kind: "substrate-physical", Service: "server", Keys: []string{"bmc:192.0.2.40:443/1", "bmc-mac:52:54:00:9a:1b:01"}}, drive: drive, refused: true},
-		"an endpoint another context shares":   {held: prerequisites.HostReservation{Context: "other", Kind: "substrate-machine-bmc", Service: "node", Keys: []string{"bmc:bmc.example.test:443/1"}, Shared: true}, drive: drive, refused: true},
-		"a shared endpoint driven exclusively": {held: prerequisites.HostReservation{Context: "other", Kind: "substrate-physical", Service: "server", Keys: []string{"bmc:192.0.2.10:8000/1"}}, drive: shared, refused: true},
-		"a shared endpoint driven shared":      {held: prerequisites.HostReservation{Context: "other", Kind: "substrate-machine-bmc", Service: "node", Keys: []string{"bmc:192.0.2.10:8000/1"}, Shared: true}, drive: shared},
-		"this context's own claim":             {held: prerequisites.HostReservation{Context: testContextName, Kind: "substrate-physical", Service: "metal", Keys: drive.Keys}, drive: drive},
+		"a MAC another context holds":          {held: infrastructureservices.HostReservation{Context: "other", Kind: "substrate-physical", Service: "server", Keys: []string{"bmc:192.0.2.40:443/1", "bmc-mac:52:54:00:9a:1b:01"}}, drive: drive, refused: true},
+		"an endpoint another context shares":   {held: infrastructureservices.HostReservation{Context: "other", Kind: "substrate-machine-bmc", Service: "node", Keys: []string{"bmc:bmc.example.test:443/1"}, Shared: true}, drive: drive, refused: true},
+		"a shared endpoint driven exclusively": {held: infrastructureservices.HostReservation{Context: "other", Kind: "substrate-physical", Service: "server", Keys: []string{"bmc:192.0.2.10:8000/1"}}, drive: shared, refused: true},
+		"a shared endpoint driven shared":      {held: infrastructureservices.HostReservation{Context: "other", Kind: "substrate-machine-bmc", Service: "node", Keys: []string{"bmc:192.0.2.10:8000/1"}, Shared: true}, drive: shared},
+		"this context's own claim":             {held: infrastructureservices.HostReservation{Context: testContextName, Kind: "substrate-physical", Service: "metal", Keys: drive.Keys}, drive: drive},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t)
-			h.workspace.foreign = []prerequisites.HostReservation{test.held}
+			h.workspace.foreign = []infrastructureservices.HostReservation{test.held}
 			called := false
 			err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName, Drives: []Drive{test.drive}},
 				func(context.Context, Runtime) error {

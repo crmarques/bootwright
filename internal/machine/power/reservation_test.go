@@ -6,11 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
-	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 )
 
@@ -25,12 +24,12 @@ func TestAPowerCommandRefusesAServerAnotherContextReserves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	emulated := substrate.ControllerReservationKey(guest.Controller.Endpoint)
-	physical := func(context string, keys ...string) prerequisites.HostReservation {
-		return prerequisites.HostReservation{Context: context, Kind: "substrate-physical", Service: "server", Keys: keys}
+	emulated := infrastructureservices.ControllerReservationKey(guest.Controller.Endpoint).String()
+	physical := func(context string, keys ...string) infrastructureservices.HostReservation {
+		return infrastructureservices.HostReservation{Context: context, Kind: "substrate-physical", Service: "server", Keys: keys}
 	}
-	shared := func(context string, key string) prerequisites.HostReservation {
-		return prerequisites.HostReservation{Context: context, Kind: "substrate-machine-bmc", Service: "node", Keys: []string{key}, Shared: true}
+	shared := func(context string, key string) infrastructureservices.HostReservation {
+		return infrastructureservices.HostReservation{Context: context, Kind: "substrate-machine-bmc", Service: "node", Keys: []string{key}, Shared: true}
 	}
 	pinned := machine.HardwareIdentity{UUID: "4C4C4544-0042-3510-8052-B4C04F4D4E31", Serial: "SN1"}
 	for name, test := range map[string]struct {
@@ -38,7 +37,7 @@ func TestAPowerCommandRefusesAServerAnotherContextReserves(t *testing.T) {
 		verb    string
 		force   bool
 		pin     machine.HardwareIdentity
-		held    prerequisites.HostReservation
+		held    infrastructureservices.HostReservation
 		refused bool
 	}{
 		"a forced stop of a server another context holds by its endpoint": {machine: "metal", verb: Stop, force: true, held: physical("other", "bmc:bmc.example.test:443/1"), refused: true},
@@ -56,7 +55,7 @@ func TestAPowerCommandRefusesAServerAnotherContextReserves(t *testing.T) {
 			if test.verb == Stop {
 				power = machine.PowerOff
 			}
-			runtime, runner := &boundary{held: []prerequisites.HostReservation{test.held}}, &adapter{machine: test.machine, power: power}
+			runtime, runner := &boundary{held: []infrastructureservices.HostReservation{test.held}}, &adapter{machine: test.machine, power: power}
 			request := PowerRequest{ContextName: "lab", Names: []string{test.machine}, Verb: test.verb, Force: test.force, SkipConfirmation: true}
 			_, err := New(stateSource{}, evidenceSource{}, proved, runtime, runner, nil, &answer{}, nil, nil).converge(context.Background(), request)
 			if !test.refused {
@@ -101,7 +100,7 @@ func TestAPinLessPowerCommandRefusesAServerAnotherSpellingProvedByItsUUID(t *tes
 	if err != nil || !found {
 		t.Fatalf("claim = %v, %v", found, diagnostics.Of(err))
 	}
-	runtime, runner := &boundary{held: []prerequisites.HostReservation{held}}, &adapter{machine: "metal", power: machine.PowerOff}
+	runtime, runner := &boundary{held: []infrastructureservices.HostReservation{held}}, &adapter{machine: "metal", power: machine.PowerOff}
 	_, err = New(stateSource{}, evidenceSource{}, &pins{}, runtime, runner, nil, &answer{}, nil, nil).
 		converge(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, Verb: Stop, Force: true, SkipConfirmation: true})
 	refused := onlyRefusal(t, err)
@@ -147,9 +146,9 @@ func TestAPowerBatchRefusesWholeWhenAnyMemberIsHeld(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	held := []prerequisites.HostReservation{
+	held := []infrastructureservices.HostReservation{
 		{Context: "other", Kind: "substrate-physical", Service: "server", Keys: []string{"bmc:bmc.example.test:443/1"}},
-		{Context: "edge", Kind: "substrate-physical", Service: "node", Keys: []string{substrate.ControllerReservationKey(guest.Controller.Endpoint)}},
+		{Context: "edge", Kind: "substrate-physical", Service: "node", Keys: []string{infrastructureservices.ControllerReservationKey(guest.Controller.Endpoint).String()}},
 	}
 	runtime, runner := &boundary{held: held}, &adapter{power: machine.PowerOff}
 	_, err = New(stateSource{}, evidenceSource{}, &pins{}, runtime, runner, nil, &answer{}, nil, nil).

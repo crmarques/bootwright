@@ -9,9 +9,8 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	"github.com/crmarques/bootwright/internal/managedos"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -129,8 +128,8 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		if !request.Placement.Local() {
 			continue
 		}
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
-			Context: input.Context.Name, Kind: prerequisites.OSInstallReservation, Service: request.Identity.Object, Keys: request.ReservationKeys(),
+		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{
+			Context: input.Context.Name, Kind: infrastructureservices.OSInstallReservation, Service: request.Identity.Object, Keys: request.ReservationKeys(),
 		})
 	}
 	if claim, held := mediaReservation(input.Context.Name, media); held {
@@ -181,17 +180,17 @@ func requires(needs Requirements) []reconciliation.ObjectRef {
 // context, kind and service, so the store entries are keys rather than
 // services of their own. The claim is shared, so any number of contexts may
 // hold it; it blocks only deletion and replacement of what it names.
-func mediaReservation(contextName string, names []string) (prerequisites.HostReservation, bool) {
+func mediaReservation(contextName string, names []string) (infrastructureservices.HostReservation, bool) {
 	keys := make([]string, 0, len(names))
 	for _, name := range names {
-		keys = append(keys, managedos.MediaReservationKey(name))
+		keys = append(keys, infrastructureservices.MediaReservationKey(name).String())
 	}
 	slices.Sort(keys)
 	keys = slices.Compact(keys)
 	if len(keys) == 0 {
-		return prerequisites.HostReservation{}, false
+		return infrastructureservices.HostReservation{}, false
 	}
-	return prerequisites.HostReservation{
+	return infrastructureservices.HostReservation{
 		Context: contextName, Kind: "media", Service: "media", Shared: true, Keys: keys,
 	}, true
 }

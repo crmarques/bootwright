@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -53,7 +53,7 @@ func (c *planningCapability) Plan(ctx context.Context, input PlanInput) (Capabil
 	}
 	plan.Definitions = definitions
 	if slices.Contains(members, c.reserves) {
-		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{Context: input.Context.Name, Kind: "listener", Service: c.reserves, Keys: []string{"tcp:" + c.reserves}})
+		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{Context: input.Context.Name, Kind: "listener", Service: c.reserves, Keys: []string{"tcp:" + c.reserves}})
 	}
 	return plan, nil
 }

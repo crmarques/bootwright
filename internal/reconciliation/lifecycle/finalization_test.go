@@ -11,9 +11,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
@@ -343,7 +343,7 @@ func TestARemovalWhoseBindingReleaseFailsReportsIncompleteFinalization(t *testin
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t, "alpha")
 			h.capability.consumes = map[string][]string{"alpha": dataLoss()}
-			h.capability.reservations = []prerequisites.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: "alpha", Keys: []string{"socket:192.0.2.1:8443"}}}
+			h.capability.reservations = []infrastructureservices.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: "alpha", Keys: []string{"socket:192.0.2.1:8443"}}}
 			if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
 				t.Fatal(err)
 			}
@@ -662,7 +662,7 @@ func unknownDestroyWithEveryBlockDone(t *testing.T) *harness {
 	ctx := context.Background()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha")})
 	h.capability.consumes = map[string][]string{"alpha": dataLoss()}
-	h.capability.reservations = []prerequisites.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: "alpha", Keys: []string{"socket:192.0.2.1:8443"}}}
+	h.capability.reservations = []infrastructureservices.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: "alpha", Keys: []string{"socket:192.0.2.1:8443"}}}
 	if err := authorized(ctx, h.service, reconciliation.Apply); err != nil {
 		t.Fatal(err)
 	}
@@ -894,7 +894,7 @@ func TestASettledVerbWithCompleteFinalizationOpensNoTransaction(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
-	h.capability.reservations = []prerequisites.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: "alpha", Keys: []string{"socket:192.0.2.1:8443"}}}
+	h.capability.reservations = []infrastructureservices.HostReservation{{Context: testContextName, Kind: "artifact-server", Service: "alpha", Keys: []string{"socket:192.0.2.1:8443"}}}
 	invoke := func(verb reconciliation.Verb, skip bool) (*OperationResult, error) {
 		if verb == reconciliation.Apply {
 			return h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: skip})

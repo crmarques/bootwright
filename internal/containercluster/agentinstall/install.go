@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -92,7 +92,7 @@ func (c InstallCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
 		if keys := controllerMediaKeys(request); len(keys) > 0 {
-			plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
+			plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{
 				Context: input.Context.Name, Kind: "cluster-install", Service: request.Identity.Cluster, ObjectKind: Kind, Keys: keys,
 			})
 		}
@@ -164,7 +164,7 @@ func controllerMediaKeys(request InstallRequest) []string {
 	var keys []string
 	for _, node := range request.Nodes {
 		if node.Physical {
-			keys = append(keys, substrate.ControllerMediaReservationKey(node.Controller.Endpoint))
+			keys = append(keys, infrastructureservices.ControllerMediaReservationKey(node.Controller.Endpoint).String())
 		}
 	}
 	slices.Sort(keys)

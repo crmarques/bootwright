@@ -16,6 +16,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
@@ -262,7 +263,7 @@ func aBindingIsEstablishedOnceAndRevalidatedExactly(t *testing.T, s Subject) {
 
 func reservationsAreTheContextsOwn(t *testing.T, s Subject) {
 	ctx := context.Background()
-	claim := []prerequisites.HostReservation{{
+	claim := []infrastructureservices.HostReservation{{
 		Context: s.Context, Kind: "proxy", Service: "lab-proxy",
 		Keys: []string{"socket:192.0.2.1:3128", "unit:bootwright-proxy"},
 	}}
@@ -273,21 +274,21 @@ func reservationsAreTheContextsOwn(t *testing.T, s Subject) {
 		reserves(t, tx, s.Context)
 		succeeds(t, tx.Reserve(ctx, claim), "a reservation")
 		reserves(t, tx, s.Context, claim...)
-		var reproved []prerequisites.HostReservation
-		succeeds(t, tx.ReproveReservations(ctx, func(held []prerequisites.HostReservation) error {
+		var reproved []infrastructureservices.HostReservation
+		succeeds(t, tx.ReproveReservations(ctx, func(held []infrastructureservices.HostReservation) error {
 			reproved = held
 			return nil
 		}, nil), "a re-proof")
-		if !slices.ContainsFunc(reproved, func(held prerequisites.HostReservation) bool {
+		if !slices.ContainsFunc(reproved, func(held infrastructureservices.HostReservation) bool {
 			return held.Context == s.Context && held.Service == claim[0].Service && slices.Equal(held.Keys, claim[0].Keys)
 		}) {
 			t.Fatalf("a re-proof read %+v, not the reservation just published", reproved)
 		}
-		refuses(t, tx.ReproveReservations(ctx, func([]prerequisites.HostReservation) error { return fmt.Errorf("refused") },
-			func(prerequisites.HostReservation) bool { return true }), "a refusing re-proof")
+		refuses(t, tx.ReproveReservations(ctx, func([]infrastructureservices.HostReservation) error { return fmt.Errorf("refused") },
+			func(infrastructureservices.HostReservation) bool { return true }), "a refusing re-proof")
 		reserves(t, tx, s.Context, claim...)
-		succeeds(t, tx.ReproveReservations(ctx, func([]prerequisites.HostReservation) error { return nil },
-			func(held prerequisites.HostReservation) bool { return held.Service == claim[0].Service }), "a marking re-proof")
+		succeeds(t, tx.ReproveReservations(ctx, func([]infrastructureservices.HostReservation) error { return nil },
+			func(held infrastructureservices.HostReservation) bool { return held.Service == claim[0].Service }), "a marking re-proof")
 		marked := claim[0]
 		marked.Releasing = true
 		reserves(t, tx, s.Context, marked)
@@ -300,7 +301,7 @@ func reservationsAreTheContextsOwn(t *testing.T, s Subject) {
 		reserves(t, tx, s.Context, claim...)
 	})
 	read(t, s, func(view lifecycle.View) { reserves(t, view, s.Context, claim...) })
-	planned := prerequisites.HostReservation{Context: s.Context, Kind: "substrate-physical", Service: "metal-01",
+	planned := infrastructureservices.HostReservation{Context: s.Context, Kind: "substrate-physical", Service: "metal-01",
 		Keys: []string{"bmc:bmc-01.example.test:443/1"}}
 	proved := planned
 	proved.Keys = []string{"bmc-system:4c4c4544-0042-3510-8052-b4c04f4d4e31", "bmc:bmc-01.example.test:443/1"}
@@ -559,12 +560,12 @@ func bindings(t *testing.T, view lifecycle.View, context string, want ...prerequ
 	}
 }
 
-func reserves(t *testing.T, view lifecycle.View, context string, want ...prerequisites.HostReservation) {
+func reserves(t *testing.T, view lifecycle.View, context string, want ...infrastructureservices.HostReservation) {
 	t.Helper()
-	held := slices.DeleteFunc(slices.Clone(view.Controller().State.Reservations), func(reservation prerequisites.HostReservation) bool {
+	held := slices.DeleteFunc(slices.Clone(view.Controller().State.Reservations), func(reservation infrastructureservices.HostReservation) bool {
 		return reservation.Context != context
 	})
-	if !slices.EqualFunc(held, want, func(x, y prerequisites.HostReservation) bool {
+	if !slices.EqualFunc(held, want, func(x, y infrastructureservices.HostReservation) bool {
 		return x.Context == y.Context && x.Kind == y.Kind && x.Service == y.Service && x.ObjectKind == y.ObjectKind && x.Shared == y.Shared && x.Releasing == y.Releasing && slices.Equal(x.Keys, y.Keys)
 	}) {
 		t.Fatalf("reservations of %s = %+v, want %+v", context, held, want)

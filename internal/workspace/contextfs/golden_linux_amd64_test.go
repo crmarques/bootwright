@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -229,7 +230,7 @@ func TestControllerRecordMatchesItsGolden(t *testing.T) {
 	value.ToolSources = []prerequisites.DependencySource{
 		{ID: "tool-helm-v3.19.0", URL: "https://get.helm.sh/helm-v3.19.0-linux-amd64.tar.gz", SHA256: strings.Repeat("a", 64), Bytes: 4096},
 	}
-	value.Reservations = []prerequisites.HostReservation{
+	value.Reservations = []infrastructureservices.HostReservation{
 		{Context: "lab", Kind: "media", Service: "media", Keys: []string{"media:rhel-9.6-x86_64-boot.iso"}, Shared: true},
 		{Context: "lab", Kind: "os-install", Service: "node-01", Keys: []string{"path:/srv/lab/node-01.iso", "path:/srv/lab/rhel"}},
 	}

@@ -9,6 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -131,7 +132,7 @@ func (j *CapabilityJourney) Holding(name string, material secrets.Material) {
 }
 
 // Reservations are the host keys the context holds now.
-func (j *CapabilityJourney) Reservations() []prerequisites.HostReservation {
+func (j *CapabilityJourney) Reservations() []infrastructureservices.HostReservation {
 	return slices.Clone(j.harness.workspace.reservations)
 }
 
