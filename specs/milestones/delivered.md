@@ -12921,7 +12921,7 @@ still running, so every command of that build stops first
 
 **Item:** B1242 (2026-11-10, [D250](backlog.md#d250) (2), (12), (13) and
 (17); [D251](backlog.md#d251)), completed in-tree. Each build embeds the
-[tool table](../controller.md#the-tool-table) `internal/controller/tooltable.json`:
+[tool table](../controller.md#the-tool-table) `internal/controller/tooltable/tooltable.json`:
 for Helm, `govc`, `kubectl` and `virtctl`, a minimum release and a default
 release with its size and SHA-256, read from each publisher on 2026-11-10 and
 confirmed by `make tool-table`. Selection fills the default into every tool
@@ -17113,4 +17113,20 @@ the installation and disk discovery capabilities name controller material by
 the frozen machine port, which the Anaconda and power roles read; the
 end-to-end cases render once per test binary. The parallel client tool
 downloads and the erase material writer are [B1529](m1.md#b1529).
+
+## X557 — Structure remainders
+
+### B1527
+
+Split from B1469 under [D274](backlog.md#d274) with the structure remainders
+the W items named. Controller selection reads an add-on's provided kinds, a
+Proxy's facts and the Machine facts it needs through what their contexts
+publish, so the three questionable `contextDependencies` rows now give their
+reasons; the tool table and `ProviderTool` are `internal/controller/tooltable`,
+which agent-based installation imports instead of the controller root; every
+reservation key is built through a typed builder in Infrastructure services,
+each key's text pinned before the move; the Ceph child admissions share their
+cluster's resolved placements (a stretch cluster's three pool admissions went
+from about 83 µs to 55 µs). No contract moved. nginx as a managed service row
+is [B1537](m1.md#b1537).
 
