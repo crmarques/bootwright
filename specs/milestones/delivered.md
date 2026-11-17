@@ -16342,3 +16342,18 @@ image use `bounded_process`, which the erase kickstart now ships, and the
 second erase runner is gone. The Python site scan refuses a new `run_command`.
 An independent review found no blocking defect.
 
+## X515 — The CLI asks the owning context
+
+### B1483
+
+Split from B1464 under [D274](backlog.md#d274) (audit 005 W3.4). The CLI
+parses `--authorize` with the lifecycle's grammar, checks media names and
+digests with the media store's rule, leaves `info` selection to the inventory
+and custody services, and renders the `diff` verdict and summary the
+lifecycle's `Judge` computes; every command's output, refusals and exit codes
+are unchanged, and the CLI goldens did not move. One loosening: `--sha256`
+accepts the spellings the media store already accepted (surrounding blanks,
+an upper-case `sha256:` prefix). An independent check found the lifecycle's
+value comparison equivalent to the old comparison of encoded documents for
+every object it builds.
+
