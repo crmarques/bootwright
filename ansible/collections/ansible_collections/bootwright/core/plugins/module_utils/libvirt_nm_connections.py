@@ -26,9 +26,9 @@ import json
 import os
 import re
 import stat
-import tempfile
 import time
 
+from ansible_collections.bootwright.core.plugins.module_utils import atomic_publish
 from ansible_collections.bootwright.core.plugins.module_utils import libvirt_nm_carrier as carrier
 
 NMCLI = "/usr/bin/nmcli"
@@ -672,17 +672,7 @@ def require(runner, arguments, what):
 def write_keyfile(root, entry):
     """Publish the keyfile atomically; NetworkManager ignores the hidden staging name."""
     os.makedirs(root, mode=0o700, exist_ok=True)
-    fd, stage = tempfile.mkstemp(prefix=".bootwright-", dir=root)
-    try:
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(keyfile(entry))
-            stream.flush()
-            os.fchmod(stream.fileno(), 0o600)
-            os.fsync(stream.fileno())
-        os.replace(stage, keyfile_path(root, entry))
-    finally:
-        if os.path.lexists(stage):
-            os.unlink(stage)
+    atomic_publish.publish(root, os.path.basename(keyfile_path(root, entry)), keyfile(entry), 0o600)
 
 
 def converge(runner, record, root):

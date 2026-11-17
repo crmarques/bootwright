@@ -6,7 +6,8 @@ import os
 import re
 import shlex
 import stat
-import tempfile
+
+from ansible_collections.bootwright.core.plugins.module_utils import atomic_publish
 
 SYSTEMD = "/etc/systemd/system"
 SYSTEMCTL = "/usr/bin/systemctl"
@@ -215,18 +216,8 @@ def manage(runner, request, state, root=SYSTEMD, owner=0):
         if code != 0 or output.strip() != "enabled":
             raise ValueError("firewalld.service must already be enabled for managed network restart; enable it before applying")
         if not os.path.exists(path):
-            fd, stage = tempfile.mkstemp(prefix=".bootwright-firewall-", dir=root)
-            try:
-                with os.fdopen(fd, "wb") as stream:
-                    stream.write(unit_content(name))
-                    stream.flush()
-                    os.fchmod(stream.fileno(), 0o644)
-                    os.fsync(stream.fileno())
-                os.replace(stage, path)
-                changed = True
-            finally:
-                if os.path.lexists(stage):
-                    os.unlink(stage)
+            atomic_publish.publish(root, name, unit_content(name), 0o644, ".bootwright-firewall-")
+            changed = True
         if not before["enabled"]:
             os.makedirs(wants, mode=0o755, exist_ok=True)
             if not stat.S_ISDIR(os.lstat(wants).st_mode):

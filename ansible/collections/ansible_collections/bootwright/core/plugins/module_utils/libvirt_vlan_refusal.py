@@ -15,8 +15,8 @@ import json
 import os
 import re
 import stat
-import tempfile
 
+from ansible_collections.bootwright.core.plugins.module_utils import atomic_publish
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_firewall_ready import vendor_dropins
 
 SYSTEMD = "/etc/systemd/system"
@@ -281,17 +281,9 @@ def require(runner, arguments):
 
 
 def write_unit(root, path, content):
-    fd, stage = tempfile.mkstemp(prefix=".bootwright-vlan-", dir=root)
-    try:
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(content)
-            stream.flush()
-            os.fchmod(stream.fileno(), 0o644)
-            os.fsync(stream.fileno())
-        os.replace(stage, path)
-    finally:
-        if os.path.lexists(stage):
-            os.unlink(stage)
+    if os.path.dirname(path) != root:
+        raise ValueError("a unit file is published only directly beneath its unit directory")
+    atomic_publish.publish(root, os.path.basename(path), content, 0o644, ".bootwright-vlan-")
 
 
 def settle(runner, request, root, owner, path):

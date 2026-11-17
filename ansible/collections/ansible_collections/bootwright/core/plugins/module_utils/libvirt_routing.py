@@ -20,8 +20,8 @@ import ipaddress
 import json
 import os
 import stat
-import tempfile
 
+from ansible_collections.bootwright.core.plugins.module_utils import atomic_publish
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_firewall_ready import vendor_dropins
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_nm_connections import DEVICE, identity, legs_of, trunks_of
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_vlan_refusal import (
@@ -317,26 +317,15 @@ def write_rules(table, rules, owner):
         try:
             for path in (os.path.dirname(rules), rules):
                 ensure_directory(path, owner)
-            fd, stage = tempfile.mkstemp(prefix=".bootwright-routing-", dir=rules)
+            held = os.open(rules, atomic_publish.DIRECTORY)
         except FileNotFoundError:
             if attempt == WRITE_ATTEMPTS - 1:
                 raise
             continue
         try:
-            with os.fdopen(fd, "wb") as stream:
-                stream.write(rules_content(table))
-                stream.flush()
-                os.fchmod(stream.fileno(), 0o644)
-                os.fsync(stream.fileno())
-            os.replace(stage, rules_path(table, rules))
-            directory = os.open(rules, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
+            atomic_publish.publish(held, os.path.basename(rules_path(table, rules)), rules_content(table), 0o644, ".bootwright-routing-")
         finally:
-            if os.path.lexists(stage):
-                os.unlink(stage)
+            os.close(held)
         return
 
 

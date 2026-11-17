@@ -5,8 +5,9 @@ from __future__ import annotations
 import configparser
 import os
 import re
-import secrets
 import stat
+
+from ansible_collections.bootwright.core.plugins.module_utils import atomic_publish
 
 CONFIG = "/etc/NetworkManager/conf.d"
 MARK = "# Bootwright owned VLAN carrier policy: "
@@ -147,21 +148,7 @@ def require_owned(observed):
 
 
 def write(descriptor, filename, data):
-    stage = ".bootwright-carrier-" + secrets.token_hex(12)
-    try:
-        fd = os.open(stage, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o644, dir_fd=descriptor)
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(data)
-            stream.flush()
-            os.fchmod(stream.fileno(), 0o644)
-            os.fsync(stream.fileno())
-        os.replace(stage, filename, src_dir_fd=descriptor, dst_dir_fd=descriptor)
-        os.fsync(descriptor)
-    finally:
-        try:
-            os.unlink(stage, dir_fd=descriptor)
-        except FileNotFoundError:
-            pass
+    atomic_publish.publish(descriptor, filename, data, 0o644, ".bootwright-carrier-")
 
 
 def reconcile(context, provider, legs, reload_config, root=CONFIG, owner=0):
