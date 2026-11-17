@@ -323,6 +323,7 @@ Alias cell.
 | [B1412](#b1412) | new, 2026-11-15 | defect | Architecture | Documentation checks detect milestone identifier collisions across active, parked and delivered records | Tooling hardening beyond the requested case; its identifiers are reconciled manually |
 | [B1424](#b1424) | new, 2026-11-16 (owner request) | defect | CLI, with State reconciliation | Resolution failures are readable through a precise supported logs command without opening private files manually | Owner requested backlog recording; explicit resolution selection and diagnostic handoff remain unpromoted |
 | [B1428](#b1428) | new, 2026-11-16 (D272) | enabling | Managed OS | The inventory boot starts its entry without the installer's 60-second boot-menu timeout | Found while rehearsing X490; mkksiso offers no timeout option, so a change means owning boot-configuration edits beyond its documented ones |
+| [B1534](#b1534) | new, 2026-11-17 (X560 review) | defect | Managed OS | A Machine's physical erase publication directory never equals another Machine's installation publication directory | Pre-existing; found by X560's safety review, outside its relaxation outcome |
 
 ### B82
 
@@ -3692,6 +3693,20 @@ attempt, distinguish them from later effect attempts, reject invalid or missing
 selections, and prove the failure's emitted command reads its exact retained
 output in human and JSON modes. Parked because the owner requested recording
 the gap, not implementing a new selector in the current troubleshooting loop.
+
+### B1534
+
+**Owner:** Managed OS. **Kind:** defect. **Requires:** existing physical erase.
+**Definition:** Candidate. **Outcome:** a Machine's
+[physical erase](../state-reconciliation.md#opt-in-physical-logical-overwrite)
+publication directory, which is its installation's private path suffixed with
+`-erase` (`internal/managedos/physicalerase/requests.go`), can never be the
+installation private path of another Machine named `<machine>-erase` under the
+same consumer, so destroying that Machine cannot remove a live erase image.
+**Exit evidence:** a request test that two such Machines get disjoint
+publication paths, and an erase test that one Machine's removal leaves the
+other's publication. Parked because X560's review found it pre-existing,
+outside the relaxation outcome.
 
 ## Audit remediation (2026-10-26)
 
