@@ -16373,3 +16373,20 @@ the Ceph ones. A registry user name may be as long as a Secret part allows.
 With this, W2 is complete. An independent review found no blocking defect;
 its follow-ups are applied.
 
+## X516 — Independent probes run at once
+
+### B1484
+
+Split from B1468 under [D274](backlog.md#d274) (audit 005 W7.1).
+`internal/fanout` runs read-only work over independent targets with a bound,
+a per-key throttle, cancellation, results in input order and every worker
+joined; a worker's panic re-panics on the caller after the join. Diff
+observation uses it in place of its own scheduler, and the quiescence probes
+before a removal, the substrate capacity probes (at most four per host), the
+storage guest prerequisite checks, the copy preflights and the power surveys
+now run at once, with their recorded output, refusals and progress counts as
+before. The controller's client tool downloads stay serial: running them at
+once needs a new protocol between the Go runner and the `controller_tool`
+action, which stays on B1468. An independent review found no data race, leak
+or limit breach; its follow-ups are applied.
+
