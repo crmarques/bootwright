@@ -16531,3 +16531,19 @@ names the operation it runs where its mutation is built, so the embedded
 playbook binding test checks their apply and destroy, which it had lost at
 X523.
 
+## X525 — One Ceph action table
+
+### B1495
+
+Split from B1465 under [D274](backlog.md#d274) (audit 005 W4.5). One table
+keyed by the Ceph request's action holds each action's arm, object, resource,
+scope, readiness and deadline, and identity, the own-arm check, scope and
+readiness validation, the deadline and the frozen scope rows read it; a test
+keeps it equal to the actions the executor's evidence schema admits. The
+Python executor dispatches through one table of procedures, with the cluster
+and resource procedures split and sharing one postcondition. Placement,
+subject, exclusivity and evidence evaluation keep their own branches, which
+are not one per action. Pin tests written on the earlier code (every action
+with its own, no and a foreign arm, 132 evidence shapes, 93 executor cases)
+pass unchanged.
+
