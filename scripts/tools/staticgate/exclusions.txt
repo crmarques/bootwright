@@ -21,6 +21,4 @@ SA6006	internal/controller/privilege/sudo_test.go	2	use io.Writer.Write instead 
 ST1005	internal/addons/clusterobjects/validation.go	2	error strings should not be capitalized
 ST1005	internal/storage/cephcluster/disk_protections.go	2	error strings should not be capitalized
 ST1008	internal/workspace/contextfs/store_failures_linux_amd64_test.go	1	error should be returned as the last argument
-ST1012	internal/infrastructureservices/artifactserver/evidence.go	1	error var certificateMismatch should have name of the form errFoo
-ST1012	internal/infrastructureservices/managedservice/evidence.go	1	error var certificateMismatch should have name of the form errFoo
 ST1012	internal/reconciliation/lifecycle/kill_harness_test.go	1	error var killError should have name of the form errFoo
