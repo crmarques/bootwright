@@ -418,7 +418,7 @@ func TestNVMeOFDependenciesRefuseAGatewayServiceWithoutAPool(t *testing.T) {
 func TestNVMeOFServiceUnitFreezesItsObservationBound(t *testing.T) {
 	catalog := nvmeCatalog()
 	cluster, _ := catalog.Find(api.CephCluster, "example")
-	base, err := New(api.CephCluster, nil).request(catalog, cluster, "synthetic")
+	base, err := New(api.CephCluster, nil).request(catalog, cluster, contextDerivation("synthetic"))
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
