@@ -17025,3 +17025,15 @@ independent durability review accepted every commit; its fixes are applied.
 The compaction of identity reservations into one authenticated record
 ([D274](backlog.md#d274) (7)) is not part of this slice.
 
+## X551 — Typed rules, arms and views
+
+### B1521
+
+Split from B1469 under [D274](backlog.md#d274) (the rest of audit 005 W8.7).
+`api.LexicalRule` is a type with one registry, and a test walks every kind's
+schema and refuses a shape rule the registry lacks. `substrate.Arm`,
+`machine.Connection`, `power.Verb` and `api.ContextName` are typed values at
+the frozen request fields and the hot arm functions, encoding to the same
+JSON. Machine and CephCluster have typed catalog views built once per compile,
+and 17 readers use them. Every plan, refusal and golden is unchanged.
+
