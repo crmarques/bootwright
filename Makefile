@@ -325,6 +325,7 @@ RACE_PACKAGES = ./internal/reconciliation/... ./internal/controller/privilege/..
 	./internal/controller/venvlocal \
 	./internal/environment \
 	./internal/environment/clusterpreflight \
+	./internal/fanout \
 	./internal/machine/access \
 	./internal/machine/power \
 	./internal/machine/sshlocal \

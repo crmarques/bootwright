@@ -10,6 +10,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/fanout"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -122,11 +123,6 @@ func (s Service) reproveDiff(ctx context.Context, view RunView, store recordRead
 	return verifyHostBinding(view.Controller(), view.Identity(), host, unobservedDiff(read.context.Name), false)
 }
 
-type settledReading struct {
-	block   reconciliation.Block
-	reading blockReading
-}
-
 // inspectAll starts observations in frozen order, a full throttle never holding back a later block that may run.
 func (s Service) inspectAll(ctx context.Context, view RunView, store recordReader, approved approved, read *diffRead, blocks []reconciliation.Block, material map[string]secrets.Material) map[string]blockReading {
 	readings := make(map[string]blockReading, len(blocks))
@@ -144,47 +140,22 @@ func (s Service) inspectAll(ctx context.Context, view RunView, store recordReade
 		}
 		waiting = append(waiting, block)
 	}
-	settled := make(chan settledReading, len(waiting))
 	shared := NewSharedReadings()
-	running, throttled := 0, map[string]int{}
-	for len(waiting) != 0 || running != 0 {
-		if ctx.Err() != nil {
-			for _, block := range waiting {
-				settle(block, canceled)
+	fanout.Run(ctx, fanout.Options[reconciliation.Block, blockReading]{
+		Limit: s.Concurrency(), Throttle: s.Throttle(),
+		Key: func(block reconciliation.Block) string { return block.Throttle },
+		Settled: func(index int, outcome fanout.Outcome[blockReading]) {
+			switch {
+			case !outcome.Started:
+				outcome.Value = canceled
+			case outcome.Err != nil:
+				outcome.Value = blockReading{state: sideUnknown, reason: "the observation failed: " + outcome.Err.Error(), remedy: repeatObserved(read.context.Name)}
 			}
-			waiting = nil
-		}
-		waiting = slices.DeleteFunc(waiting, func(block reconciliation.Block) bool {
-			if ctx.Err() != nil || running >= s.Concurrency() || block.Throttle != "" && throttled[block.Throttle] >= s.Throttle() {
-				return false
-			}
-			running++
-			if block.Throttle != "" {
-				throttled[block.Throttle]++
-			}
-			go func() {
-				settled <- settledReading{block: block, reading: s.inspect(ctx, view, store, approved, read, block, material, shared)}
-			}()
-			return true
-		})
-		if running == 0 {
-			continue
-		}
-		var done settledReading
-		select {
-		case done = <-settled:
-		case <-ctx.Done():
-			if len(waiting) != 0 {
-				continue
-			}
-			done = <-settled
-		}
-		running--
-		if done.block.Throttle != "" {
-			throttled[done.block.Throttle]--
-		}
-		settle(done.block, done.reading)
-	}
+			settle(waiting[index], outcome.Value)
+		},
+	}, waiting, func(ctx context.Context, block reconciliation.Block) (blockReading, error) {
+		return s.inspect(ctx, view, store, approved, read, block, material, shared), nil
+	})
 	status := "ok"
 	for _, reading := range readings {
 		if reading.state == sideUnknown {

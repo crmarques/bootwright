@@ -40,6 +40,7 @@ func packageRoles() map[string]packageRole {
 		"internal/nativeexec":                      technicalRole,
 		"internal/nativefs":                        technicalRole,
 		"internal/canonicaljson":                   technicalRole,
+		"internal/fanout":                          technicalRole,
 		"internal/desiredstate/customplaybooks":    domainRole,
 		"internal/desiredstate/inputfs":            adapterRole,
 		"internal/desiredstate/yamlstream":         adapterRole,

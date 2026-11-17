@@ -11,7 +11,7 @@ func commentLineCeilings() map[string]int {
 		"internal/acquisition":     9,
 		"internal/adapterprotocol": 132, "internal/addons": 6, "internal/addons/catalog": 0, "internal/addons/clusterobjects": 0, "internal/addons/clusterobjects/driver": 0, "internal/addons/instance": 0,
 		"internal/addons/packages": 2, "internal/containercluster/networking": 2,
-		"internal/availability": 0, "internal/canonicaljson": 27,
+		"internal/availability": 0, "internal/canonicaljson": 27, "internal/fanout": 0,
 		"internal/cli": 450, "internal/containercluster": 0, "internal/containercluster/openshift": 21, "internal/containercluster/access": 24,
 		"internal/containercluster/agentinstall": 467, "internal/containercluster/installation": 0,
 		"internal/containercluster/preflight": 0, "internal/containercluster/preflightlocal": 0, "internal/substrate/capacity": 0, "internal/controller": 125,
