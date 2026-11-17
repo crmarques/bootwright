@@ -214,12 +214,15 @@ request-schema:
   packages.sources []struct ceph.PackageSource
   packages.sources[].certificateRef string
   packages.sources[].host string
-  packages.sources[].media string
+  packages.sources[].media string omitempty
   packages.sources[].mediaSHA256 string omitempty
   packages.sources[].mediaSize int64 omitempty
   packages.sources[].profile string
-  packages.sources[].publicationPath string
-  packages.sources[].url string
+  packages.sources[].publicationPath string omitempty
+  packages.sources[].subscription *struct ceph.SubscriptionSource omitempty
+  packages.sources[].subscription.contentBaseURL string
+  packages.sources[].subscription.hostname string
+  packages.sources[].url string omitempty
   packages.version string
   policy *struct ceph.Policy omitempty
   policy.deviceClass string

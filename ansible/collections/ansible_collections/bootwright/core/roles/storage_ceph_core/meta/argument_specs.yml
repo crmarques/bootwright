@@ -546,7 +546,6 @@ argument_specs:
                     required: true
                   media:
                     type: str
-                    required: true
                   mediaSHA256:
                     type: str
                   mediaSize:
@@ -556,10 +555,17 @@ argument_specs:
                     required: true
                   publicationPath:
                     type: str
-                    required: true
+                  subscription:
+                    type: dict
+                    options:
+                      contentBaseURL:
+                        type: str
+                        required: true
+                      hostname:
+                        type: str
+                        required: true
                   url:
                     type: str
-                    required: true
               version:
                 type: str
                 required: true

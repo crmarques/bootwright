@@ -79,12 +79,15 @@ request-schema:
   cluster.packages.sources []struct ceph.PackageSource
   cluster.packages.sources[].certificateRef string
   cluster.packages.sources[].host string
-  cluster.packages.sources[].media string
+  cluster.packages.sources[].media string omitempty
   cluster.packages.sources[].mediaSHA256 string omitempty
   cluster.packages.sources[].mediaSize int64 omitempty
   cluster.packages.sources[].profile string
-  cluster.packages.sources[].publicationPath string
-  cluster.packages.sources[].url string
+  cluster.packages.sources[].publicationPath string omitempty
+  cluster.packages.sources[].subscription *struct ceph.SubscriptionSource omitempty
+  cluster.packages.sources[].subscription.contentBaseURL string
+  cluster.packages.sources[].subscription.hostname string
+  cluster.packages.sources[].url string omitempty
   cluster.packages.version string
   cluster.publicNetworks []string
   cluster.registry string

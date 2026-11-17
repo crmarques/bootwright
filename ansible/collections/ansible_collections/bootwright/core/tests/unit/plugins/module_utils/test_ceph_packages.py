@@ -576,6 +576,7 @@ def test_stream_download_enforces_hash_size_budget_and_origin(package_request):
 
 def test_root_payload_uses_acquired_hash_without_release_allowlist(tmp_path):
     acquisition = object.__new__(sources.Acquisition)
+    acquisition.source = {}
     acquisition.repository_base = sources.IBM_BASE
     acquisition.repository_key = sources.IBM_KEY
     plan = plan_fixture()

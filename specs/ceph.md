@@ -188,16 +188,16 @@ A native deploy that still pulls an image uses only the protected guest registry
 record of the same registry authority.
 
 IBM's public signed RPM repository does not require registry credentials.
-Red Hat media/CDN access remains a separate entitlement and source boundary.
 
-The minimal DVD installation lends Storage its proved original-apply media
-identity and publication, together with the artifact server's public TLS
-certificate. Storage uses the shared package resolver for its Ceph-owned roots;
-it does not acquire RHSM registration or install another domain's prerequisites.
+A hosted-DVD installation lends Storage its proved original-apply media
+identity and publication and the artifact server's TLS certificate; a
+[subscription](ceph-subscription-dependencies.md) one, its Satellite. Storage
+uses the shared package resolver for its Ceph-owned roots; it does not acquire
+RHSM registration or install another domain's prerequisites.
 The resolver installs no weak dependency, so a tool the host phases run that
 the provider packages only recommend is a root of its own: the container
 runtime `podman`, which cephadm only recommends, is resolved at its latest
-version from the hosted DVD's BaseOS and AppStream repositories, as `openssl`
+version from the host's BaseOS and AppStream sources, as `openssl`
 for the pull broker is, on every Ceph host, provided ones included, and
 cluster removal retains it like the other roots.
 Freeze repository metadata, the complete signed RPM closure, authenticated
@@ -298,7 +298,7 @@ ships; the complete live consumer and qualification remain
 [B79](milestones/m2.md#b79) and [B80](milestones/m2.md#b80).
 
 The package phase authenticates inherited crypto-policies roots from the
-frozen RHEL DVD and lends completed original generator/profile facts to a
+frozen RHEL source and lends completed original generator/profile facts to a
 descriptor-bound predefined OpenSSH-server policy alias resolver. Image
 provenance never substitutes for that host-OS proof.
 

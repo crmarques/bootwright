@@ -11,10 +11,12 @@ import configparser
 import contextlib
 import bz2
 import gzip
+import ipaddress
 import os
 from pathlib import Path, PurePosixPath
 import re
 import ssl
+import stat
 import time
 import urllib.error
 import urllib.parse
@@ -26,6 +28,12 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
 IBM_BASE = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64"
 IBM_KEY = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH"
 PROVIDER_ROOTS = {"cephadm", "ceph-common", "cephadm-ansible", "nfs-ganesha", "ibm-storage-ceph-license"}
+TREE_SOURCE = {"host", "profile", "media", "mediaSHA256", "mediaSize", "publicationPath", "url", "certificateRef"}
+SUBSCRIPTION_SOURCE = {"host", "profile", "certificateRef", "subscription"}
+REDHAT_REPO = "/etc/yum.repos.d/redhat.repo"
+ENTITLEMENT_DIRECTORY = "/etc/pki/entitlement"
+ENTITLEMENT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,254}")
+DNS_LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 
 NAMESPACE = "{http://linux.duke.edu/metadata/repo}"
 METADATA_TYPES = {"primary", "filelists", "modules", "group", "group_gz", "updateinfo", "other"}
@@ -123,23 +131,98 @@ def source_for(request, host):
     names = []
     selected = None
     for source in sources:
-        ceph_native.require(isinstance(source, dict)
-                            and set(source) == {"host", "profile", "media", "mediaSHA256", "mediaSize", "publicationPath", "url", "certificateRef"}, "packages")
+        ceph_native.require(isinstance(source, dict) and set(source) in (TREE_SOURCE, SUBSCRIPTION_SOURCE), "packages")
         for field in ("host", "profile", "certificateRef"):
             ceph_native.require(ceph_native.named(source[field]), "packages")
-        ceph_native.require(isinstance(source["media"], str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,254}\.iso", source["media"]) is not None,
-                            "packages")
-        ceph_native.require(ceph_native.digest(source["mediaSHA256"]) and type(source["mediaSize"]) is int and 0 < source["mediaSize"] <= 64 << 30, "packages")
-        ceph_native.require(isinstance(source["publicationPath"], str) and source["publicationPath"].startswith("/var/lib/bootwright-hosted/")
-                            and source["publicationPath"].endswith("/public/os/" + source["profile"] + "/tree") and len(source["publicationPath"]) <= 1024,
-                            "packages")
-        safe_url(source["url"])
-        ceph_native.require(urllib.parse.urlsplit(source["url"]).path.endswith("/os/" + source["profile"] + "/tree"), "packages")
+        if set(source) == SUBSCRIPTION_SOURCE:
+            subscription_source(source["subscription"])
+        else:
+            tree_source(source)
         names.append(source["host"])
         if source["host"] == host:
             selected = source
     ceph_native.require(names == sorted(h["name"] for h in request["hosts"]) and selected is not None, "packages")
     return selected
+
+
+def tree_source(source):
+    ceph_native.require(isinstance(source["media"], str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,254}\.iso", source["media"]) is not None,
+                        "packages")
+    ceph_native.require(ceph_native.digest(source["mediaSHA256"]) and type(source["mediaSize"]) is int and 0 < source["mediaSize"] <= 64 << 30, "packages")
+    ceph_native.require(isinstance(source["publicationPath"], str) and source["publicationPath"].startswith("/var/lib/bootwright-hosted/")
+                        and source["publicationPath"].endswith("/public/os/" + source["profile"] + "/tree") and len(source["publicationPath"]) <= 1024,
+                        "packages")
+    safe_url(source["url"])
+    ceph_native.require(urllib.parse.urlsplit(source["url"]).path.endswith("/os/" + source["profile"] + "/tree"), "packages")
+
+
+def subscription_source(satellite):
+    ceph_native.require(isinstance(satellite, dict) and set(satellite) == {"hostname", "contentBaseURL"}, "packages")
+    ceph_native.require(satellite_host(satellite["hostname"]), "packages")
+    content = satellite["contentBaseURL"]
+    safe_url(content)
+    ceph_native.require("?" not in content and "#" not in content and "@" not in urllib.parse.urlsplit(content).netloc, "packages")
+
+
+def satellite_host(value):
+    if not isinstance(value, str) or not 0 < len(value) <= 253:
+        return False
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        return all(DNS_LABEL.fullmatch(label) is not None for label in value.split("."))
+
+
+def read_redhat_repo():
+    import dnf
+    import dnf.conf
+    import dnf.rpm
+
+    conf = dnf.conf.Conf()
+    conf.config_file_path = REDHAT_REPO
+    conf.reposdir = []
+    conf.substitutions.update_from_etc("/")
+    if "releasever" not in conf.substitutions:
+        conf.substitutions["releasever"] = dnf.rpm.detect_releasever("/")
+    base = dnf.Base(conf)
+    base.read_all_repos()
+    return [{"enabled": bool(repo.enabled), "baseurl": list(repo.baseurl), "sslverify": bool(repo.sslverify),
+             "sslclientcert": repo.sslclientcert, "sslclientkey": repo.sslclientkey} for repo in base.repos.values() if repo.repofile == REDHAT_REPO]
+
+
+def protected(info, kind):
+    return kind(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022
+
+
+def entitlement_file(path, inspect):
+    if not isinstance(path, str) or os.path.dirname(path) != ENTITLEMENT_DIRECTORY or ENTITLEMENT_NAME.fullmatch(os.path.basename(path)) is None:
+        return False
+    try:
+        return protected(inspect(ENTITLEMENT_DIRECTORY), stat.S_ISDIR) and protected(inspect(path), stat.S_ISREG)
+    except OSError:
+        return False
+
+
+def subscription_repositories(records, content, inspect):
+    prefix = content.rstrip("/") + "/"
+    selected = {"baseos": [], "appstream": []}
+    for record in records:
+        urls = list(record["baseurl"])
+        if record["enabled"] is not True or record["sslverify"] is not True or len(urls) != 1 or not isinstance(urls[0], str):
+            continue
+        url = urls[0].rstrip("/")
+        if not url.startswith(prefix) or not entitlement_file(record["sslclientcert"], inspect) or not entitlement_file(record["sslclientkey"], inspect):
+            continue
+        try:
+            safe_url(url)
+        except ceph_native.Refusal:
+            continue
+        for kind, found in selected.items():
+            if urllib.parse.urlsplit(url).path.endswith("/" + kind + "/os"):
+                found.append({"url": url, "certificate": record["sslclientcert"], "key": record["sslclientkey"]})
+    ceph_native.require(all(len(found) == 1 for found in selected.values()), "packages")
+    return {kind: found[0] for kind, found in selected.items()}
 
 
 def safe_url(value):
@@ -214,7 +297,8 @@ class RepositoryHTTPS(urllib.request.HTTPSHandler):
 class Acquisition:
     """Never use ambient proxies, redirect credentials or unverified HTTPS."""
 
-    def __init__(self, source, certificate, budget=1800, *, repository, repository_key, trust=None, trust_ref=None, proxy=""):
+    def __init__(self, source, certificate, budget=1800, *, repository, repository_key, trust=None, trust_ref=None, proxy="", reader=read_redhat_repo,
+                 inspect=os.lstat):
         ceph_native.require(isinstance(certificate, str) and 0 < len(certificate.encode()) <= 1 << 20, "material")
         ceph_native.package_proxy(proxy)
         self.repository_base = safe_url(repository).rstrip("/")
@@ -232,6 +316,7 @@ class Acquisition:
         local, _certificate = tls_trust.context(certificate)
         local.minimum_version = ssl.TLSVersion.TLSv1_2
         self.local = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(), urllib.request.HTTPSHandler(context=local))
+        self.certificate, self.reader, self.inspect, self.satellite = certificate, reader, inspect, None
         public = ssl.create_default_context()
         public.minimum_version = ssl.TLSVersion.TLSv1_2
         self.public = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(), RepositoryHTTPS(proxy, public))
@@ -251,14 +336,10 @@ class Acquisition:
 
     def stream(self, url, output, limit, expected=None, size=None):
         safe_url(url)
-        prefix = self.source["url"].rstrip("/") + "/"
-        ceph_native.require(url.startswith(prefix) or url.startswith(self.repository_base + "/") or url == self.repository_key, "packages")
-        if url == self.repository_key:
-            opener, origin = self.repository_opener, ("the publisher key " + self.repository_key, self.anchor)
-        elif url.startswith(prefix):
-            opener, origin = self.local, None
+        if "subscription" in self.source:
+            opener, origin = self.satellite_route(url)
         else:
-            opener, origin = self.repository_opener, ("the package repository " + self.repository_base, self.anchor)
+            opener, origin = self.route(url)
         start, total, attempt = output.tell(), self.total, 1
         while True:
             try:
@@ -272,6 +353,51 @@ class Acquisition:
             self.total = total
             time.sleep(pause)
             attempt += 1
+
+    def route(self, url):
+        prefix = self.source["url"].rstrip("/") + "/"
+        ceph_native.require(url.startswith(prefix) or url.startswith(self.repository_base + "/") or url == self.repository_key, "packages")
+        if url == self.repository_key:
+            return self.repository_opener, ("the publisher key " + self.repository_key, self.anchor)
+        if url.startswith(prefix):
+            return self.local, None
+        return self.repository_opener, ("the package repository " + self.repository_base, self.anchor)
+
+    def satellite_route(self, url):
+        satellite = self.source["subscription"]
+        content = satellite["contentBaseURL"].rstrip("/")
+        ceph_native.require(url.startswith(content + "/") or url.startswith(self.repository_base + "/") or url == self.repository_key, "packages")
+        if url == self.repository_key:
+            return self.repository_opener, ("the publisher key " + self.repository_key, self.anchor)
+        if url.startswith(self.repository_base + "/"):
+            return self.repository_opener, ("the package repository " + self.repository_base, self.anchor)
+        for repository in self.satellite_repositories().values():
+            if url.startswith(repository["url"] + "/"):
+                origin = "the Satellite " + satellite["hostname"] + " content root " + content
+                return repository["opener"], (origin, "CA bundle Secret " + self.source["certificateRef"])
+        raise ceph_native.Refusal("packages")
+
+    def satellite_repositories(self):
+        if self.satellite is None:
+            try:
+                records = self.reader()
+            except Exception:
+                raise ceph_native.Refusal("packages") from None
+            ceph_native.require(isinstance(records, list), "packages")
+            selected = subscription_repositories(records, self.source["subscription"]["contentBaseURL"], self.inspect)
+            for repository in selected.values():
+                repository["opener"] = self.satellite_opener(repository)
+            self.satellite = selected
+        return self.satellite
+
+    def satellite_opener(self, repository):
+        context, _certificate = tls_trust.context(self.certificate)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        try:
+            context.load_cert_chain(repository["certificate"], repository["key"])
+        except (ssl.SSLError, OSError):
+            raise ceph_native.Refusal("packages") from None
+        return urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(), urllib.request.HTTPSHandler(context=context))
 
     def attempt(self, url, opener, origin, output, limit, expected, size):
         remaining = self.deadline - time.monotonic()
@@ -397,6 +523,13 @@ class Acquisition:
         self.expanded += count
 
     def repositories(self, scratch):
+        if "subscription" in self.source:
+            satellite = self.satellite_repositories()
+            return [
+                self.repository(scratch, "rhel-baseos", satellite["baseos"]["url"], native_signatures.RHEL_SIGNER),
+                self.repository(scratch, "rhel-appstream", satellite["appstream"]["url"], native_signatures.RHEL_SIGNER),
+                self.repository(scratch, "ibm-storage-ceph", self.repository_base, native_signatures.IBM_CEPH_SIGNER),
+            ]
         with artifact("installation tree metadata"):
             identity = self.bytes(child_url(self.source["url"], ".bootwright-tree-identity"), 65)
             ceph_native.require(identity.decode("ascii").strip() == self.source["mediaSHA256"], "packages")
@@ -420,6 +553,8 @@ class Acquisition:
         ]
 
     def payloads(self, scratch, plan):
+        if "subscription" in self.source:
+            self.satellite_repositories()
         result = {}
         for package in plan["packages"]:
             source = package["source"]
@@ -434,6 +569,8 @@ class Acquisition:
         return result
 
     def publisher_key(self, scratch):
+        if "subscription" in self.source:
+            self.satellite_repositories()
         path = str(Path(scratch, "ibm-ceph-publisher.asc"))
         with artifact("IBM Ceph publisher key"):
             self.file(self.repository_key, path, 1 << 20)

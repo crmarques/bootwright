@@ -1,6 +1,7 @@
 package ceph
 
 import (
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,14 +16,20 @@ import (
 const PackageVersion = "ceph-packages-v1"
 
 type PackageSource struct {
-	CertificateRef  string `json:"certificateRef"`
-	Host            string `json:"host"`
-	Media           string `json:"media"`
-	MediaSHA256     string `json:"mediaSHA256,omitempty"`
-	MediaSize       int64  `json:"mediaSize,omitempty"`
-	Profile         string `json:"profile"`
-	PublicationPath string `json:"publicationPath"`
-	URL             string `json:"url"`
+	CertificateRef  string              `json:"certificateRef"`
+	Host            string              `json:"host"`
+	Media           string              `json:"media,omitempty"`
+	MediaSHA256     string              `json:"mediaSHA256,omitempty"`
+	MediaSize       int64               `json:"mediaSize,omitempty"`
+	Profile         string              `json:"profile"`
+	PublicationPath string              `json:"publicationPath,omitempty"`
+	Subscription    *SubscriptionSource `json:"subscription,omitempty"`
+	URL             string              `json:"url,omitempty"`
+}
+
+type SubscriptionSource struct {
+	ContentBaseURL string `json:"contentBaseURL"`
+	Hostname       string `json:"hostname"`
 }
 
 type PackageRequest struct {
@@ -69,33 +76,76 @@ func packageSources(c api.Catalog, r Request, contextName string) (*PackageReque
 		}
 		profile, ok := c.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(m))
 		if !ok || profile.Spec().Get("os", "family").Text() != "rhel" || profile.Spec().Get("os", "architecture").Text() != "x86_64" {
-			return nil, failure("lifecycle.unsupported", "Ceph package acquisition requires the owned RHEL x86_64 DVD installation profile", "select the hosted DVD profile used to install each Ceph Machine")
+			return nil, failure("lifecycle.unsupported", "Ceph package acquisition requires the owned RHEL x86_64 installation profile", "select the hosted DVD or subscription profile used to install each Ceph Machine")
 		}
-		tree := profile.Spec().Get("installer", "anaconda", "packageSource", "hostedTree")
-		media, local := strings.CutPrefix(tree.Get("fromMedia").Text(), "local-media:")
-		if !local || !managedos.ValidMediaName(media) {
-			return nil, failure("lifecycle.unsupported", "Ceph dependencies require the installed Machine's pinned hosted DVD", "import the provider DVD and select hostedTree; a subscription package source does not supply Ceph dependencies")
+		var source PackageSource
+		if profile.Spec().Has("installer", "anaconda", "packageSource", "subscription") {
+			source, err = subscriptionPackageSource(c, profile, host)
+		} else {
+			source, err = treePackageSource(c, profile, contextName)
 		}
-		selection := tree.Get("artifactServerEndpoint")
-		server, err := artifactserver.Selected(c, selection, profile.Identity())
 		if err != nil {
 			return nil, err
 		}
-		publication, err := artifactserver.PublicPath(c, server, selection, contextName, "os", profile.Name(), "tree", profile.Identity())
-		if err != nil {
-			return nil, err
-		}
-		endpoint, err := packageEndpoint(c, server, selection, profile.Identity())
-		if err != nil {
-			return nil, err
-		}
-		certificate := server.Spec().Get("tls", "secretRef").Text()
-		if certificate == "" {
-			return nil, failure("api.required", "the DVD package source requires its managed server's TLS certificate", "declare ArtifactServer.spec.tls.secretRef and its HTTPS endpoint")
-		}
-		result.Sources = append(result.Sources, PackageSource{Host: host.Name, Profile: profile.Name(), Media: media, PublicationPath: publication.Path, URL: endpoint + "/os/" + profile.Name() + "/tree", CertificateRef: certificate})
+		source.Host, source.Profile = host.Name, profile.Name()
+		result.Sources = append(result.Sources, source)
 	}
 	return result, nil
+}
+
+func treePackageSource(c api.Catalog, profile api.Object, contextName string) (PackageSource, error) {
+	tree := profile.Spec().Get("installer", "anaconda", "packageSource", "hostedTree")
+	media, local := strings.CutPrefix(tree.Get("fromMedia").Text(), "local-media:")
+	if !local || !managedos.ValidMediaName(media) {
+		return PackageSource{}, failure("lifecycle.unsupported", "Ceph dependencies require the installed Machine's pinned hosted DVD or its Satellite subscription", "import the provider DVD and select hostedTree, or select subscription to take them from the Satellite the Machine registers with")
+	}
+	selection := tree.Get("artifactServerEndpoint")
+	server, err := artifactserver.Selected(c, selection, profile.Identity())
+	if err != nil {
+		return PackageSource{}, err
+	}
+	publication, err := artifactserver.PublicPath(c, server, selection, contextName, "os", profile.Name(), "tree", profile.Identity())
+	if err != nil {
+		return PackageSource{}, err
+	}
+	endpoint, err := packageEndpoint(c, server, selection, profile.Identity())
+	if err != nil {
+		return PackageSource{}, err
+	}
+	certificate := server.Spec().Get("tls", "secretRef").Text()
+	if certificate == "" {
+		return PackageSource{}, failure("api.required", "the DVD package source requires its managed server's TLS certificate", "declare ArtifactServer.spec.tls.secretRef and its HTTPS endpoint")
+	}
+	return PackageSource{Media: media, PublicationPath: publication.Path, URL: endpoint + "/os/" + profile.Name() + "/tree", CertificateRef: certificate}, nil
+}
+
+func subscriptionPackageSource(c api.Catalog, profile api.Object, host Host) (PackageSource, error) {
+	if host.Provided {
+		return PackageSource{}, failure("lifecycle.unsupported", "provided Ceph host "+host.Name+" takes its dependencies from the bootstrap Machine's hosted DVD, and "+profile.Identity()+" installs from a subscription",
+			"install the bootstrap Machine with a hostedTree profile, or make "+host.Name+" a Machine this context installs")
+	}
+	entitlement, found := c.Find(api.Entitlement, profile.Spec().Get("subscription", "entitlementRef").Text())
+	satellite := entitlement.Spec().Get("rhsm", "satellite")
+	source := PackageSource{CertificateRef: satellite.Get("trustBundleRef").Text(),
+		Subscription: &SubscriptionSource{ContentBaseURL: satellite.Get("contentBaseURL").Text(), Hostname: satellite.Get("hostname").Text()}}
+	if !found || entitlement.Spec().Get("rhsm", "management").Text() == "external" || source.CertificateRef == "" || source.Subscription.ContentBaseURL == "" || source.Subscription.Hostname == "" {
+		return PackageSource{}, failure("lifecycle.unsupported", "Ceph dependencies from a subscription package source come from the Satellite of a managed registration, and "+profile.Identity()+" declares none",
+			"name a managed Entitlement that declares spec.rhsm.satellite with its trustBundleRef in spec.subscription.entitlementRef on "+profile.Identity()+", or select hostedTree")
+	}
+	if dottedPath(source.Subscription.ContentBaseURL) {
+		return PackageSource{}, failure("lifecycle.unsupported", "the Satellite content root of "+entitlement.Identity()+" holds a '.', '..' or backslash path segment, which package acquisition refuses",
+			"set spec.rhsm.satellite.contentBaseURL on "+entitlement.Identity()+" to the content root without such a segment")
+	}
+	return source, nil
+}
+
+func dottedPath(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return true
+	}
+	decoded, err := url.PathUnescape(parsed.EscapedPath())
+	return err != nil || strings.Contains(decoded, `\`) || slices.ContainsFunc(strings.Split(decoded, "/"), func(part string) bool { return part == "." || part == ".." })
 }
 
 func packageEndpoint(c api.Catalog, server api.Object, selection api.Value, identity string) (string, error) {
@@ -140,6 +190,9 @@ func bindPackageSources(e lifecycle.Execution, packages *PackageRequest, readers
 	bound := *packages
 	bound.Sources = slices.Clone(bound.Sources)
 	for i, source := range bound.Sources {
+		if source.Subscription != nil {
+			continue
+		}
 		tree, err := readers.PackageTree(proofs, source.Profile)
 		if err != nil {
 			return nil, err

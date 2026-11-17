@@ -71,20 +71,30 @@ def scope_checks(request):
         require("packageRepositoryTrustBundleRef" not in package or named(package["packageRepositoryTrustBundleRef"]))
         require(isinstance(package["sources"], list) and len(package["sources"]) == len(hosts))
         names = []
-        required_source = {"host", "profile", "media", "publicationPath", "url", "certificateRef"}
         for source in package["sources"]:
-            require(isinstance(source, dict) and required_source <= set(source) and not set(source) - required_source - {"mediaSHA256", "mediaSize"})
-            require(all(isinstance(source[k], str) and 0 < len(source[k]) <= 2048 for k in required_source))
-            require(named(source["host"]) and named(source["profile"]) and named(source["certificateRef"]))
-            require(("mediaSHA256" in source) == ("mediaSize" in source))
-            if "mediaSHA256" in source:
-                require(digest(source["mediaSHA256"]) and type(source["mediaSize"]) is int and 0 < source["mediaSize"] <= 64 << 30)
+            validate_package_source(source)
             names.append(source["host"])
         require(names == sorted(host["name"] for host in hosts))
     validate_services(request, hosts, seen)
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
     ceph_native_stretch.validate(request, hosts)
     return hosts
+
+
+def validate_package_source(source):
+    require(isinstance(source, dict))
+    required_source = {"host", "profile", "media", "publicationPath", "url", "certificateRef"}
+    if "subscription" in source:
+        required_source = {"host", "profile", "certificateRef"}
+        require(set(source) == required_source | {"subscription"} and isinstance(source["subscription"], dict)
+                and set(source["subscription"]) == {"hostname", "contentBaseURL"})
+        require(all(isinstance(value, str) and 0 < len(value) <= 2048 for value in source["subscription"].values()))
+    require(required_source <= set(source) and not set(source) - required_source - {"mediaSHA256", "mediaSize", "subscription"})
+    require(all(isinstance(source[k], str) and 0 < len(source[k]) <= 2048 for k in required_source))
+    require(named(source["host"]) and named(source["profile"]) and named(source["certificateRef"]))
+    require(("mediaSHA256" in source) == ("mediaSize" in source))
+    if "mediaSHA256" in source:
+        require(digest(source["mediaSHA256"]) and type(source["mediaSize"]) is int and 0 < source["mediaSize"] <= 64 << 30)
 
 
 def validate_config(request):

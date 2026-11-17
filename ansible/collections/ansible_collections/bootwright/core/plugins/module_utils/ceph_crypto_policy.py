@@ -36,6 +36,12 @@ def scope(request, host, source):
     return {"cluster": ceph_native.marker_identity(request), "host": host, "source": source}
 
 
+def source_root(source):
+    if "subscription" in source:
+        return source["subscription"]["contentBaseURL"]
+    return source["url"]
+
+
 def selected(plan):
     result = [value for value in plan["packages"] if value["name"] in PACKAGES]
     require(len(result) == 2 and {value["name"] for value in result} == PACKAGES)
@@ -65,7 +71,7 @@ def capture(plan, payloads, headers, original_scope, binding, query):
     files, packages = {}, []
     for package in selected(plan):
         identifier = package["source"]["id"]
-        require(package["source"]["url"].startswith(original_scope["source"]["url"].rstrip("/") + "/"))
+        require(package["source"]["url"].startswith(source_root(original_scope["source"]).rstrip("/") + "/"))
         require(ceph_native.digest(headers[identifier]))
         output = query(["-qp", "--nosignature", "--qf",
                         "algo|%{FILEDIGESTALGO}\\n[%{FILENAMES}|%{FILEDIGESTS}|%{FILEMODES}|%{FILEUSERNAME}|%{FILEGROUPNAME}|%{FILEFLAGS}|%{FILENLINKS}\\n]",

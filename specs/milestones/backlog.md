@@ -325,6 +325,7 @@ Alias cell.
 | [B1428](#b1428) | new, 2026-11-16 (D272) | enabling | Managed OS | The inventory boot starts its entry without the installer's 60-second boot-menu timeout | Found while rehearsing X490; mkksiso offers no timeout option, so a change means owning boot-configuration edits beyond its documented ones |
 | [B1534](#b1534) | new, 2026-11-17 (X560 review) | defect | Managed OS | A Machine's physical erase publication directory never equals another Machine's installation publication directory | Pre-existing; found by X560's safety review, outside its relaxation outcome |
 | [B1545](#b1545) | new, 2026-11-17 (X566 review) | product | Managed OS | An erase policy whose install network the erase image cannot carry is refused at admission or plan, not first at destroy | Found by X566's safety review; the owner's bond is carried, and the destroy-time refusal names its release |
+| [B1551](#b1551) | new, 2026-11-17 (X571 review) | defect | Storage | A Ceph package decision resolved from a subscription names its cause and recovery when the host's repositories later select other URLs | Found by X571's safety review, unconfirmed; it fails closed with the generic packages refusal |
 
 ### B82
 
@@ -3722,6 +3723,21 @@ such a bond another way, such as NetworkManager keyfiles its `%pre` loads.
 policy. Parked because X566's safety review found it outside the owner's
 failure, whose active-backup bond the arguments carry.
 
+### B1551
+
+**Owner:** Storage. **Kind:** defect. **Requires:** B1550.
+**Definition:** Candidate. **Outcome:** a
+[package decision](../ceph-subscription-dependencies.md#decision) frozen from
+a host's subscription repositories whose host later selects other repository
+URLs, as a changed release or content view would, refuses with a diagnostic
+that names that cause and a recovery, instead of the generic `packages`
+refusal every later apply repeats. The same item settles whether a Satellite
+that rejects the entitlement certificate is reported as a trust refusal
+rather than a lost connection, and whether the dnf library's own warnings
+while it reads `redhat.repo` can reach a diagnostic.
+**Exit evidence:** a worker test of each case. Parked because X571's safety
+review suspected all three without confirming them, each fails closed, and
+no installed host has shown them.
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its

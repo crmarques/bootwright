@@ -164,3 +164,10 @@ leaves the packages journal without `complete.json`.
   of the earlier record version and no `complete.json`; the journal now refuses
   it as `package-journal`. Such a guest needs a fresh kickstart (destroy with the
   applying build and re-apply), not a migration.
+- DNF 4's `RepoReader` yields every non-`main` section of `conf.config_file_path`
+  as a repository with `$releasever` and `$basearch` substituted, so a `Conf`
+  whose `config_file_path` is `redhat.repo` and whose `reposdir` is empty reads
+  that file alone; `repo.repofile` names it. DNF's own command line takes
+  `releasever` from `/etc/dnf/vars` before `dnf.rpm.detect_releasever`, and
+  `read_redhat_repo` in `ceph_package_sources.py` keeps that order
+  ([subscription source](../../specs/ceph-subscription-dependencies.md)).
