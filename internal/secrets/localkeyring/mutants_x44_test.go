@@ -22,7 +22,8 @@ func TestAnInitializationRootIsAttributableOnlyAsTheLayoutItLeaves(t *testing.T)
 	}{
 		"an empty root":                          {nil, false, true},
 		"pending files before the marker":        {[]secretstore.Entry{pending}, false, true},
-		"the marker and its directories":         {[]secretstore.Entry{marker, {Name: "keys", Directory: true}, {Name: "parts", Directory: true}, {Name: "identities", Directory: true}}, true, true},
+		"the marker and its directories":         {[]secretstore.Entry{marker, {Name: "keys", Directory: true}, {Name: "parts", Directory: true}}, true, true},
+		"an earlier build's identity directory":  {[]secretstore.Entry{marker, {Name: "identities", Directory: true}}, true, false},
 		"a directory before the marker":          {[]secretstore.Entry{{Name: "keys", Directory: true}}, false, false},
 		"an unknown directory beside the marker": {[]secretstore.Entry{marker, {Name: "stray", Directory: true}}, true, false},
 		"a stray file":                           {[]secretstore.Entry{{Name: "stray", Size: 1}}, false, false},

@@ -32,6 +32,7 @@ const (
 	maxBindings         = 4096
 	maxProducedIdentity = 512
 	maxPhysicalItems    = 32768
+	maxReservations     = 32768
 	maxIndexItems       = indexMaximum
 	maxSeals            = uint64(1 << 20)
 	gcmNonceSize        = 12
@@ -60,6 +61,7 @@ type indexRecord struct {
 	Current       []secretstore.Current  `json:"current"`
 	Bindings      []secretstore.Binding  `json:"bindings"`
 	Produced      []secretstore.Produced `json:"produced"`
+	Reserved      []string               `json:"reserved"`
 }
 
 type storedKey struct {
@@ -120,12 +122,6 @@ type initializationAuthentication struct {
 	Selection     string                  `json:"backend"`
 	Attempts      []initializationAttempt `json:"attempts"`
 	MACKeyID      string                  `json:"macKeyId"`
-}
-
-type identityRecord struct {
-	FormatVersion int    `json:"formatVersion"`
-	Context       string `json:"context"`
-	ID            string `json:"id"`
 }
 
 type indexAdditionalData struct {
@@ -221,6 +217,7 @@ const (
 	indexJSONParts
 	indexJSONBindingVersions
 	indexJSONProduced
+	indexJSONReserved
 )
 
 func boundedIndexJSON(data []byte) bool {
@@ -324,8 +321,10 @@ func indexObjectChild(parent indexJSONRole, key string) (indexJSONRole, uint8, b
 			return indexJSONBindings, 1 << 3, true
 		case "produced":
 			return indexJSONProduced, 1 << 4, true
+		case "reserved":
+			return indexJSONReserved, 1 << 5, true
 		}
-		if strings.EqualFold(key, "keys") || strings.EqualFold(key, "versions") || strings.EqualFold(key, "current") || strings.EqualFold(key, "bindings") || strings.EqualFold(key, "produced") {
+		if strings.EqualFold(key, "keys") || strings.EqualFold(key, "versions") || strings.EqualFold(key, "current") || strings.EqualFold(key, "bindings") || strings.EqualFold(key, "produced") || strings.EqualFold(key, "reserved") {
 			return indexJSONGeneric, 0, false
 		}
 	}
@@ -366,6 +365,8 @@ func indexArrayLimit(role indexJSONRole) int {
 		return secrets.MaxVersions
 	case indexJSONParts:
 		return 2
+	case indexJSONReserved:
+		return maxReservations
 	}
 	return -1
 }

@@ -4,11 +4,17 @@ import (
 	"testing"
 )
 
+type canonicalProbe struct {
+	FormatVersion int    `json:"formatVersion"`
+	Context       string `json:"context"`
+	ID            string `json:"id"`
+}
+
 // A keyring record reads back only as the exact canonical bytes it encodes,
 // LF-terminated, and every other encoding refuses in its own words.
 func TestTheKeyringRecordRefusesEachNonCanonicalEncodingInItsOwnWords(t *testing.T) {
 	const exact = `{"formatVersion":1,"context":"lab","id":"store"}` + "\n"
-	var record identityRecord
+	var record canonicalProbe
 	if err := decodeCanonical([]byte(exact), selectorMaximum, 16, &record); err != nil {
 		t.Fatalf("the canonical record refused: %v", err)
 	}
@@ -21,7 +27,7 @@ func TestTheKeyringRecordRefusesEachNonCanonicalEncodingInItsOwnWords(t *testing
 		"a missing line feed":   {exact[:len(exact)-1], "noncanonical private record"},
 		"a doubled line feed":   {exact + "\n", "noncanonical private record"},
 	} {
-		var record identityRecord
+		var record canonicalProbe
 		if err := decodeCanonical([]byte(tc.data), selectorMaximum, 16, &record); err == nil || err.Error() != tc.message {
 			t.Errorf("%s: refusal = %v, want %q", name, err, tc.message)
 		}

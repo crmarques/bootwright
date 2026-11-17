@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -132,9 +133,8 @@ func TestMissingLiveIdentityReservationRefusesBeforeCleanup(t *testing.T) {
 				}
 			}
 			root := filepath.Join(h.root, "contexts", h.context.Name, "secrets")
-			if err := os.Remove(filepath.Join(root, "identities", id+".json")); err != nil {
-				t.Fatal(err)
-			}
+			kept := slices.DeleteFunc(h.reserved(), func(reserved string) bool { return reserved == id })
+			h.reseal(func(plaintext []byte) []byte { return replaceMember(t, plaintext, "reserved", reservedMember(kept)) })
 			before := artifactTree(t, root)
 			err := h.workspace.MutateSecrets(context.Background(), h.context, func(area secretstore.Area) error {
 				s, err := h.implementation.Initialize(context.Background(), h.context, area, nil)

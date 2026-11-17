@@ -570,8 +570,9 @@ only when everything in it is attributable initialization evidence or an
 interrupted temporary described below; inspection never repairs it.
 
 The normal layout has one atomically replaced `store.json`, immutable
-`parts/<blob-id>.enc`, immutable 32-byte `keys/<key-id>.key`, independently
-updated `keys/<key-id>.usage.json`, and `identities/<id>.json` reservations.
+`parts/<blob-id>.enc`, immutable 32-byte `keys/<key-id>.key` and independently
+updated `keys/<key-id>.usage.json`; identity reservations live inside
+`store.json`.
 `init.json` exists only while initialization or its cleanup is incomplete. No
 permanent initialization-key dependency exists. Dirs are 0700/files 0600 beneath held
 verified handles; refuse unsafe ownership/modes, links, hardlinks, special
@@ -579,11 +580,10 @@ files, traversal, mount crossings and substitutions.
 
 | Path | Why it remains separate |
 | --- | --- |
-| `store.json` | Atomic authenticated metadata and exact backend selection; replaces the old selector and index files. |
+| `store.json` | Atomic authenticated metadata, identity reservations included, and exact backend selection; replaces the old selector and index files. |
 | `parts/*.enc` | Immutable encrypted material, allowing metadata changes without rewriting every secret. |
 | `keys/*.key` | Required local decryption keys. Remove a retired key once retained material no longer references it. |
 | `keys/*.usage.json` | Durable seal reservations, including failed attempts; committing usage separately prevents retries from forgetting encryption already performed. |
-| `identities/*.json` | Historical version/binding ID reservations. Retain them after logical deletion to prevent ID reuse. |
 | `init.json` | Temporary authenticated recovery evidence; remove after successful publication and cleanup. |
 
 The shared canonical `store.json` envelope contains `version`
@@ -595,7 +595,7 @@ selects the exact backend and binds metadata to the expected context. Resolve
 only catalog implementations; backend selection cannot authorize acquisition
 or effects beyond the current command. Unsupported IDs refuse before session
 acquisition. The encrypted metadata contains `activeKey`, `keys`, `versions`,
-`current`, `bindings` and `produced`. It has one closed current shape, with no
+`current`, `bindings`, `produced` and `reserved`. It has one closed current shape, with no
 minimum-reader member or reader-version negotiation. Unknown members refuse under strict
 canonical decoding (`TestMetadataRejectsReaderNegotiation`), following the
 [development policy](project.md#design-priorities-and-non-goals).
@@ -645,10 +645,28 @@ part AAD from its original immutable metadata, never current input or the newest
 metadata generation. The metadata header is authenticated without storing a
 second full selector inside its ciphertext.
 
-Identity reservations use crash-atomic no-replace publication and retain
-`formatVersion`, `context`, and `id`. They preserve issued version/binding IDs
-after logical removal. Initialization uses an attributable,
-authenticated intent recording its context, backend, attempted key/generation
+Identity reservations are the metadata's `reserved` member: the sorted, unique
+version and binding IDs the store has ever issued, each a valid `ver-` or
+`bind-` ID, at most 32768 (`maxReservations`). They are encrypted and
+authenticated with the rest of the metadata, so they are bound to the store's
+context, backend and generation, and they preserve issued IDs after logical
+removal: a new ID is drawn again while it collides with a reservation. Every
+version and binding the metadata holds is reserved. A publication adds the IDs
+it issues to the record it commits, so a reservation is durable exactly when
+the version or binding is; an uncommitted publication issued nothing anyone
+holds. A `reserved` member that is missing or `null`, out of order, duplicated,
+holds another kind of ID, exceeds its cap or omits a held version or binding
+refuses with `secret.store.corrupt` before any session; a changed ciphertext
+fails authentication, and a record sealed for another context or copied from
+another keyring is refused (`TestATamperedOrMissingReservationRecordRefuses`,
+`TestAForeignReservationRecordRefuses`). A publication that would exceed the
+cap refuses with `secret.store.limit` before any effect, so the cap bounds the
+identities one keyring can ever issue. The reservations publish with
+`store.json` under the exclusive lock (staged, synced, renamed, then the
+directory synced); a publication killed between stage and rename leaves the
+earlier record and its reservations in force, and the stage is collected
+(`TestACrashBetweenStageAndRenameKeepsTheEarlierReservations`). Initialization
+uses an attributable, authenticated intent recording its context, backend, attempted key/generation
 identities and MAC; never adopt arbitrary partial state by filename. A
 publication stage (`pending-` and 32 lowercase hexadecimal digits) in the
 subtree's root or in `keys/` whose bytes are not one complete JSON value is a
@@ -685,13 +703,17 @@ without writing. Cleanup can run at the physical ceiling without first creating
 another file. Publication still reserves room for new material and metadata.
 
 Count all artifacts including crash orphans against 256 MiB physical storage
-and 32768 entries. Bound both the encoded metadata file and decrypted metadata
+and 32768 entries; identity reservations are no artifact and count against
+their own cap. Bound both the encoded metadata file and decrypted metadata
 at 8 MiB, and initialization/usage records at 64 KiB. Encoding overhead counts
 toward the physical limit. Logical material/version/binding limits also apply.
 Secret IDs use 128 random bits with 16 exclusive collision attempts. Limit
 failure never authorizes removal of referenced material or identity evidence.
 
-There is no conversion from an earlier keyring format. A `secrets/` subtree
+There is no conversion from an earlier keyring format. A keyring whose
+identity reservations an earlier build kept as one `identities/<id>.json` file
+each, whose metadata lacks `reserved`, refuses with `secret.store.corrupt`
+naming that layout, with the exits below. A `secrets/` subtree
 that is nonempty, holds no `store.json` this build can authenticate, and holds
 anything besides attributable initialization evidence and interrupted
 temporaries refuses with `secret.store.corrupt` before any session is acquired.

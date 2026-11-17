@@ -45,14 +45,7 @@ func (s *session) PutBatch(ctx context.Context, puts []secretstore.Put) ([]secre
 		return nil, secretstore.Failure("store.limit", "secret publication batch exceeds its item limit")
 	}
 	next := cloneIndex(s.index)
-	knownIDs := versionIDs(next)
-	identityNames, err := entryNames(ctx, s.area, "identities")
-	if err != nil {
-		return nil, err
-	}
-	for name := range identityNames {
-		knownIDs[strings.TrimSuffix(name, ".json")] = true
-	}
+	knownIDs := reservedIDs(next)
 	newIdentities := []string{}
 	seenNames := make(map[string]bool, len(puts))
 	results := make([]secretstore.Version, len(puts))
@@ -150,14 +143,7 @@ func (s *session) Bind(ctx context.Context, inputs []secretstore.BoundInput) (se
 		return secretstore.Binding{}, secretstore.Failure("store.limit", "secret binding exceeds its item limit")
 	}
 	next := cloneIndex(s.index)
-	knownBindings := bindingIDs(next)
-	identityNames, err := entryNames(ctx, s.area, "identities")
-	if err != nil {
-		return secretstore.Binding{}, err
-	}
-	for name := range identityNames {
-		knownBindings[strings.TrimSuffix(name, ".json")] = true
-	}
+	knownBindings := reservedIDs(next)
 	seenNames := make(map[string]bool, len(inputs))
 	versions := make([]string, 0, len(inputs))
 	for _, input := range inputs {
@@ -236,14 +222,7 @@ func (s *session) Rebind(ctx context.Context, bindingID string, replacements []s
 		}
 		pinned[version.Declaration.Name] = i
 	}
-	knownBindings := bindingIDs(next)
-	identityNames, err := entryNames(ctx, s.area, "identities")
-	if err != nil {
-		return secretstore.Binding{}, err
-	}
-	for name := range identityNames {
-		knownBindings[strings.TrimSuffix(name, ".json")] = true
-	}
+	knownBindings := reservedIDs(next)
 	seenNames := make(map[string]bool, len(replacements))
 	for _, input := range replacements {
 		if err := ctx.Err(); err != nil {
@@ -409,6 +388,9 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		return secretstore.Failure("store.limit", "secret publication seal budget exceeds its key limit")
 	}
 
+	if err := reserve(next, identities); err != nil {
+		return err
+	}
 	required := uint64(len(plain)) + 1
 	if len(publication.value) != 32 || publication.id != next.ActiveKey {
 		return secretstore.Failure("store.crypto", "secret encryption key is invalid")
@@ -430,19 +412,10 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 	}
 	defer clear(plaintext)
 
-	identityData, err := s.identityRecords(identities)
-	if err != nil {
-		return err
-	}
 	if err := s.collectArtifacts(ctx); err != nil {
 		return err
 	}
 	s.mutated = true
-	for index, id := range identities {
-		if err := s.area.PublishExclusive(ctx, "identities/"+id+".json", identityData[index]); err != nil {
-			return areaFailure(ctx, "store.conflict", "secret identity tombstone could not be stored", err)
-		}
-	}
 	if publication.fresh {
 		if err := s.area.WriteExclusive(ctx, keyPath(publication.id), publication.value); err != nil {
 			return areaFailure(ctx, "store.conflict", "fresh secret encryption key could not be stored", err)
@@ -528,19 +501,18 @@ func publicationFits(next indexRecord, plain []plainPart, keyID string) error {
 	return nil
 }
 
-func (s *session) identityRecords(identities []string) ([][]byte, error) {
-	identityData := make([][]byte, len(identities))
-	for index, id := range identities {
-		if !validID(id, "ver-") && !validID(id, "bind-") {
-			return nil, secretstore.Failure("store.corrupt", "secret publication identity is invalid")
-		}
-		data, err := encodeCanonical(identityRecord{FormatVersion: formatVersion, Context: s.context.Name, ID: id}, selectorMaximum)
-		if err != nil {
-			return nil, err
-		}
-		identityData[index] = data
+func reserve(next *indexRecord, identities []string) error {
+	if len(identities) > maxReservations-len(next.Reserved) {
+		return secretstore.Failure("store.limit", "secret identity reservations reached their limit")
 	}
-	return identityData, nil
+	for _, id := range identities {
+		if !validID(id, "ver-") && !validID(id, "bind-") || reservedID(*next, id) {
+			return secretstore.Failure("store.corrupt", "secret publication identity is invalid")
+		}
+	}
+	next.Reserved = append(next.Reserved, identities...)
+	slices.Sort(next.Reserved)
+	return nil
 }
 
 func (s *session) writeSealedParts(ctx context.Context, next indexRecord, plain []plainPart, publication publicationKey) error {
@@ -690,18 +662,15 @@ func canonicalizeIndex(index *indexRecord) {
 	slices.SortFunc(index.Produced, compareProduced)
 }
 
-func versionIDs(index indexRecord) map[string]bool {
-	result := make(map[string]bool, len(index.Versions))
-	for _, version := range index.Versions {
-		result[version.ID] = true
-	}
-	return result
+func reservedID(index indexRecord, id string) bool {
+	_, found := slices.BinarySearch(index.Reserved, id)
+	return found
 }
 
-func bindingIDs(index indexRecord) map[string]bool {
-	result := make(map[string]bool, len(index.Bindings))
-	for _, binding := range index.Bindings {
-		result[binding.ID] = true
+func reservedIDs(index indexRecord) map[string]bool {
+	result := make(map[string]bool, len(index.Reserved))
+	for _, id := range index.Reserved {
+		result[id] = true
 	}
 	return result
 }

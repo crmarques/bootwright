@@ -18,8 +18,8 @@ import (
 // keyringState is what a context's keyring publishes: its identity
 // reservations, which it keeps forever against reuse, and its bindings.
 type keyringState struct {
-	identities int
-	bindings   []string
+	record   []byte
+	bindings []string
 }
 
 type bindingListing interface {
@@ -35,8 +35,8 @@ func keyringOf(t *testing.T, repository *contextfs.Store, services cli.Services,
 	}
 	var state keyringState
 	if err := repository.ReadSecrets(ctx, snapshot.Context, func(area secretstore.Area) error {
-		entries, err := area.Entries(ctx, "identities")
-		state.identities = len(entries)
+		record, _, err := area.ReadMutable(ctx, secretstore.RecordPath, secretstore.RecordMaximum)
+		state.record = record
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -54,8 +54,8 @@ func keyringOf(t *testing.T, repository *contextfs.Store, services cli.Services,
 // A bounded consumer of one context reads its material while a bounded run of
 // another holds the context store's shared lock, over the real context store
 // and local keyring: reading binds nothing, so it needs no exclusive lock. Any
-// number of reads leaves that keyring's identity reservations and bindings as
-// they were.
+// number of reads leaves that keyring's store record, which holds its identity
+// reservations, and its bindings as they were.
 func TestBoundedConsumersOfTwoContextsReadTogetherAndLeaveTheKeyringAsTheyFoundIt(t *testing.T) {
 	t.Parallel()
 	services, repository, input, _ := contextFixture(t)
@@ -71,8 +71,8 @@ func TestBoundedConsumersOfTwoContextsReadTogetherAndLeaveTheKeyringAsTheyFoundI
 		t.Fatal("the lifecycle is not composed")
 	}
 	before := keyringOf(t, repository, services, "beta")
-	if before.identities == 0 {
-		t.Fatal("the keyring holds no identity reservation to compare")
+	if len(before.record) == 0 {
+		t.Fatal("the keyring holds no store record to compare")
 	}
 	ctx := context.Background()
 	for attempt := 1; attempt <= 3; attempt++ {

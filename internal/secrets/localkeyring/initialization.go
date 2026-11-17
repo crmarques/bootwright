@@ -27,7 +27,7 @@ func (i *Implementation) initialize(ctx context.Context, selected secretstore.Co
 	if err := verifyInitializationArtifacts(ctx, area, selected, marker, true); err != nil {
 		return nil, err
 	}
-	for _, name := range []string{"identities", "keys", "parts"} {
+	for _, name := range []string{"keys", "parts"} {
 		if err := area.EnsureDirectory(ctx, name); err != nil {
 			return nil, areaFailure(ctx, "store.conflict", "secret store directories could not be initialized", err)
 		}
@@ -207,7 +207,7 @@ func (i *Implementation) resumeInitialization(ctx context.Context, selected secr
 		}
 	}
 	selector := secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: selected.Name, Backend: i.Backend(), Generation: attempt.Generation}
-	index := indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: attempt.KeyID, Keys: []storedKey{{ID: attempt.KeyID, Seals: ledger.Seals}}, Versions: []storedVersion{}, Current: []secretstore.Current{}, Bindings: []secretstore.Binding{}, Produced: []secretstore.Produced{}}
+	index := indexRecord{FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: attempt.KeyID, Keys: []storedKey{{ID: attempt.KeyID, Seals: ledger.Seals}}, Versions: []storedVersion{}, Current: []secretstore.Current{}, Bindings: []secretstore.Binding{}, Produced: []secretstore.Produced{}, Reserved: []string{}}
 	if !freshLedger {
 		seals, err := i.reserveInitializationSeal(ctx, selected, area, attempt.KeyID, key)
 		if err != nil {
@@ -372,7 +372,7 @@ func reflectInitializationEqual(a, b initializationRecord) bool { return reflect
 func validInitializationRoot(entries []secretstore.Entry, marker bool) bool {
 	for _, entry := range entries {
 		if entry.Directory {
-			if !marker || !slices.Contains([]string{"identities", "keys", "parts"}, entry.Name) {
+			if !marker || !slices.Contains([]string{"keys", "parts"}, entry.Name) {
 				return false
 			}
 			continue
@@ -425,7 +425,7 @@ func verifyInitializationArtifacts(ctx context.Context, area secretstore.Area, s
 	for _, entry := range root {
 		if entry.Directory {
 			present[entry.Name] = true
-			if !slices.Contains([]string{"identities", "keys", "parts"}, entry.Name) {
+			if !slices.Contains([]string{"keys", "parts"}, entry.Name) {
 				return secretstore.Failure("store.corrupt", "secret initialization layout contains an unsupported directory")
 			}
 			continue
@@ -449,7 +449,7 @@ func verifyInitializationArtifacts(ctx context.Context, area secretstore.Area, s
 		allowedKeys[attempt.KeyID+".key"] = true
 		allowedKeys[attempt.KeyID+".usage.json"] = true
 	}
-	for _, directory := range []string{"identities", "parts"} {
+	for _, directory := range []string{"parts"} {
 		if !present[directory] {
 			if allowMissing {
 				continue

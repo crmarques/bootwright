@@ -49,7 +49,7 @@ func newLimitArea(files map[string][]byte) *limitArea {
 // initialized keyring keeps.
 func initializedLimitArea(files map[string][]byte) *limitArea {
 	area := newLimitArea(files)
-	for _, name := range []string{"identities", "keys", "parts"} {
+	for _, name := range []string{"keys", "parts"} {
 		area.directories[name] = true
 	}
 	return area

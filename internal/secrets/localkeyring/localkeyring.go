@@ -109,6 +109,9 @@ func (i *Implementation) open(ctx context.Context, selected secretstore.Context,
 	defer clear(plaintext)
 	index, err := decodeIndexPlaintext(plaintext)
 	if err != nil {
+		if layoutErr := refuseEarlierLayout(ctx, area); layoutErr != nil {
+			return nil, layoutErr
+		}
 		return nil, err
 	}
 	index.FormatVersion, index.Algorithm, index.Selector = formatVersion, algorithm, selector
@@ -169,11 +172,7 @@ func (s *session) Verify(ctx context.Context) error {
 	if err := s.usable(ctx, false); err != nil {
 		return err
 	}
-	if err := s.refreshMetadata(ctx); err != nil {
-		return err
-	}
-	_, err := obsoleteArtifacts(ctx, s.area, s.selector, s.index)
-	return err
+	return s.refreshMetadata(ctx)
 }
 
 func (s *session) Read(ctx context.Context, versionID string) (secrets.Material, error) {
@@ -274,12 +273,29 @@ func (s *session) refreshMetadata(ctx context.Context) error {
 		}
 		s.index.Keys[index].Seals = ledger.Seals
 	}
-	retained, cleanup, err := inspectArtifacts(ctx, s.area, s.selector, s.index)
+	retained, cleanup, err := inspectArtifacts(ctx, s.area, s.index)
 	if err != nil {
 		return err
 	}
 	s.retained, s.cleanup = retained, cleanup
 	return nil
+}
+
+func refuseEarlierLayout(ctx context.Context, area secretstore.Area) error {
+	root, err := area.Entries(ctx, "")
+	if err != nil {
+		return areaFailure(ctx, "store.corrupt", "secret artifacts cannot be enumerated safely", err)
+	}
+	for _, entry := range root {
+		if entry.Name == earlierIdentityDirectory {
+			return earlierLayoutFailure()
+		}
+	}
+	return nil
+}
+
+func earlierLayoutFailure() error {
+	return secretstore.Failure("store.corrupt", "secret store keeps its identity reservations in the per-file layout of an earlier build, which this build does not convert")
 }
 
 func (s *session) Close() error {
@@ -389,6 +405,9 @@ func validateIndex(index indexRecord, selector secretstore.Selector) error {
 	if index.FormatVersion != formatVersion || index.Algorithm != algorithm || index.Selector != selector || !validID(index.ActiveKey, "key-") || index.Keys == nil || index.Versions == nil || index.Current == nil || index.Bindings == nil || index.Produced == nil || len(index.Keys) == 0 || len(index.Versions) > secrets.MaxVersions || len(index.Bindings) > maxBindings || len(index.Produced) > secrets.MaxVersions {
 		return errors.New("invalid index header")
 	}
+	if err := validateReserved(index); err != nil {
+		return err
+	}
 	keys := make(map[string]storedKey, len(index.Keys))
 	previous := ""
 	active := 0
@@ -486,6 +505,30 @@ func validateProduced(entries []secretstore.Produced, versions map[string]stored
 	return nil
 }
 
+func validateReserved(index indexRecord) error {
+	if index.Reserved == nil || len(index.Reserved) > maxReservations {
+		return errors.New("invalid identity reservations")
+	}
+	previous := ""
+	for _, id := range index.Reserved {
+		if !validID(id, "ver-") && !validID(id, "bind-") || id <= previous {
+			return errors.New("invalid identity reservation")
+		}
+		previous = id
+	}
+	for _, version := range index.Versions {
+		if _, found := slices.BinarySearch(index.Reserved, version.ID); !found {
+			return errors.New("unreserved secret version")
+		}
+	}
+	for _, binding := range index.Bindings {
+		if _, found := slices.BinarySearch(index.Reserved, binding.ID); !found {
+			return errors.New("unreserved secret binding")
+		}
+	}
+	return nil
+}
+
 func compareProduced(a, b secretstore.Produced) int {
 	if order := strings.Compare(a.Block, b.Block); order != 0 {
 		return order
@@ -499,6 +542,7 @@ func cloneIndex(index indexRecord) indexRecord {
 	result.Current = slices.Clone(index.Current)
 	result.Bindings = cloneBindings(index.Bindings)
 	result.Produced = slices.Clone(index.Produced)
+	result.Reserved = slices.Clone(index.Reserved)
 	result.Versions = make([]storedVersion, len(index.Versions))
 	for i, version := range index.Versions {
 		result.Versions[i] = version

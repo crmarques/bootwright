@@ -68,7 +68,7 @@ func TestIndexWithAnUnnumberedVersionIsRefused(t *testing.T) {
 		FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: fixedID("key-", 1),
 		Keys:     []storedKey{{ID: fixedID("key-", 1)}},
 		Versions: []storedVersion{version},
-		Current:  []secretstore.Current{{Name: "token", Version: version.ID}}, Bindings: []secretstore.Binding{}, Produced: []secretstore.Produced{},
+		Current:  []secretstore.Current{{Name: "token", Version: version.ID}}, Bindings: []secretstore.Binding{}, Produced: []secretstore.Produced{}, Reserved: []string{version.ID},
 	}
 	index.Versions[0].Sequence = 1
 	if err := validateIndex(index, selector); err != nil {

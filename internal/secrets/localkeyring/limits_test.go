@@ -105,6 +105,7 @@ func TestIndexStructuralPreflightEnforcesTypedArrayLimits(t *testing.T) {
 		{name: "version parts", prefix: `{"versions":[{"parts":[`, suffix: `]}]}`, element: `{}`, limit: 2},
 		{name: "binding versions", prefix: `{"bindings":[{"versions":[`, suffix: `]}]}`, element: `"id"`, limit: secrets.MaxVersions},
 		{name: "produced", prefix: `{"produced":[`, suffix: `]}`, element: `{}`, limit: secrets.MaxVersions},
+		{name: "reserved", prefix: `{"reserved":[`, suffix: `]}`, element: `"id"`, limit: maxReservations},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -133,6 +134,9 @@ func TestIndexStructuralPreflightEnforcesTypedArrayLimits(t *testing.T) {
 		`{"Produced":[]}`,
 		`{"Pr\u006fduced":[]}`,
 		`{"produced":null}`,
+		`{"reserved":[],"reserved":[]}`,
+		`{"Reserved":[]}`,
+		`{"reserved":null}`,
 	} {
 		if boundedIndexJSON([]byte(duplicate)) {
 			t.Fatalf("duplicate bounded array was accepted: %s", duplicate)
@@ -165,6 +169,7 @@ func TestMaximumLogicalIndexRoundTrips(t *testing.T) {
 		Current:       make([]secretstore.Current, 0, secrets.MaxVersions),
 		Bindings:      []secretstore.Binding{},
 		Produced:      []secretstore.Produced{},
+		Reserved:      make([]string, 0, maxReservations),
 	}
 	for item := 0; item < secrets.MaxVersions; item++ {
 		name := fmt.Sprintf("secret-%04x", item)
@@ -184,6 +189,9 @@ func TestMaximumLogicalIndexRoundTrips(t *testing.T) {
 			}},
 		})
 		index.Current = append(index.Current, secretstore.Current{Name: name, Version: versionID})
+	}
+	for item := 0; len(index.Reserved) < maxReservations; item++ {
+		index.Reserved = append(index.Reserved, fixedID("ver-", item+1))
 	}
 	if err := validateIndex(index, selector); err != nil {
 		t.Fatalf("valid maximum index: %v", err)

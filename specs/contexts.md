@@ -284,7 +284,6 @@ confirmed setup:
       trust/hosts.json
     secrets/
       store.json
-      identities/
       keys/
       parts/
 ```

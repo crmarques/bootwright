@@ -3,7 +3,6 @@ package localkeyring
 import (
 	"context"
 	"slices"
-	"strings"
 
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
@@ -20,14 +19,7 @@ func (s *session) Produce(ctx context.Context, block string, outputs []secretsto
 		return nil, err
 	}
 	next := cloneIndex(s.index)
-	knownIDs := versionIDs(next)
-	identityNames, err := entryNames(ctx, s.area, "identities")
-	if err != nil {
-		return nil, err
-	}
-	for name := range identityNames {
-		knownIDs[strings.TrimSuffix(name, ".json")] = true
-	}
+	knownIDs := reservedIDs(next)
 	results := make([]secretstore.Produced, len(outputs))
 	newIdentities := []string{}
 	proved := false

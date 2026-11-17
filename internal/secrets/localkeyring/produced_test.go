@@ -22,7 +22,8 @@ func summary(name, kind, source string) secrets.VersionDeclaration {
 
 // fullIndex reaches every member the format holds: two keys, a current
 // version, a version only a binding holds and a produced entry, each version
-// sealed under one of those keys.
+// sealed under one of those keys, and the reservations of every identity it
+// issued, a released binding's and a deleted version's included.
 func fullIndex() (indexRecord, secretstore.Selector) {
 	selector := secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: "lab", Backend: New().Backend(), Generation: fixedID("gen-", 3)}
 	part := func(blob, key, size int) []storedPart {
@@ -39,6 +40,7 @@ func fullIndex() (indexRecord, secretstore.Selector) {
 		Current:  []secretstore.Current{{Name: "registry-token", Version: fixedID("ver-", 1)}},
 		Bindings: []secretstore.Binding{{ID: fixedID("bind-", 1), Versions: []string{fixedID("ver-", 2)}}},
 		Produced: []secretstore.Produced{{Block: producedBlock, Name: producedName, Version: fixedID("ver-", 3), Identity: "cluster fsid 1b0d3c1e-1111-4a4a-8b8b-000000000001 created 2026-01-01T00:00:00.000000+0000 as client.lab"}},
+		Reserved: []string{fixedID("bind-", 1), fixedID("bind-", 2), fixedID("ver-", 1), fixedID("ver-", 2), fixedID("ver-", 3), fixedID("ver-", 4)},
 	}, selector
 }
 
