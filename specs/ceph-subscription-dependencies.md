@@ -1,13 +1,17 @@
 # Ceph dependencies from a subscription
 
 A Ceph host takes its RHEL dependency packages from the source its Machine was
-installed from. A profile whose package source selects `hostedTree` lends its
-hosted DVD as [frozen release and trust](ceph.md#frozen-release-and-trust)
-states. A profile that selects
+installed and last updated from. A profile that selects
 [`subscription`](managed-os-subscription-source.md) lends the Satellite the
-installer registered the host with: BaseOS and AppStream come from that host's
-own subscription repositories, and the IBM repository, the decision, the solve,
-the signature verification and the package journal are unchanged. Everything
+installer registered the host with. A profile whose package source selects
+`hostedTree` and that [updates within its release](managed-os.md#update-within-release)
+from a managed Entitlement declaring `spec.rhsm.satellite` lends that
+Satellite too, because the update moved the host past the DVD's packages and a
+solve against the DVD would be a downgrade. Either way BaseOS and AppStream
+come from that host's own subscription repositories, and the IBM repository,
+the decision, the solve, the signature verification and the package journal
+are unchanged. Any other `hostedTree` profile lends its hosted DVD as
+[frozen release and trust](ceph.md#frozen-release-and-trust) states. Everything
 this page does not state follows [frozen release and trust](ceph.md#frozen-release-and-trust).
 
 ## Selection and request
@@ -17,9 +21,14 @@ may mix hosted-DVD and subscription hosts. Any other package source refuses
 `lifecycle.unsupported` at plan, naming both sources as the remedy. A provided
 host takes the bootstrap Machine's source; a subscription-sourced bootstrap
 profile refuses, because this executable did not register the provided host,
-so its dependencies need the bootstrap Machine's hosted DVD. A subscription
+so its dependencies need the bootstrap Machine's hosted DVD, which a provided
+host under a Satellite-updated `hostedTree` profile keeps. A subscription
 profile whose Entitlement is external, or declares no `spec.rhsm.satellite`
-with its `trustBundleRef`, refuses at plan.
+with its `trustBundleRef`, refuses at plan. A `hostedTree` profile updating
+within its release from the CDN, an external registration or a configured
+repository keeps its hosted DVD, and one updating from a managed Satellite and
+a configured repository takes the Satellite alone
+([B1552](milestones/backlog.md#b1552)).
 
 The frozen source of a subscription host carries its host, its profile, the
 Satellite's `hostname` and `contentBaseURL` and, as `certificateRef`, the
@@ -77,4 +86,5 @@ URL the host's repositories no longer hold refuses `packages`
 A host the Satellite already updated past the hosted DVD's packages takes
 them from the same content here, so the solve meets no
 [downgrade](milestones/m2.md#b1069). The installed path is qualified by the
-operator gate of [B1550](milestones/m2.md#b1550).
+operator gates of [B1550](milestones/m2.md#b1550) and
+[B1069](milestones/m2.md#b1069).

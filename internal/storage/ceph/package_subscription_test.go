@@ -144,6 +144,59 @@ func TestSubscriptionPackageSourceRefusals(t *testing.T) {
 	refused("another source", err, "hosted DVD or its Satellite subscription")
 }
 
+func updatedTreeCatalog(policy, management string, satellite bool) api.Catalog {
+	objects := subscribedCatalog().Objects()
+	for i, object := range objects {
+		switch {
+		case object.Kind() == api.MachineInstallProfile && object.Name() == "rhel":
+			spec := object.Spec().WithPath(api.StringValue("satellite"), "subscription", "entitlementRef")
+			if policy != "" {
+				spec = spec.WithPath(api.StringValue(policy), "updates", "policy")
+			}
+			objects[i] = object.WithSpec(spec)
+		case object.Kind() == api.Entitlement && object.Name() == "satellite":
+			spec := object.Spec().WithPath(api.StringValue("redhatRhel"), "type").WithPath(api.StringValue(management), "rhsm", "management")
+			if !satellite {
+				spec = spec.WithPath(spec.Get("rhsm").Without("satellite"), "rhsm")
+			}
+			objects[i] = object.WithSpec(spec)
+		}
+	}
+	return api.NewCatalog(objects)
+}
+
+func TestATreeHostItsSatelliteUpdatesTakesItsDependenciesFromThatSatellite(t *testing.T) {
+	tree := packageRequest(t)
+	for name, test := range map[string]struct {
+		catalog   api.Catalog
+		provided  bool
+		satellite bool
+	}{
+		"updated by default":     {updatedTreeCatalog("", "managed", true), false, true},
+		"updated within release": {updatedTreeCatalog("withinRelease", "managed", true), false, true},
+		"not updated":            {updatedTreeCatalog("none", "managed", true), false, false},
+		"registered to the CDN":  {updatedTreeCatalog("withinRelease", "managed", false), false, false},
+		"external registration":  {updatedTreeCatalog("withinRelease", "external", true), false, false},
+		"provided host":          {updatedTreeCatalog("withinRelease", "managed", true), true, true},
+	} {
+		r, err := subscribedRequest(t, test.catalog, func(r *Request) { r.Hosts[1].Provided = test.provided })
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for i, source := range r.Packages.Sources {
+			if !test.satellite || test.provided && i == 1 {
+				if source != tree.Packages.Sources[i] {
+					t.Fatalf("%s: host %s left its hosted DVD: %+v", name, source.Host, source)
+				}
+				continue
+			}
+			if source.Subscription == nil || source.Subscription.Hostname != "satellite.example.test" || source.CertificateRef != "satellite-ca" || source.Media != "" || source.URL != "" || source.Profile != "rhel" {
+				t.Fatalf("%s: host %s does not take its dependencies from the Satellite that updated it: %+v", name, source.Host, source)
+			}
+		}
+	}
+}
+
 func TestSubscriptionSourceBindsWithoutATreeProofAndLendsItsBundle(t *testing.T) {
 	r, err := subscribedRequest(t, subscribedCatalog("node-1", "node-2", "node-3"), nil)
 	if err != nil {

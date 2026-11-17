@@ -79,7 +79,7 @@ func packageSources(c api.Catalog, r Request, contextName string) (*PackageReque
 			return nil, failure("lifecycle.unsupported", "Ceph package acquisition requires the owned RHEL x86_64 installation profile", "select the hosted DVD or subscription profile used to install each Ceph Machine")
 		}
 		var source PackageSource
-		if profile.Spec().Has("installer", "anaconda", "packageSource", "subscription") {
+		if profile.Spec().Has("installer", "anaconda", "packageSource", "subscription") || !host.Provided && updatesFromSatellite(c, profile) {
 			source, err = subscriptionPackageSource(c, profile, host)
 		} else {
 			source, err = treePackageSource(c, profile, contextName)
@@ -137,6 +137,14 @@ func subscriptionPackageSource(c api.Catalog, profile api.Object, host Host) (Pa
 			"set spec.rhsm.satellite.contentBaseURL on "+entitlement.Identity()+" to the content root without such a segment")
 	}
 	return source, nil
+}
+
+func updatesFromSatellite(c api.Catalog, profile api.Object) bool {
+	if !managedos.UpdatesWithinRelease(profile) {
+		return false
+	}
+	entitlement, found := c.Find(api.Entitlement, profile.Spec().Get("subscription", "entitlementRef").Text())
+	return found && entitlement.Spec().Get("type").Text() == "redhatRhel" && entitlement.Spec().Get("rhsm", "management").Text() != "external" && entitlement.Spec().Has("rhsm", "satellite")
 }
 
 func dottedPath(raw string) bool {

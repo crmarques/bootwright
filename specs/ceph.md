@@ -191,7 +191,8 @@ IBM's public signed RPM repository does not require registry credentials.
 
 A hosted-DVD installation lends Storage its proved original-apply media
 identity and publication and the artifact server's TLS certificate; a
-[subscription](ceph-subscription-dependencies.md) one, its Satellite. Storage
+[subscription](ceph-subscription-dependencies.md) one, or a hosted-DVD one
+its Satellite updates, lends that Satellite. Storage
 uses the shared package resolver for its Ceph-owned roots; it does not acquire
 RHSM registration or install another domain's prerequisites.
 The resolver installs no weak dependency, so a tool the host phases run that

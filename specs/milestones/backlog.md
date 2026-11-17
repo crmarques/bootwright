@@ -326,6 +326,7 @@ Alias cell.
 | [B1534](#b1534) | new, 2026-11-17 (X560 review) | defect | Managed OS | A Machine's physical erase publication directory never equals another Machine's installation publication directory | Pre-existing; found by X560's safety review, outside its relaxation outcome |
 | [B1545](#b1545) | new, 2026-11-17 (X566 review) | product | Managed OS | An erase policy whose install network the erase image cannot carry is refused at admission or plan, not first at destroy | Found by X566's safety review; the owner's bond is carried, and the destroy-time refusal names its release |
 | [B1551](#b1551) | new, 2026-11-17 (X571 review) | defect | Storage | A Ceph package decision resolved from a subscription names its cause and recovery when the host's repositories later select other URLs | Found by X571's safety review, unconfirmed; it fails closed with the generic packages refusal |
+| [B1552](#b1552) | new, 2026-11-17 (X572) | defect | Storage | A hosted-DVD Ceph host updated within its release from the CDN or a configured repository prepares without a downgrade refusal | No such update source can be read back as a package source yet; no owner run has met it |
 
 ### B82
 
@@ -3738,6 +3739,19 @@ while it reads `redhat.repo` can reach a diagnostic.
 **Exit evidence:** a worker test of each case. Parked because X571's safety
 review suspected all three without confirming them, each fails closed, and
 no installed host has shown them.
+
+### B1552
+
+**Owner:** Storage. **Kind:** defect. **Requires:** B1069.
+**Definition:** Candidate. **Outcome:** a `hostedTree` Ceph host that updates
+within its release from the CDN or an enabled configured repository, which
+[B1069](m2.md#b1069) leaves on its DVD, or from a managed Satellite and a
+configured repository together, which B1069 sends to the Satellite alone,
+takes its RHEL dependencies from the
+source that updated it, or is refused at plan before any effect, instead of
+failing `package-resolution` on a downgrade at host preparation.
+**Exit evidence:** a planning test of each source and a resolver test of a host
+holding a newer `podman` than its DVD. Parked because no owner run has met it.
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its

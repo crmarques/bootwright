@@ -171,3 +171,11 @@ leaves the packages journal without `complete.json`.
   `releasever` from `/etc/dnf/vars` before `dnf.rpm.detect_releasever`, and
   `read_redhat_repo` in `ceph_package_sources.py` keeps that order
   ([subscription source](../../specs/ceph-subscription-dependencies.md)).
+- `package-resolution@native_resolution.solve4` naming `cannot install both
+  openssl-1:3.5.5-2.el9_8 from rhel-baseos and openssl-1:3.5.5-6.el9_8 from
+  @System` (and the same for `podman`) is a downgrade: the `latest` roots pick
+  the newest package the solve's repositories offer, and the host's
+  within-release update had already installed a newer one from its Satellite.
+  On the owner's prd-dc1 run of 2026-11-17 the hosts installed from the hosted
+  DVD and updated from the Satellite; such a host now takes its dependencies
+  from that Satellite ([selection](../../specs/ceph-subscription-dependencies.md#selection-and-request)).
