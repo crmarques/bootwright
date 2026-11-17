@@ -174,7 +174,7 @@ def test_an_effect_phase_returns_each_named_refusal_with_only_its_observed_detai
          ("controller-refused", "insert:http:409", "attaching /redfish/v1/Managers/1/VirtualMedia/CD: HTTP 409")),
         (custody.redfish.redfish_control.ControllerError("reading /redfish/v1/Systems/1: HTTP 0"),
          ("target-unanswered", "", "reading /redfish/v1/Systems/1: HTTP 0")),
-        (worker.Refusal("custody-image-drift"), ("custody-drift", "", "")),
+        (worker.Refusal("custody-policy-drift"), ("custody-drift", "", "")),
         (worker.Refusal("foreign-target"), ("foreign-custody", "", "")),
     )
     for raised, expected in cases:
@@ -193,7 +193,8 @@ def test_an_observation_and_a_build_name_their_custody_and_media_refusals(contro
         assert "failed" not in observed and observed["refused"] == code and observed["changed"] is False
     controller["receipt"] = worker.Refusal("receipt")
     assert run_module(module, arguments("observe"))["msg"] == REFUSED
-    for raised, code in (("media-identity", "boot-media-mismatch"), ("native-timeout", "image-build-failed"), ("image-copy", "image-build-failed"),
+    for raised, code in (("media-identity", "boot-media-mismatch"), ("install-network", "install-network-unsupported"),
+                         ("native-timeout", "image-build-failed"), ("image-copy", "image-build-failed"),
                          ("foreign-target", "foreign-custody")):
         def build(self, raised=raised):
             raise worker.Refusal(raised)

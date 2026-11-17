@@ -183,6 +183,23 @@ class EraseBoundaryTests(unittest.TestCase):
             namespace["run"]()
         execute.assert_not_called()
 
+    def test_the_root_entry_is_unlocked_through_chpasswd_before_the_receipt_server_starts(self):
+        from unittest.mock import Mock, patch
+
+        for code, expected in ((0, "receipt-server-probe"), (1, "installer-boundary")):
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as temporary:
+                namespace = erase_runtime()
+                namespace["ROOT"] = Path(temporary)
+                namespace["isolate"] = Mock()
+                namespace["command"] = Mock(side_effect=worker.Refusal("receipt-server-probe"))
+                with patch.object(worker, "native", return_value=(code, b"")) as native, patch.object(worker, "execute") as execute:
+                    with self.assertRaisesRegex(worker.Refusal, "^" + expected + "$"):
+                        namespace["run"]()
+                native.assert_called_once_with(["/usr/sbin/chpasswd", "-e"], b"root:$6$bootwright$*\n", timeout=10, limit=4096)
+                execute.assert_not_called()
+                if code:
+                    namespace["command"].assert_not_called()
+
     def test_boot_image_contains_only_network_and_nonreturning_pre(self):
         from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_boot as boot
 

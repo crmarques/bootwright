@@ -324,6 +324,7 @@ Alias cell.
 | [B1424](#b1424) | new, 2026-11-16 (owner request) | defect | CLI, with State reconciliation | Resolution failures are readable through a precise supported logs command without opening private files manually | Owner requested backlog recording; explicit resolution selection and diagnostic handoff remain unpromoted |
 | [B1428](#b1428) | new, 2026-11-16 (D272) | enabling | Managed OS | The inventory boot starts its entry without the installer's 60-second boot-menu timeout | Found while rehearsing X490; mkksiso offers no timeout option, so a change means owning boot-configuration edits beyond its documented ones |
 | [B1534](#b1534) | new, 2026-11-17 (X560 review) | defect | Managed OS | A Machine's physical erase publication directory never equals another Machine's installation publication directory | Pre-existing; found by X560's safety review, outside its relaxation outcome |
+| [B1545](#b1545) | new, 2026-11-17 (X566 review) | product | Managed OS | An erase policy whose install network the erase image cannot carry is refused at admission or plan, not first at destroy | Found by X566's safety review; the owner's bond is carried, and the destroy-time refusal names its release |
 
 ### B82
 
@@ -3707,6 +3708,19 @@ same consumer, so destroying that Machine cannot remove a live erase image.
 publication paths, and an erase test that one Machine's removal leaves the
 other's publication. Parked because X560's review found it pre-existing,
 outside the relaxation outcome.
+
+### B1545
+
+**Owner:** Managed OS. **Kind:** product. **Requires:** X566.
+**Definition:** Candidate. **Outcome:** a Machine with an
+[erase policy](../state-reconciliation.md#erase-image) whose install bond
+option holds a comma or colon, which the image's dracut `bond=` argument
+cannot carry, is refused before its installation instead of installing and
+then refusing `install-network-unsupported` at destroy; or the image carries
+such a bond another way, such as NetworkManager keyfiles its `%pre` loads.
+**Exit evidence:** an admission or plan test of such a bond under an erase
+policy. Parked because X566's safety review found it outside the owner's
+failure, whose active-backup bond the arguments carry.
 
 ## Audit remediation (2026-10-26)
 

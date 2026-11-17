@@ -66,6 +66,7 @@ func TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy(t *testing
 		eraseCustodyDrift:       {"differs from what its removal recorded", "inspect " + custody + " on the execution host", "under " + request.Install.Private.Path + " ", "remove " + custody + " whole", destroy},
 		eraseBootMediaMismatch:  {"no longer matches its size and SHA-256", "bootwright media add", destroy},
 		eraseImageBuildFailed:   {"could not be built", destroy},
+		eraseInstallNetwork:     {"cannot carry", retain},
 	} {
 		t.Run(reason, func(t *testing.T) {
 			runner := &eraseRefusingRunner{reason: reason}
@@ -90,8 +91,8 @@ func TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy(t *testing
 			}
 		})
 	}
-	if len(eraseRefusals("lab", "", machine, "https://bmc", "192.0.2.10", custody, "/published")) != 15 {
-		t.Fatal("the erase refusal vocabulary is not the fifteen codes the collection names")
+	if len(eraseRefusals("lab", "", machine, "https://bmc", "192.0.2.10", custody, "/published")) != 16 {
+		t.Fatal("the erase refusal vocabulary is not the sixteen codes the collection names")
 	}
 }
 

@@ -75,20 +75,23 @@ class ControllerTests(unittest.TestCase):
             instance = controller.Controller.__new__(controller.Controller)
             instance.root = work
             instance.request = {
+                "network": "network --bootproto=static --device=eno1 --vlanid=20 --interfacename=eno1.20 --ip=192.0.2.10 "
+                           "--netmask=255.255.255.0 --hostname=metal-01 --onboot=on --activate",
                 "install": {
                     "bootMedia": {"name": "boot", "size": len(original), "sha256": hashlib.sha256(original).hexdigest()},
-                    "installerArguments": [],
+                    "installerArguments": ["ifname=eno1:52:54:00:00:00:01"],
                     "private": {"path": str(published)},
-                }
+                },
             }
             token = "a" * 64
             (published / token).mkdir()
             instance.load = lambda: {"token": token}
-            observed = []
+            observed, cmdlines = [], []
 
             def build(argv, **unused):
                 held = argv[-2]
                 observed.append(held)
+                cmdlines.append(argv[argv.index("--cmdline") + 1].split())
                 source.unlink()
                 source.write_bytes(b"replaced pathname")
                 self.assertEqual(Path(held).read_bytes(), original)
@@ -113,6 +116,26 @@ class ControllerTests(unittest.TestCase):
             self.assertTrue(observed[0].startswith("/proc/" + str(os.getpid()) + "/fd/"))
             with self.assertRaises(FileNotFoundError):
                 Path(observed[0]).read_bytes()
+            self.assertEqual(cmdlines[0][0], "ifname=eno1:52:54:00:00:00:01")
+            self.assertEqual(cmdlines[0][-3:], ["vlan=eno1.20:eno1", "ip=192.0.2.10:::255.255.255.0:metal-01:eno1.20:none", "rd.neednet=1"])
+
+    def test_an_install_network_the_boot_arguments_cannot_carry_refuses_before_the_image_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            (work / "erase.iso").write_bytes(b"earlier image")
+            instance = controller.Controller.__new__(controller.Controller)
+            instance.root = work
+            instance.request = {"network": "network --bootproto=static --device=bond0 --bondslaves=eno1 "
+                                           "--bondopts=mode=active-backup;arp_ip_target=192.0.2.1,192.0.2.2 --ip=192.0.2.10 "
+                                           "--netmask=255.255.255.0 --hostname=metal-01",
+                                "install": {"bootMedia": {"name": "boot"}}}
+            instance.load = lambda: {"token": "a" * 64}
+            with patch.object(controller, "native") as native, patch.object(os, "open") as opened:
+                with self.assertRaisesRegex(controller.worker.Refusal, "^install-network$"):
+                    instance.build()
+            native.assert_not_called()
+            opened.assert_not_called()
+            self.assertEqual((work / "erase.iso").read_bytes(), b"earlier image")
 
     def test_interrupted_private_write_leaves_no_record_or_owned_stage(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -316,6 +339,21 @@ class RemovalCustodyTests(unittest.TestCase):
                 return instance.prepare(), instance.root, publication
             finally:
                 instance.close()
+
+    def test_a_retry_of_the_same_removal_boots_the_running_builds_kickstart_under_its_frozen_custody(self):
+        import json
+
+        with tempfile.TemporaryDirectory() as temporary:
+            first, root, _publication = self.prepared(temporary, "op-remove-1/erase-metal-01/1")
+            custody = (root / "custody.json").read_bytes()
+            key = (root / "host-key").read_bytes()
+            (root / "ks.cfg").write_text("kickstart an earlier build rendered")
+            again, _root, _publication = self.prepared(temporary, "op-remove-1/erase-metal-01/2")
+            self.assertEqual(again["private"], first["private"])
+            self.assertEqual((root / "custody.json").read_bytes(), custody)
+            self.assertEqual((root / "host-key").read_bytes(), key)
+            self.assertEqual((root / "ks.cfg").read_text(), "kickstart op-remove-1/erase-metal-01/1")
+            self.assertEqual(json.loads(custody)["worker"]["originalAttempt"], "op-remove-1/erase-metal-01/1")
 
     def test_a_fresh_removal_withdraws_the_earlier_removals_custody_and_boots_under_its_own_attempt(self):
         import json

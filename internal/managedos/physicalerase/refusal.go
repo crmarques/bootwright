@@ -30,6 +30,7 @@ const (
 	eraseCustodyDrift       = "custody-drift"
 	eraseBootMediaMismatch  = "boot-media-mismatch"
 	eraseImageBuildFailed   = "image-build-failed"
+	eraseInstallNetwork     = "install-network-unsupported"
 )
 
 const eraseCustodyRoot = "/var/lib/bootwright-hosted"
@@ -98,6 +99,8 @@ func eraseRefusals(contextName, continuation, machine, endpoint, address, custod
 			"restore that image with bootwright media add and check it with bootwright media list --checksums, "+again),
 		eraseImageBuildFailed: refused("the erase image of "+identity+" could not be built from its pinned installer image within its time bound, so the machine was not booted",
 			"check the execution host's free space and its mkksiso and xorriso installation, "+again),
+		eraseInstallNetwork: refused("the install network of "+identity+" names a bond option or VLAN that the erase image's boot arguments cannot carry, so no erase image was built and the machine was not booted",
+			"release it without erasing its disks with bootwright destroy --context "+contextName+" --authorize erase="+machine+":retain"),
 	}
 }
 

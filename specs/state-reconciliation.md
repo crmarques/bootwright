@@ -2632,24 +2632,6 @@ and [sysfs attributes](https://github.com/torvalds/linux/blob/v6.12/drivers/scsi
 Serial identity comes from the native serial attribute or a complete bounded
 SCSI VPD page 0x80, never from a guessed path or stale udev text.
 
-The private image contains only network configuration and a nonreturning
-Anaconda `%pre` which launches a dedicated RAM service. The service masks and
-stops installer frontends and refuses any remaining installer process before
-starting the writer. It requires RAM-backed runtime/root filesystems; no
-ordinary installation directives are present. The image selects `rd.live.ram=1`,
-`rd.live.overlay.overlayfs=1` and `inst.zram=0`; an overlay's upper and work
-directories must both resolve to tmpfs. The
-[dracut 057 live-root implementation](https://github.com/dracutdevs/dracut/blob/057/modules.d/90dmsquash-live/dmsquash-live-root.sh)
-defines the RAM copy and overlay selection, and
-[RHEL 9's boot reference](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html-single/interactively_installing_rhel_from_installation_media/index)
-documents the stage2 RAM copy. Installer isolation follows the
-[RHEL 9 Anaconda startup order](https://github.com/rhinstaller/anaconda/blob/rhel-9/anaconda.py)
-and [synchronous pre-script execution](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/kickstart.py),
-also present in the
-[RHEL 10 implementation](https://github.com/rhinstaller/anaconda/blob/rhel-10/pyanaconda/kickstart.py).
-The boot media's frozen size and SHA-256 remain mandatory. Source review does
-not qualify an image build or physical machine.
-
 Original-attempt custody and a fresh erase-only SSH host key remain private on
 the execution host, in
 `/var/lib/bootwright-hosted/<context>/machines/<machine>/erase/<operation>/`
@@ -2657,7 +2639,12 @@ of the context's [hosted directory](contexts.md#hosted-root), beneath the
 immutable original apply operation identity so reuse of a context name cannot
 adopt an old receipt. Custody belongs to one removal: initial private custody is
 atomically committed before boot, and its first erase attempt remains frozen across
-retries of that removal. A fresh removal always erases under its own custody:
+retries of that removal. The request digest and the stored worker request bind
+its targets, identities and network; its Kickstart renders them, the stored
+erase host key and the current fleet key with the running build's worker, so
+each boot rewrites it and a retry after an automation fix boots the fixed
+worker under the same custody while the worker request version is unchanged.
+A fresh removal always erases under its own custody:
 finding custody naming another removal's attempt, whether that removal failed,
 was replaced or finished, it withdraws that custody's private publication and
 boot-private files, sets its receipt and any finalizing or completed record
@@ -2695,6 +2682,41 @@ the 900-second build and 900-second RAM startup allowance they fit within the
 two-hour controller margin, keeping the invocation within six hours. Exhaustion
 leaves a partial or unknown result and retains the claim.
 
+#### Erase image
+
+The private image contains only network configuration and a nonreturning
+Anaconda `%pre` which launches a dedicated RAM service. The service masks and
+stops installer frontends and refuses any remaining installer process before
+starting the writer. It requires RAM-backed runtime/root filesystems; no
+ordinary installation directives are present. The image selects `rd.live.ram=1`,
+`rd.live.overlay.overlayfs=1` and `inst.zram=0`; an overlay's upper and work
+directories must both resolve to tmpfs. The
+[dracut 057 live-root implementation](https://github.com/dracutdevs/dracut/blob/057/modules.d/90dmsquash-live/dmsquash-live-root.sh)
+defines the RAM copy and overlay selection, and
+[RHEL 9's boot reference](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html-single/interactively_installing_rhel_from_installation_media/index)
+documents the stage2 RAM copy. Installer isolation follows the
+[RHEL 9 Anaconda startup order](https://github.com/rhinstaller/anaconda/blob/rhel-9/anaconda.py)
+and [synchronous pre-script execution](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/kickstart.py),
+also present in the
+[RHEL 10 implementation](https://github.com/rhinstaller/anaconda/blob/rhel-10/pyanaconda/kickstart.py).
+The boot media's frozen size and SHA-256 remain mandatory. Source review does
+not qualify an image build or physical machine.
+
+Anaconda applies Kickstart network only after `%pre` returns, which the erase
+`%pre` never does, so the image's boot arguments carry the frozen install
+network line as dracut `bond=`, `vlan=` and `ip=` arguments with
+`rd.neednet=1`, and the initramfs raises the install interface, its bond and
+VLAN and the static address before the installer starts. The initramfs reads a
+VLAN's ID from its name, so the image names it `<device>.<id>`, or `vlan<id>`
+beyond 15 characters. A line those arguments cannot carry, such as a bond
+option holding a comma or colon, refuses `install-network-unsupported` before
+the build. The
+`%pre` and the RAM service run only shell builtins and commands the installer
+runtime keeps: it decodes the payload with the runtime's `python3`, and
+unlocks the root entry with `chpasswd -e`, because the
+[Lorax runtime cleanup](https://github.com/weldr/lorax/blob/rhel9-branch/share/templates.d/99-generic/runtime-cleanup.tmpl)
+removes `base64` and `usermod`.
+
 #### Erase cancellation and refusals
 
 Cancellation never means erase finished. An authenticated partial status resumes
@@ -2730,8 +2752,8 @@ under `no_log`: `machine-running`, `identity-mismatch`, `hardware-mismatch` and
 and `controller-deadline` from a media, boot, power or eject step;
 `poweroff-unproved`, `worker-failed`, `worker-unreachable`, `foreign-worker`
 and `receipt-timeout` from the RAM worker; `foreign-custody` and
-`custody-drift` from custody; `boot-media-mismatch` and
-`image-build-failed` from the image build. Its detail carries only what the controller or
+`custody-drift` from custody; `boot-media-mismatch`,
+`image-build-failed` and `install-network-unsupported` from the image build. Its detail carries only what the controller or
 the session observed, such as a power state, the answering system UUID, how
 many hardware addresses differ, an HTTP status or an unanswered session's class
 and minutes, never a value derived from the private material; the play then
@@ -2739,7 +2761,8 @@ stops outside `no_log` naming the code and the controller's own printable
 line. Each diagnostic is a `lifecycle.state` failure of the Machine whose
 remedy names the destroy to run; a foreign worker, an unreachable worker and
 a foreign custody also name releasing the Machine without erasing through
-`--authorize erase=<machine>:retain`. A custody drift never does, because a
+`--authorize erase=<machine>:retain`, and an unsupported install network names
+only that release. A custody drift never does, because a
 retained erase reads the same custody: its remedy names the custody directory
 `/var/lib/bootwright-hosted/<context>/machines/<machine>/erase/<apply operation>`
 and the private erase publication directory, for the operator to remove the

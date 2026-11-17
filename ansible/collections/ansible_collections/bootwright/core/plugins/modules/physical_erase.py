@@ -109,14 +109,15 @@ NAMED = {
 NAMED.update({
     "foreign-target": "foreign-custody",
     "custody-policy-drift": "custody-drift",
-    "custody-image-drift": "custody-drift",
     "custody-token": "custody-drift",
     "completion-drift": "custody-drift",
 })
 # What the image build alone refuses: a boot media that no longer matches its
-# pin, and an image mkksiso did not build or that was not copied in full.
+# pin, an install network line its boot arguments cannot carry, and an image
+# mkksiso did not build or that was not copied in full.
 BUILT = {
     "media-identity": "boot-media-mismatch",
+    "install-network": "install-network-unsupported",
     "native-command": "image-build-failed",
     "native-timeout": "image-build-failed",
     "native-output": "image-build-failed",

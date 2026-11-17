@@ -104,7 +104,11 @@ def run():
     isolate()
     # This modifies only the verified RAM root. Password authentication stays
     # disabled; an unlocked shadow entry permits the one authorized public key.
-    command(["/usr/sbin/usermod", "--password", "$6$bootwright$*", "root"])
+    # The installer runtime keeps chpasswd but not usermod (Lorax
+    # runtime-cleanup.tmpl); -e stores the entry as given, without PAM.
+    code, _output = worker.native(["/usr/sbin/chpasswd", "-e"], b"root:$6$bootwright$*\n", timeout=10, limit=4096)
+    if code:
+        raise worker.Refusal("installer-boundary")
     config = """Port 22
 ListenAddress 0.0.0.0
 ListenAddress ::

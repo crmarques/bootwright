@@ -40,7 +40,7 @@ class ProcessTests(unittest.TestCase):
         from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_runtime as runtime
 
         lines = boot.kickstart("network --bootproto=dhcp", {}, "PRIVATE", "ssh-key PUBLIC").splitlines()
-        prefix = "base64 --decode > " + boot.RAM + "/"
+        prefix = boot.DECODE + " > " + boot.RAM + "/"
         shipped = {line[len(prefix):].split(" ", 1)[0]: base64.b64decode(lines[index + 1]) for index, line in enumerate(lines) if line.startswith(prefix)}
         self.assertIn("bounded_process.py", shipped)
         self.assertNotIn("physical_erase_process.py", shipped)

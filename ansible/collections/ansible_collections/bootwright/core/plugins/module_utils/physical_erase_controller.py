@@ -380,13 +380,14 @@ class Controller:
                     raise worker.Refusal("custody-policy-drift")
             else:
                 write(path, data.encode())
+        # The Kickstart only renders the frozen worker request, host key and
+        # fleet key, so every boot of this removal takes the running build's
+        # rendering: a retry after an automation fix boots the fixed image.
         ks = boot.kickstart(self.request["network"], self.worker_request, private_key, self.material["authorizedKey"])
         path = self.root / "ks.cfg"
-        if path.exists():
-            if read(path, 262144).decode() != ks:
-                raise worker.Refusal("custody-image-drift")
-        else:
-            write(path, ks.encode())
+        if os.path.lexists(path):
+            path.unlink()
+        write(path, ks.encode())
         publication = self.request["install"]["private"]
         if not re.fullmatch("[0-9a-f]{64}", state["token"]):
             raise worker.Refusal("custody-token")
@@ -416,6 +417,7 @@ class Controller:
 
     def build(self):
         state = self.load()
+        network = boot.network_arguments(self.request["network"])
         source = MEDIA / self.request["install"]["bootMedia"]["name"]
         if source.parent != MEDIA:
             raise worker.Refusal("media-identity")
@@ -442,7 +444,7 @@ class Controller:
                 "rd.live.ram=1",
                 "rd.live.overlay.overlayfs=1",
                 "inst.zram=0",
-            ]
+            ] + network
             # Lorax passes this absolute path unchanged to its subprocesses.
             # Refer to our still-held FD, so neither mkksiso nor xorriso can
             # re-open a replaced operator pathname after verification.
@@ -455,7 +457,8 @@ class Controller:
                     "--cmdline",
                     " ".join(arguments),
                     "--rm-args",
-                    "rd.live.check rd.live.ram rd.live.overlay rd.live.overlay.overlayfs rd.overlay rootflags rd.writable.fsimg inst.zram inst.sshd",
+                    "rd.live.check rd.live.ram rd.live.overlay rd.live.overlay.overlayfs rd.overlay rootflags rd.writable.fsimg inst.zram inst.sshd"
+                    " ip bond vlan rd.neednet",
                     held,
                     str(image),
                 ],
