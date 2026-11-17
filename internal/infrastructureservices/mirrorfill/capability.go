@@ -1,8 +1,6 @@
 package mirrorfill
 
 import (
-	"context"
-	"encoding/json"
 	"slices"
 	"strings"
 	"time"
@@ -29,44 +27,59 @@ func filesDeadline(request FilesRequest) time.Duration {
 }
 
 type Files struct {
-	runner    Runner
+	fillCapability
 	artifacts Artifacts
-	hostKeys  lifecycle.InstalledHostKey
 }
 
 func NewFiles(runner Runner, artifacts Artifacts) Files {
-	return Files{runner: runner, artifacts: artifacts}
-}
-
-func (c Files) WithInstalledHostKeys(hostKeys lifecycle.InstalledHostKey) Files {
-	c.hostKeys = hostKeys
+	c := Files{artifacts: artifacts}
+	c.fillCapability = fill[FilesRequest, FilesEvidence]{
+		runner: runner, noun: "mirror files", kind: Kind, implementation: FilesImplementation, variable: "bootwright_mirror_files",
+		quiescent:   "the controller stage that reads the mirror precedes its fill in removal",
+		requests:    c.requestList,
+		decode:      DecodeFilesRequest,
+		canonical:   FilesRequest.Canonical,
+		object:      func(request FilesRequest) string { return request.Identity.Server },
+		placement:   func(request FilesRequest) machine.Placement { return request.Placement },
+		definition:  filesDefinition,
+		describe:    filesDescription,
+		impacts:     filesImpacts,
+		references:  FilesRequest.SecretReferences,
+		classes:     func(request FilesRequest) secrets.Classes { return request.Placement.SecretClasses() },
+		deadline:    filesDeadline,
+		refusals:    filesRefusals,
+		decodeProof: decodeFilesEvidence,
+		proven:      func(evidence FilesEvidence) bool { return evidence.Postcondition },
+		effect:      filesEffect,
+		drift:       filesDrift,
+		subject: func(request FilesRequest) string {
+			return "the artifact mirror files of " + request.Identity.Environment
+		},
+		claimed: filesClaimed,
+	}
 	return c
 }
 
-func (c Files) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
-	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
-	if err := ctx.Err(); err != nil {
-		return plan, err
-	}
-	if input.State == nil {
-		return plan, refusal("lifecycle.state", "mirror planning requires compiled desired state", "")
-	}
-	request, found, err := c.Request(input.State.Effective(), input.Controller, input.Context.Name)
+func (c Files) WithInstalledHostKeys(hostKeys lifecycle.InstalledHostKey) Files {
+	c.fillCapability = c.fillCapability.withHostKeys(hostKeys)
+	return c
+}
+
+func (c Files) requestList(catalog api.Catalog, controllerMachine, contextName string) ([]FilesRequest, error) {
+	request, found, err := c.Request(catalog, controllerMachine, contextName)
 	if err != nil || !found {
-		return plan, err
+		return nil, err
 	}
-	canonical, err := request.Canonical()
-	if err != nil {
-		return plan, err
-	}
-	plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
-		ID: FilesBlockID(request.Identity.Environment), Description: filesDescription(input.Verb, request), Stage: reconciliation.StageInfrastructureServices,
+	return []FilesRequest{request}, nil
+}
+
+func filesDefinition(verb reconciliation.Verb, request FilesRequest, canonical []byte) reconciliation.BlockDefinition {
+	return reconciliation.BlockDefinition{
+		ID: FilesBlockID(request.Identity.Environment), Description: filesDescription(verb, request), Stage: reconciliation.StageInfrastructureServices,
 		Requires:  filesRequires(request),
-		Exclusive: []string{"path:" + request.Root}, Impacts: filesImpacts(input.Verb, request), Consumes: []string{},
+		Exclusive: []string{"path:" + request.Root}, Impacts: filesImpacts(verb, request), Consumes: []string{},
 		Kind: Kind, Object: request.Identity.Server, Family: Family, Implementation: FilesImplementation, ContentDigest: FilesContentDigest(), Request: canonical,
-	})
-	plan.Secrets = lifecycle.SecretNames(request.SecretReferences()...)
-	return plan, nil
+	}
 }
 
 func filesRequires(request FilesRequest) []reconciliation.ObjectRef {
@@ -140,50 +153,6 @@ func filesImpacts(verb reconciliation.Verb, request FilesRequest) []string {
 	return []string{"publish-content " + request.Root}
 }
 
-func (Files) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
-	if err := ctx.Err(); err != nil {
-		return lifecycle.Removal{}, err
-	}
-	request, err := DecodeFilesRequest(block.Request)
-	if err != nil {
-		return lifecycle.Removal{}, err
-	}
-	return lifecycle.Removal{Description: filesDescription(reconciliation.Destroy, request), Impacts: filesImpacts(reconciliation.Destroy, request), Consumes: []string{}}, nil
-}
-
-func (c Files) run(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.RunResult, FilesRequest, error) {
-	if err := ctx.Err(); err != nil {
-		return lifecycle.RunResult{}, FilesRequest{}, err
-	}
-	request, err := DecodeFilesRequest(execution.Block.Request)
-	if err != nil {
-		return lifecycle.RunResult{}, request, err
-	}
-	if execution.Block.Kind != Kind || execution.Block.Object != request.Identity.Server {
-		return lifecycle.RunResult{}, request, refusal("lifecycle.state", "the mirror files request does not match its frozen block identity", "")
-	}
-	if c.runner == nil {
-		return lifecycle.RunResult{}, request, refusal("lifecycle.state", "the mirror files adapter is not configured", "")
-	}
-	canonical, err := request.Canonical()
-	if err != nil {
-		return lifecycle.RunResult{}, request, err
-	}
-	var refusals map[string]error
-	if operation == "apply" {
-		refusals = filesRefusals(execution.Context, request)
-	}
-	execution, placement, err := lifecycle.PinInstalledHost(execution, request.Placement, c.hostKeys)
-	if err != nil {
-		return lifecycle.RunResult{}, request, err
-	}
-	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: FilesImplementation,
-		Operation: operation, Variable: "bootwright_mirror_files", Canonical: canonical, Placement: placement,
-		Refusals: refusals, Deadline: filesDeadline(request),
-	}))
-	return result, request, err
-}
-
 func filesRefusals(contextName string, request FilesRequest) map[string]error {
 	server := diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: Kind, Name: request.Identity.Server}
 	refused := func(code, message, remediation string) error {
@@ -197,88 +166,12 @@ func filesRefusals(contextName string, request FilesRequest) map[string]error {
 	}
 }
 
-func (c Files) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "apply")
-}
-
-func (c Files) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "destroy")
-}
-
-func (c Files) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
-	result, request, err := c.run(ctx, execution, operation)
-	if err != nil {
-		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
-	}
-	outcome, usable := result.Outcome, result.Outcome.Settled()
-	evidence, err := decodeFilesEvidence(result.Evidence, execution.Block.RequestDigest)
-	if !usable || err != nil || !evidence.Postcondition || filesEffect(evidence, request, operation == "destroy") != reconciliation.EffectCompleted {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, refusal("lifecycle.state", "the mirror files adapter did not prove its postcondition", "")
-	}
-	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
-}
-
-func (c Files) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, false)
-}
-
-func (c Files) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, true)
-}
-
-func (c Files) observe(ctx context.Context, execution lifecycle.Execution, removal bool) (lifecycle.Observation, error) {
-	observation := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
-	result, request, err := c.run(ctx, execution, "observe")
-	if err != nil {
-		return observation, err
-	}
-	observation.Evidence = result.Evidence
-	evidence, err := decodeFilesEvidence(result.Evidence, execution.Block.RequestDigest)
-	if err != nil {
-		return observation, nil
-	}
-	observation.Effect = filesEffect(evidence, request, removal)
-	return observation, nil
-}
-
-func (Files) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
-	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "the controller stage that reads the mirror precedes its fill in removal"}, nil
-}
-
-func (Files) Unresolved(verb reconciliation.Verb, block reconciliation.Block, data json.RawMessage) (lifecycle.Unresolved, bool) {
-	request, err := DecodeFilesRequest(block.Request)
-	if err != nil {
-		return lifecycle.Unresolved{}, false
-	}
-	evidence, err := decodeFilesEvidence(data, block.RequestDigest)
-	if err != nil || filesEffect(evidence, request, verb == reconciliation.Destroy) != reconciliation.EffectUnknown {
-		return lifecycle.Unresolved{}, false
-	}
-	return lifecycle.Drifted(verb, "the artifact mirror files of "+request.Identity.Environment, lifecycle.PlacedOn(request.Placement), filesDrift(evidence, request))
-}
-
-func (Files) SecretReferences(block reconciliation.Block) ([]string, error) {
-	request, err := DecodeFilesRequest(block.Request)
-	if err != nil {
-		return nil, err
-	}
-	return lifecycle.SecretNames(request.SecretReferences()...), nil
-}
-
-func (Files) SecretClasses(block reconciliation.Block) (secrets.Classes, error) {
-	request, err := DecodeFilesRequest(block.Request)
-	if err != nil {
-		return nil, err
-	}
-	return request.Placement.SecretClasses(), nil
-}
-
 func (Files) PrecedesController(definition reconciliation.BlockDefinition) bool {
 	_, err := DecodeFilesRequest(definition.Request)
 	return err == nil
 }
 
-func (Files) Claimed(catalog api.Catalog) []string {
+func filesClaimed(catalog api.Catalog) []string {
 	mirror, declared := infrastructureservices.ArtifactMirrorOf(catalog)
 	if !declared || !mirror.Managed {
 		return nil

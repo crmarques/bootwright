@@ -103,7 +103,7 @@ func TestTheImageFillCopiesEachMirroredImageIntoTheRegistryOnItsMachine(t *testi
 	if !slices.Equal(sources, []string{"docker.io/library/registry@" + registryDigest, "quay.io/metal3-io/sushy-tools@" + sushyDigest}) {
 		t.Fatalf("images = %+v", request.Images)
 	}
-	if (ImageFill{}).Claimed(registryCatalog())[0] != "Registry/mirror-registry" {
+	if NewImages(nil, nil).Claimed(registryCatalog())[0] != "Registry/mirror-registry" {
 		t.Fatal("the fill claims no Registry")
 	}
 }

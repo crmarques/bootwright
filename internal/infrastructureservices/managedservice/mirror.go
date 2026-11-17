@@ -58,14 +58,19 @@ func MirroredImage(catalog api.Catalog, reference string, consumer ImageConsumer
 	if mirror.Location == "" || mirror.Managed && (consumer.Machine == mirror.Registry.Spec().Get("machineRef").Text() || OriginConsumers(catalog, mirror)[consumer.Identity]) {
 		return reference, nil
 	}
-	host, _, _ := strings.Cut(mirror.Location, "/")
-	source := &ImageSource{Host: host, CredentialsRef: mirror.CredentialsRef, TrustBundleRef: mirror.TrustBundleRef}
+	source := MirrorSource(catalog, mirror)
+	source.Host, _, _ = strings.Cut(mirror.Location, "/")
+	return mirror.Location + "/" + qualified, &source
+}
+
+func MirrorSource(catalog api.Catalog, mirror infrastructureservices.ImageMirror) ImageSource {
+	source := ImageSource{Host: mirror.Location, CredentialsRef: mirror.CredentialsRef, TrustBundleRef: mirror.TrustBundleRef}
 	if source.CredentialsRef != "" {
 		if declaration, found := catalog.Find(api.Secret, source.CredentialsRef); found {
 			source.CredentialsType = declaration.Spec().Get("type").Text()
 		}
 	}
-	return mirror.Location + "/" + qualified, source
+	return source
 }
 
 func OriginConsumers(catalog api.Catalog, mirror infrastructureservices.ImageMirror) map[string]bool {

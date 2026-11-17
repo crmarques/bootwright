@@ -236,10 +236,10 @@ func TestAFillRefusesAFileItCouldNotVerify(t *testing.T) {
 // block may wait for it; its removal reads only its frozen request.
 func TestTheFillPrecedesTheControllerStageAndItsRemovalReadsItsRequest(t *testing.T) {
 	_, block := filesRequest(t)
-	if !(Files{}).PrecedesController(block.BlockDefinition) {
+	if !NewFiles(nil, nil).PrecedesController(block.BlockDefinition) {
 		t.Fatal("the fill does not precede the controller stage")
 	}
-	removal, err := (Files{}).Removal(context.Background(), block)
+	removal, err := NewFiles(nil, nil).Removal(context.Background(), block)
 	if err != nil || removal.Description != "remove the artifact mirror files of lab from mirror" ||
 		!slices.Equal(removal.Impacts, []string{"remove-content /var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public/mirror/lab"}) {
 		t.Fatalf("removal = %+v, %v", removal, err)

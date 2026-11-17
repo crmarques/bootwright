@@ -235,3 +235,23 @@ func TestAnInstalledMirrorHostsInstallationPullsFromTheOrigins(t *testing.T) {
 		}
 	}
 }
+
+// The mirror source keeps the whole location the fills push to, with the
+// credential's declared type; an image's pull keeps only its host, and a
+// mirror naming no credential carries no type.
+func TestTheMirrorSourceKeepsTheLocationWhereAPullKeepsTheHost(t *testing.T) {
+	catalog := catalogOf(mirrorEnvironment(), mirrorRegistry(text("credentialsRef", "pull"), text("trustBundleRef", "ca")), secretOf("pull", "dockerConfigJson"))
+	mirror, _ := infrastructureservices.ImageMirrorOf(catalog)
+	if got := MirrorSource(catalog, mirror); got != (ImageSource{Host: "mirror.example.test:8443/images", CredentialsRef: "pull", CredentialsType: "dockerConfigJson", TrustBundleRef: "ca"}) {
+		t.Fatalf("source = %+v", got)
+	}
+	origin := "quay.io/a/b@sha256:" + strings.Repeat("a", 64)
+	if _, pulled := MirroredImage(catalog, origin, ImageConsumer{Identity: "Proxy/egress", Machine: "controller"}); pulled == nil || pulled.Host != "mirror.example.test:8443" || pulled.CredentialsType != "dockerConfigJson" {
+		t.Fatalf("pull source = %+v", pulled)
+	}
+	bare := catalogOf(mirrorEnvironment(), mirrorRegistry())
+	mirror, _ = infrastructureservices.ImageMirrorOf(bare)
+	if got := MirrorSource(bare, mirror); got != (ImageSource{Host: "mirror.example.test:8443/images"}) {
+		t.Fatalf("bare source = %+v", got)
+	}
+}
