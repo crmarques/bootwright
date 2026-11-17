@@ -51,7 +51,10 @@ addresses, disk names, WWNs, media and credentials.
   apply, because that apply freezes it. Omitting it makes realized physical
   Ceph retirement refuse. Neither method is hardware sanitization, and a
   four-hour erase deadline applies. Add DB/WAL disks to the targets when
-  extending.
+  extending. `metadataClear` suits disks reused for a new Ceph install, and one
+  `destroy` may relax the root's `logicalOverwrite` the same way with
+  `--authorize erase=<machine>:metadataClear`
+  ([operator guide](../../../docs/operator-guide.md#a-physical-erase-you-do-not-want-to-run-in-full)).
 - Required inputs: BMC credentials (`lab-bmc-credentials`) and CA
   (`lab-bmc-ca`), per-host host keys, `ibm-registry`, RHEL 9.8 media and
   verified BMC media trust. The Entitlement `license.accept: true` is a

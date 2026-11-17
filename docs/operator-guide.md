@@ -927,6 +927,54 @@ A build that reads another local keyring format refuses every access to the
 keyring, `secret encryption init` included, with `secret.store.implementation`,
 naming the persisted format and the remedy.
 
+### A physical erase you do not want to run in full
+
+A Machine that declares `spec.hardware.eraseOnRemoval` has every target
+overwritten, read back and powered off before `destroy` releases it
+([physical erase](../specs/state-reconciliation.md#opt-in-physical-logical-overwrite)).
+When you know the full erase is not what this removal needs, one `destroy` can
+name a weaker one for one Machine, root disk included, without touching the
+declared policy. Two choices exist, and only toward less:
+
+- `metadataClear` clears only the regions that make a disk read as empty to
+  native probes, on every target. Use it when the disks are reused for a new
+  Ceph install and the root's full overwrite is not worth hours of waiting.
+- `retain` erases nothing and never contacts the BMC. Use it when the BMC is
+  dead or the hardware is gone. The disks keep their data, the installed OS and
+  the Ceph host state, and the result reports power and media state as
+  unproved, because an earlier erase's worker may still be running.
+
+Review the relaxed plan first, then destroy with the same tokens and the digest
+the plan printed:
+
+```sh
+bootwright plan --context <name> --authorize erase=<machine>:metadataClear
+bootwright destroy --context <name> --authorize data-loss=<digest> --authorize erase=<machine>:metadataClear
+```
+
+Repeat `--authorize erase=` once per Machine, and take the digest from a plan
+that names the same tokens. A destroy that did not finish, including one you
+interrupted mid-erase, can be replaced this way; `status` and the destroy's
+`next:` print the tokens to repeat. The
+[relaxation rules](../specs/state-reconciliation.md#erase-relaxation) say which
+tokens are refused and when a continuation accepts them, and
+[removal-time relaxation](../specs/state-reconciliation.md#removal-time-relaxation)
+what each method does.
+
+A failed erase names a refusal code, what the controller or worker observed and
+the destroy command to run next. Read the code first: `machine-running` asks you
+to stop the Machine, `target-unanswered` and `controller-refused` point at the
+BMC, and `worker-unreachable` at the install address. When the remedy offers
+`--authorize erase=<machine>:retain`, it is the way to release the Machine
+unerased. The codes and their remedies are in
+[erase cancellation and refusals](../specs/state-reconciliation.md#erase-cancellation-and-refusals).
+
+While the erase runs, `destroy` and `logs --follow` show each target's written
+and read-back bytes, the observed rate and `about <time> left at the observed
+rate`, and a worker no session reaches reads `waiting for the erase worker at
+<address>, no answer for <n> min`
+([long-running progress](../specs/cli/output.md#long-running-progress)).
+
 ## M1 closing validation
 
 Run every repository gate from the M1 worktree:
