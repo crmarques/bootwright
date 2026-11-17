@@ -65,6 +65,7 @@ func checkpoints() []checkpoint {
 		checkpointConfirmOperationEntry,
 		checkpointCreateFile,
 		checkpointMeasureOperationEntry,
+		checkpointMeasureSecretStorage,
 		checkpointMkdir,
 		checkpointSyncContextFile,
 		checkpointSyncDirectory,

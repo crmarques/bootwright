@@ -876,7 +876,8 @@ func checkpointScenarios() []checkpointScenario {
 func checkpointTraceShapes() map[string]map[checkpoint]int {
 	return map[string]map[checkpoint]int{
 		"init": {
-			checkpointCreateFile: 14, checkpointWriteFile: 14, checkpointSyncFile: 14,
+			checkpointMeasureSecretStorage: 15,
+			checkpointCreateFile:           14, checkpointWriteFile: 14, checkpointSyncFile: 14,
 			checkpointSyncDirectory: 47, checkpointBeforeRegistryRename: 4,
 			checkpointAfterRegistryRename: 4, checkpointAfterContextReservation: 1, checkpointMkdir: 10,
 			checkpointAfterContextDirectory: 1, checkpointBeforeContextPublish: 1, checkpointAfterContextPublish: 1, checkpointBeforeSecretRename: 3,
@@ -885,6 +886,7 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointBeforeContextReady: 1, checkpointBeforeContextSubtree: 8,
 		},
 		"init-purge": {
+			checkpointMeasureSecretStorage:  15,
 			checkpointAfterContextDirectory: 1, checkpointAfterContextPublish: 1, checkpointAfterContextReservation: 1,
 			checkpointAfterRegistryRename: 5, checkpointAfterSecretRename: 3, checkpointAfterSecretUnlink: 1,
 			checkpointBeforeContextPublish: 1, checkpointBeforeContextReady: 1, checkpointBeforeContextRmdir: 1,
@@ -1000,26 +1002,30 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointBeforeMediaRetainedRemoval: 1,
 		},
 		"secret-publication": {
-			checkpointCreateFile: 4, checkpointWriteFile: 4, checkpointSyncFile: 4,
+			checkpointMeasureSecretStorage: 24,
+			checkpointCreateFile:           4, checkpointWriteFile: 4, checkpointSyncFile: 4,
 			checkpointSyncDirectory: 9, checkpointBeforeSecretImmutableRename: 1,
 			checkpointAfterSecretImmutableRename: 1, checkpointBeforeSecretRename: 2,
 			checkpointAfterSecretRename: 2, checkpointBeforeSecretPrune: 1, checkpointSyncContextFile: 1,
 			checkpointBeforeSecretUnlink: 1, checkpointAfterSecretUnlink: 1,
 		},
 		"secret-lent-area": {
-			checkpointCreateFile: 4, checkpointWriteFile: 4, checkpointSyncFile: 4,
+			checkpointMeasureSecretStorage: 15,
+			checkpointCreateFile:           4, checkpointWriteFile: 4, checkpointSyncFile: 4,
 			checkpointSyncDirectory: 7, checkpointBeforeSecretImmutableRename: 1,
 			checkpointAfterSecretImmutableRename: 1, checkpointBeforeSecretRename: 2,
 			checkpointAfterSecretRename: 2,
 		},
 		"secret-rotation": {
-			checkpointCreateFile: 4, checkpointWriteFile: 4, checkpointSyncFile: 4,
+			checkpointMeasureSecretStorage: 29,
+			checkpointCreateFile:           4, checkpointWriteFile: 4, checkpointSyncFile: 4,
 			checkpointSyncDirectory: 9, checkpointBeforeSecretRename: 1, checkpointAfterSecretRename: 1,
 			checkpointBeforeSecretPrune: 1, checkpointSyncContextFile: 1, checkpointBeforeSecretUnlink: 3,
 			checkpointAfterSecretUnlink: 3,
 		},
 		"secret-cleanup": {
-			checkpointBeforeSecretPrune: 1, checkpointSyncContextFile: 1, checkpointSyncDirectory: 2,
+			checkpointMeasureSecretStorage: 4,
+			checkpointBeforeSecretPrune:    1, checkpointSyncContextFile: 1, checkpointSyncDirectory: 2,
 			checkpointBeforeSecretUnlink: 1, checkpointAfterSecretUnlink: 1,
 		},
 		"stage-collection": {
@@ -1031,6 +1037,7 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointBeforeSetupRuntimeRename: 1,
 		},
 		"secret-initialization": {
+			checkpointMeasureSecretStorage: 16,
 			checkpointBeforeSecretFileSync: 1, checkpointSyncContextFile: 2, checkpointSyncDirectory: 8,
 			checkpointCreateFile: 3, checkpointWriteFile: 3, checkpointSyncFile: 3,
 			checkpointBeforeSecretRename: 2, checkpointAfterSecretRename: 2,

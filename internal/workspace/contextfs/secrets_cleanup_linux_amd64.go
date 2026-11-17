@@ -230,6 +230,7 @@ func (a *secretArea) removeObserved(ctx context.Context, target secretCleanupTar
 		return secretConflict(ctx, "secret cleanup parent was replaced", nil)
 	}
 	directory := target.expectation.identity.Mode&syscall.S_IFMT == syscall.S_IFDIR
+	a.usage = nil
 	if err := unlinkVerified(parent, name, target.expectation.identity, directory); err != nil {
 		return secretConflict(ctx, "secret cleanup target changed or could not be removed", err)
 	}

@@ -377,6 +377,12 @@ type secretArea struct {
 	readOnly bool
 	active   bool
 	phase    secretPublicationPhase
+	usage    *secretUsage
+}
+
+type secretUsage struct {
+	entries int
+	bytes   int64
 }
 
 func (a *secretArea) forgetExpectation(path string) {
@@ -464,7 +470,17 @@ func (a *secretArea) ensureRoot(ctx context.Context) error {
 		return secretEffectFailure(ctx, "secret storage directory could not be created safely", err)
 	}
 	a.secrets = dir
+	a.usage = &secretUsage{}
 	return nil
+}
+
+func (a *secretArea) counted(entries int, bytes int64, err error) {
+	if err != nil || a.usage == nil {
+		a.usage = nil
+		return
+	}
+	a.usage.entries += entries
+	a.usage.bytes += bytes
 }
 
 func (a *secretArea) parent(ctx context.Context, parts []string) (*directory, string, func(), error) {
@@ -679,7 +695,12 @@ func secretDirectoryNames(ctx context.Context, dir *directory, maximum int) ([]s
 
 func (a *secretArea) scan(ctx context.Context) (int, int64, error) {
 	if a.secrets == nil {
+		a.usage = &secretUsage{}
 		return 0, 0, nil
+	}
+	a.usage = nil
+	if err := a.store.checkpoint(ctx, checkpointMeasureSecretStorage); err != nil {
+		return 0, 0, err
 	}
 	rootEntries, err := listSecretDirectory(ctx, a.secrets, true, a.readOnly)
 	if err != nil {
@@ -714,14 +735,17 @@ func (a *secretArea) scan(ctx context.Context) (int, int64, error) {
 	if count > maxSecretEntries || size > maxSecretBytes {
 		return 0, 0, secretLimit("secret storage physical bounds are exceeded")
 	}
+	a.usage = &secretUsage{entries: count, bytes: size}
 	return count, size, nil
 }
 
 func (a *secretArea) capacity(ctx context.Context, entries int, bytes int64) error {
-	count, size, err := a.scan(ctx)
-	if err != nil {
-		return err
+	if a.usage == nil {
+		if _, _, err := a.scan(ctx); err != nil {
+			return err
+		}
 	}
+	count, size := a.usage.entries, a.usage.bytes
 	if entries < 0 || bytes < 0 || count > maxSecretEntries-entries || size > maxSecretBytes-bytes {
 		return secretLimit("secret storage physical bounds would be exceeded")
 	}
@@ -750,6 +774,7 @@ func (a *secretArea) EnsureDirectory(ctx context.Context, path string) error {
 	}
 	a.phase = secretPublishing
 	child, err := a.store.newDirectory(ctx, a.secrets, parts[0])
+	a.counted(1, 0, err)
 	if err != nil {
 		return secretEffectFailure(ctx, "secret storage directory could not be created safely", err)
 	}
@@ -794,6 +819,7 @@ func (a *secretArea) writeExclusive(ctx context.Context, path string, data []byt
 	} else {
 		_, err = a.store.writeExclusiveIdentity(ctx, parent, name, data, true)
 	}
+	a.counted(1, int64(len(data)), err)
 	if err != nil {
 		return secretEffectFailure(ctx, "exclusive secret state could not be published safely", err)
 	}
@@ -861,6 +887,11 @@ func (a *secretArea) Replace(ctx context.Context, path string, data, expected []
 			return nil
 		},
 	}, checkpointBeforeSecretRename, checkpointAfterSecretRename)
+	if expectation.exists {
+		a.counted(0, int64(len(data)-len(expectation.data)), err)
+	} else {
+		a.counted(1, int64(len(data)), err)
+	}
 	switch outcome {
 	case publicationNotCommitted:
 		if refused, found := secretIOFailure("secret state could not be published", err); found && ctx.Err() == nil {

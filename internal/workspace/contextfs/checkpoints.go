@@ -70,6 +70,7 @@ const (
 	checkpointConfirmOperationEntry         checkpoint = "confirm-operation-entry"
 	checkpointCreateFile                    checkpoint = "create-file"
 	checkpointMeasureOperationEntry         checkpoint = "measure-operation-entry"
+	checkpointMeasureSecretStorage          checkpoint = "measure-secret-storage"
 	checkpointMkdir                         checkpoint = "mkdir"
 	checkpointSyncContextFile               checkpoint = "sync-context-file"
 	checkpointSyncDirectory                 checkpoint = "sync-directory"
