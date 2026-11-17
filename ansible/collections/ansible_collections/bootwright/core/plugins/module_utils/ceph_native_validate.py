@@ -10,8 +10,8 @@ import re
 import uuid
 
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
-    DEVICE, DEVICE_CLASS, HOST_LABEL, Refusal, SERIAL_DEVICE, SUBVOLUME_UUID, class_groups, digest, named, package_url, registry_authority, require,
-    selected_device, tunnel_helpers, validate_auxiliary,
+    DEVICE, DEVICE_CLASS, HOST_LABEL, Refusal, SERIAL_DEVICE, SUBVOLUME_UUID, class_groups, digest, named, package_proxy, package_url,
+    registry_authority, require, selected_device, tunnel_helpers, validate_auxiliary,
 )
 
 
@@ -64,8 +64,9 @@ def scope_checks(request):
         require(request["singleHostDefaults"] is True and len(hosts) == 1 and "stretch" not in request, "request")
     package = request.get("packages")
     if package is not None:
-        require(isinstance(package, dict) and {"version", "licenseAccepted", "sources"} <= set(package)
-                <= {"version", "licenseAccepted", "sources", "packageRepositoryTrustBundleRef"})
+        require(isinstance(package, dict) and {"version", "licenseAccepted", "sources", "repositoryProxy"} <= set(package)
+                <= {"version", "licenseAccepted", "sources", "repositoryProxy", "packageRepositoryTrustBundleRef"})
+        package_proxy(package["repositoryProxy"])
         require(package["version"] == "ceph-packages-v1" and package["licenseAccepted"] is True)
         require("packageRepositoryTrustBundleRef" not in package or named(package["packageRepositoryTrustBundleRef"]))
         require(isinstance(package["sources"], list) and len(package["sources"]) == len(hosts))

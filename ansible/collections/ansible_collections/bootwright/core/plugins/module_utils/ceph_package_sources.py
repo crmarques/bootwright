@@ -6,6 +6,7 @@ from __future__ import annotations
 # pylint: disable=unidiomatic-typecheck
 
 import hashlib
+import http.client
 import configparser
 import contextlib
 import bz2
@@ -113,8 +114,8 @@ class MetadataEncoding:
 def source_for(request, host):
     ceph_native.validate_scope(request)
     package = request.get("packages")
-    ceph_native.require(isinstance(package, dict) and {"version", "licenseAccepted", "sources"} <= set(package)
-                        <= {"version", "licenseAccepted", "sources", "packageRepositoryTrustBundleRef"}, "packages")
+    ceph_native.require(isinstance(package, dict) and {"version", "licenseAccepted", "sources", "repositoryProxy"} <= set(package)
+                        <= {"version", "licenseAccepted", "sources", "repositoryProxy", "packageRepositoryTrustBundleRef"}, "packages")
     ceph_native.require(package["version"] == "ceph-packages-v1" and package["licenseAccepted"] is True, "packages")
     ceph_native.require("packageRepositoryTrustBundleRef" not in package or ceph_native.named(package["packageRepositoryTrustBundleRef"]), "packages")
     sources = package["sources"]
@@ -191,11 +192,31 @@ class RepositoryTrustFailure(Exception):
     """A package repository connection its TLS anchor did not verify; the message names only the repository and the anchor."""
 
 
+class RepositoryHTTPS(urllib.request.HTTPSHandler):
+    """Origin TLS inside an explicit HTTP CONNECT tunnel; no environment bypass."""
+
+    def __init__(self, proxy, context):
+        super().__init__(context=context)
+        self.proxy = ceph_native.package_proxy(proxy)
+
+    def connection(self, authority, **options):
+        target = urllib.parse.urlsplit("https://" + authority)
+        connection = http.client.HTTPSConnection(self.proxy.hostname, self.proxy.port or 80, **options)
+        connection.set_tunnel(target.hostname, target.port or 443)
+        return connection
+
+    def https_open(self, req):
+        if self.proxy is None:
+            return super().https_open(req)
+        return self.do_open(self.connection, req, context=self._context)
+
+
 class Acquisition:
     """Never use ambient proxies, redirect credentials or unverified HTTPS."""
 
-    def __init__(self, source, certificate, budget=1800, *, repository, repository_key, trust=None, trust_ref=None):
+    def __init__(self, source, certificate, budget=1800, *, repository, repository_key, trust=None, trust_ref=None, proxy=""):
         ceph_native.require(isinstance(certificate, str) and 0 < len(certificate.encode()) <= 1 << 20, "material")
+        ceph_native.package_proxy(proxy)
         self.repository_base = safe_url(repository).rstrip("/")
         self.repository_key = safe_url(repository_key)
 
@@ -213,7 +234,7 @@ class Acquisition:
         self.local = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(), urllib.request.HTTPSHandler(context=local))
         public = ssl.create_default_context()
         public.minimum_version = ssl.TLSVersion.TLSv1_2
-        self.public = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(), urllib.request.HTTPSHandler(context=public))
+        self.public = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(), RepositoryHTTPS(proxy, public))
         ceph_native.require((trust is None) == (trust_ref is None), "material")
         if trust is None:
             self.repository_opener = self.public
@@ -225,7 +246,7 @@ class Acquisition:
         except (ssl.SSLError, ValueError, TypeError):
             raise ceph_native.Refusal("material") from None
         bundle.minimum_version = ssl.TLSVersion.TLSv1_2
-        self.repository_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(), urllib.request.HTTPSHandler(context=bundle))
+        self.repository_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(), RepositoryHTTPS(proxy, bundle))
         self.anchor = "trust bundle Secret " + trust_ref
 
     def stream(self, url, output, limit, expected=None, size=None):

@@ -74,7 +74,7 @@ CORE = {
     "monIP": "192.0.2.1",
     "owner": "op-0123456789abcdef",
     "packages": {
-        "licenseAccepted": True,
+        "repositoryProxy": "", "licenseAccepted": True,
         "packageRepositoryTrustBundleRef": "repository-ca",
         "sources": [{
             "certificateRef": "package-ca",

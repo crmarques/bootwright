@@ -28,6 +28,7 @@ type PackageSource struct {
 type PackageRequest struct {
 	LicenseAccepted                 bool            `json:"licenseAccepted"`
 	PackageRepositoryTrustBundleRef string          `json:"packageRepositoryTrustBundleRef,omitempty"`
+	RepositoryProxy                 string          `json:"repositoryProxy"`
 	Sources                         []PackageSource `json:"sources"`
 	Version                         string          `json:"version"`
 }
@@ -56,6 +57,11 @@ func packageSources(c api.Catalog, r Request, contextName string) (*PackageReque
 		return nil, failure("lifecycle.unsupported", "the frozen IBM package entitlement has no accepted license", "review the provider license and declare Entitlement.spec.license.accept")
 	}
 	result := &PackageRequest{LicenseAccepted: accepted, PackageRepositoryTrustBundleRef: cluster.Spec().Get("packageRepositoryTrustBundleRef").Text(), Version: PackageVersion, Sources: []PackageSource{}}
+	proxy, err := packageRepositoryProxy(c, cluster, r.PackageRepository)
+	if err != nil {
+		return nil, err
+	}
+	result.RepositoryProxy = proxy
 	for _, host := range r.Hosts {
 		m, _ := c.Find(api.Machine, host.Machine)
 		if host.Provided {

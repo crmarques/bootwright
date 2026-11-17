@@ -531,6 +531,9 @@ argument_specs:
                 required: true
               packageRepositoryTrustBundleRef:
                 type: str
+              repositoryProxy:
+                type: str
+                required: true
               sources:
                 type: list
                 elements: dict

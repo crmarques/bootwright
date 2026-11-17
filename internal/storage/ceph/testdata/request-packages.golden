@@ -91,6 +91,7 @@
   "packageRepositoryKey": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH",
   "packages": {
     "licenseAccepted": true,
+    "repositoryProxy": "",
     "sources": [
       {
         "certificateRef": "serving-tls",

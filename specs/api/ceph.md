@@ -172,6 +172,17 @@ every metadata path the host fetches stays within 2048 bytes. Omission uses
 source default, not a release catalog. Independent publisher signatures remain
 required for its selected RPMs.
 
+`packageRepositoryProxy` optionally selects `direct: {}` or a `proxyRef` with
+optional `noProxy`, using the shared proxy-selection grammar. Omission means
+direct; it inherits no controller, Machine or install-profile route. This
+consumer currently supports only external unauthenticated HTTP CONNECT proxies
+whose `connection.httpsProxy` is a bare `http://` endpoint, with at most 128
+bypass entries and no Proxy `auth`, bound bundle or relaxed TLS policy. Other
+choices refuse at admission. The selected route is frozen for repository
+metadata, RPMs and the same-origin signing key; hosted DVD fetches remain
+direct. Repository TLS and publisher verification remain independent. See
+[package acquisition](../ceph.md#frozen-release-and-trust).
+
 `packageRepositoryTLSVerification` selects
 [client TLS trust](../secrets.md#client-tls-trust), defaulting to `full`;
 non-full policies currently refuse before package acquisition.

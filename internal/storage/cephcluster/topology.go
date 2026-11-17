@@ -26,6 +26,7 @@ func (a *admission) cluster() {
 	ceph := spec
 	a.distribution(ceph)
 	a.packageRepositoryTrust(ceph)
+	a.packageProxy(ceph)
 	a.clusterAccess(ceph)
 	a.topology(ceph)
 	a.enrollmentAddresses(ceph)

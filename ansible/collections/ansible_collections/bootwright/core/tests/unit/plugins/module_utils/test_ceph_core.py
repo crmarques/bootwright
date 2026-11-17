@@ -371,7 +371,7 @@ class AppliedTransport:
 
 def host_block(core_request):
     cluster = {key: value for key, value in copy.deepcopy(core_request).items() if key != "action"}
-    cluster["packages"] = {"version": "ceph-packages-v1", "licenseAccepted": True, "sources": [
+    cluster["packages"] = {"version": "ceph-packages-v1", "repositoryProxy": "", "licenseAccepted": True, "sources": [
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-hosted/example/services/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"} for host in cluster["hosts"]]}
@@ -1814,7 +1814,7 @@ class ReadinessTransport:
 
 
 def package_intent(core_request):
-    core_request["packages"] = {"version": "ceph-packages-v1", "licenseAccepted": True, "sources": [
+    core_request["packages"] = {"version": "ceph-packages-v1", "repositoryProxy": "", "licenseAccepted": True, "sources": [
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "publicationPath": "/private/example/os-tree",
          "url": "https://192.0.2.10:8443/os/rhel/tree", "certificateRef": "serving-tls"}
         for host in core_request["hosts"]]}

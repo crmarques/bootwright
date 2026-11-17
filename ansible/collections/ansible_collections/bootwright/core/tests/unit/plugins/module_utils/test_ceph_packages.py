@@ -54,7 +54,7 @@ def package_request():
             "clusterNetworks": [], "hosts": hosts,
             "services": [{"service_type": "mon", "placement": {"hosts": names}}, {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
                          {"service_type": "osd", "service_id": "data", "placement": {"hosts": names}, "spec": {"data_devices": {"paths": ["/dev/vdb"]}}}],
-            "packages": {"version": "ceph-packages-v1", "licenseAccepted": True,
+            "packages": {"version": "ceph-packages-v1", "repositoryProxy": "", "licenseAccepted": True,
                          "sources": [{"host": name, "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "c" * 64, "mediaSize": 1000000,
                                       "publicationPath": "/var/lib/bootwright-hosted/example/services/artifact-server/artifacts/public/os/rhel/tree",
                                       "url": "https://192.0.2.10:8443/os/rhel/tree", "certificateRef": "serving-tls"} for name in names]}}
@@ -161,6 +161,15 @@ def boundary(package_request, monkeypatch):
 
 def prepare(package_request, boundary):
     return packages.prepare(package_request, "node-1", "public-certificate", acquisition=boundary.acquisition, journal=boundary.journal)
+
+
+def test_a_changed_package_proxy_never_reuses_the_original_package_decision(package_request, boundary):
+    prepare(package_request, boundary)
+    writes, events = list(boundary.journal.writes), list(boundary.events)
+    package_request["packages"]["repositoryProxy"] = "http://proxy.example.test:3128"
+    with pytest.raises(ceph_native.Refusal, match="^package-journal$"):
+        prepare(package_request, boundary)
+    assert boundary.journal.writes == writes and boundary.events == events
 
 
 @pytest.mark.parametrize("site, reason, written", [("repositories", "package-resolution", []), ("payloads", "package-signature", ["decision.json"])])
@@ -518,7 +527,7 @@ def test_prepare_builds_the_acquisition_with_the_bound_repository_bundle(package
         packages.prepare(package_request, "node-1", "public-certificate", trust=trust, journal=boundary.journal)
     assert received == [((sources.source_for(package_request, "node-1"), "public-certificate"),
                          {"repository": package_request["packageRepository"], "repository_key": package_request["packageRepositoryKey"],
-                          "trust": trust, "trust_ref": trust_ref})]
+                          "trust": trust, "trust_ref": trust_ref, "proxy": ""})]
     assert boundary.journal.writes == []
 
 

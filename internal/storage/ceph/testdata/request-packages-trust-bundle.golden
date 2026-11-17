@@ -92,6 +92,7 @@
   "packages": {
     "licenseAccepted": true,
     "packageRepositoryTrustBundleRef": "repository-ca",
+    "repositoryProxy": "",
     "sources": [
       {
         "certificateRef": "serving-tls",

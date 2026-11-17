@@ -210,6 +210,7 @@ request-schema:
   packages *struct ceph.PackageRequest omitempty
   packages.licenseAccepted bool
   packages.packageRepositoryTrustBundleRef string omitempty
+  packages.repositoryProxy string
   packages.sources []struct ceph.PackageSource
   packages.sources[].certificateRef string
   packages.sources[].host string

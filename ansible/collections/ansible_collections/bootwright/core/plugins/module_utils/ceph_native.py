@@ -694,6 +694,23 @@ def host_scope(request):
     return validate_scope(request)
 
 
+def package_proxy(value):
+    """A resolved CONNECT endpoint, never credentials or an ambient route."""
+    import urllib.parse
+    require(isinstance(value, str) and len(value) <= 2048, "packages")
+    if not value:
+        return None
+    require(value.isascii() and not any(ord(char) <= 32 or ord(char) >= 127 for char in value), "packages")
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        require(parsed.scheme == "http" and parsed.hostname and parsed.username is None and parsed.password is None
+                and parsed.path == parsed.query == parsed.fragment == "" and (parsed.port is None or 0 < parsed.port <= 65535)
+                and "\\" not in value and "%" not in value, "packages")
+    except ValueError:
+        raise Refusal("packages") from None
+    return parsed
+
+
 def package_url(value):
     """A frozen package/key URL with no credentials, redirects or traversal authority."""
     import urllib.parse

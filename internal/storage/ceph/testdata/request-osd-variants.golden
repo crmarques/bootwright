@@ -108,6 +108,7 @@
   "packageRepositoryKey": "",
   "packages": {
     "licenseAccepted": true,
+    "repositoryProxy": "",
     "sources": [
       {
         "certificateRef": "serving-tls",

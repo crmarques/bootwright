@@ -203,9 +203,21 @@ cluster removal retains it like the other roots.
 Freeze repository metadata, the complete signed RPM closure, authenticated
 package headers and the before/after RPM inventory in a separate durable
 package decision before installation. Acquisition reads the authored
-`packageRepository`, or its source default, over HTTPS without proxy or
-redirect and never from another repository; it verifies that repository
-against `packageRepositoryTrustBundleRef` alone when it is set and
+`packageRepository`, or its source default, over HTTPS without redirects
+and never from another repository. `packageRepositoryProxy` independently
+selects its acquisition route; omission or `direct: {}` means direct. The
+selected external Proxy supplies an unauthenticated HTTP CONNECT endpoint in
+`connection.httpsProxy`. Its bypass choice is resolved against the repository
+origin while planning and the resulting endpoint is frozen with the package
+request. This route covers metadata, payloads and the same-origin publisher
+key, while the bound hosted DVD remains direct. Neither the process
+environment nor controller, installation or subscription routes select this
+connection. Proxy failure never falls back to direct access. HTTPS proxy
+endpoints, authenticated proxies and a Proxy-bound trust bundle refuse at
+admission; origin TLS still uses the repository trust policy. A changed route
+requires a new plan and never changes an earlier frozen decision. Acquisition
+verifies that repository against `packageRepositoryTrustBundleRef` alone
+when it is set and
 against the host trust store otherwise, and a connection the anchor does not
 verify fails the package phase with a native error that names the repository
 and the anchor, never a credential; a publisher key connection that does not
