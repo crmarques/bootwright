@@ -17068,3 +17068,17 @@ the Store's unchanged ports. Every refusal, crash point and recovery is
 unchanged. Stage publication and collection and the context-tree walk stay in
 contextfs until the kernel has a checkpoint port.
 
+## X554 — The lifecycle's decision and credential service
+
+### B1524
+
+Split from B1469 under [D274](backlog.md#d274) (the rest of audit 005 W8.4).
+`AdminCredentialService` owns the administrator credential update and the
+password read with only the dependencies they use. A `decider`, built once per
+decision, holds the preparation scope as an explicit input, its own compile
+memo and narrow planning, proof and record ports (eleven read methods in place
+of the operation store's twenty-seven); the service no longer keeps a
+preparation scope or overwrites its effect-bearing kinds, and a preparation
+judges unclaimed objects by its own definition. Every plan, journal, refusal
+and golden is unchanged, and the per-decision compile and lending counts hold.
+
