@@ -142,7 +142,7 @@ func (a *admission) clusterAccess(ceph api.Value) {
 	}
 	bootstrap := ceph.Get("cephadm", "bootstrap")
 	if name := textOf(bootstrap, "nodeRef"); name != "" && ceph.Get("topology", "nodes").Len() > 0 {
-		if node, ok := lookupNode(a.object, name); ok && !nativeMember(a.object, "mon", textOf(node, "name")) {
+		if node, ok := lookupNode(a.object, name); ok && !a.placements().member("mon", textOf(node, "name")) {
 			a.invalid("$.spec.cephadm.bootstrap.nodeRef", "bootstrap node must be eligible for the declared MON service", "select a bootstrap node included by the MON service placement or expand that placement")
 		}
 	}
@@ -217,7 +217,7 @@ func (a *admission) monNetworks(ceph api.Value) {
 	}
 	for i, node := range ceph.Get("topology", "nodes").Items() {
 		m, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef"))
-		if !ok || !nativeMember(a.object, "mon", textOf(node, "name")) {
+		if !ok || !a.placements().member("mon", textOf(node, "name")) {
 			continue
 		}
 		reference := textOf(ceph, "cephadm", "addressRef")
@@ -290,7 +290,7 @@ func (a *admission) stretch(ceph api.Value) {
 	if textOf(tie, "site") == "" || textOf(node, "site") != textOf(tie, "site") || slices.Contains(sites, textOf(tie, "site")) {
 		a.invalid("$.spec.topology.stretch.tiebreaker.site", "tiebreaker must occupy its node's distinct third site", "set tiebreaker.site to its node's site, distinct from both stretch dataSites")
 	}
-	if !nativeMember(a.object, "mon", tiebreaker) {
+	if !a.placements().member("mon", tiebreaker) {
 		a.invalid("$.spec.topology.stretch.tiebreaker.node", "the tiebreaker node must be eligible for the declared MON service", "include the tiebreaker node in the mon service placement")
 	}
 	if textOf(ceph, "cephadm", "bootstrap", "nodeRef") == tiebreaker {
@@ -298,7 +298,7 @@ func (a *admission) stretch(ceph api.Value) {
 	}
 	for i, service := range ceph.Get("services").Items() {
 		kind := textOf(service, "service_type")
-		names, issues := ResolveServicePlacement(a.object, service)
+		names, issues := a.placements().resolve(service)
 		if kind != "mon" && len(issues) == 0 && slices.Contains(names, tiebreaker) {
 			a.invalid(indexed("$.spec.services", i)+".placement", "the "+kind+" service places on the stretch tiebreaker "+tiebreaker+", which runs a MON alone", "narrow this service's placement to data-site nodes")
 		}
@@ -315,10 +315,10 @@ func (a *admission) stretch(ceph api.Value) {
 			if textOf(node, "site") != site {
 				continue
 			}
-			if nativeMember(a.object, "mon", textOf(node, "name")) {
+			if a.placements().member("mon", textOf(node, "name")) {
 				mon++
 			}
-			if nativeMember(a.object, "osd", textOf(node, "name")) {
+			if a.placements().member("osd", textOf(node, "name")) {
 				osd++
 			}
 		}

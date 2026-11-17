@@ -54,7 +54,7 @@ func (a *admission) replicationCoverage(ceph api.Value, nodes []api.Value) {
 		if textOf(service, "service_type") != "osd" {
 			continue
 		}
-		names, _ := ResolveServicePlacement(a.object, service)
+		names, _ := a.placements().resolve(service)
 		for _, name := range names {
 			osdHosts[name] = true
 		}

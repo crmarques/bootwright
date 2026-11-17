@@ -206,8 +206,9 @@ func effectiveReplicas(value api.Value, size, minimum *big.Int) (*big.Int, *big.
 }
 func osdHostCount(cluster api.Object) int64 {
 	var count int64
+	placed := newPlacements(cluster)
 	for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
-		if nativeMember(cluster, "osd", textOf(node, "name")) {
+		if placed.member("osd", textOf(node, "name")) {
 			count++
 		}
 	}

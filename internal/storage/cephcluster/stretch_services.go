@@ -33,7 +33,7 @@ func (a *admission) stretchServices(ceph api.Value, sites []string) {
 			a.invalid(field+".service_type", "an NFS service on a stretch cluster has no qualified profile: cephadm creates .nfs on the default rule and its per-site front door is unqualified", "remove this nfs service, or declare it on a cluster without spec.topology.stretch; B936 delivers NFS and SMB stretch profiles")
 			continue
 		}
-		names, issues := ResolveServicePlacement(a.object, service)
+		names, issues := a.placements().resolve(service)
 		if len(issues) != 0 {
 			continue
 		}
@@ -70,7 +70,7 @@ func (a *admission) stretchServices(ceph api.Value, sites []string) {
 		ingresses := fronts[name]
 		switch {
 		case len(ingresses) == 0:
-			names, issues := ResolveServicePlacement(a.object, service)
+			names, issues := a.placements().resolve(service)
 			if count := service.Get("placement", "count"); len(issues) == 0 && count.Present() && numeric(count).Cmp(big.NewInt(int64(len(names)))) != 0 {
 				a.invalid(field+".placement.count", "an rgw service of a stretch cluster without ingresses is reached at every host's address, so every placed host runs a daemon", "omit placement.count or set it to the number of placed hosts, or front this service with one ingress per data site")
 			}

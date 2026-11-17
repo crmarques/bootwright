@@ -121,8 +121,9 @@ func normalizeCluster(object api.Object, catalog api.Catalog) api.Value {
 		}
 		if !stretch.Has("dataSites") {
 			sites := []string{}
+			placed := newPlacements(cluster)
 			for _, node := range nodes {
-				if textOf(node, "name") != tie && nativeMember(cluster, "mon", textOf(node, "name")) && textOf(node, "site") != "" && !slices.Contains(sites, textOf(node, "site")) {
+				if textOf(node, "name") != tie && placed.member("mon", textOf(node, "name")) && textOf(node, "site") != "" && !slices.Contains(sites, textOf(node, "site")) {
 					sites = append(sites, textOf(node, "site"))
 				}
 			}

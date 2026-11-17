@@ -11,7 +11,7 @@ import (
 
 // stretchCatalog is the reference stretch shape: three OSD hosts at each data
 // site and a provided tiebreaker at a third site on its own routed subnet.
-func stretchCatalog(t *testing.T, change func(api.Value) api.Value) (api.Object, api.Catalog) {
+func stretchCatalog(t testing.TB, change func(api.Value) api.Value) (api.Object, api.Catalog) {
 	t.Helper()
 	catalog := replace(replace(fixtureCatalog(), lanNetwork("tiebreaker", "198.51.100.0/24")), object(api.Environment, "environment", m("domains", m("base", "example.test"), "remoteMachinesAccessKey", m("keyRef", "fleet-key"),
 		"sites", []api.Value{m("name", "site-a"), m("name", "site-b"), m("name", "site-c")})))

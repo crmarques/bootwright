@@ -135,26 +135,13 @@ func SerialSelection(catalog api.Catalog, m api.Object, path string) (serial str
 	return serial, size, "", ""
 }
 
-func nativeMember(cluster api.Object, serviceType, nodeName string) bool {
-	for _, service := range cluster.Spec().Get("services").Items() {
-		if textOf(service, "service_type") != serviceType {
-			continue
-		}
-		names, issues := ResolveServicePlacement(cluster, service)
-		if len(issues) == 0 && slices.Contains(names, nodeName) {
-			return true
-		}
-	}
-	return false
-}
-
 func (a *admission) nativeAllocationConflicts(ceph api.Value) {
 	owned := map[string]bool{}
 	for i, service := range ceph.Get("services").Items() {
 		if textOf(service, "service_type") != "osd" {
 			continue
 		}
-		names, issues := ResolveServicePlacement(a.object, service)
+		names, issues := a.placements().resolve(service)
 		if len(issues) != 0 {
 			continue
 		}

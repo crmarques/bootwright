@@ -94,7 +94,7 @@ func replace(catalog api.Catalog, replacement api.Object) api.Catalog {
 	}
 	return api.NewCatalog(append(objects, replacement))
 }
-func find(t *testing.T, catalog api.Catalog, kind api.Kind, name string) api.Object {
+func find(t testing.TB, catalog api.Catalog, kind api.Kind, name string) api.Object {
 	t.Helper()
 	object, ok := catalog.Find(kind, name)
 	if !ok {

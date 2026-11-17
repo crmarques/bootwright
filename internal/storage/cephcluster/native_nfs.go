@@ -47,7 +47,7 @@ func (a *admission) nfsDirect(service api.Value, field string) {
 func (a *admission) nfsMode(service api.Value, field string, ingress api.Value, ingressField string) {
 	spec, front := service.Get("spec"), ingress.Get("spec")
 	flag := spec.Get("enable_haproxy_protocol").Bool()
-	hosts, _ := ResolveServicePlacement(a.object, service)
+	hosts, _ := a.placements().resolve(service)
 	count := service.Get("placement", "count")
 	switch {
 	case front.Get("keepalive_only").Bool():

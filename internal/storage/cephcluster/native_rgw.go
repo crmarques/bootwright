@@ -62,7 +62,7 @@ func (a *admission) tlsBindingRules(service api.Value, field string, terminates 
 }
 
 func (a *admission) rgwBehindIngress(service api.Value, field string) {
-	if hosts, _ := ResolveServicePlacement(a.object, service); len(hosts) < 2 {
+	if hosts, _ := a.placements().resolve(service); len(hosts) < 2 {
 		a.issue("api.invariant", field+".placement", "an RGW service behind an ingress needs at least two eligible hosts", "select at least two declared storage hosts in the RGW placement")
 	}
 	if count := service.Get("placement", "count"); count.Present() && numeric(count).Cmp(big.NewInt(2)) < 0 {

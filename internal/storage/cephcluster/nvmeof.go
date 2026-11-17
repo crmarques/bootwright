@@ -89,7 +89,7 @@ func (a *admission) nvmeofGraph(ceph api.Value) {
 		if textOf(service, "service_type") != "nvmeof" {
 			continue
 		}
-		hosts, _ := ResolveServicePlacement(a.object, service)
+		hosts, _ := a.placements().resolve(service)
 		gateway := nvmeofGateway{field: indexed("$.spec.services", i), group: textOf(service, "spec", "group"), hosts: hosts}
 		for _, earlier := range gateways {
 			if gateway.group != "" && gateway.group == earlier.group {

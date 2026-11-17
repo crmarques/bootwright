@@ -13,6 +13,7 @@ type admission struct {
 	catalog api.Catalog
 	issues  []api.Issue
 	partial bool
+	placed  *placements
 }
 
 func isStorage(kind api.Kind) bool {
