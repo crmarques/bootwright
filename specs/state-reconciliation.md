@@ -2613,7 +2613,8 @@ content before erase, and releases the hardware claim only after erase. Removal
 consumes `data-loss`, and its plan names a `boot-offline-erase <machine>`
 impact and one `logical-overwrite <deviceName>` or `metadata-clear <deviceName>`
 impact per target, `serial:<serialNumber>` standing for the `deviceName` of a
-target without one. It never chooses disks from authorization or discovery.
+target without one, unless a [removal-time relaxation](#removal-time-relaxation)
+changes them. It never chooses disks from authorization or discovery.
 An original installation block proved never started is retained without booting
 or writing disks; the policy's removal records retention, never an erase receipt.
 Missing original records refuse rather than imply that no installation started.
@@ -2758,6 +2759,42 @@ A complete receipt records, per target, its method and written and verified
 byte counts equal to that method's coverage: the size for `logicalOverwrite`,
 the merged region total for `metadataClear`. Go and the worker compute the
 same regions and refuse any other count.
+
+#### Removal-time relaxation
+
+An [erase relaxation](#erase-relaxation) of one Machine,
+`erase=<machine>:metadataClear` or `erase=<machine>:retain`, applies to all its
+targets, root included, and only toward less. It is frozen in the removal
+block: the apply's erase request, its digest, the content digest and every
+effect pin stay what they were, so no request or evidence version moves, and
+the run hands the adapter that frozen request unchanged with the method as the
+`relaxationBase64` value; an unrelaxed run carries no such value. `metadataClear`
+refuses for a Machine whose every target already clears only metadata.
+
+Under `metadataClear` the removal runs as declared except that every target's
+method is `metadataClear`. Its plan names `relax-erase <machine>
+(--authorize erase=<machine>:metadataClear)` beside `boot-offline-erase
+<machine>`, and `metadata-clear <deviceName> (relaxed from logical-overwrite)`
+for a target the policy overwrites. The complete receipt records the method
+used, and Go and every reader validate it against the relaxed targets: a
+receipt of the declared `logicalOverwrite` coverage does not prove the relaxed
+removal, and a relaxed receipt never proves an unrelaxed one.
+
+`retain` waives the erase. Its plan names `retain-disks <machine> (erase
+waived; data, installed OS and Ceph host state remain)` and
+`unproved-power-and-media <machine> (power and media state unproved; an
+earlier removal's erase worker may still be running)`, and its result says
+the same. It never contacts the management controller or boots the worker: its
+run is handed no controller, fleet or certificate material and no pinned
+identity, only `relaxationBase64`, the original attempt and the apply operation.
+On the execution host it withdraws this block's own leftover private erase
+publication and boot-private custody, reports custody another removal holds
+without deleting it, and records retention, `prepared`, `removed` and
+`retained` with no receipt. Its observation reads that retention as completed
+and anything short of it as partial, which the destroy repeats. A waived
+retention never reads as a never-started installation's retention, and
+[physical Ceph retirement](ceph.md#devices-and-destructive-ownership) accepts
+it.
 
 #### Device-mapper holder release
 

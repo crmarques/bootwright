@@ -197,3 +197,48 @@ func physicalCephUnstartedExecution(t *testing.T, plan, inverse reconciliation.P
 	}
 	return execution
 }
+
+func TestPhysicalCephRetirementPassesOverAWaivedEraseAndNoOtherRetention(t *testing.T) {
+	t.Parallel()
+	for _, relaxation := range []string{lifecycle.EraseRetain, ""} {
+		t.Run("relaxation "+relaxation, func(t *testing.T) {
+			plan := physicalCephRetirementPlan(t, false)
+			policy, _ := plan.Block(ceph.PhysicalRetirementBlockID("ceph-lab"))
+			states := map[string]reconciliation.BlockState{policy.ID: reconciliation.BlockDone}
+			for _, block := range plan.Blocks {
+				if block.Implementation != physicalerase.EraseImplementation && block.Implementation != installation.Implementation {
+					continue
+				}
+				states[block.ID] = reconciliation.BlockDone
+				for id := range physicalCephAncestors(plan, block.ID) {
+					states[id] = reconciliation.BlockDone
+				}
+			}
+			inverse, err := reconciliation.OwnedSubset(plan, states).Inverse()
+			if err != nil {
+				t.Fatal(err)
+			}
+			execution := physicalCephUnstartedExecution(t, plan, inverse, states, policy)
+			for index := range execution.RemovalProved {
+				execution.RemovalProved[index].Removed.Block.Relaxation = relaxation
+			}
+			capability := ceph.NewPhysicalRetirement().WithProofs(cephDependencyProofs{}).WithErasureProofs(physicalCephEraseProof).WithUninstalledProofs(physicalerase.PhysicalEraseUnstarted)
+			result, err := capability.Destroy(context.Background(), execution)
+			if relaxation == "" {
+				if reported := diagnostics.Of(err); len(reported) != 1 || !strings.Contains(reported[0].Message, "physical erase evidence does not prove this operation") {
+					t.Fatalf("a retention of a started installation counted as its erase: %+v", reported)
+				}
+				return
+			}
+			var proof ceph.PhysicalRetirementEvidence
+			if err != nil || json.Unmarshal(result.Evidence, &proof) != nil || !proof.Retired || len(proof.Receipts) != 3 {
+				t.Fatalf("retirement over a waived erase refused: %s %+v", result.Evidence, diagnostics.Of(err))
+			}
+			for _, receipt := range proof.Receipts {
+				if receipt.RetainedWithoutInstall || receipt.Block != physicalerase.EraseBlockID(receipt.Machine) || receipt.Digest == "" {
+					t.Fatalf("the waived erase retired as %+v", receipt)
+				}
+			}
+		})
+	}
+}

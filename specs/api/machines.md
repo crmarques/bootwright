@@ -836,7 +836,10 @@ because a map key is no path segment.
 
 `hardware.eraseOnRemoval` opts a Bootwright-installed bare-metal Machine into
 [physical erase](../state-reconciliation.md#opt-in-physical-logical-overwrite)
-on removal; omission retains its disks.
+on removal; omission retains its disks. One `destroy` may clear only metadata or
+retain the disks through an
+[erase relaxation](../state-reconciliation.md#removal-time-relaxation), which
+leaves this field and the frozen policy unchanged.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |

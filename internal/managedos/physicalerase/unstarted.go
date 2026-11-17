@@ -83,6 +83,9 @@ func PhysicalEraseUnstarted(original []lifecycle.BlockEvidence, removed []lifecy
 		pair.Removed.Block.RequestDigest != policy.Block.RequestDigest || !bytes.Equal(pair.Removed.Block.Request, policy.Block.Request) {
 		return unknown()
 	}
+	if pair.Removed.Block.Relaxation == lifecycle.EraseRetain {
+		return false, nil
+	}
 	proof, err := reconciliation.DecodeEvidence[EraseEvidence](pair.Removed.Evidence, 32768, "physical erase retention")
 	if err != nil {
 		return false, err

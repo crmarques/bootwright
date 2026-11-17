@@ -124,7 +124,7 @@ func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (li
 	if err != nil {
 		return lifecycle.Removal{}, err
 	}
-	return lifecycle.Removal{Description: eraseDescription + request.Install.Identity.Object, Impacts: eraseImpacts(request), Groups: eraseGroups(request), Consumes: []string{reconciliation.AuthorizationDataLoss}}, nil
+	return eraseRemoval(request, ""), nil
 }
 
 func eraseGroups(request EraseRequest) []reconciliation.Group {
@@ -142,8 +142,16 @@ func eraseGroups(request EraseRequest) []reconciliation.Group {
 
 const eraseDescription = "overwrite and read back the declared physical disks of "
 
-func eraseImpacts(request EraseRequest) []string {
+func eraseImpacts(request EraseRequest) []string { return removalImpacts(request, "") }
+
+func removalImpacts(request EraseRequest, relaxation string) []string {
+	if relaxation == lifecycle.EraseRetain {
+		return relaxedImpacts(request, relaxation)
+	}
 	impacts := []string{"boot-offline-erase " + request.Install.Identity.Object}
+	if relaxation != "" {
+		impacts = append(impacts, relaxedImpacts(request, relaxation)...)
+	}
 	if request.Install.Target.Controller.VirtualMedia.EnableVerification {
 		impacts = append(impacts, "enable-bmc-media-verification "+request.Install.Identity.Object+" (BMC-wide; retained)")
 	}
@@ -154,11 +162,14 @@ func eraseImpacts(request EraseRequest) []string {
 		}
 	}
 	for _, target := range request.Targets {
-		verb := "logical-overwrite "
-		if target.Method == EraseMetadataClear {
-			verb = "metadata-clear "
+		impact := "logical-overwrite " + eraseTargetName(target)
+		switch {
+		case target.Method == EraseMetadataClear:
+			impact = "metadata-clear " + eraseTargetName(target)
+		case relaxation == lifecycle.EraseMetadataClear:
+			impact = "metadata-clear " + eraseTargetName(target) + " (relaxed from logical-overwrite)"
 		}
-		impacts = append(impacts, verb+eraseTargetName(target))
+		impacts = append(impacts, impact)
 	}
 	return impacts
 }
@@ -196,11 +207,18 @@ func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) 
 		proof, _ := json.Marshal(EraseEvidence{Version: EraseImplementation, Request: execution.Block.RequestDigest, Prepared: true, Removed: true, Retained: true})
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: proof}, nil
 	}
-	result, err := c.run(ctx, execution, request, "destroy")
+	if execution.Block.Relaxation == lifecycle.EraseRetain {
+		return c.destroyWaived(ctx, execution, request)
+	}
+	effective, err := relaxedRequest(request, execution.Block.Relaxation)
+	if err != nil {
+		return lifecycle.Result{}, err
+	}
+	result, err := c.run(ctx, execution, request, effective, "destroy")
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	if err = eraseEvidence(result.Evidence, request, execution.Block.RequestDigest, true); err != nil {
+	if err = eraseEvidence(result.Evidence, effective, execution.Block.RequestDigest, true); err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
 	}
 	return lifecycle.Result{Outcome: reconciliation.OutcomeChanged, Evidence: result.Evidence}, nil
@@ -219,12 +237,19 @@ func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Exec
 		proof, _ := json.Marshal(EraseEvidence{Version: EraseImplementation, Request: execution.Block.RequestDigest, Prepared: true, Removed: true, Retained: true})
 		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: proof}, nil
 	}
-	result, err := c.run(ctx, execution, request, "observe")
+	if execution.Block.Relaxation == lifecycle.EraseRetain {
+		return c.observeWaived(ctx, execution, request)
+	}
+	effective, err := relaxedRequest(request, execution.Block.Relaxation)
+	if err != nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+	}
+	result, err := c.run(ctx, execution, request, effective, "observe")
 	if err != nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
 	}
 	effect := reconciliation.EffectUnknown
-	if eraseEvidence(result.Evidence, request, execution.Block.RequestDigest, true) == nil {
+	if eraseEvidence(result.Evidence, effective, execution.Block.RequestDigest, true) == nil {
 		effect = reconciliation.EffectCompleted
 	} else if eraseUnfinished(result.Evidence, execution.Block.RequestDigest) {
 		effect = reconciliation.EffectPartial
@@ -297,7 +322,7 @@ func (c Capability) identity(execution lifecycle.Execution, request EraseRequest
 	return pin.PinValues(""), nil
 }
 
-func (c Capability) run(ctx context.Context, execution lifecycle.Execution, request EraseRequest, operation string) (lifecycle.RunResult, error) {
+func (c Capability) run(ctx context.Context, execution lifecycle.Execution, request, effective EraseRequest, operation string) (lifecycle.RunResult, error) {
 	if c.runner == nil {
 		return lifecycle.RunResult{}, refusal("lifecycle.state", "physical erase runner is missing", "")
 	}
@@ -331,6 +356,9 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, requ
 	values["authorizedKey"] = key
 	values["originalAttempt"] = fmt.Sprintf("%s/%s/%d", execution.Operation, execution.Block.ID, execution.Attempt)
 	values["applyOperation"] = execution.ApplyOperation
+	if execution.Block.Relaxation != "" {
+		values["relaxationBase64"] = base64.StdEncoding.EncodeToString([]byte(execution.Block.Relaxation))
+	}
 	if values["applyOperation"] == "" {
 		return lifecycle.RunResult{}, refusal("lifecycle.state", "physical erase has no original apply operation", "")
 	}
@@ -352,7 +380,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, requ
 		deadline = 3 * time.Minute
 	}
 	validate := func(data json.RawMessage) error {
-		return eraseLineage(data, request, execution, values["pinnedUUIDBase64"])
+		return eraseLineage(data, effective, execution, values["pinnedUUIDBase64"])
 	}
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: EraseImplementation, Operation: operation, Variable: eraseVariable, Canonical: canonical,
 		Placement: install.Placement, Materials: materials, Values: values, Deadline: deadline, RemovalPreparation: validate,

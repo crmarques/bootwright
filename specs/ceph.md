@@ -1331,6 +1331,13 @@ so consumer removal and managed-OS cleanup can precede the offline erase worker.
 A separate terminal verification block then matches every complete original-policy
 erase receipt to the original machine UUID, complete MAC set and observed Ceph
 disk serial and capacity, and its WWN where the erase target declares one. Only that terminal proof permits claim release.
+An [erase relaxation](state-reconciliation.md#removal-time-relaxation) of one
+destroy is honored the same way: a complete `metadataClear` receipt of the
+relaxed removal, or its waived retention matched by the original policy's
+targets and MAC set, retires the host, because retirement proves the cluster
+no longer uses the disks, not that they are blank. A waived host keeps every
+byte of its disks, and a waived root keeps its installed OS and Ceph host
+state, since the host's native cleanup runs only for a root the policy retains.
 A stopped host, a released claim, or a pending disposition proves no erasure.
 
 When the original core cluster block is positively unstarted, the terminal

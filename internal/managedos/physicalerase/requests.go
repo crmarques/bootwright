@@ -219,12 +219,7 @@ func validateEraseReceipt(receipt *EraseReceipt, request EraseRequest, digest st
 	if receipt == nil || receipt.Version != EraseImplementation || receipt.State != "complete" || receipt.Request != digest || receipt.OriginalAttempt == "" || receipt.UUID == "" || len(receipt.Targets) != len(request.Targets) {
 		return refusal("lifecycle.state", "physical erase has no complete original-attempt receipt", "continue the same removal to reprove the target and read back every erased byte")
 	}
-	var macs []string
-	for _, nic := range request.Install.Target.Hardware.Interfaces {
-		macs = append(macs, strings.ToLower(nic.MACAddress))
-	}
-	slices.Sort(macs)
-	if !slices.Equal(receipt.MACs, macs) {
+	if !slices.Equal(receipt.MACs, eraseMACs(request)) {
 		return refusal("lifecycle.state", "physical erase receipt has another complete MAC set", "restore the original operation records")
 	}
 	for index, target := range request.Targets {
@@ -262,7 +257,17 @@ func PhysicalEraseProof(applied reconciliation.Block, removed lifecycle.BlockEvi
 	if err != nil {
 		return EraseReceipt{}, false, err
 	}
-	if err := eraseEvidence(removed.Evidence, request, applied.RequestDigest, true); err != nil {
+	if removed.Block.Relaxation == lifecycle.EraseRetain {
+		if !waivedRetention(removed.Evidence, applied.RequestDigest) {
+			return EraseReceipt{}, false, refusal("lifecycle.state", "physical erase waiver evidence does not prove this removal", "restore the original removal records")
+		}
+		return waivedProof(request, applied.RequestDigest), true, nil
+	}
+	effective, err := relaxedRequest(request, removed.Block.Relaxation)
+	if err != nil {
+		return EraseReceipt{}, false, err
+	}
+	if err := eraseEvidence(removed.Evidence, effective, applied.RequestDigest, true); err != nil {
 		return EraseReceipt{}, false, err
 	}
 	proof, err := reconciliation.DecodeEvidence[EraseEvidence](removed.Evidence, 32768, "physical erase")
