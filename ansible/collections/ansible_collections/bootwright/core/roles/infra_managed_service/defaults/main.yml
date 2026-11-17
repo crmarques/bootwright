@@ -12,21 +12,12 @@ infra_managed_service_service: '{{ bootwright_managed_service_request.unit }}.se
 infra_managed_service_tls_dir: '{{ bootwright_managed_service_request.contentRoot }}/tls'
 infra_managed_service_auth_dir: '{{ bootwright_managed_service_request.contentRoot }}/auth'
 infra_managed_service_data_dir: '{{ bootwright_managed_service_request.contentRoot }}/data'
-# A registry's container runs at one SELinux level derived from its unit, so
-# the storage it writes stays readable across every start.
-infra_managed_service_label_level: >-
-  {%- set digest = bootwright_managed_service_request.unit | hash('sha256') -%}
-  {%- set first = (digest[0:4] | int(base=16)) % 1024 -%}
-  {%- set second = (digest[4:8] | int(base=16)) % 1023 -%}
-  {%- set second = second + 1 if second >= first else second -%}
-  s0:c{{ [first, second] | min }},c{{ [first, second] | max }}
+# A registry's container runs at the one SELinux level Go froze from its unit,
+# so the storage it writes stays readable across every start.
+infra_managed_service_label_level: '{{ bootwright_managed_service_request.labelLevel }}'
 # Whether the running registry answered every probe target with the bound
-# credential while presenting the bound certificate.
-infra_managed_service_credential_accepted: >-
-  {{ (infra_managed_service_accepted.observation.unit | default('')) == 'active'
-     and (infra_managed_service_accepted.failures | default(['unproved'])) | length == 0
-     and (infra_managed_service_accepted.answers | default([])) | length > 0
-     and (infra_managed_service_accepted.answers | default([]) | selectattr('answer', 'equalto', 'certificate-mismatch') | list | length) == 0 }}
+# credential while presenting the bound certificate, as its inspection judged.
+infra_managed_service_credential_accepted: '{{ infra_managed_service_accepted.accepted | default(false) }}'
 infra_managed_service_runs_from: >-
   {{ [infra_managed_service_configuration_path]
      + ([infra_managed_service_tls_dir ~ '/tls.crt', infra_managed_service_tls_dir ~ '/tls.key']

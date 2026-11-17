@@ -75,6 +75,9 @@ argument_specs:
               - NTPServer
               - Proxy
               - Registry
+          labelLevel:
+            type: str
+            required: false
           localZones:
             type: list
             elements: str

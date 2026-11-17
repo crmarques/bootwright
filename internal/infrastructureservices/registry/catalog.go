@@ -1,6 +1,9 @@
 package registry
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"fmt"
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -56,7 +59,18 @@ func extend(catalog api.Catalog, spec api.Value, request *managedservice.Request
 	}
 	request.TLS = &managedservice.TLS{MinVersion: minimum, Secret: tls}
 	request.CredentialsRef = credential
+	request.LabelLevel = LabelLevel(request.Unit)
 	return nil
+}
+
+func LabelLevel(unit string) string {
+	sum := sha256.Sum256([]byte(unit))
+	first := int(binary.BigEndian.Uint16(sum[0:2])) % 1024
+	second := int(binary.BigEndian.Uint16(sum[2:4])) % 1023
+	if second >= first {
+		second++
+	}
+	return fmt.Sprintf("s0:c%d,c%d", min(first, second), max(first, second))
 }
 
 func certificate(material map[string]secrets.Material, secret, contextName string, addresses []string, now time.Time, registered bool) (string, error) {

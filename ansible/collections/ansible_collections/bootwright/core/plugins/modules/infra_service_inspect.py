@@ -96,6 +96,13 @@ bindAddressAssigned:
   description: Whether the explicit bind address is usable on this host, or the address is a wildcard.
   returned: when bind_address is requested
   type: bool
+accepted:
+  description:
+    - Whether the active service answered every probe target, a registry with
+      the credential it was handed and none of them presenting another
+      certificate than the bound one.
+  returned: when readiness is requested
+  type: bool
 unproved:
   description: Addresses that did not answer within the bounded window.
   returned: always
@@ -137,6 +144,12 @@ def answer_for(request, address, credential):
     if kind == "Registry":
         return probe_registry(address, port, *credential)
     raise ValueError("kind")
+
+
+def accepted(observation, failures, answers):
+    """Whether the active service answered every probe target, none of them with a certificate other than the bound one."""
+    return (observation.get("unit") == "active" and not failures and bool(answers)
+            and not any(entry["answer"] == "certificate-mismatch" for entry in answers))
 
 
 def main():
@@ -203,6 +216,7 @@ def main():
     result["answers"] = answers
     result["failures"].sort(key=lambda failure: failure["reason"] == "readiness-timeout")
     result["unproved"] = unproved
+    result["accepted"] = accepted(observation, result["failures"], answers)
     module.exit_json(**result)
 
 

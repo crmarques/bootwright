@@ -148,7 +148,8 @@ func TestARegistryFreezesItsServingAndClientSecretsAndLendsEachOperationItsParts
 	if request.TLS == nil || *request.TLS != (managedservice.TLS{MinVersion: "TLSv1.3", Secret: "mirror-serving"}) || request.CredentialsRef != "mirror-push" {
 		t.Fatalf("the request froze %+v and %q", request.TLS, request.CredentialsRef)
 	}
-	if request.Unit != "bootwright-lab-registry-mirror" || !strings.HasSuffix(request.ContentRoot, "/lab/services/registry/mirror") || request.Port != 5000 {
+	if request.Unit != "bootwright-lab-registry-mirror" || !strings.HasSuffix(request.ContentRoot, "/lab/services/registry/mirror") || request.Port != 5000 ||
+		request.LabelLevel != "s0:c537,c638" {
 		t.Fatalf("the request places the registry at %s, %s:%d", request.Unit, request.ContentRoot, request.Port)
 	}
 	if !slices.Equal(plan.Secrets, []string{"mirror-push", "mirror-serving"}) {
@@ -259,6 +260,22 @@ func TestARegistryIsPresentOnlyWhenItPresentsTheBoundCertificate(t *testing.T) {
 		}
 		if tc.outcome == reconciliation.OutcomeFailed && !strings.Contains(message(err), "different certificate") {
 			t.Errorf("%s: refused as %v", name, err)
+		}
+	}
+}
+
+// The level each unit's container and storage run at is the one the role
+// derived from the unit before Go froze it, so a registry that already holds
+// storage keeps reading it; the first case is the role's own template golden.
+func TestARegistryFreezesTheSELinuxLevelItsUnitDerives(t *testing.T) {
+	for unit, level := range map[string]string{
+		"bootwright-lab-rhel-registry-mirror": "s0:c130,c165",
+		"bootwright-lab-registry-mirror":      "s0:c537,c638",
+		"bootwright-example-registry-cache":   "s0:c314,c387",
+		"bootwright-x-registry-a":             "s0:c233,c762",
+	} {
+		if got := LabelLevel(unit); got != level {
+			t.Errorf("unit %s runs at %s, want %s", unit, got, level)
 		}
 	}
 }

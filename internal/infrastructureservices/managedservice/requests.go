@@ -45,6 +45,7 @@ type Request struct {
 	Implementation string            `json:"implementation"`
 	IngressHosts   []string          `json:"ingressHosts,omitempty"`
 	Kind           string            `json:"kind"`
+	LabelLevel     string            `json:"labelLevel,omitempty"`
 	LocalZones     []string          `json:"localZones,omitempty"`
 	Placement      machine.Placement `json:"placement"`
 	Port           int               `json:"port"`

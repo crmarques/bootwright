@@ -15,6 +15,9 @@
         bootwright_managed_service_request.contentRoot.split('/')[1:]
         | select('in', ['', '.', '..']) | list | length == 0
       - >-
+        bootwright_managed_service_request.kind != 'Registry'
+        or bootwright_managed_service_request.labelLevel | default('') is match('^s0:c[0-9]{1,4},c[0-9]{1,4}$(?!\n)')
+      - >-
         (bootwright_managed_service_request.contentRoot | dirname | dirname | dirname)
         == '/var/lib/bootwright-hosted/' ~ bootwright_managed_service_request.identity.context
       - bootwright_managed_service_request.image is search('@sha256:[0-9a-f]{64}$(?!\n)')

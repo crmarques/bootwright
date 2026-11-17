@@ -145,7 +145,7 @@ def scope(role, tls):
         request["tls"] = {"minVersion": "TLSv1.2"} if tls else {}
         variables["bootwright_artifact_server_material"] = MATERIAL if tls else {}
     if role == "Registry":
-        request.update({"tls": {"minVersion": "TLSv1.2", "secret": "mirror-serving"}, "credentialsRef": "mirror-push"})
+        request.update({"tls": {"minVersion": "TLSv1.2", "secret": "mirror-serving"}, "credentialsRef": "mirror-push", "labelLevel": "s0:c537,c638"})
         variables["bootwright_managed_service_material"] = dict(MATERIAL, **CLIENT)
     variables.update({service["request"]: request, service["digest"]: DIGEST})
     return variables

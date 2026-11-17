@@ -210,3 +210,27 @@ def test_a_host_command_past_its_bound_fails_the_observation(service, monkeypatc
     monkeypatch.setattr(bounded_process, "run", outran)
     result = run({"request": request}, capsys)
     assert result["failed"] is True and result["msg"] == "the managed service could not be observed: TimeoutError"
+
+
+# The inspection judges whether the running registry accepts the credential it
+# was handed, so the role reads one boolean rather than re-deriving it.
+@pytest.mark.parametrize("unit, answers, accepted", [
+    ("active", ["HTTP/1.1 200 OK", "HTTP/1.1 200 OK"], True),
+    ("active", ["HTTP/1.1 200 OK", "certificate-mismatch"], False),
+    ("active", [None], False),
+    ("inactive", ["HTTP/1.1 200 OK"], False),
+])
+def test_the_inspection_reports_whether_the_registry_accepts_the_credential(monkeypatch, capsys, unit, answers, accepted):
+    monkeypatch.setattr(inspect, "observe", lambda *_: {"unit": unit})
+    addresses = ["192.0.2.%d" % index for index in range(1, len(answers) + 1)]
+    monkeypatch.setattr(inspect, "probe_targets", lambda _: addresses)
+
+    def answer(_request, address, _credential):
+        given = answers[addresses.index(address)]
+        if given is None:
+            raise ConnectionRefusedError()
+        return given, "b" * 64
+    monkeypatch.setattr(inspect, "answer_for", answer)
+    result = run({"request": {"port": 5000, "kind": "Registry"}, "readiness": True, "attempts": 1, "authorization": "dG9rZW4="}, capsys)
+    assert result["accepted"] is accepted
+    assert "accepted" not in run({"request": {"port": 5000, "kind": "Registry"}}, capsys)

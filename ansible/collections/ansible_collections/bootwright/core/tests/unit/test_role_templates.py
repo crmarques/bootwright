@@ -141,9 +141,11 @@ SCOPES = {
     ("infra_managed_service", "squid.container.j2"): {"bootwright_managed_service_request": service(
         "Proxy", "proxy-squid", "egress", 3128)},
     ("infra_managed_service", "distribution.yml.j2"): {"bootwright_managed_service_request": service(
-        "Registry", "registry", "mirror", 5000, credentialsRef="mirror-push", tls={"minVersion": "TLSv1.3", "secret": "mirror-serving"})},
+        "Registry", "registry", "mirror", 5000, credentialsRef="mirror-push", labelLevel="s0:c130,c165",
+        tls={"minVersion": "TLSv1.3", "secret": "mirror-serving"})},
     ("infra_managed_service", "distribution.container.j2"): {"bootwright_managed_service_request": service(
-        "Registry", "registry", "mirror", 5000, credentialsRef="mirror-push", tls={"minVersion": "TLSv1.2", "secret": "mirror-serving"})},
+        "Registry", "registry", "mirror", 5000, credentialsRef="mirror-push", labelLevel="s0:c130,c165",
+        tls={"minVersion": "TLSv1.2", "secret": "mirror-serving"})},
     ("substrate_libvirt_host", "network.xml.j2"): {
         "bootwright_substrate_host_request": HOST, "item": NETWORK,
         "substrate_libvirt_host_network_uuids": {NETWORK["name"]: "4c0a4300-aa43-458c-86d7-ac2256d1fc00"}},

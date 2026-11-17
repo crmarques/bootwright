@@ -867,7 +867,8 @@ three `0700` directories: `tls`, with the serving certificate and private key;
 [artifact server's](#managed-artifact-serving) private files are, atomically
 from a private sibling, never through a link. On a host that enforces SELinux
 the unit pins the container's level, `s0:c<a>,c<b>` with two categories
-derived from the unit name, the apply labels `data` `container_file_t` at that
+derived from the unit name, which the request freezes as `labelLevel`
+(`TestARegistryFreezesTheSELinuxLevelItsUnitDerives`), the apply labels `data` `container_file_t` at that
 level, and `data` is mounted
 without relabeling, so a start never walks a store that may be large and what
 one start wrote the next reads. When any entry of `data` carries another label,

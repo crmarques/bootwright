@@ -28,6 +28,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 from ansible.template import Templar, trust_as_template
+from ansible_collections.bootwright.core.plugins.modules import infra_service_inspect
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[2]
@@ -597,7 +598,8 @@ def role_defaults():
 
 # The lent password file carries a fresh salt every apply, so it is published
 # only when the running registry does not already answer the bound credential
-# on every target while presenting the bound certificate.
+# on every target while presenting the bound certificate, as the inspection
+# module judges it and the role reads it.
 @pytest.mark.parametrize("accepted, published", [
     ({"observation": {"unit": "active"}, "failures": [], "answers": [{"answer": "HTTP/1.1 200 OK"}]}, False),
     ({"observation": {"unit": "active"}, "failures": [{"reason": "listener-failed"}], "answers": []}, True),
@@ -611,6 +613,8 @@ def test_the_password_file_is_published_only_when_the_running_registry_refuses_t
     publish = index_of(tasks, lambda task: str((task.get("bootwright.core.private_file") or {}).get("path", "")).endswith("/htpasswd"),
                        "publishes the password file")
     assert ask < publish and tasks[ask].get("no_log") is True
+    if "observation" in accepted:
+        accepted = dict(accepted, accepted=infra_service_inspect.accepted(accepted["observation"], accepted["failures"], accepted["answers"]))
     variables = dict(role_defaults(), bootwright_managed_service_request={"credentialsRef": "mirror-push"}, infra_managed_service_accepted=accepted)
     templar = Templar(loader=LOADER, variables=variables)
     assert all(templar.evaluate_conditional(condition) for condition in tasks[publish]["when"]) is published
@@ -681,3 +685,18 @@ def test_derived_dns_local_zones_cover_the_input_document_bound():
     assert holds(task, variables("bootwright_managed_service", request))
     request["localZones"].append("one-more.example.test")
     assert not holds(task, variables("bootwright_managed_service", request))
+
+
+# A registry runs at the level Go froze, so a request that carries none, as
+# one an earlier build froze, is refused before any effect.
+@pytest.mark.parametrize("request_value, admitted", [
+    ({"kind": "Registry", "labelLevel": "s0:c537,c638"}, True),
+    ({"kind": "Registry"}, False),
+    ({"kind": "Registry", "labelLevel": "s0:c537,c638\n"}, False),
+    ({"kind": "Proxy"}, True),
+])
+def test_a_registry_request_must_carry_its_frozen_label_level(request_value, admitted):
+    validation = load_tasks("infra_managed_service", "apply.yml")[0]["ansible.builtin.assert"]["that"]
+    [condition] = [condition for condition in validation if "labelLevel" in condition]
+    templar = Templar(loader=LOADER, variables={"bootwright_managed_service_request": request_value})
+    assert templar.evaluate_conditional(condition) is admitted
