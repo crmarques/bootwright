@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 )
 
 func TestEveryAdmittedCLIVersionPassesTheToolScreen(t *testing.T) {
@@ -153,7 +153,7 @@ func TestARetainedReleaseNeedsNoMetadataAndAConflictingIdentityRefuses(t *testin
 }
 
 func TestAPinnedToolComesFromItsMirrorWithNoPublisherMetadata(t *testing.T) {
-	pin, _, err := controller.PinOf("helm")
+	pin, _, err := tooltable.PinOf("helm")
 	if err != nil {
 		t.Fatal(err)
 	}

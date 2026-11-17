@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -68,11 +68,11 @@ func (s Service) provedClients(ctx context.Context, store recordReader, applied 
 }
 
 func outdatedClient(contextName, owner string, client ProvedClient) (*OutdatedClient, diagnostics.Diagnostic) {
-	pin, pinned, err := controller.PinOf(client.Kind)
+	pin, pinned, err := tooltable.PinOf(client.Kind)
 	if err != nil || !pinned {
 		return nil, diagnostics.Diagnostic{}
 	}
-	if order, comparable := controller.CompareReleases(client.Version, pin.Minimum); comparable && order >= 0 {
+	if order, comparable := tooltable.CompareReleases(client.Version, pin.Minimum); comparable && order >= 0 {
 		return nil, diagnostics.Diagnostic{}
 	}
 	return &OutdatedClient{Kind: client.Kind, Release: client.Version, Minimum: pin.Minimum, Apply: owner}, diagnostics.Diagnostic{

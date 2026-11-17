@@ -3,13 +3,13 @@ name: tool-table
 on:
   push:
     paths:
-      - internal/controller/tooltable.json
+      - internal/controller/tooltable/tooltable.json
       - scripts/tools/tooltable/**
       - scripts/tools/clientassets/**
       - .github/workflows/tool-table.yml
   pull_request:
     paths:
-      - internal/controller/tooltable.json
+      - internal/controller/tooltable/tooltable.json
       - scripts/tools/tooltable/**
       - scripts/tools/clientassets/**
       - .github/workflows/tool-table.yml

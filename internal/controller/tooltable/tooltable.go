@@ -1,4 +1,4 @@
-package controller
+package tooltable
 
 import (
 	"bytes"
@@ -13,34 +13,34 @@ import (
 	"sync"
 )
 
-const ToolTableFormat = "bootwright.controller.tool-table-v1"
+const Format = "bootwright.controller.tool-table-v1"
 
 const maxPinnedToolBytes int64 = 1 << 30
 
 var pinnedToolKinds = []string{"govc", "helm", "kubectl", "virtctl"}
 
-type ToolRelease struct {
+type Release struct {
 	Version string `json:"version"`
 	Bytes   int64  `json:"bytes"`
 	SHA256  string `json:"sha256"`
 }
 
-type ToolPin struct {
-	Kind    string      `json:"kind"`
-	Minimum string      `json:"minimum"`
-	License string      `json:"license"`
-	Default ToolRelease `json:"default"`
+type Pin struct {
+	Kind    string  `json:"kind"`
+	Minimum string  `json:"minimum"`
+	License string  `json:"license"`
+	Default Release `json:"default"`
 }
 
 type toolTableDocument struct {
-	Format string    `json:"format"`
-	Tools  []ToolPin `json:"tools"`
+	Format string `json:"format"`
+	Tools  []Pin  `json:"tools"`
 }
 
 //go:embed tooltable.json
 var embeddedToolTable []byte
 
-var embeddedPins = sync.OnceValues(func() ([]ToolPin, error) { return ParseToolTable(embeddedToolTable) })
+var embeddedPins = sync.OnceValues(func() ([]Pin, error) { return Parse(embeddedToolTable) })
 
 var releasePattern = regexp.MustCompile(`^v?(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})(.*)$`)
 
@@ -48,7 +48,7 @@ var sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 var licensePattern = regexp.MustCompile(`^[A-Za-z0-9.+-]+( (AND|OR|WITH) [A-Za-z0-9.+-]+)*$`)
 
-func ParseToolTable(data []byte) ([]ToolPin, error) {
+func Parse(data []byte) ([]Pin, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var document toolTableDocument
@@ -58,8 +58,8 @@ func ParseToolTable(data []byte) ([]ToolPin, error) {
 	if len(bytes.TrimSpace(data[decoder.InputOffset():])) != 0 {
 		return nil, errors.New("the tool table holds more than one JSON document")
 	}
-	if document.Format != ToolTableFormat {
-		return nil, fmt.Errorf("the tool table's format is %q, not %q", document.Format, ToolTableFormat)
+	if document.Format != Format {
+		return nil, fmt.Errorf("the tool table's format is %q, not %q", document.Format, Format)
 	}
 	kinds := make([]string, 0, len(document.Tools))
 	for _, pin := range document.Tools {
@@ -86,19 +86,19 @@ func ParseToolTable(data []byte) ([]ToolPin, error) {
 	return document.Tools, nil
 }
 
-func ToolPins() ([]ToolPin, error) {
+func Pins() ([]Pin, error) {
 	pins, err := embeddedPins()
 	return slices.Clone(pins), err
 }
 
-func PinOf(kind string) (ToolPin, bool, error) {
+func PinOf(kind string) (Pin, bool, error) {
 	pins, err := embeddedPins()
 	if err != nil {
-		return ToolPin{}, false, err
+		return Pin{}, false, err
 	}
-	index := slices.IndexFunc(pins, func(pin ToolPin) bool { return pin.Kind == kind })
+	index := slices.IndexFunc(pins, func(pin Pin) bool { return pin.Kind == kind })
 	if index < 0 {
-		return ToolPin{}, false, nil
+		return Pin{}, false, nil
 	}
 	return pins[index], true, nil
 }

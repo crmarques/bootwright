@@ -30,7 +30,7 @@ vulngate: wheels
 	fi; \
 	CGO_ENABLED=0 ./scripts/govulncheck -db "$(VULNDB)" -format json ./cmd/bootwright >bin/govulncheck.json; \
 	$(GO) -C scripts/tools run ./vulngate -govulncheck "$(CURDIR)/bin/govulncheck.json" \
-		-lock "$(CURDIR)/internal/controller/runtimelock/lock.json" -table "$(CURDIR)/internal/controller/tooltable.json" \
+		-lock "$(CURDIR)/internal/controller/runtimelock/lock.json" -table "$(CURDIR)/internal/controller/tooltable/tooltable.json" \
 		-exceptions "$(CURDIR)/cmd/bootwright/vulnerability-exceptions.json" -verdict "$(CURDIR)/bin/vulnerability-check" \
 		-artifacts "$(CLIENTS_CACHE)" -db "$(VULNDB)"
 
@@ -58,7 +58,7 @@ wheels:
 
 # The controller stage installs each default client by the size and SHA-256
 # the tool table pins. These read the publishers, which no build does.
-TOOL_TABLE = $(CURDIR)/internal/controller/tooltable.json
+TOOL_TABLE = $(CURDIR)/internal/controller/tooltable/tooltable.json
 tool-table:
 	$(GO) -C scripts/tools run ./tooltable -table "$(TOOL_TABLE)" verify
 
@@ -261,6 +261,7 @@ RACE_PACKAGES = ./internal/reconciliation/... ./internal/controller/privilege/..
 	./internal/cli \
 	./internal/controller \
 	./internal/controller/hostdnf \
+	./internal/controller/tooltable \
 	./internal/controller/hostowned \
 	./internal/controller/firewalllocal \
 	./internal/containercluster/preflightlocal \

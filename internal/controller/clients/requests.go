@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -70,7 +71,7 @@ type MirrorTrust struct {
 }
 
 func (r Request) WithMirrorTrust(catalog api.Catalog) Request {
-	base, reference := controller.ArtifactMirror(catalog)
+	base, reference := tooltable.ArtifactMirror(catalog)
 	parsed, err := url.Parse(base)
 	if reference == "" || err != nil || !slices.ContainsFunc(r.Tools, func(tool ToolRequest) bool { return mirrorHost(tool.Mirror) == parsed.Hostname() }) {
 		return r
@@ -81,7 +82,7 @@ func (r Request) WithMirrorTrust(catalog api.Catalog) Request {
 
 func (r Request) MirrorReader() bool {
 	return slices.ContainsFunc(r.Tools, func(tool ToolRequest) bool {
-		return tool.SHA256 != "" && controller.PublicOrigin(tool.catalogRequest()) && tool.Mirror != ""
+		return tool.SHA256 != "" && tooltable.PublicOrigin(tool.catalogRequest()) && tool.Mirror != ""
 	})
 }
 
@@ -156,8 +157,8 @@ func (r Request) ToolRequests() []evidence.ToolRequest {
 // Versions is the dependency intent this stage resolves against. Only the
 // versions a context may declare come from the request; the host foundation is
 // setup's and stays at the compiled default.
-func (r Request) Versions() controller.DependencyVersions {
-	versions := controller.DefaultDependencyVersions()
+func (r Request) Versions() tooltable.DependencyVersions {
+	versions := tooltable.DefaultDependencyVersions()
 	if r.Libvirt != "" {
 		versions.Libvirt = r.Libvirt
 	}

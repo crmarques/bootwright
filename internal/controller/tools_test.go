@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/evidence"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 )
 
 func TestTargetToolLimitCountsDistinctRequirements(t *testing.T) {
@@ -317,7 +318,7 @@ func TestAnAuthoredKubeVirtProviderRequestsVirtctlOnce(t *testing.T) {
 
 func defaultTool(t *testing.T, kind string) evidence.ToolRequest {
 	t.Helper()
-	pin, found, err := controller.PinOf(kind)
+	pin, found, err := tooltable.PinOf(kind)
 	if err != nil || !found {
 		t.Fatalf("the build pins no %s: %v", kind, err)
 	}

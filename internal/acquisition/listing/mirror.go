@@ -6,6 +6,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/evidence"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 )
 
@@ -17,7 +18,7 @@ type MirroredClient struct {
 func (t Tools) MirroredClients(tools []evidence.ToolRequest) ([]MirroredClient, error) {
 	var clients []MirroredClient
 	for _, tool := range tools {
-		if !controller.PublicOrigin(tool) || tool.Mirror == "" || tool.SHA256 == "" {
+		if !tooltable.PublicOrigin(tool) || tool.Mirror == "" || tool.SHA256 == "" {
 			continue
 		}
 		location, err := t.SourceURL(tool)

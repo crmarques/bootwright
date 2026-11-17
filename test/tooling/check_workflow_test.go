@@ -58,7 +58,7 @@ func TestTheCheckWorkflowChecksPushedCommitsKeysItsCacheOnEveryPinnedInputAndCan
 	for _, input := range []string{
 		"scripts/tools/ansible-requirements.txt", "scripts/tools/ansible-check-interpreter.json",
 		"scripts/tools/ansible-check-floor-interpreter.json", "scripts/tools/ansible-test-artifacts.json",
-		"scripts/tools/go.sum", "internal/controller/tooltable.json", "internal/controller/runtimelock/lock.json",
+		"scripts/tools/go.sum", "internal/controller/tooltable/tooltable.json", "internal/controller/runtimelock/lock.json",
 	} {
 		if !strings.Contains(key, "'"+input+"'") {
 			t.Errorf("the cache key does not hash %s: %s", input, key)

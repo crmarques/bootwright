@@ -7,6 +7,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
 	"github.com/crmarques/bootwright/internal/controller/clients"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -51,7 +52,7 @@ func (p mirrorProbe) ProbeMirror(ctx context.Context, selected string, catalog a
 	}
 	request := clients.NewRequest(selection, tools)
 	var readings []bundlelocal.MirrorReading
-	_, reference := controller.ArtifactMirror(catalog)
+	_, reference := tooltable.ArtifactMirror(catalog)
 	if reference == "" {
 		readings, err = p.read(ctx, probed, request, nil)
 	} else {

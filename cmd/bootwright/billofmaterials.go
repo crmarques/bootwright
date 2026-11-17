@@ -13,9 +13,9 @@ import (
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/acquisition"
 	"github.com/crmarques/bootwright/internal/cli"
-	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
@@ -97,7 +97,7 @@ func composeBillOfMaterials(info cli.BuildInfo, stamp *debug.BuildInfo) (cli.Bil
 	bom.Components = append(bom.Components, wheels...)
 	bom.Components = append(bom.Components, cli.BOMComponent{Ref: "ansible:" + collectionName, Type: "library", Name: collectionName, Scope: "required",
 		Properties: []cli.BOMProperty{carried, {Name: "bootwright:automation-digest", Value: ansible.Digest()}}})
-	pins, err := controller.ToolPins()
+	pins, err := tooltable.Pins()
 	if err != nil {
 		return cli.BillOfMaterials{}, err
 	}

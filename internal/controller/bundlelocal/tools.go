@@ -14,9 +14,9 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 )
 
 const maxToolSourceBytes int64 = 1 << 30
@@ -448,7 +448,7 @@ func toolChecksum(data []byte, filename string) (string, error) {
 
 func sourcePath(source prerequisites.DependencySource) string { return path.Join("sources", source.ID) }
 
-func PublisherURL(pin controller.ToolPin) (string, error) {
+func PublisherURL(pin tooltable.Pin) (string, error) {
 	request := evidence.ToolRequest{Kind: pin.Kind, Version: withV(pin.Default.Version)}
 	if pin.Kind == "virtctl" {
 		request.Compatibility = "kubevirt"

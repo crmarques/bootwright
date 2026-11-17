@@ -76,7 +76,7 @@ func assetOf(kind string) func(string) string {
 var stable = regexp.MustCompile(`^v?([0-9]+)\.([0-9]+)\.([0-9]+)$`)
 
 func main() {
-	path := flag.String("table", "internal/controller/tooltable.json", "the tool table to check")
+	path := flag.String("table", "internal/controller/tooltable/tooltable.json", "the tool table to check")
 	flag.Parse()
 	command := flag.Arg(0)
 	client := &http.Client{Timeout: 5 * time.Minute}

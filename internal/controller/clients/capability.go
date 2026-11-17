@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -429,7 +430,7 @@ func admitted(execution lifecycle.Execution) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
-	if request.Libvirt != "" && request.Libvirt != controller.DefaultDependencyVersions().Libvirt {
+	if request.Libvirt != "" && request.Libvirt != tooltable.DefaultDependencyVersions().Libvirt {
 		return Request{}, refuse("controller.unsupported", "the controller stage installs the libvirt release this host's repositories provide, and "+execution.Block.Object+" pins spec.dependencyVersions.libvirt to "+request.Libvirt,
 			"remove spec.dependencyVersions.libvirt from "+execution.Block.Object)
 	}

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	controllerscope "github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -60,7 +60,7 @@ func portTools(catalog api.Catalog, nodes []nodeProjection) ([]Tool, error) {
 	slices.Sort(kinds)
 	var tools []Tool
 	for _, kind := range slices.Compact(kinds) {
-		request, err := controllerscope.ProviderTool(catalog, kind)
+		request, err := tooltable.ProviderTool(catalog, kind)
 		if err != nil {
 			return nil, err
 		}

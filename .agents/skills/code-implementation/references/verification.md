@@ -116,8 +116,8 @@ that met it ([D250](../../../../specs/milestones/backlog.md#d250) (15)):
 1. Read the advisory (`https://api.osv.dev/v1/vulns/<id>`): what code it
    affects, its aliases and its fixed releases.
 2. A fixed release exists: raise the component to it, in its own commit. For a
-   client, move the default in `internal/controller/tooltable.json`, and the
-   minimum too when the advisory reaches it, then run `make tool-table`; for a
+   client, move the default in `internal/controller/tooltable/tooltable.json`,
+   and the minimum too when the advisory reaches it, then run `make tool-table`; for a
    wheel, refresh the runtime lock; for a Go module, `./scripts/go get` it. A
    client's findings name the toolchain or module its own release file holds
    and the release that fixes it, so the fix is a client release built with it;

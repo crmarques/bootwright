@@ -1,4 +1,4 @@
-package controller
+package tooltable
 
 import (
 	"strings"
@@ -39,11 +39,11 @@ func (v DependencyVersions) Baseline() DependencyVersions {
 	return DependencyVersions{Python: v.Python, Ansible: v.Ansible, Podman: v.Podman, OpenSSH: v.OpenSSH, NMState: v.NMState}
 }
 
-func selectDependencyVersions(environment api.Object) (DependencyVersions, error) {
+func SelectDependencyVersions(environment api.Object) (DependencyVersions, error) {
 	versions := DefaultDependencyVersions()
 	configured := environment.Spec().Get("dependencyVersions")
 	if configured.Present() && configured.Type() != api.Mapping {
-		return DependencyVersions{}, selectionFailure(environment, "api.value", "$.spec.dependencyVersions", "dependency versions must be an object")
+		return DependencyVersions{}, Failure(environment, "api.value", "$.spec.dependencyVersions", "dependency versions must be an object")
 	}
 	for _, field := range configured.Fields() {
 		var target *string
@@ -58,10 +58,10 @@ func selectDependencyVersions(environment api.Object) (DependencyVersions, error
 		case "libvirt":
 			target, grammar = &versions.Libvirt, api.LexicalPackageVersion
 		default:
-			return DependencyVersions{}, selectionFailure(environment, "api.value", "$.spec.dependencyVersions."+field.Name, "dependency version names must identify a supported dependency")
+			return DependencyVersions{}, Failure(environment, "api.value", "$.spec.dependencyVersions."+field.Name, "dependency version names must identify a supported dependency")
 		}
 		if field.Value.Type() != api.String || !api.ValidLexical(grammar, field.Value.Text()) {
-			return DependencyVersions{}, selectionFailure(environment, "api.value", "$.spec.dependencyVersions."+field.Name, "dependency version must be an exact publisher release tag, or latest for libvirt")
+			return DependencyVersions{}, Failure(environment, "api.value", "$.spec.dependencyVersions."+field.Name, "dependency version must be an exact publisher release tag, or latest for libvirt")
 		}
 		*target = field.Value.Text()
 		if grammar == api.LexicalCLIVersion {

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -123,7 +123,7 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 // placeholders every row names.
 func clientRelease(t *testing.T, names map[string]string, release string) map[string]string {
 	t.Helper()
-	pin, _, err := controller.PinOf("helm")
+	pin, _, err := tooltable.PinOf("helm")
 	if err != nil {
 		t.Fatal(err)
 	}

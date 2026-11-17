@@ -38,7 +38,7 @@ func contextDependencies() []contextEdge {
 		{"addons", "reconciliation", "instances and drivers implement the lifecycle capability port (Lifecycle ports)"},
 		{"addons", "secrets", "package inputs, placements and secret references resolve through Secrets' custody and values"},
 		{"containercluster", "addons", "secondary networks share the cluster-object programs and driver add-ons own (applicationDependencies)"},
-		{"containercluster", "controller", "installer tools name the controller evidence (controller/evidence) and resolve a provider arm's client release through controller.ProviderTool"},
+		{"containercluster", "controller", "installer tools name the controller evidence (controller/evidence) and resolve a provider arm's client release through the tool table (controller/tooltable.ProviderTool)"},
 		{"containercluster", "desiredstate", "capabilities read the compiled catalog they were planned from"},
 		{"containercluster", "environment", "reads Environment's shared defaults and graph facts, such as the container-cluster domain and member selection"},
 		{"containercluster", "infrastructureservices", "nodes select shared service endpoints through Infrastructure services' placement and endpoint rules"},

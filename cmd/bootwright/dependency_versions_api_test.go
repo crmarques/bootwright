@@ -6,6 +6,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/evidence"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 )
 
 // An Environment declares versions only for the prerequisites its own
@@ -36,10 +37,10 @@ func TestEnvironmentDependencyVersionsPreserveExplicitIntent(t *testing.T) {
 	}
 	// The context-independent versions stay at their compiled default, because
 	// no Environment can move them.
-	if got := selection.Versions(); got != (controller.DependencyVersions{Python: "latest", Ansible: "latest", Podman: "latest", OpenSSH: "latest", NMState: "latest", Libvirt: "latest", InstallerMedia: "latest", Helm: "4.3.0", Govc: "0.54.0", Virtctl: "1.9.0"}) {
+	if got := selection.Versions(); got != (tooltable.DependencyVersions{Python: "latest", Ansible: "latest", Podman: "latest", OpenSSH: "latest", NMState: "latest", Libvirt: "latest", InstallerMedia: "latest", Helm: "4.3.0", Govc: "0.54.0", Virtctl: "1.9.0"}) {
 		t.Fatalf("selection did not receive the complete normalized version intent: %#v", got)
 	}
-	if got := selection.Versions().Baseline(); got != controller.DefaultDependencyVersions().Baseline() {
+	if got := selection.Versions().Baseline(); got != tooltable.DefaultDependencyVersions().Baseline() {
 		t.Fatalf("a context moved the baseline version intent: %#v", got)
 	}
 	tools, err := controller.SelectTools(state.Effective())
@@ -119,7 +120,7 @@ func TestEnvironmentDependencyVersionsAdmitAnyPublisherReleaseTag(t *testing.T) 
 
 func defaultToolRequest(t *testing.T, kind string) evidence.ToolRequest {
 	t.Helper()
-	pin, found, err := controller.PinOf(kind)
+	pin, found, err := tooltable.PinOf(kind)
 	if err != nil || !found {
 		t.Fatalf("the build pins no %s: %v", kind, err)
 	}

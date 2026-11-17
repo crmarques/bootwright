@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 )
 
 var pinnedToolsLock sync.Mutex
@@ -57,7 +57,7 @@ func pinnedHelmDirectory(t *testing.T) string {
 	t.Helper()
 	pinnedToolsLock.Lock()
 	defer pinnedToolsLock.Unlock()
-	pin, ok, err := controller.PinOf("helm")
+	pin, ok, err := tooltable.PinOf("helm")
 	if err != nil || !ok {
 		t.Fatalf("the tool table pins no helm: %v", err)
 	}

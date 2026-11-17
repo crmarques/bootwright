@@ -11,7 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/acquisition/listing"
 	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/cli"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -35,7 +35,7 @@ func TestTheAcquisitionListNamesWhatEachOwnerAcquiresWithItsOrigin(t *testing.T)
 		}
 		return acquired[index]
 	}
-	helm, _, err := controller.PinOf("helm")
+	helm, _, err := tooltable.PinOf("helm")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestAManagedArtifactMirrorIsFilledFromThePublisherOnItsHostAndReadByTheCont
 		t.Fatal(err)
 	}
 	for _, kind := range []string{"helm"} {
-		pin, _, err := controller.PinOf(kind)
+		pin, _, err := tooltable.PinOf(kind)
 		if err != nil {
 			t.Fatal(err)
 		}

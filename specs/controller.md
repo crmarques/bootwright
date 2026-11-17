@@ -872,9 +872,10 @@ binding and reservations and retires the tool area only that binding named
 
 ### The tool table
 
-Each build embeds one tool table, `internal/controller/tooltable.json`, in the
-format `controller.ToolTableFormat`. For `govc`, Helm, a standalone `kubectl`
-and `virtctl`, in that order, it names the minimum release this build accepts
+Each build embeds one tool table,
+`internal/controller/tooltable/tooltable.json`, in the format
+`tooltable.Format`. For `govc`, Helm, a standalone `kubectl` and `virtctl`, in
+that order, it names the minimum release this build accepts
 and the default release it installs when an Environment declares none, with
 that default's size and SHA-256 from its publisher, and its SPDX license, which
 `make tool-table` holds to the publisher's repository. Releases are

@@ -8,8 +8,8 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
-	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -77,7 +77,7 @@ func (s Service) Preflight(ctx context.Context, request PreflightRequest) (*Repo
 			return s.controllerReport(checks, selected, request.DryRun, stages)
 		})
 	}
-	if mirror, _ := controller.ArtifactMirror(catalog); mirror != "" && slices.Contains(stages, reconciliation.StageController) {
+	if mirror, _ := tooltable.ArtifactMirror(catalog); mirror != "" && slices.Contains(stages, reconciliation.StageController) {
 		if s.Mirror == nil {
 			return nil, availability.ErrNotImplemented
 		}

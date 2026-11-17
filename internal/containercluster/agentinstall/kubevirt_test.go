@@ -12,8 +12,8 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster/openshift"
-	controllerscope "github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -303,7 +303,7 @@ func kubevirtTool() prerequisites.ToolDefinition {
 }
 
 func defaultVirtctl() string {
-	pin, _, _ := controllerscope.PinOf("virtctl")
+	pin, _, _ := tooltable.PinOf("virtctl")
 	return pin.Default.Version
 }
 

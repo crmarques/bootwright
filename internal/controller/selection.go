@@ -10,7 +10,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster"
 	"github.com/crmarques/bootwright/internal/controller/evidence"
-	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/managedos"
@@ -30,20 +30,20 @@ type Selection struct {
 	iputils          bool
 	nmstate          bool
 	route            Route
-	versions         DependencyVersions
+	versions         tooltable.DependencyVersions
 }
 
-func (s Selection) EnvironmentName() string      { return s.environmentName }
-func (s Selection) MachineName() string          { return s.machineName }
-func (s Selection) ContainerRuntime() bool       { return s.containerRuntime }
-func (s Selection) LibvirtClient() bool          { return s.libvirtClient }
-func (s Selection) Hypervisor() bool             { return s.hypervisor }
-func (s Selection) ImageMirror() bool            { return s.imageMirror }
-func (s Selection) IPUtils() bool                { return s.iputils }
-func (s Selection) NMState() bool                { return s.nmstate }
-func (s Selection) InstallerMedia() bool         { return s.installerMedia }
-func (s Selection) Route() Route                 { return s.route }
-func (s Selection) Versions() DependencyVersions { return s.versions }
+func (s Selection) EnvironmentName() string                { return s.environmentName }
+func (s Selection) MachineName() string                    { return s.machineName }
+func (s Selection) ContainerRuntime() bool                 { return s.containerRuntime }
+func (s Selection) LibvirtClient() bool                    { return s.libvirtClient }
+func (s Selection) Hypervisor() bool                       { return s.hypervisor }
+func (s Selection) ImageMirror() bool                      { return s.imageMirror }
+func (s Selection) IPUtils() bool                          { return s.iputils }
+func (s Selection) NMState() bool                          { return s.nmstate }
+func (s Selection) InstallerMedia() bool                   { return s.installerMedia }
+func (s Selection) Route() Route                           { return s.route }
+func (s Selection) Versions() tooltable.DependencyVersions { return s.versions }
 
 // HasStage reports whether a context selecting this graph has a controller
 // stage: only that stage installs a target client, the container runtime, the
@@ -73,7 +73,7 @@ func (r Route) NoProxy() []string  { return slices.Clone(r.noProxy) }
 // Baseline selects context-free prerequisites and direct acquisition. It never
 // reads the invoking user's current context or ambient configuration.
 func Baseline() Selection {
-	return Selection{route: Route{direct: true}, versions: DefaultDependencyVersions()}
+	return Selection{route: Route{direct: true}, versions: tooltable.DefaultDependencyVersions()}
 }
 
 // WithAmbientRoute substitutes the acquisition route of a selection no context
@@ -129,7 +129,7 @@ func Select(catalog api.Catalog) (Selection, error) {
 	if err != nil {
 		return Selection{}, err
 	}
-	versions, err := selectDependencyVersions(environment)
+	versions, err := tooltable.SelectDependencyVersions(environment)
 	if err != nil {
 		return Selection{}, err
 	}
@@ -303,7 +303,7 @@ func Unsupported(catalog api.Catalog) []UnsupportedShape {
 func unsupported(machine api.Object, catalog api.Catalog) []UnsupportedShape {
 	shapes := []UnsupportedShape{}
 	if environments := catalog.OfKind(api.Environment); len(environments) == 1 && requiresLibvirtClient(catalog, machine) {
-		if versions, err := selectDependencyVersions(environments[0]); err == nil && versions.Libvirt != DefaultDependencyVersions().Libvirt {
+		if versions, err := tooltable.SelectDependencyVersions(environments[0]); err == nil && versions.Libvirt != tooltable.DefaultDependencyVersions().Libvirt {
 			shapes = append(shapes, UnsupportedShape{Object: environments[0], Field: "$.spec.dependencyVersions.libvirt",
 				Reason:      "this executable's controller stage installs the libvirt release the host's repositories provide, and " + environments[0].Identity() + " pins spec.dependencyVersions.libvirt",
 				Remediation: "remove spec.dependencyVersions.libvirt from " + environments[0].Identity()})
@@ -348,25 +348,12 @@ func unsupported(machine api.Object, catalog api.Catalog) []UnsupportedShape {
 	return shapes
 }
 
-// selectionFailure is a refusal from a selection helper that names no remedy
-// of its own: the field it names is the one to correct, and a refusal no
-// declared field settles is an invariant of this executable.
 func selectionFailure(object api.Object, code, field, message string) error {
-	remediation := "use a compatible executable"
-	if object.Kind() != "" && field != "" {
-		remediation = "correct " + strings.TrimPrefix(field, "$.") + " on " + object.Identity()
-	}
-	return refuseSelection(object, code, field, message, remediation)
+	return tooltable.Failure(object, code, field, message)
 }
 
-// refuseSelection is a selection refusal on the object and field that declare
-// it, with the action that settles it. It never echoes an authored value.
 func refuseSelection(object api.Object, code, field, message, remediation string) error {
-	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: code, Field: field, Message: message, Remediation: remediation}
-	if object.Kind() != "" {
-		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(object.Kind()), Name: object.Name()}
-	}
-	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{diagnostic}}
+	return tooltable.Refuse(object, code, field, message, remediation)
 }
 
 func requiresNMState(catalog api.Catalog) bool {
@@ -406,12 +393,12 @@ func releasesBelowMinimum(environment api.Object, catalog api.Catalog) []Unsuppo
 	}
 	shapes, seen := []UnsupportedShape{}, map[string]bool{}
 	for _, tool := range tools {
-		pin, found, err := PinOf(tool.Kind)
+		pin, found, err := tooltable.PinOf(tool.Kind)
 		if err != nil || !found || seen[tool.Kind] {
 			continue
 		}
 		seen[tool.Kind] = true
-		order, comparable := CompareReleases(tool.Version, pin.Minimum)
+		order, comparable := tooltable.CompareReleases(tool.Version, pin.Minimum)
 		if comparable && order >= 0 {
 			continue
 		}
@@ -445,7 +432,7 @@ func mirrorShapes(environment api.Object, catalog api.Catalog) []UnsupportedShap
 		if tool.Compatibility == "okd" {
 			key = "okd"
 		}
-		if !PublicOrigin(tool) || tool.SHA256 != "" || seen[key] {
+		if !tooltable.PublicOrigin(tool) || tool.SHA256 != "" || seen[key] {
 			continue
 		}
 		seen[key] = true

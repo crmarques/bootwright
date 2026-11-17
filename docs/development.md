@@ -269,8 +269,8 @@ precedence, output, cancellation, and effect boundaries. `make check` includes
 the unprivileged collection gate and never installs controller packages. The
 tests that render the end-to-end cases or run their workloads and the runtime
 lock tool use no ambient `helm` or `python3`: helm is the release
-`internal/controller/tooltable.json` pins and Python is the Ansible check's
-pinned interpreter, both in the shared cache, which a cold cache fetches once
+`internal/controller/tooltable/tooltable.json` pins and Python is the Ansible
+check's pinned interpreter, both in the shared cache, which a cold cache fetches once
 (helm from `get.helm.sh` against the table's SHA-256; Python by
 `scripts/ansible-check`). An executed native installer, container or guest is qualified only by the
 operator-run harnesses below and the journeys in the
@@ -402,7 +402,7 @@ reads the license from its owner and a check holds the table to it.
 | --- | --- | --- | --- |
 | Go modules and the standard library | `cmd/bootwright/go-licenses.json` | Each module's license file in the module cache, matched against the MIT, BSD-2-Clause, BSD-3-Clause, ISC, Apache-2.0 and MPL-2.0 texts; a text that matches none, or two license files, fails until a person reviews it into `reviewedTexts` of `scripts/tools/licenses/classify.go` | `make licenses`, `make licenses-check` |
 | Runtime wheels | `internal/controller/runtimelock/licenses.json` | The wheel's own `License-Expression`, else an unambiguous license classifier; a wheel that declares neither needs an entry a person recorded with a `reviewed:` source | `scripts/runtime-lock generate` and `verify` |
-| The four default clients | `license` of each `internal/controller/tooltable.json` entry | The publisher's repository, which declares its license through the GitHub API | `make tool-table` |
+| The four default clients | `license` of each `internal/controller/tooltable/tooltable.json` entry | The publisher's repository, which declares its license through the GitHub API | `make tool-table` |
 | Service and emulated BMC images | `imageLicenses` in `cmd/bootwright/billofmaterials_licenses.go` | The license of the project each image runs, with the page that declares it | `TestEveryPinnedImageAndToolNamesItsPublishersLicense` |
 
 `TestEveryThirdPartyComponentNamesAReviewedSPDXLicense` fails when any
@@ -420,7 +420,7 @@ the document. The components a build only names, the clients and images it
 acquires at use, are not redistributed by it and carry no text.
 
 The controller stage's clients follow the tool table
-`internal/controller/tooltable.json` ([controller](../specs/controller.md#the-tool-table)).
+`internal/controller/tooltable/tooltable.json` ([controller](../specs/controller.md#the-tool-table)).
 To move a default, edit its version, size and SHA-256 in the table and run,
 with network:
 

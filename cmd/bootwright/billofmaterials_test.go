@@ -13,8 +13,8 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/cli"
-	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 )
 
 func TestTheBillOfMaterialsNamesEveryCarriedAndPinnedArtifact(t *testing.T) {
@@ -50,7 +50,7 @@ func TestTheBillOfMaterialsNamesEveryCarriedAndPinnedArtifact(t *testing.T) {
 		}
 	}
 	want = append(want, "pypi:"+lock.Installer().Filename)
-	pins, err := controller.ToolPins()
+	pins, err := tooltable.Pins()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestEveryPinnedImageAndToolNamesItsPublishersLicense(t *testing.T) {
 			t.Errorf("the image license table names %s, which no service pins", repository)
 		}
 	}
-	pins, err := controller.ToolPins()
+	pins, err := tooltable.Pins()
 	if err != nil {
 		t.Fatal(err)
 	}

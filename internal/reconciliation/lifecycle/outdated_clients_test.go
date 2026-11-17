@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/tooltable"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -45,7 +45,7 @@ func appliedClientsHarness(t *testing.T, helm string) *harness {
 
 func helmMinimum(t *testing.T) string {
 	t.Helper()
-	pin, found, err := controller.PinOf("helm")
+	pin, found, err := tooltable.PinOf("helm")
 	if err != nil || !found {
 		t.Fatalf("the tool table pins no helm: %v", err)
 	}

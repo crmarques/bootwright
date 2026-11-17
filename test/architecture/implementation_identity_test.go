@@ -35,8 +35,9 @@ func coincidentArmWords() map[string]string {
 		`internal/containercluster/agentinstall/projection.go: "baremetal" (substrate.ArmBaremetal)`: "the installer's platform type",
 		`internal/containercluster/openshift/virtual_ips.go: "baremetal" (substrate.ArmBaremetal)`:   "the installer's platform type",
 		`internal/controller/bundlelocal/tools.go: "kubevirt" (substrate.ArmKubeVirt)`:               "virtctl's compatibility tag",
-		`internal/controller/tools.go: "kubevirt" (substrate.ArmKubeVirt)`:                           "virtctl's compatibility tag and the add-on capability that needs it",
-		`internal/controller/versions.go: "libvirt" (substrate.ArmLibvirt)`:                          "the libvirt package's version key",
+		`internal/controller/tools.go: "kubevirt" (substrate.ArmKubeVirt)`:                           "the add-on capability that needs virtctl",
+		`internal/controller/tooltable/provider.go: "kubevirt" (substrate.ArmKubeVirt)`:              "virtctl's compatibility tag",
+		`internal/controller/tooltable/versions.go: "libvirt" (substrate.ArmLibvirt)`:                "the libvirt package's version key",
 	}
 }
 
