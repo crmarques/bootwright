@@ -151,9 +151,28 @@ func (m mirror) sources() []string {
 	return []string{"--pypi", "file://" + m.root, "--files", "file://" + filepath.Join(m.root, "files")}
 }
 
+// pinnedPython is the CPython the Ansible check pins in the shared cache,
+// prepared by scripts/ansible-check the first time it is missing.
+func pinnedPython(t *testing.T) string {
+	t.Helper()
+	scripts := filepath.Join("..", "..", "..", "scripts")
+	cache, err := exec.Command(filepath.Join(scripts, "cache-dir")).Output()
+	if err != nil {
+		t.Fatalf("scripts/cache-dir: %v", err)
+	}
+	interpreter := filepath.Join(strings.TrimSpace(string(cache)), "ansible-check", "venv", "bin", "python")
+	if _, err := os.Stat(interpreter); err != nil {
+		if output, err := exec.Command(filepath.Join(scripts, "ansible-check"), "--help").CombinedOutput(); err != nil {
+			t.Fatalf("preparing the pinned python with scripts/ansible-check: %v\n%s", err, output)
+		}
+	}
+	return interpreter
+}
+
 func runtimeLockTool(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
 	command := exec.Command("sh", append([]string{filepath.Join("..", "..", "..", "scripts", "runtime-lock")}, args...)...)
+	command.Env = append(os.Environ(), "RUNTIME_LOCK_PYTHON="+pinnedPython(t))
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
 	err := command.Run()
@@ -166,9 +185,6 @@ func runtimeLockTool(t *testing.T, args ...string) (string, string, error) {
 // and keeps the tested releases; verify passes on it and names a changed file;
 // and a report whose hash the download contradicts leaves the lock alone.
 func TestTheRuntimeLockToolRoundTrips(t *testing.T) {
-	if _, err := exec.LookPath("python3"); err != nil {
-		t.Fatal("the lock tool needs python3")
-	}
 	m := newMirror(t)
 	output := filepath.Join(t.TempDir(), "lock.json")
 	generate := func(extra ...string) error {
@@ -255,7 +271,7 @@ func slicesEqualReleases(got, want []Release) bool {
 // The tool's own unit tests run with the offline gates, since only Go tests
 // run there.
 func TestTheRuntimeLockToolUnitsPass(t *testing.T) {
-	command := exec.Command("python3", "-I", "-B", filepath.Join("..", "..", "..", "scripts", "tools", "runtime_lock_test.py"))
+	command := exec.Command(pinnedPython(t), "-I", "-B", filepath.Join("..", "..", "..", "scripts", "tools", "runtime_lock_test.py"))
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("runtime_lock_test.py failed: %v\n%s", err, output)
 	}

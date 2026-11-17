@@ -43,7 +43,7 @@ func TestSNOIsolationFixtures(t *testing.T) {
 			for _, value := range test.sets {
 				argv = append(argv, "--set", value)
 			}
-			out, err := exec.Command("helm", argv...).CombinedOutput()
+			out, err := exec.Command(pinnedHelm(t), argv...).CombinedOutput()
 			if test.refusal != "" {
 				if err == nil || !bytes.Contains(out, []byte(test.refusal)) {
 					t.Fatalf("expected refusal %q: %v %s", test.refusal, err, out)
@@ -77,7 +77,7 @@ func TestSNOIsolationFixtures(t *testing.T) {
 			if err := os.WriteFile(configPath, []byte(configMap["data"].(map[string]any)["config.json"].(string)), 0600); err != nil {
 				t.Fatal(err)
 			}
-			if out, err := exec.Command("python3", "-B", filepath.Join(root, "app", "verify.py"), "--config", configPath, "--mode", "config").CombinedOutput(); err != nil {
+			if out, err := exec.Command(pinnedPython(t), "-B", filepath.Join(root, "app", "verify.py"), "--config", configPath, "--mode", "config").CombinedOutput(); err != nil {
 				t.Fatalf("offline verifier refuses rendered input: %v %s", err, out)
 			}
 			var config struct {
@@ -141,7 +141,7 @@ func stringValue(value any) string {
 
 func TestSNOIsolationVerifierFailures(t *testing.T) {
 	root := filepath.Join("..", "..", "e2e", "lab-sno-fips-controller", "app")
-	cmd := exec.Command("python3", "-B", "-m", "unittest", "discover", "-s", root, "-p", "verify_test.py")
+	cmd := exec.Command(pinnedPython(t), "-B", "-m", "unittest", "discover", "-s", root, "-p", "verify_test.py")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("verifier failure-path tests: %v\n%s", err, output)
 	}

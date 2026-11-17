@@ -260,8 +260,13 @@ In-tree tests are unitary and host-independent, as the
 rule requires: no package manager, network, privilege, second operating system
 or virtual machine. Package tests exercise command dispatch, parsing and help
 precedence, output, cancellation, and effect boundaries. `make check` includes
-the unprivileged collection gate and never installs controller packages. An
-executed native installer, container or guest is qualified only by the
+the unprivileged collection gate and never installs controller packages. The
+tests that render the end-to-end cases or run their workloads and the runtime
+lock tool use no ambient `helm` or `python3`: helm is the release
+`internal/controller/tooltable.json` pins and Python is the Ansible check's
+pinned interpreter, both in the shared cache, which a cold cache fetches once
+(helm from `get.helm.sh` against the table's SHA-256; Python by
+`scripts/ansible-check`). An executed native installer, container or guest is qualified only by the
 operator-run harnesses below and the journeys in the
 [operator guide](operator-guide.md#run-a-lab-journey).
 

@@ -184,7 +184,7 @@ func renderE2ECase(t *testing.T, script, name string, render e2eRender) []string
 		arguments = append(arguments, "--set", set)
 	}
 	command := exec.Command(script, arguments...)
-	command.Env = append(os.Environ(), "PATH="+e2eFixtureRouteTools(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	command.Env = append(os.Environ(), "PATH="+e2ePath(t, e2eFixtureRouteTools(t)))
 	if combined, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("render.sh %s: %v\n%s", strings.Join(arguments, " "), err, combined)
 	}
@@ -227,7 +227,7 @@ func TestE2ERenderNamesAFailedRouteProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	command := exec.Command(e2eRenderScript(t), "lab-rhel", "--out-dir", filepath.Join(t.TempDir(), "input"))
-	command.Env = append(os.Environ(), "PATH="+tools+string(os.PathListSeparator)+os.Getenv("PATH"))
+	command.Env = append(os.Environ(), "PATH="+e2ePath(t, tools))
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr
@@ -243,9 +243,7 @@ func TestE2ERenderNamesAFailedRouteProbe(t *testing.T) {
 
 func e2eRenderScript(t *testing.T) string {
 	t.Helper()
-	if _, err := exec.LookPath("helm"); err != nil {
-		t.Fatalf("rendering the e2e cases needs helm on PATH: %v", err)
-	}
+	pinnedHelmDirectory(t)
 	script, err := filepath.Abs(filepath.Join("..", "..", "e2e", "render.sh"))
 	if err != nil {
 		t.Fatal(err)

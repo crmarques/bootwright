@@ -105,7 +105,7 @@ func TestSingleCephStorageAndIsolationFixtures(t *testing.T) {
 	caseRoot := filepath.Join(root, "lab-sno-single-ceph-fdf")
 	image := "registry.example.test/python@sha256:" + strings.Repeat("a", 64)
 	for _, chart := range []string{filepath.Join(caseRoot, "app"), filepath.Join(caseRoot, "platform"), filepath.Join(root, "lab-sno-fips-controller", "isolation")} {
-		out, err := exec.Command("helm", "template", "fixture", chart, "-f", filepath.Join(caseRoot, "values.yaml"), "--set", "isolation.image="+image).CombinedOutput()
+		out, err := exec.Command(pinnedHelm(t), "template", "fixture", chart, "-f", filepath.Join(caseRoot, "values.yaml"), "--set", "isolation.image="+image).CombinedOutput()
 		if err != nil {
 			t.Fatalf("%s: %v %s", chart, err, out)
 		}
@@ -135,7 +135,7 @@ func TestSingleCephStorageAndIsolationFixtures(t *testing.T) {
 			}
 			if object["kind"] == "ConfigMap" && meta["name"] == "e2e-isolation-config" {
 				data := object["data"].(map[string]any)["config.json"].(string)
-				probe := exec.Command("python3", filepath.Join(root, "lab-sno-fips-controller", "app", "verify.py"), "--config", "/dev/stdin", "--mode", "config")
+				probe := exec.Command(pinnedPython(t), filepath.Join(root, "lab-sno-fips-controller", "app", "verify.py"), "--config", "/dev/stdin", "--mode", "config")
 				probe.Stdin = strings.NewReader(data)
 				if result, err := probe.CombinedOutput(); err != nil || !json.Valid([]byte(data)) {
 					t.Fatalf("direct VLAN fixture configuration: %v %s", err, result)
