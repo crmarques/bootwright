@@ -189,13 +189,15 @@ func RenderKickstart(input Installation) (string, error) {
 		"",
 		"lang " + input.Language + languageSuffix(input),
 		"keyboard --vckeymap=" + input.Keyboard,
-		timezoneLine(input),
+	}
+	lines = append(lines, timeSettings(input)...)
+	lines = append(lines,
 		"",
 		"rootpw --lock",
-		"user --name=" + input.User + " --groups=wheel --lock",
-		`sshkey --username=` + input.User + ` "` + AuthorizedKeyToken + `"`,
+		"user --name="+input.User+" --groups=wheel --lock",
+		`sshkey --username=`+input.User+` "`+AuthorizedKeyToken+`"`,
 		"",
-	}
+	)
 	lines = append(lines, targetProofLines(input)...)
 	lines = append(lines, encryptionPreLines(input)...)
 	lines = append(lines, storageLines(input)...)
@@ -461,12 +463,12 @@ func languageSuffix(input Installation) string {
 	return " --addsupport=" + strings.Join(input.AdditionalLocale, ",")
 }
 
-func timezoneLine(input Installation) string {
-	line := "timezone " + input.Timezone + " --utc"
-	if len(input.NTPServers) != 0 {
-		line += " --ntpservers=" + strings.Join(input.NTPServers, ",")
+func timeSettings(input Installation) []string {
+	lines := []string{"timezone " + input.Timezone + " --utc"}
+	for _, server := range input.NTPServers {
+		lines = append(lines, "timesource --ntp-server="+server)
 	}
-	return line
+	return lines
 }
 
 const diskInclude = "/tmp/bootwright-disk.ks"

@@ -36,7 +36,8 @@ func TestTheDerivedKickstartInstallsUnattended(t *testing.T) {
 		"url --url=http://192.0.2.1:8080/os/rhel-9-8/tree",
 		"lang en_US.UTF-8",
 		"keyboard --vckeymap=us",
-		"timezone Etc/UTC --utc --ntpservers=192.0.2.1",
+		"timezone Etc/UTC --utc",
+		"timesource --ntp-server=192.0.2.1",
 		"rootpw --lock",
 		"user --name=bootwright --groups=wheel --lock",
 		"ignoredisk --only-use=vda",
@@ -601,6 +602,31 @@ install -d -m 0750 /etc/sudoers.d
 	for _, line := range strings.Split(kickstart, "\n") {
 		if strings.HasPrefix(line, "repo ") {
 			t.Fatalf("the kickstart renders an install-time %q", line)
+		}
+	}
+}
+
+func TestKickstartTimeSourcesUseCurrentCommands(t *testing.T) {
+	for _, servers := range [][]string{nil, {"ntp.example.test"}, {"192.0.2.123", "ntp.example.test", "2001:db8::123"}} {
+		input := physicalInstallation()
+		input.NTPServers = servers
+		rendered, err := RenderKickstart(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		requireLine(t, rendered, "timezone "+input.Timezone+" --utc")
+		if strings.Contains(rendered, "--ntpservers") || strings.Count(rendered, "timesource ") != len(servers) {
+			t.Fatal("time sources must use one current command per declared server")
+		}
+		last := -1
+		for _, server := range servers {
+			line := "timesource --ntp-server=" + server
+			requireLine(t, rendered, line)
+			at := strings.Index(rendered, line)
+			if at <= last {
+				t.Fatal("time source order changed")
+			}
+			last = at
 		}
 	}
 }

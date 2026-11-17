@@ -80,7 +80,7 @@ func TestExternalNameAndTimeServicesAreUsedByTheirDeclaredAddress(t *testing.T) 
 		t.Fatalf("refusals = %+v", refused)
 	}
 	request, needs := onlyRequest(t, catalog)
-	for _, line := range []string{"--nameserver=203.0.113.53", "--ntpservers=ntp.example.test"} {
+	for _, line := range []string{"--nameserver=203.0.113.53", "timesource --ntp-server=ntp.example.test"} {
 		if !strings.Contains(request.Kickstart, line) {
 			t.Fatalf("the Kickstart carries no %s:\n%s", line, request.Kickstart)
 		}

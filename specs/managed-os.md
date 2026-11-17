@@ -257,8 +257,8 @@ it for a later one, and no lifecycle requires or consumes it.
 
 Planning derives the complete Kickstart from
 effective state alone: text mode; the accepted license; the install source;
-`lang`, `keyboard` and `timezone` with the selected NTP servers from
-`localization` and the profile's effective NTP selections; one static
+`lang`, `keyboard` and `timezone` from `localization`, with one current
+`timesource --ntp-server` command for each effective NTP selection in order; one static
 `network` line that configures the Machine's install interface, a plain,
 bonded, VLAN or VLAN-over-bond interface, with its selected install address
 and prefix, the install interface's default route and the selected DNS
