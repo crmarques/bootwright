@@ -157,16 +157,18 @@ func (a *admission) nativeAllocationConflicts(ceph api.Value) {
 	}
 }
 
-func SingleHostOSDCount(cluster api.Object) int64 {
-	if cluster.Spec().Get("topology", "nodes").Len() != 1 {
+func SingleHostOSDCount(cluster api.Object) int64 { return newPlacements(cluster).singleHostOSDCount() }
+
+func (p *placements) singleHostOSDCount() int64 {
+	if p.cluster.Spec().Get("topology", "nodes").Len() != 1 {
 		return 0
 	}
 	devices := map[string]bool{}
-	for _, service := range cluster.Spec().Get("services").Items() {
+	for _, service := range p.cluster.Spec().Get("services").Items() {
 		if service.Get("service_type").Text() != "osd" {
 			continue
 		}
-		hosts, issues := ResolveServicePlacement(cluster, service)
+		hosts, issues := p.resolve(service)
 		if len(issues) != 0 || len(hosts) != 1 {
 			continue
 		}

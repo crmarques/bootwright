@@ -184,7 +184,7 @@ func (a *admission) topology(ceph api.Value) {
 		if len(nodes) != 1 || ceph.Has("topology", "stretch") {
 			a.invalid("$.spec.cephadm.bootstrap.singleHostDefaults", "single-host defaults require exactly one non-stretch node", "remove spec.cephadm.bootstrap.singleHostDefaults or use exactly one topology node without stretch")
 		}
-		if SingleHostOSDCount(a.object) < 2 {
+		if a.placements().singleHostOSDCount() < 2 {
 			a.invalid("$.spec.services", "single-host testing requires at least two explicitly selected OSD data disks", "declare at least two distinct data disks and select them in the OSD service")
 		}
 	}

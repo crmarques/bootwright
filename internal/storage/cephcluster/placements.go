@@ -59,3 +59,17 @@ func (a *admission) placements() *placements {
 	}
 	return a.placed
 }
+
+func (a *admission) placementsOf(cluster api.Object) *placements {
+	if sameCluster(a.object, cluster) {
+		return a.placements()
+	}
+	if a.foreign == nil || !sameCluster(a.foreign.cluster, cluster) {
+		a.foreign = newPlacements(cluster)
+	}
+	return a.foreign
+}
+
+func sameCluster(held, cluster api.Object) bool {
+	return held.Kind() == cluster.Kind() && held.Identity() == cluster.Identity() && held.Spec().Equal(cluster.Spec())
+}

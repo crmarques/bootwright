@@ -14,6 +14,7 @@ type admission struct {
 	issues  []api.Issue
 	partial bool
 	placed  *placements
+	foreign *placements
 }
 
 func isStorage(kind api.Kind) bool {

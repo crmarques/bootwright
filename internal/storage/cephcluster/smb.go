@@ -643,7 +643,7 @@ func (a *admission) smbDisjointPlacement(cluster api.Object, hosts []string) {
 		if native.Get("placement").Type() != api.Mapping {
 			continue
 		}
-		other, _ := ResolveServicePlacement(cluster, native)
+		other, _ := a.placementsOf(cluster).resolve(native)
 		if index := slices.IndexFunc(hosts, func(host string) bool { return slices.Contains(other, host) }); index >= 0 {
 			a.issue("api.invariant", "$.spec.native.placement", "SMB cluster CephSMBResource "+peer.Name()+" may also run on host "+hosts[index]+", and one host serves one SMB cluster because each binds the SMB port", "select disjoint hosts for the two SMB clusters")
 		}
@@ -666,7 +666,7 @@ func (a *admission) smbListeners(cluster api.Object, native api.Value, hosts []s
 	if smbClustered(native) {
 		ports = append(ports, listener{label: "CTDB (4379)", low: 4379})
 	}
-	registry := listenerRegistry(cluster, a.catalog)
+	registry := listenerRegistry(a.placementsOf(cluster), a.catalog)
 	for _, own := range ports {
 		own.service, own.high, own.binds = -1, own.low, bindAll(hosts, netip.Addr{})
 		for _, other := range registry {

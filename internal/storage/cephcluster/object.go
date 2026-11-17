@@ -129,9 +129,9 @@ func (a *admission) gatewayDerivedPools(cluster api.Object) {
 	if _, _, declared := declaredPoolDefaults(cluster); !declared && !cluster.Spec().Has("topology", "stretch") {
 		remedy += ", or set osd_pool_default_size and osd_pool_default_min_size to \"2\" under its spec.config.global"
 	}
-	hosts := big.NewInt(osdHostCount(cluster))
+	hosts := big.NewInt(osdHostCount(a.placementsOf(cluster)))
 	if cluster.Spec().Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
-		if size.Cmp(big.NewInt(SingleHostOSDCount(cluster))) > 0 {
+		if size.Cmp(big.NewInt(a.placementsOf(cluster).singleHostOSDCount())) > 0 {
 			a.invalid("$.spec.zone", "single-host gateway replicas exceed explicitly selected OSD-disk capacity", "select at least two distinct OSD data disks")
 		}
 		return

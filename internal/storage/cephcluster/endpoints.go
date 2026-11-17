@@ -39,10 +39,10 @@ type listener struct {
 type reservedListener struct {
 	label  string
 	ranges [][2]int64
-	hosts  func(cluster api.Object) []string
+	hosts  func(placed *placements) []string
 }
 
-type listenerSource func(cluster api.Object, catalog api.Catalog, service api.Value, field string, index int) []listener
+type listenerSource func(placed *placements, catalog api.Catalog, service api.Value, field string, index int) []listener
 
 var reservedListeners = []reservedListener{
 	{label: "the Ceph monitors (3300 and 6789)", ranges: [][2]int64{{3300, 3300}, {6789, 6789}}, hosts: topologyNodeNames},
@@ -82,32 +82,32 @@ func declaredServices(cluster api.Object, serviceType string) []api.Value {
 	return out
 }
 
-func undeclaredExporterHosts(cluster api.Object) []string {
-	if len(declaredServices(cluster, "ceph-exporter")) != 0 {
+func undeclaredExporterHosts(placed *placements) []string {
+	if len(declaredServices(placed.cluster, "ceph-exporter")) != 0 {
 		return nil
 	}
-	return topologyNodeNames(cluster)
+	return topologyNodeNames(placed)
 }
 
-func declaredHosts(serviceType string, alongside ...string) func(api.Object) []string {
-	return func(cluster api.Object) []string {
+func declaredHosts(serviceType string, alongside ...string) func(*placements) []string {
+	return func(placed *placements) []string {
 		for _, other := range alongside {
-			if len(declaredServices(cluster, other)) == 0 {
+			if len(declaredServices(placed.cluster, other)) == 0 {
 				return nil
 			}
 		}
 		out := []string{}
-		for _, service := range declaredServices(cluster, serviceType) {
-			hosts, _ := ResolveServicePlacement(cluster, service)
+		for _, service := range declaredServices(placed.cluster, serviceType) {
+			hosts, _ := placed.resolve(service)
 			out = append(out, hosts...)
 		}
 		return out
 	}
 }
 
-func topologyNodeNames(cluster api.Object) []string {
+func topologyNodeNames(placed *placements) []string {
 	out := []string{}
-	for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
+	for _, node := range placed.cluster.Spec().Get("topology", "nodes").Items() {
 		out = append(out, textOf(node, "name"))
 	}
 	return out
@@ -132,17 +132,17 @@ func serviceListener(field string, index int, port int64, binds map[string]netip
 	return listener{field: field, service: index, low: port, high: port, binds: binds}
 }
 
-func listenerRegistry(cluster api.Object, catalog api.Catalog) []listener {
+func listenerRegistry(placed *placements, catalog api.Catalog) []listener {
 	out := []listener{}
 	for _, row := range reservedListeners {
-		hosts := row.hosts(cluster)
+		hosts := row.hosts(placed)
 		for _, span := range row.ranges {
 			out = append(out, listener{label: row.label, service: -1, low: span[0], high: span[1], binds: bindAll(hosts, netip.Addr{})})
 		}
 	}
-	for i, service := range cluster.Spec().Get("services").Items() {
+	for i, service := range placed.cluster.Spec().Get("services").Items() {
 		if source, ok := nativeListeners[textOf(service, "service_type")]; ok {
-			out = append(out, source(cluster, catalog, service, indexed("$.spec.services", i), i)...)
+			out = append(out, source(placed, catalog, service, indexed("$.spec.services", i), i)...)
 		}
 	}
 	return out
@@ -176,7 +176,7 @@ func nodeNetworkAddress(cluster api.Object, catalog api.Catalog, host string, ne
 	return netip.Addr{}
 }
 
-func rgwListeners(cluster api.Object, catalog api.Catalog, service api.Value, field string, index int) []listener {
+func rgwListeners(placed *placements, catalog api.Catalog, service api.Value, field string, index int) []listener {
 	spec := service.Get("spec")
 	fallback := int64(80)
 	if spec.Get("ssl").Bool() {
@@ -186,65 +186,65 @@ func rgwListeners(cluster api.Object, catalog api.Catalog, service api.Value, fi
 	if !ok {
 		return nil
 	}
-	return []listener{serviceListener(field+".spec.rgw_frontend_port", index, port, networkBinds(cluster, catalog, service))}
+	return []listener{serviceListener(field+".spec.rgw_frontend_port", index, port, networkBinds(placed, catalog, service))}
 }
 
-func networkBinds(cluster api.Object, catalog api.Catalog, service api.Value) map[string]netip.Addr {
-	hosts, _ := ResolveServicePlacement(cluster, service)
+func networkBinds(placed *placements, catalog api.Catalog, service api.Value) map[string]netip.Addr {
+	hosts, _ := placed.resolve(service)
 	binds := bindAll(hosts, netip.Addr{})
 	if service.Get("spec", "only_bind_port_on_networks").Bool() {
 		for _, host := range hosts {
-			binds[host] = nodeNetworkAddress(cluster, catalog, host, service.Get("networks"))
+			binds[host] = nodeNetworkAddress(placed.cluster, catalog, host, service.Get("networks"))
 		}
 	}
 	return binds
 }
 
 func portListener(fallback int64, networks bool) listenerSource {
-	return func(cluster api.Object, catalog api.Catalog, service api.Value, field string, index int) []listener {
+	return func(placed *placements, catalog api.Catalog, service api.Value, field string, index int) []listener {
 		port, ok := listenerPort(service.Get("spec"), "port", fallback)
 		if !ok {
 			return nil
 		}
-		hosts, _ := ResolveServicePlacement(cluster, service)
+		hosts, _ := placed.resolve(service)
 		binds := bindAll(hosts, netip.Addr{})
 		if networks {
-			binds = networkBinds(cluster, catalog, service)
+			binds = networkBinds(placed, catalog, service)
 		}
 		return []listener{serviceListener(field+".spec.port", index, port, binds)}
 	}
 }
 
-func labelledListener(cluster api.Object, service api.Value, field string, index int, port int64, label string) listener {
-	hosts, _ := ResolveServicePlacement(cluster, service)
+func labelledListener(placed *placements, service api.Value, field string, index int, port int64, label string) listener {
+	hosts, _ := placed.resolve(service)
 	out := serviceListener(field+".placement", index, port, bindAll(hosts, netip.Addr{}))
 	out.label = label + " of " + field
 	return out
 }
 
-func alertmanagerListeners(cluster api.Object, catalog api.Catalog, service api.Value, field string, index int) []listener {
-	out := portListener(9093, false)(cluster, catalog, service, field, index)
-	return append(out, labelledListener(cluster, service, field, index, 9094, "the Alertmanager cluster listener (9094)"))
+func alertmanagerListeners(placed *placements, catalog api.Catalog, service api.Value, field string, index int) []listener {
+	out := portListener(9093, false)(placed, catalog, service, field, index)
+	return append(out, labelledListener(placed, service, field, index, 9094, "the Alertmanager cluster listener (9094)"))
 }
 
-func lokiListeners(cluster api.Object, catalog api.Catalog, service api.Value, field string, index int) []listener {
-	out := portListener(3100, false)(cluster, catalog, service, field, index)
-	out = append(out, labelledListener(cluster, service, field, index, 3100, "the loki HTTP listener (3100)"))
-	return append(out, labelledListener(cluster, service, field, index, 8080, "the loki gRPC listener (8080)"))
+func lokiListeners(placed *placements, catalog api.Catalog, service api.Value, field string, index int) []listener {
+	out := portListener(3100, false)(placed, catalog, service, field, index)
+	out = append(out, labelledListener(placed, service, field, index, 3100, "the loki HTTP listener (3100)"))
+	return append(out, labelledListener(placed, service, field, index, 8080, "the loki gRPC listener (8080)"))
 }
 
-func promtailListeners(cluster api.Object, catalog api.Catalog, service api.Value, field string, index int) []listener {
-	out := portListener(9080, false)(cluster, catalog, service, field, index)
-	return append(out, labelledListener(cluster, service, field, index, 9080, "the promtail listener (9080)"))
+func promtailListeners(placed *placements, catalog api.Catalog, service api.Value, field string, index int) []listener {
+	out := portListener(9080, false)(placed, catalog, service, field, index)
+	return append(out, labelledListener(placed, service, field, index, 9080, "the promtail listener (9080)"))
 }
 
-func oauth2ProxyListeners(cluster api.Object, _ api.Catalog, service api.Value, field string, index int) []listener {
-	return []listener{labelledListener(cluster, service, field, index, 4180, "oauth2-proxy (4180)")}
+func oauth2ProxyListeners(placed *placements, _ api.Catalog, service api.Value, field string, index int) []listener {
+	return []listener{labelledListener(placed, service, field, index, 4180, "oauth2-proxy (4180)")}
 }
 
-func nfsListeners(cluster api.Object, _ api.Catalog, service api.Value, field string, index int) []listener {
+func nfsListeners(placed *placements, _ api.Catalog, service api.Value, field string, index int) []listener {
 	spec := service.Get("spec")
-	hosts, _ := ResolveServicePlacement(cluster, service)
+	hosts, _ := placed.resolve(service)
 	vip := netip.Addr{}
 	if prefix, ok := ParseVirtualIP(textOf(spec, "virtual_ip"), false); ok && !spec.Get("enable_haproxy_protocol").Bool() {
 		vip = prefix.Addr()
@@ -261,9 +261,9 @@ func nfsListeners(cluster api.Object, _ api.Catalog, service api.Value, field st
 	return append(out, qos)
 }
 
-func ingressListeners(cluster api.Object, _ api.Catalog, service api.Value, field string, index int) []listener {
+func ingressListeners(placed *placements, _ api.Catalog, service api.Value, field string, index int) []listener {
 	spec := service.Get("spec")
-	hosts, _ := ResolveServicePlacement(cluster, service)
+	hosts, _ := placed.resolve(service)
 	out := []listener{}
 	if prefix, ok := ParseVirtualIP(textOf(spec, "virtual_ip"), true); ok {
 		if port, ok := listenerPort(spec, "frontend_port", 0); ok {
@@ -273,7 +273,7 @@ func ingressListeners(cluster api.Object, _ api.Catalog, service api.Value, fiel
 	if port, ok := listenerPort(spec, "monitor_port", 0); ok {
 		out = append(out, serviceListener(field+".spec.monitor_port", index, port, bindAll(hosts, netip.Addr{})))
 	}
-	if spec.Has("haproxy_peer_communication_port") || ingressBackendType(cluster, service) == "nfs" {
+	if spec.Has("haproxy_peer_communication_port") || ingressBackendType(placed.cluster, service) == "nfs" {
 		if port, ok := listenerPort(spec, "haproxy_peer_communication_port", 1024); ok {
 			out = append(out, serviceListener(field+".spec.haproxy_peer_communication_port", index, port, bindAll(hosts, netip.Addr{})))
 		}
@@ -300,7 +300,7 @@ func listenerClash(left, right listener) (string, bool) {
 
 func (a *admission) listenerConflicts(cluster api.Object) {
 	services := cluster.Spec().Get("services").Items()
-	registry := listenerRegistry(cluster, a.catalog)
+	registry := listenerRegistry(a.placementsOf(cluster), a.catalog)
 	reported := map[string]bool{}
 	for j, later := range registry {
 		for _, earlier := range registry[:j] {

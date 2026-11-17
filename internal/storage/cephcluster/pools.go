@@ -42,9 +42,9 @@ func TargetSizeBytes(text string) (*big.Int, bool) {
 
 func RoleApplication(role string) string { return roleApplication[role] }
 
-func declaredClassHosts(cluster api.Object) map[string][]string {
+func declaredClassHosts(placed *placements) map[string][]string {
 	out := map[string][]string{}
-	for _, service := range cluster.Spec().Get("services").Items() {
+	for _, service := range placed.cluster.Spec().Get("services").Items() {
 		if textOf(service, "service_type") != "osd" {
 			continue
 		}
@@ -55,7 +55,7 @@ func declaredClassHosts(cluster api.Object) map[string][]string {
 		if len(classes) == 0 {
 			classes = append(classes, textOf(service, "spec", "crush_device_class"))
 		}
-		names, issues := ResolveServicePlacement(cluster, service)
+		names, issues := placed.resolve(service)
 		for _, class := range classes {
 			if class == "" {
 				continue
@@ -75,26 +75,26 @@ func declaredClassHosts(cluster api.Object) map[string][]string {
 	return out
 }
 
-func classHostCount(cluster api.Object, class string) (int64, bool) {
+func classHostCount(placed *placements, class string) (int64, bool) {
 	if slices.Contains(automaticClasses, class) {
-		return automaticClassCapacity(cluster, class)
+		return automaticClassCapacity(placed, class)
 	}
-	hosts, declared := declaredClassHosts(cluster)[class]
+	hosts, declared := declaredClassHosts(placed)[class]
 	if !declared {
-		return osdHostCount(cluster), false
+		return osdHostCount(placed), false
 	}
 	return int64(len(hosts)), true
 }
 
-func automaticClassCapacity(cluster api.Object, class string) (int64, bool) {
+func automaticClassCapacity(placed *placements, class string) (int64, bool) {
 	possible := map[string]bool{}
-	for _, service := range cluster.Spec().Get("services").Items() {
+	for _, service := range placed.cluster.Spec().Get("services").Items() {
 		if textOf(service, "service_type") != "osd" {
 			continue
 		}
-		names, issues := ResolveServicePlacement(cluster, service)
+		names, issues := placed.resolve(service)
 		if len(issues) != 0 {
-			return osdHostCount(cluster), false
+			return osdHostCount(placed), false
 		}
 		assigned := []string{}
 		for _, path := range service.Get("spec", "data_devices", "paths").Items() {
@@ -111,7 +111,7 @@ func automaticClassCapacity(cluster api.Object, class string) (int64, bool) {
 		}
 	}
 	count := int64(len(possible))
-	return count, count < osdHostCount(cluster)
+	return count, count < osdHostCount(placed)
 }
 
 func effectiveClass(service, path api.Value) string {
@@ -140,7 +140,7 @@ func (a *admission) deviceClass(cluster api.Object, value api.Value, field strin
 		a.issue("api.invariant", field, "device class "+class+" is not a native CRUSH class name of at most 64 letters, digits, '-', '_' and '.'", "rename the device class here and on the OSD service that declares it")
 		return
 	}
-	if _, declared := declaredClassHosts(cluster)[class]; declared || slices.Contains(automaticClasses, class) {
+	if _, declared := declaredClassHosts(a.placementsOf(cluster))[class]; declared || slices.Contains(automaticClasses, class) {
 		return
 	}
 	a.issue("api.invariant", field, "device class "+class+" is neither an automatic class (hdd, ssd, nvme) nor a crush_device_class an OSD service of this cluster declares", "use hdd, ssd or nvme, or declare crush_device_class: "+class+" on the OSD service that owns those devices")
@@ -204,10 +204,9 @@ func effectiveReplicas(value api.Value, size, minimum *big.Int) (*big.Int, *big.
 	}
 	return size, minimum
 }
-func osdHostCount(cluster api.Object) int64 {
+func osdHostCount(placed *placements) int64 {
 	var count int64
-	placed := newPlacements(cluster)
-	for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
+	for _, node := range placed.cluster.Spec().Get("topology", "nodes").Items() {
 		if placed.member("osd", textOf(node, "name")) {
 			count++
 		}
@@ -240,14 +239,14 @@ func (a *admission) replication(cluster, policy api.Object) {
 		class = textOf(spec, "crushDeviceClass")
 	}
 	if cluster.Spec().Get("cephadm", "bootstrap", "singleHostDefaults").Bool() && policy.Kind() == "" && a.object.Kind() == api.CephPool {
-		if size.Cmp(big.NewInt(SingleHostOSDCount(cluster))) > 0 {
+		if size.Cmp(big.NewInt(a.placementsOf(cluster).singleHostOSDCount())) > 0 {
 			a.invalid("$.spec.replicated.size", "single-host replicas exceed explicitly selected OSD-disk capacity", "select more distinct OSD data disks, or lower replicated.size while keeping size and minSize at least two")
 		}
 		return
 	}
 	if domain == "host" && cluster.Spec().Get("topology", "nodes").Len() > 0 {
-		hosts := big.NewInt(osdHostCount(cluster))
-		classHosts, bounded := classHostCount(cluster, class)
+		hosts := big.NewInt(osdHostCount(a.placementsOf(cluster)))
+		classHosts, bounded := classHostCount(a.placementsOf(cluster), class)
 		if size.Cmp(hosts) > 0 {
 			a.issue("api.invariant", "$.spec.replicated.size", "host-domain replicas exceed declared OSD-host capacity", "add OSD-bearing hosts, or lower replicated.size to at most the declared OSD-host count")
 		} else if bounded && size.Cmp(big.NewInt(classHosts)) > 0 {
@@ -368,7 +367,7 @@ func (a *admission) erasureProfile(cluster api.Object, erasure api.Value) {
 		k, m := numeric(data), numeric(coding)
 		width := new(big.Int).Add(k, m)
 		class := textOf(erasure, "crushDeviceClass")
-		hosts, bounded := classHostCount(cluster, class)
+		hosts, bounded := classHostCount(a.placementsOf(cluster), class)
 		if width.Cmp(big.NewInt(hosts)) > 0 {
 			if bounded && slices.Contains(automaticClasses, class) {
 				a.issue("api.invariant", "$.spec.erasure", fmt.Sprintf("erasure profile %d+%d needs %d OSD hosts with device class %s, but declared OSD services allow at most %d OSD hosts", k, m, width, class, hosts), fmt.Sprintf("declare OSD services that permit device class %s on at least %d hosts, or lower dataChunks and codingChunks", class, width))

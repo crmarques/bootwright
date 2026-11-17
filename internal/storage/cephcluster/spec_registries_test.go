@@ -152,13 +152,13 @@ func TestCephListenerTableMatchesRegistry(t *testing.T) {
 	for _, family := range families {
 		service := b479Service(family).With("spec", m("backend_service", "nfs.data", "virtual_ip", "192.0.2.8/24"))
 		source := nativeListeners[family]
-		defaults := listenerPorts(source(cluster, catalog, service, "$.service", 0), nil)
+		defaults := listenerPorts(source(newPlacements(cluster), catalog, service, "$.service", 0), nil)
 		if family == "rgw" {
-			tls := source(cluster, catalog, service.With("spec", service.Get("spec").With("ssl", api.BoolValue(true))), "$.service", 0)
+			tls := source(newPlacements(cluster), catalog, service.With("spec", service.Get("spec").With("ssl", api.BoolValue(true))), "$.service", 0)
 			defaults += "; ssl: " + listenerPorts(tls, nil)
 		}
 		withPorts := authored.With("backend_service", api.StringValue("nfs.data")).With("virtual_ip", api.StringValue("192.0.2.8/24"))
-		configured := source(cluster, catalog, service.With("spec", withPorts), "$.service", 0)
+		configured := source(newPlacements(cluster), catalog, service.With("spec", withPorts), "$.service", 0)
 		label := specCode(family)
 		if family == "ingress" {
 			label += " (NFS backend)"

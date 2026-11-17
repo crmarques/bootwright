@@ -103,14 +103,14 @@ func (a *admission) nvmeofGraph(ceph api.Value) {
 	}
 }
 
-func nvmeofListeners(cluster api.Object, catalog api.Catalog, service api.Value, field string, index int) []listener {
-	out := portListener(5500, false)(cluster, catalog, service, field, index)
-	hosts, _ := ResolveServicePlacement(cluster, service)
+func nvmeofListeners(placed *placements, catalog api.Catalog, service api.Value, field string, index int) []listener {
+	out := portListener(5500, false)(placed, catalog, service, field, index)
+	hosts, _ := placed.resolve(service)
 	if port, ok := listenerPort(service.Get("spec"), "discovery_port", 8009); ok {
 		out = append(out, serviceListener(field+".spec.discovery_port", index, port, bindAll(hosts, netip.Addr{})))
 	}
-	out = append(out, labelledListener(cluster, service, field, index, nvmeofListenerPort, "the NVMe/TCP subsystem listener port (4420)"))
-	return append(out, labelledListener(cluster, service, field, index, 10008, "the NVMe-oF gateway exporter (10008)"))
+	out = append(out, labelledListener(placed, service, field, index, nvmeofListenerPort, "the NVMe/TCP subsystem listener port (4420)"))
+	return append(out, labelledListener(placed, service, field, index, 10008, "the NVMe-oF gateway exporter (10008)"))
 }
 
 func (a *admission) nvmeofSubsystemIntrinsic() {
@@ -193,7 +193,7 @@ func (a *admission) nvmeofSubsystemService(cluster api.Object, spec api.Value) {
 		a.issue("api.invariant", "$.spec.serviceRef", "spec.serviceRef must name an nvmeof service; it names a "+textOf(service, "service_type")+" service", "set spec.serviceRef to the qualified name nvmeof.<service_id> of a declared nvmeof service")
 		return
 	}
-	eligible, issues := ResolveServicePlacement(cluster, service)
+	eligible, issues := a.placementsOf(cluster).resolve(service)
 	if len(issues) != 0 {
 		return
 	}

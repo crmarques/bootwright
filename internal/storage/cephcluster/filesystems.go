@@ -78,7 +78,7 @@ func (a *admission) mdsCoverage(cluster api.Object) {
 	if !ok {
 		return
 	}
-	hosts, issues := ResolveServicePlacement(cluster, service)
+	hosts, issues := a.placementsOf(cluster).resolve(service)
 	if len(issues) != 0 {
 		return
 	}
