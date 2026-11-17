@@ -20,7 +20,7 @@ const lifecycleDirectory = "../../internal/reconciliation/lifecycle"
 
 func lifecycleFileClasses() map[string]string {
 	return map[string]string{
-		"admin_credentials.go": "executor", "admin_password.go": "reader",
+		"admin_credential_run.go": "executor", "admin_credentials.go": "executor", "admin_password.go": "reader",
 		"additive.go": "planner", "authorization.go": "planner", "authorization_grammar.go": "planner", "claims.go": "planner", "commands.go": "planner",
 		"contradictions.go": "planner", "decision.go": "planner", "lineage.go": "planner", "lineage_removal.go": "planner",
 		"operation_plan.go": "planner", "other_build.go": "planner", "planning.go": "planner", "presentation.go": "planner",

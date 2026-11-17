@@ -94,6 +94,9 @@ func invokedPairs(t *testing.T) map[string]string {
 				}
 				at := fileset.Position(literal.Pos()).String()
 				operations := pkg.operations(function, fields["Operation"], map[string]bool{})
+				if fields["Operation"] == nil && pkg.bindsAdminCredential(function.Name.Name) {
+					operations = credentialOperations(packages)
+				}
 				if len(operations) == 0 {
 					t.Errorf("%s: no operation of %s is derivable from %s", at, implementation, dir)
 				}
@@ -182,6 +185,39 @@ func (p *invokedPackage) operations(function *ast.FuncDecl, expression ast.Expr,
 	}
 	slices.Sort(found)
 	return slices.Compact(found)
+}
+
+func (p *invokedPackage) bindsAdminCredential(binder string) bool {
+	bound := false
+	for _, function := range p.functions {
+		ast.Inspect(function, func(node ast.Node) bool {
+			literal, ok := node.(*ast.CompositeLit)
+			if !ok {
+				return !bound
+			}
+			if selector, typed := literal.Type.(*ast.SelectorExpr); !typed || selector.Sel.Name != "AdminCredentialCall" {
+				return !bound
+			}
+			for _, element := range literal.Elts {
+				if pair, ok := element.(*ast.KeyValueExpr); ok && calledName(pair.Key) == "Bind" && calledName(pair.Value) == binder {
+					bound = true
+				}
+			}
+			return !bound
+		})
+	}
+	return bound
+}
+
+func credentialOperations(packages map[string]*invokedPackage) []string {
+	var operations []string
+	for name, text := range packages[filepath.Join("..", "..", "internal", "reconciliation", "lifecycle")].constants {
+		if strings.HasSuffix(name, "CredentialsOperation") {
+			operations = append(operations, text)
+		}
+	}
+	slices.Sort(operations)
+	return operations
 }
 
 func calledName(expression ast.Expr) string {

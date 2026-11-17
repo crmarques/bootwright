@@ -743,6 +743,10 @@ type PlanInspection func(context.Context, string, api.Catalog, reconciliation.Pl
 
 type ListenerAdmission func(context.Context, string, api.Catalog, reconciliation.Plan, []reconciliation.Block) error
 
+type AdminCredentialRunner interface {
+	Run(context.Context, RunRequest) (RunResult, error)
+}
+
 type AdminCredentialUpdater interface {
 	AdminCredentialIdentity(context.Context, Execution) (string, error)
 	AdminCredentialSeed(reconciliation.Block) string
