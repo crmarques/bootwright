@@ -16424,3 +16424,10 @@ Every plan, refusal, frozen request and golden is unchanged. The Ceph base
 request (G18-08) and the remaining repeats stay on B1468. An independent
 review found no stale or shared-mutable memo; its key note is applied.
 
+### B1488
+
+Defect found by X518's `make check`: X516's per-host throttle test closed its
+peak signal each time four probes overlapped, so under load it panicked while
+holding the test prober's lock and the fan-out's join waited forever. The
+prober now signals once; the product is unchanged.
+
