@@ -94,7 +94,7 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 		ImageSource: source,
 		Listeners:   listeners,
 		Placement:   placement,
-		Unit:        unitPrefix + "-" + contextName + "-artifacts-" + name,
+		Unit:        managedservice.UnitName(contextName, "artifacts", name),
 		Version:     requestVersion,
 	}
 	if request.BindAddress == "" {

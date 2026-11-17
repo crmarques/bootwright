@@ -3,6 +3,7 @@ package artifactserver
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 )
 
@@ -83,7 +84,7 @@ func PrivatePath(catalog api.Catalog, server api.Object, selection api.Value, co
 // consumer publishes beneath the root that server created, so the layout has
 // one owner rather than one copy per consumer.
 func ContentRoot(contextName, server string) string {
-	return HostedRoot + "/" + contextName + "/" + servicesArea + "/artifact-server/" + server
+	return managedservice.ContentRoot(contextName, "artifact-server", server)
 }
 
 func ServedRoot(contextName, server string) string {

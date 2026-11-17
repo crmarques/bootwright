@@ -1,6 +1,7 @@
 package artifactserver
 
 import (
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -17,15 +18,6 @@ const Kind = "ArtifactServer"
 // replaces it; neither may use a floating tag.
 const defaultImage = "registry.access.redhat.com/ubi9/nginx-124@sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56"
 
-// HostedRoot is outside the Bootwright state root, so serving a
-// directory can never expose context storage.
-const HostedRoot = "/var/lib/bootwright-hosted"
-
-const servicesArea = "services"
-
-// unitPrefix namespaces every host unit this capability owns.
-const unitPrefix = "bootwright"
-
 // ContentDigest binds the plan to the exact behavior this build implements.
 // The automation identity is mixed in by the caller's operation record; this
 // value fixes the Go-side contract, so changing the request shape, the default
@@ -36,9 +28,9 @@ func ContentDigest() string {
 		Implementation,
 		requestVersion,
 		defaultImage,
-		HostedRoot,
-		servicesArea,
-		unitPrefix,
+		managedservice.HostedRoot,
+		managedservice.ServicesArea,
+		managedservice.UnitPrefix,
 	)
 }
 

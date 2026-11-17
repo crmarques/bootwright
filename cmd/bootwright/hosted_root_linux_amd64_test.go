@@ -6,7 +6,6 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 )
 
@@ -15,7 +14,6 @@ const hostedRoot = "/var/lib/bootwright-hosted"
 func TestEveryDomainNamesTheOneHostedRoot(t *testing.T) {
 	for owner, root := range map[string]string{
 		"managedservice.HostedRoot": managedservice.HostedRoot,
-		"artifactserver.HostedRoot": artifactserver.HostedRoot,
 		"agentinstall.HostedRoot":   agentinstall.HostedRoot,
 	} {
 		if root != hostedRoot {

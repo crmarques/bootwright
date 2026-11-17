@@ -7,6 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -71,7 +72,7 @@ func TestRequestsDeriveTheFrozenLocalPlacement(t *testing.T) {
 	if request.Image != defaultImage {
 		t.Fatalf("image = %q", request.Image)
 	}
-	if request.ContentRoot != HostedRoot+"/"+testContext+"/services/artifact-server/lab-artifacts" {
+	if request.ContentRoot != managedservice.HostedRoot+"/"+testContext+"/services/artifact-server/lab-artifacts" {
 		t.Fatalf("content root = %q", request.ContentRoot)
 	}
 	if strings.HasPrefix(request.ContentRoot, "/var/lib/bootwright/") {
@@ -283,8 +284,8 @@ func TestReservationKeysCoverEverySocketUnitAndPath(t *testing.T) {
 	keys := requests[0].reservationKeys()
 	for _, want := range []string{
 		"socket:192.0.2.1:8080", "socket:192.0.2.1:8443",
-		"unit:" + unitPrefix + "-" + testContext + "-artifacts-lab-artifacts",
-		"path:" + HostedRoot + "/" + testContext + "/services/artifact-server/lab-artifacts",
+		"unit:" + managedservice.UnitPrefix + "-" + testContext + "-artifacts-lab-artifacts",
+		"path:" + managedservice.HostedRoot + "/" + testContext + "/services/artifact-server/lab-artifacts",
 	} {
 		if !slices.Contains(keys, want) {
 			t.Fatalf("keys = %v, missing %q", keys, want)
