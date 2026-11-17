@@ -62,7 +62,7 @@ func runHeldBy(t *testing.T, parent context.Context, runner ansiblerunner.Runner
 	ctx, cancel := context.WithCancel(parent)
 	running := make(chan struct{})
 	var once sync.Once
-	request := composedRequest(t, func(context.Context, string, string) { once.Do(func() { close(running) }) })
+	request := composedRequest(t, func(context.Context, string, string, lifecycle.ByteProgress) { once.Do(func() { close(running) }) })
 	ended := make(chan error, 1)
 	go func() {
 		_, err := runner.Run(ctx, request)
@@ -84,7 +84,7 @@ func runHeldBy(t *testing.T, parent context.Context, runner ansiblerunner.Runner
 	return stop
 }
 
-func composedRequest(t *testing.T, progress func(context.Context, string, string)) lifecycle.RunRequest {
+func composedRequest(t *testing.T, progress func(context.Context, string, string, lifecycle.ByteProgress)) lifecycle.RunRequest {
 	t.Helper()
 	return lifecycle.RunRequest{
 		Context: "alpha", Block: "artifact-server-lab", Description: "Serve ArtifactServer/artifact-server-lab",

@@ -512,7 +512,7 @@ func (s Service) invoke(ctx context.Context, run invocation, block reconciliatio
 				return boundary.append(inner, log, record)
 			},
 			Output: output,
-			Progress: func(inner context.Context, group, status string) {
+			Progress: func(inner context.Context, group, status string, bytes ByteProgress) {
 				// Only a group the frozen block declares may advance completion,
 				// because the declaration is what the count is measured against.
 				if status != "running" && declaresGroup(block, group) {
@@ -520,7 +520,7 @@ func (s Service) invoke(ctx context.Context, run invocation, block reconciliatio
 				}
 				s.report(inner, ProgressEvent{Block: block.ID, Description: block.Description, Group: group,
 					Detail: groupDescription(block, group), Status: status, Position: position, Total: total,
-					Completed: len(settled), Declared: len(block.Groups)})
+					Completed: len(settled), Declared: len(block.Groups), Bytes: bytes})
 			},
 		}
 		if err := populateRemovalExecution(ctx, store, operation, plan, &execution); err != nil {

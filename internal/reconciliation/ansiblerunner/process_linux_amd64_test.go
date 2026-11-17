@@ -363,7 +363,7 @@ func TestARecordWaitingAtTheDrainIsJudgedAsIfReadFirst(t *testing.T) {
 				request := adapterRequest(t, &output)
 				request.Refusals = map[string]error{"identity-mismatch": named}
 				held := false
-				request.Progress = func(context.Context, string, string) {
+				request.Progress = func(context.Context, string, string, lifecycle.ByteProgress) {
 					if held {
 						return
 					}

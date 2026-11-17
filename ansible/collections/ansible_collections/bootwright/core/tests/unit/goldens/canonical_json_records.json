@@ -9,6 +9,10 @@
  },
  {
   "admission": "lifecycle",
+  "line": "{\"group\":\"zero and read back sda\",\"phase\":\"group\",\"progress\":{\"completed\":1073741824,\"total\":9223372036854775807},\"status\":\"running\"}"
+ },
+ {
+  "admission": "lifecycle",
   "line": "{\"phase\":\"refused\",\"reason\":\"identity-mismatch\"}"
  },
  {

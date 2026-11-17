@@ -787,7 +787,7 @@ func (c Capability) published(ctx context.Context, execution lifecycle.Execution
 
 func report(ctx context.Context, execution lifecycle.Execution, group, status string) {
 	if execution.Progress != nil && status != "" {
-		execution.Progress(ctx, group, status)
+		execution.Progress(ctx, group, status, lifecycle.ByteProgress{})
 	}
 }
 

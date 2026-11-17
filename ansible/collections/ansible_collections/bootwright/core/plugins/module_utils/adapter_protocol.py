@@ -1,7 +1,8 @@
 """The adapter result protocol every capability's action plugin publishes.
 
 One dispatch hands the runner a capability's records: `loaded`, which waits for
-the runner's acknowledgement, `group` progress, a `prepared` before-state that
+the runner's acknowledgement, `group` progress (optionally the bytes a running
+group has proved of the bytes it must prove), a `prepared` before-state that
 also waits for it, a named `refused` reason and the terminal `completed` record. Each capability supplies only what is its own:
 its name, its phases, the refusals it may name and the completion that builds
 its evidence. Whether that evidence proves a postcondition is the capability's
@@ -39,6 +40,10 @@ NAME = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-.")
 KIND = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
 TRUNCATED = "..."
 MAX_LINE = 65536
+# A running group's byte progress: both counts non-negative 64-bit integers,
+# completed at most total, as the Go decoder admits them. It only reports, so
+# the dispatch drops a progress it would refuse rather than fail the effect.
+MAX_PROGRESS = 2**63 - 1
 
 
 def request_digest(value):
@@ -141,6 +146,21 @@ def warning(entry):
     return record
 
 
+def byte_count(value):
+    """Whether value is a JSON integer the Go decoder reads as a byte count; a bool is not one."""
+    return type(value) is int and 0 <= value <= MAX_PROGRESS  # pylint: disable=unidiomatic-typecheck
+
+
+def progress_of(value):
+    """A group's byte progress in the record's shape, or None for one the Go decoder would refuse."""
+    if not isinstance(value, dict) or set(value) != {"completed", "total"}:
+        return None
+    completed, total = value["completed"], value["total"]
+    if not byte_count(completed) or not byte_count(total) or completed > total:
+        return None
+    return {"completed": completed, "total": total}
+
+
 def counted(kept, dropped):
     """Mark the last kept warning with how many were not reported."""
     if dropped and kept:
@@ -197,7 +217,11 @@ def handed(arguments, capability, emit):
         status = arguments.get("status")
         if status not in GROUP_STATUSES:
             raise ValueError("group status")
-        emit({"phase": "group", "group": str(arguments.get("group")), "status": status})
+        record = {"phase": "group", "group": str(arguments.get("group")), "status": status}
+        progress = progress_of(arguments.get("progress"))
+        if progress is not None:
+            record["progress"] = progress
+        emit(record)
         return {"changed": False}
     if phase == "refused":
         record = {"phase": "refused", "reason": refusal(arguments, capability.refusals)}

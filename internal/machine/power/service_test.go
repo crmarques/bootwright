@@ -126,7 +126,7 @@ func (a *adapter) Run(ctx context.Context, request lifecycle.RunRequest) (lifecy
 	a.seen = request
 	for _, group := range a.groups {
 		if request.Progress != nil {
-			request.Progress(ctx, group[0], group[1])
+			request.Progress(ctx, group[0], group[1], lifecycle.ByteProgress{})
 		}
 	}
 	if a.err != nil {

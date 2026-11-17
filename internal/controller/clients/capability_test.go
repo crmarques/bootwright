@@ -365,7 +365,7 @@ func (r *recorder) execution(t *testing.T, block reconciliation.Block, state pre
 				return nil
 			},
 		},
-		Progress: func(_ context.Context, group, status string) {
+		Progress: func(_ context.Context, group, status string, _ lifecycle.ByteProgress) {
 			r.groups = append(r.groups, group+"="+status)
 		},
 	}

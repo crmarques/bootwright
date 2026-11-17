@@ -371,20 +371,20 @@ func (s Service) run(ctx context.Context, runtime lifecycle.Runtime, resolved ta
 // groups reports each adapter group as a sub-step of the run's one step. The
 // runner calls it from the goroutine that reads the adapter, so it shares
 // nothing but the reporter, which serializes its own rows.
-func (s Service) groups(step lifecycle.ProgressEvent, force bool) func(context.Context, string, string) {
-	return func(ctx context.Context, group, status string) {
+func (s Service) groups(step lifecycle.ProgressEvent, force bool) func(context.Context, string, string, lifecycle.ByteProgress) {
+	return func(ctx context.Context, group, status string, bytes lifecycle.ByteProgress) {
 		nested := step
-		nested.Group, nested.Detail, nested.Status = group, groupDetail(group, force), status
+		nested.Group, nested.Detail, nested.Status, nested.Bytes = group, groupDetail(group, force), status, bytes
 		s.report(ctx, nested)
 	}
 }
 
 // readGroups reports each group of a reading as a sub-step of its host's
 // check, named as the role names it.
-func (s Service) readGroups(step lifecycle.ProgressEvent) func(context.Context, string, string) {
-	return func(ctx context.Context, group, status string) {
+func (s Service) readGroups(step lifecycle.ProgressEvent) func(context.Context, string, string, lifecycle.ByteProgress) {
+	return func(ctx context.Context, group, status string, bytes lifecycle.ByteProgress) {
 		nested := step
-		nested.Group, nested.Detail, nested.Status = group, group, status
+		nested.Group, nested.Detail, nested.Status, nested.Bytes = group, group, status, bytes
 		s.report(ctx, nested)
 	}
 }
@@ -466,7 +466,7 @@ func (s Service) report(ctx context.Context, event lifecycle.ProgressEvent) {
 }
 
 func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []byte, digest string,
-	progress func(context.Context, string, string)) lifecycle.RunRequest {
+	progress func(context.Context, string, string, lifecycle.ByteProgress)) lifecycle.RunRequest {
 	return lifecycle.RunRequest{
 		Context:        runtime.Context.Name,
 		Repeat:         "bootwright machine list --context " + runtime.Context.Name + " --power-status",
@@ -487,7 +487,7 @@ func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []by
 }
 
 func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string, pin machine.HardwareIdentity,
-	progress func(context.Context, string, string)) lifecycle.RunRequest {
+	progress func(context.Context, string, string, lifecycle.ByteProgress)) lifecycle.RunRequest {
 	user, password := substrate.ControllerCredential(frozen.Arm)
 	port := frozen.MachinePort
 	materials := []lifecycle.MaterialFile{{Name: "bmc-user", Part: user, Secret: credentialSecret(frozen.Controller), Variable: port.UserVariable}}

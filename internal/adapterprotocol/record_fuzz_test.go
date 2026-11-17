@@ -22,6 +22,8 @@ func FuzzDecodeRecord(f *testing.F) {
 		`{"group":"pull-image","phase":"group","status":"running"}`,
 		`{"group":"","phase":"group","status":"running"}`,
 		`{"group":"pull-image","phase":"group","status":"unknown"}`,
+		`{"group":"zero and read back sda","phase":"group","progress":{"completed":1,"total":2},"status":"running"}`,
+		`{"group":"x","phase":"group","progress":{"completed":3,"total":2},"status":"running"}`,
 		`{"phase":"refused","reason":"identity-mismatch"}`,
 		`{"phase":"refused","reason":"timeout","source":"tool-helm"}`,
 		`{"detail":"a:b@c-d_e.f","phase":"refused","reason":"x"}`,
@@ -89,6 +91,9 @@ func checkRecordBounds(t *testing.T, record Record) {
 		if !slices.Contains(warningCodes, warning.Code) || len(warning.Message) > MaxWarningMessage {
 			t.Fatalf("warning %+v is outside its bounds", warning)
 		}
+	}
+	if got := record.Progress; got != nil && (got.Completed < 0 || got.Total < 0 || got.Completed > got.Total) {
+		t.Fatalf("progress %+v is outside its bounds", got)
 	}
 	if native := record.NativeError; native != nil {
 		if len(native.Coordinate) > MaxNativeCoordinate || len(native.Cause) > MaxNativeCause || !utf8.ValidString(native.Coordinate+native.Cause) {

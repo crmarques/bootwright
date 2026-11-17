@@ -62,6 +62,7 @@ func (*lifecycleOutputFailure) Error() string { return "lifecycle plan output fa
 type LifecycleProgressPresenter struct {
 	progress progressPresenter
 	model    *lifecyclePresentation
+	meters   byteMeters
 }
 
 // NewLifecycleProgressPresenter streams to out. Given a terminal width reader
@@ -102,7 +103,7 @@ func (p *LifecycleProgressPresenter) ReportProgress(ctx context.Context, event l
 	p.progress.report(ctx, progressEvent{
 		Heading: lifecyclePhaseHeading(event.Phase), Label: label, Identity: identity, Detail: detail, Status: event.Status,
 		Position: event.Position, Total: event.Total, Nested: event.Group != "",
-		Completed: event.Completed, Declared: event.Declared,
+		Completed: event.Completed, Declared: event.Declared, Measure: p.meters.text(p.progress.clock.now(), event),
 	})
 }
 

@@ -25,6 +25,7 @@ type Record struct {
 	Reason      string
 	Source      string
 	Detail      string
+	Progress    *Progress
 	NativeError *NativeError
 	Evidence    json.RawMessage
 	Preparation json.RawMessage
@@ -32,6 +33,8 @@ type Record struct {
 }
 
 type NativeError struct{ Coordinate, Cause string }
+
+type Progress struct{ Completed, Total int64 }
 
 type Warning struct {
 	Code    string         `json:"code"`
@@ -94,6 +97,7 @@ type phase struct {
 	admitted    Admission
 	source      Admission
 	detail      Admission
+	progress    Admission
 	nativeError Admission
 	warnings    Admission
 }
@@ -101,7 +105,7 @@ type phase struct {
 // phases is the one table of which runner admits which phase.
 var phases = map[string]phase{
 	"loaded":    {members: []string{"phase"}, admitted: Lifecycle | Controller},
-	"group":     {members: []string{"group", "phase", "status"}, admitted: Lifecycle},
+	"group":     {members: []string{"group", "phase", "status"}, admitted: Lifecycle, progress: Lifecycle},
 	"prepared":  {members: []string{"phase", "preparation"}, admitted: Lifecycle | Controller},
 	"native":    {members: []string{"phase"}, admitted: Controller},
 	"continue":  {members: []string{"phase"}, admitted: Controller},
@@ -277,19 +281,7 @@ func shape(members map[string]json.RawMessage, admission Admission) (Record, err
 	if !known || rule.admitted&admission == 0 {
 		return Record{}, errPhase
 	}
-	expected := rule.members
-	if _, named := members["source"]; named && rule.source&admission != 0 {
-		expected = append(slices.Clone(expected), "source")
-	}
-	if _, named := members["detail"]; named && rule.detail&admission != 0 {
-		expected = append(slices.Clone(expected), "detail")
-	}
-	if _, named := members["nativeError"]; named && rule.nativeError&admission != 0 {
-		expected = append(slices.Clone(expected), "nativeError")
-	}
-	if _, named := members["warnings"]; named && rule.warnings&admission != 0 {
-		expected = append(slices.Clone(expected), "warnings")
-	}
+	expected := expectedMembers(members, rule, admission)
 	if len(members) != len(expected) {
 		return Record{}, errRecord
 	}
@@ -301,8 +293,7 @@ func shape(members map[string]json.RawMessage, admission Admission) (Record, err
 	valid := true
 	switch record.Phase {
 	case "group":
-		valid = text(members["group"], &record.Group) && record.Group != "" &&
-			text(members["status"], &record.Status) && slices.Contains([]string{"running", "ok", "failed", "skipped"}, record.Status)
+		valid = groupRecord(members, &record)
 	case "completed":
 		evidence := members["evidence"]
 		valid = text(members["outcome"], &record.Outcome) && (record.Outcome == "changed" || record.Outcome == "unchanged") &&
@@ -334,6 +325,51 @@ func shape(members map[string]json.RawMessage, admission Admission) (Record, err
 		return Record{}, errRecord
 	}
 	return record, nil
+}
+
+func progress(raw json.RawMessage) (*Progress, bool) {
+	var members map[string]json.RawMessage
+	if len(raw) == 0 || raw[0] != '{' || json.Unmarshal(raw, &members) != nil || len(members) != 2 {
+		return nil, false
+	}
+	completed, done := byteCount(members["completed"])
+	total, counted := byteCount(members["total"])
+	if !done || !counted || completed > total {
+		return nil, false
+	}
+	return &Progress{Completed: completed, Total: total}, true
+}
+
+func byteCount(raw json.RawMessage) (int64, bool) {
+	if len(raw) == 0 || raw[0] < '0' || raw[0] > '9' || len(raw) > 1 && raw[0] == '0' {
+		return 0, false
+	}
+	count, err := strconv.ParseInt(string(raw), 10, 64)
+	return count, err == nil
+}
+
+func expectedMembers(members map[string]json.RawMessage, rule phase, admission Admission) []string {
+	expected := rule.members
+	for _, optional := range []struct {
+		name     string
+		admitted Admission
+	}{{"source", rule.source}, {"detail", rule.detail}, {"progress", rule.progress}, {"nativeError", rule.nativeError}, {"warnings", rule.warnings}} {
+		if _, named := members[optional.name]; named && optional.admitted&admission != 0 {
+			expected = append(slices.Clone(expected), optional.name)
+		}
+	}
+	return expected
+}
+
+func groupRecord(members map[string]json.RawMessage, record *Record) bool {
+	valid := text(members["group"], &record.Group) && record.Group != "" &&
+		text(members["status"], &record.Status) && slices.Contains([]string{"running", "ok", "failed", "skipped"}, record.Status)
+	if raw, named := members["progress"]; named {
+		var ok bool
+		record.Progress, ok = progress(raw)
+		valid = valid && ok
+	}
+	return valid
 }
 
 func warnings(raw json.RawMessage) ([]Warning, bool) {

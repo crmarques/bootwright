@@ -22,7 +22,7 @@ type grouped struct {
 
 func (g *grouped) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	if request.Progress != nil {
-		request.Progress(ctx, "read-state", "running")
+		request.Progress(ctx, "read-state", "running", lifecycle.ByteProgress{})
 	}
 	if len(g.runs)+1 == g.failAt {
 		g.runs = append(g.runs, request)
@@ -30,7 +30,7 @@ func (g *grouped) Run(ctx context.Context, request lifecycle.RunRequest) (lifecy
 	}
 	result, err := g.surveyor.Run(ctx, request)
 	if err == nil && request.Progress != nil {
-		request.Progress(ctx, "read-state", "ok")
+		request.Progress(ctx, "read-state", "ok", lifecycle.ByteProgress{})
 	}
 	return result, err
 }

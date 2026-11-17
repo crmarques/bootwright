@@ -116,6 +116,25 @@ func TestTruncationMarkerAndUndecodableLineAreExplicit(t *testing.T) {
 	}
 }
 
+func TestAGroupRecordCarriesItsByteProgressAsPlainDetail(t *testing.T) {
+	f := newFixture(t, "erase")
+	detail := "running 12% (1.0 GiB of 8.0 GiB), 34.1 MiB/s, about 4m left at the observed rate"
+	f.log("operation.jsonl", record("09:00:00", "opened", "", ""))
+	f.log("blocks/erase/attempt-000001.jsonl", record("09:00:01", "opened", "", ""),
+		`{"time":"2026-11-08T09:01:00Z","event":"group","group":"zero and read back sda","detail":"`+detail+`"}`)
+	result, err := f.service(nil).Show(f.ctx, Selection{Context: "lab"})
+	if err != nil {
+		t.Fatalf("show = %#v", diagnostics.Of(err))
+	}
+	last := result.Events[len(result.Events)-1]
+	if last.Group != "zero and read back sda" || last.Detail != detail {
+		t.Fatalf("group event = %+v", last)
+	}
+	if line := RenderEvents(result.Events[len(result.Events)-1:], false)[0]; !strings.HasSuffix(line, "group  zero and read back sda "+detail) {
+		t.Fatalf("rendered = %q", line)
+	}
+}
+
 func TestNoCurrentOperationIsNotFound(t *testing.T) {
 	ws := newWorkspace()
 	_, err := New(ws, Options{Operations: stores}).Show(context.Background(), Selection{Context: "lab"})

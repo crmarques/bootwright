@@ -342,6 +342,32 @@ type lifecycleJudge struct {
 	loaded    bool
 	prepared  bool
 	completed bool
+	now       func() time.Time
+	meters    map[string]*lifecycle.ByteMeter
+}
+
+func (j *lifecycleJudge) groupDetail(record adapterprotocol.Record, bytes lifecycle.ByteProgress) (string, bool) {
+	group, status := record.Group, record.Status
+	if record.Progress == nil {
+		return status, true
+	}
+	if !bytes.Known() {
+		return status, false
+	}
+	if j.meters == nil {
+		j.meters = map[string]*lifecycle.ByteMeter{}
+	}
+	meter := j.meters[group]
+	if meter == nil {
+		meter = &lifecycle.ByteMeter{}
+		j.meters[group] = meter
+	}
+	now := time.Now
+	if j.now != nil {
+		now = j.now
+	}
+	text, due := meter.Observe(now(), bytes)
+	return status + " " + text, due
 }
 
 // Judge judges one record and applies what a valid one reports. A record read
@@ -358,13 +384,20 @@ func (j *lifecycleJudge) Judge(ctx context.Context, record adapterprotocol.Recor
 		verdict.Acknowledge = true
 	case "group":
 		valid = valid && j.loaded
-		if valid && !moment.Exited && j.request.Progress != nil {
-			j.request.Progress(ctx, record.Group, record.Status)
+		reported := valid && !moment.Exited
+		bytes := lifecycle.ByteProgress{}
+		if record.Progress != nil {
+			bytes = lifecycle.ByteProgress{Completed: record.Progress.Completed, Total: record.Progress.Total}
+		}
+		if reported && j.request.Progress != nil {
+			j.request.Progress(ctx, record.Group, record.Status, bytes)
 		}
 		// A record the log could not keep is the engine's log fault: its
 		// callback latches it and cancels this run, which then ends.
-		if valid && !moment.Exited && j.request.Log != nil {
-			_ = j.request.Log(ctx, operationstore.LogRecord{Event: "group", Group: record.Group, Detail: record.Status})
+		if reported && j.request.Log != nil {
+			if detail, logged := j.groupDetail(record, bytes); logged {
+				_ = j.request.Log(ctx, operationstore.LogRecord{Event: "group", Group: record.Group, Detail: detail})
+			}
 		}
 	case "prepared":
 		valid = valid && j.loaded && !j.prepared && j.request.Prepare != nil && !j.request.ReadOnly

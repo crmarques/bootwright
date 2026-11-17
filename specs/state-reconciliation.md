@@ -2167,7 +2167,7 @@ their cluster's host reads this way
 | `completed` | present |
 
 A present or partial reading also carries, as the note `<block>: <message>`,
-each [warning](architecture.md#the-adapter-result-protocol) its
+each [warning](architecture.md#adapter-warnings-and-group-progress) its
 observation's completed result reported, such as the checks a Ceph
 observation names as `not ready: <entry>`; a warning holding a part of 8
 bytes or more of the material lent to the read is left out. An unknown

@@ -690,7 +690,7 @@ type Execution struct {
 	// capability receives nil and cannot reach it.
 	Stage    *ControllerStage
 	Log      func(context.Context, operationstore.LogRecord) error
-	Progress func(context.Context, string, string)
+	Progress func(context.Context, string, string, ByteProgress)
 	Warn     func(context.Context, []operationstore.Warning)
 	// Output retains what the adapter prints on its own standard output and
 	// error, for an operator to read when no structured event explains what a

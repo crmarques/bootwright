@@ -299,6 +299,52 @@ func TestDecodeAcceptsTheCanonicalVectorsThePythonEncoderWrites(t *testing.T) {
 	}
 }
 
+func TestDecodeReadsAGroupsByteProgressForALifecycleRunOnly(t *testing.T) {
+	records := accepts(t, Lifecycle,
+		`{"group":"zero and read back sda","phase":"group","progress":{"completed":0,"total":4096},"status":"running"}`,
+		`{"group":"zero and read back sda","phase":"group","progress":{"completed":4096,"total":4096},"status":"ok"}`,
+		`{"group":"zero and read back sda","phase":"group","progress":{"completed":9223372036854775807,"total":9223372036854775807},"status":"running"}`,
+		`{"group":"zero and read back sda","phase":"group","status":"running"}`,
+	)
+	if got := records[0].Progress; got == nil || *got != (Progress{Completed: 0, Total: 4096}) {
+		t.Fatalf("progress = %+v, want 0 of 4096", got)
+	}
+	if got := records[2].Progress; got == nil || got.Total != 1<<63-1 {
+		t.Fatalf("progress = %+v, want the largest int64 total", got)
+	}
+	if records[3].Progress != nil {
+		t.Fatalf("a group without progress decoded %+v", records[3].Progress)
+	}
+	refuses(t, Controller, `{"group":"x","phase":"group","progress":{"completed":0,"total":1},"status":"running"}`)
+}
+
+func TestDecodeRefusesAMalformedByteProgressLikeAnyMalformedMember(t *testing.T) {
+	for _, progress := range []string{
+		`null`, `[]`, `1`, `"1"`, `{}`,
+		`{"completed":1}`, `{"total":1}`,
+		`{"completed":1,"total":2,"extra":0}`,
+		`{"completed":2,"total":1}`,
+		`{"completed":-1,"total":1}`,
+		`{"completed":0,"total":-1}`,
+		`{"completed":1.5,"total":2}`,
+		`{"completed":1,"total":2.0}`,
+		`{"completed":1e1,"total":20}`,
+		`{"completed":"1","total":2}`,
+		`{"completed":true,"total":2}`,
+		`{"completed":null,"total":2}`,
+		`{"completed":01,"total":2}`,
+		`{"completed":0,"total":9223372036854775808}`,
+		`{"completed":0,"total":99999999999999999999}`,
+	} {
+		refuses(t, Lifecycle, `{"group":"x","phase":"group","progress":`+progress+`,"status":"running"}`)
+	}
+	refuses(t, Lifecycle,
+		`{"group":"x","phase":"loaded","progress":{"completed":0,"total":1}}`,
+		`{"phase":"refused","progress":{"completed":0,"total":1},"reason":"identity-mismatch"}`,
+		`{"group":"x","phase":"group","progress":{"total":1,"completed":0},"status":"running"}`,
+	)
+}
+
 func TestDecodeAdmitsALifecycleRefusalDetailOfTheClosedGrammarOnly(t *testing.T) {
 	records := accepts(t, Lifecycle,
 		`{"detail":"native-refusal:fixture-session-expired","phase":"refused","reason":"remote-refusal"}`,

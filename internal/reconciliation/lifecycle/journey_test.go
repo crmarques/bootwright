@@ -984,6 +984,8 @@ type testCapability struct {
 	material   []map[string]secrets.Material
 	executions []Execution
 	extraGroup string
+	// groupBytes is what the pull-image group reports while it runs.
+	groupBytes ByteProgress
 	probes     []string
 	// probed is every execution a probe presents, in the order it ran.
 	probed       []Execution
@@ -1250,11 +1252,11 @@ func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result
 		return Result{Outcome: reconciliation.OutcomeFailed}, errors.New("the endpoint refused the credential")
 	}
 	if execution.Progress != nil {
-		execution.Progress(ctx, "pull-image", "running")
-		execution.Progress(ctx, "pull-image", "ok")
+		execution.Progress(ctx, "pull-image", "running", c.groupBytes)
+		execution.Progress(ctx, "pull-image", "ok", ByteProgress{})
 	}
 	if c.extraGroup != "" {
-		execution.Progress(ctx, c.extraGroup, "ok")
+		execution.Progress(ctx, c.extraGroup, "ok", ByteProgress{})
 	}
 	if execution.Output != nil {
 		_, _ = execution.Output.Write([]byte("TASK [acquire the image]\nok: [controller]\n"))
@@ -1987,6 +1989,7 @@ func TestApplyRefusesAnUnpreparedControllerHost(t *testing.T) {
 type testProgress struct {
 	mutex          sync.Mutex
 	rows           []string
+	bytes          []ByteProgress
 	location       string
 	named          LogLocation
 	rowsAtLocation int
@@ -2003,6 +2006,9 @@ func (p *testProgress) ReportProgress(_ context.Context, event ProgressEvent) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	p.rows = append(p.rows, row)
+	if event.Bytes.Known() {
+		p.bytes = append(p.bytes, event.Bytes)
+	}
 }
 
 func (p *testProgress) ReportLogLocation(_ context.Context, location LogLocation) {
@@ -2037,6 +2043,25 @@ func TestProgressNamesBlocksAndGroupsFromTheFrozenPlan(t *testing.T) {
 	}
 	if !slices.Equal(progress.rows, want) {
 		t.Fatalf("progress = %q, want %q", progress.rows, want)
+	}
+}
+
+// A group's byte progress rides its running row to the reporter and moves
+// neither the row text nor the count of settled groups.
+func TestProgressCarriesAGroupsBytesWithoutChangingItsRows(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, "artifact-server-lab")
+	progress := &testProgress{}
+	h.service.options.Progress = progress
+	h.capability.groupBytes = ByteProgress{Completed: 512, Total: 2048}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []ByteProgress{{Completed: 512, Total: 2048}}; !slices.Equal(progress.bytes, want) {
+		t.Fatalf("reported bytes = %+v, want %+v", progress.bytes, want)
+	}
+	if len(progress.rows) != 4 {
+		t.Fatalf("progress = %q", progress.rows)
 	}
 }
 

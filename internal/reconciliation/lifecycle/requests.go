@@ -299,6 +299,7 @@ type ProgressEvent struct {
 	// A check counts the blocks it has probed out of the blocks it must probe.
 	Completed int
 	Declared  int
+	Bytes     ByteProgress
 }
 
 type SetupCheck struct {

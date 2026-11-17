@@ -46,7 +46,9 @@ func applicationValues() packageSymbols {
 		"internal/infrastructureservices/mirrorfill": {"Release": true},
 		// The removal gate's values, what a capability is asked and what it
 		// answers; they bind no replaceable service.
-		"internal/reconciliation/lifecycle": {"Probe": true, "Quiescence": true},
+		// The bytes a group has proved and the meter that states them: a count
+		// the engine reports and a presenter or log reads, binding no service.
+		"internal/reconciliation/lifecycle": {"Probe": true, "Quiescence": true, "ByteProgress": true, "ByteMeter": true},
 		// The two private records an operation opens and hands to the work it
 		// is recording. Each is an owned handle over the area it was opened
 		// from, not a replaceable service.

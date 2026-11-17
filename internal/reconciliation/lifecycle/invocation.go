@@ -85,7 +85,7 @@ type RunRequest struct {
 	Launch         prerequisites.PythonLaunch
 	Material       map[string]secrets.Material
 	Log            func(context.Context, operationstore.LogRecord) error
-	Progress       func(context.Context, string, string)
+	Progress       func(context.Context, string, string, ByteProgress)
 	Warn           func(context.Context, []operationstore.Warning)
 	// Output receives the adapter process's own standard output and error.
 	Output prerequisites.RunOutput

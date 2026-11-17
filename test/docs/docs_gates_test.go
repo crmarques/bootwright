@@ -176,7 +176,7 @@ const specLeafBudget = 8192
 // ceiling its leaf's size that day. B965 in specs/milestones/backlog.md owns
 // splitting them and the section exceptions above; none may grow.
 var docsLeafExceptions = map[string]docsSectionException{
-	"specs/architecture.md #### The adapter result protocol":                    {ceiling: 13900, since: "2026-10-29"},
+	"specs/architecture.md #### The adapter result protocol":                    {ceiling: 12309, since: "2026-10-29"},
 	"specs/ceph-coverage.md ### Profile catalog":                                {ceiling: 13962, since: "2026-10-29"},
 	"specs/ceph-native-api.md ### Observability and management gateway records": {ceiling: 8545, since: "2026-10-29"},
 	"specs/ceph-native-api.md ### RGW, ingress and NFS records":                 {ceiling: 8993, since: "2026-10-29"},

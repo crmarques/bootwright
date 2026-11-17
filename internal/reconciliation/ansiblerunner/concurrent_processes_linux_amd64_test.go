@@ -20,6 +20,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
@@ -114,7 +115,7 @@ func runControlledWave(t *testing.T, ctx context.Context, runner Runner, impleme
 	for _, implementation := range implementations {
 		request := adapterRequest(t, &bytes.Buffer{})
 		request.Implementation, request.Operation = implementation, verb
-		request.Progress = func(context.Context, string, string) { arrived <- struct{}{} }
+		request.Progress = func(context.Context, string, string, lifecycle.ByteProgress) { arrived <- struct{}{} }
 		workers.Go(func() {
 			_, err := runner.Run(ctx, request)
 			done <- err

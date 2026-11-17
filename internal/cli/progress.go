@@ -68,6 +68,7 @@ type progressEvent struct {
 	Completed int
 	Declared  int
 	Nested    bool
+	Measure   string
 }
 
 // progressPresenter streams progress rows and repeats a silent step's row on
@@ -104,6 +105,7 @@ type progressStep struct {
 	nested    bool
 	completed int
 	declared  int
+	measure   string
 	ctx       context.Context
 	started   time.Time
 	// reported is when this step last wrote a row, which is what the silence
@@ -142,7 +144,7 @@ func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
 	}
 	if event.Nested || event.Status == "running" {
 		step.nested = event.Nested
-		step.detail, step.note = event.Detail, ""
+		step.detail, step.note, step.measure = event.Detail, "", event.Measure
 		p.running(step, now)
 		p.arm(now)
 		return
@@ -262,7 +264,9 @@ func (p *progressPresenter) beat(generation int) {
 			if !step.active() {
 				continue
 			}
-			step.note = "still running, " + formatElapsed(now.Sub(step.started))
+			if step.measure == "" {
+				step.note = "still running, " + formatElapsed(now.Sub(step.started))
+			}
 			redrawn = true
 		}
 		if redrawn {
@@ -459,6 +463,9 @@ func (p *progressPresenter) row(status string, step *progressStep, detail, suffi
 		if step.declared > 0 {
 			subject += styleMuted(fmt.Sprintf(" - %d%%", step.completed*100/step.declared), opts)
 		}
+	}
+	if status == "running" && suffix == "" {
+		suffix = step.measure
 	}
 	tail := ""
 	if suffix != "" {

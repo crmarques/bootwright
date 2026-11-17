@@ -27,6 +27,14 @@ options:
     description: The status a progress phase reports for its group.
     type: str
     required: false
+  progress:
+    description:
+      - The bytes a running group has proved, as exactly C(completed) and C(total),
+        both non-negative integers with C(completed) at most C(total). A value
+        that is not exactly that is left out of the record, because progress
+        only reports and never fails the effect it describes.
+    type: dict
+    required: false
   outcome:
     description: The terminal outcome a completion phase publishes.
     type: str

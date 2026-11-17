@@ -44,7 +44,7 @@ func runHeldIn(t *testing.T, parent context.Context, runner Runner, request life
 	ctx, cancel := context.WithCancel(parent)
 	running := make(chan struct{})
 	var once sync.Once
-	request.Progress = func(context.Context, string, string) { once.Do(func() { close(running) }) }
+	request.Progress = func(context.Context, string, string, lifecycle.ByteProgress) { once.Do(func() { close(running) }) }
 	runner.command = func(string, ...string) *exec.Cmd { return blocking() }
 	ended := make(chan error, 1)
 	go func() {

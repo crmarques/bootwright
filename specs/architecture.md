@@ -997,7 +997,7 @@ They accept these phases:
 | `prepared` | controller | adapter → runner | `phase`, `preparation`: exactly `addedSources`, the sorted source identities of the frozen request's tools | after the runner matches these sources to the frozen request and publishes them durably | once, after `loaded` and before any `continue` | Unmatched, with any other member, or unpublished, it is never acknowledged, so no tool is installed. |
 | `prepared` | lifecycle | adapter → runner | `phase`, `preparation`: an object the run's capability validates | after the capability validates it and the runner records it durably as the running attempt's preparation | once, after `loaded`, only on an apply's own attempt | It is never acknowledged unless validated and recorded, so the effect it precedes never runs: out of bounds or on a read-only run it breaks the protocol; refused by the capability, the run fails with the capability's diagnostic; unrecorded, it fails with the store's diagnostic, or with `lifecycle.unknown` `the attempt's preparation could not be recorded` when the store names none. |
 | `continue` | controller | adapter → runner | `phase` | before each tool installation | one per frozen tool, in order, after `prepared`; at most 128 | Acknowledgement EOF fails the adapter before that tool. |
-| `group` | lifecycle | adapter → runner | `phase`, `group`, `status` | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
+| `group` | lifecycle | adapter → runner | `phase`, `group`, `status`; optionally `progress`: exactly `completed` and `total`, JSON integers from 0 to 2^63-1 with `completed` at most `total` | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. A malformed `progress` breaks the protocol like any malformed member. |
 | `completed` | both | adapter → runner | `phase`, `outcome`, `evidence`: an object of at least one member; for a lifecycle run optionally `warnings` | none | last, once | Absent when the channel closes, the run has no result. |
 | `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp`, an acquisition class with `source`, or `internal` | none | last, once, in place of `completed`: `release-stamp` while an `openshift-clients` tool is being installed; an acquisition class (`dns`, `certificate`, `timeout`, `unreachable`, `proxy`, `status`, `redirect`, `integrity`, `trust`, `storage`) naming the tool being installed; `internal`, with no `source`, after `loaded` | The run fails with the [release-stamp refusal](controller.md#the-controller-stage), or the diagnostic Go gives the [class](controller.md#the-controller-stage), naming the source's host, instead of the generic adapter failure, even when the adapter's failed exit is read first; `internal` keeps the generic failure. |
 | `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply; optionally `detail`: at most 160 letters, digits and `_.:@-` naming a closed cause, optionally with the code site that refused, or an exception type and code site, never a value | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason, its message followed by any `detail`, instead of the generic adapter failure, even when the adapter's failed exit is read first; the runner closes the acknowledgement channel and kills nothing, so the adapter is left to end on its own. |
@@ -1012,32 +1012,6 @@ shape and bounds and appends these values only for an opted-in call. Other
 capabilities refuse this member. This leaves the closed `detail` grammar
 unchanged; raw vendor output and exception text never become evidence.
 
-A lifecycle `completed` record may carry `warnings`, a nonempty array of at
-most 16 advisories, each exactly `code`, one of the registered adapter warning
-codes, `message`, nonempty printable ASCII
-of at most 1024 bytes, and optionally `object`, exactly a `kind` (an API kind
-name of at most 63 bytes) and a `name` (lowercase letters, digits, `-` and
-`.`, at most 253 bytes, starting and ending alphanumeric). The decoder refuses
-any other code, bound or member, and the controller runner refuses the member,
-so a malformed warning breaks the protocol like any malformed record. A
-warning must never fail the completed effect it rides on, so the shared
-dispatch drops each warning the decoder would refuse, yields none when a
-capability's warning builder raises or answers anything but a list, clips a
-message to its bound with a `...` marker, marks the last kept warning with
-how many it dropped, and leaves the member out when the record would pass the
-line bound with it. The trade-off: a record that still carries an invalid
-warning breaks the protocol, so its attempt reads `unknown` until a
-resolution observes it. Warnings are presentation: the lifecycle runner hands
-those of a run that completed, and only those, to an attempt's own apply or
-removal run and to `diff --observe`'s observations, never to any other read;
-the attempt keeps
-those of all its runs up to the bound, records them with its outcome, and
-reports each once as a `warning` diagnostic of the run, about the object it
-names when the plan holds a block of that kind and object, or else the
-block's own. They never change an outcome, the evidence or a block's state.
-The member is additive and the protocol carries no version of its own; each
-code is a row of the [diagnostic registry](cli/output.md#diagnostic-taxonomy-and-order).
-
 `outcome` is `changed` or `unchanged`. `status` is `running`, `ok`, `failed`
 or `skipped`, and every status but `running` settles its group. Go alone derives
 `failed`, `unknown` and `canceled`; they never cross the channel. `reason`
@@ -1050,8 +1024,8 @@ canonical: a byte outside printable ASCII, whitespace outside a string, or an
 object, at any depth, whose members are out of order or two of them equal
 under case folding. It also refuses a phase carrying any member but its own, a
 `completed` whose evidence is not an object with at least one member, a
-`group` whose status is not one of the four, and a phase its runner does not
-admit. Both runners refuse an unknown, repeated or out-of-order phase, a record
+`group` whose status is not one of the four or whose `progress` is not exactly
+two ordered counts, and a phase its runner does not admit. Both runners refuse an unknown, repeated or out-of-order phase, a record
 after `completed`, and more records than their bound: 64 for the lifecycle
 runner, 132 for the controller runner (`loaded`, `prepared`, `completed` or
 `refused`, and a `continue` per tool). The
@@ -1141,6 +1115,46 @@ An installation adapter's inventory may hold, beside the controller, one host
 per node it boots, each the controller itself over a local connection, so that
 per-node phases run at the frozen fan-out; such a host carries no identity of
 its own.
+
+#### Adapter warnings and group progress
+
+A lifecycle `group` record may carry `progress`, the bytes its group has proved
+out of the bytes it must prove. It is presentation: the lifecycle runner hands
+it, with the group and status, to the attempt's progress, which the CLI shows
+as the [long-running progress](cli/output.md#long-running-progress) measure,
+and writes it into the group's log record only as that measure's text, at most
+once a minute per group and at each five percent step. It never counts toward
+a group's or a block's completion and is never evidence; the engine alone
+decides whether an effect happened. The collection's shared dispatch leaves out
+a `progress` the decoder would refuse, so progress never fails the effect it
+describes, and a record that still carries one breaks the protocol. The member
+is additive and moves no capability's request, evidence or effect pin.
+
+A lifecycle `completed` record may carry `warnings`, a nonempty array of at
+most 16 advisories, each exactly `code`, one of the registered adapter warning
+codes, `message`, nonempty printable ASCII
+of at most 1024 bytes, and optionally `object`, exactly a `kind` (an API kind
+name of at most 63 bytes) and a `name` (lowercase letters, digits, `-` and
+`.`, at most 253 bytes, starting and ending alphanumeric). The decoder refuses
+any other code, bound or member, and the controller runner refuses the member,
+so a malformed warning breaks the protocol like any malformed record. A
+warning must never fail the completed effect it rides on, so the shared
+dispatch drops each warning the decoder would refuse, yields none when a
+capability's warning builder raises or answers anything but a list, clips a
+message to its bound with a `...` marker, marks the last kept warning with
+how many it dropped, and leaves the member out when the record would pass the
+line bound with it. The trade-off: a record that still carries an invalid
+warning breaks the protocol, so its attempt reads `unknown` until a
+resolution observes it. Warnings are presentation: the lifecycle runner hands
+those of a run that completed, and only those, to an attempt's own apply or
+removal run and to `diff --observe`'s observations, never to any other read;
+the attempt keeps
+those of all its runs up to the bound, records them with its outcome, and
+reports each once as a `warning` diagnostic of the run, about the object it
+names when the plan holds a block of that kind and object, or else the
+block's own. They never change an outcome, the evidence or a block's state.
+The member is additive and the protocol carries no version of its own; each
+code is a row of the [diagnostic registry](cli/output.md#diagnostic-taxonomy-and-order).
 
 ## Implementations and version variation
 

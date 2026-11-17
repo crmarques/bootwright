@@ -104,6 +104,26 @@ def test_a_group_status_outside_the_four_is_refused():
     assert records == []
 
 
+def test_a_group_carries_the_bytes_it_has_proved():
+    for progress in ({"completed": 0, "total": 4096}, {"completed": 4096, "total": 4096}, {"completed": 1, "total": 2**63 - 1}):
+        result, records = published({"phase": "group", "group": "erase-1", "status": "running", "progress": progress})
+        assert result == {"changed": False}
+        assert records == [({"phase": "group", "group": "erase-1", "status": "running", "progress": progress}, False)]
+
+
+def test_a_progress_the_go_decoder_would_refuse_is_left_out_and_never_fails_the_group():
+    malformed = (
+        None, [], 1, "1", {}, {"completed": 1}, {"total": 1}, {"completed": 1, "total": 2, "extra": 0},
+        {"completed": 2, "total": 1}, {"completed": -1, "total": 1}, {"completed": 0, "total": -1},
+        {"completed": 1.5, "total": 2}, {"completed": "1", "total": 2}, {"completed": True, "total": 2},
+        {"completed": 0, "total": 2**63}, {"completed": None, "total": 2},
+    )
+    for progress in malformed:
+        result, records = published({"phase": "group", "group": "erase-1", "status": "running", "progress": progress})
+        assert result == {"changed": False}
+        assert records == [({"phase": "group", "group": "erase-1", "status": "running"}, False)]
+
+
 def test_a_refusal_the_capability_does_not_name_is_refused():
     result, records = published({"phase": "refused", "reason": "widget-busy"})
     assert result == {"changed": False}

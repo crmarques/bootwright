@@ -168,7 +168,18 @@ sub-steps; it settles with the proved number of machines read or a failure.
 
 One row belongs to each running step; sub-steps update that row and never settle
 as independent work. A known sub-step count may show the percentage actually
-proved, and an unknown count shows none. Every step settles with its observed
+proved, and an unknown count shows none. A running sub-step that reports bytes
+proved out of bytes to prove (the
+[adapter result protocol](../architecture.md#the-adapter-result-protocol)'s
+`group` `progress`) shows its percentage, both byte counts, the rate observed
+on the presenter's own clock since it first saw the group, and
+`about <time> left at the observed rate`; the rate and the time appear only
+after ten seconds of observation and once bytes have moved, so an adapter's
+claim of speed is never shown. The measure replaces the `still running` note
+while it is current. The log record of such a group carries the same text as its
+detail at most once a minute per group and at each five percent step. A
+preview, a settled sub-step and a sub-step without a byte count show none of
+it. Every step settles with its observed
 outcome and a duration only when at least one second elapsed. A running step
 silent for ten seconds gets a `still running` heartbeat and its elapsed time.
 Concurrent steps retain separate rows. Checks and work never masquerade as one
@@ -1044,7 +1055,7 @@ answer for, other than by reporting it missing, reads `absent` and adds a
 `context.state` warning naming the path and the kernel's answer.
 
 An `apply` or `destroy` reports each warning its attempts' adapters returned
-with a completed result ([adapter warnings](../architecture.md#the-adapter-result-protocol))
+with a completed result ([adapter warnings](../architecture.md#adapter-warnings-and-group-progress))
 once per attempt as `warning` diagnostics, in the
 [diagnostic order](#diagnostic-taxonomy-and-order) beside any error: on
 standard error with the human result, or in the envelope's `diagnostics`,

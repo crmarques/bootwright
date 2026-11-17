@@ -77,7 +77,7 @@ func TestARunIsBoundedByItsRequestsDeadline(t *testing.T) {
 				Context: "lab", Launch: testLaunch,
 				Output:   io.Discard,
 				Deadline: test.requested,
-				Progress: func(run context.Context, _, _ string) {
+				Progress: func(run context.Context, _, _ string, _ lifecycle.ByteProgress) {
 					observed, bounded = run.Deadline()
 					cancel()
 				},
