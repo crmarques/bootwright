@@ -38,6 +38,21 @@ func ValidateProxy(selection api.Value, c api.Catalog, field string, externalOnl
 	return issues
 }
 
+type ProxyFacts struct {
+	Management                    string
+	HTTPProxy, HTTPSProxy         api.Value
+	Authenticated, PrivateTrusted bool
+}
+
+func ProxyFactsOf(proxy api.Object) ProxyFacts {
+	connection := proxy.Spec().Get("connection")
+	return ProxyFacts{
+		Management: proxy.Spec().Get("management").Text(),
+		HTTPProxy:  connection.Get("httpProxy"), HTTPSProxy: connection.Get("httpsProxy"),
+		Authenticated: connection.Has("auth", "proxyAuthRef"), PrivateTrusted: connection.Has("trustBundleRef"),
+	}
+}
+
 // spelled is a field path as a remediation writes it, without its root.
 func spelled(field string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(field, "$"), ".")

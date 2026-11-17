@@ -50,7 +50,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]e
 			return nil, selectionFailure(binding, "api.reference", "$.spec.addonRefs", "target tool selection requires fully resolved add-on bindings")
 		}
 		for _, addon := range selected {
-			if !slices.Contains(addon.Spec().Get("provides").Strings(), "kubevirt") {
+			if !addons.Provides(addon, "kubevirt") {
 				continue
 			}
 			result = append(result, virtctl)

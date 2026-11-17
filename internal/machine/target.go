@@ -106,3 +106,38 @@ func Memberships(c api.Catalog) map[string][]string {
 	}
 	return memberships
 }
+
+func OSProvided(o api.Object) bool {
+	provided := o.Spec().Get("os", "provided")
+	return provided.Type() == api.Boolean && provided.Bool()
+}
+
+func ReachedOnlyLocally(o api.Object) bool {
+	local := o.Spec().Get("access", "local")
+	return local.Type() == api.Boolean && local.Bool() && !o.Spec().Has("access", "ssh")
+}
+
+func ProxyChoice(o api.Object) api.Value { return o.Spec().Get("proxy") }
+
+func NamesControllerHost(o api.Object, c api.Catalog, controllerName string) bool {
+	ssh := o.Spec().Get("access", "ssh")
+	if !ssh.Present() {
+		return o.Spec().Get("access", "local").Bool()
+	}
+	controller, found := c.Find(api.Machine, controllerName)
+	if !found {
+		return false
+	}
+	address := ""
+	for _, entry := range o.Spec().Get("network", "addresses").Items() {
+		if entry.Get("name").Text() == ssh.Get("addressRef").Text() {
+			address = entry.Get("address").Text()
+			break
+		}
+	}
+	port := 22
+	if value, ok := ssh.Get("port").Int64(); ok && value > 0 {
+		port = int(value)
+	}
+	return address != "" && ReachesController(controller, address, port)
+}

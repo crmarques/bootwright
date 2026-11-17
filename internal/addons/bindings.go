@@ -16,6 +16,10 @@ func ExpandBinding(binding api.Object, c api.Catalog) ([]api.Object, []api.Issue
 	return expandSelection(binding, c)
 }
 
+func Provides(addon api.Object, capability string) bool {
+	return slices.Contains(addon.Spec().Get("provides").Strings(), capability)
+}
+
 func expandSelection(owner api.Object, c api.Catalog) ([]api.Object, []api.Issue) {
 	selected, issues, _ := expandIndexed(owner, c, uniqueObjects(c.OfKind(api.ClusterAddonProfile)), uniqueObjects(c.OfKind(api.ClusterAddon)))
 	return selected, issues

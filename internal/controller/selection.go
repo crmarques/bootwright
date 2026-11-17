@@ -111,11 +111,11 @@ func Select(catalog api.Catalog) (Selection, error) {
 		return Selection{}, refuseSelection(environment, "api.reference", "$.spec.controller.machineRef", "controller reference must resolve to exactly one Machine",
 			"declare the Machine spec.controller.machineRef names on "+environment.Identity()+", or name a declared one")
 	}
-	if provided := machine.Spec().Get("os", "provided"); provided.Type() != api.Boolean || !provided.Bool() {
+	if !machineref.OSProvided(machine) {
 		return Selection{}, refuseSelection(machine, "api.invariant", "$.spec.os.provided", "controller setup requires an OS-ready Machine with os.provided: true",
 			"set spec.os.provided: true on "+machine.Identity())
 	}
-	if local := machine.Spec().Get("access", "local"); local.Type() != api.Boolean || !local.Bool() || machine.Spec().Has("access", "ssh") {
+	if !machineref.ReachedOnlyLocally(machine) {
 		return Selection{}, refuseSelection(machine, "api.invariant", "$.spec.access", "controller setup requires access.local: true and no SSH access",
 			"set spec.access.local: true and remove spec.access.ssh on "+machine.Identity())
 	}
@@ -192,7 +192,7 @@ func requiresLibvirtClient(catalog api.Catalog, controllerMachine api.Object) bo
 // executable's own limits on that route are its unsupported shapes, which
 // Select refuses before it gets here.
 func selectRoute(machine api.Object, catalog api.Catalog) (Route, error) {
-	choice := machine.Spec().Get("proxy")
+	choice := machineref.ProxyChoice(machine)
 	if choice.Type() != api.Mapping {
 		return Route{}, refuseSelection(machine, "api.value", "$.spec.proxy", "controller setup requires a normalized proxy choice",
 			"set spec.proxy on "+machine.Identity()+" to direct: {} or a proxyRef")
@@ -222,13 +222,14 @@ func selectRoute(machine api.Object, catalog api.Catalog) (Route, error) {
 		return Route{}, refuseSelection(machine, "api.reference", "$.spec.proxy.proxyRef", "proxy reference must resolve to exactly one Proxy",
 			"declare the Proxy spec.proxy.proxyRef names on "+machine.Identity()+", or name a declared one")
 	}
-	connection := proxy.Spec().Get("connection")
+	facts := infrastructureservices.ProxyFactsOf(proxy)
 	route := Route{proxyName: proxy.Name()}
 	for _, entry := range []struct {
 		field  string
+		value  api.Value
 		target *string
-	}{{"httpProxy", &route.httpProxy}, {"httpsProxy", &route.httpsProxy}} {
-		value := connection.Get(entry.field)
+	}{{"httpProxy", facts.HTTPProxy, &route.httpProxy}, {"httpsProxy", facts.HTTPSProxy, &route.httpsProxy}} {
+		value := entry.value
 		if !value.Present() {
 			continue
 		}
@@ -312,33 +313,34 @@ func unsupported(machine api.Object, catalog api.Catalog) []UnsupportedShape {
 		shapes = append(shapes, releasesBelowMinimum(environments[0], catalog)...)
 		shapes = append(shapes, mirrorShapes(environments[0], catalog)...)
 	}
-	if bypass := machine.Spec().Get("proxy", "noProxy"); bypass.Type() == api.Sequence && bypass.Len() > maxProxyBypassEntries {
+	choice := machineref.ProxyChoice(machine)
+	if bypass := choice.Get("noProxy"); bypass.Type() == api.Sequence && bypass.Len() > maxProxyBypassEntries {
 		shapes = append(shapes, UnsupportedShape{Object: machine, Field: "$.spec.proxy.noProxy",
 			Reason:      "this executable's controller route carries at most " + strconv.Itoa(maxProxyBypassEntries) + " bypass entries, and " + machine.Identity() + " declares more in spec.proxy.noProxy",
 			Remediation: "keep at most " + strconv.Itoa(maxProxyBypassEntries) + " entries in spec.proxy.noProxy on " + machine.Identity()})
 	}
-	ref := machine.Spec().Get("proxy", "proxyRef")
+	ref := choice.Get("proxyRef")
 	proxy, found := catalog.Find(api.Proxy, ref.Text())
 	if ref.Type() != api.String || !found {
 		return shapes
 	}
-	if proxy.Spec().Get("management").Text() != "external" {
+	facts := infrastructureservices.ProxyFactsOf(proxy)
+	if facts.Management != "external" {
 		return append(shapes, UnsupportedShape{Object: machine, Field: "$.spec.proxy.proxyRef",
 			Reason:      "this executable's controller stage acquires only directly or through an external Proxy that is already ready, and " + machine.Identity() + " selects the managed " + proxy.Identity(),
 			Remediation: "select direct: {} or an external Proxy in spec.proxy on " + machine.Identity()})
 	}
-	connection := proxy.Spec().Get("connection")
-	if connection.Has("auth", "proxyAuthRef") {
+	if facts.Authenticated {
 		shapes = append(shapes, UnsupportedShape{Object: proxy, Field: "$.spec.connection.auth.proxyAuthRef",
 			Reason:      "this executable's controller stage acquires through no authenticated proxy, and " + proxy.Identity() + " sets spec.connection.auth.proxyAuthRef",
 			Remediation: "select direct: {} or an external Proxy that needs no authentication in spec.proxy on " + machine.Identity()})
 	}
-	if connection.Has("trustBundleRef") {
+	if facts.PrivateTrusted {
 		shapes = append(shapes, UnsupportedShape{Object: proxy, Field: "$.spec.connection.trustBundleRef",
 			Reason:      "this executable's controller stage trusts only the host's system trust store, and " + proxy.Identity() + " sets spec.connection.trustBundleRef",
 			Remediation: "select direct: {} or an external Proxy without spec.connection.trustBundleRef that the host's system trust store verifies in spec.proxy on " + machine.Identity()})
 	}
-	if connection.Has("httpProxy") && !connection.Has("httpsProxy") {
+	if facts.HTTPProxy.Present() && !facts.HTTPSProxy.Present() {
 		shapes = append(shapes, UnsupportedShape{Object: proxy, Field: "$.spec.connection.httpsProxy",
 			Reason:      "every dependency source is HTTPS, so the spec.connection.httpProxy of " + proxy.Identity() + " alone selects no controller acquisition route",
 			Remediation: "set connection.httpsProxy on " + proxy.Identity() + " to the proxy endpoint; every dependency source is HTTPS"})
@@ -485,7 +487,7 @@ func managedMirrorShapes(environment api.Object, catalog api.Catalog, mirror inf
 	words, service, host := mirrorWordsOf(mirror.Service.Kind()), mirror.Service.Identity(), mirror.Host
 	controllerName := environment.Spec().Get("controller", "machineRef").Text()
 	machine, found := catalog.Find(api.Machine, host)
-	if host != controllerName && found && onControllerHost(catalog, machine, controllerName) {
+	if host != controllerName && found && machineref.NamesControllerHost(machine, catalog, controllerName) {
 		return refused(infrastructureservices.MirrorRefusal{
 			Reason:      "this executable places a managed " + words.noun + " on the controller host only through its controller Machine, and " + service + " is placed on Machine/" + host + ", another name for that host",
 			Remediation: "place " + service + " on Machine/" + controllerName + " or on another Machine reached over SSH"})
@@ -496,7 +498,7 @@ func managedMirrorShapes(environment api.Object, catalog api.Catalog, mirror inf
 	if !found {
 		return nil
 	}
-	if proxy, found := catalog.Find(api.Proxy, machine.Spec().Get("proxy", "proxyRef").Text()); found && proxy.Spec().Get("management").Text() == "managed" {
+	if proxy, found := catalog.Find(api.Proxy, machineref.ProxyChoice(machine).Get("proxyRef").Text()); found && infrastructureservices.ProxyFactsOf(proxy).Management == "managed" {
 		return []UnsupportedShape{{Object: machine, Field: "$.spec.proxy.proxyRef",
 			Reason:      "the " + words.noun + " on " + machine.Identity() + " is filled before " + words.fill + ", and " + machine.Identity() + " reaches the " + words.sources + " through the managed " + proxy.Identity(),
 			Remediation: "select direct: {} or an external Proxy in spec.proxy on " + machine.Identity()}}
@@ -520,27 +522,4 @@ func mirrorProviders(catalog api.Catalog, mirror infrastructureservices.ManagedM
 	}
 	slices.Sort(providers)
 	return slices.Compact(providers)
-}
-
-func onControllerHost(catalog api.Catalog, machine api.Object, controllerName string) bool {
-	ssh := machine.Spec().Get("access", "ssh")
-	if !ssh.Present() {
-		return machine.Spec().Get("access", "local").Bool()
-	}
-	own, found := catalog.Find(api.Machine, controllerName)
-	if !found {
-		return false
-	}
-	address := ""
-	for _, entry := range machine.Spec().Get("network", "addresses").Items() {
-		if entry.Get("name").Text() == ssh.Get("addressRef").Text() {
-			address = entry.Get("address").Text()
-			break
-		}
-	}
-	port := 22
-	if value, ok := ssh.Get("port").Int64(); ok && value > 0 {
-		port = int(value)
-	}
-	return address != "" && machineref.ReachesController(own, address, port)
 }
