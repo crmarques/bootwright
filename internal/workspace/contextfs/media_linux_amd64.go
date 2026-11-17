@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -439,7 +440,7 @@ func (a *mediaArea) Reservations(ctx context.Context) (map[string][]string, erro
 	reserved := map[string][]string{}
 	for _, reservation := range a.stored.value.Reservations {
 		for _, key := range reservation.Keys {
-			name, found := strings.CutPrefix(key, "media:")
+			name, found := infrastructureservices.UnqualifiedSubject(key, infrastructureservices.MediaClass)
 			if !found || slices.Contains(reserved[name], reservation.Context) {
 				continue
 			}

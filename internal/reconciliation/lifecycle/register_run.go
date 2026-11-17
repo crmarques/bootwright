@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"slices"
-	"strings"
 
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -226,7 +225,7 @@ func keepProved(held []infrastructureservices.HostReservation, contextName strin
 				continue
 			}
 			for _, key := range own.Keys {
-				if (strings.HasPrefix(key, "bmc-system:") || strings.HasPrefix(key, "bmc-mac:")) && !slices.Contains(reservation.Keys, key) {
+				if (infrastructureservices.HasClass(key, infrastructureservices.SystemClass) || infrastructureservices.HasClass(key, infrastructureservices.MACClass)) && !slices.Contains(reservation.Keys, key) {
 					reservation.Keys = append(reservation.Keys, key)
 				}
 			}

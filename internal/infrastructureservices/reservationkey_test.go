@@ -1,6 +1,7 @@
 package infrastructureservices
 
 import (
+	"net/netip"
 	"slices"
 	"testing"
 )
@@ -22,6 +23,16 @@ func TestEveryReservationKeyKeepsItsStoredText(t *testing.T) {
 		"a MAC address":                         {MACReservationKey(" AA-BB-CC-DD-EE-FF "), "bmc-mac:aa:bb:cc:dd:ee:ff"},
 		"an unparsed MAC address":               {MACReservationKey("Zz"), "bmc-mac:zz"},
 		"an image":                              {MediaReservationKey("rhel.iso"), "media:rhel.iso"},
+		"a path":                                {PathReservationKey("/srv/artifacts"), "path:/srv/artifacts"},
+		"a unit":                                {UnitReservationKey("bootwright-dns"), "unit:bootwright-dns"},
+		"a socket":                              {SocketReservationKey("::", "53"), "socket::::53"},
+		"a bridge":                              {BridgeReservationKey("virbr-lab"), "bridge:virbr-lab"},
+		"a bridge in use":                       {BridgeUseReservationKey("br-shared"), "bridge-use:br-shared"},
+		"a prefix":                              {PrefixReservationKey(netip.MustParsePrefix("203.0.113.193/26")), "prefix:203.0.113.192/26"},
+		"a NetworkManager connection":           {ConnectionReservationKey("trunk-160"), "nm-connection:trunk-160"},
+		"a libvirt pool":                        {LibvirtPoolReservationKey("lab-pool"), "libvirt-pool:lab-pool"},
+		"a libvirt network":                     {LibvirtNetworkReservationKey("lab-net"), "libvirt-network:lab-net"},
+		"a libvirt domain":                      {LibvirtDomainReservationKey("lab-node-01"), "libvirt-domain:lab-node-01"},
 		"a key qualified by an SSH address":     {Key{Qualifier: SSHReservationQualifier("FD00::0001", 2222), Class: "socket", Subject: "0.0.0.0:3128"}, "ssh/fd00::1:2222/socket:0.0.0.0:3128"},
 		"a key qualified by a pinned host key":  {Key{Qualifier: pinnedQualifier(t), Class: "unit", Subject: "x"}, "sshkey/SHA256:gNSIRW-2Iyiuvsdp_bgjy38bvWHw6wQm3tuoXrl3WjQ/unit:x"},
 		"a key on the controller":               {Key{Class: "path", Subject: "/srv"}, "path:/srv"},

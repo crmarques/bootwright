@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -383,9 +384,9 @@ func onTheController(placement machineref.Placement, subject string) error {
 // before its first effect: the private subtree it publishes into and the work
 // area the installer keeps its state in.
 func (r MediaRequest) ReservationKeys() []string {
-	keys := []string{"path:" + r.WorkRoot}
+	keys := []string{infrastructureservices.PathReservationKey(r.WorkRoot).String()}
 	if r.DeliveryKind != "push" {
-		keys = append(keys, "path:"+r.Image.Path)
+		keys = append(keys, infrastructureservices.PathReservationKey(r.Image.Path).String())
 	}
 	slices.Sort(keys)
 	return slices.Compact(keys)

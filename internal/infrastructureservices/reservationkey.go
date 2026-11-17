@@ -91,7 +91,7 @@ func controllerAuthority(parsed *url.URL) string {
 }
 
 func SystemReservationKey(uuid string) Key {
-	return Key{Class: "bmc-system", Subject: strings.ToLower(strings.TrimSpace(uuid))}
+	return Key{Class: SystemClass, Subject: strings.ToLower(strings.TrimSpace(uuid))}
 }
 
 func MACReservationKey(mac string) Key {
@@ -99,12 +99,61 @@ func MACReservationKey(mac string) Key {
 	if parsed, err := net.ParseMAC(address); err == nil {
 		address = parsed.String()
 	}
-	return Key{Class: "bmc-mac", Subject: strings.ToLower(address)}
+	return Key{Class: MACClass, Subject: strings.ToLower(address)}
 }
 
 // MediaReservationKey is the shared host claim a context holds while an
 // operation of its plan needs one image to stay exactly as it froze it.
-func MediaReservationKey(name string) Key { return Key{Class: "media", Subject: name} }
+func MediaReservationKey(name string) Key { return Key{Class: MediaClass, Subject: name} }
+
+const (
+	MediaClass      = "media"
+	SystemClass     = "bmc-system"
+	MACClass        = "bmc-mac"
+	PathClass       = "path"
+	UnitClass       = "unit"
+	SocketClass     = "socket"
+	BridgeClass     = "bridge"
+	BridgeUseClass  = "bridge-use"
+	PrefixClass     = "prefix"
+	ConnectionClass = "nm-connection"
+	PoolClass       = "libvirt-pool"
+	NetworkClass    = "libvirt-network"
+	DomainClass     = "libvirt-domain"
+)
+
+func PathReservationKey(path string) Key { return Key{Class: PathClass, Subject: path} }
+
+func UnitReservationKey(unit string) Key { return Key{Class: UnitClass, Subject: unit} }
+
+func SocketReservationKey(address, port string) Key {
+	return Key{Class: SocketClass, Subject: address + ":" + port}
+}
+
+func BridgeReservationKey(bridge string) Key { return Key{Class: BridgeClass, Subject: bridge} }
+
+func BridgeUseReservationKey(bridge string) Key { return Key{Class: BridgeUseClass, Subject: bridge} }
+
+func PrefixReservationKey(prefix netip.Prefix) Key {
+	return Key{Class: PrefixClass, Subject: prefix.Masked().String()}
+}
+
+func ConnectionReservationKey(name string) Key { return Key{Class: ConnectionClass, Subject: name} }
+
+func LibvirtPoolReservationKey(name string) Key { return Key{Class: PoolClass, Subject: name} }
+
+func LibvirtNetworkReservationKey(name string) Key { return Key{Class: NetworkClass, Subject: name} }
+
+func LibvirtDomainReservationKey(name string) Key { return Key{Class: DomainClass, Subject: name} }
+
+func UnqualifiedSubject(text, class string) (string, bool) {
+	return strings.CutPrefix(text, class+":")
+}
+
+func HasClass(text, class string) bool {
+	_, found := UnqualifiedSubject(text, class)
+	return found
+}
 
 func SSHReservationQualifier(address string, port int) Qualifier {
 	host := strings.TrimSuffix(strings.ToLower(address), ".")

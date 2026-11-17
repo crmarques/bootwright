@@ -82,10 +82,10 @@ func ListenerRefusals(kind, service, bindAddress string, ports []int) map[string
 // so a UDP and a TCP listener on one port are the same exclusive claim.
 func SocketKeys(bindAddress string, port int, endpoints []Endpoint) []string {
 	formatted := infrastructureservices.FormatPort(port)
-	keys := []string{"socket:" + bindAddress + ":" + formatted}
+	keys := []string{infrastructureservices.SocketReservationKey(bindAddress, formatted).String()}
 	if bindAddress == "0.0.0.0" || bindAddress == "::" {
 		for _, endpoint := range endpoints {
-			keys = append(keys, "socket:"+endpoint.Address+":"+formatted)
+			keys = append(keys, infrastructureservices.SocketReservationKey(endpoint.Address, formatted).String())
 		}
 	}
 	return keys
@@ -94,7 +94,7 @@ func SocketKeys(bindAddress string, port int, endpoints []Endpoint) []string {
 // ReservationKeys are the exclusive host resources a service claims before its
 // first effect, so a second context refuses rather than taking them.
 func ReservationKeys(unit, contentRoot string, sockets []string) []string {
-	keys := append([]string{"unit:" + unit, "path:" + contentRoot}, sockets...)
+	keys := append([]string{infrastructureservices.UnitReservationKey(unit).String(), infrastructureservices.PathReservationKey(contentRoot).String()}, sockets...)
 	slices.Sort(keys)
 	return slices.Compact(keys)
 }

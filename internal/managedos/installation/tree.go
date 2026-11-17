@@ -145,7 +145,7 @@ func appendTreePlan(plan *lifecycle.CapabilityPlan, catalog api.Catalog, input l
 	plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
 		ID: reconciliation.BlockIdentity("os-package-tree-", request.Identity.Profile), Description: treeDescription(input.Verb), Stage: reconciliation.StageMachines,
 		Requires:  []reconciliation.ObjectRef{{Kind: "ArtifactServer", Object: server}},
-		Exclusive: []string{"path:" + request.Publication.Path}, Kind: TreeKind, Object: request.Identity.Profile,
+		Exclusive: []string{infrastructureservices.PathReservationKey(request.Publication.Path).String()}, Kind: TreeKind, Object: request.Identity.Profile,
 		Implementation: TreeImplementation, ContentDigest: TreeContentDigest(), Request: canonical,
 		Impacts: treeImpacts(input.Verb, request),
 	})
@@ -155,7 +155,7 @@ func appendTreePlan(plan *lifecycle.CapabilityPlan, catalog api.Catalog, input l
 	}
 	if request.Placement.Local() {
 		plan.Reservations = append(plan.Reservations, infrastructureservices.HostReservation{
-			Context: input.Context.Name, Kind: "os-package-tree", Service: request.Identity.Profile, Keys: []string{"path:" + request.Publication.Path},
+			Context: input.Context.Name, Kind: "os-package-tree", Service: request.Identity.Profile, Keys: []string{infrastructureservices.PathReservationKey(request.Publication.Path).String()},
 		})
 	}
 	return nil

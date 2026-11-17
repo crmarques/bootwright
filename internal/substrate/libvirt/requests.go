@@ -197,32 +197,32 @@ func validateDiskMedia(disks []Disk) error {
 // ReservationKeys are the exclusive host resources each request claims before
 // its first effect, so a second context refuses rather than taking them.
 func (r HostRequest) ReservationKeys() []string {
-	keys := []string{"path:" + r.PoolPath, "libvirt-pool:" + r.PoolName}
+	keys := []string{infrastructureservices.PathReservationKey(r.PoolPath).String(), infrastructureservices.LibvirtPoolReservationKey(r.PoolName).String()}
 	if r.FirewallReadyUnit != "" {
-		keys = append(keys, "unit:"+strings.TrimSuffix(r.FirewallReadyUnit, ".service"))
+		keys = append(keys, infrastructureservices.UnitReservationKey(strings.TrimSuffix(r.FirewallReadyUnit, ".service")).String())
 	}
 	if r.VLANRefusalUnit != "" {
-		keys = append(keys, "unit:"+strings.TrimSuffix(r.VLANRefusalUnit, ".service"))
+		keys = append(keys, infrastructureservices.UnitReservationKey(strings.TrimSuffix(r.VLANRefusalUnit, ".service")).String())
 	}
 	for _, network := range r.Networks {
 		if !network.Managed {
 			continue
 		}
-		keys = append(keys, "bridge:"+network.Bridge, "libvirt-network:"+network.Name)
+		keys = append(keys, infrastructureservices.BridgeReservationKey(network.Bridge).String(), infrastructureservices.LibvirtNetworkReservationKey(network.Name).String())
 		if prefix, err := netip.ParsePrefix(network.Address); err == nil {
-			keys = append(keys, "prefix:"+prefix.Masked().String())
+			keys = append(keys, infrastructureservices.PrefixReservationKey(prefix).String())
 		}
 	}
 	if r.Routing != nil {
-		keys = append(keys, "unit:"+RoutingTable(*r.Routing))
+		keys = append(keys, infrastructureservices.UnitReservationKey(RoutingTable(*r.Routing)).String())
 	}
 	for _, trunk := range r.Trunks {
-		keys = append(keys, "bridge:"+trunk.Bridge, "nm-connection:"+trunk.Name)
+		keys = append(keys, infrastructureservices.BridgeReservationKey(trunk.Bridge).String(), infrastructureservices.ConnectionReservationKey(trunk.Name).String())
 	}
 	for _, leg := range r.Legs {
-		keys = append(keys, "bridge:"+leg.Device, "nm-connection:"+leg.Name)
+		keys = append(keys, infrastructureservices.BridgeReservationKey(leg.Device).String(), infrastructureservices.ConnectionReservationKey(leg.Name).String())
 		if prefix, err := netip.ParsePrefix(leg.CIDR); err == nil {
-			keys = append(keys, "prefix:"+prefix.Masked().String())
+			keys = append(keys, infrastructureservices.PrefixReservationKey(prefix).String())
 		}
 	}
 	slices.Sort(keys)
@@ -233,7 +233,7 @@ func (r HostRequest) SharedReservationKeys() []string {
 	var keys []string
 	for _, network := range r.Networks {
 		if !network.Managed && network.Bridge != "" {
-			keys = append(keys, "bridge-use:"+network.Bridge)
+			keys = append(keys, infrastructureservices.BridgeUseReservationKey(network.Bridge).String())
 		}
 	}
 	slices.Sort(keys)
@@ -246,10 +246,10 @@ func (r MachineRequest) SharedReservationKeys() []string {
 
 func (r MachineRequest) ReservationKeys() []string {
 	keys := []string{
-		"libvirt-domain:" + r.Domain,
-		"unit:" + r.Controller.Unit,
-		"socket:" + r.Controller.Address + ":" + substrate.FormatPort(r.Controller.Port),
-		"path:" + r.Directory,
+		infrastructureservices.LibvirtDomainReservationKey(r.Domain).String(),
+		infrastructureservices.UnitReservationKey(r.Controller.Unit).String(),
+		infrastructureservices.SocketReservationKey(r.Controller.Address, substrate.FormatPort(r.Controller.Port)).String(),
+		infrastructureservices.PathReservationKey(r.Directory).String(),
 	}
 	slices.Sort(keys)
 	return slices.Compact(keys)

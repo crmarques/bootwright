@@ -77,7 +77,7 @@ func filesDefinition(verb reconciliation.Verb, request FilesRequest, canonical [
 	return reconciliation.BlockDefinition{
 		ID: FilesBlockID(request.Identity.Environment), Description: filesDescription(verb, request), Stage: reconciliation.StageInfrastructureServices,
 		Requires:  filesRequires(request),
-		Exclusive: []string{"path:" + request.Root}, Impacts: filesImpacts(verb, request), Consumes: []string{},
+		Exclusive: []string{infrastructureservices.PathReservationKey(request.Root).String()}, Impacts: filesImpacts(verb, request), Consumes: []string{},
 		Kind: Kind, Object: request.Identity.Server, Family: Family, Implementation: FilesImplementation, ContentDigest: FilesContentDigest(), Request: canonical,
 	}
 }

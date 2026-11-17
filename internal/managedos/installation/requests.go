@@ -409,10 +409,10 @@ func (r Request) ReservationKeys() []string {
 		keys = append(keys, infrastructureservices.ControllerMediaReservationKey(r.Target.Controller.Endpoint).String())
 	}
 	if r.Image != nil {
-		keys = append(keys, "path:"+r.Image.Path)
+		keys = append(keys, infrastructureservices.PathReservationKey(r.Image.Path).String())
 	}
 	if r.Private != nil {
-		keys = append(keys, "path:"+r.Private.Path)
+		keys = append(keys, infrastructureservices.PathReservationKey(r.Private.Path).String())
 	}
 
 	slices.Sort(keys)
