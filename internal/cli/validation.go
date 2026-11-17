@@ -208,21 +208,14 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 		if err != nil || parallelism < 1 {
 			return "--parallelism must be a positive integer"
 		}
-		seen := map[string]bool{}
+		var authorizations []string
 		for _, occurrence := range arrayValue(flags, "authorize") {
 			for _, token := range strings.Split(occurrence, ",") {
-				token = strings.TrimSpace(token)
-				secret, rebind := strings.CutPrefix(token, lifecycle.RebindAuthorization)
-				name, digest, bound := strings.Cut(token, "=")
-				if rebind {
-					name = token
-				}
-				dataLoss := name == "data-loss" && (!bound || authorizationDigest(digest))
-				if !dataLoss && (!rebind || !api.ValidLexical("name", secret)) || seen[name] {
-					return "--authorize accepts data-loss or data-loss=<digest> and rebind=<secret>, each at most once"
-				}
-				seen[name] = true
+				authorizations = append(authorizations, strings.TrimSpace(token))
 			}
+		}
+		if !lifecycle.ValidAuthorizations(authorizations) {
+			return "--authorize accepts data-loss or data-loss=<digest> and rebind=<secret>, each at most once"
 		}
 		for _, occurrence := range arrayValue(flags, "unregistered") {
 			for _, name := range strings.Split(occurrence, ",") {
@@ -464,18 +457,6 @@ func structuredLabel(command *cobra.Command) string {
 		return "YAML"
 	}
 	return "JSON"
-}
-
-func authorizationDigest(value string) bool {
-	if len(value) != 16 {
-		return false
-	}
-	for _, c := range value {
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
-			return false
-		}
-	}
-	return true
 }
 
 func validateRenderFlags(path string, flags *pflag.FlagSet) string {

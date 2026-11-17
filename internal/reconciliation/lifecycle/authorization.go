@@ -104,5 +104,5 @@ func AuthorizationDigest(plan reconciliation.Plan, token string) string {
 				"\x00" + block.ContentDigest + "\x00" + block.RequestDigest))
 		}
 	}
-	return hex.EncodeToString(sum.Sum(nil))[:16]
+	return hex.EncodeToString(sum.Sum(nil))[:authorizationDigestLength]
 }
