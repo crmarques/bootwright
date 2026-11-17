@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -532,31 +533,48 @@ func TestRetainedRootRetirementRequiresNativeCleanupAndAllDiskReceipts(t *testin
 	if _, err := capability.Destroy(context.Background(), e); err == nil {
 		t.Fatal("disk erasure alone claimed retained-root retirement")
 	}
-	for i, pair := range e.RemovalProved {
-		if pair.Applied.Implementation != HostImplementation {
-			continue
-		}
-		request, err := DecodeHostRequest(pair.Applied.Block.Request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for n := range request.Cluster.Hosts {
-			request.Cluster.Hosts[n].RetainRoot = true
-		}
-		raw, _ := request.canonical()
-		block := retirementBlock(t, pair.Applied.Block.ID, pair.Applied.Kind, pair.Applied.Object, pair.Applied.Implementation, raw)
-		bound := request
-		bound.Cluster.Owner = e.ApplyOperation
-		bound.Cluster.FSID = FSIDFor(e.ApplyOperation, cluster.Cluster)
-		proof, _ := json.Marshal(HostEvidence{Version: HostEvidenceVersion, Request: block.RequestDigest, Owner: bound.Cluster.Owner, FSID: bound.Cluster.FSID, Host: bound.Host, Image: bound.Cluster.Image, Removed: true, NativeRemoved: true, Devices: []HostDevice{}})
-		var applied HostEvidence
-		if err := json.Unmarshal(pair.Applied.Evidence, &applied); err != nil {
-			t.Fatal(err)
-		}
-		applied.Request = block.RequestDigest
-		appliedRaw, _ := json.Marshal(applied)
-		e.RemovalProved[i] = lifecycle.RemovalEvidence{Applied: retirementRecord(block, reconciliation.Apply, appliedRaw), Removed: retirementRecord(block, reconciliation.Destroy, proof)}
+	if !strings.HasPrefix(cluster.Image, PinnedRepository+":") {
+		t.Fatalf("the fixture authors %s, not a tag of %s", cluster.Image, PinnedRepository)
 	}
+	hostCleanup := func(image string) lifecycle.Execution {
+		cleaned := e
+		cleaned.RemovalProved = slices.Clone(e.RemovalProved)
+		for i, pair := range cleaned.RemovalProved {
+			if pair.Applied.Implementation != HostImplementation {
+				continue
+			}
+			request, err := DecodeHostRequest(pair.Applied.Block.Request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for n := range request.Cluster.Hosts {
+				request.Cluster.Hosts[n].RetainRoot = true
+			}
+			raw, _ := request.canonical()
+			block := retirementBlock(t, pair.Applied.Block.ID, pair.Applied.Kind, pair.Applied.Object, pair.Applied.Implementation, raw)
+			proof, _ := json.Marshal(HostEvidence{Version: HostEvidenceVersion, Request: block.RequestDigest, Owner: e.ApplyOperation, FSID: FSIDFor(e.ApplyOperation, cluster.Cluster), Host: request.Host, Image: image, Removed: true, NativeRemoved: true, Devices: []HostDevice{}})
+			var applied HostEvidence
+			if err := json.Unmarshal(pair.Applied.Evidence, &applied); err != nil {
+				t.Fatal(err)
+			}
+			applied.Request = block.RequestDigest
+			appliedRaw, _ := json.Marshal(applied)
+			cleaned.RemovalProved[i] = lifecycle.RemovalEvidence{Applied: retirementRecord(block, reconciliation.Apply, appliedRaw), Removed: retirementRecord(block, reconciliation.Destroy, proof)}
+		}
+		return cleaned
+	}
+	for name, image := range map[string]string{
+		"the authored tag a cleanup never runs":  cluster.Image,
+		"another repository":                     "cp.icr.io/cp/ibm-ceph/other@" + resolvedDigest,
+		"a repository the authored one prefixes": PinnedRepository + "-other@" + resolvedDigest,
+		"no manifest digest":                     PinnedRepository + "@sha256:short",
+	} {
+		reported := diagnostics.Of(func() error { _, err := capability.Destroy(context.Background(), hostCleanup(image)); return err }())
+		if len(reported) != 1 || reported[0].Message != "the physical Ceph retirement policy is incomplete or inconsistent" {
+			t.Fatalf("a host cleanup proof over %s counted: %+v", name, reported)
+		}
+	}
+	e = hostCleanup(PinnedRepository + "@" + resolvedDigest)
 	result, err := capability.Destroy(context.Background(), e)
 	if err != nil {
 		t.Fatal(err)
@@ -637,7 +655,7 @@ func TestRetainedMonitorWithoutOSDsNeedsNativeReceiptInsteadOfRootErase(t *testi
 		}
 		raw, _ := request.canonical()
 		block := retirementBlock(t, pair.Applied.Block.ID, pair.Applied.Kind, pair.Applied.Object, pair.Applied.Implementation, raw)
-		native, _ := json.Marshal(HostEvidence{Version: HostEvidenceVersion, Request: block.RequestDigest, Host: request.Host, Owner: e.ApplyOperation, FSID: FSIDFor(e.ApplyOperation, cluster.Cluster), Image: request.Cluster.Image, Removed: true, NativeRemoved: true, Devices: []HostDevice{}})
+		native, _ := json.Marshal(HostEvidence{Version: HostEvidenceVersion, Request: block.RequestDigest, Host: request.Host, Owner: e.ApplyOperation, FSID: FSIDFor(e.ApplyOperation, cluster.Cluster), Image: PinnedRepository + "@" + resolvedDigest, Removed: true, NativeRemoved: true, Devices: []HostDevice{}})
 		var applied HostEvidence
 		if err := json.Unmarshal(pair.Applied.Evidence, &applied); err != nil {
 			t.Fatal(err)

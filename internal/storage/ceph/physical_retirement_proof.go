@@ -408,7 +408,9 @@ func physicalHostCleanupProof(e lifecycle.Execution, cluster string, host Host) 
 		proof, err := decodeHostEvidence(pair.Removed.Evidence, pair.Applied.Block.RequestDigest)
 		request.Cluster.Owner = e.ApplyOperation
 		request.Cluster.FSID = FSIDFor(e.ApplyOperation, cluster)
-		if pair.Applied.Kind != string(api.CephCluster) || request.Cluster.Cluster != cluster || target.Name != host.Name || !target.Physical || !target.RetainRoot || !slices.Equal(target.Devices, host.Devices) || found != "" || !matchingRemovalPair(pair) || err != nil || !proof.NativeRemoved || !retained(proof, request) {
+		pinned := resolvesAuthored(request.Cluster.Image, proof.Image)
+		request.Cluster.Image = proof.Image
+		if pair.Applied.Kind != string(api.CephCluster) || request.Cluster.Cluster != cluster || target.Name != host.Name || !target.Physical || !target.RetainRoot || !slices.Equal(target.Devices, host.Devices) || found != "" || !matchingRemovalPair(pair) || err != nil || !pinned || !proof.NativeRemoved || !retained(proof, request) {
 			return "", physicalPolicyFailure()
 		}
 		digest := sha256.Sum256(pair.Removed.Evidence)

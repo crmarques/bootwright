@@ -73,6 +73,18 @@ func validSelection(base, tag, image string) bool {
 	return cephcluster.NativeVersion(tag) && image == base+":"+tag || tag == "" && strings.HasPrefix(image, base+"@") && ValidImageDigest(strings.TrimPrefix(image, base+"@"))
 }
 
+func resolvesAuthored(authored, image string) bool {
+	if strings.Contains(authored, "@") {
+		return image == authored
+	}
+	tag := strings.LastIndex(authored, ":")
+	if tag <= strings.LastIndex(authored, "/") {
+		return false
+	}
+	digest, pinned := strings.CutPrefix(image, authored[:tag]+"@")
+	return pinned && ValidImageDigest(digest)
+}
+
 func validAuxiliary(r ImageRequest) bool {
 	if len(r.Auxiliary) > len(AuxiliaryNames) {
 		return false
