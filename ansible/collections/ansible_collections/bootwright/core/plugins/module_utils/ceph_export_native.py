@@ -31,22 +31,9 @@ REASONS = ("gateway-dns", "export-foreign-principal", "export-key-type", "export
 RGW_CAPS = {"buckets": "*", "users": "*", "usage": "read", "metadata": "read", "zone": "read", "info": "read"}
 
 
-def caps_for(request):
-    health = "profile rbd-read-only"
-    if "gateway" in request:
-        gateway = request["gateway"]
-        zone = gateway["zone"]
-        health += (", allow rwx pool=" + zone + ".rgw.meta, allow r pool=.rgw.root, allow rw pool=" + zone
-                   + ".rgw.control, allow rx pool=" + zone + ".rgw.log, allow x pool=" + gateway["indexPool"])
-    return {
-        "health": {"mon": "allow r, allow command quorum_status, allow command version", "mgr": "allow command config", "osd": health, "mds": "allow *"},
-        "rbd-node": {"mon": "profile rbd, allow command 'osd blocklist'", "osd": "profile rbd pool=" + request["pool"]},
-        "rbd-prov": {"mon": "profile rbd, allow command 'osd blocklist'", "mgr": "allow rw", "osd": "profile rbd pool=" + request["pool"]},
-        "fs-node": {"mon": "allow r, allow command 'osd blocklist'", "mgr": "allow rw",
-                    "osd": "allow rw tag cephfs *=" + request["filesystem"], "mds": "allow rw"},
-        "fs-prov": {"mon": "allow r, allow command 'osd blocklist'", "mgr": "allow rw",
-                    "osd": "allow rw tag cephfs metadata=" + request["filesystem"], "mds": "allow *"},
-    }
+# The cap sections Go grants each CSI export principal (internal/storage/ceph/export.go exportCaps); the worker applies them as frozen.
+PRINCIPAL_CAPS = {"health": {"mds", "mgr", "mon", "osd"}, "rbd-node": {"mon", "osd"}, "rbd-prov": {"mgr", "mon", "osd"},
+                  "fs-node": {"mds", "mgr", "mon", "osd"}, "fs-prov": {"mds", "mgr", "mon", "osd"}}
 
 
 def validate(request):
@@ -56,10 +43,11 @@ def validate(request):
     require(request["version"] == VERSION and request["keyType"] in ("aes", "aes256k"))
     require(all(ceph_native.named(request[key]) for key in ("cluster", "controller", "filesystem", "name", "pool", "defaultDataPool")))
     require(len(request["name"]) <= 63 and isinstance(request["machines"], list) and request["machines"] == sorted(set(request["machines"])))
-    require(set(request["principals"]) == {"health", "rbd-node", "rbd-prov", "fs-node", "fs-prov"})
-    require(all(isinstance(caps, dict) and caps and set(caps) <= {"mon", "mgr", "osd", "mds"}
-                and all(isinstance(cap, str) and 0 < len(cap) < 2048 and "\n" not in cap and '"' not in cap for cap in caps.values())
-                for caps in request["principals"].values()))
+    require(isinstance(request["principals"], dict) and set(request["principals"]) == set(PRINCIPAL_CAPS))
+    require(all(isinstance(caps, dict) and set(caps) == PRINCIPAL_CAPS[suffix]
+                and all(isinstance(cap, str) and 0 < len(cap) < 2048 and cap.isascii() and cap.isprintable() and '"' not in cap
+                        for cap in caps.values())
+                for suffix, caps in request["principals"].items()))
     scope = ceph_native.validate_scope(request["scope"])
     require(scope["cluster"] == request["cluster"] and sorted(host["machine"] for host in scope["hosts"]) == request["machines"])
     require(request["providedMachines"] == sorted(host["machine"] for host in scope["hosts"] if host.get("provided")))
@@ -75,7 +63,6 @@ def validate(request):
         require(isinstance(gateway["addresses"], list) and bool(gateway["addresses"]))
         for address in gateway["addresses"]:
             ipaddress.ip_address(address)
-    require(request["principals"] == caps_for(request))
     require(isinstance(request["monitors"], dict) and bool(request["monitors"]))
     require(isinstance(request["monitoringHosts"], list) and bool(request["monitoringHosts"])
             and request["monitoringHosts"] == sorted(set(request["monitoringHosts"])) and request["monitoringPort"] == 9283)

@@ -9,6 +9,7 @@ import pytest
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_export_native as export, ceph_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils.test_ceph_smb_native import scope, Markers
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils.test_ceph_client_custody import client  # pylint: disable=unused-import
+from ansible_collections.bootwright.core.tests.unit.test_ceph_request_goldens import legacy_export_caps
 
 
 def request():
@@ -18,7 +19,7 @@ def request():
              "providedMachines": [], "hostSecretRefs": ceph_native.host_secret_refs(cluster["hosts"]), "scope": cluster,
              "physicalHosts": False, "monitors": {"node-1": "192.0.2.1"},
              "monitoringHosts": ["192.0.2.1", "192.0.2.2"], "monitoringPort": 9283}
-    value["principals"] = export.caps_for(value)
+    value["principals"] = legacy_export_caps(value)
     return value
 
 
@@ -187,13 +188,6 @@ def test_real_inode_custody_retains_export_keys(client):  # noqa: F811
     assert store.material(own) == first
 
 
-def test_widened_native_caps_are_refused():
-    value = request()
-    value["principals"]["rbd-node"]["mon"] = "allow *"
-    with pytest.raises(ceph_native.Refusal):
-        export.validate(value)
-
-
 def with_provided_tiebreaker(value):
     value["scope"]["hosts"].append({"name": "tie", "machine": "tie", "address": "198.51.100.10", "user": "operator", "port": 22, "devices": [],
                                     "labels": ["mon"], "location": {}, "sshKeyRef": "fleet-key", "knownHostsRef": "tie-known-hosts", "provided": True})
@@ -313,7 +307,7 @@ def test_rgw_lost_reply_recaptures_one_pair_without_key_arguments(monkeypatch):
     native.export["gateway"] = {"name": "objects", "fqdn": "objects.example.test", "addresses": ["192.0.2.1"], "port": 80,
                                 "realm": "objects", "zoneGroup": "objects", "zone": "objects", "indexPool": "objects.rgw.buckets.index",
                                 "tls": False, "certificateRef": ""}
-    native.export["principals"] = export.caps_for(native.export)
+    native.export["principals"] = legacy_export_caps(native.export)
     uid = native.identifier + "-ops"
     stored = []
     calls = []
@@ -349,7 +343,7 @@ def test_failed_rgw_create_retains_no_rgw_material(monkeypatch):
     native.export["gateway"] = {"name": "objects", "fqdn": "objects.example.test", "addresses": ["192.0.2.1"], "port": 80,
                                 "realm": "objects", "zoneGroup": "objects", "zone": "objects", "indexPool": "objects.rgw.buckets.index",
                                 "tls": False, "certificateRef": ""}
-    native.export["principals"] = export.caps_for(native.export)
+    native.export["principals"] = legacy_export_caps(native.export)
 
     def rgw(*args):
         if args[:2] == ("user", "list"):
@@ -366,7 +360,7 @@ def test_failed_rgw_create_retains_no_rgw_material(monkeypatch):
 def test_consumer_preserves_the_one_name_bound(length):
     value = request()
     value["name"] = "c" * length
-    value["principals"] = export.caps_for(value)
+    value["principals"] = legacy_export_caps(value)
     if length == 64:
         with pytest.raises(ceph_native.Refusal):
             export.validate(value)
@@ -382,3 +376,38 @@ def test_disallowed_key_names_the_proved_allowed_type(monkeypatch, allowed):
     with pytest.raises(ceph_native.Refusal, match="^export-key-type-" + allowed + "$"):
         native.prerequisites()
     assert not native.markers.writes
+
+
+@pytest.mark.parametrize("change", ["missing section", "extra section", "missing principal", "extra principal", "not text", "control character",
+                                    "quote", "too long"])
+def test_the_validator_refuses_principals_outside_the_frozen_shape(change):
+    value = request()
+    principals = value["principals"]
+    if change == "missing section":
+        del principals["rbd-prov"]["mgr"]
+    elif change == "extra section":
+        principals["rbd-node"]["mds"] = "allow r"
+    elif change == "missing principal":
+        del principals["fs-node"]
+    elif change == "extra principal":
+        principals["admin"] = {"mon": "allow *"}
+    elif change == "not text":
+        principals["health"]["mds"] = ["allow *"]
+    elif change == "control character":
+        principals["health"]["mon"] += "\n"
+    elif change == "quote":
+        principals["health"]["mon"] += '"'
+    else:
+        principals["health"]["osd"] = "allow r pool=" + "p" * 2048
+    with pytest.raises(ceph_native.Refusal):
+        export.validate(value)
+
+
+# Go judges the grants (internal/storage/ceph TestExportRequestRejectsExpandedCapsAndRuntimeScope); the worker applies what it froze.
+def test_the_worker_applies_the_grants_go_froze_without_deriving_them():
+    value = request()
+    value["principals"]["fs-prov"]["mds"] = "allow rw"
+    value["principals"]["health"]["osd"] = "profile rbd-read-only pool=block"
+    assert export.validate(value)["principals"]["fs-prov"]["mds"] == "allow rw"
+    generated = json.loads(export.ExportWorker(value, "node-1", markers=Markers()).generate())
+    assert {suffix: entry["caps"] for suffix, entry in generated.items()} == value["principals"]

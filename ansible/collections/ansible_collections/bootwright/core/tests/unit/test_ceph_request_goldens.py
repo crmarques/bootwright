@@ -87,6 +87,25 @@ def legacy_caps(client):
     return {"mon": "profile rbd", "mgr": "profile " + profile + " pool=" + client["pool"], "osd": osd}
 
 
+def legacy_export_caps(request):
+    """The grants of the five Ceph CSI principals an export creates, as the export worker derived them (caps_for)."""
+    health = "profile rbd-read-only"
+    if "gateway" in request:
+        gateway = request["gateway"]
+        zone = gateway["zone"]
+        health += (", allow rwx pool=" + zone + ".rgw.meta, allow r pool=.rgw.root, allow rw pool=" + zone
+                   + ".rgw.control, allow rx pool=" + zone + ".rgw.log, allow x pool=" + gateway["indexPool"])
+    return {
+        "health": {"mon": "allow r, allow command quorum_status, allow command version", "mgr": "allow command config", "osd": health, "mds": "allow *"},
+        "rbd-node": {"mon": "profile rbd, allow command 'osd blocklist'", "osd": "profile rbd pool=" + request["pool"]},
+        "rbd-prov": {"mon": "profile rbd, allow command 'osd blocklist'", "mgr": "allow rw", "osd": "profile rbd pool=" + request["pool"]},
+        "fs-node": {"mon": "allow r, allow command 'osd blocklist'", "mgr": "allow rw",
+                    "osd": "allow rw tag cephfs *=" + request["filesystem"], "mds": "allow rw"},
+        "fs-prov": {"mon": "allow r, allow command 'osd blocklist'", "mgr": "allow rw",
+                    "osd": "allow rw tag cephfs metadata=" + request["filesystem"], "mds": "allow *"},
+    }
+
+
 def legacy_pg_num(autoscale):
     pgs = 32
     if autoscale["minPGs"] and pgs < autoscale["minPGs"]:
@@ -131,6 +150,14 @@ def test_the_frozen_grants_budgets_and_pg_counts_equal_what_the_collection_deriv
         assert REQUESTS[name]["nvmeof"]["budgets"] == legacy_nvmeof_budgets(REQUESTS[name]["nvmeof"])
     for pool in pools:
         assert pool["pgNum"] == legacy_pg_num(pool["autoscale"]), pool["name"]
+
+
+def test_the_frozen_export_principal_grants_equal_what_the_export_worker_derived():
+    exports = versions("ceph-export-request-v1")
+    assert exports == ["export", "export-gateway", "export-tls"]
+    assert any("gateway" in REQUESTS[name] for name in exports)
+    for name in exports:
+        assert REQUESTS[name]["principals"] == legacy_export_caps(REQUESTS[name]), name
 
 
 @pytest.mark.parametrize("name, member", [("client", "caps"), ("client-filesystem", "caps"), ("client-subvolume", "caps"), ("nvmeof", "budgets")])

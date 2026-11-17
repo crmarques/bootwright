@@ -1429,6 +1429,8 @@ principal changes name:
 
 These are the exporter's restricted-authorization capabilities, whose
 privileged grants serve ocs-operator's health checks and CSI provisioning.
+Go freezes them as the request's `principals` and judges the created
+principals against them; the worker applies them.
 The RGW user carries `buckets=*;users=*;usage=read;metadata=read;zone=read`
 and `info=read`, created in the gateway's realm, zone group and zone; its caps
 apply to every user and bucket of the realm. It serves the operator's object
@@ -1488,10 +1490,8 @@ request, record, evidence, log, diagnostic or output. Observation compares
 each principal's key and capabilities privately and never writes.
 
 The consumer block retires with its cluster when every host is a
-Bootwright-owned virtual Machine the same destroy removes and every container
-cluster whose `fdf` package names the consumer is removed by the same destroy,
-its nodes Bootwright-owned virtual Machines that destroy stops and deletes.
-Only then does the hosts' stop proof stand in for the consumer's quiescence.
+Bootwright-owned virtual Machine the same destroy removes and its container
+clusters meet the last refusal above. Only then does the hosts' stop proof stand in for the consumer's quiescence.
 A consumer that survives the removal, such as a cluster on physical nodes,
 makes the removal refuse before registration, naming the consuming cluster and
 the consumer, and the cluster's own retirement refuses with it
