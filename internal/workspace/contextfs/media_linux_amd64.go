@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/managedos/media"
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 const mediaContainer = "media"
@@ -65,33 +66,23 @@ func (s *Store) MutateMedia(ctx context.Context, callback func(media.Transaction
 }
 
 func (s *Store) withMedia(ctx context.Context, write bool, callback func(*mediaArea) error) error {
-	root, err := s.openRoot(ctx, false, nil)
-	if errors.Is(err, syscall.ENOENT) {
-		return mediaUnprepared()
-	}
-	if err != nil {
-		return safeError(err)
-	}
-	defer root.file.Close()
-	mode := lockShared
+	how := syscall.LOCK_SH
 	if write {
-		mode = func(dir *directory) error { return awaitRoot(ctx, s, dir, syscall.LOCK_EX) }
+		how = syscall.LOCK_EX
 	}
-	if err := mode(root); err != nil {
+	scope := readScope{absent: mediaUnprepared(), registered: true, unverified: true, held: func(err error) error {
 		var held *busyError
 		if errors.As(err, &held) {
 			return &mediaBusy{held}
 		}
 		return err
-	}
-	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
-	registry, exists, err := readRegistry(ctx, root)
-	if err != nil {
-		return safeError(err)
-	}
-	if !exists {
-		return mediaUnprepared()
-	}
+	}}
+	return s.withRead(ctx, how, scope, func(root *directory, registry contexts.Registry) error {
+		return s.lendMedia(ctx, root, registry, write, callback)
+	})
+}
+
+func (s *Store) lendMedia(ctx context.Context, root *directory, registry contexts.Registry, write bool, callback func(*mediaArea) error) error {
 	stored, err := readControllerStored(ctx, root, registry)
 	if err != nil {
 		return safeError(err)

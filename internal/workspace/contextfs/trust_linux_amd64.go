@@ -4,7 +4,6 @@ package contextfs
 
 import (
 	"context"
-	"errors"
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -59,54 +58,27 @@ func (s *Store) withTrustArea(ctx context.Context, name string, mutation bool, c
 	if !contextName(name) {
 		return state("SSH trust access requires an explicit context name")
 	}
-	root, err := s.openRoot(ctx, false, nil)
-	if errors.Is(err, syscall.ENOENT) {
-		return contexts.AbsentContext(name)
-	}
-	if err != nil {
-		return safeError(err)
-	}
-	defer root.file.Close()
+	how := syscall.LOCK_SH
 	if mutation {
-		if err := awaitRoot(ctx, s, root, syscall.LOCK_EX); err != nil {
+		how = syscall.LOCK_EX
+	}
+	return s.withRead(ctx, how, readScope{absent: contexts.AbsentContext(name), registered: true}, func(root *directory, registry contexts.Registry) error {
+		record, err := lifecycleRecord(registry, name)
+		if err != nil {
 			return err
 		}
-	} else if err := lockShared(root); err != nil {
-		return err
-	}
-	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
-	registry, exists, err := readRegistry(ctx, root)
-	if err != nil {
-		return safeError(err)
-	}
-	if !exists {
-		return contexts.AbsentContext(name)
-	}
-	if err := verifyMappings(ctx, root, registry); err != nil {
-		return safeError(err)
-	}
-	record, err := lifecycleRecord(registry, name)
-	if err != nil {
-		return err
-	}
-	container, err := openDirectory(root, "contexts")
-	if err != nil {
-		return safeError(err)
-	}
-	defer container.file.Close()
-	dir, err := openDirectory(container, record.Name)
-	if err != nil {
-		return safeError(err)
-	}
-	defer dir.file.Close()
-	if record.DirectoryInode != 0 && !dir.recorded(record.DirectoryInode) {
-		return state("context directory was replaced")
-	}
-	active := true
-	defer func() { active = false }()
-	area := &operationArea{
-		store: s, subtree: trustSubtree, context: dir, name: record.Name,
-		active: func() bool { return active }, readOnly: !mutation, cached: mutation,
-	}
-	return safeError(callback(area))
+		container, dir, err := openContext(root, record)
+		if err != nil {
+			return safeError(err)
+		}
+		defer container.file.Close()
+		defer dir.file.Close()
+		active := true
+		defer func() { active = false }()
+		area := &operationArea{
+			store: s, subtree: trustSubtree, context: dir, name: record.Name,
+			active: func() bool { return active }, readOnly: !mutation, cached: mutation,
+		}
+		return safeError(callback(area))
+	})
 }

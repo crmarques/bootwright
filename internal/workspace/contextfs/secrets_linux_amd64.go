@@ -86,41 +86,29 @@ func (s *Store) SecretContext(ctx context.Context, name string) (secretstore.Con
 	if !contextName(name) {
 		return secretstore.ContextSnapshot{}, state("no valid current context is selected")
 	}
-	root, err := s.openRoot(ctx, false, nil)
-	if errors.Is(err, syscall.ENOENT) {
-		return secretstore.ContextSnapshot{}, contexts.AbsentContext(name)
-	}
-	if err != nil {
-		return secretstore.ContextSnapshot{}, safeError(err)
-	}
-	defer root.file.Close()
-	if err := lockShared(root); err != nil {
-		return secretstore.ContextSnapshot{}, err
-	}
-	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
-	registry, _, err := readRegistry(ctx, root)
-	if err == nil {
-		err = verifyMappings(ctx, root, registry)
-	}
-	if err != nil {
-		return secretstore.ContextSnapshot{}, safeError(err)
-	}
-
-	record, err := namedSecretRecord(registry, name)
-	if err != nil {
-		return secretstore.ContextSnapshot{}, err
-	}
-	if record.Mode != contexts.Ready {
-		return secretstore.ContextSnapshot{}, contexts.NotReady(record)
-	}
-	inputs := desiredstate.Sources{}
-	if record.Revision != "" {
-		inputs, err = readSnapshot(ctx, root, record)
+	var snapshot secretstore.ContextSnapshot
+	err := s.withRead(ctx, syscall.LOCK_SH, readScope{absent: contexts.AbsentContext(name)}, func(root *directory, registry contexts.Registry) error {
+		record, err := namedSecretRecord(registry, name)
 		if err != nil {
-			return secretstore.ContextSnapshot{}, safeError(err)
+			return err
 		}
+		if record.Mode != contexts.Ready {
+			return contexts.NotReady(record)
+		}
+		inputs := desiredstate.Sources{}
+		if record.Revision != "" {
+			inputs, err = readSnapshot(ctx, root, record)
+			if err != nil {
+				return safeError(err)
+			}
+		}
+		snapshot = secretstore.ContextSnapshot{Context: secretContext(record), Inputs: inputs, SecretStoreType: record.SecretStoreType}
+		return nil
+	})
+	if err != nil {
+		return secretstore.ContextSnapshot{}, err
 	}
-	return secretstore.ContextSnapshot{Context: secretContext(record), Inputs: inputs, SecretStoreType: record.SecretStoreType}, nil
+	return snapshot, nil
 }
 
 func (s *Store) ReadSecrets(ctx context.Context, expected secretstore.Context, callback func(secretstore.Area) error) error {
@@ -170,34 +158,22 @@ func (s *Store) MutateSecrets(ctx context.Context, expected secretstore.Context,
 }
 
 func (s *Store) withSecretRecord(ctx context.Context, expected secretstore.Context, mutation bool, callback func(*directory, contexts.Registry, contexts.Record) error) error {
-	root, err := s.openRoot(ctx, false, nil)
-	if err != nil {
-		return safeError(err)
-	}
-	defer root.file.Close()
+	how, scope := syscall.LOCK_SH, readScope{}
 	if mutation {
-		if err := awaitRoot(ctx, s, root, syscall.LOCK_EX); err != nil {
+		how, scope.held = syscall.LOCK_EX, func(err error) error {
 			return secretLockFailure(ctx, "secret storage is held by another mutator", err)
 		}
-	} else if err := lockShared(root); err != nil {
-		return err
 	}
-	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
-	registry, _, err := readRegistry(ctx, root)
-	if err == nil {
-		err = verifyMappings(ctx, root, registry)
-	}
-	if err != nil {
-		return safeError(err)
-	}
-	record, err := exactSecretRecord(registry, expected)
-	if err != nil {
-		return err
-	}
-	if record.Mode != contexts.Ready {
-		return contexts.NotReady(record)
-	}
-	return callback(root, registry, record)
+	return s.withRead(ctx, how, scope, func(root *directory, registry contexts.Registry) error {
+		record, err := exactSecretRecord(registry, expected)
+		if err != nil {
+			return err
+		}
+		if record.Mode != contexts.Ready {
+			return contexts.NotReady(record)
+		}
+		return callback(root, registry, record)
+	})
 }
 
 func lendSecretArea(ctx context.Context, area *secretArea, dir *directory, callback func() error) error {

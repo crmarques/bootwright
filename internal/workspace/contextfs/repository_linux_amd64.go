@@ -105,23 +105,62 @@ func safeError(err error) error {
 }
 
 func (s *Store) View(ctx context.Context) (contexts.Registry, error) {
-	root, err := s.openRoot(ctx, false, nil)
-	if errors.Is(err, syscall.ENOENT) {
+	var registry contexts.Registry
+	err := s.withRead(ctx, syscall.LOCK_SH, readScope{absent: errAbsentRoot}, func(_ *directory, read contexts.Registry) error {
+		registry = read
+		return nil
+	})
+	if err == errAbsentRoot {
 		return emptyRegistry(), nil
 	}
+	return registry, err
+}
+
+var errAbsentRoot = errors.New("state root is absent")
+
+// readScope is how one entry point's read prologue refuses an absent root or,
+// when registered, an absent registry, and a root lock another command holds.
+type readScope struct {
+	absent     error
+	registered bool
+	unverified bool
+	held       func(error) error
+}
+
+func (s *Store) withRead(ctx context.Context, how int, scope readScope, callback func(*directory, contexts.Registry) error) error {
+	root, err := s.openRoot(ctx, false, nil)
+	if scope.absent != nil && errors.Is(err, syscall.ENOENT) {
+		return scope.absent
+	}
 	if err != nil {
-		return contexts.Registry{}, safeError(err)
+		return safeError(err)
 	}
 	defer root.file.Close()
-	if err := lockShared(root); err != nil {
-		return contexts.Registry{}, err
+	if how == syscall.LOCK_EX {
+		err = awaitRoot(ctx, s, root, syscall.LOCK_EX)
+	} else {
+		err = lockShared(root)
+	}
+	if err != nil && scope.held != nil {
+		return scope.held(err)
+	}
+	if err != nil {
+		return err
 	}
 	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
-	registry, _, err := readRegistry(ctx, root)
-	if err == nil {
-		err = verifyMappings(ctx, root, registry)
+	registry, exists, err := readRegistry(ctx, root)
+	if err != nil {
+		return safeError(err)
 	}
-	return registry, safeError(err)
+	if scope.registered && !exists {
+		return scope.absent
+	}
+	if !scope.unverified {
+		if err := verifyMappings(ctx, root, registry); err != nil {
+			return safeError(err)
+		}
+	}
+	return callback(root, registry)
 }
 
 func readRegistry(ctx context.Context, root *directory) (contexts.Registry, bool, error) {
@@ -763,38 +802,27 @@ func (s *Store) ReadInputs(ctx context.Context, name string) (desiredstate.Sourc
 	if !contextName(name) {
 		return desiredstate.Sources{}, state("no valid current context is selected")
 	}
-	root, err := s.openRoot(ctx, false, nil)
-	if errors.Is(err, syscall.ENOENT) {
-		return desiredstate.Sources{}, contexts.AbsentContext(name)
-	}
+	var result desiredstate.Sources
+	err := s.withRead(ctx, syscall.LOCK_SH, readScope{absent: contexts.AbsentContext(name)}, func(root *directory, registry contexts.Registry) error {
+		for _, record := range registry.Contexts {
+			if record.Name == name {
+				if record.Mode != contexts.Ready {
+					return contexts.NotReady(record)
+				}
+				if record.Revision == "" {
+					return contexts.MissingInput(record.Name)
+				}
+				read, err := readSnapshot(ctx, root, record)
+				result = read
+				return safeError(err)
+			}
+		}
+		return contexts.AbsentContext(name)
+	})
 	if err != nil {
-		return desiredstate.Sources{}, safeError(err)
-	}
-	defer root.file.Close()
-	if err := lockShared(root); err != nil {
 		return desiredstate.Sources{}, err
 	}
-	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
-	registry, _, err := readRegistry(ctx, root)
-	if err != nil {
-		return desiredstate.Sources{}, safeError(err)
-	}
-	if err := verifyMappings(ctx, root, registry); err != nil {
-		return desiredstate.Sources{}, safeError(err)
-	}
-	for _, record := range registry.Contexts {
-		if record.Name == name {
-			if record.Mode != contexts.Ready {
-				return desiredstate.Sources{}, contexts.NotReady(record)
-			}
-			if record.Revision == "" {
-				return desiredstate.Sources{}, contexts.MissingInput(record.Name)
-			}
-			result, err := readSnapshot(ctx, root, record)
-			return result, safeError(err)
-		}
-	}
-	return desiredstate.Sources{}, contexts.AbsentContext(name)
+	return result, nil
 }
 
 // emptyStore is the refusal of a transaction over a store that holds no

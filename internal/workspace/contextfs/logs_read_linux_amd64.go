@@ -148,28 +148,12 @@ func (s *Store) readLogs(ctx context.Context, name string, callback func(*logsVi
 	if !contextName(name) {
 		return state("log inspection requires an explicit context name")
 	}
-	root, err := s.openRoot(ctx, false, nil)
-	if errors.Is(err, syscall.ENOENT) {
-		return contexts.AbsentContext(name)
-	}
-	if err != nil {
-		return safeError(err)
-	}
-	defer root.file.Close()
-	if err := lockShared(root); err != nil {
-		return err
-	}
-	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
-	registry, exists, err := readRegistry(ctx, root)
-	if err != nil {
-		return safeError(err)
-	}
-	if !exists {
-		return contexts.AbsentContext(name)
-	}
-	if err := verifyMappings(ctx, root, registry); err != nil {
-		return safeError(err)
-	}
+	return s.withRead(ctx, syscall.LOCK_SH, readScope{absent: contexts.AbsentContext(name), registered: true}, func(root *directory, registry contexts.Registry) error {
+		return s.readLogsContext(root, registry, name, callback)
+	})
+}
+
+func (s *Store) readLogsContext(root *directory, registry contexts.Registry, name string, callback func(*logsView) error) error {
 	var record *contexts.Record
 	for index := range registry.Contexts {
 		if registry.Contexts[index].Name == name {
@@ -179,19 +163,12 @@ func (s *Store) readLogs(ctx context.Context, name string, callback func(*logsVi
 	if record == nil {
 		return contexts.AbsentContext(name)
 	}
-	container, err := openDirectory(root, "contexts")
+	container, dir, err := openContext(root, *record)
 	if err != nil {
 		return safeError(err)
 	}
 	defer container.file.Close()
-	dir, err := openDirectory(container, record.Name)
-	if err != nil {
-		return safeError(err)
-	}
 	defer dir.file.Close()
-	if record.DirectoryInode != 0 && !dir.recorded(record.DirectoryInode) {
-		return state("context directory was replaced")
-	}
 	active := true
 	defer func() { active = false }()
 	live := func() bool { return active }

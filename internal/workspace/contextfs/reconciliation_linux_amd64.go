@@ -186,28 +186,12 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 	if !contextName(name) {
 		return state("lifecycle inspection requires an explicit context name")
 	}
-	root, err := s.openRoot(ctx, false, nil)
-	if errors.Is(err, syscall.ENOENT) {
-		return contexts.AbsentContext(name)
-	}
-	if err != nil {
-		return safeError(err)
-	}
-	defer root.file.Close()
-	if err := lockShared(root); err != nil {
-		return err
-	}
-	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
-	registry, exists, err := readRegistry(ctx, root)
-	if err != nil {
-		return safeError(err)
-	}
-	if !exists {
-		return contexts.AbsentContext(name)
-	}
-	if err := verifyMappings(ctx, root, registry); err != nil {
-		return safeError(err)
-	}
+	return s.withRead(ctx, syscall.LOCK_SH, readScope{absent: contexts.AbsentContext(name), registered: true}, func(root *directory, registry contexts.Registry) error {
+		return s.readLifecycleContext(ctx, root, registry, name, bounded, callback)
+	})
+}
+
+func (s *Store) readLifecycleContext(ctx context.Context, root *directory, registry contexts.Registry, name string, bounded bool, callback func(*lifecycleView, *operationArea) error) error {
 	record, err := lifecycleRecord(registry, name)
 	if err != nil {
 		return err
@@ -216,19 +200,12 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 	if err != nil {
 		return safeError(err)
 	}
-	container, err := openDirectory(root, "contexts")
+	container, dir, err := openContext(root, record)
 	if err != nil {
 		return safeError(err)
 	}
 	defer container.file.Close()
-	dir, err := openDirectory(container, record.Name)
-	if err != nil {
-		return safeError(err)
-	}
 	defer dir.file.Close()
-	if record.DirectoryInode != 0 && !dir.recorded(record.DirectoryInode) {
-		return state("context directory was replaced")
-	}
 	if bounded {
 		if err := lockShared(dir); err != nil {
 			return err
