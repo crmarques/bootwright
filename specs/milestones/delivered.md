@@ -16737,3 +16737,20 @@ regenerated, moving only that line, the token is classified as a Kickstart
 token, and the comment goes, since the managed OS spec states its rationale. Fixed under the owner's 2026-11-16 rule that gate failures from other
 work are fixed where they block.
 
+## X535 — Ceph values frozen by Go
+
+### B1505
+
+Split from B1464 under [D274](backlog.md#d274) (the Ceph part of audit 005
+W3.2). The Ceph request carries each client's capability grants, the NVMe-oF
+phase and execution budgets and the pool's placement-group count as Go
+computes them; Go judges the produced client against the same grants, and the
+subvolume grant gains its proved path at prepare. The Python executor applies
+the frozen values and keeps closed keys, exact types and bounds, dropping the
+budget formula, the PG clamp, MDS coverage and the admission rules Go owns;
+it keeps the single-host profile's one-host check, because it applies that
+profile's CRUSH setting itself. `storage-ceph-core-v1`'s contract moved: a
+client or NVMe-oF request an earlier build froze is refused. An independent
+review found the grants byte-identical and no path around Go's admission; its
+should-fix is applied.
+
