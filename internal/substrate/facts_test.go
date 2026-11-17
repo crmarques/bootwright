@@ -4,6 +4,8 @@ import (
 	"maps"
 	"slices"
 	"testing"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 func TestEveryArmAnswersTheFactsConsumersAsk(t *testing.T) {
@@ -34,5 +36,18 @@ func TestASyntheticArmAnswersThroughItsFactsRowAlone(t *testing.T) {
 	baremetal, _ := MachineBoundsFor(ArmBaremetal)
 	if fanout != baremetal.Fanout || allowance != baremetal.BootAllowance || margin != baremetal.NodeMargin {
 		t.Fatalf("an arm with no machine port bounds moved the cluster bounds to %d, %s, %s", fanout, allowance, margin)
+	}
+}
+
+func TestOnlyAProviderOfAnArmWithAHypervisorNeedsItsClient(t *testing.T) {
+	for _, arm := range Arms() {
+		provider := obj(api.InfraProvider, "p", m(arm, m()))
+		if got, want := NeedsHypervisorClient(provider), arm == ArmLibvirt; got != want {
+			t.Errorf("%s needs the hypervisor client = %t, want %t", arm, got, want)
+		}
+	}
+	both := obj(api.InfraProvider, "p", m(ArmLibvirt, m(), ArmVSphere, m()))
+	if !NeedsHypervisorClient(both) || NeedsHypervisorClient(obj(api.InfraProvider, "p", m())) {
+		t.Error("the answer follows the declared arms, not the selected variant")
 	}
 }

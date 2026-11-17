@@ -17,13 +17,14 @@ type facts struct {
 	credential       [2]secrets.Part
 	portPinned       bool
 	emulatedBMC      bool
+	hypervisorClient bool
 }
 
 var account = [2]secrets.Part{secrets.UsernamePart, secrets.PasswordPart}
 
 var armFacts = map[string]facts{
 	ArmBaremetal: {deliveredHostKey: true, delivery: DeliveryFetch, accessCredential: true, credential: account},
-	ArmLibvirt:   {deliveredHostKey: true, delivery: DeliveryFetch, bridgedGuests: true, credential: account, emulatedBMC: true},
+	ArmLibvirt:   {deliveredHostKey: true, delivery: DeliveryFetch, bridgedGuests: true, credential: account, emulatedBMC: true, hypervisorClient: true},
 	ArmVSphere:   {delivery: DeliveryFetch, tools: []string{"govc"}, credential: account},
 	ArmKubeVirt:  {delivery: DeliveryPush, accessCredential: true, tools: []string{"virtctl"}, credential: [2]secrets.Part{secrets.ValuePart}, portPinned: true},
 }
@@ -78,7 +79,9 @@ func ProvidersHostedOn(catalog api.Catalog, machine string) []string {
 	return hosted
 }
 
-func NeedsHypervisorClient(provider api.Object) bool { return provider.Spec().Has(ArmLibvirt) }
+func NeedsHypervisorClient(provider api.Object) bool {
+	return slices.ContainsFunc(Arms(), func(arm string) bool { return armFacts[arm].hypervisorClient && provider.Spec().Has(arm) })
+}
 
 func NamesHostCluster(provider api.Object) bool { return HostCluster(provider) != "" }
 

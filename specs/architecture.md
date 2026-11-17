@@ -508,7 +508,10 @@ installation method touches only this list:
    outcome, cancellation, replay and evidence.
 7. For a substrate arm, its arm in the `api/v1alpha1` schema and
    [Machine API](api/machines.md) tables; its `Arms`, `Realized`, `armFacts`
-   and machine-bound rows in the general substrate package; each admission
+   and machine-bound rows in the general substrate package, its entries in
+   the per-arm admission tables (`armNormalizers`, `armValidators` and
+   `segmentValidators`, whose functions live in the arm-named
+   `admission_<arm>.go` files); each admission
    file `armSupportFiles` names; and its `cmd/bootwright` composition.
    The [identity exemptions](#architecture-verification) and
    `armSupportFiles` in

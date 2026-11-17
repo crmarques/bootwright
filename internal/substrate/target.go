@@ -234,22 +234,22 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 		return Target{}, refusal("api.value", "the Machine's emulated BMC port does not allocate",
 			"correct spec.libvirt.bmcEmulation.port on "+provider.Identity())
 	}
-	credentials := provider.Spec().Get("libvirt", "bmcEmulation", "auth", "credentialsRef").Text()
+	credentials := provider.Spec().Get(ArmLibvirt, "bmcEmulation", "auth", "credentialsRef").Text()
 	if credentials == "" {
 		return Target{}, refusal("api.required", "the provider declares no emulated BMC credential",
 			"set spec.libvirt.bmcEmulation.auth.credentialsRef on "+provider.Identity())
 	}
-	certificate := provider.Spec().Get("libvirt", "bmcEmulation", "certificateRef").Text()
+	certificate := provider.Spec().Get(ArmLibvirt, "bmcEmulation", "certificateRef").Text()
 	if certificate == "" {
 		return Target{}, refusal("api.required", "the provider declares no emulated BMC serving certificate",
 			"set spec.libvirt.bmcEmulation.certificateRef on "+provider.Identity())
 	}
-	host, ok := catalog.Find(api.Machine, provider.Spec().Get("libvirt", "machineRef").Text())
+	host, ok := catalog.Find(api.Machine, provider.Spec().Get(ArmLibvirt, "machineRef").Text())
 	if !ok {
 		return Target{}, refusal("api.reference", "the provider's host Machine is not in the selected graph",
 			"declare it or correct spec.libvirt.machineRef on "+provider.Identity())
 	}
-	address := provider.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text()
+	address := provider.Spec().Get(ArmLibvirt, "bmcEmulation", "bindAddress").Text()
 	target.Controller = Controller{
 		Endpoint:       ControllerEndpoint(address, port, DomainUUID(contextName, machine.Name())),
 		CredentialsRef: credentials,
@@ -261,7 +261,7 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 	}
 	target.Identity = Identity{
 		Channel: ChannelGuestAgent,
-		URI:     provider.Spec().Get("libvirt", "uri").Text(),
+		URI:     provider.Spec().Get(ArmLibvirt, "uri").Text(),
 		Domain:  DomainName(contextName, machine.Name()),
 	}
 	if key := machine.Spec().Get("os", "install", "hostKeyRef").Text(); key != "" {
