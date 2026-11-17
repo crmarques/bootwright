@@ -11,23 +11,15 @@ never completed into one that was.
 from __future__ import annotations
 
 from ansible.plugins.action import ActionBase
-from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, machine_identity
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import (
     emit,
 )
+from ansible_collections.bootwright.core.plugins.module_utils.machine_identity import ADDRESS_LIMIT, IDENTITY_LIMIT, MAX_ADDRESSES, bounded
 
 POWER_STATES = ("", "On", "Off")
-MAX_ADDRESSES = 64
-IDENTITY_LIMIT = 128
 NAME_LIMIT = 64
 MAX_NAMED_FAILURES = 8
-
-
-def bounded(value, limit=128):
-    value = str(value or "").strip()
-    if len(value) > limit:
-        raise ValueError("bounded value")
-    return value
 
 
 class UnprovableIdentity(ValueError):
@@ -69,7 +61,7 @@ def presence(arguments, request_digest):
     serial = identity(observation.get("serial"), "SerialNumber", endpoint)
     evidence = {
         "absent": False,
-        "addresses": sorted({bounded(address, 32) for address in addresses}),
+        "addresses": sorted({bounded(address, ADDRESS_LIMIT) for address in addresses}),
         "manufacturer": bounded(observation.get("manufacturer")),
         "model": bounded(observation.get("model")),
         "postcondition": False,
@@ -80,13 +72,11 @@ def presence(arguments, request_digest):
     }
     if "rootVolume" in observation:
         evidence["rootVolume"] = observation["rootVolume"]
-    expected = {bounded(address, 32) for address in (arguments.get("expected") or [])}
+    # The declared-set rule is the one machine power and the pre-boot target
+    # proof refuse a wrong target from (module_utils/machine_identity.py).
     evidence["postcondition"] = bool(
-        expected
-        and not (observation.get("failures") or [])
-        and expected == set(evidence["addresses"])
+        machine_identity.declared(observation, arguments.get("expected") or [])
         and evidence["power"]
-        and (evidence["uuid"] or evidence["serial"])
     )
     return evidence
 
@@ -136,7 +126,7 @@ def unproved(evidence, arguments):
     failures = observation.get("failures") or []
     if failures:
         names.append(_inventory(list(failures)))
-    expected = {bounded(address, 32) for address in (arguments.get("expected") or [])}
+    expected = {bounded(address, ADDRESS_LIMIT) for address in (arguments.get("expected") or [])}
     if not expected:
         names.append("any declared hardware address")
     else:

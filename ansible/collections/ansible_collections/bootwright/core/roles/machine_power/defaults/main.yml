@@ -14,18 +14,23 @@ machine_power_ca_data: >-
   {{ lookup('ansible.builtin.file', bootwright_machine_power_material.controllerCA, rstrip=false)
      if bootwright_machine_power_material.controllerCA | default('') | length > 0 else '' }}
 
-# Whether the machine answers as the system this context's current apply
-# proved: each identity the pin records is the one its controller reports now.
+# The identity verdict of what the machine's controller reports, from the one
+# rule module_utils/machine_identity.py owns with the bare-metal target proof.
 # It is read only once that identity has been read (tasks/power.yml), and both
 # the refusal the runner is told of and the refusal the run prints decide from
-# this one comparison.
-machine_power_answers_as_pinned: >-
-  {{ ((bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length == 0)
-      or ((machine_power_identity.observation.uuid | default('') | trim | lower)
-          == (bootwright_machine_power_material.pinnedUUIDBase64 | b64decode | trim | lower)))
-     and ((bootwright_machine_power_material.pinnedSerialBase64 | default('') | length == 0)
-      or ((machine_power_identity.observation.serial | default('') | trim)
-          == (bootwright_machine_power_material.pinnedSerialBase64 | b64decode | trim))) }}
+# it. Each value arrives base64-encoded and is decoded inside the verdict.
+machine_power_verdict: >-
+  {{ machine_power_identity.observation | default({})
+     | bootwright.core.machine_identity_verdict(
+         expected_base64=bootwright_machine_power_material.expectedMACsBase64 | default(''),
+         pinned_uuid_base64=bootwright_machine_power_material.pinnedUUIDBase64 | default(''),
+         pinned_serial_base64=bootwright_machine_power_material.pinnedSerialBase64 | default(''),
+         host_uuid_base64=bootwright_machine_power_material.controllerHostUUIDBase64 | default(''),
+         host_macs_base64=bootwright_machine_power_material.controllerHostMACsBase64 | default('')) }}
+
+# Whether the machine answers as the system this context's current apply
+# proved: each identity the pin records is the one its controller reports now.
+machine_power_answers_as_pinned: '{{ machine_power_verdict.pinned }}'
 
 # Whether this run reaches a physical machine: the power service hands every
 # such run the controller host's own identity, and no other run any.
@@ -36,21 +41,11 @@ machine_power_physical: >-
 # Whether the machine answers with the controller host's own identity: its
 # reported UUID, other than in letter case or surrounding space, or any of its
 # reported MAC addresses is one this host reads locally.
-machine_power_is_controller_host: >-
-  {{ ((bootwright_machine_power_material.controllerHostUUIDBase64 | default('') | length > 0)
-      and ((machine_power_identity.observation.uuid | default('') | trim | lower)
-           == (bootwright_machine_power_material.controllerHostUUIDBase64 | b64decode | trim | lower)))
-     or ((machine_power_identity.observation.addresses | default([]))
-         | intersect((bootwright_machine_power_material.controllerHostMACsBase64 | default('') | b64decode).split(',')
-                     | reject('equalto', '') | list) | length > 0) }}
+machine_power_is_controller_host: '{{ machine_power_verdict.controllerHost }}'
 
 # Whether an unpinned physical machine's complete inventory reports exactly the
-# MAC set it declares.
-machine_power_reports_declared: >-
-  {{ (machine_power_identity.observation.failures | default(['unread']) | length == 0)
-     and ((machine_power_identity.observation.addresses | default([]) | unique | sort)
-          == ((bootwright_machine_power_material.expectedMACsBase64 | default('') | b64decode).split(',')
-              | reject('equalto', '') | unique | sort)) }}
+# MAC set it declares and names the system.
+machine_power_reports_declared: '{{ machine_power_verdict.declared }}'
 
 machine_power_access: >-
   {{ {'endpoint': (bootwright_machine_power_request.controller.endpoint),
