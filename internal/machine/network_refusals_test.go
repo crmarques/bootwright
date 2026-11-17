@@ -11,7 +11,7 @@ import (
 // An OS-ready Machine is told once to remove a network selection, never also
 // to select a configuration it may not declare.
 func TestAnOSReadyMachineIsToldOnlyToRemoveASelection(t *testing.T) {
-	ready := object(api.Machine, "ready", m("os", m("provided", true), "network", m("installAddressRef", "ip")))
+	ready := object(api.Machine, "ready", m("os", m("provided", m()), "network", m("installAddressRef", "ip")))
 	var found []api.Issue
 	for _, issue := range Validate(ready, api.NewCatalog([]api.Object{ready})) {
 		if issue.Field == "$.spec.network.installAddressRef" {
@@ -27,16 +27,16 @@ func TestAnOSReadyMachineIsToldOnlyToRemoveASelection(t *testing.T) {
 // selector reads warns api.deferred, while deviceName and wwn, which keep the
 // root disk out of Ceph OSD selections, do not.
 func TestAnOSReadyMachineWarnsOfRootHintsNothingReads(t *testing.T) {
-	ready := object(api.Machine, "ready", m("os", m("provided", true),
-		"hardware", m("rootDevice", m("deviceName", "/dev/vda", "model", "disk", "vendor", "acme", "minSizeGigabytes", api.IntegerValue("10"), "rotational", false)),
-		"substrate", m("baremetal", m("rootDevice", m("wwn", "0x5000c500a1b2c3d4", "hctl", "0:0:0:0", "serialNumber", "s1")))))
+	ready := object(api.Machine, "ready", m("os", m("provided", m()),
+		"hardware", m("rootDisk", m("wwn", "0x5000c500a1b2c3d4", "serialNumber", "s1",
+			"hints", m("deviceName", "/dev/vda", "model", "disk", "vendor", "acme", "minSizeGigabytes", api.IntegerValue("10"), "rotational", false, "hctl", "0:0:0:0")))))
 	deferred := []string{}
 	for _, issue := range Validate(ready, api.NewCatalog([]api.Object{ready})) {
 		if issue.Code == "api.deferred" {
 			deferred = append(deferred, issue.Field)
 		}
 	}
-	want := []string{"$.spec.substrate.baremetal.rootDevice.hctl", "$.spec.hardware.rootDevice.minSizeGigabytes", "$.spec.hardware.rootDevice.model", "$.spec.hardware.rootDevice.rotational", "$.spec.substrate.baremetal.rootDevice.serialNumber", "$.spec.hardware.rootDevice.vendor"}
+	want := []string{"$.spec.hardware.rootDisk.hints.hctl", "$.spec.hardware.rootDisk.hints.minSizeGigabytes", "$.spec.hardware.rootDisk.hints.model", "$.spec.hardware.rootDisk.hints.rotational", "$.spec.hardware.rootDisk.serialNumber", "$.spec.hardware.rootDisk.hints.vendor"}
 	if !slices.Equal(deferred, want) {
 		t.Fatalf("deferred = %v, want %v", deferred, want)
 	}
@@ -74,8 +74,8 @@ func TestEveryNICDefaultsToItsProvidersSoleSegment(t *testing.T) {
 			machine := guest(network)
 			catalog := api.NewCatalog(append([]api.Object{machine}, lab...))
 			normalized, _ := Normalize(machine, catalog)
-			if got := normalized.Spec().Get("substrate", "libvirt", "nics"); !got.Equal(list(m("nicRef", "enp1s0", "segmentRef", "net"))) {
-				t.Fatalf("substrate.libvirt.nics = %v, want enp1s0 on the sole segment net", got)
+			if got := normalized.Spec().Get("hardware", "nics"); !got.Equal(list(m("name", "enp1s0", "segmentRef", "net"))) {
+				t.Fatalf("hardware.nics = %v, want enp1s0 on the sole segment net", got)
 			}
 			if issues := admission(machine, lab...); len(issues) != 0 {
 				t.Fatalf("a Machine on its provider's sole segment was refused: %v", issues)
@@ -83,10 +83,10 @@ func TestEveryNICDefaultsToItsProvidersSoleSegment(t *testing.T) {
 		})
 	}
 	machine := guest(m("configRef", "net", "addresses", addresses))
-	requireOneIssue(t, admission(machine, twoSegmentLab(list(m("name", "enp1s0", "type", "ethernet")))...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
+	requireOneIssue(t, admission(machine, twoSegmentLab(list(m("name", "enp1s0", "type", "ethernet")))...), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[0].segmentRef",
 		Message:     "NIC enp1s0 of Machine/guest selects no segment, and InfraProvider/lab offers 2 segments across spec.segments and the managed Networks whose spec.libvirt.providerRef names it, not exactly one that every NIC defaults to",
-		Remediation: "add a spec.substrate.libvirt.nics entry with nicRef enp1s0 and a segmentRef naming a spec.segments entry of InfraProvider/lab or a managed Network whose spec.libvirt.providerRef names lab on Machine/guest"})
-	selected := machine.WithSpec(machine.Spec().WithPath(list(m("nicRef", "enp1s0", "segmentRef", "net")), "substrate", "libvirt", "nics"))
+		Remediation: "set spec.hardware.nics[0].segmentRef to a spec.segments entry of InfraProvider/lab or a managed Network whose spec.libvirt.providerRef names lab on Machine/guest"})
+	selected := machine.WithSpec(machine.Spec().WithPath(list(m("name", "enp1s0", "segmentRef", "net")), "hardware", "nics"))
 	if issues := admission(selected, twoSegmentLab(list(m("name", "enp1s0", "type", "ethernet")))...); len(issues) != 0 {
 		t.Fatalf("a NIC naming one of two segments was refused: %v", issues)
 	}
@@ -99,12 +99,11 @@ func TestABondRefusesPortsOnDifferentSegments(t *testing.T) {
 		m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("enp1s0", "enp2s0"))))
 	bonded := func(second string) api.Object {
 		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11", "interface", "bond0"))))
-		return machine.WithSpec(machine.Spec().WithPath(list(m("nicRef", "enp1s0", "segmentRef", "net"), m("nicRef", "enp2s0", "segmentRef", second)), "substrate", "libvirt", "nics").
-			WithPath(list(m("name", "enp1s0"), m("name", "enp2s0")), "hardware", "nics"))
+		return machine.WithSpec(machine.Spec().WithPath(list(m("name", "enp1s0", "segmentRef", "net"), m("name", "enp2s0", "segmentRef", second)), "hardware", "nics"))
 	}
-	requireOneIssue(t, admission(bonded("storage"), twoSegmentLab(interfaces)...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics[1].segmentRef",
+	requireOneIssue(t, admission(bonded("storage"), twoSegmentLab(interfaces)...), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[1].segmentRef",
 		Message:     "bond bond0 of Machine/guest has ports on different segments (enp1s0 on net, enp2s0 on storage), so a failover would move the host onto another network",
-		Remediation: "put the NIC of every port of bond bond0 on one segment in spec.substrate.libvirt.nics on Machine/guest, or remove the port on another segment from the bond"})
+		Remediation: "put the NIC of every port of bond bond0 on one segment in spec.hardware.nics on Machine/guest, or remove the port on another segment from the bond"})
 	if issues := admission(bonded("net"), twoSegmentLab(interfaces)...); len(issues) != 0 {
 		t.Fatalf("a bond on one segment was refused: %v", issues)
 	}
@@ -121,18 +120,18 @@ func TestABondSplitThroughControllerOrNestingRefusesOnce(t *testing.T) {
 	}
 	attached := func(interfaces api.Value, install string, segments ...string) []api.Issue {
 		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11", "interface", install))))
-		var entries, nics []api.Value
+		var nics []api.Value
 		for index, reference := range segments {
 			name := []string{"enp1s0", "enp2s0", "enp3s0"}[index]
-			entries, nics = append(entries, m("nicRef", name, "segmentRef", reference)), append(nics, m("name", name))
+			nics = append(nics, m("name", name, "segmentRef", reference))
 		}
-		machine = machine.WithSpec(machine.Spec().WithPath(list(entries...), "substrate", "libvirt", "nics").WithPath(list(nics...), "hardware", "nics"))
+		machine = machine.WithSpec(machine.Spec().WithPath(list(nics...), "hardware", "nics"))
 		return admission(machine, twoSegmentLab(interfaces)...)
 	}
 	controlled := list(ethernet("enp1s0", "bond0"), ethernet("enp2s0", "bond0"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup")))
-	requireOneIssue(t, attached(controlled, "bond0", "net", "storage"), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics[1].segmentRef",
+	requireOneIssue(t, attached(controlled, "bond0", "net", "storage"), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[1].segmentRef",
 		Message:     "bond bond0 of Machine/guest has ports on different segments (enp1s0 on net, enp2s0 on storage), so a failover would move the host onto another network",
-		Remediation: "put the NIC of every port of bond bond0 on one segment in spec.substrate.libvirt.nics on Machine/guest, or remove the port on another segment from the bond"})
+		Remediation: "put the NIC of every port of bond bond0 on one segment in spec.hardware.nics on Machine/guest, or remove the port on another segment from the bond"})
 	if issues := attached(controlled, "bond0", "net", "net"); len(issues) != 0 {
 		t.Fatalf("a controller-declared bond on one segment was refused: %v", issues)
 	}
@@ -212,7 +211,7 @@ func TestAnInstallGatewayLiesInsideTheInstallPrefix(t *testing.T) {
 // name, which no Network needs to hold.
 func TestAContactNeedsNoNetwork(t *testing.T) {
 	ready := func(address string) []api.Issue {
-		machine := object(api.Machine, "ready", m("os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", address)))))
+		machine := object(api.Machine, "ready", m("os", m("provided", m()), "network", m("addresses", list(m("name", "ssh", "address", address)))))
 		return admission(machine)
 	}
 	for _, address := range []string{"192.0.2.10", "2001:db8::10", "host.example.test"} {
@@ -229,8 +228,7 @@ func TestAnUnmatchedNICMayNotShareAMatchedInterfaceName(t *testing.T) {
 	node, catalog := fixture()
 	labelled := func(second string) api.Object {
 		return node.WithSpec(node.Spec().
-			WithPath(list(m("name", "nic-a"), m("name", second)), "hardware", "nics").
-			WithPath(list(m("nicRef", "nic-a", "macAddress", "02:00:00:00:00:01"), m("nicRef", second, "macAddress", "02:00:00:00:00:02")), "substrate", "baremetal", "nics").
+			WithPath(list(m("name", "nic-a", "macAddress", "02:00:00:00:00:01"), m("name", second, "macAddress", "02:00:00:00:00:02")), "hardware", "nics").
 			WithPath(list(m("interface", "eth0", "nicRef", "nic-a")), "network", "interfaceMatches"))
 	}
 	requireOneIssue(t, admission(labelled("eth0"), without(catalog, node)...), api.Issue{Code: "api.invariant", Field: "$.spec.network.interfaceMatches[0].nicRef",

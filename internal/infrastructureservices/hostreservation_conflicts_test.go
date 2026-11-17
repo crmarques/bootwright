@@ -64,7 +64,7 @@ func TestAPhysicalServerConflictNamesBothMachinesAndTheBMCField(t *testing.T) {
 	}
 	got := ConflictDiagnostic(conflicts[0])
 	message := "context alpha holds a bmc reservation for Machine/node-a, which conflicts with the same bmc reservation that Machine/node-b of this context claims"
-	remediation := "run bootwright destroy --context alpha first, or change spec.substrate.baremetal.bmc.address on Machine/node-b"
+	remediation := "run bootwright destroy --context alpha first, or change spec.hardware.bmc.address on Machine/node-b"
 	if got.Message != message || got.Remediation != remediation || got.Object == nil || got.Object.Kind != "Machine" || got.Object.Name != "node-b" {
 		t.Fatalf("diagnostic = %+v", got)
 	}

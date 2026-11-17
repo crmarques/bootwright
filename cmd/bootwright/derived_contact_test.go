@@ -17,9 +17,9 @@ import (
 func TestAnOverlongDerivedContactIsTheMachinesOnlyDiagnostic(t *testing.T) {
 	t.Parallel()
 	labels := []string{"b", strings.Repeat("a", 63), strings.Repeat("a", 63), strings.Repeat("a", 63), strings.Repeat("a", 53)}
-	env := "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: synthetic\nspec:\n  domains:\n    base: " + strings.Join(labels, ".") + "\n  controller: {machineRef: controller}\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n  os: {provided: true}\n  access: {local: true}\n  network:\n    addresses: [{name: fqdn, address: controller.example.test}]\n"
+	env := "apiVersion: bootwright.io/v1alpha1\nkind: Environment\nmetadata:\n  name: synthetic\nspec:\n  domains:\n    base: " + strings.Join(labels, ".") + "\n  controller: {machineRef: controller}\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n  os: {provided: {}}\n  access: {local: {}}\n  network:\n    addresses: [{name: fqdn, address: controller.example.test}]\n"
 	for _, access := range []string{"{auth: {operatorIdentity: {}}}", "{addressRef: fqdn, auth: {operatorIdentity: {}}}"} {
-		machine := "---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: rhel-01}\nspec:\n  os: {provided: true}\n  access:\n    ssh: " + access + "\n"
+		machine := "---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: rhel-01}\nspec:\n  os: {provided: {}}\n  access:\n    ssh: " + access + "\n"
 		sources := desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(env+machine))}, Roots: []string{"/synthetic"}}
 		_, _, err := wireCompiler().Compile(context.Background(), sources)
 		got := []string{}

@@ -17,7 +17,7 @@ func validateSegments(c api.Catalog, o, provider api.Object, native api.Value) [
 	if substrate.VirtualArm(variant) {
 		issues = api.AppendIssues(issues, validateVirtualMACs(o, native, variant)...)
 	}
-	issues = api.AppendIssues(issues, validateBondSegments(o, native, "$.spec.substrate."+string(variant)+".nics")...)
+	issues = api.AppendIssues(issues, validateBondSegments(o, native, "$."+substrate.NICsPath)...)
 	issues = api.AppendIssues(issues, validateNICSegmentSelection(c, o, provider, native)...)
 	return api.AppendIssues(issues, validateCapacities(c, o, provider, native)...)
 }
@@ -42,12 +42,11 @@ func validateNICSegmentSelection(c api.Catalog, o, provider api.Object, native a
 		if !slices.Contains(substrate.MachineNICs(o), nic) || substrate.NICSegment(c, provider, o, nic) != "" {
 			continue
 		}
-		field := "$.spec.substrate." + string(variant) + ".nics"
-		remedy := "add an entry {nicRef: " + nic + ", macAddress: <its MAC>, segmentRef: <segment>} to spec.substrate." + string(variant) + ".nics of " + o.Identity() + ", with segmentRef one of " + strings.Join(names, ", ")
+		field := "$." + substrate.NICsPath
+		remedy := "set segmentRef on NIC " + nic + " in " + substrate.NICsPath + " of " + o.Identity() + " to one of " + strings.Join(names, ", ")
 		for i, entry := range substrate.MachineNICSegments(o).Items() {
-			if entry.Get("nicRef").Text() == nic {
-				field = fmt.Sprintf("%s[%d]", field, i)
-				remedy = "set segmentRef on the spec.substrate." + string(variant) + ".nics entry of NIC " + nic + " on " + o.Identity() + " to one of " + strings.Join(names, ", ")
+			if entry.Get("name").Text() == nic {
+				field = fmt.Sprintf("%s[%d].segmentRef", field, i)
 			}
 		}
 		issues = api.AppendIssues(issues, invariant(field, "NIC "+nic+" of "+o.Identity()+" carries interface "+match.Get("interface").Text()+", and "+provider.Identity()+" declares segments "+strings.Join(names, ", ")+", so the NIC needs its segment", remedy))
@@ -277,22 +276,17 @@ func stackVLAN(native api.Value, path []string) string {
 }
 
 func moveNIC(c api.Catalog, provider, o api.Object, nic, carries string) string {
-	variant := substrate.Variant(provider)
 	sole := substrate.Segments(c, provider).Len() == 1
-	for _, entry := range substrate.MachineNICSegments(o).Items() {
-		switch {
-		case entry.Get("nicRef").Text() != nic:
-		case entry.Has("segmentRef") && !sole:
-			return "move NIC " + nic + " with its segmentRef on " + o.Identity() + " to a segment that " + carries
-		case !entry.Has("segmentRef") || entry.Has("macAddress"):
-			return "set segmentRef on the spec.substrate." + string(variant) + ".nics entry of NIC " + nic + " on " + o.Identity() + " to a segment that " + carries
+	for i, entry := range substrate.MachineNICSegments(o).Items() {
+		if entry.Get("name").Text() != nic {
+			continue
 		}
+		if entry.Has("segmentRef") && !sole {
+			return "move NIC " + nic + " with its segmentRef on " + o.Identity() + " to a segment that " + carries
+		}
+		return fmt.Sprintf("set %s[%d].segmentRef on %s to a segment that %s", substrate.NICsPath, i, o.Identity(), carries)
 	}
-	entry := "{nicRef: " + nic + ", segmentRef: <segment>}"
-	if !substrate.VirtualArm(variant) {
-		entry = "{nicRef: " + nic + ", macAddress: <its MAC>, segmentRef: <segment>}"
-	}
-	return "add an entry " + entry + " to spec.substrate." + string(variant) + ".nics of " + o.Identity() + " naming a segment that " + carries
+	return "declare NIC " + nic + " in " + substrate.NICsPath + " of " + o.Identity() + " with a segmentRef naming a segment that " + carries
 }
 
 func carriageChecked(o api.Object, c api.Catalog, native api.Value) map[string]bool {
@@ -343,7 +337,7 @@ func validateStackedVLANs(o api.Object, c api.Catalog, native api.Value) []api.I
 			if substrate.TaggedCarriage(variant) {
 				carried := "the Network of VLAN " + strconv.FormatInt(id, 10)
 				for _, candidate := range c.OfKind(api.Network) {
-					if vlan, tagged := network.VLAN(candidate); tagged && int64(vlan) == id && network.Serves(candidate, o.Spec().Get("placement", "site").Text()) {
+					if vlan, tagged := network.VLAN(candidate); tagged && int64(vlan) == id && network.Serves(candidate, o.Spec().Get("site").Text()) {
 						carried = candidate.Name()
 					}
 				}
@@ -364,13 +358,4 @@ func carriesVLAN(c api.Catalog, segment api.Value, id int) bool {
 		}
 	}
 	return false
-}
-
-func namedValueBy(values api.Value, key, name string) (api.Value, bool) {
-	for _, value := range values.Items() {
-		if value.Get(key).Text() == name {
-			return value, true
-		}
-	}
-	return api.Value{}, false
 }

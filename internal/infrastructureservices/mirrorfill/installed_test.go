@@ -30,7 +30,7 @@ func installedHost(catalog api.Catalog) api.Catalog {
 		if object.Kind() == api.Machine && object.Name() == "mirror" {
 			ssh := api.MapValue(text("addressRef", "ip"), field("port", api.IntegerValue("22")), text("user", "bootwright"), field("auth", api.MapValue(text("privateKeyRef", "fleet-key"))))
 			network := api.MapValue(text("installAddressRef", "ip"), field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "203.0.113.20")))))
-			spec := object.Spec().With("os", api.MapValue(field("provided", api.BoolValue(false)), text("installProfileRef", "rhel")))
+			spec := object.Spec().With("os", api.MapValue(field("install", api.MapValue(text("profileRef", "rhel")))))
 			objects[index] = object.WithSpec(spec.With("network", network).With("access", api.MapValue(field("ssh", ssh))))
 		}
 	}

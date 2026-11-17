@@ -46,15 +46,15 @@ func list(values ...api.Value) api.Value { return api.ListValue(values...) }
 func catalogOf() api.Catalog {
 	return api.NewCatalog([]api.Object{
 		obj(api.Environment, "env", m("controller", m("machineRef", "controller"))),
-		obj(api.Machine, "controller", m("os", m("provided", true), "access", m("local", true))),
+		obj(api.Machine, "controller", m("os", m("provided", m()), "access", m("local", m()))),
 		obj(api.InfraProvider, "floor", m("baremetal", m())),
 		obj(api.Machine, "server", m(
-			"substrate", m("providerRef", "floor", "baremetal", m(
+			"hardware", m("providerRef", "floor",
 				"bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "server-bmc"),
-				"nics", list(m("nicRef", "eno2", "macAddress", "AA:BB:CC:DD:EE:02"),
-					m("nicRef", "eno1", "macAddress", "aa:bb:cc:dd:ee:01")))),
-			"os", m("provided", false, "installProfileRef", "rhel", "install", m("hostKeyRef", "server-host-key")),
-			"hardware", m("nics", list(m("name", "eno2"), m("name", "eno1")), "rootDevice", m("deviceName", "/dev/sda")))),
+				"nics", list(m("name", "eno2", "macAddress", "AA:BB:CC:DD:EE:02"),
+					m("name", "eno1", "macAddress", "aa:bb:cc:dd:ee:01")),
+				"rootDisk", m("hints", m("deviceName", "/dev/sda"))),
+			"os", m("install", m("profileRef", "rhel", "hostKeyRef", "server-host-key")))),
 	})
 }
 
@@ -64,7 +64,7 @@ func catalogWithControllerTLS(tls api.Value) api.Catalog {
 	objects := catalogOf().Objects()
 	for index, object := range objects {
 		if object.Kind() == api.Machine && object.Name() == "server" {
-			objects[index] = object.WithSpec(object.Spec().WithPath(tls, "substrate", "baremetal", "bmc", "tls"))
+			objects[index] = object.WithSpec(object.Spec().WithPath(tls, "hardware", "bmc", "tls"))
 		}
 	}
 	return api.NewCatalog(objects)
@@ -158,7 +158,7 @@ func TestTheClaimReadsTheControllerThroughItsBundle(t *testing.T) {
 		catalog api.Catalog
 		bundle  string
 	}{
-		"declared": {catalogWithControllerTLS(m("verify", true, "trustBundleRef", "server-bmc-ca")), "server-bmc-ca"},
+		"declared": {catalogWithControllerTLS(m("trustBundleRef", "server-bmc-ca")), "server-bmc-ca"},
 		"absent":   {catalogOf(), ""},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -510,7 +510,7 @@ func TestTwoSpellingsOfOneUUIDLessServerConflict(t *testing.T) {
 	spelled := catalogOf().Objects()
 	for index, object := range spelled {
 		if object.Kind() == api.Machine && object.Name() == "server" {
-			spelled[index] = object.WithSpec(object.Spec().WithPath(api.StringValue("https://192.0.2.10/redfish/v1/Systems/1"), "substrate", "baremetal", "bmc", "address"))
+			spelled[index] = object.WithSpec(object.Spec().WithPath(api.StringValue("https://192.0.2.10/redfish/v1/Systems/1"), "hardware", "bmc", "address"))
 		}
 	}
 	claimed := func(contextName string, catalog api.Catalog) infrastructureservices.HostReservation {

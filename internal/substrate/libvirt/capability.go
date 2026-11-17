@@ -196,7 +196,7 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 			ID:             request.Identity.Block,
 			Description:    machineDescription(input.Verb, request),
 			Stage:          reconciliation.StageMachines,
-			Requires:       machineRequires(catalog, machine.Spec().Get("substrate", "providerRef").Text(), request),
+			Requires:       machineRequires(catalog, api.MachineProviderRef(machine), request),
 			Impacts:        machineImpacts(input.Verb, request),
 			Groups:         machineGroups(input.Verb, request),
 			Kind:           MachineKind,

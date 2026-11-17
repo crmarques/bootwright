@@ -1,7 +1,6 @@
 package machine
 
 import (
-	"fmt"
 	"strconv"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -9,8 +8,8 @@ import (
 )
 
 const (
-	rootSizePath   = "$.spec.substrate.baremetal.rootDevice.sizeBytes"
-	rootSerialPath = "$.spec.substrate.baremetal.rootDevice.serialNumber"
+	rootSizePath   = "$." + substrate.RootDiskPath + ".sizeBytes"
+	rootSerialPath = "$." + substrate.RootDiskPath + ".serialNumber"
 )
 
 func validateRootSize(o api.Object) []api.Issue {
@@ -18,10 +17,10 @@ func validateRootSize(o api.Object) []api.Issue {
 	if size == "" {
 		return nil
 	}
-	agentProof := !o.Spec().Get("os", "provided").Bool() && substrate.MachineRootDeviceHints(o).SerialNumber != ""
+	agentProof := !api.MachineProvided(o) && substrate.MachineRootDeviceHints(o).SerialNumber != ""
 	if !installed(o) && !agentProof {
 		return []api.Issue{invariant(rootSizePath, "sizeBytes is the exact capacity a Bootwright installation proves its root disk by, and nothing installs this Machine with Bootwright",
-			"remove spec.substrate.baremetal.rootDevice.sizeBytes")}
+			"remove "+rootSizePath[2:])}
 	}
 	if bytes, err := strconv.ParseInt(size, 10, 64); err != nil || bytes%4096 != 0 {
 		return []api.Issue{invariant(rootSizePath, "a root disk's sizeBytes is its exact logical capacity, aligned to 4096 bytes",
@@ -38,11 +37,9 @@ func selectingSerials(o api.Object) []selectingSerial {
 	if hints.DeviceName == "" && (hints.WWN == "" || !installed(o)) && hints.SerialNumber != "" && hints.SizeBytes != "" {
 		selecting = append(selecting, selectingSerial{rootSerialPath, hints.SerialNumber})
 	}
-	for _, policy := range []string{"eraseOnRemoval", "clearOnInstall"} {
-		for index, target := range o.Spec().Get("hardware", policy, "targets").Items() {
-			if serial := target.Get("serialNumber").Text(); !target.Has("deviceName") && serial != "" {
-				selecting = append(selecting, selectingSerial{fmt.Sprintf("$.spec.hardware.%s.targets[%d].serialNumber", policy, index), serial})
-			}
+	for index, disk := range substrate.MachineDataDisks(o) {
+		if serial := disk.Get("serialNumber").Text(); !disk.Has("wwn") && serial != "" {
+			selecting = append(selecting, selectingSerial{"$." + substrate.DataDiskPath(index, "serialNumber"), serial})
 		}
 	}
 	return selecting
@@ -53,11 +50,9 @@ func declaredSerials(o api.Object) map[string]bool {
 	if serial := substrate.MachineRootDeviceHints(o).SerialNumber; serial != "" {
 		declared[serial] = true
 	}
-	for _, policy := range []string{"eraseOnRemoval", "clearOnInstall"} {
-		for _, target := range o.Spec().Get("hardware", policy, "targets").Items() {
-			if serial := target.Get("serialNumber").Text(); serial != "" {
-				declared[serial] = true
-			}
+	for _, disk := range substrate.MachineDataDisks(o) {
+		if serial := disk.Get("serialNumber").Text(); serial != "" {
+			declared[serial] = true
 		}
 	}
 	return declared
@@ -76,9 +71,9 @@ func validateSelectingSerials(o api.Object, c api.Catalog) []api.Issue {
 		declared := declaredSerials(other)
 		for _, entry := range selecting {
 			if declared[entry.serial] {
-				remedy := "correct the serial number here or on " + other.Identity() + ", or declare spec.substrate.baremetal.rootDevice.wwn as the disk's stable WWN"
+				remedy := "correct the serial number here or on " + other.Identity() + ", or declare " + substrate.RootDiskPath + ".wwn as the disk's stable WWN"
 				if entry.field != rootSerialPath {
-					remedy = "correct the serial number here or on " + other.Identity() + ", or name the disk by its /dev/disk/by-id/wwn-0x deviceName with its wwn"
+					remedy = "correct the serial number here or on " + other.Identity() + ", or declare the data disk's wwn"
 				}
 				issues = append(issues, invariant(entry.field, "a disk selected by its serial number needs a serial number no other Machine declares, and "+other.Identity()+" declares "+entry.serial,
 					remedy))

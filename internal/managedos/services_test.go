@@ -35,7 +35,7 @@ func TestProfileServiceChoicesUseExplicitTypedReferences(t *testing.T) {
 
 func TestProfileArtifactsRequireExplicitServerAndIndependentHost(t *testing.T) {
 	server := obj(api.ArtifactServer, "artifacts", m("management", "managed", "machineRef", "services", "listeners", list(m("name", "plain", "protocol", "http"), m("name", "secure", "protocol", "https")), "endpoints", list(m("name", "packages", "listenerRef", "plain"), m("name", "media", "listenerRef", "secure"))))
-	machine := obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "install")))
+	machine := obj(api.Machine, "node", m("os", m("install", m("profileRef", "install"))))
 	catalog := api.NewCatalog([]api.Object{server, machine})
 	profile := anaconda()
 	profile = profile.WithSpec(profile.Spec().WithPath(m("serverRef", "artifacts", "endpointRef", "media"), "installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint").WithPath(m("fromMedia", "local-media:packages.iso", "artifactServerEndpoint", m("serverRef", "artifacts", "endpointRef", "packages")), "installer", "anaconda", "packageSource", "hostedTree"))

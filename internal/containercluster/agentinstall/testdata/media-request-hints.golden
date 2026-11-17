@@ -9,7 +9,7 @@
         "hostname": "master-0",
         "interfaces": [
           {
-            "macAddress": "52:54:00:b9:31:5b",
+            "macAddress": "aa:bb:cc:dd:ee:01",
             "name": "enp1s0"
           }
         ],
@@ -26,7 +26,7 @@
               "ipv4": {
                 "address": [
                   {
-                    "ip": "198.51.100.31",
+                    "ip": "198.51.100.41",
                     "prefix-length": 24
                   }
                 ],
@@ -36,7 +36,7 @@
               "ipv6": {
                 "enabled": false
               },
-              "mac-address": "52:54:00:b9:31:5b",
+              "mac-address": "aa:bb:cc:dd:ee:01",
               "name": "enp1s0",
               "state": "up",
               "type": "ethernet"
@@ -55,18 +55,20 @@
         },
         "role": "master",
         "rootDeviceHints": {
-          "deviceName": "/dev/disk/by-path/pci-0000:00:04.0",
+          "hctl": "1:0:0:0",
           "minSizeGigabytes": 0,
           "model": "1e3",
           "rotational": false,
-          "vendor": "0o17"
+          "serialNumber": "0987654321",
+          "vendor": "0o17",
+          "wwn": "0x5000c500a1b2c3d4"
         }
       },
       {
         "hostname": "master-1",
         "interfaces": [
           {
-            "macAddress": "52:54:00:07:56:b8",
+            "macAddress": "aa:bb:cc:dd:ee:02",
             "name": "enp1s0"
           }
         ],
@@ -83,7 +85,7 @@
               "ipv4": {
                 "address": [
                   {
-                    "ip": "198.51.100.32",
+                    "ip": "198.51.100.42",
                     "prefix-length": 24
                   }
                 ],
@@ -93,7 +95,7 @@
               "ipv6": {
                 "enabled": false
               },
-              "mac-address": "52:54:00:07:56:b8",
+              "mac-address": "aa:bb:cc:dd:ee:02",
               "name": "enp1s0",
               "state": "up",
               "type": "ethernet"
@@ -112,14 +114,14 @@
         },
         "role": "master",
         "rootDeviceHints": {
-          "minSizeGigabytes": 100
+          "wwn": "0x5000c500a1b2c3d5"
         }
       },
       {
         "hostname": "master-2",
         "interfaces": [
           {
-            "macAddress": "52:54:00:e5:76:94",
+            "macAddress": "aa:bb:cc:dd:ee:03",
             "name": "enp1s0"
           }
         ],
@@ -136,7 +138,7 @@
               "ipv4": {
                 "address": [
                   {
-                    "ip": "198.51.100.33",
+                    "ip": "198.51.100.43",
                     "prefix-length": 24
                   }
                 ],
@@ -146,7 +148,7 @@
               "ipv6": {
                 "enabled": false
               },
-              "mac-address": "52:54:00:e5:76:94",
+              "mac-address": "aa:bb:cc:dd:ee:03",
               "name": "enp1s0",
               "state": "up",
               "type": "ethernet"
@@ -165,28 +167,28 @@
         },
         "role": "master",
         "rootDeviceHints": {
-          "deviceName": "/dev/vda"
+          "wwn": "0x5000c500a1b2c3d4"
         }
       }
     ],
     "kind": "AgentConfig",
     "metadata": {
-      "name": "ocp"
+      "name": "metal"
     },
-    "rendezvousIP": "198.51.100.31"
+    "rendezvousIP": "198.51.100.41"
   },
   "budgets": {
     "buildSeconds": 1800
   },
   "deliveryKind": "fetch",
   "identity": {
-    "block": "cluster-media-ocp",
-    "cluster": "ocp",
+    "block": "cluster-media-metal",
+    "cluster": "metal",
     "context": "lab"
   },
   "image": {
-    "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/clusters/ocp",
-    "url": "https://192.0.2.1:8443/private/clusters/ocp"
+    "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/clusters/metal",
+    "url": "https://192.0.2.1:8443/private/clusters/metal"
   },
   "installConfig": {
     "apiVersion": "v1",
@@ -202,7 +204,7 @@
       "replicas": 3
     },
     "metadata": {
-      "name": "ocp"
+      "name": "metal"
     },
     "networking": {
       "clusterNetwork": [
@@ -223,12 +225,11 @@
     "platform": {
       "baremetal": {
         "apiVIPs": [
-          "198.51.100.10"
+          "198.51.100.20"
         ],
         "ingressVIPs": [
-          "198.51.100.11"
-        ],
-        "provisioningNetwork": "Disabled"
+          "198.51.100.21"
+        ]
       }
     },
     "pullSecret": "",
@@ -252,5 +253,5 @@
     "version": "4.21.15"
   },
   "version": "cluster-media-agent-v1",
-  "workRoot": "/var/lib/bootwright-hosted/lab/clusters/ocp"
+  "workRoot": "/var/lib/bootwright-hosted/lab/clusters/metal"
 }

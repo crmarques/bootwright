@@ -361,10 +361,10 @@ func TestPrivateControllerRulesApplyToEveryPrivateInstallation(t *testing.T) {
 	unverifiedFetch := agent(func(target *substrate.Target) {
 		target.Controller.VirtualMedia.Trust = substrate.TrustDisableVerification
 	})
-	if reason, _ := refusedTarget(guest(), unverifiedFetch, true); reason != "" {
+	if reason, _ := refusedTarget(api.Catalog{}, guest(), unverifiedFetch, true); reason != "" {
 		t.Fatalf("reason = %q", reason)
 	}
-	if reason, _ := refusedTarget(guest(), unverifiedFetch, false); reason != "" {
+	if reason, _ := refusedTarget(api.Catalog{}, guest(), unverifiedFetch, false); reason != "" {
 		t.Fatalf("a public installation refused: %q", reason)
 	}
 	for name, change := range map[string]func(*substrate.Target){
@@ -373,11 +373,11 @@ func TestPrivateControllerRulesApplyToEveryPrivateInstallation(t *testing.T) {
 		},
 		"unverified": func(target *substrate.Target) { target.Controller.TLSVerify = false },
 	} {
-		reason, _ := refusedTarget(guest(), agent(change), true)
+		reason, _ := refusedTarget(api.Catalog{}, guest(), agent(change), true)
 		if !strings.HasPrefix(reason, "a Machine whose installation delivers private material hands its BMC the private installer image URL") {
 			t.Fatalf("%s: reason = %q", name, reason)
 		}
-		if reason, _ := refusedTarget(guest(), agent(change), false); reason != "" {
+		if reason, _ := refusedTarget(api.Catalog{}, guest(), agent(change), false); reason != "" {
 			t.Fatalf("%s: a public installation refused: %q", name, reason)
 		}
 	}
@@ -389,7 +389,7 @@ func TestPrivateControllerRulesApplyToEveryPrivateInstallation(t *testing.T) {
 	if !privateInstallation(catalog, guest(), derived.Identity.Channel) {
 		t.Fatal("an encrypting guest is not a private installation")
 	}
-	if reason, _ := refusedTarget(guest(), derived, true); reason != "" {
+	if reason, _ := refusedTarget(catalog, guest(), derived, true); reason != "" {
 		t.Fatalf("the lab target refused: %q", reason)
 	}
 }

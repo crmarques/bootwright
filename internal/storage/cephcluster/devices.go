@@ -15,7 +15,10 @@ func cleanDevice(value string) bool {
 	return cleanAbsolute(value) && strings.HasPrefix(value, "/dev/") && value != "/dev/"
 }
 
-func rootDevice(machine api.Object, device string) bool {
+func rootDevice(catalog api.Catalog, machine api.Object, device string) bool {
+	if root := substrate.RootDevicePath(catalog, machine); root != "" && device == root {
+		return true
+	}
 	hints := substrate.MachineRootDeviceHints(machine)
 	if hints.DeviceName != "" && device == hints.DeviceName || hints.SerialNumber != "" && device == substrate.SerialDevicePrefix+hints.SerialNumber {
 		return true

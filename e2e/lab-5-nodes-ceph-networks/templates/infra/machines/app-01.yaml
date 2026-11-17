@@ -5,29 +5,20 @@ metadata:
   name: app-01
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: app
-
-      nics:
-        - nicRef: nic0
-          segmentRef: ceph-public
-
-        - nicRef: nic1
-          segmentRef: app-users
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: app
+
     nics:
       - name: nic0
-      - name: nic1
+        segmentRef: ceph-public
 
-    rootDevice:
-      deviceName: /dev/vda
+      - name: nic1
+        segmentRef: app-users
 
   os:
-    provided: false
-    installProfileRef: rhel
+    install:
+      profileRef: rhel
 
   network:
     configRef: app

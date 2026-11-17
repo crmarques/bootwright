@@ -15,7 +15,7 @@ func (Capability) Claimed(catalog api.Catalog) []string {
 func (TreeCapability) Claimed(catalog api.Catalog) []string {
 	used := map[string]bool{}
 	for _, machine := range InstalledMachines(catalog) {
-		used[machine.Spec().Get("os", "installProfileRef").Text()] = true
+		used[api.MachineInstallProfileRef(machine)] = true
 	}
 	var claimed []string
 	for _, profile := range catalog.OfKind(api.MachineInstallProfile) {

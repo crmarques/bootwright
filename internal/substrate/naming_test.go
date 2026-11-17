@@ -81,8 +81,8 @@ func providerWithPort(port string) api.Object {
 
 func hosted(name string) api.Object {
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "lab"))),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
+		field("hardware", api.MapValue(text("providerRef", "lab"))),
+		field("os", api.MapValue(field("install", api.MapValue(text("profileRef", "rhel"))))),
 	))
 }
 
@@ -110,8 +110,8 @@ func TestControllerPortsAllocateInCanonicalOrder(t *testing.T) {
 // never shifts the allocation of the Machines that are.
 func TestProvidedMachinesTakeNoControllerPort(t *testing.T) {
 	provided := api.NewObject(api.Machine, "alpha", api.Value{}, api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "lab"))),
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("hardware", api.MapValue(text("providerRef", "lab"))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 	))
 	catalog := api.NewCatalog([]api.Object{providerWithPort("8000"), provided, hosted("beta")})
 	if hosts := HostedMachines(catalog, "lab"); len(hosts) != 1 || hosts[0].Name() != "beta" {

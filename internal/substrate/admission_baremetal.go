@@ -25,13 +25,8 @@ func validateBaremetalAuthored(o api.Object) []api.Issue {
 }
 
 func NormalizeBMCDefaults(bmc api.Value) api.Value {
-	tls := bmc.Get("tls")
-	if mode := tls.Get("verification").Text(); mode != "" {
-		tls = tls.Default("verify", api.BoolValue(mode != "none"))
-	}
-	bmc = bmc.With("tls", tls.Default("verify", api.BoolValue(true)))
 	media := bmc.Get("virtualMedia")
-	tls = media.Get("tls").Default("trust", api.StringValue(TrustImportCertificate))
+	tls := media.Get("tls").Default("trust", api.StringValue(TrustImportCertificate))
 	switch tls.Get("trust").Text() {
 	case "disableVerification":
 		tls = tls.Default("restoreVerificationAfterBoot", api.BoolValue(true))
@@ -39,7 +34,7 @@ func NormalizeBMCDefaults(bmc api.Value) api.Value {
 		tls = tls.Default("removeCertificateAfterBoot", api.BoolValue(false))
 	}
 	if tls.Get("trust").Text() != TrustDisableVerification {
-		verified := bmc.Get("tls", "verify").Bool() && bmc.Get("tls", "verification").Text() != "none"
+		verified := BMCVerified(bmc)
 		tls = tls.Default("enableVerification", api.BoolValue(verified))
 	}
 	return bmc.With("virtualMedia", media.With("tls", tls))
@@ -65,7 +60,6 @@ func ValidateBMCDefaults(bmc api.Value, path string, authored bool) []api.Issue 
 	if tls.Get("enableVerification").Bool() {
 		controllerTLS := bmc.Get("tls")
 		if trust == TrustDisableVerification || controllerTLS.Get("verification").Text() == "none" ||
-			(controllerTLS.Has("verify") && !controllerTLS.Get("verify").Bool()) ||
 			(bmc.Has("address") && !strings.HasPrefix(bmc.Get("address").Text(), "https://")) {
 			issues = api.AppendIssues(issues, issue(path+".virtualMedia.tls.enableVerification", "enabling media verification requires verified HTTPS BMC access and importCertificate or established trust"))
 		}
@@ -73,21 +67,15 @@ func ValidateBMCDefaults(bmc api.Value, path string, authored bool) []api.Issue 
 	return issues
 }
 
-// validateControllerTrust refuses a bundle beside verification turned off. It
-// reads the value it is given, so an authored block and an effective one that
-// inherited either half are held to the same rule.
+// validateControllerTrust refuses certificate verification on a plain-HTTP
+// controller endpoint.
 func validateControllerTrust(bmc api.Value, path string) []api.Issue {
 	tls := bmc.Get("tls")
 	var issues []api.Issue
 	if tls.Get("verification").Text() == "certificate" && bmc.Has("address") && !strings.HasPrefix(bmc.Get("address").Text(), "https://") {
 		issues = append(issues, api.Issue{Code: "api.invariant", Field: path + ".tls.verification", Message: "certificate verification requires an HTTPS controller endpoint", Remediation: "set the BMC address to its HTTPS ComputerSystem endpoint"})
 	}
-	if !tls.Has("trustBundleRef") || !tls.Has("verify") || tls.Get("verify").Bool() {
-		return issues
-	}
-	return append(issues, api.Issue{Code: "api.invariant", Field: path + ".tls.trustBundleRef",
-		Message:     "a BMC trust bundle requires verification, and tls.verify is false here, whether authored or inherited",
-		Remediation: "set tls.verify: true where the bundle is declared, or remove tls.trustBundleRef"})
+	return issues
 }
 
 // validateProviderMediaTrust refuses the one virtual-media trust that is an
@@ -98,5 +86,5 @@ func validateProviderMediaTrust(bmc api.Value, path string) []api.Issue {
 	}
 	return []api.Issue{{Code: "api.invariant", Field: path + ".virtualMedia.tls.trust",
 		Message:     "disableVerification is a per-Machine exception and never a provider default",
-		Remediation: "declare substrate.baremetal.bmc.virtualMedia.tls.trust: disableVerification on each Machine that needs it"}}
+		Remediation: "declare hardware.bmc.virtualMedia.tls.trust: disableVerification on each Machine that needs it"}}
 }

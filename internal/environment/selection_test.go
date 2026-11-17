@@ -172,7 +172,7 @@ func TestStorageClosureRetainsSMBResources(t *testing.T) {
 
 func selectionFixture(extra ...api.Object) []api.Object {
 	objects := []api.Object{
-		selectionObject(api.Machine, "ctl", "substrate", selectionValue("providerRef", "prov-ctl")),
+		selectionObject(api.Machine, "ctl", "hardware", selectionValue("providerRef", "prov-ctl")),
 		selectionObject(api.InfraProvider, "prov-ctl", "libvirt", selectionValue("machineRef", "host-ctl")),
 		selectionObject(api.Machine, "host-ctl"),
 		selectionObject(api.Machine, "orphan"),

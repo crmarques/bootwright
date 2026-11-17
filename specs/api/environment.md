@@ -189,7 +189,7 @@ The cluster-selection closure is authoritative and independent of file layout:
 
 | Starting selection | Retained objects |
 | --- | --- |
-| Every selection | The selected `Environment`, its required controller Machine and that Machine's provider/provider-host closure, plus every `Entitlement`, `MachineImage`, `MachineInstallProfile`, `Network`, `NetworkConfig`, `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`, `CustomPlaybook`, and `Secret` objects; every `Network` with a `libvirt` arm also retains the `InfraProvider` it names and that provider's host closure; every retained managed service also retains its placement Machine and that Machine's `InfraProvider` and provider-host Machine closure; and every Bootwright-installed Machine (`os.provided: false` with `installProfileRef`) that is neither a node nor a node's provider host of any declared cluster, as a root with its provider and provider-host closure. |
+| Every selection | The selected `Environment`, its required controller Machine and that Machine's provider/provider-host closure, plus every `Entitlement`, `MachineImage`, `MachineInstallProfile`, `Network`, `NetworkConfig`, `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`, `CustomPlaybook`, and `Secret` objects; every `Network` with a `libvirt` arm also retains the `InfraProvider` it names and that provider's host closure; every retained managed service also retains its placement Machine and that Machine's `InfraProvider` and provider-host Machine closure; and every Bootwright-installed Machine (`os.install`) that is neither a node nor a node's provider host of any declared cluster, as a root with its provider and provider-host closure. |
 | One `OpenShiftCluster` | That root; its node Machines; the Machines' `InfraProvider` objects and any libvirt provider-host Machines; each KubeVirt provider's `hostClusterRef` `OpenShiftCluster`, retained as a root with its own row; Machines hosting managed infrastructure services consumed by the root; bindings for the root plus their recursively expanded profiles and add-ons; and each `CephConsumer` named by a selected package's configuration, its referenced storage cluster, policy/pool/filesystem/gateway chain, and every `CephNFSExport` on that retained storage cluster. |
 | One `CephCluster` | That root and every Ceph child kind whose `clusterRef` names it, `CephConsumer` included; its node, provider, provider-host, and consumed-service Machines; and each `OpenShiftCluster` attached to one of those exports through a package's configuration, together with that container root's bindings, recursively expanded profiles, and add-ons. |
 
@@ -223,8 +223,8 @@ every selected object.
 ## Remote-machine access and install defaults
 
 `spec.remoteMachinesAccessKey.keyRef` is a plain reference to an `sshKeyPair`
-`Secret`. It is required as soon as a selected `Machine` with
-`os.provided: false` sets `os.installProfileRef`. A managed-OS install authorizes its public half for the
+`Secret`. It is required as soon as a selected `Machine` declares
+`os.install`. A managed-OS install authorizes its public half for the
 product-owned `bootwright` account and uses its private half for that account;
 an already provided machine keeps its own `Machine.spec.access`. The Secret is
 [effect material](../secrets.md#immutable-binding-and-contexts), because the
@@ -473,8 +473,8 @@ sole Machine, hostname, capability or local-access declaration never selects
 it implicitly. Controller egress belongs to the selected Machine's
 [proxy choice](machines.md#machine-proxy).
 
-The referenced Machine must have effective `os.provided: true`
-and `access.local: true`; it receives the container runtime only when it
+The referenced Machine must have effective `os.provided: {}`
+and `access.local: {}`; it receives the container runtime only when it
 runs a container, which no Machine declares
 ([host packages](../controller.md#host-packages)).
 Selection never supplies these values or changes an SSH transport into local
@@ -484,7 +484,7 @@ CephCluster. Other retained Machines must not declare local access.
 
 Each controller violation is refused with `api.invariant` at
 `spec.controller.machineRef` and names its remedy on the Machine it concerns:
-set `os.provided` to true, give the controller `access.local: true` and no
+give the controller `os.provided: {}`, give it `access.local: {}` and no
 `access.ssh`, remove
 `access.local` from the other Machine, or remove the controller from the
 cluster's nodes; or select another controller Machine.
@@ -518,13 +518,13 @@ metadata:
 
 spec:
   os:
-    provided: true
+    provided: {}
 
   proxy:
     direct: {}
 
   access:
-    local: true
+    local: {}
 ```
 
 A controller may host a managed service when that service explicitly selects
@@ -601,7 +601,7 @@ contains exactly these required fields in order:
 | `os` | object | Exact `{family: rhel, version: <non-empty>, architecture}` tuple. |
 | `artifactServerEndpoint` | object | Required `{serverRef, endpointRef}` selecting a managed ArtifactServer directly; both references are required. |
 
-The selected artifact server must run on a Machine with `os.provided: true` so
+The selected artifact server must run on a Machine with `os.provided: {}` so
 it remains reachable after managed machines shut down. Validation checks the
 declaration and its references. No rescue journey exists yet, so admission
 refuses a present `rescue` with `api.invariant` at `spec.lifecycle.rescue`,

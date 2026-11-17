@@ -182,8 +182,8 @@ func TestEveryTargetInOneSurveyNamesItsOwnMaterial(t *testing.T) {
 // anchor.
 func TestEachReadTargetReadsItsOwnBundle(t *testing.T) {
 	tls := map[string]api.Value{
-		"metal": m("verify", true, "trustBundleRef", "metal-bmc-ca"),
-		"rack":  m("verify", true, "trustBundleRef", "rack-bmc-ca"),
+		"metal": m("trustBundleRef", "metal-bmc-ca"),
+		"rack":  m("trustBundleRef", "rack-bmc-ca"),
 	}
 	runtime, runner := &boundary{}, &surveyor{}
 	if _, err := New(stateSource{tls: tls}, evidenceSource{}, &pins{}, runtime, runner, nil, nil, nil, nil).

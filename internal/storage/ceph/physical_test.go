@@ -20,6 +20,9 @@ func physicalCatalog() (api.Catalog, api.Object) {
 		if object.Kind() == api.InfraProvider {
 			objects[i] = object.WithSpec(requestMap("baremetal", requestMap()))
 		}
+		if object.Kind() == api.Machine {
+			objects[i] = withoutProfile(object)
+		}
 		if object.Kind() != api.CephCluster {
 			continue
 		}
@@ -31,6 +34,11 @@ func physicalCatalog() (api.Catalog, api.Object) {
 		objects[i] = cluster
 	}
 	return api.NewCatalog(objects), cluster
+}
+
+func withoutProfile(machine api.Object) api.Object {
+	hardware := machine.Spec().Get("hardware").Without("profileRef")
+	return machine.WithSpec(machine.Spec().With("hardware", hardware))
 }
 
 func TestPhysicalCephPlansOnlyExplicitWWNIntent(t *testing.T) {
@@ -123,7 +131,7 @@ func TestPhysicalCephCannotUseVirtualHostRetirement(t *testing.T) {
 const serialSize = int64(1 << 40)
 
 // physicalSerialCatalog selects node-2's disk by /dev/disk/by-serial/SER-2,
-// which node-2 declares as an erase target without deviceName.
+// which node-2 declares as a data disk without wwn.
 func physicalSerialCatalog(machineChange func(api.Value) api.Value) (api.Catalog, api.Object) {
 	catalog, cluster := physicalCatalog()
 	services := cluster.Spec().Get("services").Items()
@@ -135,8 +143,7 @@ func physicalSerialCatalog(machineChange func(api.Value) api.Value) (api.Catalog
 		case object.Kind() == api.CephCluster:
 			objects[i] = cluster
 		case object.Kind() == api.Machine && object.Name() == "node-2":
-			targets := api.ListValue(requestMap("serialNumber", "ROOT-2", "sizeBytes", 1<<39), requestMap("serialNumber", "SER-2", "sizeBytes", 1<<40))
-			spec := object.Spec().WithPath(requestMap("method", "logicalOverwrite", "targets", targets), "hardware", "eraseOnRemoval")
+			spec := object.Spec().WithPath(api.ListValue(erasedDataDisk("SER-2", 1<<40, "")), "hardware", "dataDisks")
 			if machineChange != nil {
 				spec = machineChange(spec)
 			}
@@ -144,6 +151,14 @@ func physicalSerialCatalog(machineChange func(api.Value) api.Value) (api.Catalog
 		}
 	}
 	return api.NewCatalog(objects), cluster
+}
+
+func erasedDataDisk(serial string, size int64, wwn string) api.Value {
+	disk := requestMap("serialNumber", serial, "sizeBytes", size, "onRemoval", "logicalOverwrite")
+	if wwn != "" {
+		disk = disk.With("wwn", api.StringValue(wwn))
+	}
+	return disk
 }
 
 func TestPhysicalCephPlansSerialIntentFromTheMachineErasePolicy(t *testing.T) {
@@ -169,7 +184,7 @@ func TestPhysicalCephPlansSerialIntentFromTheMachineErasePolicy(t *testing.T) {
 	if decoded, err := DecodePhysicalRetirementRequest(mustCanonical(t, retirement)); err != nil || decoded.Hosts[1].Devices[0] != want || decoded.authorized() == nil {
 		t.Fatalf("serial retirement policy %+v: %v", decoded, err)
 	}
-	if retirement.Hosts[1].EraseTargets[1] != (PhysicalEraseTarget{Serial: "SER-2", SizeBytes: serialSize}) {
+	if retirement.Hosts[1].EraseTargets[0] != (PhysicalEraseTarget{Serial: "SER-2", SizeBytes: serialSize}) {
 		t.Fatalf("erase targets %+v", retirement.Hosts[1].EraseTargets)
 	}
 }
@@ -180,7 +195,7 @@ func TestPhysicalCephFreezesTheRootSerialItsMachineDeclares(t *testing.T) {
 		want    string
 	}{
 		"declared by serial": {func(spec api.Value) api.Value {
-			return spec.WithPath(requestMap("serialNumber", "ROOT-2", "sizeBytes", 1<<39), "substrate", "baremetal", "rootDevice")
+			return spec.WithPath(requestMap("serialNumber", "ROOT-2", "sizeBytes", 1<<39), "hardware", "rootDisk")
 		}, "ROOT-2"},
 		"not declared": {nil, ""},
 	} {
@@ -204,24 +219,18 @@ func TestPhysicalCephFreezesTheRootSerialItsMachineDeclares(t *testing.T) {
 }
 
 // A root its Machine declares by wwn is the root the Ceph host excludes from
-// its OSD devices, by that WWN, and the root an erase target names by its
-// derived path or by that WWN under any other path, so the host then retains
-// no root.
+// its OSD devices, by that WWN, and a root whose onRemoval erases it leaves the
+// host no root to retain.
 func TestPhysicalCephFreezesTheRootWWNItsMachineDeclares(t *testing.T) {
 	const wwn = "0x7000000000000002"
-	for name, target := range map[string]api.Value{
-		"no root target":           {},
-		"the derived path":         requestMap("deviceName", "/dev/disk/by-id/wwn-"+wwn, "wwn", wwn, "serialNumber", "ROOT-2", "sizeBytes", 1<<39),
-		"another path and its wwn": requestMap("deviceName", "/dev/sdz", "wwn", "naa.7000000000000002", "serialNumber", "ROOT-2", "sizeBytes", 1<<39),
+	for name, root := range map[string]api.Value{
+		"root retained": requestMap("wwn", wwn),
+		"root erased":   requestMap("wwn", wwn, "serialNumber", "ROOT-2", "sizeBytes", 1<<39, "onRemoval", "logicalOverwrite"),
 	} {
+		erased := root.Has("onRemoval")
 		t.Run(name, func(t *testing.T) {
 			catalog, cluster := physicalSerialCatalog(func(spec api.Value) api.Value {
-				targets := []api.Value{requestMap("serialNumber", "SER-2", "sizeBytes", 1<<40)}
-				if target.Present() {
-					targets = append(targets, target)
-				}
-				return spec.WithPath(requestMap("wwn", wwn), "substrate", "baremetal", "rootDevice").
-					WithPath(api.ListValue(targets...), "hardware", "eraseOnRemoval", "targets")
+				return spec.WithPath(root, "hardware", "rootDisk")
 			})
 			r, err := baseRequest(catalog, cluster, "synthetic")
 			if err != nil {
@@ -231,7 +240,7 @@ func TestPhysicalCephFreezesTheRootWWNItsMachineDeclares(t *testing.T) {
 				if host.Machine != "node-2" {
 					continue
 				}
-				if host.RootWWN != wwn || host.RootSerial != "" || host.RetainRoot != !target.Present() {
+				if host.RootWWN != wwn || host.RootSerial != root.Get("serialNumber").Text() || host.RetainRoot != !erased {
 					t.Fatalf("node-2 root = wwn %q serial %q retained %v", host.RootWWN, host.RootSerial, host.RetainRoot)
 				}
 				if _, refused := rootDeviceRefusals(host)["device-root"]; !refused {
@@ -243,11 +252,10 @@ func TestPhysicalCephFreezesTheRootWWNItsMachineDeclares(t *testing.T) {
 }
 
 func TestPhysicalCephRefusesASerialSelectionItsMachineDoesNotDeclare(t *testing.T) {
-	const undeclared = "the serial number SER-2 that this OSD selection names is no eraseOnRemoval target of Machine node-2 declared without deviceName, which would give its exact size"
-	const undeclaredRemedy = "declare the disk in spec.hardware.eraseOnRemoval.targets of Machine node-2 with its serialNumber and sizeBytes and no deviceName, or select it by that target's deviceName"
-	byDevice := func(spec api.Value) api.Value {
-		targets := api.ListValue(requestMap("deviceName", "/dev/disk/by-id/wwn-0x7000000000000001", "wwn", "0x7000000000000001", "serialNumber", "SER-2", "sizeBytes", 1<<40))
-		return spec.WithPath(targets, "hardware", "eraseOnRemoval", "targets")
+	const undeclared = "the serial number SER-2 that this OSD selection names is no hardware.dataDisks entry of Machine node-2 with a non-retain onRemoval and no wwn, which would give its exact size"
+	const undeclaredRemedy = "declare the disk in spec.hardware.dataDisks of Machine node-2 with its serialNumber, sizeBytes and a non-retain onRemoval and no wwn, or select it by its wwn path"
+	byWWN := func(spec api.Value) api.Value {
+		return spec.WithPath(api.ListValue(erasedDataDisk("SER-2", 1<<40, "0x7000000000000001")), "hardware", "dataDisks")
 	}
 	for _, test := range []struct {
 		name           string
@@ -256,11 +264,11 @@ func TestPhysicalCephRefusesASerialSelectionItsMachineDoesNotDeclare(t *testing.
 		reason, remedy string
 	}{
 		{"undeclared", func(spec api.Value) api.Value {
-			return spec.WithPath(api.ListValue(requestMap("serialNumber", "OTHER", "sizeBytes", 1<<40)), "hardware", "eraseOnRemoval", "targets")
+			return spec.WithPath(api.ListValue(erasedDataDisk("OTHER", 1<<40, "")), "hardware", "dataDisks")
 		}, "", undeclared, undeclaredRemedy},
-		{"declared by deviceName", byDevice, "", undeclared, undeclaredRemedy},
+		{"declared with a wwn", byWWN, "", undeclared, undeclaredRemedy},
 		{"root disk", func(spec api.Value) api.Value {
-			return spec.WithPath(requestMap("serialNumber", "SER-2", "sizeBytes", 1<<40), "substrate", "baremetal", "rootDevice")
+			return spec.WithPath(requestMap("serialNumber", "SER-2", "sizeBytes", 1<<40), "hardware", "rootDisk")
 		}, "", "explicit OSD allocation cannot use the Machine root device", "remove the Machine root device from the OSD selector and select a dedicated data device"},
 		{"grammar", nil, "/dev/disk/by-serial/SER=2", "a /dev/disk/by-serial/ path carries a serial number of 1 to 128 ASCII letters, digits and ._:+- characters", "select this disk by its /dev/disk/by-id/wwn-0x path"},
 	} {
@@ -285,8 +293,7 @@ func TestPhysicalCephRefusesOneSerialNumberSelectedOnTwoHosts(t *testing.T) {
 	objects := catalog.Objects()
 	for i, object := range objects {
 		if object.Kind() == api.Machine && object.Name() == "node-3" {
-			targets := api.ListValue(requestMap("serialNumber", "SER-2", "sizeBytes", 1<<40))
-			objects[i] = object.WithSpec(object.Spec().WithPath(requestMap("method", "logicalOverwrite", "targets", targets), "hardware", "eraseOnRemoval"))
+			objects[i] = object.WithSpec(object.Spec().WithPath(api.ListValue(erasedDataDisk("SER-2", 1<<40, "")), "hardware", "dataDisks"))
 		}
 	}
 	_, err := baseRequest(api.NewCatalog(objects), cluster, "synthetic")

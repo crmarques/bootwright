@@ -35,8 +35,8 @@ func TestHostFirewallRequestAndDigestMatchGoldens(t *testing.T) {
 func TestFirewallBarrierSharesTheControllerUnitReservationNamespace(t *testing.T) {
 	provider := api.NewObject(api.InfraProvider, "bmc-alpha", api.Value{}, provider().Spec())
 	guest := guest("alpha-firewalld-ready")
-	guest = api.NewObject(api.Machine, guest.Name(), api.Value{}, guest.Spec().With("substrate",
-		guest.Spec().Get("substrate").With("providerRef", api.StringValue(provider.Name()))))
+	guest = api.NewObject(api.Machine, guest.Name(), api.Value{}, guest.Spec().With("hardware",
+		guest.Spec().Get("hardware").With("providerRef", api.StringValue(provider.Name()))))
 	network := labNetwork()
 	network = network.WithSpec(network.Spec().WithPath(api.StringValue(provider.Name()), "libvirt", "providerRef"))
 	catalog := catalogOf(controller(), provider, network, networkConfig(), guest)

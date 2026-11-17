@@ -36,6 +36,7 @@ func TestAScopeResolvesWhereItsReferenceLooks(t *testing.T) {
 	type owner struct {
 		identity string
 		names    []string
+		entries  []string
 	}
 	for _, row := range []struct {
 		name   string
@@ -44,26 +45,34 @@ func TestAScopeResolvesWhereItsReferenceLooks(t *testing.T) {
 		record Value
 		want   []owner
 	}{
-		{"the referring object", Scope{Entries: []string{"network", "addresses"}}, machineA, Value{}, []owner{{"Machine/a", []string{"lan", "wan"}}}},
+		{"the referring object", Scope{Entries: []string{"network", "addresses"}}, machineA, Value{}, []owner{{"Machine/a", []string{"lan", "wan"}, nil}}},
 		{"an owner the spec names", Scope{Owner: []string{"machineRef"}, Kind: Machine, Entries: []string{"network", "addresses"}},
-			NewObject(Proxy, "edge", Value{}, scopeMap("machineRef", "b")), Value{}, []owner{{"Machine/b", []string{"lan"}}}},
-		{"an owner the record names", Scope{Sibling: "proxyRef", Kind: Machine, Entries: []string{"network", "addresses"}}, machineA, scopeMap("proxyRef", "a"), []owner{{"Machine/a", []string{"lan", "wan"}}}},
+			NewObject(Proxy, "edge", Value{}, scopeMap("machineRef", "b")), Value{}, []owner{{"Machine/b", []string{"lan"}, nil}}},
+		{"an owner the record names", Scope{Sibling: "proxyRef", Kind: Machine, Entries: []string{"network", "addresses"}}, machineA, scopeMap("proxyRef", "a"), []owner{{"Machine/a", []string{"lan", "wan"}, nil}}},
 		{"an owner that does not resolve", Scope{Sibling: "proxyRef", Kind: Machine, Entries: []string{"network", "addresses"}}, machineA, scopeMap("proxyRef", "gone"), nil},
 		{"every owner a list names", Scope{Each: []string{"topology", "nodes"}, Owner: []string{"machineRef"}, Kind: Machine, Entries: []string{"network", "addresses"}}, cluster, Value{},
-			[]owner{{"Machine/a", []string{"lan", "wan"}}, {"Machine/b", []string{"lan"}}}},
+			[]owner{{"Machine/a", []string{"lan", "wan"}, nil}, {"Machine/b", []string{"lan"}, nil}}},
 		{"the owner a nested reference selects", Scope{Each: []string{"topology", "nodes"}, Select: []string{"bootstrap", "nodeRef"}, Owner: []string{"machineRef"}, Kind: Machine, Entries: []string{"network", "addresses"}}, cluster, Value{},
-			[]owner{{"Machine/b", []string{"lan"}}}},
-		{"native service names", Scope{Entries: []string{"services"}, Key: []string{"service_type", "service_id"}}, cluster, Value{}, []owner{{"CephCluster/ceph", []string{"mon", "mds.files"}}}},
-		{"an owner of the addressed shape", Scope{Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"libvirt"}, Entries: []string{"libvirt", "machineProfiles"}},
-			NewObject(Machine, "vm", Value{}, scopeMap("substrate", scopeMap("providerRef", "lab"))), Value{}, []owner{{"InfraProvider/lab", []string{"small"}}}},
-		{"an owner of another shape", Scope{Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"vsphere"}, Entries: []string{"vsphere", "machineProfiles"}},
-			NewObject(Machine, "vm", Value{}, scopeMap("substrate", scopeMap("providerRef", "lab"))), Value{}, nil},
+			[]owner{{"Machine/b", []string{"lan"}, nil}}},
+		{"native service names", Scope{Entries: []string{"services"}, Key: []string{"service_type", "service_id"}}, cluster, Value{}, []owner{{"CephCluster/ceph", []string{"mon", "mds.files"}, nil}}},
+		{"an owner of the addressed shape", Scope{Owner: []string{"hardware", "providerRef"}, Kind: InfraProvider, Within: []string{"libvirt"}, Entries: []string{"libvirt", "machineProfiles"}},
+			NewObject(Machine, "vm", Value{}, scopeMap("hardware", scopeMap("providerRef", "lab"))), Value{}, []owner{{"InfraProvider/lab", []string{"small"}, []string{"libvirt", "machineProfiles"}}}},
+		{"an owner of another shape", Scope{Owner: []string{"hardware", "providerRef"}, Kind: InfraProvider, Within: []string{"vsphere"}, Entries: []string{"vsphere", "machineProfiles"}},
+			NewObject(Machine, "vm", Value{}, scopeMap("hardware", scopeMap("providerRef", "lab"))), Value{}, nil},
+		{"an owner whose arm is a candidate", Scope{Owner: []string{"hardware", "providerRef"}, Kind: InfraProvider, Arms: []string{"vsphere", "libvirt"}, Entries: []string{"machineProfiles"}},
+			NewObject(Machine, "vm", Value{}, scopeMap("hardware", scopeMap("providerRef", "lab"))), Value{}, []owner{{"InfraProvider/lab", []string{"small"}, []string{"libvirt", "machineProfiles"}}}},
+		{"an owner with no candidate arm", Scope{Owner: []string{"hardware", "providerRef"}, Kind: InfraProvider, Arms: []string{"vsphere", "kubevirt"}, Entries: []string{"machineProfiles"}},
+			NewObject(Machine, "vm", Value{}, scopeMap("hardware", scopeMap("providerRef", "lab"))), Value{}, nil},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			owners, resolved := row.scope.Owners(row.object, row.record, catalog)
 			var got []owner
 			for _, found := range owners {
-				got = append(got, owner{found.Object.Identity(), found.Names})
+				entries := found.Entries
+				if row.scope.Arms == nil && row.scope.Within == nil {
+					entries = nil
+				}
+				got = append(got, owner{found.Object.Identity(), found.Names, entries})
 			}
 			if !reflect.DeepEqual(got, row.want) || resolved != (row.want != nil) {
 				t.Fatalf("owners = %v (%t), want %v", got, resolved, row.want)

@@ -162,7 +162,7 @@
       declared hardware addresses but no system UUID or serial number of at most
       128 printable characters, so nothing proves which system it is and no
       power request was sent. Make that management controller report the
-      system's UUID or serial number, or correct spec.substrate.baremetal.bmc.address.
+      system's UUID or serial number, or correct spec.hardware.bmc.address.
   when: bootwright_machine_power_material.expectedMACsBase64 | default('') | length > 0
 
 # The runner is told of the refusal before the run fails, so the operator's
@@ -201,7 +201,7 @@
       | bootwright.core.printable)[:128] }}' and serial
       '{{ (bootwright_machine_power_material.pinnedSerialBase64 | default('') | b64decode
       | bootwright.core.printable)[:128] }}', so no
-      power request was sent. Correct spec.substrate.baremetal.bmc.address, or destroy and apply
+      power request was sent. Correct spec.hardware.bmc.address, or destroy and apply
       this context so the machine is proved again.
   when: >-
     (machine_power_physical | bool)

@@ -23,7 +23,7 @@ func stretchCatalog(t testing.TB, change func(api.Value) api.Value) (api.Object,
 			site, address, labels = "site-c", "198.51.100.10", api.StringList()
 		}
 		nodes = append(nodes, m("name", name, "machineRef", "machine-"+name, "labels", labels))
-		catalog = replace(catalog, object(api.Machine, "machine-"+name, m("placement", m("site", site), "hardware", m("rootDevice", m("deviceName", "/dev/vda")), "os", m("provided", true),
+		catalog = replace(catalog, object(api.Machine, "machine-"+name, m("site", site, "hardware", m("rootDisk", m("hints", m("deviceName", "/dev/vda"))), "os", m("provided", m()),
 			"network", m("addresses", []api.Value{assignedAddress("ssh", address)}), "access", m("ssh", m("addressRef", "ssh")))))
 	}
 	services := api.ListValue(m("service_type", "mon", "placement", m("hosts", fqdns("a1", "a2", "b1", "b2", "tie"))), m("service_type", "mgr", "placement", m("hosts", fqdns("a1", "b1"))),
@@ -148,7 +148,7 @@ func TestStretchTopologyRefusesEachBrokenInput(t *testing.T) {
 func TestStretchNodesOccupyADataSiteOrTheTiebreakerSite(t *testing.T) {
 	_, catalog := stretchCatalog(t, nil)
 	moved := find(t, catalog, api.Machine, "machine-b3")
-	catalog = replace(catalog, moved.WithSpec(moved.Spec().WithPath(api.StringValue("site-c"), "placement", "site")))
+	catalog = replace(catalog, moved.WithSpec(moved.Spec().WithPath(api.StringValue("site-c"), "site")))
 	cluster := find(t, catalog, api.CephCluster, "storage")
 	nodes := cluster.Spec().Get("topology", "nodes")
 	cluster = cluster.WithSpec(cluster.Spec().WithPath(withItem(nodes, 5, nodes.Items()[5].With("site", api.StringValue("site-c"))), "topology", "nodes"))

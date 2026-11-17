@@ -18,7 +18,7 @@ metadata:
   name: controller
 spec:
   os:
-    provided: true
+    provided: {}
   proxy:
     direct: {}
   network:
@@ -28,7 +28,7 @@ spec:
       - name: ip
         address: 192.0.2.1
   access:
-    local: true
+    local: {}
     rootLogin: keep
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -36,33 +36,27 @@ kind: Machine
 metadata:
   name: physical-01
 spec:
-  substrate:
-    providerRef: lab-metal
-    baremetal:
-      bmc:
-        address: https://bmc-01.example.test/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: lab-bmc-credentials
-        tls:
-          verify: true
-          trustBundleRef: physical-01-bmc-trust
-          verification: certificate
-        virtualMedia:
-          tls:
-            trust: importCertificate
-            enableVerification: true
-            removeCertificateAfterBoot: false
-      nics:
-        - nicRef: eno1
-          macAddress: 52:54:00:9a:1b:01
-      rootDevice:
-        serialNumber: EXAMPLE-PHYSICAL-01-ROOT
-        sizeBytes: 480103981056
   hardware:
+    providerRef: lab-metal
+    bmc:
+      address: https://bmc-01.example.test/redfish/v1/Systems/1
+      credentialsRef: lab-bmc-credentials
+      tls:
+        trustBundleRef: physical-01-bmc-trust
+        verification: certificate
+      virtualMedia:
+        tls:
+          trust: importCertificate
+          enableVerification: true
+          removeCertificateAfterBoot: false
     nics:
       - name: eno1
+        macAddress: 52:54:00:9a:1b:01
+    rootDisk:
+      serialNumber: EXAMPLE-PHYSICAL-01-ROOT
+      sizeBytes: 480103981056
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-metal
     installAddressRef: ip
@@ -81,31 +75,25 @@ kind: Machine
 metadata:
   name: physical-02
 spec:
-  substrate:
-    providerRef: lab-metal
-    baremetal:
-      bmc:
-        address: https://bmc-02.example.test/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: lab-bmc-credentials
-        tls:
-          verify: true
-          trustBundleRef: lab-bmc-ca
-        virtualMedia:
-          tls:
-            trust: importCertificate
-            enableVerification: true
-            removeCertificateAfterBoot: false
-      nics:
-        - nicRef: eno1
-          macAddress: 52:54:00:9a:1b:02
-      rootDevice:
-        wwn: "0x500000000000f002"
   hardware:
+    providerRef: lab-metal
+    bmc:
+      address: https://bmc-02.example.test/redfish/v1/Systems/1
+      credentialsRef: lab-bmc-credentials
+      tls:
+        trustBundleRef: lab-bmc-ca
+      virtualMedia:
+        tls:
+          trust: importCertificate
+          enableVerification: true
+          removeCertificateAfterBoot: false
     nics:
       - name: eno1
+        macAddress: 52:54:00:9a:1b:02
+    rootDisk:
+      wwn: "0x500000000000f002"
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-metal
     installAddressRef: ip
@@ -124,31 +112,25 @@ kind: Machine
 metadata:
   name: physical-03
 spec:
-  substrate:
-    providerRef: lab-metal
-    baremetal:
-      bmc:
-        address: https://bmc-03.example.test/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: lab-bmc-credentials
-        tls:
-          verify: true
-          trustBundleRef: lab-bmc-ca
-        virtualMedia:
-          tls:
-            trust: importCertificate
-            enableVerification: true
-            removeCertificateAfterBoot: false
-      nics:
-        - nicRef: eno1
-          macAddress: 52:54:00:9a:1b:03
-      rootDevice:
-        wwn: "0x500000000000f003"
   hardware:
+    providerRef: lab-metal
+    bmc:
+      address: https://bmc-03.example.test/redfish/v1/Systems/1
+      credentialsRef: lab-bmc-credentials
+      tls:
+        trustBundleRef: lab-bmc-ca
+      virtualMedia:
+        tls:
+          trust: importCertificate
+          enableVerification: true
+          removeCertificateAfterBoot: false
     nics:
       - name: eno1
+        macAddress: 52:54:00:9a:1b:03
+    rootDisk:
+      wwn: "0x500000000000f003"
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-metal
     installAddressRef: ip
@@ -167,31 +149,25 @@ kind: Machine
 metadata:
   name: physical-04
 spec:
-  substrate:
-    providerRef: lab-metal
-    baremetal:
-      bmc:
-        address: https://bmc-04.example.test/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: lab-bmc-credentials
-        tls:
-          verify: true
-          trustBundleRef: lab-bmc-ca
-        virtualMedia:
-          tls:
-            trust: importCertificate
-            enableVerification: true
-            removeCertificateAfterBoot: false
-      nics:
-        - nicRef: eno1
-          macAddress: 52:54:00:9a:1b:04
-      rootDevice:
-        wwn: "0x500000000000f004"
   hardware:
+    providerRef: lab-metal
+    bmc:
+      address: https://bmc-04.example.test/redfish/v1/Systems/1
+      credentialsRef: lab-bmc-credentials
+      tls:
+        trustBundleRef: lab-bmc-ca
+      virtualMedia:
+        tls:
+          trust: importCertificate
+          enableVerification: true
+          removeCertificateAfterBoot: false
     nics:
       - name: eno1
+        macAddress: 52:54:00:9a:1b:04
+    rootDisk:
+      wwn: "0x500000000000f004"
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-metal
     installAddressRef: ip
@@ -210,31 +186,25 @@ kind: Machine
 metadata:
   name: physical-05
 spec:
-  substrate:
-    providerRef: lab-metal
-    baremetal:
-      bmc:
-        address: https://bmc-05.example.test/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: lab-bmc-credentials
-        tls:
-          verify: true
-          trustBundleRef: lab-bmc-ca
-        virtualMedia:
-          tls:
-            trust: importCertificate
-            enableVerification: true
-            removeCertificateAfterBoot: false
-      nics:
-        - nicRef: eno1
-          macAddress: 52:54:00:9a:1b:05
-      rootDevice:
-        wwn: "0x500000000000f005"
   hardware:
+    providerRef: lab-metal
+    bmc:
+      address: https://bmc-05.example.test/redfish/v1/Systems/1
+      credentialsRef: lab-bmc-credentials
+      tls:
+        trustBundleRef: lab-bmc-ca
+      virtualMedia:
+        tls:
+          trust: importCertificate
+          enableVerification: true
+          removeCertificateAfterBoot: false
     nics:
       - name: eno1
+        macAddress: 52:54:00:9a:1b:05
+    rootDisk:
+      wwn: "0x500000000000f005"
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-metal
     installAddressRef: ip
@@ -301,7 +271,6 @@ spec:
       bmc:
         credentialsRef: lab-bmc-credentials
         tls:
-          verify: true
           trustBundleRef: lab-bmc-ca
         virtualMedia:
           tls:

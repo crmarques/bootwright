@@ -179,7 +179,7 @@ and [DNF tree and repository TLS propagation](https://github.com/rhinstaller/ana
 
 ### Selection
 
-A Machine with `os.provided: false` and an install profile selects managed
+A Machine with `os.install` selects managed
 installation; the profile and frozen substrate determine its supported shape.
 
 ### Implementations
@@ -236,17 +236,17 @@ A credentialed Proxy reaches nothing when no repository is configured, and is
 accepted then. Every refusal names the Machine that selects the installation, with the
 reason and remedy the [refusal table](#refusal-table) states. The media trust
 policy is secure by default and permits the explicit
-per-Machine [unverified-fetch exception](api/machines.md#bmc-and-root-device-shape)
+per-Machine [unverified-fetch exception](api/machines.md#bmc)
 for private media, with its weaker bootstrap provenance frozen in the request.
 `importCertificate` needs the installer image served over
 https and the certificate its server presents, and refuses naming the Machine
 without either. The trust is set by the installation's insert and settled by
 its ejects after the installer's power-off
 ([virtual media](substrates.md#adapter-boundary)). A Machine
-declaring any root-device hint other than `deviceName` refuses before
-registration, naming each such field, because the Kickstart selects its disk
-by name alone and would ignore the others; on a bare-metal provider the disk is
-named by its `wwn`, from which the Kickstart derives that name, or by
+declaring any `rootDisk.hints` field refuses before
+registration, naming each, because the Kickstart selects its disk
+by name alone; a libvirt or KubeVirt Machine's disk is `/dev/vda`, and on a bare-metal
+provider the disk is named by its `wwn`, from which the Kickstart derives that name, or by
 `serialNumber` and `sizeBytes` alone, and `serialNumber` and `sizeBytes` may
 stand beside the `wwn` as proofs the installer compares
 ([physical installation](#physical-installation)). The installation publishes
@@ -381,7 +381,7 @@ by spaces as the one `mkksiso --cmdline` value. An interface's address is that
 of the NIC it matches (`spec.network.interfaceMatches`, else the NIC of its
 name): on libvirt its vNIC's realized MAC
 ([substrates](substrates.md#machine-realization)), on bare metal, which pins
-matched NICs only, the NIC's `spec.substrate.baremetal.nics` `macAddress`, as
+matched NICs only, the NIC's `spec.hardware.nics[].macAddress`, as
 the `%pre` target proof requires. Anaconda writes each pin to the installed
 system as `/etc/systemd/network/10-anaconda-ifname-<name>.link`, so both use the
 declared names. dracut reserves the kernel's `ethN` names, which therefore
@@ -887,7 +887,7 @@ request's digest, so neither a continuation nor a new plan can change the
 declared network of an installed Machine: a network declaration error is
 recovered only by `bootwright destroy`, which is context-wide, and a fresh
 apply. A `libvirt` Machine's destroy erases its disks. A `baremetal` Machine's
-destroy retains the system unless its frozen `eraseOnRemoval` policy selects
+destroy retains the system unless its frozen erase policy selects
 [verified physical erase](state-reconciliation.md#opt-in-physical-logical-overwrite).
 A powered-on guest that answers with another
 marker refuses, so its recovery also powers it off from its management
@@ -1229,21 +1229,22 @@ Unregistration's session is 330 seconds.
 ### Physical removal
 
 The physical claim and ordinary installation cleanup retain the installed
-system. Opt-in `spec.hardware.eraseOnRemoval` plans a separate Managed OS erase
+system. A non-retain `onRemoval`
+([disk actions](api/machines.md#data-disks-and-disk-actions)) plans a separate Managed OS erase
 capability before the installation so removal runs cleanup first, offline erase
 second and claim release last. Its
 [physical erase contract](state-reconciliation.md#opt-in-physical-logical-overwrite)
 owns the `logicalOverwrite` and `metadataClear` methods, exact identities,
 private RAM boot, direct I/O, receipt acknowledgement and failure recovery. Omission retains disks. An original installation proved never
 started removes its unused policy without booting or writing a disk. A root
-erase target, when the policy names one, follows the
-[root-target rule](api/machines.md#physical-erase-policy), which compares it
+erase target, when `rootDisk.onRemoval` names one, follows the
+[disk actions](api/machines.md#data-disks-and-disk-actions), which compare it
 with the root's frozen identity and, for a root declared by serial number, the
 WWN it reported, [recorded](#physical-installation) in the installation's
 evidence.
 
 The installation request version freezes the optional
-`eraseOnRemoval` Boolean so recovery guidance agrees with the separate policy.
+erase-on-removal Boolean so recovery guidance agrees with the separate policy.
 An erasing recovery names data-loss authorization and the overwritten disks;
 a retaining recovery continues to name the retained installed system. Version
 changes refuse earlier frozen requests rather than silently reinterpret them.
@@ -1264,7 +1265,7 @@ substrate family, never by the claim's block identity.
 An installation that delivers private material hands its management
 controller the tokenized URL of the private installer image, so it refuses
 before registration, naming its Machine, unless its BMC is addressed
-over `https` with its certificate verified: `tls.verify` not opted out, and a
+over `https` with its certificate verified: `tls.verification` not `none`, and a
 `tls.trustBundleRef` naming the authority when the system trust store does not
 hold it.
 
@@ -1287,13 +1288,13 @@ media takes back nothing from the machine. The separate opt-in
 authorization acknowledges already-planned loss; it selects no target and
 relaxes no proof. Installation erasure is confined to the root disk the
 Machine names, and on a physical Machine that name is one of the durable forms
-of the [root-device rule](api/machines.md#bmc-and-root-device-shape), because a
+of the [root-disk rule](api/machines.md#root-disk), because a
 kernel name such as `/dev/sda` follows probe order and can name another disk
 on the next boot. An installation that names none of them refuses before
 registration, and the Kickstart renderer refuses rather than clearing every
 disk. A `wwn` root is written through the `/dev/disk/by-id/wwn-0x<digits>`
 path it derives, frozen as the root device beside the `wwn` and any
-`serialNumber` and `sizeBytes` proofs; a `hardware.rootDevice.deviceName`, a `wwn` in another form or a serial
+`serialNumber` and `sizeBytes` proofs; a `hardware.rootDisk.hints.deviceName`, a `wwn` in another form or a serial
 number outside the rule's grammar refuses before registration. One declaring
 any other hint
 refuses before registration too, as the [supported shape](#installation)
@@ -1367,7 +1368,7 @@ completion and each observation read over the pinned fleet connection into
 `rootWWN`, unproved when unread or malformed.
 
 **Declared data disks are cleared only after every proof.** A Machine that
-declares `hardware.clearOnInstall` has its data disks proved and cleared in
+declares a data disk with `onInstall: metadataClear` has those disks proved and cleared in
 this same `%pre`, after the proofs above, as
 [physical data-disk clear](#physical-data-disk-clear) states.
 
@@ -1419,13 +1420,13 @@ publications. Their real-hardware qualification remains
 
 ### Physical data-disk clear
 
-A physical Machine may name, in `hardware.clearOnInstall.targets`, 1 to 15
-data disks the installation clears, each by its `/dev/disk/by-id/wwn-0x` path
-with the `wwn` that path names, or by neither, together with a `serialNumber`
-under the root disk's grammar and its exact `sizeBytes`, 4096-aligned and at
-most 64 TiB
-([field rules](api/machines.md#install-time-data-disk-clear)); a target that is
-the root disk by path, WWN or serial number refuses at admission. Like the
+A physical Machine may declare `onInstall: metadataClear` on 1 to 15
+`hardware.dataDisks[]` entries the installation clears, each by its
+`serialNumber` under the root disk's grammar and its exact `sizeBytes`,
+4096-aligned and at most 64 TiB, and by the `/dev/disk/by-id/wwn-0x` path its
+`wwn` derives when it declares one
+([field rules](api/machines.md#data-disks-and-disk-actions)); an entry that is
+the root disk by WWN or serial number refuses at admission. Like the
 rest of this arm it is proved in-tree only. The request freezes the targets
 without `deviceName` first in `serialNumber` order, then the others in
 `deviceName` order, each with its metadata-clear intervals, and the plan shows
@@ -1565,7 +1566,7 @@ HTTP, certificate and connection causes without exposing the private URL.
 The procedure requires verified BMC access, qualified RHEL boot media,
 complete machine identity, and an already powered-off non-controller target.
 Media delivery is verified by default; the explicit per-Machine unverified
-fetch policy follows the [BMC contract](api/machines.md#bmc-and-root-device-shape).
+fetch policy follows the [BMC contract](api/machines.md#bmc).
 Its weaker bootstrap provenance is bound into the request and inventory proof,
 so it cannot satisfy a later verified-policy request.
 It reserves the same hardware as power and lifecycle effects. Boot and media
@@ -1576,7 +1577,7 @@ It starts no systemd, udev, Anaconda or installer second stage and mounts only
 RAM and kernel pseudo-filesystems. Automatic RAID, LVM and swap activation is
 disabled. The worker configures the declared static IPv4 ethernet, bond or VLAN,
 reads the inventory and starts a restricted OpenSSH endpoint on the declared
-install address and `rootDevice.discover.ssh.port` (default 22) until the
+install address and `rootDisk.discover.ssh.port` (default 22) until the
 controller powers it off. Declared DNS resolvers are configured in RAM when
 needed. The controller initiates this connection; enterprise rules must admit
 it independently of BMC-to-controller artifact HTTPS. The endpoint admits only
@@ -2254,11 +2255,8 @@ read the Machine's hardware NICs or its libvirt segment only once its target
 derives, then the profile rows, then the publication rows, each group in
 table order, and only the first row a Machine meets is reported. Its reason and remedy are the diagnostic's
 message and remediation, in which `<machine>` is that Machine, `<profile>` the
-`MachineInstallProfile` it selects and `<hints>` every root-device hint it
-declares other than `deviceName` on a virtual Machine, and on a `baremetal` provider other than
-`serialNumber`, `sizeBytes` and `wwn`, as `spec.hardware.rootDevice.<hint>`, or
-`spec.substrate.baremetal.rootDevice.<hint>` for `hctl`, `serialNumber`,
-`sizeBytes` and `wwn`,
+`MachineInstallProfile` it selects and `<hints>` every root-disk hint it
+declares, as `spec.hardware.rootDisk.hints.<hint>`,
 in name order, separated by `, `. `<name>` is the first `ethernet` interface,
 in composed order, the row describes; `<bond>` is the install interface when it is a bond, else the bond
 its VLAN is over; `<declared mode>` is `mode <value>` for a scalar
@@ -2285,15 +2283,15 @@ the length of that many bytes in base64url without padding.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| A physical root named by a device path | any `spec.hardware.rootDevice.deviceName` on a Machine on a `baremetal` provider | `a bare-metal Machine an installer writes names its root WWN as spec.substrate.baremetal.rootDevice.wwn, never by spec.hardware.rootDevice.deviceName` | `<remedy>` |
-| A root-device wwn in another form | a `spec.substrate.baremetal.rootDevice.wwn` other than `0x` followed by 16 or 32 lowercase hexadecimal digits | `a physical installation names its root disk by a wwn of 0x followed by 16 or 32 lowercase hexadecimal digits, and the wwn the Machine declares is not one` | `set spec.substrate.baremetal.rootDevice.wwn on <machine> to the disk's WWN in that form` |
-| A physical Machine naming no root device | on a Machine on a `baremetal` provider, none of the forms of the [root-device rule](api/machines.md#bmc-and-root-device-shape); a serial number without its size included | `a physical installation erases only a root disk named by its wwn, by its serial number and exact size, or by a volumeRef or bootVolume logical volume, and the Machine names none of them` | `set spec.substrate.baremetal.rootDevice.wwn on <machine> to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root hint to default to bootVolume; a device path such as /dev/sda is refused` |
-| A root-device hint other than deviceName | any `spec.hardware.rootDevice` field but a virtual Machine's `deviceName`, or `spec.substrate.baremetal.rootDevice.hctl`; a Machine on a `baremetal` provider may declare `wwn`, `serialNumber`, `sizeBytes`, `volumeRef` and `bootVolume` | `a managed-OS installation selects its root disk by deviceName on a virtual Machine or, on a physical Machine, by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares` | `remove <hints> from <machine>` |
-| A root-device serial number the installer cannot compare | a `spec.substrate.baremetal.rootDevice.serialNumber` other than 1 to 256 characters drawn from ASCII letters, digits, `.`, `_`, `:`, `+`, `/`, `=` and `-` | `a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare` | `set spec.substrate.baremetal.rootDevice.serialNumber on <machine> to the disk's serial number, at most 256 ASCII letters, digits and ._:+/=- characters, or remove it` |
-| An unverified BMC leg for private delivery | a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase), with a non-https `spec.substrate.baremetal.bmc.address` or `tls.verify: false` | `a Machine whose installation delivers private material hands its BMC the private installer image URL, so the BMC must be reached over https with its certificate verified` | `address the BMC of <machine> with an https:// spec.substrate.baremetal.bmc.address and remove the tls.verify opt-out on <machine> or in spec.baremetal.defaults.bmc of <provider>; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it` |
+| A physical root named by a device path | any `spec.hardware.rootDisk.hints.deviceName` on a Machine on a `baremetal` provider | `a bare-metal Machine an installer writes names its root WWN as spec.hardware.rootDisk.wwn, never by spec.hardware.rootDisk.hints.deviceName` | `<remedy>` |
+| A root-device wwn in another form | a `spec.hardware.rootDisk.wwn` other than `0x` followed by 16 or 32 lowercase hexadecimal digits | `a physical installation names its root disk by a wwn of 0x followed by 16 or 32 lowercase hexadecimal digits, and the wwn the Machine declares is not one` | `set spec.hardware.rootDisk.wwn on <machine> to the disk's WWN in that form` |
+| A physical Machine naming no root device | on a Machine on a `baremetal` provider, none of the forms of the [root-disk rule](api/machines.md#root-disk); a serial number without its size included | `a physical installation erases only a root disk named by its wwn, by its serial number and exact size, or by a volumeRef or bootVolume logical volume, and the Machine names none of them` | `set spec.hardware.rootDisk.wwn on <machine> to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root-disk field to default to bootVolume; a device path such as /dev/sda is refused` |
+| A root-device hint other than deviceName | any `spec.hardware.rootDisk.hints` field on a Machine on a `baremetal` provider; it may declare `wwn`, `serialNumber`, `sizeBytes`, `volumeRef` and `bootVolume` | `a managed-OS installation selects its root disk by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the root-disk hints the Machine declares` | `remove <hints> from <machine>` |
+| A root-device serial number the installer cannot compare | a `spec.hardware.rootDisk.serialNumber` other than 1 to 256 characters drawn from ASCII letters, digits, `.`, `_`, `:`, `+`, `/`, `=` and `-` | `a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare` | `set spec.hardware.rootDisk.serialNumber on <machine> to the disk's serial number, at most 256 ASCII letters, digits and ._:+/=- characters, or remove it` |
+| An unverified BMC leg for private delivery | a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase), with a non-https `spec.hardware.bmc.address` or `tls.verification: none` | `a Machine whose installation delivers private material hands its BMC the private installer image URL, so the BMC must be reached over https with its certificate verified` | `address the BMC of <machine> with an https:// spec.hardware.bmc.address and remove the tls.verification: none opt-out on <machine>; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it` |
 | A DHCP-only install | an effective `spec.network.installAddressRef` naming no `spec.network.addresses` entry with an `interface` and an IPv4 address; admission refuses it first, so no validated graph reaches this row | `a managed-OS installation configures one static IPv4 install address, and the Machine selects none; DHCP installation is not supported` | `assign an IPv4 address to the install interface in spec.network.addresses of <machine> and select it with spec.network.installAddressRef` |
 | A kernel-style interface name | any available composed `ethernet` interface whose `name` matches `^eth[0-9]+$`, on any substrate | `a managed-OS installation names each ethernet interface after its hardware address, and a kernel-style name such as <name> can collide with the names the kernel assigns` | `rename interface <name> in the network of <machine> to a name outside the kernel's ethN scheme, such as its predictable name` |
-| An ethernet interface without a hardware address | on a `baremetal` provider, an available composed `ethernet` interface that resolves, through its `spec.network.interfaceMatches` `nicRef` or else the `spec.substrate.baremetal.nics` entry of its own name, to no NIC, or to one whose `macAddress` differs from its authored `mac-address` | `a managed-OS installation names each ethernet interface after its hardware address, and interface <name> of <machine> resolves to no declared hardware NIC, or to one whose address differs from its mac-address` | `match interface <name> to its hardware NIC in spec.network.interfaceMatches of <machine>, or mark it absent in its network` |
+| An ethernet interface without a hardware address | on a `baremetal` provider, an available composed `ethernet` interface that resolves, through its `spec.network.interfaceMatches` `nicRef` or else the `spec.hardware.nics` entry of its own name, to no NIC, or to one whose `macAddress` differs from its authored `mac-address` | `a managed-OS installation names each ethernet interface after its hardware address, and interface <name> of <machine> resolves to no declared hardware NIC, or to one whose address differs from its mac-address` | `match interface <name> to its hardware NIC in spec.network.interfaceMatches of <machine>, or mark it absent in its network` |
 | An install interface of another type | an install interface, named by the selected install address, that is a composed interface whose `type` is not `ethernet`, `bond` or `vlan`, such as a `linux-bridge`; admission refuses it first, so no validated graph reaches this row | `the installer configures only an ethernet, bond or VLAN install interface, and the install interface <interface> of <machine> is of type <type>` | `assign the install address of <machine> to an ethernet, bond or VLAN interface` |
 | A bond install interface without its ports | the install interface, or the base of a `vlan` install interface, is a `bond` whose `link-aggregation.port` is absent or empty, or names a port that is not an available composed `ethernet` interface, or one whose `controller` names another interface | `the installer configures a bonded install interface from its named ports, and bond <bond> of <machine> names no port, or a port that is not an available ethernet interface aggregated by it` | `list the ethernet interfaces bond <bond> aggregates in its link-aggregation.port in the network of <machine>` |
 | A bond install interface without a carried mode | that bond's `link-aggregation.mode` absent or not one of `balance-rr`, `active-backup`, `balance-xor`, `broadcast`, `802.3ad`, `balance-tlb`, `balance-alb` | `the installer configures a bond only by its full mode name, and bond <bond> of <machine> declares <declared mode>` | `set link-aggregation.mode of <bond> to one of balance-rr, active-backup, balance-xor, broadcast, 802.3ad, balance-tlb or balance-alb in the network of <machine>` |

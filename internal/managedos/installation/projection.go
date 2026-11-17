@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	profileRefField = "spec.os.installProfileRef"
+	profileRefField = "spec.os.install.profileRef"
 	releaseFamily   = "rhel"
 )
 

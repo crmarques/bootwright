@@ -16,7 +16,7 @@ func TestAMachineReportsTheSecretsItsControllerNames(t *testing.T) {
 		want    []string
 	}{
 		"credentials only": {catalogOf(), []string{"server-bmc"}},
-		"with a bundle":    {catalogWithControllerTLS(m("verify", true, "trustBundleRef", "server-bmc-ca")), []string{"server-bmc", "server-bmc-ca"}},
+		"with a bundle":    {catalogWithControllerTLS(m("trustBundleRef", "server-bmc-ca")), []string{"server-bmc", "server-bmc-ca"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			definition := planIn(t, reconciliation.Apply, tc.catalog).Definitions[0]

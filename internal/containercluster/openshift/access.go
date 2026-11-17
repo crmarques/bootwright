@@ -16,7 +16,7 @@ func AccessCatalog(catalog api.Catalog) api.Catalog {
 	objects := catalog.Objects()
 	for i, object := range objects {
 		spec := object.Spec()
-		if object.Kind() != api.Machine || spec.Has("access") || !spec.Has("os", "provided") || spec.Get("os", "provided").Bool() || spec.Has("os", "installProfileRef") || len(owners[object.Name()]) != 1 {
+		if object.Kind() != api.Machine || spec.Has("access") || !spec.Has("os", "clusterInstalled") || len(owners[object.Name()]) != 1 {
 			continue
 		}
 		ssh := owners[object.Name()][0].Spec().Get("install", "nodeSSH")

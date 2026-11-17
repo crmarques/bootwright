@@ -211,10 +211,10 @@ func TestEveryAdmissionRuleRemediationNamesWhatToChange(t *testing.T) {
 	cases := []scenario{
 		{"mixed provider platform", "$.spec.install.platform", "mixed provider types", []string{"spec.install.platform"}, func() (api.Object, api.Catalog) {
 			o, c := fixture("libvirt", 2, false)
-			c = rewrite(c, api.Machine, "node-1", func(s api.Value) api.Value { return s.WithPath(api.StringValue("other"), "substrate", "providerRef") })
+			c = rewrite(c, api.Machine, "node-1", func(s api.Value) api.Value { return s.WithPath(api.StringValue("other"), "hardware", "providerRef") })
 			return o, api.NewCatalog(append(c.Objects(), obj(api.InfraProvider, "other", m("kubevirt", m()))))
 		}},
-		{"os provided", "$.spec.nodes[0].machineRef", "OS is not provided", []string{"spec.os.provided", "node-0"}, machineSpec(func(s api.Value) api.Value { return s.WithPath(api.BoolValue(true), "os", "provided") })},
+		{"os provided", "$.spec.nodes[0].machineRef", "OS is not provided", []string{"spec.os.clusterInstalled", "node-0"}, machineSpec(func(s api.Value) api.Value { return s.With("os", m("provided", m())) })},
 		{"Machine networking", "$.spec.nodes[0].machineRef", "configured Machine networking", []string{"spec.network.configRef", "spec.network.inline", "node-0"}, machineSpec(func(s api.Value) api.Value { return s.Without("network") })},
 		{"redfish artifact endpoint", "$.spec.install.agent.redfishVirtualMedia.artifactServerEndpoint", "virtual-media artifact endpoint", []string{"spec.install.agent.redfishVirtualMedia.artifactServerEndpoint"}, func() (api.Object, api.Catalog) { return fixture("baremetal", 1, false) }},
 		{"boot artifacts endpoint", "$.spec.install.agent.bootArtifacts.artifactServerEndpoint", "boot-artifacts endpoint", []string{"spec.install.agent.bootArtifacts.artifactServerEndpoint"}, disconnected(func(o api.Object, c api.Catalog) (api.Object, api.Catalog) { return o, c })},

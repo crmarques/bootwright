@@ -16,8 +16,8 @@ const serviceHost = `apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: {name: service-host}
 spec:
-  os: {provided: true}
-  access: {local: true}
+  os: {provided: {}}
+  access: {local: {}}
   network:
     addresses: [{name: service, address: 192.0.2.10}]
 `

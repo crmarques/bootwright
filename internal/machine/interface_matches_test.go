@@ -13,8 +13,7 @@ func TestInterfaceMatchesResolveDefaultedAndAuthoredMatches(t *testing.T) {
 		t.Fatalf("defaulted match = %v", got)
 	}
 	relabelled := server.WithSpec(server.Spec().
-		WithPath(list(m("nicRef", "nic0", "macAddress", "02:00:00:00:00:01")), "substrate", "baremetal", "nics").
-		WithPath(list(m("name", "nic0")), "hardware", "nics").
+		WithPath(list(m("name", "nic0", "macAddress", "02:00:00:00:00:01")), "hardware", "nics").
 		WithPath(list(m("interface", "eth0", "nicRef", "nic0")), "network", "interfaceMatches"))
 	if got := InterfaceMatches(relabelled, catalog); !slices.Equal(got, []InterfaceMatch{{NIC: "nic0", Interface: "eth0"}}) {
 		t.Fatalf("authored match = %v", got)

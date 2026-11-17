@@ -17,20 +17,14 @@ kind: Machine
 metadata:
   name: child-01
 spec:
-  substrate:
-    providerRef: lab-kubevirt-nested
-    kubevirt:
-      profileRef: kubevirt
-      nics:
-        - nicRef: eth0
-          segmentRef: nested-guests
   hardware:
+    providerRef: lab-kubevirt-nested
+    profileRef: kubevirt
     nics:
       - name: eth0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: nested-guests
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: nested-guests
     installAddressRef: ip
@@ -49,20 +43,14 @@ kind: Machine
 metadata:
   name: child-02
 spec:
-  substrate:
-    providerRef: lab-kubevirt-nested
-    kubevirt:
-      profileRef: kubevirt
-      nics:
-        - nicRef: eth0
-          segmentRef: nested-guests
   hardware:
+    providerRef: lab-kubevirt-nested
+    profileRef: kubevirt
     nics:
       - name: eth0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: nested-guests
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: nested-guests
     installAddressRef: ip
@@ -81,20 +69,14 @@ kind: Machine
 metadata:
   name: child-03
 spec:
-  substrate:
-    providerRef: lab-kubevirt-nested
-    kubevirt:
-      profileRef: kubevirt
-      nics:
-        - nicRef: eth0
-          segmentRef: nested-guests
   hardware:
+    providerRef: lab-kubevirt-nested
+    profileRef: kubevirt
     nics:
       - name: eth0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: nested-guests
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: nested-guests
     installAddressRef: ip
@@ -114,7 +96,7 @@ metadata:
   name: controller
 spec:
   os:
-    provided: true
+    provided: {}
   proxy:
     direct: {}
   network:
@@ -124,7 +106,7 @@ spec:
       - name: ip
         address: 192.0.2.1
   access:
-    local: true
+    local: {}
     rootLogin: keep
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -132,26 +114,18 @@ kind: Machine
 metadata:
   name: host-01
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: master
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-secondary
-        - nicRef: enp3s0
-          segmentRef: lab-routed
   hardware:
+    providerRef: lab-libvirt
+    profileRef: master
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-secondary
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-routed
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -177,26 +151,18 @@ kind: Machine
 metadata:
   name: host-02
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: master
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-secondary
-        - nicRef: enp3s0
-          segmentRef: lab-routed
   hardware:
+    providerRef: lab-libvirt
+    profileRef: master
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-secondary
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-routed
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -222,26 +188,18 @@ kind: Machine
 metadata:
   name: host-03
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: master
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-secondary
-        - nicRef: enp3s0
-          segmentRef: lab-routed
   hardware:
+    providerRef: lab-libvirt
+    profileRef: master
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-secondary
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-routed
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip

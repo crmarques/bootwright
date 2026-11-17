@@ -4,32 +4,20 @@ metadata:
   name: ceph-01
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-
-    libvirt:
-      profileRef: ceph
-
-      nics:
-        - nicRef: enp1s0
-          segmentRef: ceph-client
-
-        - nicRef: enp2s0
-          segmentRef: ceph-replication
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: ceph
+
     nics:
       - name: enp1s0
-      - name: enp2s0
+        segmentRef: ceph-client
 
-    rootDevice:
-      deviceName: /dev/vda
+      - name: enp2s0
+        segmentRef: ceph-replication
 
   os:
-    provided: false
-    installProfileRef: rhel
-
     install:
+      profileRef: rhel
       hostKeyRef: ceph-host-key
 
   network:

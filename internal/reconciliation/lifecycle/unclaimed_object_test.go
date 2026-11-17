@@ -29,7 +29,7 @@ func TestAnEffectBearingObjectNoImplementationClaimsIsRefused(t *testing.T) {
 	}
 	rack, lab, cloud := provider("rack"), provider("lab"), provider("cloud")
 	bare := api.NewObject(api.Machine, "bare", api.Value{}, api.MapValue(
-		api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(false)})}))
+		api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "clusterInstalled", Value: api.MapValue()})}))
 	catalog := api.NewCatalog([]api.Object{rack, lab, cloud, bare})
 	refused := RefusalOf(lab, "its arm is outside the supported shape", "remove "+lab.Identity())
 	capability := objectClaimer{testCapability: &testCapability{unsupported: []Refusal{refused}}, claimed: []string{rack.Identity()}}

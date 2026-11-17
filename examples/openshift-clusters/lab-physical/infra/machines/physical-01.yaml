@@ -4,27 +4,26 @@ metadata:
   name: physical-01
 
 spec:
-  substrate:
+  hardware:
     providerRef: lab-metal
 
-    baremetal:
-      rootDevice:
-        serialNumber: "EXAMPLE-PHYSICAL-01-ROOT"
-        sizeBytes: 480103981056
+    bmc:
+      address: https://bmc-01.example.test/redfish/v1/Systems/1
 
-      bmc:
-        address: https://bmc-01.example.test/redfish/v1/Systems/1
+      tls:
+        trustBundleRef: physical-01-bmc-trust
+        verification: certificate
 
-        tls:
-          trustBundleRef: physical-01-bmc-trust
-          verification: certificate
+    nics:
+      - name: eno1
+        macAddress: 52:54:00:9a:1b:01
 
-      nics:
-        - nicRef: eno1
-          macAddress: 52:54:00:9a:1b:01
+    rootDisk:
+      serialNumber: "EXAMPLE-PHYSICAL-01-ROOT"
+      sizeBytes: 480103981056
 
   os:
-    provided: false
+    clusterInstalled: {}
 
   network:
     configRef: lab-metal
@@ -37,7 +36,3 @@ spec:
       - name: ip
         address: 198.51.100.21
         interface: eno1
-
-  hardware:
-    nics:
-      - name: eno1

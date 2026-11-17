@@ -150,23 +150,20 @@ func physicalMatrixState(t *testing.T, name string, original *compilation.State)
 			key := "physical-" + object.Name() + "-host-key"
 			secret := requireObject(t, base.Authored(), api.Secret, "metal-01-host-key")
 			objects = append(objects, api.NewObject(api.Secret, key, api.Value{}, secret.Spec().WithPath(api.StringValue("ecdsaP256"), "source", "generated", "keyType")))
-			spec = spec.With("substrate", api.MapValue(api.FieldValue{Name: "providerRef", Value: api.StringValue(provider.Name())}))
-			root := fmt.Sprintf("/dev/disk/by-id/wwn-0x6%015x", number)
-			spec = spec.WithPath(api.StringValue(key), "os", "install", "hostKeyRef").
-				WithPath(spec.Get("hardware", "rootDevice").Without("deviceName"), "hardware", "rootDevice").
-				WithPath(api.StringValue(fmt.Sprintf("0x6%015x", number)), "substrate", "baremetal", "rootDevice", "wwn")
-			nics, macs := []api.Value{}, []api.Value{}
+			spec = spec.WithPath(api.StringValue(provider.Name()), "hardware", "providerRef").WithPath(api.StringValue(key), "os", "install", "hostKeyRef")
+			spec = spec.WithPath(spec.Get("hardware").Without("profileRef"), "hardware")
+			nics := []api.Value{}
 			for _, nic := range virtual.Interfaces {
-				nics = append(nics, api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(nic.Name)}))
-				macs = append(macs, api.MapValue(api.FieldValue{Name: "nicRef", Value: api.StringValue(nic.Name)}, api.FieldValue{Name: "macAddress", Value: api.StringValue(nic.MACAddress)}))
+				nics = append(nics, api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(nic.Name)}, api.FieldValue{Name: "macAddress", Value: api.StringValue(nic.MACAddress)}))
 			}
-			targets := []api.Value{physicalMatrixTarget(root, fmt.Sprintf("0x6%015x", number), number*16, int64(virtual.Disks[0].SizeGiB)<<30)}
+			root := physicalMatrixDisk(fmt.Sprintf("0x6%015x", number), number*16, int64(virtual.Disks[0].SizeGiB)<<30)
+			disks := []api.Value{}
 			for _, disk := range virtual.Disks[1:] {
 				path := paths[object.Name()]["/dev/"+disk.Target]
-				targets = append(targets, physicalMatrixTarget(path, strings.TrimPrefix(path, "/dev/disk/by-id/wwn-"), number*16+len(targets), int64(disk.SizeGiB)<<30))
+				disks = append(disks, physicalMatrixDisk(strings.TrimPrefix(path, "/dev/disk/by-id/wwn-"), number*16+len(disks)+1, int64(disk.SizeGiB)<<30))
 			}
-			spec = spec.WithPath(api.ListValue(nics...), "hardware", "nics").WithPath(api.StringValue(fmt.Sprintf("https://bmc-%02d.physical.example.test/redfish/v1/Systems/1", number)), "substrate", "baremetal", "bmc", "address").WithPath(api.ListValue(macs...), "substrate", "baremetal", "nics")
-			spec = spec.WithPath(api.MapValue(api.FieldValue{Name: "method", Value: api.StringValue("logicalOverwrite")}, api.FieldValue{Name: "targets", Value: api.ListValue(targets...)}), "hardware", "eraseOnRemoval")
+			spec = spec.WithPath(api.ListValue(nics...), "hardware", "nics").WithPath(api.StringValue(fmt.Sprintf("https://bmc-%02d.physical.example.test/redfish/v1/Systems/1", number)), "hardware", "bmc", "address")
+			spec = spec.WithPath(root, "hardware", "rootDisk").WithPath(api.ListValue(disks...), "hardware", "dataDisks")
 		}
 		if object.Kind() == api.CephCluster {
 			nodes := requireObject(t, original.Effective(), api.CephCluster, object.Name()).Spec().Get("topology", "nodes").Items()
@@ -215,6 +212,6 @@ func physicalMatrixState(t *testing.T, name string, original *compilation.State)
 	return state
 }
 
-func physicalMatrixTarget(path, wwn string, serial int, size int64) api.Value {
-	return api.MapValue(api.FieldValue{Name: "deviceName", Value: api.StringValue(path)}, api.FieldValue{Name: "wwn", Value: api.StringValue(wwn)}, api.FieldValue{Name: "serialNumber", Value: api.StringValue(fmt.Sprintf("SYNTHETIC-%04d", serial))}, api.FieldValue{Name: "sizeBytes", Value: api.IntegerValue(fmt.Sprint(size))})
+func physicalMatrixDisk(wwn string, serial int, size int64) api.Value {
+	return api.MapValue(api.FieldValue{Name: "wwn", Value: api.StringValue(wwn)}, api.FieldValue{Name: "serialNumber", Value: api.StringValue(fmt.Sprintf("SYNTHETIC-%04d", serial))}, api.FieldValue{Name: "sizeBytes", Value: api.IntegerValue(fmt.Sprint(size))}, api.FieldValue{Name: "onRemoval", Value: api.StringValue("logicalOverwrite")})
 }

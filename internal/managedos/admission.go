@@ -355,7 +355,7 @@ func validateServedNames(o api.Object, c api.Catalog) []api.Issue {
 		return nil
 	}
 	profile := o
-	if selected := machine.Spec().Get("os", "installProfileRef").Text(); selected != o.Name() {
+	if selected := api.MachineInstallProfileRef(machine); selected != o.Name() {
 		if profile, ok = c.Find(api.MachineInstallProfile, selected); !ok {
 			return nil
 		}
@@ -380,7 +380,7 @@ func validateConsumers(o api.Object, c api.Catalog) []api.Issue {
 			"set spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on "+o.Identity()))
 	}
 	for _, machine := range consumers(o, c) {
-		provider, ok := c.Find(api.InfraProvider, machine.Spec().Get("substrate", "providerRef").Text())
+		provider, ok := c.Find(api.InfraProvider, api.MachineProviderRef(machine))
 		if !ok {
 			continue
 		}
@@ -545,13 +545,13 @@ func validMediaURL(raw string, file bool) bool {
 // bootwrightInstalled holds for a Machine whose operating system this
 // installation lays down rather than one the operator provides.
 func bootwrightInstalled(machine api.Object) bool {
-	return machine.Spec().Has("os", "provided") && !machine.Spec().Get("os", "provided").Bool()
+	return api.MachineInstalled(machine) || api.MachineClusterInstalled(machine)
 }
 
 func consumers(o api.Object, c api.Catalog) []api.Object {
 	out := []api.Object{}
 	for _, machine := range c.OfKind(api.Machine) {
-		if machine.Spec().Get("os", "installProfileRef").Text() == o.Name() {
+		if api.MachineInstallProfileRef(machine) == o.Name() {
 			out = append(out, machine)
 		}
 	}

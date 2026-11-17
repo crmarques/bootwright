@@ -4,36 +4,24 @@ metadata:
   name: sno-01
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: sno
-{{- if .Values.environments.enabled }}
-
-      nics:
-        - nicRef: enp1s0
-          segmentRef: openshift-infra
-
-        - nicRef: {{ .Values.environments.trunk.interface }}
-          segmentRef: staging
-
-        - nicRef: enp3s0
-          segmentRef: ceph-client
-{{- end }}
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: sno
+
     nics:
       - name: enp1s0
 {{- if .Values.environments.enabled }}
+        segmentRef: openshift-infra
+
       - name: {{ .Values.environments.trunk.interface }}
+        segmentRef: staging
+
       - name: enp3s0
+        segmentRef: ceph-client
 {{- end }}
 
-    rootDevice:
-      deviceName: /dev/vda
-
   os:
-    provided: false
+    clusterInstalled: {}
 
   network:
     configRef: openshift-infra

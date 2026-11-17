@@ -8,6 +8,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/diskselection"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 type ClearTarget struct {
@@ -34,16 +35,15 @@ func clearTargetOrder(a, b ClearTarget) int {
 
 func clearTargetsFor(machine api.Object) []ClearTarget {
 	var targets []ClearTarget
-	for _, declared := range machine.Spec().Get("hardware", "clearOnInstall", "targets").Items() {
-		size, _ := strconv.ParseInt(declared.Get("sizeBytes").Text(), 10, 64)
+	for _, declared := range substrate.ClearTargets(machine) {
 		target := ClearTarget{
-			DeviceName:   declared.Get("deviceName").Text(),
-			Intervals:    MetadataClearRegions(size),
-			SerialNumber: declared.Get("serialNumber").Text(),
-			SizeBytes:    size,
+			DeviceName:   declared.DeviceName,
+			Intervals:    MetadataClearRegions(declared.SizeBytes),
+			SerialNumber: declared.SerialNumber,
+			SizeBytes:    declared.SizeBytes,
 		}
-		if wwn := declared.Get("wwn"); wwn.Present() {
-			target.WWN = "0x" + canonicalWWN(wwn.Text())
+		if declared.WWN != "" {
+			target.WWN = "0x" + canonicalWWN(declared.WWN)
 		}
 		targets = append(targets, target)
 	}

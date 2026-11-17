@@ -49,7 +49,7 @@ func physicalDevices(c api.Catalog, cluster, m api.Object, node string) ([]Devic
 				case serial != "":
 					sizes[path.Text()] = size
 				case !physicalWWN.MatchString(path.Text()):
-					return nil, failure("lifecycle.unsupported", "physical OSD devices require explicit canonical WWN by-id paths or /dev/disk/by-serial/ paths", "use /dev/disk/by-id/wwn-0x followed by 16 or 32 lowercase hexadecimal digits, or /dev/disk/by-serial/ followed by the serial number of a disk the Machine's eraseOnRemoval policy declares without deviceName; partitions and dynamic selectors are refused")
+					return nil, failure("lifecycle.unsupported", "physical OSD devices require explicit canonical WWN by-id paths or /dev/disk/by-serial/ paths", "use /dev/disk/by-id/wwn-0x followed by 16 or 32 lowercase hexadecimal digits, or /dev/disk/by-serial/ followed by the serial number of a disk the Machine declares in hardware.dataDisks with a non-retain onRemoval and no wwn; partitions and dynamic selectors are refused")
 				}
 				paths = append(paths, path.Text())
 			}
@@ -81,7 +81,7 @@ func physicalHosts(hosts []Host) bool {
 }
 
 func physicalRemovalRefusal() error {
-	return failure("lifecycle.unsupported", "physical Ceph retirement lacks original disk-erasure authority", "retain this context; automatic retirement requires every selected data, DB and WAL disk in each Machine's original eraseOnRemoval policy")
+	return failure("lifecycle.unsupported", "physical Ceph retirement lacks original disk-erasure authority", "retain this context; automatic retirement requires every selected data, DB and WAL disk in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval")
 }
 
 func bindPhysicalHosts(hosts []Host, e lifecycle.Execution, readers DependencyProofs) error {

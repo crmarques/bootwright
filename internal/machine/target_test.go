@@ -27,7 +27,7 @@ func TestDeclaredIPsAreEveryIPInDeclaredOrderWithoutRepetition(t *testing.T) {
 // than an empty string that would read as one.
 func TestAMachineDeclaringNoIPReportsNone(t *testing.T) {
 	for name, spec := range map[string]api.Value{
-		"no network":  m("os", m("provided", true)),
+		"no network":  m("os", m("provided", m())),
 		"no address":  m("network", m("addresses", list())),
 		"a name only": m("network", m("addresses", list(m("name", "fqdn", "address", "node.lab.example.test")))),
 		"not an IP":   m("network", m("addresses", list(m("name", "ssh", "address", "192.0.2.300")))),

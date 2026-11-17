@@ -36,7 +36,7 @@ func mirroredInput(trust string) api.Catalog {
 	if trust != "" {
 		environment = environment.WithPath(api.StringValue(trust), "mirror", "artifacts", "trustBundleRef")
 	}
-	machine := api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")
+	machine := api.MapValue().WithPath(api.MapValue(), "os", "provided").WithPath(api.MapValue(), "access", "local").WithPath(api.MapValue(), "proxy", "direct")
 	cluster := api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.15"), "distribution", "release", "version")
 	return api.NewCatalog([]api.Object{
 		api.NewObject(api.Environment, "lab", api.Value{}, environment),

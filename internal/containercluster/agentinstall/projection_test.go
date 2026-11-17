@@ -337,7 +337,7 @@ func TestUnsupportedNamesEveryClusterThisContractCannotInstall(t *testing.T) {
 // trust and root selector its Machine declares.
 func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.T) {
 	installed := guest("sno-01", "198.51.100.21")
-	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel-9-8"), "os", "installProfileRef"))
+	installed = installed.WithSpec(installed.Spec().With("os", api.MapValue(field("install", api.MapValue(text("profileRef", "rhel-9-8"))))))
 	for name, test := range map[string]struct {
 		catalog     api.Catalog
 		cluster     string
@@ -350,7 +350,7 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 				node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test")))),
 			"OpenShiftCluster/sno",
 			"a declared node selects an install profile, so two installations would write its disk",
-			"remove spec.os.installProfileRef from Machine/sno-01 or drop it from OpenShiftCluster/sno",
+			"declare spec.os.clusterInstalled on Machine/sno-01 instead of spec.os.install, or drop it from OpenShiftCluster/sno",
 		},
 		"controller port past the port space": {
 			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20")), "OpenShiftCluster/sno",
@@ -479,7 +479,7 @@ func TestAMultiNodeClusterOnNoPlatformInstallsOnNone(t *testing.T) {
 // server its boot image is fetched from can be placed on different Machines.
 func hypervisor() []api.Object {
 	host := api.NewObject(api.Machine, "hv-01", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.2")),
 		)))),
@@ -505,7 +505,7 @@ func servedBy(server string, declared api.Object) api.Object {
 
 // onRemote places a guest on the provider hv-01 hosts.
 func onRemote(machine api.Object) api.Object {
-	return machine.WithSpec(machine.Spec().WithPath(api.StringValue("far-libvirt"), "substrate", "providerRef"))
+	return machine.WithSpec(machine.Spec().WithPath(api.StringValue("far-libvirt"), "hardware", "providerRef"))
 }
 
 func TestAnEmulatedNodeOffTheServersHostImportsTheServerCertificate(t *testing.T) {
@@ -670,17 +670,13 @@ func TestEveryDeclaredRootDeviceHintReachesTheAgentConfig(t *testing.T) {
 	}
 }
 
-// Every hint a virtual node is admitted with reaches the agent configuration
-// through selection, and a node that selects its disk by size alone keeps that
-// selection rather than rendering none.
-func TestEveryHintAVirtualNodeDeclaresReachesTheAgentConfig(t *testing.T) {
-	media, _, _ := onlyRequests(t, hintsCatalog())
+// A virtual node declares no root disk, so every one renders the root its
+// provider derives, /dev/vda, whatever the cluster's size.
+func TestAVirtualNodeRendersItsDerivedRoot(t *testing.T) {
+	media, _, _ := onlyRequests(t, compactCatalog())
 	want := map[string]any{
-		"master-0": map[string]any{
-			"deviceName": "/dev/disk/by-path/pci-0000:00:04.0", "model": "1e3", "vendor": "0o17",
-			"minSizeGigabytes": int64(0), "rotational": false,
-		},
-		"master-1": map[string]any{"minSizeGigabytes": int64(100)},
+		"master-0": map[string]any{"deviceName": "/dev/vda"},
+		"master-1": map[string]any{"deviceName": "/dev/vda"},
 		"master-2": map[string]any{"deviceName": "/dev/vda"},
 	}
 	if got := hostHints(t, media); !reflect.DeepEqual(got, want) {
@@ -688,63 +684,33 @@ func TestEveryHintAVirtualNodeDeclaresReachesTheAgentConfig(t *testing.T) {
 	}
 }
 
-// The agent installer names a root device only as a name directly beneath
-// /dev/ or beneath /dev/disk/by-path/, and the frozen request carries a size
-// exactly only up to 2^53-1. A node declaring anything else refuses before
-// registration, naming the bound Machine, and the projection itself refuses it
-// the same way, so no caller derives an input that selection refuses.
+// The frozen request carries a size exactly only up to 2^53-1. A physical node
+// declaring a larger minSizeGigabytes refuses before registration, naming the
+// bound Machine, and the projection itself refuses it the same way, so no
+// caller derives an input that selection refuses.
 func TestARootDeviceTheAgentInstallerCannotCarryRefuses(t *testing.T) {
 	const (
-		unnamed   = "the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>"
-		rename    = "set spec.hardware.rootDevice.deviceName on Machine/sno-01 to such a path"
 		oversized = "a node's minSizeGigabytes is larger than the frozen installer input carries exactly"
-		shrink    = "declare spec.hardware.rootDevice.minSizeGigabytes on Machine/sno-01 as at most 9007199254740991"
+		shrink    = "declare spec.hardware.rootDisk.hints.minSizeGigabytes on Machine/metal-01 as at most 9007199254740991"
 	)
-	for name, test := range map[string]struct {
-		hints       []api.FieldValue
-		reason      string
-		remediation string
-	}{
-		"a by-id link":   {[]api.FieldValue{text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")}, unnamed, rename},
-		"a mapper":       {[]api.FieldValue{text("deviceName", "/dev/mapper/root")}, unnamed, rename},
-		"a size past it": {[]api.FieldValue{text("deviceName", "/dev/vda"), number("minSizeGigabytes", "9007199254740992")}, oversized, shrink},
-		"a size past every integer type": {
-			[]api.FieldValue{text("deviceName", "/dev/vda"), number("minSizeGigabytes", "100000000000000000000000")}, oversized, shrink,
-		},
+	for name, size := range map[string]string{
+		"a size past it":                 "9007199254740992",
+		"a size past every integer type": "100000000000000000000000",
 	} {
 		t.Run(name, func(t *testing.T) {
-			catalog := singleNodeWith(test.hints...)
-			if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{"OpenShiftCluster/sno"}) {
+			catalog := physicalWithRoot(text("wwn", "0x5000c500a1b2c3d4"), number("minSizeGigabytes", size))
+			if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{"OpenShiftCluster/metal"}) {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
-			// The refusal plan and apply report before registration carries
-			// the cluster, the reason and the remedy naming the Machine.
-			want := []lifecycle.Refusal{{Kind: "OpenShiftCluster", Name: "sno", Reason: test.reason, Remediation: test.remediation}}
+			want := []lifecycle.Refusal{{Kind: "OpenShiftCluster", Name: "metal", Reason: oversized, Remediation: shrink}}
 			if refused := Refusals(catalog); !slices.Equal(refused, want) {
 				t.Fatalf("refusals = %+v, want %+v", refused, want)
 			}
 			_, _, _, err := Requests(catalog, "controller", testContext)
-			refusedWith(t, err, test.reason, test.remediation)
-			declared, _ := catalog.Find(api.OpenShiftCluster, "sno")
+			refusedWith(t, err, oversized, shrink)
+			declared, _ := catalog.Find(api.OpenShiftCluster, "metal")
 			_, err = nodeProjections(catalog, declared, testContext, "controller", &Requirements{})
-			refusedWith(t, err, test.reason, test.remediation)
-		})
-	}
-}
-
-// A device directly beneath /dev/ or beneath /dev/disk/by-path/ is one the
-// agent installer names, so it reaches the agent configuration unrefused.
-func TestARootDeviceTheAgentInstallerCanNameIsNotRefused(t *testing.T) {
-	for _, device := range []string{"/dev/sda", "/dev/disk/by-path/pci-0000:00:1f.2-ata-1"} {
-		t.Run(device, func(t *testing.T) {
-			catalog := singleNodeWith(text("deviceName", device))
-			if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
-				t.Fatalf("unsupported = %v", unsupported)
-			}
-			media, _, _ := onlyRequests(t, catalog)
-			if got := hostHints(t, media); !reflect.DeepEqual(got, map[string]any{"master-0": map[string]any{"deviceName": device}}) {
-				t.Fatalf("hints = %#v", got)
-			}
+			refusedWith(t, err, oversized, shrink)
 		})
 	}
 }
@@ -754,7 +720,7 @@ func TestARootDeviceTheAgentInstallerCanNameIsNotRefused(t *testing.T) {
 // refused as not canonical when execution reads it, which is why selection
 // refuses such a size instead.
 func TestARootDeviceSizeTheFrozenInputCannotCarryRefuses(t *testing.T) {
-	media, _, _ := onlyRequests(t, singleNodeWith(text("deviceName", "/dev/vda"), number("minSizeGigabytes", "9007199254740991")))
+	media, _, _ := onlyRequests(t, physicalWithRoot(text("wwn", "0x5000c500a1b2c3d4"), number("minSizeGigabytes", "9007199254740991")))
 	frozen, err := media.Canonical()
 	if err != nil {
 		t.Fatalf("freezing the largest size: %v", diagnostics.Of(err))
@@ -776,8 +742,8 @@ func TestARootDeviceSizeTheFrozenInputCannotCarryRefuses(t *testing.T) {
 // Only the agent configuration carries the hints: the install request boots
 // the same nodes whatever disk each one selects.
 func TestTheInstallRequestCarriesNoRootDeviceHint(t *testing.T) {
-	_, hinted, _ := onlyRequests(t, hintsCatalog())
-	_, compact, _ := onlyRequests(t, compactCatalog())
+	_, hinted, _ := onlyRequests(t, physicalHintsCatalog())
+	_, compact, _ := onlyRequests(t, physicalCatalog())
 	hintedBytes, err := hinted.Canonical()
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))

@@ -305,10 +305,9 @@ a direct server leaf refuses before its worker runs.
 The installed OpenShift `additionalTrustBundleRefs` carries material, not an
 endpoint policy, and cannot relax name verification across a cluster.
 
-The BMC's existing `tls.verify` boolean remains supported: omission means true,
-and false corresponds to `verification: none`. Explicitly supplying both
-requires agreement. Physical private installation, logical-root proofs and
-physical erase retain their refusal of an unverified BMC. Exact-certificate
+A BMC is verified when its `tls.verification` is absent, `full` or
+`certificate`; `none` is unverified. Physical private installation,
+logical-root proofs and physical erase refuse an unverified BMC. Exact-certificate
 identity authenticates that BMC and satisfies verified transport; `none` does
 not. None of these client settings changes the separate BMC-to-media-server
 verification policy.

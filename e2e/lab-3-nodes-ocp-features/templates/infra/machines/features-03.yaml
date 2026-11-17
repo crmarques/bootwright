@@ -5,20 +5,15 @@ metadata:
   name: features-03
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: master
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: master
+
     nics:
       - name: enp1s0
 
-    rootDevice:
-      deviceName: /dev/vda
-
   os:
-    provided: false
+    clusterInstalled: {}
 
   network:
     configRef: lab-guests

@@ -148,7 +148,7 @@ func AddressClaims(o api.Object) []AddressClaim {
 }
 
 func SelectedProfile(catalog api.Catalog, machine api.Object) (api.Object, api.Value, bool) {
-	provider, found := catalog.Find(api.InfraProvider, machine.Spec().Get("substrate", "providerRef").Text())
+	provider, found := catalog.Find(api.InfraProvider, MachineProviderRef(machine))
 	arm := Variant(provider)
 	if !found || arm == "" {
 		return provider, api.Value{}, false
@@ -176,47 +176,4 @@ func ClusterBounds(arms ...Arm) (fanout int, allowance, margin time.Duration) {
 		margin = max(margin, bounds.NodeMargin)
 	}
 	return fanout, allowance, margin
-}
-
-func MachineArm(machine api.Object) Arm {
-	for _, arm := range Arms() {
-		if machine.Spec().Has("substrate", string(arm)) {
-			return arm
-		}
-	}
-	return ""
-}
-
-func MachineProfileRef(machine api.Object) string {
-	return machine.Spec().Get("substrate", string(MachineArm(machine)), "profileRef").Text()
-}
-
-func MachineProfilePath(machine api.Object) string {
-	arm := MachineArm(machine)
-	if arm == "" {
-		return "spec.substrate"
-	}
-	return "spec.substrate." + string(arm) + ".profileRef"
-}
-
-const BMCPath = "spec.substrate.baremetal.bmc"
-
-func MachineBMC(machine api.Object) api.Value {
-	return machine.Spec().Get("substrate", "baremetal", "bmc")
-}
-
-func MachineMACs(machine api.Object) api.Value {
-	if arm := MachineArm(machine); arm == ArmBaremetal || arm == ArmVSphere {
-		return machine.Spec().Get("substrate", string(arm), "nics")
-	}
-	return api.Value{}
-}
-
-func MachineMAC(machine api.Object, nic string) string {
-	for _, entry := range MachineMACs(machine).Items() {
-		if entry.Get("nicRef").Text() == nic {
-			return entry.Get("macAddress").Text()
-		}
-	}
-	return ""
 }

@@ -52,11 +52,11 @@ func fixture(variant string, count int, ipv6 bool) (api.Object, api.Catalog) {
 	for i := range count {
 		name := fmt.Sprintf("node-%d", i)
 		address := fmt.Sprintf("%s%d", ip, i+10)
-		arm := m("providerRef", "provider")
+		nics := list(m("name", "eth0"), m("name", "eth1"), m("name", "eth2"), m("name", "eth3"))
 		if variant == "baremetal" {
-			arm = arm.With("baremetal", m("nics", list(m("nicRef", "eth0", "macAddress", fmt.Sprintf("02:00:00:00:00:%02x", i+1)), m("nicRef", "eth1", "macAddress", fmt.Sprintf("02:00:00:00:01:%02x", i+1)), m("nicRef", "eth2", "macAddress", fmt.Sprintf("02:00:00:00:02:%02x", i+1)), m("nicRef", "eth3", "macAddress", fmt.Sprintf("02:00:00:00:03:%02x", i+1)))))
+			nics = list(m("name", "eth0", "macAddress", fmt.Sprintf("02:00:00:00:00:%02x", i+1)), m("name", "eth1", "macAddress", fmt.Sprintf("02:00:00:00:01:%02x", i+1)), m("name", "eth2", "macAddress", fmt.Sprintf("02:00:00:00:02:%02x", i+1)), m("name", "eth3", "macAddress", fmt.Sprintf("02:00:00:00:03:%02x", i+1)))
 		}
-		machine := obj(api.Machine, name, m("os", m("provided", false), "substrate", arm, "hardware", m("nics", list(m("name", "eth0"), m("name", "eth1"), m("name", "eth2"), m("name", "eth3"))), "network", m("inline", m("nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")))), "addresses", list(m("name", "primary", "address", address, "interface", "eth0")))))
+		machine := obj(api.Machine, name, m("hardware", m("providerRef", "provider", "nics", nics), "os", m("clusterInstalled", m()), "network", m("inline", m("nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")))), "addresses", list(m("name", "primary", "address", address, "interface", "eth0")))))
 		objects = append(objects, machine)
 		role := "worker"
 		if i < 3 {
@@ -108,7 +108,7 @@ func TestPlatformDerivationAndAuthoredExternalPreservation(t *testing.T) {
 	}
 	objects := c.Objects()
 	peer, _ := c.Find(api.Machine, "node-1")
-	peer = peer.WithSpec(peer.Spec().WithPath(api.StringValue("second"), "substrate", "providerRef"))
+	peer = peer.WithSpec(peer.Spec().WithPath(api.StringValue("second"), "hardware", "providerRef"))
 	for i, x := range objects {
 		if x.Identity() == peer.Identity() {
 			objects[i] = peer

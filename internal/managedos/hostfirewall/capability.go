@@ -138,7 +138,7 @@ func (c Capability) Claimed(catalog api.Catalog) []string {
 	}
 	var claimed []string
 	for _, object := range catalog.OfKind(api.Machine) {
-		if RealizesHostPorts(catalog, object.Name()) && (object.Spec().Get("os", "provided").Bool() && object.Spec().Get("firewall", "management").Text() == "managed" || slices.ContainsFunc(requirements, func(r HostPortRequirement) bool { return r.Machine == object.Name() })) {
+		if RealizesHostPorts(catalog, object.Name()) && (api.MachineProvided(object) && object.Spec().Get("firewall", "management").Text() == "managed" || slices.ContainsFunc(requirements, func(r HostPortRequirement) bool { return r.Machine == object.Name() })) {
 			claimed = append(claimed, object.Identity())
 		}
 	}

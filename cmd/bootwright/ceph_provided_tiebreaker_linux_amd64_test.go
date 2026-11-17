@@ -47,9 +47,9 @@ func tiebreakerSources(t *testing.T, access string) desiredstate.Sources {
 	rhel04 := strings.ReplaceAll(strings.ReplaceAll(read("infra/machines/rhel-03.yaml"), "rhel-03", "rhel-04"), "198.51.100.13", "198.51.100.14")
 	add("infra/machines/rhel-04.yaml", rhel04)
 	for machine, site := range map[string]string{"rhel-01": "site-a", "rhel-02": "site-a", "rhel-03": "site-b", "rhel-04": "site-b"} {
-		edit("infra/machines/"+machine+".yaml", "spec:\n  substrate:\n", "spec:\n  placement:\n    site: "+site+"\n\n  substrate:\n")
+		edit("infra/machines/"+machine+".yaml", "spec:\n  hardware:\n", "spec:\n  site: "+site+"\n\n  hardware:\n")
 	}
-	add("infra/machines/witness.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata:\n  name: witness\n\nspec:\n  placement:\n    site: site-c\n\n  os:\n    provided: true\n\n"+
+	add("infra/machines/witness.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata:\n  name: witness\n\nspec:\n  site: site-c\n\n  os:\n    provided: {}\n\n"+
 		"  network:\n    addresses:\n      - name: fqdn\n        address: witness.lab.example.test\n\n      - name: ip\n        address: 198.51.100.20\n\n"+access)
 	add("secret-descriptors/witness-known-hosts.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: witness-known-hosts\n\nspec:\n  type: opaque\n\n  source:\n    contextStore: {}\n")
 	for _, pool := range []string{"pool", "cephfs-data-pool", "cephfs-metadata-pool"} {

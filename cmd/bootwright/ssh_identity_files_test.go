@@ -21,7 +21,7 @@ const sessionNode = `apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: {name: node}
 spec:
-  os: {provided: true}
+  os: {provided: {}}
   network:
     addresses: [{name: ssh, address: 192.0.2.20}]
 `

@@ -15,7 +15,7 @@ import (
 func TestAHostKeyIsNoOtherCredential(t *testing.T) {
 	machine, catalog := installedFixture()
 	key := machine.Spec().Get("os", "install", "hostKeyRef").Text()
-	provided := object(api.Machine, "provided", m("os", m("provided", true), "access", m("ssh", m("auth", m("privateKeyRef", key)))))
+	provided := object(api.Machine, "provided", m("os", m("provided", m()), "access", m("ssh", m("auth", m("privateKeyRef", key)))))
 	environment := object(api.Environment, "env", m("domains", m("base", "example.test"), "remoteMachinesAccessKey", m("keyRef", key)))
 	cases := map[string]struct {
 		objects  []api.Object
@@ -37,7 +37,7 @@ func TestAHostKeyIsNoOtherCredential(t *testing.T) {
 			"OpenShiftCluster/ocp's spec.install.nodeSSH.keyPairRef", "",
 		},
 		"the fleet key beside another installed Machine": {
-			[]api.Object{environment, object(api.Machine, "peer", m("os", m("provided", false, "installProfileRef", "rhel"), "access", m("ssh", m("auth", m("privateKeyRef", key)))))},
+			[]api.Object{environment, object(api.Machine, "peer", m("os", m("install", m("profileRef", "rhel")), "access", m("ssh", m("auth", m("privateKeyRef", key)))))},
 			"Environment/env's spec.remoteMachinesAccessKey.keyRef", api.Environment,
 		},
 	}

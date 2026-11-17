@@ -12,7 +12,7 @@ Every kind on this page names its objects under the [one name rule](../api.md#ob
 
 Unless a field below declares a narrower namespace, a scalar `*Ref` is a plain
 `metadata.name` reference in the global namespace of its target kind. Local
-references are deliberately scalar too: a substrate arm's `profileRef`
+references are deliberately scalar too: a Machine's `hardware.profileRef`
 resolves inside one provider, NIC and address refs inside one machine, listener and endpoint refs
 inside one service, and segment refs inside one provider. Loading order
 never chooses among duplicates.
@@ -43,7 +43,7 @@ No setting changes upstream firewalls or the service's bind addresses.
 | Kind | Declares |
 | --- | --- |
 | `InfraProvider` | One substrate provider, bare metal, a libvirt host, vSphere or KubeVirt, with its segments and machine profiles. |
-| `Machine` | One host, physical or virtual, with its substrate arm, hardware, operating-system lifecycle, network and access. |
+| `Machine` | One host, physical or virtual, with its hardware, operating-system lifecycle, network and access. |
 | `MachineImage` | One operating-system installation image a profile installs from. |
 | `MachineInstallProfile` | One managed operating-system installation recipe: its installer, package source, customizations and services. |
 | `NetworkConfig` | One reusable host network configuration that Machines reference. |
@@ -74,25 +74,25 @@ its 63-byte identity.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `spec.baremetal.defaults.bmc.credentialsRef` | string | no | — | Default `usernamePassword` `Secret` reference for a Machine that omits its own BMC credentials. Access credential. |
-| `spec.baremetal.defaults.bmc.tls.verification` | string | no | `full` | Only `full` is valid as a provider default; non-full policy is per Machine. |
-| `spec.baremetal.defaults.bmc.tls.verify` | boolean | no | `true` | Default for a machine BMC whose own `tls.verify` is absent. |
-| `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` or `trustBundle` `Secret` reference for a machine BMC that keeps verification; refused beside `tls.verify: false`. Trust anchor. |
+| `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` or `trustBundle` `Secret` reference for a machine BMC that keeps verification; refused beside `tls.verification: none`. Trust anchor. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.trust` | string | no | `importCertificate` | `importCertificate` or `established`. `disableVerification` is refused here: it is a per-Machine exception and never a provider default. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.enableVerification` | boolean | no | `true` with verified BMC access | Automatic media-verification setup inherited with the complete virtual-media block; follows the Machine rule below. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | — | Refused: it is valid only with `disableVerification`, which a provider never defaults. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Valid only with `importCertificate`. |
 
-Normalization inherits a configured provider `credentialsRef` or `tls.verify`
-only when the machine still omits that value. It copies the complete provider `virtualMedia`
+A provider default selects no verification mode, so the BMC's `tls` holds only
+`trustBundleRef`; a non-full `tls.verification` is authored on the Machine.
+Normalization inherits a configured provider `credentialsRef` only when the
+machine still omits that value. It copies the complete provider `virtualMedia`
 block only when the machine omits that block. A machine-local value always
 wins. Missing credentials never select a same-named Secret, another provider,
 or ambient identity; a consuming bare-metal installation requires the
 resolved reference, an access credential, and its `usernamePassword` type.
 
 A provider `tls.trustBundleRef` is inherited only by a machine that keeps
-verification: one that authors `tls.verify: false` inherits no bundle, and a
+verification: one that authors `tls.verification: none` inherits no bundle, and a
 machine-local bundle always wins. An Environment kind-default bundle likewise
-never reaches an object that authors `tls.verify: false`. A bundle beside
+never reaches an object that authors `tls.verification: none`. A bundle beside
 verification turned off, whether either half was authored or inherited, fails
 admission at `tls.trustBundleRef`. A bundle replaces the system trust store rather than adding to it. It may
 hold public CA or server certificates, in any order. The
@@ -115,7 +115,8 @@ certificate identity, partial-chain verification and insecure exceptions.
 runs, speaks Redfish and is sushy-tools, so the block names none of the three;
 a bare-metal Machine always boots its installer from Redfish virtual media, so
 the bare-metal arm names no boot method. Only a
-Machine on the provider whose `os.provided` is `false` is realized and counted:
+Machine on the provider whose OS is not provided (`os.install` or
+`os.clusterInstalled`) is realized and counted:
 each such Machine has its own emulated BMC, listening at `port` plus its
 position in the canonical name order of those Machines, so a provider realizing
 `n` Machines claims the range `port` through `port + n - 1`. An OS-ready
@@ -151,8 +152,8 @@ The field detail of the vSphere arm is recorded in
 [refused machine arms](../deferred/machine-arms.md), which
 [B99](../milestones/m1.md#b99) revives, and the KubeVirt arm's field reference
 is [its record](../deferred/machine-arms.md#kubevirt-arm).
-A Machine NIC's segment is its arm's `nics[].segmentRef`
-([substrate arm](#substrate-arm)).
+A Machine NIC's segment is its `hardware.nics[].segmentRef`
+([hardware and substrate](#hardware-and-substrate)).
 
 ### Machine profiles and segments
 
@@ -215,9 +216,9 @@ capacity and its holder, and the field to raise: the segment's `mtu`, the host
 secondary network's or the Network's.
 
 A bond's ports, followed through VLAN parents and nested bonds to their
-`ethernet` interfaces and their NICs, reach one segment: arm `nics` putting two
+`ethernet` interfaces and their NICs, reach one segment: NICs putting two
 ports of one bond on different segments refuse `api.invariant` at the first
-differing entry's `segmentRef`, naming the bond and each port's segment,
+differing `hardware.nics[<i>].segmentRef`, naming the bond and each port's segment,
 because a failover would move the host onto another network.
 
 A libvirt segment claims only the shared key `bridge-use:<name>`, never an
@@ -239,53 +240,61 @@ own refusal.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.placement.site` | string | conditional | — | `Environment.spec.sites[].name`; required only where a consumer needs site placement: it is the only source of a [Ceph topology node's site](ceph.md#normalization), which a stretch CephCluster needs on every node, and it scopes the Machine's [interface assignments](networks.md#cross-kind-checks). |
-| `spec.substrate.providerRef` | string | conditional | — | Global `InfraProvider`; required whenever `os.provided: false`. |
-| `spec.substrate.baremetal` | object | conditional | — | The bare-metal [substrate arm](#substrate-arm): `bmc`, `nics`, `rootDevice` and [`firmware`](#firmware-block); required for a bare-metal install machine. |
-| `spec.substrate.libvirt` | object | conditional | — | The libvirt [substrate arm](#substrate-arm): `profileRef` and `nics`. |
-| `spec.substrate.kubevirt` | object | conditional | — | The KubeVirt [substrate arm](#substrate-arm): `profileRef` and `nics`. |
-| `spec.substrate.vsphere` | object | conditional | — | The vSphere [substrate arm](#substrate-arm): `profileRef` and `nics`. |
+| `spec.site` | string | conditional | — | `Environment.spec.sites[].name`; required only where a consumer needs site placement: it is the only source of a [Ceph topology node's site](ceph.md#normalization), which a stretch CephCluster needs on every node, and it scopes the Machine's [interface assignments](networks.md#cross-kind-checks). |
+| `spec.hardware` | object | conditional | — | Each device declared once ([hardware and substrate](#hardware-and-substrate)). |
+| `spec.hardware.providerRef` | string | conditional | — | Global `InfraProvider`; required with `os.install` or `os.clusterInstalled`. |
+| `spec.hardware.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`, resolved in whichever arm a libvirt, KubeVirt or vSphere provider has; required there when the OS is not provided, refused on bare metal. |
+| `spec.hardware.bmc` | object | conditional | — | The management controller; [BMC](#bmc). |
+| `spec.hardware.firmware` | object | no | — | Declared firmware settings; [shape](#firmware-block). |
 | `spec.hardware.nics` | array | conditional | `[]` | The NIC list, in device order, set keyed by `name`; non-empty on a bare-metal install machine and on a non-provided libvirt or KubeVirt Machine, where each entry is one vNIC. |
-| `spec.hardware.nics[].name` | string | yes | — | Machine-local NIC name; the only NIC field, on every substrate. |
-| `spec.hardware.rootDevice` | object | no | — | Substrate-neutral root-device hints below; admitted on every substrate, with or without `installProfileRef`. |
-| `spec.os.provided` | boolean | yes | — | Selects the OS lifecycle with `installProfileRef`. |
-| `spec.os.installProfileRef` | string | conditional | — | Global `MachineInstallProfile`; valid only when `provided: false`. |
+| `spec.hardware.nics[].name` | string | yes | — | Machine-local NIC name, on every substrate. |
+| `spec.hardware.nics[].macAddress` | string | conditional | — | EUI-48; required on every NIC of a non-provided bare-metal Machine, refused on libvirt and KubeVirt, where the provider derives it. |
+| `spec.hardware.nics[].segmentRef` | string | no | the provider's sole segment | A segment of the provider; refused without `providerRef`. |
+| `spec.hardware.rootDisk` | object | no | — | The root disk's identity, selector and hints, and its removal action; [root disk](#root-disk). |
+| `spec.hardware.dataDisks` | array | no | — | Data disks acted on at installation or removal; [data disks and disk actions](#data-disks-and-disk-actions). |
+| `spec.os.provided` | empty object | union | — | The OS-ready arm, `provided: {}`. |
+| `spec.os.install.profileRef` | string | with `install` | — | Global `MachineInstallProfile`; the Bootwright-installed arm. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
-| `spec.hardware.eraseOnRemoval` | object | no | retain | The bare-metal [physical erase policy](#physical-erase-policy). |
 | `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` delivered as the installed SSH host key; required on bare metal, optional on libvirt ([completion channel](../managed-os.md#delivered-identity-off-the-hypervisor)), forbidden otherwise. Unique per Machine and no other credential. Effect material. |
+| `spec.os.clusterInstalled` | empty object | union | — | The installer-provisioned arm, `clusterInstalled: {}`. |
 | `spec.proxy` | choice object | no | profile choice or direct access | Lifecycle-dependent atomic Machine-owned selection below; emits immediately after `os`. |
 | `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments and interface matches below. |
 | `spec.access` | object | lifecycle-dependent | normalized as below | Local or SSH access plus optional root-login posture. |
 
+Effective output orders them `site`, `hardware`, `os`, `proxy`, `firewall`,
+`network`, `access`.
+
 ### OS lifecycle and substrate invariants
 
-The required `os.provided` value and optional `installProfileRef` select exactly
-one lifecycle:
+`spec.os` is required and holds exactly one of `provided`, `install` and
+`clusterInstalled`; none, or several, refuse at `$.spec.os`. The arm selects the
+OS lifecycle:
 
-- `provided: true` is OS-ready. `installProfileRef`, `os.install`, and network
+- `provided: {}` is OS-ready. `os.install`, `os.clusterInstalled`, and network
   configuration are absent; `network.addresses` may declare contacts. Access
-  is operator-authored or defaults to SSH operator identity. An OS-ready
-  Machine that sets `installProfileRef` is refused once, at that field; it
-  needs no fleet key, and a reference it may not declare is not resolved.
-- `provided: false` with `installProfileRef` is Bootwright-installed. The
-  machine references a `MachineInstallProfile`, must not author `access`, and
-  effective access is derived.
-- `provided: false` without `installProfileRef` is installer-provisioned. The
-  substrate is prepared, but a downstream installer supplies the OS. Access
-  may remain absent.
+  is operator-authored or defaults to SSH operator identity.
+- `install` is Bootwright-installed. Its required `profileRef` references a
+  `MachineInstallProfile`; the Machine must not author `access`, and effective
+  access is derived.
+- `clusterInstalled: {}` is installer-provisioned. The substrate is prepared,
+  but a downstream (cluster) installer supplies the OS. Access may remain
+  absent.
 
-Every non-provided machine has `substrate.providerRef`. Libvirt, vSphere, and
-KubeVirt Machines require their arm's `profileRef` when the OS is not provided;
-bare metal has no profile field. A selected profile resolves only in its
-provider.
+`install` and `clusterInstalled` require `hardware.providerRef`. Libvirt,
+vSphere, and KubeVirt Machines require `hardware.profileRef` when the OS is not
+provided; a bare-metal Machine refuses it, since bare metal has no profile. A
+selected profile resolves only in its provider. A virtual Machine declares no
+`bmc`, `firmware`, `rootDisk` or `dataDisks`, and a bare-metal one no
+`profileRef`: [hardware and substrate](#hardware-and-substrate) lists what each
+substrate admits.
 
-A bare-metal non-provided machine has at least one NIC; every NIC has a MAC in
-`substrate.baremetal.nics`; `substrate.baremetal.bmc` address and credentials
-are present. A non-provided libvirt or KubeVirt Machine has at least one NIC,
-else `api.invariant` at `hardware.nics`. Root selection follows the [cluster agent](../openshift-clusters.md#selection)
+A bare-metal non-provided machine has at least one NIC; every NIC has a
+`macAddress`; `hardware.bmc` address and credentials are present. A
+non-provided libvirt or KubeVirt Machine has at least one NIC, else
+`api.invariant` at `hardware.nics`. Root selection follows the [cluster agent](../openshift-clusters.md#selection)
 or [managed OS](../managed-os.md#physical-installation). Its BMC address, like every
 authored one, selects one exact `/redfish/v1/Systems/<id>` ComputerSystem in
-the [one spelling](#bmc-and-root-device-shape) the realized target sends. These
+the [one spelling](#bmc-endpoint-identity) the realized target sends. These
 declarations identify an install target but do not authorize a destructive
 operation.
 
@@ -319,45 +328,51 @@ NIC names and canonical MACs are unique in a machine, and authored MACs are
 unique across the complete graph. Effective normalization writes MACs as
 lowercase colon-separated EUI-48 values.
 
-A libvirt or KubeVirt arm has no MAC, BMC or physical root-device field,
-because realization would ignore each: the provider realizes one vNIC per
-`hardware.nics` entry, in order, derives its MAC from the context, Machine and
-NIC names, and a libvirt provider realizes the Machine's management controller
-as its emulated BMC ([substrates](../substrates.md#machine-realization),
+A Machine of a libvirt or KubeVirt provider declares no MAC, BMC, firmware,
+root disk or data disk, because realization would ignore each: the provider
+realizes one vNIC per `hardware.nics` entry, in order, derives its MAC from the
+context, Machine and NIC names, creates the root disk and the profile's data
+disks, and a libvirt provider realizes the Machine's management controller as
+its emulated BMC ([substrates](../substrates.md#machine-realization),
 [KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)).
 Such a Machine takes no part in the graph-wide MAC uniqueness check, and an
 NMState `mac-address` on any of its ethernet interfaces refuses with
 `api.invariant` at its network selection (D197).
 
-### Substrate arm
+### Hardware and substrate
 
-`spec.substrate` holds `providerRef` and at most one arm, named like the arm of
-the `InfraProvider` that `providerRef` names, or `baremetal` on a Machine with
-no provider. An arm holds only the facts its
-substrate reads; NIC names and substrate-neutral root-device hints stay in
-`spec.hardware`.
+`spec.hardware` declares each device of the host once. A Machine authors no
+substrate: it follows its provider. When `hardware.providerRef` resolves, the
+substrate is the arm that `InfraProvider` declares, `baremetal`, `libvirt`,
+`kubevirt` or `vsphere`. With no `providerRef` a Machine is `baremetal` when it
+declares `bmc`, `firmware`, a NIC `macAddress`, a `rootDisk` identity or
+selector, or `dataDisks`, and has no substrate otherwise. A provider that does
+not resolve gives none, the reference refusal already reporting it. A
+provider-less bare-metal Machine is an OS-ready one no provider realizes, such
+as a bastion: operator-owned hardware that keeps every bare-metal rule below,
+whose power reaches it through the `bmc` it authors from the controller host
+([substrates](../substrates.md)).
 
-| Arm | Field | Type | Rule |
+The substrate selects what `hardware` admits. A field a substrate would ignore
+refuses `api.invariant` at its path, naming the provider and its arm; an
+`os.install` or `os.clusterInstalled` Machine of any substrate needs its
+`providerRef`.
+
+| Field | Bare metal | Libvirt, KubeVirt | vSphere |
 | --- | --- | --- | --- |
-| `baremetal` | `bmc` | object | The management controller; exact shape [below](#bmc-and-root-device-shape). |
-| `baremetal` | `nics` | array | Set of `{nicRef, macAddress, segmentRef}` keyed by `nicRef`; `nicRef` names a `hardware.nics[].name`, at most one entry per NIC; `macAddress` is EUI-48; optional `segmentRef` names a segment of the provider with this arm, and is refused without `providerRef`. Omitted, the NIC takes the provider's sole segment; with two or more, a NIC an available ethernet interface matches needs one (`api.invariant` at its entry, naming the candidates). |
-| `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string, `sizeBytes`, the root disk's exact capacity, 4096-aligned up to 64 TiB, proved by a Bootwright installation or the physical agent pre-boot serial proof, and the logical-volume selectors `volumeRef` and `bootVolume`; the [root forms](#bmc-and-root-device-shape) are one rule. |
-| `baremetal` | `firmware` | object | Declared firmware settings; [shape](#firmware-block). |
-| `libvirt`, `kubevirt` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
-| `libvirt`, `kubevirt` | `nics` | array | Set of `{nicRef, segmentRef}` keyed by `nicRef`: `segmentRef` names a segment of the provider with this arm. A NIC without an entry takes the provider's sole segment, whatever its name; with two or more, every NIC needs its entry, else `api.invariant` at this field names the NIC. |
-| `vsphere` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
-| `vsphere` | `nics` | array | As on bare metal, `segmentRef` admitted and not realized; each authored MAC lies in the manual assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff` ([refused machine arms](../deferred/machine-arms.md#machine-fields)). |
+| `profileRef` | refused | required unless OS-ready | required unless OS-ready |
+| `bmc`, `firmware` | [BMC](#bmc), [firmware](#firmware-block) | refused | refused |
+| `nics[].macAddress` | required on every NIC of a non-provided Machine; EUI-48 | refused | optional, in the manual assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff` ([refused machine arms](../deferred/machine-arms.md#machine-fields)) |
+| `nics[].segmentRef` | a segment of the provider; refused without `providerRef` | a segment of the provider | admitted and not realized |
+| `rootDisk` | [root disk](#root-disk) | refused: the provider creates it and the installer uses `/dev/vda`, derived | refused |
+| `dataDisks` | [data disks](#data-disks-and-disk-actions) | refused | refused |
 
-A `libvirt`, `kubevirt` or `vsphere` arm requires `providerRef`; without it the
-arm refuses with `api.invariant` at `$.spec.substrate.<arm>`. A `baremetal` arm
-stands without `providerRef` on an OS-ready Machine no provider realizes, such
-as a bastion: it is operator-owned hardware, the arm keeps every rule above, and
-power reaches the Machine through the `bmc` it authors from the controller host
-([substrates](../substrates.md)). An arm other than the provider's refuses with
-`api.invariant` at the same path, naming the provider and its arm. The arm is
-omitted only where it would be empty: an OS-ready Machine of a virtual provider
-that names no profile, or an installer-provisioned or OS-ready bare-metal
-Machine that declares no BMC, MAC or physical hint.
+A NIC's `segmentRef` names a segment of the provider whose arm matches. Omitted,
+a NIC takes the provider's sole segment, whatever its name. With two or more
+segments, on libvirt and KubeVirt every NIC needs one, else `api.invariant` at
+`hardware.nics` names the NIC; on bare metal and vSphere a NIC an available
+ethernet interface matches needs one, else `api.invariant` at its entry names
+the candidates.
 
 Machine roles are not declared: a Machine is an OpenShift node because an
 `OpenShiftCluster` names it in `spec.nodes[].machineRef`, a Ceph node or the
@@ -388,9 +403,9 @@ select one with `network.configRef` or `network.inline` or to remove the
 selection or interface; an OS-ready Machine, which declares
 contacts only, is told to remove it.
 
-Effective normalization writes each defaulted arm `nics` entry and the complete
-`interfaceMatches` list; a bare-metal or vSphere NIC's sole-segment default is
-read, not written. A Machine on a managed libvirt network selects an install address inside
+Effective normalization writes each defaulted `segmentRef` of a libvirt or
+KubeVirt NIC and the complete `interfaceMatches` list; a bare-metal or vSphere
+NIC's sole-segment default is read, not written. A Machine on a managed libvirt network selects an install address inside
 that Network's prefix, other than the bridge's host address and, for an IPv4
 prefix shorter than /31, its network and broadcast addresses; each refuses at
 `network.installAddressRef` naming the prefix and every reserved address.
@@ -492,9 +507,9 @@ and applicability follow the Machine's OS lifecycle:
 
 | Machine lifecycle | Proxy selection |
 | --- | --- |
-| OS-ready (`os.provided: true`) | An authored or kind-default choice may select a managed or external Proxy; omission normalizes to `direct: {}`. The selected controller's Machine proxy also owns controller egress. |
-| Bootwright-installed (`os.provided: false` with `installProfileRef`) | An authored or Machine kind-default choice wins as a whole; otherwise inherit the install profile's proxy, then use `direct: {}`. A selected Proxy must be external. |
-| Downstream-installer (`os.provided: false` without `installProfileRef`) | `spec.proxy` is forbidden, including a choice introduced by Machine defaults. No intrinsic proxy field is materialized; the downstream cluster owns its installation choice. |
+| OS-ready (`os.provided`) | An authored or kind-default choice may select a managed or external Proxy; omission normalizes to `direct: {}`. The selected controller's Machine proxy also owns controller egress. |
+| Bootwright-installed (`os.install`) | An authored or Machine kind-default choice wins as a whole; otherwise inherit the install profile's proxy, then use `direct: {}`. A selected Proxy must be external. |
+| Downstream-installer (`os.clusterInstalled`) | `spec.proxy` is forbidden, including a choice introduced by Machine defaults. No intrinsic proxy field is materialized; the downstream cluster owns its installation choice. |
 
 The complete choice includes endpoint and bypass selections. An explicit
 `direct: {}` overrides inherited routing; fields from different choices never
@@ -526,7 +541,7 @@ no contact or session address; an over-long one refuses
 `fqdn` is preserved verbatim, is a DNS subdomain, has no assigned interface,
 and is unique across Machines.
 
-`access.local` is boolean `true`, not an object. It is mutually exclusive with
+`access.local` is the empty record `{}`. It is mutually exclusive with
 `access.ssh` and valid only for the OS-ready
 [controller Machine](environment.md#controller-machine) in the retained graph.
 Controller selection does not infer local access. On an OS-ready machine,
@@ -594,23 +609,23 @@ delivered or captured, so it consults no trust store, and a session dialing
 any other address refuses `trust.identity` naming the address the installation
 proved.
 
-## Bare-metal Machine fields
+## Bare-metal hardware
 
-The nested blocks of the bare-metal [substrate arm](#substrate-arm), and the
-erase policy and data-disk clear only a bare-metal Machine admits.
+The blocks of `spec.hardware` that only a bare-metal Machine admits
+([where each is admitted](#hardware-and-substrate)), and the disk actions only
+a Bootwright-installed one admits.
 
-### BMC and root-device shape
+### BMC
 
-`substrate.baremetal.bmc` contains only:
+`spec.hardware.bmc` contains only the fields below. Every BMC speaks Redfish, so
+the block names no protocol.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `address` | string | with the BMC block | — | Redfish endpoint naming one exact ComputerSystem, in the one canonical spelling below, on every Machine that authors it. |
-| `protocol` | string | no | `redfish` | `redfish`. |
 | `credentialsRef` | string | resolved with the BMC block | configured provider default | `usernamePassword` `Secret`; machine-local values take precedence. Access credential. |
-| `tls.verify` | boolean | no | `true` | Whether the controller-to-BMC TLS leg is verified: against `tls.trustBundleRef` alone when it is set, and against the system trust store otherwise. |
-| `tls.verification` | string | no | `full` | `full`, `certificate`, or `none` under [client TLS trust](../secrets.md#client-tls-trust). Non-full values must be authored on this Machine. Explicit `tls.verify` must agree. |
-| `tls.trustBundleRef` | string | no | configured provider default | `caBundle` or `trustBundle` `Secret`; the one anchor of the controller-to-BMC leg. Refused beside `tls.verify: false`. Trust anchor. |
+| `tls.verification` | string | no | `full` | `full`, `certificate`, or `none` under [client TLS trust](../secrets.md#client-tls-trust), for the controller-to-BMC TLS leg. Verified means absent, `full` or `certificate`; `none` skips certificate and hostname checks. A non-full value must be authored on this Machine: neither a provider default nor an Environment kind default selects one. |
+| `tls.trustBundleRef` | string | no | configured provider default | `caBundle` or `trustBundle` `Secret`; the one anchor of the controller-to-BMC leg, against which a verified leg checks alone, else against the system trust store. Refused beside `verification: none`. Trust anchor. |
 | `virtualMedia.tls.trust` | string | no | `importCertificate` | How the BMC trusts the artifact server it fetches media from. `importCertificate` uses the device certificate collection or qualified discovered SecurityService [media trust contract](../substrates.md#identity-and-power-operations); `established` imports no certificate; `disableVerification` turns deciding verification off before insertion and is the per-Machine exception below. |
 | `virtualMedia.tls.enableVerification` | boolean | no | `true` with verified BMC access and verified media trust | Authorizes media insertion to enable the deciding verification property with a conditional write and read-back. Requires verified HTTPS BMC access and `importCertificate` or `established`. Explicit `false` requires preconfigured verification. Successful enables remain enabled after cleanup and destroy. |
 | `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disableVerification`; eject restores the deciding manager switches, or the device flag when no manager declares one. Explicit `false` retains the disabled state. |
@@ -645,14 +660,13 @@ restoration after release, even after interrupted boot; false keeps it off.
 For an explicit persistent opt-out:
 
 ```yaml
-substrate:
-  baremetal:
-    bmc:
-      virtualMedia:
-        tls:
-          trust: disableVerification
-          enableVerification: false
-          restoreVerificationAfterBoot: false
+hardware:
+  bmc:
+    virtualMedia:
+      tls:
+        trust: disableVerification
+        enableVerification: false
+        restoreVerificationAfterBoot: false
 ```
 
 #### BMC endpoint identity
@@ -686,26 +700,44 @@ requires verification, configuring it by default or requiring preconfiguration
 when automatic enabling is explicitly disabled
 ([identity and power operations](../substrates.md#identity-and-power-operations)).
 
-`hardware.rootDevice` admits only `deviceName`, `model`, `vendor`,
-`minSizeGigabytes` and boolean `rotational`, on every substrate and with or
-without `installProfileRef`; `substrate.baremetal.rootDevice` admits `bootVolume`, `volumeRef`, `wwn`,
-`hctl`, `serialNumber` and `sizeBytes`, which only a physical disk carries, since
-the disks a virtual substrate creates carry no WWN, SCSI address or serial number
+### Root disk
+
+`spec.hardware.rootDisk` holds what is known of the host's root disk. A virtual
+Machine declares none, because its provider creates the disk and every installer
+on libvirt and KubeVirt uses `/dev/vda`, derived rather than authored
+([substrates](../substrates.md#machine-realization)); `rootDisk` on a Machine of
+a virtual provider refuses `api.invariant` at `$.spec.hardware.rootDisk`.
+
+| Field | Type | Rule |
+| --- | --- | --- |
+| `wwn` | string | `0x` followed by 16 or 32 lowercase hexadecimal digits. |
+| `serialNumber` | string | 1 to 256 ASCII letters, digits or `._:+/=-`. |
+| `sizeBytes` | integer | The disk's exact capacity, 4096-aligned up to 64 TiB, proved by a Bootwright installation or the physical agent pre-boot serial proof. |
+| `volumeRef`, `bootVolume` | object | Logical-volume selectors, [below](#existing-logical-root-volumes). |
+| `discover` | object | The opt-in [automatic selector](#automatic-root-disk-discovery). |
+| `hints` | object | Narrowing hints only: `deviceName`, `model`, `vendor`, `minSizeGigabytes`, boolean `rotational` and `hctl`. |
+| `onRemoval` | string | The root's removal action, [below](#data-disks-and-disk-actions). |
+
+`wwn`, `serialNumber`, `sizeBytes`, `volumeRef`, `bootVolume` and `discover`
+only a physical disk carries, since the disks a virtual substrate creates carry
+no WWN, SCSI address or serial number
 ([substrates](../substrates.md#machine-realization)). `sizeBytes` refuses
-`api.invariant` at `$.spec.substrate.baremetal.rootDevice.sizeBytes` without a Bootwright installation or a physical agent serial proof,
-and when it is not a multiple of 4096.
-`deviceName` is a device path: a clean absolute path beneath `/dev/` built
-only from ASCII letters, digits, `.`, `_`, `-`, `/`, `:` and `+`, so
-whitespace, control characters, quotes, other shell metacharacters and `.` or
-`..` segments are refused, because the path reaches installer directives and
-shell words verbatim. `minSizeGigabytes` is non-negative. Bare-metal root
+`api.invariant` at `$.spec.hardware.rootDisk.sizeBytes` without a Bootwright
+installation or a physical agent serial proof, and when it is not a multiple of
+4096. `hints.deviceName` is a device path: a clean absolute path beneath
+`/dev/` built only from ASCII letters, digits, `.`, `_`, `-`, `/`, `:` and `+`,
+so whitespace, control characters, quotes, other shell metacharacters and `.`
+or `..` segments are refused, because the path reaches installer directives and
+shell words verbatim. `hints.minSizeGigabytes` is non-negative. Bare-metal root
 selectors follow the [OS lifecycle invariant](#os-lifecycle-and-substrate-invariants);
 predicate-only hints are not an adequate destructive target selector.
-Nothing installs an OS-ready Machine: there `deviceName` and `wwn` name the
-root disk that a Ceph OSD selection must not name, compared with each explicit
-OSD device path, `wwn` as its `/dev/disk/by-id/wwn-0x` path without regard to
-case or a `0x` prefix; `sizeBytes`, `bootVolume` and `volumeRef` refuse, and
-every other hint warns `api.deferred` at its path, since it selects no disk.
+
+An OS-ready Machine is installed by nothing, so there `rootDisk` only names the
+disk a Ceph OSD must not: `hints.deviceName` and `wwn` are compared with each
+explicit OSD device path, `wwn` as its `/dev/disk/by-id/wwn-0x` path without
+regard to case or a `0x` prefix. `sizeBytes`, `bootVolume`, `volumeRef`,
+`discover` and `onRemoval` refuse, and every other hint, `serialNumber` and
+`hctl` included, warns `api.deferred` at its path, since it selects no disk.
 
 A bare-metal Machine that an installer writes, a Bootwright installation or a
 cluster's agent installer, names its root disk in exactly one of these forms.
@@ -716,28 +748,26 @@ it rather than restate it.
 
 | Form | Declared as | Consumer notes |
 | --- | --- | --- |
-| WWN | `substrate.baremetal.rootDevice.wwn`, `0x` followed by 16 or 32 lowercase hexadecimal digits | The one WWN root form ([D253](../milestones/backlog.md#d253)). Each installer derives what it needs: a Bootwright installation writes and proves the disk through `/dev/disk/by-id/wwn-0x<digits>`, and the agent installer takes it as its `wwn` hint. `serialNumber` and `sizeBytes` may stand beside it as proofs. |
-| Serial number | no `wwn`; `substrate.baremetal.rootDevice.serialNumber`, 1 to 256 ASCII letters, digits or `._:+/=-`, and exact `sizeBytes` | For a disk whose WWN cannot be learned before an OS boots or that has none, such as an NVMe disk. |
-| Logical volume | `substrate.baremetal.rootDevice.volumeRef` or `bootVolume` alone, under verified BMC TLS | One [existing logical volume](#existing-logical-root-volumes), proved by its NAA identifier and exact capacity. `bootVolume: {}` is the default on a Machine of a bare-metal provider that an installer writes and that declares no root hint. |
+| WWN | `rootDisk.wwn`, `0x` followed by 16 or 32 lowercase hexadecimal digits | The one WWN root form ([D253](../milestones/backlog.md#d253)). Each installer derives what it needs: a Bootwright installation writes and proves the disk through `/dev/disk/by-id/wwn-0x<digits>`, and the agent installer takes it as its `wwn` hint. `serialNumber` and `sizeBytes` may stand beside it as proofs. |
+| Serial number | no `wwn`; `rootDisk.serialNumber`, 1 to 256 ASCII letters, digits or `._:+/=-`, and exact `sizeBytes` | For a disk whose WWN cannot be learned before an OS boots or that has none, such as an NVMe disk. |
+| Logical volume | `rootDisk.volumeRef` or `bootVolume` alone, under verified BMC TLS | One [existing logical volume](#existing-logical-root-volumes), proved by its NAA identifier and exact capacity. `bootVolume: {}` is the default on a Machine of a bare-metal provider that an installer writes and that declares no `rootDisk` field. |
+| Discovery | `rootDisk.discover` alone, on `os.install` only | The [automatic selector](#automatic-root-disk-discovery). |
 
 The installation erases that disk, and a kernel name such as `/dev/sda` moves
 with probe order, firmware and hot-added disks, so on such a Machine any
-`hardware.rootDevice.deviceName` refuses `api.invariant` at its path. When it
-is a `/dev/disk/by-id/wwn-0x` path, the remedy names the `wwn` it spells;
-every other root refusal's remedy names each form, `volumeRef` and the
-`bootVolume` default included. A `wwn` in another form refuses at its path. A serial number that
-selects a disk, here or as a target named without `deviceName` below, is
-declared by no other Machine; a second declaration refuses `api.invariant` at
-its field, naming the other Machine, because two disks sharing a serial number
-cannot be told apart. Which other hints an installation carries, and the
-proofs it runs before and inside the installer, are the consumer's rule.
+`hints.deviceName` refuses `api.invariant` at its path. When it is a
+`/dev/disk/by-id/wwn-0x` path, the remedy names the `wwn` it spells; every other
+root refusal's remedy names each form, `volumeRef` and the `bootVolume` default
+included. A `wwn` in another form refuses at its path. Which other hints an
+installation carries, and the proofs it runs before and inside the installer, are
+the consumer's rule.
 
 ### Existing logical root volumes
 
 A Machine of a bare-metal provider that an installer writes, a Bootwright
 installation or an agent node ([D252](../milestones/backlog.md#d252)), and
-that declares no root hint defaults to
-`substrate.baremetal.rootDevice.bootVolume: {}`. This selects the first enabled
+that declares no `rootDisk` field defaults to
+`hardware.rootDisk.bootVolume: {}`. This selects the first enabled
 persistent local-disk firmware boot option through Redfish `BootOrder`, its
 `BootOptionReference` and a direct `RelatedItem` link to a Volume in this
 ComputerSystem's complete Storage inventory. Known non-disk options are
@@ -745,7 +775,7 @@ skipped; an unknown or uncorrelatable earlier disk option refuses. Transient
 boot overrides, display names, `IsBootCapable`, a single available volume and
 member Drive serials select nothing.
 
-Alternatively `volumeRef: {storageId: <id>, volumeId: <id>}` positively selects
+Alternatively `rootDisk.volumeRef: {storageId: <id>, volumeId: <id>}` positively selects
 one existing logical volume. Each ID is 1 to 128 ASCII letters, digits,
 underscores or hyphens. Both selectors require verified BMC TLS, select alone,
 and refuse on OS-ready Machines. No controller, array or member disk is
@@ -765,7 +795,7 @@ owns its remaining controller-to-installer race and capacity limitation.
 ### Automatic root-disk discovery
 
 A physical RHEL installation may opt in with
-`substrate.baremetal.rootDevice.discover`. This arm selects alone. Its
+`hardware.rootDisk.discover`. This arm selects alone. Its
 `inventory` is `automatic`, the default, which reads the BMC's drive inventory
 and boots only when that inventory cannot stand in for Linux, or `boot`, which
 always inventories through a RAM boot. The RAM worker exposes a restricted SSH
@@ -777,12 +807,13 @@ host and client keys for each operation. This is independent of installed-OS
 `access.ssh` configuration. For example:
 
 ```yaml
-rootDevice:
-  discover:
-    ssh:
-      port: 2222
-    match:
-      maxSizeBytes: 600000000000
+hardware:
+  rootDisk:
+    discover:
+      ssh:
+        port: 2222
+      match:
+        maxSizeBytes: 600000000000
 ```
 
 Its optional
@@ -808,7 +839,7 @@ chooses a replacement when that target changes. The execution boundary is
 
 ### Firmware block
 
-`substrate.baremetal.firmware` is atomic and authored only on a Machine: no
+`hardware.firmware` is atomic and authored only on a Machine: no
 `InfraProvider` defaults it, and an Environment kind default of it refuses
 `api.invariant` at its `$.spec.defaults.Machine` path, because firmware is
 per-Machine intent and never a kind default.
@@ -823,76 +854,99 @@ per-Machine intent and never a kind default.
 
 The block sets at least one of `secureBoot`, `bootMode` and `biosAttributes`
 and needs `bmc` beside it; an OS-ready Machine, which nothing installs, admits
-none. Each refuses `api.invariant` at `$.spec.substrate.baremetal.firmware`.
+none. Each refuses `api.invariant` at `$.spec.hardware.firmware`.
 An attribute name matches `^[A-Za-z][A-Za-z0-9_]{1,127}$`, a string is 0 to
 256 bytes of printable ASCII, an integer is signed 64-bit, and a null,
 fractional, list or map value refuses. A name containing `password` in any
 letter case refuses `api.invariant`: a firmware password is secret material,
 never desired state. Each attribute refusal names
-`$.spec.substrate.baremetal.firmware.biosAttributes` and the entry's position,
+`$.spec.hardware.firmware.biosAttributes` and the entry's position,
 because a map key is no path segment.
 
-### Physical erase policy
+### Data disks and disk actions
 
-`hardware.eraseOnRemoval` opts a Bootwright-installed bare-metal Machine into
-[physical erase](../state-reconciliation.md#opt-in-physical-logical-overwrite)
-on removal; omission retains its disks. One `destroy` may clear only metadata or
-retain the disks through an
-[erase relaxation](../state-reconciliation.md#removal-time-relaxation), which
-leaves this field and the frozen policy unchanged.
+A destructive disk action is declared beside the identity it destroys: the
+`rootDisk` carries `onRemoval`, and each `dataDisks[]` entry carries
+`onInstall` and `onRemoval`. An absent action is `retain`, which is never
+materialized, and leaves the disk untouched. Only a Bootwright-installed
+bare-metal Machine (`os.install`) admits a disk action or a `dataDisks` entry;
+an OS-ready Machine and a Machine of a virtual provider refuse each at its own
+path, because nothing there performs one. A declaration identifies a disk and
+authorizes nothing: the destructive operation is authorized when it runs.
+`rootDisk.onRemoval` and `hardware.dataDisks` are authored only on a Machine:
+no `InfraProvider` defaults either, and an Environment kind default of either
+refuses `api.invariant` at its `$.spec.defaults.Machine` path, because each is
+per-Machine intent and never a kind default.
 
-| Field | Type | Required | Default | Rule |
-| --- | --- | --- | --- | --- |
-| `method` | string | yes | — | `logicalOverwrite` zeroes and reads back every byte; `metadataClear` only the regions that make a disk read as empty to native probes, which is not sanitization. |
-| `targets` | array | yes | — | 1 to 16 whole disks keyed by `serialNumber`; only listed disks are erased. |
-| `targets[].deviceName`, `wwn` | string | together or neither | — | The disk's exact path and the live sysfs WWN it reports, distinct across targets; omitted, the worker selects the one whole disk reporting `serialNumber` and `sizeBytes`. |
-| `targets[].serialNumber` | string | yes | — | The disk's live sysfs serial number, distinct across targets: 1 to 256 ASCII letters, digits and `._:+/=-`, the one grammar of the [root forms](#bmc-and-root-device-shape) and of a clear target. |
-| `targets[].sizeBytes` | integer | yes | — | Exact logical capacity, a multiple of 4096 up to 64 TiB, and at most 896 GiB for a `logicalOverwrite` target. |
-| `targets[].method` | string | no | the policy's `method` | The same choice, for this disk only. |
-
-The policy lists the root only when it names it; an omitted root is retained,
-and every listed disk, root or data, is erased. This is the one root-target
-rule. For a root declared by `wwn`, the root target is the one whose `deviceName`
-is the `/dev/disk/by-id/wwn-0x` path that `wwn` derives, or whose `wwn` names
-the same WWN under any other path, compared without regard to case or a `0x`
-or `naa.` prefix, or the target without `deviceName` whose `serialNumber` is
-the root's declared `serialNumber`; for a root declared by serial number, it is the
-target without `deviceName` whose `serialNumber` is the root's, or a target
-naming the WWN that root [reported at installation](../managed-os.md#physical-removal)
-by its `wwn` or by the by-id path an `naa.` WWN derives. A root
-target's `sizeBytes` must be the root's declared `sizeBytes`, when it declares
-one, or it refuses `api.invariant` at that target's `sizeBytes`; a target naming the serial root's serial number with a
-`deviceName` refuses at its `targets[<i>]` path, and one naming its reported WWN
-refuses `api.invariant` when its removal runs. Admission compares the declared
-identities only; the disk each target selects is compared with the root's
-identity where [physical disk safety](../state-reconciliation.md#physical-disk-safety)
-states, so the root is never erased unrecognised. A root selected by
-`volumeRef` or `bootVolume` has no root target: each listed target is erased by
-its own identity. A target naming only one of `deviceName` and `wwn` refuses
-`api.invariant` at its `targets[<i>]` path.
-
-### Install-time data-disk clear
-
-`spec.hardware.clearOnInstall` is optional and absent by default, which leaves
-every data disk untouched. Only a Bootwright-installed bare-metal Machine
-admits it; [physical data-disk clear](../managed-os.md#physical-data-disk-clear)
-owns what the installation does with it.
+`hardware.dataDisks` is an atomic sequence of 1 to 15 whole disks keyed by
+`serialNumber`; only a listed disk is acted on.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `targets` | array | yes | — | 1 to 15 whole data disks, an atomic sequence keyed by `serialNumber`. |
-| `targets[].deviceName` | string | with `wwn` | — | `/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase hexadecimal digits. |
-| `targets[].wwn` | string | with `deviceName` | — | The WWN `deviceName` names, compared without regard to case or a `0x` prefix. |
-| `targets[].serialNumber` | string | yes | — | 1 to 256 ASCII letters, digits and `._:+/=-`. |
-| `targets[].sizeBytes` | integer | yes | — | Exact capacity, a multiple of 4096 of at most 64 TiB. |
+| `serialNumber` | string | yes | — | The disk's live sysfs serial number: 1 to 256 ASCII letters, digits and `._:+/=-`, the one grammar of the [root forms](#root-disk). |
+| `sizeBytes` | integer | yes | — | Exact logical capacity, a multiple of 4096 up to 64 TiB. |
+| `wwn` | string | no | — | The disk's live sysfs WWN, `0x` followed by 16 or 32 lowercase hexadecimal digits. Declared, the disk's exact path derives as `/dev/disk/by-id/wwn-0x<digits>`; omitted, the worker selects the one whole disk reporting `serialNumber` and `sizeBytes`. |
+| `onInstall` | string | no | `retain` | `retain` or `metadataClear`: the installation clears only the regions that make the disk read as empty to native probes ([physical data-disk clear](../managed-os.md#physical-data-disk-clear) owns what it does). |
+| `onRemoval` | string | no | `retain` | `retain`, `metadataClear` or `logicalOverwrite`. `logicalOverwrite` zeroes and reads back every byte; `metadataClear` only the regions that make a disk read as empty to native probes, which is not sanitization. |
 
-A target names `deviceName` and `wwn` together, or neither, in which case the
-`%pre` selects the one whole disk reporting its `serialNumber` and `sizeBytes`.
-Each refusal is `api.invariant` at the field's path. Every identity is
-distinct across the targets, and a target whose `deviceName`, `wwn` or
-`serialNumber` is the root device's, from `substrate.baremetal.rootDevice` and
-the path its `wwn` derives, refuses at its `targets[<i>]` path: the
-installation already clears the root disk.
+`rootDisk.onRemoval` takes the same three values for the root disk and is
+absent by default, which retains the installed system. The root is erased only
+under an identity the Machine declares: a `rootDisk.onRemoval` other than
+`retain` requires `rootDisk.serialNumber` and `rootDisk.sizeBytes`, and beside
+`volumeRef`, `bootVolume` or `discover` it refuses at its path, because a
+selected root has no declared identity to erase by. A `logicalOverwrite` disk,
+root or data, is at most 896 GiB, so its write and read-back fit the erase
+deadline; a larger one refuses at that disk's `sizeBytes`, with the remedy of
+`metadataClear` or a smaller disk.
+
+An `onRemoval` other than `retain`, on the root or a data disk, also requires
+verified BMC TLS (`bmc.tls.verification` absent, `full` or `certificate`) and a
+declared media trust policy (`virtualMedia.tls.trust` of `importCertificate`,
+`established` or `disableVerification`) on this Machine, else `api.invariant`
+at that `onRemoval`, with the remedy to declare both.
+
+Each refusal below is `api.invariant` at the entry's or field's path:
+
+- an entry declaring no action, `onInstall` and `onRemoval` both absent or
+  `retain`, refuses at its `dataDisks[<i>]` path with "declares no action",
+  because an undeclared disk is already left untouched;
+- `serialNumber` and `wwn` are distinct across the entries;
+- an entry whose `serialNumber` or `wwn` is the root's, from `rootDisk.wwn`, the
+  by-id path it derives and `rootDisk.serialNumber`, refuses at its
+  `dataDisks[<i>]` path: the root disk has its own actions and the installation
+  already clears it; and
+- a serial number that selects a disk is declared by no other Machine, as its
+  `rootDisk.serialNumber` or any `dataDisks[].serialNumber`; a second
+  declaration refuses at the selecting field, naming the other Machine, because
+  two disks sharing a serial number cannot be told apart. A `dataDisks` entry
+  selects by its `serialNumber` only when it declares no `wwn`, and the root
+  only when it declares `serialNumber` and `sizeBytes` and no
+  `hints.deviceName`, and, on a Bootwright-installed Machine, no `wwn`. An
+  entry's `serialNumber` beside its `wwn` is not compared, because the `wwn`
+  selects that disk.
+
+An entry's `wwn` naming the WWN a serial-declared root
+[reported at installation](../managed-os.md#physical-removal) refuses
+`api.invariant` when its removal runs. Admission compares the declared
+identities only; the disk each entry selects is compared with the root's
+identity where
+[physical disk safety](../state-reconciliation.md#physical-disk-safety) states,
+so the root is never erased unrecognised.
+
+The actions derive two internal policies, which no field authors, so each
+frozen request keeps its shape:
+
+- The [physical erase](../state-reconciliation.md#opt-in-physical-logical-overwrite)
+  policy lists the root, when its `onRemoval` is not `retain`, and every data
+  disk whose `onRemoval` is not `retain`; each target is its disk's
+  `serialNumber`, `sizeBytes`, `wwn` and by-id `deviceName` when `wwn` is
+  declared, and `method` its `onRemoval`. An omitted root is retained, and every
+  listed disk, root or data, is erased. The
+  [erase relaxation](../state-reconciliation.md#removal-time-relaxation) of one
+  `destroy` may clear only metadata or retain the disks and leaves these fields
+  and the frozen policy unchanged.
+- The install-time clear list is every data disk whose `onInstall` is
+  `metadataClear`, each with the same four identity fields.
 
 ## MachineImage
 

@@ -227,7 +227,7 @@ func (s Service) guestChecks(ctx context.Context, selected string, catalog api.C
 	host, found := catalog.Find(api.Machine, name)
 	check := Check{ID: "host.prerequisites", Target: name, Status: capacity.Unknown, Next: "prove this Machine's installed OS and prerequisites before Ceph enrollment"}
 	state, recorded := owned["Machine/"+name]
-	provided := host.Spec().Get("os", "provided").Bool()
+	provided := api.MachineProvided(host)
 	switch {
 	case !found:
 		check.Reason = "the declared Machine is missing"

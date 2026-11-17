@@ -260,7 +260,7 @@ One Go table names the host packages by name or RPM capability:
 `podman` runs only the containers a context places on the controller Machine:
 a managed service whose `machineRef` names it, and the emulated BMC a libvirt
 provider hosted on it runs. A controller that runs neither never receives it,
-and no Machine declares it ([substrate arm](api/machines.md#substrate-arm),
+and no Machine declares it ([hardware and substrate](api/machines.md#hardware-and-substrate),
 [D247](milestones/backlog.md#d247)). The hypervisor closure names
 `qemu-kvm-core`, not the `qemu-kvm` metapackage, which on Fedora also pulls
 every QEMU display, audio and block module, because a guest uses only devices

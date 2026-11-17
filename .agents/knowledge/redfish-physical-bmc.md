@@ -200,7 +200,7 @@ also owns the qualified SecurityService path when the device has no collection.
   `true`; a refused write fails, because verification stays on. Where a manager
   publishes `HttpsTransferCertVerification` the current Machine contract uses
   a conditional manager write when explicitly disabled, with read-back under
-  the [Machine media contract](../../specs/api/machines.md#bmc-and-root-device-shape).
+  the [Machine media contract](../../specs/api/machines.md#bmc).
 - There is **no fallback**. A member without `Certificates`, or a
   `VerifyCertificate` write answered 501, 400 or 405, fails the import naming
   the two exceptions an operator may declare instead, and a post refused while

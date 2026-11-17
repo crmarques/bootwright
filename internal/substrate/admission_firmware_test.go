@@ -10,15 +10,22 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-const firmwareField = "$.spec.substrate.baremetal.firmware"
+const firmwareField = "$.spec.hardware.firmware"
 const attributesField = firmwareField + ".biosAttributes"
 
 func firmwareMachine(provided bool, bmc bool, firmware api.Value) api.Object {
-	arm := m("firmware", firmware)
+	hardware := m("firmware", firmware)
 	if bmc {
-		arm = arm.With("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "bmc"))
+		hardware = hardware.With("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "bmc"))
 	}
-	return obj(api.Machine, "node", m("os", m("provided", provided), "substrate", m("baremetal", arm)))
+	return obj(api.Machine, "node", m("os", firmwareOS(provided), "hardware", hardware))
+}
+
+func firmwareOS(provided bool) api.Value {
+	if provided {
+		return m("provided", m())
+	}
+	return m("install", m("profileRef", "rhel", "hostKeyRef", "host-key"))
 }
 
 func attributes(entries ...any) api.Value { return m(entries...) }
@@ -93,7 +100,7 @@ func TestFirmwareAdmissionAdmitsADeclaredBlock(t *testing.T) {
 			}
 		})
 	}
-	absent := obj(api.Machine, "node", m("os", m("provided", true), "substrate", m("baremetal", m())))
+	absent := obj(api.Machine, "node", m("os", m("provided", m()), "hardware", m()))
 	if issues := Validate(absent, api.NewCatalog([]api.Object{absent})); len(issues) != 0 {
 		t.Fatalf("an absent block refused: %#v", issues)
 	}
@@ -104,7 +111,7 @@ func TestMachineFirmwareReader(t *testing.T) {
 		t.Fatalf("an absent block read %+v", got)
 	}
 	if got := MachineFirmware(obj(api.Machine, "node", m())); got != nil {
-		t.Fatalf("a Machine without a substrate read %+v", got)
+		t.Fatalf("a Machine without hardware read %+v", got)
 	}
 	machine := firmwareMachine(false, true, m("secureBoot", false, "bootMode", "UEFI", "biosAttributes", attributes(
 		"Zeta", "last", "Min", api.IntegerValue(strconv.FormatInt(math.MinInt64, 10)), "Alpha", true, "Max", api.IntegerValue(strconv.FormatInt(math.MaxInt64, 10)), "Empty", "")))
@@ -145,5 +152,5 @@ func TestMachineFirmwareReader(t *testing.T) {
 }
 
 func firmwareMachineWithout() api.Object {
-	return obj(api.Machine, "node", m("os", m("provided", false), "substrate", m("baremetal", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1")))))
+	return obj(api.Machine, "node", m("os", firmwareOS(false), "hardware", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1"))))
 }

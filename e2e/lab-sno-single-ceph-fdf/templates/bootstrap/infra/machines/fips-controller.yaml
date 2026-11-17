@@ -6,29 +6,20 @@ metadata:
   name: {{ .Values.controller.name }}
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: controller
-
-      nics:
-        - nicRef: enp1s0
-          segmentRef: openshift-infra
-
-        - nicRef: enp2s0
-          segmentRef: ceph-client
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: controller
+
     nics:
       - name: enp1s0
-      - name: enp2s0
+        segmentRef: openshift-infra
 
-    rootDevice:
-      deviceName: /dev/vda
+      - name: enp2s0
+        segmentRef: ceph-client
 
   os:
-    provided: false
-    installProfileRef: rhel
+    install:
+      profileRef: rhel
 
   network:
     configRef: openshift-infra

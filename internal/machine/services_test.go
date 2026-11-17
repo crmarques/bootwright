@@ -11,7 +11,7 @@ func TestInstallServiceProfileInheritanceAndOverrides(t *testing.T) {
 	ntp := object(api.NTPServer, "clock", m("management", "managed", "endpoints", list(m("name", "installation", "addressRef", "primary"))))
 	profile := object(api.MachineInstallProfile, "install", m("proxy", m("proxyRef", "egress", "noProxy", api.StringList(".example.test")), "ntp", list(m("serverRef", "clock"))))
 	c := api.NewCatalog([]api.Object{proxy, ntp, profile})
-	original := object(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "install")))
+	original := object(api.Machine, "node", m("os", m("install", m("profileRef", "install"))))
 	inherited, issues := Normalize(original, c)
 	if len(issues) != 0 {
 		t.Fatal(issues)
@@ -22,7 +22,7 @@ func TestInstallServiceProfileInheritanceAndOverrides(t *testing.T) {
 	if issues := validateServices(inherited, c); len(issues) != 0 {
 		t.Fatal(issues)
 	}
-	if original.Spec().Has("proxy") || original.Spec().Has("os", "install") || profile.Spec().Get("ntp").Items()[0].Has("endpointRef") {
+	if original.Spec().Has("proxy") || original.Spec().Has("os", "install", "ntp") || profile.Spec().Get("ntp").Items()[0].Has("endpointRef") {
 		t.Fatal("normalization mutated declarations")
 	}
 	origins := NormalizationOrigins(original, inherited, c)
@@ -38,7 +38,7 @@ func TestInstallServiceProfileInheritanceAndOverrides(t *testing.T) {
 		t.Fatal("explicit overrides attributed to profile", origins)
 	}
 	noProfile, _ := Normalize(original, api.Catalog{})
-	if !noProfile.Spec().Get("proxy").Equal(m("direct", m())) || noProfile.Spec().Has("os", "install") {
+	if !noProfile.Spec().Get("proxy").Equal(m("direct", m())) || noProfile.Spec().Has("os", "install", "ntp") {
 		t.Fatal("omitted choices did not retain native defaults")
 	}
 	if origins := NormalizationOrigins(original, noProfile, api.Catalog{}); len(origins) != 0 {
@@ -50,12 +50,12 @@ func TestMachineProxyFollowsOSLifecycle(t *testing.T) {
 	managed := object(api.Proxy, "managed", m("management", "managed", "endpoints", list(m("name", "installation", "addressRef", "primary"))))
 	external := object(api.Proxy, "external", m("management", "external", "connection", m("httpsProxy", "http://proxy.example.test:3128")))
 	c := api.NewCatalog([]api.Object{managed, external})
-	installed := object(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "install"), "proxy", m("proxyRef", "managed", "endpointRef", "installation")))
+	installed := object(api.Machine, "node", m("os", m("install", m("profileRef", "install")), "proxy", m("proxyRef", "managed", "endpointRef", "installation")))
 	if issues := validateServices(installed, c); len(issues) == 0 || issues[0].Field != "$.spec.proxy.proxyRef" {
 		t.Fatal("managed install proxy admitted")
 	}
 	for _, proxyRef := range []string{"managed", "external"} {
-		provided := object(api.Machine, "ready", m("os", m("provided", true), "proxy", m("proxyRef", proxyRef)))
+		provided := object(api.Machine, "ready", m("os", m("provided", m()), "proxy", m("proxyRef", proxyRef)))
 		if issues := ValidateAuthored(provided, c); len(issues) != 0 {
 			t.Fatal("OS-ready Machine proxy rejected before normalization", issues)
 		}
@@ -70,11 +70,11 @@ func TestMachineProxyFollowsOSLifecycle(t *testing.T) {
 			t.Fatal("OS-ready proxy normalization changed authored policy or installation intent")
 		}
 	}
-	provided, _ := Normalize(object(api.Machine, "ready", m("os", m("provided", true))), c)
+	provided, _ := Normalize(object(api.Machine, "ready", m("os", m("provided", m()))), c)
 	if !provided.Spec().Get("proxy").Equal(m("direct", m())) {
 		t.Fatal("OS-ready Machine did not default to direct access")
 	}
-	downstream := object(api.Machine, "node", m("os", m("provided", false)))
+	downstream := object(api.Machine, "node", m("os", m("clusterInstalled", m())))
 	effective, _ := Normalize(downstream, c)
 	if effective.Spec().Has("proxy") || effective.Spec().Has("os", "install") {
 		t.Fatal("downstream-installer Machine received independent host policy")
@@ -85,11 +85,9 @@ func TestMachineProxyFollowsOSLifecycle(t *testing.T) {
 			t.Fatal("downstream-installer Machine accepted a proxy choice", issues)
 		}
 	}
-	for _, provided := range []bool{true, false} {
-		o := object(api.Machine, "node", m("os", m("provided", provided, "install", m("ntp", list()))))
-		if issues := ValidateAuthored(o, c); len(issues) != 1 || issues[0].Field != "$.spec.os.install.ntp" {
-			t.Fatal("inapplicable installation NTP policy accepted", issues)
-		}
+	o := object(api.Machine, "node", m("os", m("provided", m(), "install", m("ntp", list()))))
+	if issues := ValidatePartial(o, c); len(issues) != 1 || issues[0].Field != "$.spec.os.install.ntp" {
+		t.Fatal("inapplicable installation NTP policy accepted", issues)
 	}
 }
 
@@ -101,7 +99,7 @@ func TestAuthoredInstallServicesDeferCatalogChecks(t *testing.T) {
 		m("proxy", m("proxyRef", "missing"), "ntp", list(m("serverRef", "missing"))),
 		m("proxy", m("proxyRef", "egress", "endpointRef", "missing"), "ntp", list(m("serverRef", "clock", "endpointRef", "missing"))),
 	} {
-		o := object(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "install", "install", m("ntp", selection.Get("ntp"))), "proxy", selection.Get("proxy")))
+		o := object(api.Machine, "node", m("os", m("install", m("profileRef", "install", "ntp", selection.Get("ntp"))), "proxy", selection.Get("proxy")))
 		if issues := ValidateAuthored(o, catalog); len(issues) != 0 {
 			t.Fatal("authored phase resolved a service or endpoint", issues)
 		}
@@ -117,14 +115,14 @@ func TestMachineProxyDefaultsValidateOnlyKnownContradictions(t *testing.T) {
 		m("direct", m(), "noProxy", api.StringList("example.test")),
 		m("direct", m(), "endpointRef", "missing"),
 	} {
-		o := object(api.Machine, "node", m("os", m("provided", true), "proxy", choice))
+		o := object(api.Machine, "node", m("os", m("provided", m()), "proxy", choice))
 		for _, validate := range []func(api.Object, api.Catalog) []api.Issue{ValidatePartial, ValidateAuthored} {
 			if issues := validate(o, api.Catalog{}); len(issues) != 1 || issues[0].Field != "$.spec.proxy" {
 				t.Fatal("contradictory proxy choice was accepted or mislocated", issues)
 			}
 		}
 	}
-	for _, os := range []api.Value{m(), m("provided", true), m("provided", false)} {
+	for _, os := range []api.Value{m(), m("provided", m()), m("clusterInstalled", m())} {
 		partial := object(api.Machine, "", m("os", os, "proxy", m("proxyRef", "missing", "endpointRef", "missing")))
 		if issues := ValidatePartial(partial, api.Catalog{}); len(issues) != 0 {
 			t.Fatal("partial defaults inferred absent lifecycle fields or resolved references", issues)

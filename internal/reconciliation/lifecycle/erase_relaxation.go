@@ -102,7 +102,7 @@ func (s Service) refuseInapplicableRelaxations(contextName string, decided opera
 		delete(others, machine)
 		token := eraseToken(machine, methods[machine])
 		return failure("lifecycle.authorization",
-			"--authorize "+token+" names Machine/"+machine+", which declares no spec.hardware.eraseOnRemoval this destroy performs, so the relaxation changes nothing",
+			"--authorize "+token+" names Machine/"+machine+", which declares no spec.hardware.rootDisk.onRemoval or spec.hardware.dataDisks[].onRemoval this destroy performs, so the relaxation changes nothing",
 			"repeat "+contextCommand(contextName, s.relaxing.command, relaxationFlags(others)...)+" without --authorize "+token)
 	}
 	return nil

@@ -45,9 +45,9 @@ func kubevirtClusterCatalog() api.Catalog {
 			f("domains", api.MapValue(s("base", "lab.example.test"), s("machines", "lab.example.test"),
 				s("clusters", "lab.example.test"), s("containerClusters", "lab.example.test"))), f("controller", api.MapValue(s("machineRef", "controller"))))),
 		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-			f("os", api.MapValue(f("provided", api.BoolValue(true)))),
+			f("os", api.MapValue(f("provided", api.MapValue()))),
 			f("network", api.MapValue(f("addresses", api.ListValue(api.MapValue(s("name", "ip"), s("address", "192.0.2.1")))))),
-			f("access", api.MapValue(f("local", api.BoolValue(true)))))),
+			f("access", api.MapValue(f("local", api.MapValue()))))),
 		api.NewObject(api.NetworkConfig, "lab-guests", api.Value{}, api.MapValue(
 			f("nmstate", api.MapValue(
 				f("interfaces", api.ListValue(api.MapValue(s("name", "enp1s0"), s("type", "ethernet"), s("state", "up"),
@@ -66,9 +66,8 @@ func kubevirtClusterCatalog() api.Catalog {
 	var nodes []api.Value
 	for index, name := range kubevirtNodes {
 		objects = append(objects, api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
-			f("substrate", api.MapValue(s("providerRef", "lab-kubevirt"), f("kubevirt", api.MapValue(s("profileRef", "kubevirt"))))),
-			f("hardware", api.MapValue(f("nics", api.ListValue(api.MapValue(s("name", "enp1s0")))), f("rootDevice", api.MapValue(s("deviceName", "/dev/vda"))))),
-			f("os", api.MapValue(f("provided", api.BoolValue(false)))),
+			f("hardware", api.MapValue(s("providerRef", "lab-kubevirt"), s("profileRef", "kubevirt"), f("nics", api.ListValue(api.MapValue(s("name", "enp1s0")))))),
+			f("os", api.MapValue(f("clusterInstalled", api.MapValue()))),
 			f("network", api.MapValue(s("configRef", "lab-guests"), s("installAddressRef", "ip"),
 				f("addresses", api.ListValue(api.MapValue(s("name", "ip"), s("address", "198.51.100.2"+string(rune('1'+index))), s("interface", "enp1s0")))))))))
 		nodes = append(nodes, api.MapValue(s("name", "master-"+string(rune('0'+index))), s("role", "controlPlane"), s("machineRef", name)))

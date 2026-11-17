@@ -216,6 +216,9 @@ func physicalCatalogOf(hosts, disks int) (api.Catalog, api.Object) {
 		if object.Kind() == api.InfraProvider {
 			objects[i] = object.WithSpec(requestMap("baremetal", requestMap()))
 		}
+		if object.Kind() == api.Machine {
+			objects[i] = withoutProfile(object)
+		}
 		if object.Kind() != api.CephCluster {
 			continue
 		}

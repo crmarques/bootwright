@@ -159,14 +159,13 @@ func readsBack[T interface{ Canonical() ([]byte, error) }](t *testing.T, name st
 func goldenCatalog(tls map[string]api.Value) api.Catalog {
 	objects := catalog().Objects()
 	for index, name := range []string{"rack", "zero"} {
-		objects = append(objects, object(api.Machine, name, m("os", m("provided", true), "network", addresses(fmt.Sprintf("192.0.2.%d/24", 31+index)),
-			"hardware", m("nics", list(m("name", "eno1"))),
-			"substrate", m("baremetal", m("bmc", m("address", "https://"+name+".example.test/redfish/v1/Systems/7",
-				"credentialsRef", name+"-bmc"), "nics", list(m("nicRef", "eno1", "macAddress", fmt.Sprintf("52:54:00:9a:1c:%02d", index))))))))
+		objects = append(objects, object(api.Machine, name, m("os", m("provided", m()), "network", addresses(fmt.Sprintf("192.0.2.%d/24", 31+index)),
+			"hardware", m("bmc", m("address", "https://"+name+".example.test/redfish/v1/Systems/7",
+				"credentialsRef", name+"-bmc"), "nics", list(m("name", "eno1", "macAddress", fmt.Sprintf("52:54:00:9a:1c:%02d", index)))))))
 	}
 	for index, candidate := range objects {
 		if value, ok := tls[candidate.Name()]; ok && candidate.Kind() == api.Machine {
-			objects[index] = candidate.WithSpec(candidate.Spec().WithPath(value, "substrate", "baremetal", "bmc", "tls"))
+			objects[index] = candidate.WithSpec(candidate.Spec().WithPath(value, "hardware", "bmc", "tls"))
 		}
 	}
 	return api.NewCatalog(objects)
@@ -176,7 +175,7 @@ func goldenCatalog(tls map[string]api.Value) api.Catalog {
 // it acts, so their exact bytes are pinned, and each golden reads back as
 // itself.
 func TestPowerRequestsMatchTheirGoldens(t *testing.T) {
-	bundled := map[string]api.Value{"metal": m("verify", true, "trustBundleRef", "metal-bmc-ca", "verification", "certificate")}
+	bundled := map[string]api.Value{"metal": m("trustBundleRef", "metal-bmc-ca", "verification", "certificate")}
 	for name, catalog := range map[string]api.Catalog{
 		"request-power": goldenCatalog(nil), "request-power-bundle": goldenCatalog(bundled),
 	} {
@@ -193,7 +192,7 @@ func TestPowerRequestsMatchTheirGoldens(t *testing.T) {
 			readsBack[Request](t, name)
 		})
 	}
-	bundled["rack"] = m("verify", true, "trustBundleRef", "rack-bmc-ca")
+	bundled["rack"] = m("trustBundleRef", "rack-bmc-ca")
 	for name, test := range map[string]struct {
 		catalog api.Catalog
 		names   []string

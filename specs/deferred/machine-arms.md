@@ -88,26 +88,26 @@ the native resource's scope.
 
 ## Machine fields
 
-Each virtual Machine arm ([substrate arm](../api/machines.md#substrate-arm))
+Each virtual provider ([hardware and substrate](../api/machines.md#hardware-and-substrate))
 states where an interface's MAC comes from. A libvirt interface's MAC is
 derived by the provider and never authored
 ([machine realization](../substrates.md#machine-realization)). A vSphere MAC
-is authored in `spec.substrate.vsphere.nics[].macAddress`, in the manual
+is authored in `spec.hardware.nics[].macAddress`, in the manual
 assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff`, or else
 derived in that range from the context, Machine and NIC names
 ([vSphere machine realization](../substrates.md#vsphere-machine-realization)).
 A KubeVirt interface carries a pinned `macAddress`
 ([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization))
 that the provider derives from the context, Machine and NIC names, as
-libvirt's does, and that is never authored: the KubeVirt arm has no MAC field
+libvirt's does, and that is never authored: a KubeVirt Machine's NIC has no MAC field
 ([B87](../milestones/m1.md#b87), D183, Q79).
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.substrate.kubevirt.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required when the OS is not provided. |
-| `spec.substrate.kubevirt.nics` | array | conditional | — | Per-NIC segments, on libvirt as on KubeVirt, as the [substrate arm](../api/machines.md#substrate-arm) states; each `segmentRef` resolves to a KubeVirt arm of its provider. |
-| `spec.substrate.vsphere.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required when the OS is not provided. The profile carries `template` and `failureDomainRef`. |
-| `spec.substrate.vsphere.nics` | array | no | — | `{nicRef, macAddress, segmentRef}` keyed by `nicRef`, each MAC in the manual assignment range above; `segmentRef` follows the bare-metal rule. |
+| `spec.hardware.profileRef` | string | conditional | — | On a KubeVirt provider: provider-local `machineProfiles[].name`; required when the OS is not provided. |
+| `spec.hardware.nics[].segmentRef` | string | conditional | — | On a KubeVirt provider: per-NIC segments, on libvirt as on KubeVirt, as [hardware and substrate](../api/machines.md#hardware-and-substrate) states; each `segmentRef` resolves to a KubeVirt arm of its provider. |
+| `spec.hardware.profileRef` | string | conditional | — | On a vSphere provider: provider-local `machineProfiles[].name`; required when the OS is not provided. The profile carries `template` and `failureDomainRef`. |
+| `spec.hardware.nics[].macAddress`, `segmentRef` | string | no | — | On a vSphere provider: each MAC in the manual assignment range above; `segmentRef` follows the bare-metal rule. |
 
 ## Template-clone installer arm
 

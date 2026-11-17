@@ -15,9 +15,9 @@ func TestPerInterfaceLibvirtSegmentsAndMTURequestGolden(t *testing.T) {
 	n = n.WithSpec(n.Spec().WithPath(api.ListValue(interfaces...), "nmstate", "interfaces"))
 	g := guest("rhel-01")
 	g = g.WithSpec(g.Spec().WithPath(api.ListValue(
-		api.MapValue(text("nicRef", "enp1s0"), text("segmentRef", "lab-guests")),
-		api.MapValue(text("nicRef", "enp2s0"), text("segmentRef", "storage")),
-	), "substrate", "libvirt", "nics").WithPath(api.ListValue(api.MapValue(text("name", "enp1s0")), api.MapValue(text("name", "enp2s0"))), "hardware", "nics"))
+		api.MapValue(text("name", "enp1s0"), text("segmentRef", "lab-guests")),
+		api.MapValue(text("name", "enp2s0"), text("segmentRef", "storage")),
+	), "hardware", "nics"))
 	requests, err := MachineRequests(catalogOf(controller(), p, n, g), "controller", testContext)
 	if err != nil || len(requests) != 1 {
 		t.Fatalf("requests: %v %v", requests, err)

@@ -16,7 +16,7 @@ func volumeCatalog() api.Catalog {
 	objects := physicalCatalog().Objects()
 	for i, o := range objects {
 		if o.Kind() == api.Machine && o.Name() == "metal-01" {
-			objects[i] = o.WithSpec(o.Spec().WithPath(api.MapValue().With("bootVolume", api.MapValue()), "substrate", "baremetal", "rootDevice"))
+			objects[i] = o.WithSpec(o.Spec().WithPath(api.MapValue().With("bootVolume", api.MapValue()), "hardware", "rootDisk"))
 		}
 	}
 	return api.NewCatalog(objects)

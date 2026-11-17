@@ -4,11 +4,10 @@ metadata:
   name: storage-witness-01
 
 spec:
-  placement:
-    site: site-c
+  site: site-c
 
   os:
-    provided: true
+    provided: {}
 
   network:
     addresses:

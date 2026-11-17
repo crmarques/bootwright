@@ -35,10 +35,10 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 			}
 		}
 		for _, machine := range substrate.HostedMachines(catalog, provider.Name()) {
-			if machine.Spec().Get("os", "installProfileRef").Text() != "" {
+			if api.MachineInstallProfileRef(machine) != "" {
 				found = append(found, lifecycle.RefusalOf(machine,
 					"a KubeVirt Machine is realized for an installer that supplies its operating system, and this one names an install profile",
-					"remove spec.os.installProfileRef from "+machine.Identity()+", or host it on a baremetal or libvirt provider"))
+					"declare spec.os.clusterInstalled on "+machine.Identity()+" instead of spec.os.install, or host it on a baremetal or libvirt provider"))
 			}
 			if _, profile, selected := substrate.SelectedProfile(catalog, machine); selected && !sized(profile) {
 				name := profile.Get("name").Text()
@@ -235,7 +235,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 		segment, found := provider.Spec().Get("segments").Named("name", reference)
 		if !found {
 			return MachineRequest{}, refusal("api.reference", "NIC "+iface.Name+" of the Machine selects no segment of its provider",
-				"add a spec.substrate.kubevirt.nics entry for NIC "+iface.Name+" naming a segment of "+provider.Identity()+" on "+machine.Identity())
+				"set spec.hardware.nics[].segmentRef of NIC "+iface.Name+" to a segment of "+provider.Identity()+" on "+machine.Identity())
 		}
 		network, ok := networkOf(provider, segment)
 		if !ok {

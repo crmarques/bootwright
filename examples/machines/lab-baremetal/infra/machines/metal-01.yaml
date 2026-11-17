@@ -4,39 +4,33 @@ metadata:
   name: metal-01
 
 spec:
-  substrate:
+  hardware:
     providerRef: lab-metal
 
-    baremetal:
-      rootDevice:
-        wwn: '0x5000c500a1b2c301'
+    bmc:
+      address: https://bmc-01.metal.example.test/redfish/v1/Systems/1
 
-      bmc:
-        address: https://bmc-01.metal.example.test/redfish/v1/Systems/1
+    # Proved before media is inserted: the installation refuses a machine
+    # whose BMC does not report these, and never changes them.
+    firmware:
+      mode: prove
+      secureBoot: true
+      bootMode: UEFI
 
-      nics:
-        - nicRef: eno1
-          macAddress: 52:54:00:9a:1b:01
+    nics:
+      - name: eno1
+        macAddress: 52:54:00:9a:1b:01
 
-      # Proved before media is inserted: the installation refuses a machine
-      # whose BMC does not report these, and never changes them.
-      firmware:
-        mode: prove
-        secureBoot: true
-        bootMode: UEFI
+    rootDisk:
+      wwn: '0x5000c500a1b2c301'
 
   os:
-    provided: false
-    installProfileRef: rhel-9-8
-
     install:
+      profileRef: rhel-9-8
+
       # The key this machine's installation delivers, so completion is proved
       # against a key known before the machine is ever contacted.
       hostKeyRef: metal-01-host-key
-
-  hardware:
-    nics:
-      - name: eno1
 
   network:
     configRef: lab-metal

@@ -39,7 +39,7 @@ func providedHostFirewalls(catalog api.Catalog) ([]string, error) {
 }
 
 func providerHostFirewall(catalog api.Catalog, placement machine.Placement) []string {
-	if host, found := catalog.Find(api.Machine, placement.Machine); found && host.Spec().Get("os", "provided").Bool() && machine.ManagesFirewall(catalog, host.Name()) {
+	if host, found := catalog.Find(api.Machine, placement.Machine); found && api.MachineProvided(host) && machine.ManagesFirewall(catalog, host.Name()) {
 		return []string{hostfirewall.FirewallPreparationBlockID(host.Name())}
 	}
 	return nil

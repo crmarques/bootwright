@@ -3,9 +3,8 @@ package v1alpha1
 import "testing"
 
 func TestDiscoverySSHOwnsItsPortWithoutAccessCredentials(t *testing.T) {
-	substrate, _ := machineSchema().Field("substrate")
-	baremetal, _ := substrate.Shape.Field("baremetal")
-	root, _ := baremetal.Shape.Field("rootDevice")
+	hardware, _ := machineSchema().Field("hardware")
+	root, _ := hardware.Shape.Field("rootDisk")
 	discover, _ := root.Shape.Field("discover")
 	ssh, found := discover.Shape.Field("ssh")
 	if !found || ssh.Required || ssh.Shape.Open || !ssh.Default.Present() {

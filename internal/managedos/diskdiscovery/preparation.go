@@ -64,7 +64,7 @@ func (c Capability) ValidatePreparation(ctx context.Context, input lifecycle.Pla
 	for _, name := range scope.Targets {
 		m, found := input.State.Effective().Find(api.Machine, name)
 		if !found || !discoveryMachine(m) || name == input.Controller {
-			return refusal("api.invariant", "discovery selects only non-controller physical Machines declaring rootDevice.discover", "select a powered-off physical RHEL installation target")
+			return refusal("api.invariant", "discovery selects only non-controller physical Machines declaring spec.hardware.rootDisk.discover", "select a powered-off physical RHEL installation target")
 		}
 		owned, err := input.AppliedEvidence(ctx, installation.Kind, name)
 		if err != nil {

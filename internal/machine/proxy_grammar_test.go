@@ -29,15 +29,15 @@ kind: Machine
 metadata:
   name: controller
 spec:
-  os: {provided: true}
-  access: {local: true}
+  os: {provided: {}}
+  access: {local: {}}
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
   name: services
 spec:
-  os: {provided: true}
+  os: {provided: {}}
   network:
     addresses:
       - {name: ip, address: 192.0.2.10}

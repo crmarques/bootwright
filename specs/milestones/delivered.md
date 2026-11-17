@@ -939,7 +939,7 @@ kept, a hint the installer cannot carry refuses, the media request is version
 `TestEveryDeclaredRootDeviceHintReachesTheAgentConfig`,
 `TestARootDeviceTheAgentInstallerCannotCarryRefuses`,
 `TestAnInstallationRefusesARootDeviceHintItCannotCarry`,
-`TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig`, and the
+`TestLabSNOExampleDerivesItsRootDeviceHintFromTheCreatedDisk`, and the
 collection tests `test_every_operation_goes_through_the_client`,
 `test_no_operation_builds_a_controller_path_itself`,
 `test_a_reference_to_another_authority_is_refused_and_never_sent_the_credential`,
@@ -11678,7 +11678,7 @@ A Bootwright-installed bare-metal Machine may name its root disk by
 `deviceName`, and a [clear-on-install](../managed-os.md#physical-data-disk-clear)
 or [erase-on-removal](../state-reconciliation.md#opt-in-physical-logical-overwrite)
 target by `serialNumber` and `sizeBytes` without `deviceName` and `wwn`
-([root-device rule](../api/machines.md#bmc-and-root-device-shape)); every WWN
+([root-device rule](../api/machines.md#root-disk)); every WWN
 declaration keeps its proofs. The physical `%pre` resolves such a disk to
 exactly one fixed, writable whole disk of that size before any storage
 directive and writes the storage include naming its kernel name only after
@@ -12320,7 +12320,7 @@ controller-to-installer race remain. No live host effects or push occurred.
 
 Delivers [B1194](m2.md#b1194) in-tree under [D239](backlog.md#d239), awaiting
 operator acceptance, in the same delivery commit and gates as X319.
-[Explicit erase targets](../api/machines.md#physical-erase-policy) no longer require
+[Explicit erase targets](../api/machines.md#data-disks-and-disk-actions) no longer require
 the root. [Ceph retirement](../ceph.md#devices-and-destructive-ownership)
 requires every selected data, DB and WAL disk's original erase authority and,
 when retaining the root, a matching FSID-scoped native cleanup receipt.
@@ -13398,12 +13398,12 @@ by `noProxy` goes around the proxy; the live proof is
 
 **Items:** B1260 (2026-11-10, [D252](backlog.md#d252)), Kind safety, Owners:
 Machine, with Managed OS, Container clusters and Storage. The
-[root-device rule](../api/machines.md#bmc-and-root-device-shape) alone lists
+[root-device rule](../api/machines.md#root-disk) alone lists
 the root forms: a `/dev/disk/by-id/wwn-0x` path, a serial number with exact
 size, or a logical volume through `volumeRef` or the defaulted `bootVolume`
 under verified BMC TLS. Managed OS, the agent installer, physical disk safety
 and Ceph retirement link it. The
-[root-target rule](../api/machines.md#physical-erase-policy) lists the root
+[root-target rule](../api/machines.md#data-disks-and-disk-actions) lists the root
 only when the policy names it. A physical agent node now also admits the WWN
 path, which reaches the installer as its `wwn` hint, so one WWN spelling
 validates for both installers. Every root refusal names each form,
@@ -13425,7 +13425,7 @@ WWN path, path beside its wwn, `volumeRef`, declared and defaulted
 `bootVolume`), `TestPhysicalAgentRootRefusalsNameEveryForm`,
 `TestLogicalVolumeRootRefusalsNameTheirOwnField` (the TLS refusal),
 `TestInstalledPhysicalRootRefusalNamesEveryForm`,
-`TestErasePolicyListsTheRootOnlyWhenItNamesIt` and
+`TestTheRootIsAnErasureTargetOnlyWhenItsOnRemovalErases` and
 `TestPhysicalAgentWWNReachesTheInstallerAsItsWWNHint` (X369 dropped its path cases); the refusal-table
 tests hold both tables to the code.
 
@@ -13759,7 +13759,7 @@ the notices are refused by the build, not by a release step
 Owners: Machine, with Managed OS, Container clusters and Storage.
 `substrate.baremetal.rootDevice.wwn`, `0x` and 16 or 32 lowercase hexadecimal
 digits, is the one WWN root form of a bare-metal Machine an installer writes
-([root-device rule](../api/machines.md#bmc-and-root-device-shape)), which
+([root-device rule](../api/machines.md#root-disk)), which
 reverses [X352](#x352--root-rule)'s choice of the by-id path. A Bootwright
 installation derives `/dev/disk/by-id/wwn-0x<digits>` from it for its
 Kickstart and `%pre`, and the agent installer passes it as its `wwn` hint, so
@@ -13783,8 +13783,8 @@ Tests: `TestOneWWNRootValidatesForEitherInstaller`,
 alone, beside a serial and size, and malformed), the managed-OS and
 OpenShift refusal-table rows, `TestPhysicalAgentWWNReachesTheInstallerAsItsWWNHint`,
 `TestPhysicalEraseMatchesAWWNRootByItsDerivedPathOrItsWWN`, the WWN cases of
-`TestEraseAdmissionComparesTheDeclaredRootSize` and
-`TestErasePolicyListsTheRootOnlyWhenItNamesIt`, and
+`TestRootRemovalRequiresTheRootsSerialNumberAndSize` and
+`TestTheRootIsAnErasureTargetOnlyWhenItsOnRemovalErases`, and
 `TestPhysicalCephFreezesTheRootWWNItsMachineDeclares`; the physical request
 goldens now carry the derived root path beside its `wwn`.
 
@@ -13951,7 +13951,7 @@ left-open note. A root declared by serial number has the WWN its disk reported
 to the `%pre` that proved its serial number and size
 [recorded](../managed-os.md#physical-installation) in the installation's
 evidence as `rootWWN`, empty when it reported none, and its erase compares it
-under the [root-target rule](../api/machines.md#physical-erase-policy): a
+under the [root-target rule](../api/machines.md#data-disks-and-disk-actions): a
 target naming it by `wwn` or by the by-id path an `naa.` WWN derives is the
 root, which a serial root's target names by serial number alone, so the
 removal refuses before any effect. It also closes the gap an independent
@@ -13977,7 +13977,7 @@ Tests: Go `TestThePhysicalTargetProofRecordsTheWWNASerialRootReports`,
 `TestInstallationEvidenceRecordsTheWWNOfASerialDeclaredRoot`,
 `TestPhysicalEraseComparesTheWWNASerialRootReportedAtInstallation`,
 `TestPhysicalEraseHandsTheWorkerTheDeclaredRootWWN` and a WWN-root serial case
-of `TestEraseAdmissionComparesTheDeclaredRootSize`; Python
+of `TestRootRemovalRequiresTheRootsSerialNumberAndSize`; Python
 `test_managedos_install_root_wwn.py`,
 `test_a_serial_declared_root_records_the_wwn_it_reported_to_the_installer`,
 `RootRecognitionTests`, `test_an_unrecognised_root_refuses_before_the_holder_release_and_every_write`,
@@ -17186,4 +17186,30 @@ them by X530 to X557 kept its pin tests elsewhere:
 Tests of their own bring them to 96.8%, 97.0% and 91.3%; the floors of the
 packages the program added are recorded and the stale ones raised. No
 production code changed and no floor fell.
+
+## X568 — One hardware block per Machine
+
+### B1546
+
+Under [D275](backlog.md#d275). A Machine declares its provider, profile, BMC,
+firmware, NICs, `rootDisk` and `dataDisks` once, in `hardware`, and its OS
+lifecycle as one of `provided`, `install` and `clusterInstalled`
+([shape](../api/machines.md#machine)). Each disk carries its own `onInstall`
+and `onRemoval`, from which the install-time clear list and the physical-erase
+targets are derived in their earlier frozen shapes, so no contract moved; a
+target's device path is the by-id path of its `wwn`. A libvirt or KubeVirt
+Machine's root is `/dev/vda` for every installer, and the agent installer now
+carries that hint for every virtual node. The BMC's `tls.verify` and
+`protocol` left the API, and a provider default keeps only `trustBundleRef`.
+An independent review found that a virtual root no longer stopped an explicit
+OSD path, that a Machine kind default could turn on disk removal actions, and
+that a vSphere MAC read as bare metal; each is fixed with a regression test.
+
+### B1547
+
+The `bootwright-template-inputs` charts `environment-ha` and `ceph-cluster`
+render the new shape, and their example renderings and the owner's gitignored
+values validate with the X568 build. The gitignored fixtures under
+`examples/wip/` were migrated; thirteen of them already failed validation on
+the earlier build for unrelated retired fields and still do.
 

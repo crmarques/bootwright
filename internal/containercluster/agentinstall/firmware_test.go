@@ -21,7 +21,7 @@ func firmwareCatalog(firmware map[string]api.Value) api.Catalog {
 	objects := physicalCatalog().Objects()
 	for index, object := range objects {
 		if declared, ok := firmware[object.Name()]; ok && object.Kind() == api.Machine {
-			objects[index] = object.WithSpec(object.Spec().WithPath(declared, "substrate", "baremetal", "firmware"))
+			objects[index] = object.WithSpec(object.Spec().WithPath(declared, "hardware", "firmware"))
 		}
 	}
 	return api.NewCatalog(objects)

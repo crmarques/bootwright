@@ -649,7 +649,7 @@ func TestActualCompilerDefaultPrecedencePreservesExplicitValues(t *testing.T) {
 	if explicit.Spec().Get("access", "ssh", "port").Text() != "2222" || explicit.Spec().Get("access", "ssh", "addressRef").Text() != "fqdn" || explicit.Spec().Get("network", "addresses").Len() != 1 {
 		t.Fatal("explicit scalar or empty list lost precedence")
 	}
-	if !local.Spec().Get("access", "local").Bool() || local.Spec().Has("access", "ssh") {
+	if !local.Spec().Has("access", "local") || local.Spec().Has("access", "ssh") {
 		t.Fatal("inactive access defaults crossed authored union choice")
 	}
 	playbook := requireObject(t, state.Effective(), api.CustomPlaybook, "disabled")
@@ -718,7 +718,7 @@ metadata:
 
 spec:
   os:
-    provided: true
+    provided: {}
 `,
 		`apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig

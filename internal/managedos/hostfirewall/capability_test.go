@@ -78,7 +78,7 @@ func TestOnlyAnInstalledMachineWithItsFirewallEnabledRealizesHostPorts(t *testin
 		"enabled":  {enabled, firewallMachine, true},
 		"disabled": {labCatalog(firewallProfile(firewallDisabled)), firewallMachine, false},
 		"absent":   {labCatalog(), firewallMachine, false},
-		"provided": {labCatalog(firewallProfile(firewallEnabled), guest(field("os", api.MapValue(field("provided", api.BoolValue(true)))))), firewallMachine, false},
+		"provided": {labCatalog(firewallProfile(firewallEnabled), guest(field("os", api.MapValue(field("provided", api.MapValue()))))), firewallMachine, false},
 		"unknown":  {enabled, "metal-09", false},
 	} {
 		if got := RealizesHostPorts(test.catalog, test.machine); got != test.want {

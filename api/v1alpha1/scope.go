@@ -10,6 +10,7 @@ type Scope struct {
 	Each    []string
 	Select  []string
 	Within  []string
+	Arms    []string
 	Entries []string
 	Key     []string
 	Joined  *ScopeJoin
@@ -21,8 +22,9 @@ type ScopeJoin struct {
 }
 
 type ScopeOwner struct {
-	Object Object
-	Names  []string
+	Object  Object
+	Names   []string
+	Entries []string
 }
 
 func (s *Scope) Owners(object Object, record Value, catalog Catalog) ([]ScopeOwner, bool) {
@@ -58,18 +60,34 @@ func (s *Scope) Owners(object Object, record Value, catalog Catalog) ([]ScopeOwn
 		if len(s.Within) > 0 && !owner.Spec().Has(s.Within...) {
 			continue
 		}
-		scoped = append(scoped, ScopeOwner{Object: owner, Names: s.names(owner, catalog)})
+		entries, ok := s.EntriesOf(owner)
+		if !ok {
+			continue
+		}
+		scoped = append(scoped, ScopeOwner{Object: owner, Names: s.names(owner, entries, catalog), Entries: entries})
 	}
 	return scoped, len(scoped) > 0
 }
 
-func (s *Scope) names(owner Object, catalog Catalog) []string {
+func (s *Scope) EntriesOf(owner Object) ([]string, bool) {
+	if len(s.Arms) == 0 {
+		return s.Entries, true
+	}
+	for _, arm := range s.Arms {
+		if owner.Spec().Has(arm) {
+			return append([]string{arm}, s.Entries...), true
+		}
+	}
+	return nil, false
+}
+
+func (s *Scope) names(owner Object, entries []string, catalog Catalog) []string {
 	key := s.Key
 	if len(key) == 0 {
 		key = []string{"name"}
 	}
 	var names []string
-	for _, entry := range owner.Spec().Get(s.Entries...).Items() {
+	for _, entry := range owner.Spec().Get(entries...).Items() {
 		parts := []string{}
 		for _, field := range key {
 			if part := entry.Get(field).Text(); part != "" {

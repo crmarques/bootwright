@@ -4,25 +4,35 @@ metadata:
   name: metal-03
 
 spec:
-  substrate:
+  hardware:
     providerRef: lab-metal
 
-    baremetal:
-      rootDevice:
-        wwn: '0x6000000000000003'
+    bmc:
+      address: https://bmc-03.metal.example.test/redfish/v1/Systems/1
 
-      bmc:
-        address: https://bmc-03.metal.example.test/redfish/v1/Systems/1
+    nics:
+      - name: eno1
+        macAddress: 52:54:00:9a:1b:03
 
-      nics:
-        - nicRef: eno1
-          macAddress: 52:54:00:9a:1b:03
+    rootDisk:
+      wwn: '0x6000000000000003'
+      serialNumber: SYNTHETIC-ROOT-03
+      sizeBytes: 53687091200
+      onRemoval: logicalOverwrite
+
+    # Each installation proves the OSD disk and then clears its metadata
+    # regions, so a disk a destroyed or abandoned cluster left reads as empty.
+    dataDisks:
+      - wwn: '0x5000000000000003'
+        serialNumber: SYNTHETIC-CEPH-03
+        sizeBytes: 107374182400
+        onInstall: metadataClear
+        onRemoval: metadataClear
 
   os:
-    provided: false
-    installProfileRef: rhel-9-8
-
     install:
+      profileRef: rhel-9-8
+
       # The key this machine's installation delivers, so completion is proved
       # against a key known before the machine is ever contacted.
       hostKeyRef: metal-03-host-key
@@ -30,34 +40,6 @@ spec:
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
-
-  hardware:
-    eraseOnRemoval:
-      method: logicalOverwrite
-
-      targets:
-        - deviceName: /dev/disk/by-id/wwn-0x6000000000000003
-          wwn: '0x6000000000000003'
-          serialNumber: SYNTHETIC-ROOT-03
-          sizeBytes: 53687091200
-
-        - deviceName: /dev/disk/by-id/wwn-0x5000000000000003
-          wwn: '0x5000000000000003'
-          serialNumber: SYNTHETIC-CEPH-03
-          sizeBytes: 107374182400
-          method: metadataClear
-
-    # Each installation proves the OSD disk and then clears its metadata
-    # regions, so a disk a destroyed or abandoned cluster left reads as empty.
-    clearOnInstall:
-      targets:
-        - deviceName: /dev/disk/by-id/wwn-0x5000000000000003
-          wwn: '0x5000000000000003'
-          serialNumber: SYNTHETIC-CEPH-03
-          sizeBytes: 107374182400
-
-    nics:
-      - name: eno1
 
   network:
     configRef: lab-metal

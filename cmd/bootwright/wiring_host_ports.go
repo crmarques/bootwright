@@ -119,7 +119,7 @@ func hostPortAdmission(requirement hostfirewall.HostPortRequirement) string {
 func installedProfile(catalog api.Catalog, machine string) (string, bool) {
 	for _, object := range installation.InstalledMachines(catalog) {
 		if object.Name() == machine {
-			return object.Spec().Get("os", "installProfileRef").Text(), true
+			return api.MachineInstallProfileRef(object), true
 		}
 	}
 	return "", false

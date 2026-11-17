@@ -929,7 +929,7 @@ naming the persisted format and the remedy.
 
 ### A physical erase you do not want to run in full
 
-A Machine that declares `spec.hardware.eraseOnRemoval` has every target
+A Machine whose disks declare an `onRemoval` other than `retain` has every such disk
 overwritten, read back and powered off before `destroy` releases it
 ([physical erase](../specs/state-reconciliation.md#opt-in-physical-logical-overwrite)).
 When you know the full erase is not what this removal needs, one `destroy` can

@@ -24,7 +24,7 @@ func firmwareCatalog(firmware api.Value) api.Catalog {
 	objects := catalog.Objects()
 	for index, object := range objects {
 		if object.Kind() == api.Machine && object.Name() == "metal-01" {
-			objects[index] = object.WithSpec(object.Spec().WithPath(firmware, "substrate", "baremetal", "firmware"))
+			objects[index] = object.WithSpec(object.Spec().WithPath(firmware, "hardware", "firmware"))
 		}
 	}
 	return api.NewCatalog(objects)

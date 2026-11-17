@@ -69,7 +69,6 @@ func validateNested(record *objectRecord, name string, scope *api.Scope, path st
 	case len(scope.Each) == 0:
 		dependency.entries = "$.spec." + strings.Join(scope.Entries, ".")
 	}
-	declared := "spec." + strings.Join(scope.Entries, ".")
 	named, reference := " named "+name, name
 	if !nestedName(name) {
 		named, reference = " of the authored name", "it"
@@ -78,6 +77,7 @@ func validateNested(record *objectRecord, name string, scope *api.Scope, path st
 		return
 	}
 	for _, owner := range owners {
+		declared := "spec." + strings.Join(owner.Entries, ".")
 		joined := ""
 		if scope.Joined != nil {
 			joined = ", or a " + string(scope.Joined.Kind) + " whose spec." + strings.Join(scope.Joined.Field, ".") + " names " + owner.Object.Name()

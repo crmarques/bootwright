@@ -59,7 +59,7 @@ func sshMachine(name, address, pin string, installed bool) api.Object {
 		fieldOf("network", api.MapValue(fieldOf("addresses", api.ListValue(api.MapValue(fieldOf("name", text("mgmt")), fieldOf("address", text(address))))))),
 	}
 	if installed {
-		fields = append(fields, fieldOf("os", api.MapValue(fieldOf("provided", api.BoolValue(false)), fieldOf("installProfileRef", text("profile")))))
+		fields = append(fields, fieldOf("os", api.MapValue(fieldOf("install", api.MapValue(fieldOf("profileRef", text("profile")))))))
 	}
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(fields...))
 }

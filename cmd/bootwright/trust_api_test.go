@@ -54,9 +54,8 @@ apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: {name: trust-node}
 spec:
-  substrate: {providerRef: trust-provider, kubevirt: {profileRef: standard}}
-  hardware: {nics: [{name: eth0}]}
-  os: {provided: false}
+  hardware: {providerRef: trust-provider, profileRef: standard, nics: [{name: eth0}]}
+  os: {clusterInstalled: {}}
   network:
     inline:
       nmstate:
@@ -270,8 +269,8 @@ func TestUnusedClusterInstallTrustDefaultsValidateStructureOnly(t *testing.T) {
 func TestDisableVerificationIsNeverAKindDefault(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, defaults, field, message string }{
-		{"Machine", "    Machine:\n      substrate:\n        baremetal:\n          bmc:\n            virtualMedia:\n              tls: {trust: disableVerification}\n",
-			"$.spec.defaults.Machine.substrate.baremetal.bmc.virtualMedia.tls.trust", "disableVerification is a per-Machine exception and never a kind default"},
+		{"Machine", "    Machine:\n      hardware:\n        bmc:\n          virtualMedia:\n            tls: {trust: disableVerification}\n",
+			"$.spec.defaults.Machine.hardware.bmc.virtualMedia.tls.trust", "disableVerification is a per-Machine exception and never a kind default"},
 		{"InfraProvider", "    InfraProvider:\n      baremetal:\n        defaults:\n          bmc:\n            virtualMedia:\n              tls: {trust: disableVerification}\n",
 			"$.spec.defaults.InfraProvider.baremetal.defaults.bmc.virtualMedia.tls.trust", "disableVerification is a per-Machine exception and never a provider default"},
 	} {
@@ -284,19 +283,34 @@ func TestDisableVerificationIsNeverAKindDefault(t *testing.T) {
 	}
 }
 
+func TestDiskRemovalIntentIsNeverAMachineKindDefault(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, hardware, field string }{
+		{"rootDisk.onRemoval", "        rootDisk: {onRemoval: logicalOverwrite}\n", "$.spec.defaults.Machine.hardware.rootDisk.onRemoval"},
+		{"dataDisks", "        dataDisks: [{serialNumber: SER-1, sizeBytes: 1099511627776, onRemoval: logicalOverwrite}]\n", "$.spec.defaults.Machine.hardware.dataDisks"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			diagnostic := trustFailure(t, serviceSources(serviceEnvironment+"  defaults:\n    Machine:\n      hardware:\n"+tc.hardware), "api.invariant", tc.field)
+			if diagnostic.Message != tc.name+" is per-Machine intent and never a kind default" {
+				t.Fatalf("message = %q", diagnostic.Message)
+			}
+		})
+	}
+}
+
 // bmcTrustSources is an Environment whose Machine kind default offers a
 // controller trust bundle, a controller Machine that keeps verification, and
 // one Machine that turns it off.
 func bmcTrustSources() desiredstate.Sources {
 	machine := func(name, address, extra, tls string) string {
-		return "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: " + name + "}\nspec:\n  os: {provided: true}\n" + extra +
+		return "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: " + name + "}\nspec:\n  os: {provided: {}}\n" + extra +
 			"  network:\n    addresses: [{name: service, address: " + address + "}]\n" +
-			"  substrate:\n    providerRef: lab-metal\n    baremetal:\n      bmc:\n        address: https://" + name + "-bmc.example.test/redfish/v1/Systems/1\n" +
-			"        credentialsRef: bmc\n" + tls
+			"  hardware:\n    providerRef: lab-metal\n    bmc:\n      address: https://" + name + "-bmc.example.test/redfish/v1/Systems/1\n" +
+			"      credentialsRef: bmc\n" + tls
 	}
-	env := serviceEnvironment + "  defaults:\n    Machine:\n      substrate:\n        baremetal:\n          bmc:\n            tls: {trustBundleRef: bmc-ca}\n"
-	content := env + "\n---\n" + machine("service-host", "192.0.2.10", "  access: {local: true}\n", "") +
-		"\n---\n" + machine("opted-out", "192.0.2.11", "", "        tls: {verify: false}\n") +
+	env := serviceEnvironment + "  defaults:\n    Machine:\n      hardware:\n        bmc:\n          tls: {trustBundleRef: bmc-ca}\n"
+	content := env + "\n---\n" + machine("service-host", "192.0.2.10", "  access: {local: {}}\n", "") +
+		"\n---\n" + machine("opted-out", "192.0.2.11", "", "      tls: {verification: none}\n") +
 		"\n---\napiVersion: bootwright.io/v1alpha1\nkind: InfraProvider\nmetadata: {name: lab-metal}\nspec:\n  baremetal: {}\n" +
 		"\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: bmc-ca}\nspec: {type: caBundle}\n" +
 		"\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: bmc}\nspec: {type: usernamePassword}\n"
@@ -304,17 +318,17 @@ func bmcTrustSources() desiredstate.Sources {
 }
 
 // An Environment kind-default bundle reaches a Machine that keeps verification
-// and never one that authors tls.verify: false, so the opt-out compiles and
+// and never one that authors tls.verification: none, so the opt-out compiles and
 // its effective controller carries no bundle.
 func TestAKindDefaultTrustBundleSkipsAMachineThatOptsOut(t *testing.T) {
 	t.Parallel()
 	state, _ := compileAcceptance(t, bmcTrustSources())
-	tls := requireObject(t, state.Effective(), api.Machine, "opted-out").Spec().Get("substrate", "baremetal", "bmc", "tls")
-	if tls.Has("trustBundleRef") || tls.Get("verify").Bool() {
+	tls := requireObject(t, state.Effective(), api.Machine, "opted-out").Spec().Get("hardware", "bmc", "tls")
+	if tls.Has("trustBundleRef") || tls.Get("verification").Text() != "none" {
 		t.Fatalf("the opted-out Machine's effective controller trust = %v", tls)
 	}
-	kept := requireObject(t, state.Effective(), api.Machine, "service-host").Spec().Get("substrate", "baremetal", "bmc", "tls")
-	if kept.Get("trustBundleRef").Text() != "bmc-ca" || !kept.Get("verify").Bool() {
+	kept := requireObject(t, state.Effective(), api.Machine, "service-host").Spec().Get("hardware", "bmc", "tls")
+	if kept.Get("trustBundleRef").Text() != "bmc-ca" || kept.Get("verification").Text() == "none" {
 		t.Fatalf("the verifying Machine's effective controller trust = %v", kept)
 	}
 }

@@ -248,8 +248,8 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		if !ok {
 			continue
 		}
-		if provided := bound.Spec().Get("os", "provided"); provided.Present() && provided.Bool() {
-			issues = api.AppendIssues(issues, api.ReferenceIssue(path, "container installation requires a Machine whose OS is not provided", "set spec.os.provided to false on "+bound.Identity()))
+		if api.MachineProvided(bound) {
+			issues = api.AppendIssues(issues, api.ReferenceIssue(path, "container installation requires a Machine whose OS is not provided", "replace spec.os.provided with spec.os.clusterInstalled on "+bound.Identity()))
 		}
 		if provider, ok := machine.Provider(bound, c); ok && substrate.RealizesPhysicalNICs(provider) {
 			baremetal = true

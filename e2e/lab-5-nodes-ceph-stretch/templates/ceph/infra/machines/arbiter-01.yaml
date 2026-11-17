@@ -9,11 +9,10 @@ metadata:
   name: arbiter-01
 
 spec:
-  placement:
-    site: {{ .Values.sites.tiebreaker }}
+  site: {{ .Values.sites.tiebreaker }}
 
   os:
-    provided: true
+    provided: {}
 
   network:
     addresses:

@@ -101,7 +101,7 @@ func controllerFor(catalog api.Catalog, object api.Object, contextName, controll
 // managedTarget resolves the realized target whose controller manages a
 // Machine, without asking whether that controller exists yet.
 func managedTarget(catalog api.Catalog, object api.Object, contextName, controllerMachine string) (substrate.Target, error) {
-	if object.Spec().Get("substrate", "providerRef").Text() == "" && !substrate.MachineBMC(object).Present() {
+	if substrate.MachineProviderRef(object) == "" && !substrate.MachineBMC(object).Present() {
 		return substrate.Target{}, failure("access.unavailable",
 			"this Machine has no management controller this context can reach",
 			"declare "+substrate.BMCPath+" on "+object.Identity()+", or place it on a provider that emulates a management controller")

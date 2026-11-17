@@ -90,7 +90,7 @@ func TestUnusedProviderDoesNotRequestTools(t *testing.T) {
 func TestNativeLibvirtAndRemoteCephPreparationDoNotRequestUnrelatedDownloads(t *testing.T) {
 	objects := append(selectionObjects(),
 		api.NewObject(api.InfraProvider, "hypervisor", api.Value{}, api.MapValue().With("libvirt", api.MapValue())),
-		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("hypervisor"), "substrate", "providerRef")),
+		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("hypervisor"), "hardware", "providerRef")),
 		api.NewObject(api.CephCluster, "storage", api.Value{}, api.MapValue().With("management", api.StringValue("managed")).WithPath(api.StringValue("19.2.1"), "release")),
 	)
 	// virsh and OpenSSH belong to the native package closure. cephadm executes
@@ -104,7 +104,7 @@ func TestNativeLibvirtAndRemoteCephPreparationDoNotRequestUnrelatedDownloads(t *
 func TestReferencedVSphereRequestsOnlyItsGenericClient(t *testing.T) {
 	objects := append(selectionObjects(),
 		api.NewObject(api.InfraProvider, "virtualization", api.Value{}, api.MapValue().With("vsphere", api.MapValue())),
-		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("virtualization"), "substrate", "providerRef")),
+		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("virtualization"), "hardware", "providerRef")),
 	)
 	tools, err := controller.SelectTools(api.NewCatalog(objects))
 	if err != nil || !reflect.DeepEqual(tools, []evidence.ToolRequest{defaultTool(t, "govc")}) {
@@ -133,7 +133,7 @@ func TestKubeVirtRequirementNeedsNoVendorCSVOrClusterObservation(t *testing.T) {
 	for _, access := range []string{"hostClusterRef", "kubeconfigRef"} {
 		objects := append(selectionObjects(),
 			api.NewObject(api.InfraProvider, "virtualization", api.Value{}, api.MapValue().WithPath(api.StringValue("host"), "kubevirt", access)),
-			api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("virtualization"), "substrate", "providerRef")),
+			api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("virtualization"), "hardware", "providerRef")),
 		)
 		tools, err := controller.SelectTools(api.NewCatalog(objects))
 		if err != nil || !reflect.DeepEqual(tools, []evidence.ToolRequest{defaultTool(t, "virtctl")}) {
@@ -165,8 +165,8 @@ func TestEnvironmentDependencyVersionsOverrideOnlyRequiredVariableClients(t *tes
 		api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.15"), "distribution", "release", "version")),
 		api.NewObject(api.InfraProvider, "vsphere", api.Value{}, api.MapValue().With("vsphere", api.MapValue())),
 		api.NewObject(api.InfraProvider, "kubevirt", api.Value{}, api.MapValue().With("kubevirt", api.MapValue())),
-		api.NewObject(api.Machine, "one", api.Value{}, api.MapValue().WithPath(api.StringValue("vsphere"), "substrate", "providerRef")),
-		api.NewObject(api.Machine, "two", api.Value{}, api.MapValue().WithPath(api.StringValue("kubevirt"), "substrate", "providerRef")),
+		api.NewObject(api.Machine, "one", api.Value{}, api.MapValue().WithPath(api.StringValue("vsphere"), "hardware", "providerRef")),
+		api.NewObject(api.Machine, "two", api.Value{}, api.MapValue().WithPath(api.StringValue("kubevirt"), "hardware", "providerRef")),
 	)
 	tools, err = controller.SelectTools(api.NewCatalog(objects))
 	if err != nil || len(tools) != 5 {

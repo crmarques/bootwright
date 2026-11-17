@@ -131,7 +131,7 @@ func clusterNetworkFacts(cluster api.Object, catalog api.Catalog, family string)
 	sites := []string{}
 	for _, node := range cluster.Spec().Get("nodes").Items() {
 		if bound, found := catalog.Find(api.Machine, node.Get("machineRef").Text()); found {
-			sites = append(sites, bound.Spec().Get("placement", "site").Text())
+			sites = append(sites, bound.Spec().Get("site").Text())
 		}
 	}
 	facts := []addons.NetworkFact{}

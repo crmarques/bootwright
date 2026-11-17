@@ -49,8 +49,7 @@ func TestMachineAdmissionRefusesWhatItsSubstrateCannotRealize(t *testing.T) {
 		}
 	})
 	installerProvisioned := []exampleEdit{
-		{labGuest, "    installProfileRef: rhel-9-8\n", ""},
-		{labGuest, "    rootDevice:\n      deviceName: /dev/vda\n\n", ""},
+		{labGuest, "    install:\n      profileRef: rhel-9-8\n", "    clusterInstalled: {}\n"},
 		{labGuest, "    configRef: lab-guests\n    installAddressRef: ip\n\n", ""},
 		{labGuest, "\n    addresses:\n      - name: ip\n        address: 198.51.100.11\n        interface: enp1s0\n", "\n    addresses:\n      - name: fqdn\n        address: rhel-01.lab.example.test\n"},
 	}
@@ -73,12 +72,12 @@ func TestMachineAdmissionRefusesWhatItsSubstrateCannotRealize(t *testing.T) {
 			"api.reference", guest, "$.spec.network.interfaceMatches[0].interface"},
 		"a realized Machine without NICs": {[]exampleEdit{{labGuest, "    nics:\n      - name: enp1s0\n\n", ""}},
 			"api.invariant", guest, "$.spec.hardware.nics"},
-		"a NIC entry naming no NIC": {[]exampleEdit{{labGuest, "      profileRef: rhel\n", "      profileRef: rhel\n      nics:\n        - nicRef: enp9s0\n          segmentRef: lab-guests\n"}},
-			"api.reference", guest, "$.spec.substrate.libvirt.nics[0].nicRef"},
+		"a libvirt NIC naming its own MAC": {[]exampleEdit{{labGuest, "      - name: enp1s0\n", "      - name: enp1s0\n        macAddress: 52:54:00:00:00:01\n"}},
+			"api.invariant", guest, "$.spec.hardware.nics[0].macAddress"},
 		"an authored NMState MAC": {[]exampleEdit{{"infra/networkconfigs/lab-guests.yaml", "type: ethernet", "type: ethernet\n        mac-address: 52:54:00:00:00:01"}},
 			"api.invariant", guest, "$.spec.network.configRef"},
-		"a bare-metal arm": {[]exampleEdit{{labGuest, "      profileRef: rhel\n", "      profileRef: rhel\n    baremetal:\n      bmc:\n        address: https://bmc.example.test/redfish/v1/Systems/1\n        credentialsRef: lab-bmc-credentials\n"}},
-			"api.invariant", guest, "$.spec.substrate.baremetal"},
+		"a BMC on a libvirt Machine": {[]exampleEdit{{labGuest, "    profileRef: rhel\n", "    profileRef: rhel\n\n    bmc:\n      address: https://bmc.example.test/redfish/v1/Systems/1\n      credentialsRef: lab-bmc-credentials\n"}},
+			"api.invariant", guest, "$.spec.hardware.bmc"},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -103,9 +102,8 @@ func TestAProviderlessMachineIsPoweredThroughTheControllerItAuthors(t *testing.T
 	const address = "https://bastion-bmc.lab.example.test/redfish/v1/Systems/1"
 	root := t.TempDir()
 	copySources(t, exampleDirectory(t, "lab-rhel"), root)
-	bastion := "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata:\n  name: bastion\n\nspec:\n  os:\n    provided: true\n\n" +
-		"  hardware:\n    nics:\n      - name: eno1\n\n  substrate:\n    baremetal:\n      bmc:\n        address: " + address +
-		"\n        credentialsRef: lab-bmc-credentials\n\n      nics:\n        - nicRef: eno1\n          macAddress: 02:00:00:00:20:01\n\n" +
+	bastion := "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata:\n  name: bastion\n\nspec:\n  hardware:\n    bmc:\n      address: " + address +
+		"\n      credentialsRef: lab-bmc-credentials\n\n    nics:\n      - name: eno1\n        macAddress: 02:00:00:00:20:01\n\n  os:\n    provided: {}\n\n" +
 		"  network:\n    addresses:\n      - name: fqdn\n        address: bastion.lab.example.test\n"
 	if err := os.WriteFile(filepath.Join(root, "infra", "machines", "bastion.yaml"), []byte(bastion), 0o600); err != nil {
 		t.Fatal(err)

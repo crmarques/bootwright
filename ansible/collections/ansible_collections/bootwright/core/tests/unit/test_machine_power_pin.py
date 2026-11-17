@@ -43,7 +43,7 @@ ENDPOINT = "https://bmc.example.test/redfish/v1/Systems/1"
 UUID = "4c4c4544-0042-3510-8052-b4c04f4d4e31"
 SERIAL = "CZJ2440ABC"
 TEMPLATE = "{{ 6 * 7 }}"
-REMEDY = ("Correct spec.substrate.baremetal.bmc.address, or destroy and apply this context so the machine is "
+REMEDY = ("Correct spec.hardware.bmc.address, or destroy and apply this context so the machine is "
           "proved again.")
 
 
@@ -369,7 +369,7 @@ def test_an_unpinned_refusal_names_its_cause_and_remedy(tmp_path, observation, c
         assert message == ("Machine/metal at %s reports its declared hardware addresses but no system UUID or serial "
                            "number of at most 128 printable characters, so nothing proves which system it is and no "
                            "power request was sent. Make that management controller report the system's UUID or "
-                           "serial number, or correct spec.substrate.baremetal.bmc.address." % ENDPOINT)
+                           "serial number, or correct spec.hardware.bmc.address." % ENDPOINT)
 
 
 def test_a_proved_unpinned_machine_names_no_refusal(tmp_path):

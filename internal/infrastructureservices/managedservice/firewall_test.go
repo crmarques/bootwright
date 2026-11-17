@@ -8,7 +8,7 @@ import (
 )
 
 func TestLoopbackOnlyPlacementNeedsNoFirewallGrantBlock(t *testing.T) {
-	host := api.NewObject(api.Machine, "host", api.Value{}, api.MapValue().With("os", api.MapValue().With("provided", api.BoolValue(false)).With("installProfileRef", api.StringValue("rhel"))))
+	host := api.NewObject(api.Machine, "host", api.Value{}, api.MapValue().With("os", api.MapValue().With("install", api.MapValue().With("profileRef", api.StringValue("rhel")))))
 	profile := api.NewObject(api.MachineInstallProfile, "rhel", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "customizations", "security", "firewall", "enabled"))
 	catalog := api.NewCatalog([]api.Object{host, profile})
 	placement := machine.Placement{Connection: machine.ConnectionInstalled, Machine: "host"}

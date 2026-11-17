@@ -141,11 +141,11 @@ metadata:
   name: ready-01
 
 spec:
-  substrate:
+  hardware:
     providerRef: lab-libvirt
 
   os:
-    provided: true
+    provided: {}
 
   network:
     addresses:

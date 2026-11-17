@@ -76,30 +76,30 @@ func refusalRows() []refusalRow {
 		{"duplicate entry that is not a label", environmentYAML + "  sites: [{name: " + refusalSentinel + ".}, {name: " + refusalSentinel + ".}]\n", ""},
 		{"name that is not a label", environmentYAML, strings.Replace(refusalSecret, "name: probe", "name: "+refusalSentinel+".", 1) + "  type: opaque\n  typ: x\n"},
 		{"name that is not a label, alone", environmentYAML, strings.Replace(refusalSecret, "name: probe", "name: "+refusalSentinel+".", 1) + "  type: opaque\n"},
-		{"Machine name that is not a label", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: Probe-}\nspec:\n  os: {provided: true}\n"},
+		{"Machine name that is not a label", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: Probe-}\nspec:\n  os: {provided: {}}\n"},
 		{"key three edits from its only near field", environmentYAML, refusalSecret + "  name: probe\n  type: opaque\n"},
 		{"kind three edits from a registered kind", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Mach\nmetadata: {name: probe}\nspec: {}\n"},
 		{"kind defaults key three edits from a kind", environmentYAML + "  defaults:\n    Mach: {}\n", ""},
 		{"referenced Secret that does not decode", environmentYAML + "  remoteMachinesAccessKey: {keyRef: probe}\n", refusalSecret + "  type: sshKeyPair\n  extra: x\n"},
 		{"referenced Secret whose type is not a string", environmentYAML + "  remoteMachinesAccessKey: {keyRef: probe}\n", refusalSecret + "  type: 1\n"},
 		{"network selection without a configured network", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  network:\n    installAddressRef: ip\n    addresses: [{name: ip, address: 198.51.100.9, interface: eth0}]\n"},
-		{"interface assignment on an OS-ready Machine", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  network:\n    addresses: [{name: ip, address: 198.51.100.9, interface: eth0}]\n"},
+		{"interface assignment on an OS-ready Machine", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: {}}\n  network:\n    addresses: [{name: ip, address: 198.51.100.9, interface: eth0}]\n"},
 		{"install gateway outside the install prefix", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  network:\n    inline:\n      nmstate:\n        interfaces: [{name: eth0, type: ethernet}]\n        routes: {config: [{destination: 0.0.0.0/0, next-hop-address: 198.51.100.1}]}\n    addresses: [{name: ip, address: 192.0.2.9, interface: eth0}]\n---\napiVersion: bootwright.io/v1alpha1\nkind: Network\nmetadata: {name: lan}\nspec:\n  provided: true\n  ipv4: {cidr: 192.0.2.0/24}\n"},
 		{"selected cluster that does not decode", environmentYAML + "  containerClusters: [probe]\n", undecodableCluster},
-		{"OS-ready Machine with installation declarations", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true, installProfileRef: rhel}\n"},
-		{"OS-ready Machine with a network configuration", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  network: {configRef: net}\n"},
-		{"non-provided Machine without a provider", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: false}\n"},
+		{"Machine declaring two operating system arms", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: {}, clusterInstalled: {}}\n"},
+		{"OS-ready Machine with a network configuration", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: {}}\n  network: {configRef: net}\n"},
+		{"non-provided Machine without a provider", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {clusterInstalled: {}}\n"},
 		{"controller that is not OS-ready", environmentYAML, ""},
 		{"controller without local access", environmentYAML, ""},
-		{"a second local Machine", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  access: {local: true}\n"},
+		{"a second local Machine", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: {}}\n  access: {local: {}}\n"},
 	}
 }
 
 const refusalControllerHead = "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n"
 
 var refusalControllers = map[string]string{
-	"controller that is not OS-ready": refusalControllerHead + "  os: {provided: false}\n  access: {local: true}\n",
-	"controller without local access": refusalControllerHead + "  os: {provided: true}\n",
+	"controller that is not OS-ready": refusalControllerHead + "  os: {clusterInstalled: {}}\n  access: {local: {}}\n",
+	"controller without local access": refusalControllerHead + "  os: {provided: {}}\n",
 }
 
 func refusalSources(row refusalRow) desiredstate.Sources {

@@ -10,9 +10,6 @@ spec:
       bmc:
         credentialsRef: ocp-bmc-credentials
 
-        tls:
-          verify: true
-
         virtualMedia:
           tls:
             trust: established

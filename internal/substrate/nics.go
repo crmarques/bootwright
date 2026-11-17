@@ -15,15 +15,12 @@ func MachineNICs(machine api.Object) []string {
 func VirtualArm(arm Arm) bool { return arm == ArmLibvirt || arm == ArmKubeVirt }
 
 func MachineNICSegments(machine api.Object) api.Value {
-	if arm := MachineArm(machine); arm != "" {
-		return machine.Spec().Get("substrate", string(arm), "nics")
-	}
-	return api.Value{}
+	return machine.Spec().Get("hardware", "nics")
 }
 
 func NICSegment(catalog api.Catalog, provider, machine api.Object, nic string) string {
 	for _, entry := range MachineNICSegments(machine).Items() {
-		if entry.Get("nicRef").Text() == nic && entry.Has("segmentRef") {
+		if entry.Get("name").Text() == nic && entry.Has("segmentRef") {
 			return entry.Get("segmentRef").Text()
 		}
 	}

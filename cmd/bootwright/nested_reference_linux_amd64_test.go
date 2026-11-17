@@ -26,10 +26,10 @@ func TestEveryNestedReferenceKindRefusesOnlyThroughTheSharedDiagnostic(t *testin
 		edit          exampleEdit
 		want          []string
 	}{
-		{"a provider machine profile", "lab-compact-df", exampleEdit{machine, "profileRef: rhel", "profileRef: absent"},
-			[]string{"Machine/rhel-03 $.spec.substrate.libvirt.profileRef no machine profile named absent is declared on InfraProvider/lab-libvirt"}},
-		{"a provider segment", "lab-compact-df", exampleEdit{machine, "      profileRef: rhel\n", "      profileRef: rhel\n      nics:\n        - nicRef: enp1s0\n          segmentRef: absent\n"},
-			[]string{"Machine/rhel-03 $.spec.substrate.libvirt.nics[0].segmentRef no segment named absent is declared on InfraProvider/lab-libvirt"}},
+		{"a provider machine profile", "lab-compact-df", exampleEdit{machine, "    profileRef: rhel\n", "    profileRef: absent\n"},
+			[]string{"Machine/rhel-03 $.spec.hardware.profileRef no machine profile named absent is declared on InfraProvider/lab-libvirt"}},
+		{"a provider segment", "lab-compact-df", exampleEdit{machine, "      - name: enp1s0\n", "      - name: enp1s0\n        segmentRef: absent\n"},
+			[]string{"Machine/rhel-03 $.spec.hardware.nics[0].segmentRef no segment named absent is declared on InfraProvider/lab-libvirt"}},
 		{"a Machine install address", "lab-compact-df", exampleEdit{machine, "installAddressRef: ip", "installAddressRef: absent"},
 			[]string{"Machine/rhel-03 $.spec.network.installAddressRef no address named absent is declared on Machine/rhel-03"}},
 		{"a server endpoint selection", "lab-compact-df", exampleEdit{machine, "endpointRef: ip", "endpointRef: absent"},
@@ -52,8 +52,6 @@ func TestEveryNestedReferenceKindRefusesOnlyThroughTheSharedDiagnostic(t *testin
 			[]string{"CephCluster/ceph-lab $.spec.serviceBindings[0].serviceRef no native service named rgw.absent is declared on CephCluster/ceph-lab"}},
 		{"a gateway's native service", "lab-compact-df", exampleEdit{"storage/object-gateway.yaml", "serviceRef: rgw.objects", "serviceRef: rgw.absent"},
 			[]string{"CephObjectGateway/objects $.spec.serviceRef no native service named rgw.absent is declared on CephCluster/ceph-lab"}},
-		{"a bare-metal MAC's hardware NIC", "physical-3-nodes-ceph", exampleEdit{"infra/machines/metal-01.yaml", "- nicRef: eno1", "- nicRef: absent"},
-			[]string{"Machine/metal-01 $.spec.substrate.baremetal.nics[0].nicRef no hardware NIC named absent is declared on Machine/metal-01"}},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			_, _, err := wireCompiler().Compile(context.Background(), editedExample(t, row.example, row.edit))

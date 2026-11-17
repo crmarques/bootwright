@@ -21,24 +21,18 @@ metadata:
   name: {{ .name }}
 
 spec:
-  placement:
-    site: {{ include "site" . }}
-
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: {{ if and .gateway $v.ceph.services.object }}gateway{{ else }}data{{ end }}
+  site: {{ include "site" . }}
 
   hardware:
+    providerRef: lab-libvirt
+    profileRef: {{ if and .gateway $v.ceph.services.object }}gateway{{ else }}data{{ end }}
+
     nics:
       - name: enp1s0
 
-    rootDevice:
-      deviceName: /dev/vda
-
   os:
-    provided: false
-    installProfileRef: rhel
+    install:
+      profileRef: rhel
 
   network:
     configRef: lab-guests

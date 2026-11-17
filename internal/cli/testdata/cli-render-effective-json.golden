@@ -32,7 +32,7 @@
         },
         "spec": {
           "os": {
-            "provided": true
+            "provided": {}
           }
         }
       }

@@ -15,7 +15,7 @@ import (
 // interfaces, an Anaconda install profile and an Environment domain.
 func libvirtLab(interfaces api.Value) []api.Object {
 	return []api.Object{
-		object(api.Machine, "host", m("os", m("provided", true))),
+		object(api.Machine, "host", m("os", m("provided", m()))),
 		object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small"))))),
 		object(api.NetworkConfig, "net", m("nmstate", m("interfaces", interfaces))),
 		object(api.MachineInstallProfile, "rhel", m("installer", m("anaconda", m("imageRef", "image")))),
@@ -31,7 +31,7 @@ func managedNet(name, provider, cidr, host string) api.Object {
 }
 
 func guest(network api.Value) api.Object {
-	spec := m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))))
+	spec := m("hardware", m("providerRef", "lab", "profileRef", "small", "nics", list(m("name", "enp1s0"))), "os", m("clusterInstalled", m()))
 	if network.Present() {
 		spec = spec.With("network", network)
 	}
@@ -92,13 +92,13 @@ func TestALibvirtMachineNeedsAnAvailableEthernetInterface(t *testing.T) {
 		t.Fatalf("a Machine with one ethernet interface up was refused: %v", issues)
 	}
 	installed := guest(api.Value{})
-	installed = installed.WithSpec(installed.Spec().With("os", m("provided", false, "installProfileRef", "rhel")).With("hardware", m("nics", list(m("name", "enp1s0")), "rootDevice", m("deviceName", "/dev/vda"))))
+	installed = installed.WithSpec(installed.Spec().With("os", m("install", m("profileRef", "rhel"))))
 	issues := admission(installed, libvirtLab(up)...)
 	if len(issues) != 1 || issues[0].Field != "$.spec.network.installAddressRef" ||
 		issues[0].Message != "a Bootwright-installed Anaconda Machine installs with one static IPv4 address, and DHCP installation is not supported" {
 		t.Fatalf("an installed Anaconda Machine without a network: %#v", issues)
 	}
-	ready := object(api.Machine, "ready", m("substrate", m("providerRef", "lab"), "os", m("provided", true)))
+	ready := object(api.Machine, "ready", m("hardware", m("providerRef", "lab"), "os", m("provided", m())))
 	if issues := admission(ready, libvirtLab(up)...); mentions(issues, "$.spec.network") {
 		t.Fatalf("an OS-ready Machine was asked for a network: %v", issues)
 	}
@@ -139,7 +139,7 @@ func TestAnInstallAddressIsNeitherTheBridgeNorItsNetworkOrBroadcast(t *testing.T
 			for _, perInterface := range []bool{false, true} {
 				node := installOn(address)
 				if perInterface {
-					node = node.WithSpec(node.Spec().WithPath(list(m("nicRef", "enp1s0", "segmentRef", "net")), "substrate", "libvirt", "nics"))
+					node = node.WithSpec(node.Spec().WithPath(list(m("name", "enp1s0", "segmentRef", "net")), "hardware", "nics"))
 				}
 				want := api.Issue{Code: "api.invariant", Field: "$.spec.network.installAddressRef", Message: message,
 					Remediation: "assign Machine/guest an install address inside 192.0.2.0/24 other than 192.0.2.1, 192.0.2.0 and 192.0.2.255"}
@@ -205,7 +205,7 @@ func TestAnIPv4AssignmentIsAHostAddressOfItsPrefix(t *testing.T) {
 
 func TestAMachineNameHasNoBlockDerivedLimit(t *testing.T) {
 	validate := func(name string) []api.Issue {
-		return admission(object(api.Machine, name, m("os", m("provided", true))), object(api.Environment, "env", m("domains", m("base", "example.test"))))
+		return admission(object(api.Machine, name, m("os", m("provided", m()))), object(api.Environment, "env", m("domains", m("base", "example.test"))))
 	}
 	if issues := validate(strings.Repeat("a", 63)); len(issues) != 0 {
 		t.Fatalf("a 63-byte name was refused: %v", issues)
@@ -223,7 +223,7 @@ func TestAMachineNameHasNoBlockDerivedLimit(t *testing.T) {
 func TestAnInvalidMachineNameDerivesNoContact(t *testing.T) {
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
 	for name, want := range map[string]string{"rhel-01": "rhel-01.example.test", "Rhel_01": ""} {
-		machine := object(api.Machine, name, m("os", m("provided", true)))
+		machine := object(api.Machine, name, m("os", m("provided", m())))
 		normalized, _ := Normalize(machine, api.NewCatalog([]api.Object{machine, env}))
 		fqdn, _ := namedValue(normalized.Spec().Get("network", "addresses"), "fqdn")
 		if got := fqdn.Get("address").Text(); got != want {
@@ -258,7 +258,7 @@ func TestAnOverlongDerivedContactRefusesAtTheName(t *testing.T) {
 		domains api.Value
 		field   string
 	}{{m("base", dnsOfLength(245)), "spec.domains.base"}, {m("base", "example.test", "machines", dnsOfLength(245)), "spec.domains.machines"}} {
-		machine := object(api.Machine, "rhel-01", m("os", m("provided", true)))
+		machine := object(api.Machine, "rhel-01", m("os", m("provided", m())))
 		within := object(api.Environment, "env", m("domains", row.domains))
 		normalized, _ := Normalize(machine, api.NewCatalog([]api.Object{machine, within}))
 		if fqdn, _ := namedValue(normalized.Spec().Get("network", "addresses"), "fqdn"); len(fqdn.Get("address").Text()) != 253 {
@@ -292,7 +292,7 @@ func TestAnOverlongDerivedContactRefusesAtTheName(t *testing.T) {
 func TestAnUnresolvedFleetKeyDerivesNoAccess(t *testing.T) {
 	node, catalog := fixture()
 	spec := node.Spec()
-	node = node.WithSpec(spec.With("os", spec.Get("os").With("installProfileRef", api.StringValue("rhel"))))
+	node = node.WithSpec(spec.With("os", m("install", m("profileRef", "rhel"))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test"), "remoteMachinesAccessKey", m("keyRef", "fleet")))
 	objects := []api.Object{node, env, object(api.MachineInstallProfile, "rhel", m())}
 	for _, existing := range catalog.Objects() {
@@ -321,42 +321,56 @@ func TestAnUnresolvedFleetKeyDerivesNoAccess(t *testing.T) {
 	}
 }
 
+// overlaid is base with every field of extra set.
+func overlaid(base, extra api.Value) api.Value {
+	for _, field := range extra.Fields() {
+		base = base.With(field.Name, field.Value)
+	}
+	return base
+}
+
 // A libvirt provider derives every interface's MAC and realizes the Machine's
 // management controller as its emulated BMC, so a Machine of a libvirt provider
-// has no MAC or controller to author: those fields belong to the bare-metal
-// arm, and authoring that arm on a libvirt provider refuses at the arm. A NIC
-// name alone is admitted, and a bare-metal Machine keeps its MACs and
-// controller.
-func TestALibvirtMachineAuthorsOnlyItsOwnArm(t *testing.T) {
+// has no MAC or controller to author: hardware.bmc and a NIC's macAddress refuse
+// at their own paths. A NIC name alone is admitted, and a bare-metal Machine
+// keeps its MACs and controller.
+func TestALibvirtMachineAuthorsNoMACOrController(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	attached := installOn("192.0.2.11")
-	with := func(hardware, arm api.Value) api.Object {
-		return attached.WithSpec(attached.Spec().With("hardware", hardware).With("substrate", arm))
+	with := func(hardware api.Value) api.Object {
+		return attached.WithSpec(attached.Spec().With("hardware", overlaid(m("providerRef", "lab", "profileRef", "small", "nics", list(m("name", "enp1s0"))), hardware)))
 	}
-	mismatch := api.Issue{Code: "api.invariant", Field: "$.spec.substrate.baremetal",
-		Message:     "the Machine's substrate arm baremetal does not match the libvirt arm of its provider InfraProvider/lab",
-		Remediation: "move the fields of spec.substrate.baremetal to spec.substrate.libvirt on Machine/guest, or select a provider with the baremetal arm"}
-	nics := m("nics", list(m("name", "enp1s0")))
-	for name, arm := range map[string]api.Value{
-		"a MAC and a controller":   m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "bmc"), "nics", list(m("nicRef", "enp1s0", "macAddress", "52:54:00:00:00:01"))),
-		"a MAC alone":              m("nics", list(m("nicRef", "enp1s0", "macAddress", "52:54:00:00:00:01"))),
-		"an incomplete controller": m("bmc", m("address", "bmc.example.test", "virtualMedia", m("tls", m()))),
+	controller := api.Issue{Code: "api.invariant", Field: "$.spec.hardware.bmc",
+		Message:     "a libvirt Machine declares no spec.hardware.bmc: the provider controls the machine it creates, so it declares no BMC",
+		Remediation: "remove spec.hardware.bmc from Machine/guest"}
+	mac := api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[0].macAddress",
+		Message:     "a libvirt provider derives each vNIC's MAC from the context, Machine and NIC names",
+		Remediation: "remove spec.hardware.nics[0].macAddress from Machine/guest"}
+	nics := m("nics", list(m("name", "enp1s0", "macAddress", "52:54:00:00:00:01")))
+	for name, test := range map[string]struct {
+		hardware api.Value
+		want     []api.Issue
+	}{
+		"a MAC and a controller":   {nics.With("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "bmc")), []api.Issue{controller, mac}},
+		"a MAC alone":              {nics, []api.Issue{mac}},
+		"an incomplete controller": {m("bmc", m("address", "bmc.example.test", "virtualMedia", m("tls", m()))), []api.Issue{controller}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if issues := admission(with(nics, m("providerRef", "lab", "baremetal", arm)), lab...); !slices.Contains(issues, mismatch) {
-				t.Fatalf("the bare-metal arm on a libvirt provider: %#v", issues)
+			issues := admission(with(test.hardware), lab...)
+			for _, want := range test.want {
+				if !slices.Contains(issues, want) {
+					t.Fatalf("a libvirt Machine authoring %s: %#v, want %#v among them", name, issues, want)
+				}
 			}
 		})
 	}
-	for _, arm := range []substrate.Arm{substrate.ArmLibvirt, substrate.ArmKubeVirt, substrate.ArmVSphere} {
-		armless := api.Issue{Code: "api.invariant", Field: "$.spec.substrate." + string(arm),
-			Message:     "a " + string(arm) + " arm requires the provider whose arm it matches; only a bare-metal arm stands without a provider",
-			Remediation: "set spec.substrate.providerRef on Machine/guest, or remove spec.substrate." + string(arm)}
-		if issues := admission(with(nics, m(string(arm), m("profileRef", "small"))), lab...); !slices.Contains(issues, armless) {
-			t.Fatalf("a %s arm without a provider: %#v", arm, issues)
-		}
+	armless := attached.WithSpec(attached.Spec().With("hardware", m("profileRef", "small", "nics", list(m("name", "enp1s0")))))
+	if issues := admission(armless, lab...); !slices.Contains(issues, api.Issue{Code: "api.invariant", Field: "$.spec.hardware.profileRef",
+		Message:     "a machine profile belongs to the Machine's provider, and Machine/guest names none",
+		Remediation: "set spec.hardware.providerRef to the provider whose machineProfiles declares it, or remove spec.hardware.profileRef"}) {
+		t.Fatalf("a machine profile without a provider: %#v", issues)
 	}
-	if issues := admission(with(nics, m("providerRef", "lab", "libvirt", m("profileRef", "small"))), lab...); len(issues) != 0 {
+	if issues := admission(attached, lab...); len(issues) != 0 {
 		t.Fatalf("a NIC name alone was refused: %v", issues)
 	}
 	server, catalog := fixture()
@@ -364,52 +378,127 @@ func TestALibvirtMachineAuthorsOnlyItsOwnArm(t *testing.T) {
 		t.Fatalf("a bare-metal Machine's MAC and controller were refused: %v", issues)
 	}
 	twin := object(api.Machine, "twin", server.Spec())
-	if issues := admission(server, append(without(catalog, server), twin)...); !slices.Contains(issues, api.Issue{Code: "api.invariant", Field: "$.spec.substrate.baremetal.nics[0].macAddress",
-		Message: "authored hardware MACs must be unique across Machines", Remediation: "correct spec.substrate.baremetal.nics[0].macAddress on Machine/node, a MAC Machine/twin also declares"}) {
+	if issues := admission(server, append(without(catalog, server), twin)...); !slices.Contains(issues, api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[0].macAddress",
+		Message: "authored hardware MACs must be unique across Machines", Remediation: "correct spec.hardware.nics[0].macAddress on Machine/node, a MAC Machine/twin also declares"}) {
 		t.Fatalf("a MAC two bare-metal Machines declare: %#v", issues)
 	}
 }
 
 // A Machine no provider realizes, such as a bastion, is operator-owned
 // hardware whose power is reached through the controller it authors, so its
-// bare-metal arm stands without a provider and keeps every rule a provided arm
+// hardware stands without a provider and keeps every rule a provided Machine
 // has: one resolved MAC per declared NIC and an exact controller system.
-func TestAProviderlessMachineAuthorsItsBareMetalArm(t *testing.T) {
-	arm := func(nicRef, address string) api.Object {
-		return object(api.Machine, "bastion", m("os", m("provided", true), "hardware", m("nics", list(m("name", "eno1"))),
-			"substrate", m("baremetal", m("bmc", m("address", address, "credentialsRef", "bastion-bmc"),
-				"nics", list(m("nicRef", nicRef, "macAddress", "02:00:00:00:20:01")), "rootDevice", m("wwn", "0x5000c500a1b2c3d4")))))
+func TestAProviderlessMachineAuthorsItsHardware(t *testing.T) {
+	bastion := func(address string) api.Object {
+		return object(api.Machine, "bastion", m("os", m("provided", m()),
+			"hardware", m("nics", list(m("name", "eno1", "macAddress", "02:00:00:00:20:01")),
+				"bmc", m("address", address, "credentialsRef", "bastion-bmc"), "rootDisk", m("wwn", "0x5000c500a1b2c3d4"))))
 	}
 	environment := object(api.Environment, "env", m("domains", m("base", "example.test")))
-	if issues := admission(arm("eno1", "https://bastion-bmc.example.test/redfish/v1/Systems/1"), environment); len(issues) != 0 {
-		t.Fatalf("a provider-less bare-metal arm was refused: %#v", issues)
+	if issues := admission(bastion("https://bastion-bmc.example.test/redfish/v1/Systems/1"), environment); len(issues) != 0 {
+		t.Fatalf("a provider-less bare-metal Machine was refused: %#v", issues)
 	}
-	if issues := admission(arm("eno9", "https://bastion-bmc.example.test/redfish/v1/Systems/1"), environment); slices.ContainsFunc(issues, func(issue api.Issue) bool {
-		return issue.Field == "$.spec.substrate.baremetal.nics[0].nicRef"
-	}) {
-		t.Fatalf("an unresolved NIC, which the shared reference check reports, was refused again: %#v", issues)
-	}
-	if issues := admission(arm("eno1", "https://bastion-bmc.example.test/redfish/v1"), environment); !slices.ContainsFunc(issues, func(issue api.Issue) bool {
-		return issue.Code == "api.invariant" && issue.Field == "$.spec.substrate.baremetal.bmc.address"
+	if issues := admission(bastion("https://bastion-bmc.example.test/redfish/v1"), environment); !slices.ContainsFunc(issues, func(issue api.Issue) bool {
+		return issue.Code == "api.invariant" && issue.Field == "$.spec.hardware.bmc.address"
 	}) {
 		t.Fatalf("a controller naming no exact system was admitted: %#v", issues)
 	}
 }
 
 // A KubeVirt provider derives every interface's MAC exactly as a libvirt one
-// does, so the bare-metal arm that carries MACs refuses on it at the arm, and a
-// NIC name alone is admitted.
+// does, so a NIC's macAddress refuses on it at the NIC, and a NIC name alone is
+// admitted.
 func TestAKubeVirtMachineAuthorsNoMAC(t *testing.T) {
 	provider := object(api.InfraProvider, "lab", m("kubevirt", m("kubeconfigRef", "host", "namespace", "guests")))
-	hardware := m("nics", list(m("name", "eth0"), m("name", "eth1")))
-	guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "baremetal", m("nics", list(m("nicRef", "eth0", "macAddress", "02:00:00:00:10:01")))), "os", m("provided", false), "hardware", hardware))
+	guest := object(api.Machine, "guest", m("hardware", m("providerRef", "lab", "profileRef", "small", "nics", list(m("name", "eth0", "macAddress", "02:00:00:00:10:01"), m("name", "eth1"))), "os", m("clusterInstalled", m())))
 	catalog := api.NewCatalog([]api.Object{guest, provider})
-	requireOneIssue(t, validateArm(guest, provider, true, substrate.ArmKubeVirt), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.baremetal",
-		Message:     "the Machine's substrate arm baremetal does not match the kubevirt arm of its provider InfraProvider/lab",
-		Remediation: "move the fields of spec.substrate.baremetal to spec.substrate.kubevirt on Machine/guest, or select a provider with the baremetal arm"})
-	named := guest.WithSpec(guest.Spec().With("substrate", m("providerRef", "lab", "kubevirt", m("profileRef", "small"))))
+	requireOneIssue(t, validateArm(guest, true, substrate.ArmKubeVirt), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[0].macAddress",
+		Message:     "a kubevirt provider derives each vNIC's MAC from the context, Machine and NIC names",
+		Remediation: "remove spec.hardware.nics[0].macAddress from Machine/guest"})
+	named := guest.WithSpec(guest.Spec().WithPath(list(m("name", "eth0"), m("name", "eth1")), "hardware", "nics"))
 	if issues := validateHardware(named, catalog, substrate.ArmKubeVirt); len(issues) != 0 {
 		t.Fatalf("NIC names alone were refused: %v", issues)
+	}
+	if issues := validateArm(named, true, substrate.ArmKubeVirt); len(issues) != 0 {
+		t.Fatalf("NIC names alone were refused by the arm rule: %v", issues)
+	}
+}
+
+// A Machine of a libvirt or KubeVirt provider declares none of the hardware the
+// provider creates: its controller, its root disk and a NIC's MAC each refuse at
+// their own path, and a bare-metal provider takes no machine profile.
+func TestAVirtualMachineRefusesPhysicalHardwareAtItsPath(t *testing.T) {
+	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
+	physical := m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "bmc"),
+		"rootDisk", m("wwn", "0x5000c500a1b2c3d4"), "nics", list(m("name", "enp1s0", "macAddress", "52:54:00:00:00:01")))
+	for _, arm := range []substrate.Arm{substrate.ArmLibvirt, substrate.ArmKubeVirt} {
+		t.Run(string(arm), func(t *testing.T) {
+			guest := object(api.Machine, "guest", m("hardware", overlaid(m("providerRef", "lab", "profileRef", "small"), physical), "os", m("clusterInstalled", m())))
+			var issues []api.Issue
+			if arm == substrate.ArmLibvirt {
+				issues = admission(guest, lab...)
+			} else {
+				issues = validateArm(guest, true, arm)
+			}
+			for field, remedy := range map[string]string{
+				"$.spec.hardware.bmc":                "remove spec.hardware.bmc from Machine/guest",
+				"$.spec.hardware.rootDisk":           "remove spec.hardware.rootDisk from Machine/guest",
+				"$.spec.hardware.nics[0].macAddress": "remove spec.hardware.nics[0].macAddress from Machine/guest",
+			} {
+				at := slices.IndexFunc(issues, func(issue api.Issue) bool { return issue.Field == field })
+				if at < 0 || issues[at].Code != "api.invariant" || issues[at].Remediation != remedy {
+					t.Fatalf("%s: no refusal at %s with remedy %q in %#v", arm, field, remedy, issues)
+				}
+			}
+		})
+	}
+}
+
+// A bare-metal provider realizes no machine profile, since the hardware itself
+// is the machine, and a profile beside no provider has none to belong to.
+func TestABaremetalProviderTakesNoMachineProfile(t *testing.T) {
+	server, catalog := fixture()
+	profiled := server.WithSpec(server.Spec().WithPath(api.StringValue("small"), "hardware", "profileRef"))
+	issues := admission(profiled, without(catalog, server)...)
+	if !slices.Contains(issues, api.Issue{Code: "api.invariant", Field: "$.spec.hardware.profileRef",
+		Message:     "a bare-metal provider realizes no machine profile; the hardware itself is the machine",
+		Remediation: "remove spec.hardware.profileRef from Machine/node"}) {
+		t.Fatalf("a machine profile on a bare-metal provider: %#v", issues)
+	}
+}
+
+// An installed Machine, whether Bootwright installs it or a cluster installer
+// does, is realized by a provider, so each lifecycle refuses at the provider
+// reference when it names none.
+func TestAnInstalledMachineRequiresItsProvider(t *testing.T) {
+	environment := object(api.Environment, "env", m("domains", m("base", "example.test")))
+	profile := object(api.MachineInstallProfile, "rhel", m())
+	for name, os := range map[string]api.Value{
+		"os.install":          m("install", m("profileRef", "rhel")),
+		"os.clusterInstalled": m("clusterInstalled", m()),
+	} {
+		t.Run(name, func(t *testing.T) {
+			machine := object(api.Machine, "node", m("os", os))
+			issues := admission(machine, environment, profile)
+			want := api.Issue{Code: "api.invariant", Field: "$.spec.hardware.providerRef",
+				Message:     "an installed Machine requires the hardware provider that realizes it",
+				Remediation: "set spec.hardware.providerRef to the InfraProvider that realizes this Machine, or declare os.provided: {} for a Machine whose OS is already installed"}
+			if !slices.Contains(issues, want) {
+				t.Fatalf("%s without a provider: %#v", name, issues)
+			}
+		})
+	}
+}
+
+// Normalization attaches each hardware NIC of a Machine a libvirt provider
+// realizes to the provider's sole segment, writing the segmentRef onto the NIC
+// itself, and leaves a NIC that names a segment as it is.
+func TestNormalizationWritesTheSoleSegmentOntoAVirtualNIC(t *testing.T) {
+	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
+	normalized, _ := Normalize(guest(api.Value{}), api.NewCatalog(append([]api.Object{guest(api.Value{})}, lab...)))
+	nics := normalized.Spec().Get("hardware", "nics").Items()
+	if len(nics) != 1 || nics[0].Get("name").Text() != "enp1s0" || nics[0].Get("segmentRef").Text() != "net" {
+		t.Fatalf("hardware.nics = %v, want the sole segment net on NIC enp1s0", normalized.Spec().Get("hardware", "nics"))
 	}
 }
 
@@ -418,9 +507,9 @@ func TestAKubeVirtMachineAuthorsNoMAC(t *testing.T) {
 // network, so with two segments to choose from each NIC names one.
 func TestABaremetalMachineSelectsNoSegment(t *testing.T) {
 	inline := guest(m("inline", m("nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet"))))))
-	requireOneIssue(t, admission(inline, twoSegmentLab(list())...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
+	requireOneIssue(t, admission(inline, twoSegmentLab(list())...), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[0].segmentRef",
 		Message:     "NIC enp1s0 of Machine/guest selects no segment, and InfraProvider/lab offers 2 segments across spec.segments and the managed Networks whose spec.libvirt.providerRef names it, not exactly one that every NIC defaults to",
-		Remediation: "add a spec.substrate.libvirt.nics entry with nicRef enp1s0 and a segmentRef naming a spec.segments entry of InfraProvider/lab or a managed Network whose spec.libvirt.providerRef names lab on Machine/guest"})
+		Remediation: "set spec.hardware.nics[0].segmentRef to a spec.segments entry of InfraProvider/lab or a managed Network whose spec.libvirt.providerRef names lab on Machine/guest"})
 	server, catalog := fixture()
 	objects := without(catalog, server)
 	for i, existing := range objects {
@@ -449,27 +538,27 @@ func TestAnFQDNContactIsADNSName(t *testing.T) {
 	}
 }
 
-// A MAC is authored in its substrate arm and names one declared hardware NIC,
-// once; a vSphere MAC lies in the manual assignment range.
+// A MAC is authored on the hardware NIC it belongs to, once per Machine; a
+// vSphere MAC lies in the manual assignment range.
 func TestAMACNamesOneDeclaredHardwareNIC(t *testing.T) {
 	server, catalog := fixture()
 	edit := func(nics api.Value) []api.Issue {
-		edited := server.WithSpec(server.Spec().WithPath(nics, "substrate", "baremetal", "nics"))
+		edited := server.WithSpec(server.Spec().WithPath(nics, "hardware", "nics"))
 		return validateHardware(edited, catalog, substrate.ArmBaremetal)
 	}
-	if issues := edit(list(m("nicRef", "eth9", "macAddress", "02:00:00:00:00:09"))); len(issues) != 0 {
-		t.Fatalf("an unresolved nicRef, which the shared reference check reports, was refused again: %v", issues)
+	if issues := edit(list(m("name", "eth0", "macAddress", "02:00:00:00:00:01"), m("name", "eth1", "macAddress", "02:00:00:00:00:02"))); len(issues) != 0 {
+		t.Fatalf("two NICs with distinct MACs were refused: %v", issues)
 	}
-	requireOneIssue(t, edit(list(m("nicRef", "eth0", "macAddress", "02:00:00:00:00:01"), m("nicRef", "eth0", "macAddress", "02:00:00:00:00:02"))), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.baremetal.nics[1].nicRef",
-		Message:     "each hardware NIC has one MAC",
-		Remediation: "remove the repeated spec.substrate.baremetal.nics[1] entry"})
+	requireOneIssue(t, edit(list(m("name", "eth0", "macAddress", "02:00:00:00:00:01"), m("name", "eth1", "macAddress", "02-00-00-00-00-01"))), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[1].macAddress",
+		Message:     "canonical hardware MACs must be unique",
+		Remediation: "correct spec.hardware.nics[1].macAddress; another NIC of this Machine declares the same MAC"})
 	virtual := func(mac string) []api.Issue {
-		machine := object(api.Machine, "vm", m("substrate", m("providerRef", "lab", "vsphere", m("nics", list(m("nicRef", "eth0", "macAddress", mac)))), "hardware", m("nics", list(m("name", "eth0")))))
+		machine := object(api.Machine, "vm", m("hardware", m("providerRef", "lab", "nics", list(m("name", "eth0", "macAddress", mac)))))
 		return validateHardware(machine, api.NewCatalog([]api.Object{machine}), substrate.ArmVSphere)
 	}
-	requireOneIssue(t, virtual("02:00:00:00:00:01"), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.vsphere.nics[0].macAddress",
+	requireOneIssue(t, virtual("02:00:00:00:00:01"), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[0].macAddress",
 		Message:     "vSphere MAC must be in the manual assignment range",
-		Remediation: "set spec.substrate.vsphere.nics[0].macAddress to a MAC from 00:50:56:00:00:00 to 00:50:56:3f:ff:ff"})
+		Remediation: "set spec.hardware.nics[0].macAddress to a MAC from 00:50:56:00:00:00 to 00:50:56:3f:ff:ff"})
 	if issues := virtual("00:50:56:00:00:01"); len(issues) != 0 {
 		t.Fatalf("a MAC in the vSphere range was refused: %v", issues)
 	}
@@ -482,15 +571,20 @@ func TestAVirtualMachineDeclaresItsNICsAndNamesAProviderProfile(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	provider := lab[1]
 	bare := installOn("192.0.2.11")
-	bare = bare.WithSpec(bare.Spec().Without("hardware"))
+	bare = bare.WithSpec(bare.Spec().WithPath(list(), "hardware", "nics"))
 	requireOneIssue(t, validateSubstrate(api.NewCatalog(lab), bare, provider, substrate.ArmLibvirt), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics",
 		Message:     "a libvirt provider creates one vNIC per spec.hardware.nics entry, in order, and Machine/guest declares none",
 		Remediation: "declare each vNIC of Machine/guest in spec.hardware.nics, in device order, such as one entry named enp1s0"})
 	unknown := installOn("192.0.2.11")
-	unknown = unknown.WithSpec(unknown.Spec().WithPath(api.StringValue("missing"), "substrate", "libvirt", "profileRef"))
+	unknown = unknown.WithSpec(unknown.Spec().WithPath(api.StringValue("missing"), "hardware", "profileRef"))
 	if issues := validateSubstrate(api.NewCatalog(lab), unknown, provider, substrate.ArmLibvirt); len(issues) != 0 {
 		t.Fatalf("an unresolved profileRef, which the shared reference check reports, was refused again: %v", issues)
 	}
+	unnamed := installOn("192.0.2.11")
+	unnamed = unnamed.WithSpec(unnamed.Spec().With("hardware", unnamed.Spec().Get("hardware").Without("profileRef")))
+	requireOneIssue(t, validateSubstrate(api.NewCatalog(lab), unnamed, provider, substrate.ArmLibvirt), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.profileRef",
+		Message:     "virtual installation requires a provider-local machine profile",
+		Remediation: "set spec.hardware.profileRef to a machine profile of the selected provider"})
 }
 
 func TestInstallSegmentContainmentFollowsVLANAndBondParents(t *testing.T) {
@@ -502,7 +596,7 @@ func TestInstallSegmentContainmentFollowsVLANAndBondParents(t *testing.T) {
 		{"bond0", list(m("name", "enp1s0", "type", "ethernet"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("enp1s0"))))},
 	} {
 		node := installOn("192.0.2.1")
-		node = node.WithSpec(node.Spec().With("network", node.Spec().Get("network").With("addresses", list(m("name", "ip", "address", "192.0.2.1", "interface", network.iface)))).WithPath(list(m("nicRef", "enp1s0", "segmentRef", "net")), "substrate", "libvirt", "nics"))
+		node = node.WithSpec(node.Spec().With("network", node.Spec().Get("network").With("addresses", list(m("name", "ip", "address", "192.0.2.1", "interface", network.iface)))).WithPath(list(m("name", "enp1s0", "segmentRef", "net")), "hardware", "nics"))
 		issues := admission(node, libvirtLab(network.interfaces)...)
 		if !slices.ContainsFunc(issues, func(issue api.Issue) bool {
 			return issue.Field == "$.spec.network.installAddressRef" && strings.Contains(issue.Message, "host address of managed Network/net")
@@ -513,17 +607,17 @@ func TestInstallSegmentContainmentFollowsVLANAndBondParents(t *testing.T) {
 }
 
 // An OS-ready Machine of a one-segment libvirt provider may declare its
-// hardware NICs: normalization defaults no arm nics entry for it, so the rule
+// hardware NICs: normalization defaults no segment onto them, so the rule
 // that an OS-ready Machine declares contacts only has nothing to refuse.
 func TestAnOSReadyVirtualMachineMayDeclareHardwareNICs(t *testing.T) {
-	ready := object(api.Machine, "ready", m("substrate", m("providerRef", "lab", "libvirt", m()), "os", m("provided", true), "hardware", m("nics", list(m("name", "enp1s0")))))
+	ready := object(api.Machine, "ready", m("hardware", m("providerRef", "lab", "nics", list(m("name", "enp1s0"))), "os", m("provided", m())))
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	if issues := admission(ready, lab...); len(issues) != 0 {
 		t.Fatalf("an OS-ready libvirt Machine with hardware NICs was refused: %v", issues)
 	}
 	normalized, _ := Normalize(ready, api.NewCatalog(append([]api.Object{ready}, lab...)))
-	if normalized.Spec().Has("substrate", "libvirt", "nics") {
-		t.Fatalf("an OS-ready Machine was given arm nics: %v", normalized.Spec().Get("substrate", "libvirt", "nics"))
+	if normalized.Spec().Get("hardware", "nics").Items()[0].Has("segmentRef") {
+		t.Fatalf("an OS-ready Machine's NIC was given a segment: %v", normalized.Spec().Get("hardware", "nics"))
 	}
 }
 
@@ -535,7 +629,7 @@ func TestAVirtualMachineNICNameIsAnInterfaceName(t *testing.T) {
 	requireOneIssue(t, admission(machine, libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))...), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[1].name",
 		Message:     "NIC uplink port of Machine/guest is a libvirt vNIC the installer pins under its NIC name unless an interface matches it, and " + interfaceNameRule,
 		Remediation: "rename NIC uplink port in spec.hardware.nics on Machine/guest to an interface name the guest may use, such as enp2s0, and update every nicRef that names it"})
-	ready := object(api.Machine, "ready", m("substrate", m("providerRef", "lab", "libvirt", m()), "os", m("provided", true), "hardware", m("nics", list(m("name", "uplink port")))))
+	ready := object(api.Machine, "ready", m("hardware", m("providerRef", "lab", "nics", list(m("name", "uplink port"))), "os", m("provided", m())))
 	if issues := admission(ready, libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))...); len(issues) != 0 {
 		t.Fatalf("an OS-ready Machine's NIC name was refused: %v", issues)
 	}
@@ -547,7 +641,7 @@ func TestAProviderWithoutSegmentsIsToldToDeclareOne(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	lab = slices.DeleteFunc(lab, func(o api.Object) bool { return o.Kind() == api.Network })
 	issues := admission(installOn("192.0.2.11"), lab...)
-	want := api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
+	want := api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics",
 		Message:     "Machine/guest cannot attach its vNICs: InfraProvider/lab declares no segment",
 		Remediation: "declare a segment with a libvirt arm in spec.segments of InfraProvider/lab, or a Network with spec.provided false whose spec.libvirt.providerRef names lab"}
 	if !slices.Contains(issues, want) {

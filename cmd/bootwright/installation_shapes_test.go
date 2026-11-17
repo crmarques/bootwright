@@ -50,7 +50,7 @@ func TestInstallationShapesTheInstallationCannotUseRefuseAtValidate(t *testing.T
 		"an install address with no network configuration": {[]exampleEdit{
 			{labMachine, "    configRef: lab-guests\n", ""},
 		}, "api.invariant", "Machine/rhel-01", "$.spec.network.installAddressRef", "DHCP installation is not supported", "spec.network.configRef"},
-		"a profile named like the Machine it installs": {[]exampleEdit{{labProfile, "  name: rhel-9-8\n", "  name: rhel-01\n"}, {labMachine, "installProfileRef: rhel-9-8", "installProfileRef: rhel-01"}},
+		"a profile named like the Machine it installs": {[]exampleEdit{{labProfile, "  name: rhel-9-8\n", "  name: rhel-01\n"}, {labMachine, "profileRef: rhel-9-8", "profileRef: rhel-01"}},
 			"api.invariant", "MachineInstallProfile/rhel-01", treeServer, "os/rhel-01/", "rename Machine/rhel-01 or MachineInstallProfile/rhel-01"},
 		"an artifact server on the Machine it installs": {[]exampleEdit{{"infra/components/artifact-server.yaml", "machineRef: controller", "machineRef: rhel-01"}},
 			"api.invariant", "MachineInstallProfile/rhel-9-8", "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint.serverRef",

@@ -4,29 +4,21 @@ metadata:
   name: hub-multidc-01-infra-03
 
 spec:
-  placement:
-    site: site-a
-
-  substrate:
-    providerRef: kubevirt-ocp-multidc-01
-
-    kubevirt:
-      profileRef: large
-
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-a
 
   hardware:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: large
+
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
+
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
 
   os:
-    provided: false
+    clusterInstalled: {}
 
   network:
     configRef: hub-vm-network

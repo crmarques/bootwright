@@ -191,12 +191,12 @@ func TestAnInapplicableRelaxationRefusesBeforeAnythingRuns(t *testing.T) {
 	}{
 		"a Machine the plan does not hold": {
 			relaxations: map[string]string{"bravo": EraseRetain, "zulu": EraseRetain},
-			message:     "--authorize erase=zulu:retain names Machine/zulu, which declares no spec.hardware.eraseOnRemoval this destroy performs, so the relaxation changes nothing",
+			message:     "--authorize erase=zulu:retain names Machine/zulu, which declares no spec.hardware.rootDisk.onRemoval or spec.hardware.dataDisks[].onRemoval this destroy performs, so the relaxation changes nothing",
 			remedy:      "repeat bootwright destroy --context lab --authorize erase=bravo:retain without --authorize erase=zulu:retain",
 		},
 		"a block whose capability relaxes nothing": {
 			relaxations: map[string]string{"alpha": EraseMetadataClear},
-			message:     "--authorize erase=alpha:metadataClear names Machine/alpha, which declares no spec.hardware.eraseOnRemoval this destroy performs, so the relaxation changes nothing",
+			message:     "--authorize erase=alpha:metadataClear names Machine/alpha, which declares no spec.hardware.rootDisk.onRemoval or spec.hardware.dataDisks[].onRemoval this destroy performs, so the relaxation changes nothing",
 			remedy:      "repeat bootwright destroy --context lab without --authorize erase=alpha:metadataClear",
 		},
 		"a method the capability refuses": {

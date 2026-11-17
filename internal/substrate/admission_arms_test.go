@@ -27,7 +27,7 @@ func armDefects() map[Arm]api.Value {
 	), "segments", list(m("name", "plain", "vsphere", m()), m("name", "wrong", "kubevirt", m())))
 	return map[Arm]api.Value{
 		"baremetal": m("baremetal", m("defaults", m("bmc", m("address", "http://10.0.0.1",
-			"tls", m("verification", "certificate", "verify", false, "trustBundleRef", "ca"),
+			"tls", m("trustBundleRef", "ca"),
 			"virtualMedia", m("tls", m("trust", "importCertificate", "restoreVerificationAfterBoot", true, "enableVerification", true))))),
 			"segments", list(m("name", "n", "libvirt", m("bridge", "b")))),
 		"libvirt": m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("bindAddress", "0.0.0.0", "port", api.IntegerValue("65535"), "auth", m("credentialsRef", "bmc"))),
@@ -42,8 +42,8 @@ func armDefects() map[Arm]api.Value {
 
 func TestEachArmRefusesItsOwnDefectsInOrder(t *testing.T) {
 	host := obj(api.Machine, "host", m())
-	one := obj(api.Machine, "one", m("substrate", m("providerRef", "libvirt")))
-	two := obj(api.Machine, "two", m("substrate", m("providerRef", "libvirt")))
+	one := obj(api.Machine, "one", m("hardware", m("providerRef", "libvirt")))
+	two := obj(api.Machine, "two", m("hardware", m("providerRef", "libvirt")))
 	got := map[Arm][]string{}
 	for arm, spec := range armDefects() {
 		provider := obj(api.InfraProvider, string(arm), spec)
@@ -110,8 +110,6 @@ func TestAPartialProviderRefusesASegmentOfAnotherArm(t *testing.T) {
 func armDefectIssues() map[Arm][]string {
 	return map[Arm][]string{
 		"baremetal": {
-			"$.spec.baremetal.defaults.bmc.tls.verification: certificate verification requires an HTTPS controller endpoint",
-			"$.spec.baremetal.defaults.bmc.tls.trustBundleRef: a BMC trust bundle requires verification, and tls.verify is false here, whether authored or inherited",
 			"$.spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot: restoring verification requires disableVerification trust",
 			"$.spec.baremetal.defaults.bmc.virtualMedia.tls.enableVerification: enabling media verification requires verified HTTPS BMC access and importCertificate or established trust",
 			"$.spec.segments[0]: segment arm must match its provider substrate",

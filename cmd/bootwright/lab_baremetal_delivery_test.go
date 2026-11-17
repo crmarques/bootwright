@@ -151,12 +151,13 @@ func TestLabBaremetalExampleRefusesAnUnverifiedController(t *testing.T) {
 	t.Parallel()
 	const reason = "a Machine whose installation delivers private material hands its BMC the private installer image URL, " +
 		"so the BMC must be reached over https with its certificate verified"
-	const remedy = "address the BMC of Machine/metal-01 with an https:// spec.substrate.baremetal.bmc.address and remove the tls.verify opt-out " +
-		"on Machine/metal-01 or in spec.baremetal.defaults.bmc of InfraProvider/lab-metal; " +
+	const remedy = "address the BMC of Machine/metal-01 with an https:// spec.hardware.bmc.address and remove the tls.verification: none opt-out " +
+		"on Machine/metal-01; " +
 		"name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it"
 	for name, sources := range map[string]func(*testing.T) desiredstate.Sources{
 		"verification disabled": func(t *testing.T) desiredstate.Sources {
-			return rewritten(t, "trustBundleRef: lab-bmc-ca", "verify: false")
+			const address = "      address: https://bmc-01.metal.example.test/redfish/v1/Systems/1\n"
+			return rewritten(t, address, address+"      tls:\n        verification: none\n\n      virtualMedia:\n        tls:\n          enableVerification: false\n")
 		},
 		"an http controller": func(t *testing.T) desiredstate.Sources {
 			return rewritten(t, "address: https://bmc-01.metal.example.test/", "address: http://bmc-01.metal.example.test/")
@@ -167,7 +168,7 @@ func TestLabBaremetalExampleRefusesAnUnverifiedController(t *testing.T) {
 			if name == "an http controller" {
 				reported := diagnostics.Of(err)
 				if len(reported) != 1 || reported[0].Code != "api.invariant" ||
-					reported[0].Field != "$.spec.substrate.baremetal.bmc.virtualMedia.tls.enableVerification" {
+					reported[0].Field != "$.spec.hardware.bmc.virtualMedia.tls.enableVerification" {
 					t.Fatalf("HTTP setup admission: %v", reported)
 				}
 				return
@@ -196,8 +197,8 @@ func TestLabBaremetalExampleRefusesAnUnverifiedController(t *testing.T) {
 // the private image and management TLS requirements remain enforced.
 func TestLabBaremetalExampleFreezesItsExplicitMediaOptOut(t *testing.T) {
 	t.Parallel()
-	const address = "        address: https://bmc-01.metal.example.test/redfish/v1/Systems/1\n"
-	sources := rewritten(t, address, address+"        virtualMedia:\n          tls:\n            trust: disableVerification\n            restoreVerificationAfterBoot: false\n")
+	const address = "      address: https://bmc-01.metal.example.test/redfish/v1/Systems/1\n"
+	sources := rewritten(t, address, address+"      virtualMedia:\n        tls:\n          trust: disableVerification\n          restoreVerificationAfterBoot: false\n")
 	if len(sources.Files) != baremetalExampleFiles {
 		t.Fatalf("example discovery: got %d files, want %d", len(sources.Files), baremetalExampleFiles)
 	}

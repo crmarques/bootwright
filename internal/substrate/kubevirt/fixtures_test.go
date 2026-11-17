@@ -23,8 +23,8 @@ func number(name, value string) api.FieldValue { return field(name, api.IntegerV
 
 func controller() api.Object {
 	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
-		field("access", api.MapValue(field("local", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
+		field("access", api.MapValue(field("local", api.MapValue()))),
 	))
 }
 
@@ -58,13 +58,12 @@ func networkConfig() api.Object {
 
 func node(name string) api.Object {
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "lab-kubevirt"), field("kubevirt", api.MapValue(text("profileRef", "node"),
+		field("hardware", api.MapValue(text("providerRef", "lab-kubevirt"), text("profileRef", "node"),
 			field("nics", api.ListValue(
-				api.MapValue(text("nicRef", "enp1s0"), text("segmentRef", "lab-guests")),
-				api.MapValue(text("nicRef", "enp2s0"), text("segmentRef", "storage")),
-			)))))),
-		field("hardware", api.MapValue(field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")), api.MapValue(text("name", "enp2s0")))))),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
+				api.MapValue(text("name", "enp1s0"), text("segmentRef", "lab-guests")),
+				api.MapValue(text("name", "enp2s0"), text("segmentRef", "storage")),
+			)))),
+		field("os", api.MapValue(field("clusterInstalled", api.MapValue()))),
 		field("network", api.MapValue(text("configRef", "lab-guests"))),
 	))
 }

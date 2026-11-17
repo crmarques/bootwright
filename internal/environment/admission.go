@@ -57,8 +57,8 @@ func fleetKeyIssues(fleetKey api.Value, catalog api.Catalog) []api.Issue {
 		if named {
 			subject = machine.Identity()
 		}
-		installs := machine.Spec().Has("os", "installProfileRef")
-		if provided := machine.Spec().Get("os", "provided"); installs && provided.Present() && !provided.Bool() && !fleetKey.Present() {
+		installs := api.MachineInstalled(machine)
+		if installs && !fleetKey.Present() {
 			installing++
 			if named {
 				names = append(names, machine.Name())
@@ -100,15 +100,15 @@ func validateController(environment api.Object, catalog api.Catalog, members fun
 			issues = append(issues, api.Issue{Code: "api.invariant", Field: "$.spec.controller.machineRef", Message: message, Remediation: remediation})
 		}
 	}
-	if !controller.Spec().Get("os", "provided").Bool() {
-		add("controller must reference an OS-ready Machine with os.provided: true", "set spec.os.provided to true on "+controller.Identity()+", or set spec.controller.machineRef to an OS-ready Machine")
+	if !api.MachineProvided(controller) {
+		add("controller must reference an OS-ready Machine with os.provided: {}", "set spec.os.provided: {} on "+controller.Identity()+", or set spec.controller.machineRef to an OS-ready Machine")
 	}
-	if !controller.Spec().Get("access", "local").Bool() || controller.Spec().Has("access", "ssh") {
-		add("controller must reference the local Machine with access.local: true and no SSH access", "give "+controller.Identity()+" access.local: true and no spec.access.ssh")
+	if !controller.Spec().Has("access", "local") || controller.Spec().Has("access", "ssh") {
+		add("controller must reference the local Machine with access.local: {} and no SSH access", "give "+controller.Identity()+" access.local: {} and no spec.access.ssh")
 	}
 	for _, machine := range catalog.OfKind(api.Machine) {
-		if machine.Name() != name && api.ValidLexical(api.LexicalName, machine.Name()) && machine.Spec().Get("access", "local").Bool() {
-			add("only the controller Machine may declare local access; Machine/"+machine.Name()+" also declares access.local: true", "remove spec.access.local from "+machine.Identity())
+		if machine.Name() != name && api.ValidLexical(api.LexicalName, machine.Name()) && machine.Spec().Has("access", "local") {
+			add("only the controller Machine may declare local access; Machine/"+machine.Name()+" also declares access.local: {}", "remove spec.access.local from "+machine.Identity())
 		}
 	}
 	for _, cluster := range catalog.Objects() {
@@ -191,8 +191,8 @@ func validateRescueArtifactEndpoint(selection api.Value, catalog api.Catalog) []
 	}
 	spec := component.Spec()
 	machine, found := catalog.Find(api.Machine, spec.Get("machineRef").Text())
-	if found && !machine.Spec().Get("os", "provided").Bool() {
-		return issue("rescue artifact server requires an OS-ready Machine", "set spec.machineRef on "+component.Identity()+" to a Machine with os.provided: true")
+	if found && !api.MachineProvided(machine) {
+		return issue("rescue artifact server requires an OS-ready Machine", "set spec.machineRef on "+component.Identity()+" to a Machine with os.provided: {}")
 	}
 	return issues
 }

@@ -13,9 +13,7 @@ func physicalWithLabelledNIC(label string, match bool) api.Catalog {
 	for index, object := range objects {
 		if object.Kind() == api.Machine && object.Name() == "metal-01" {
 			spec := object.Spec().
-				WithPath(api.ListValue(api.MapValue(text("nicRef", label), text("macAddress", "aa:bb:cc:dd:ee:01"))), "substrate", "baremetal", "nics").
-				WithPath(api.ListValue(api.MapValue(text("name", label))), "hardware", "nics").
-				WithPath(api.StringValue(label), "hardware", "boot", "nicRef")
+				WithPath(api.ListValue(api.MapValue(text("name", label), text("macAddress", "aa:bb:cc:dd:ee:01"))), "hardware", "nics")
 			if match {
 				spec = spec.WithPath(api.ListValue(api.MapValue(text("interface", "enp1s0"), text("nicRef", label))), "network", "interfaceMatches")
 			}

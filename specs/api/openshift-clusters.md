@@ -174,7 +174,7 @@ When the complete platform object is omitted, normalization derives it:
 - multi-node KubeVirt machines become `none: {}`.
 
 Derivation follows `nodes[].machineRef` to each `Machine` and then its
-`substrate.providerRef`. Mixed provider types require an explicit platform. An
+`hardware.providerRef`. Mixed provider types require an explicit platform. An
 unresolved machine reference is reported at that reference and suppresses the
 secondary cannot-derive error. An authored platform always wins.
 
@@ -523,8 +523,8 @@ role ([node placement](../openshift-clusters.md#node-placement)).
 Repeated authored taints are kept; a native projection deduplicates them by
 `key` plus `effect`, so authoring the standard infra taint is a no-op.
 
-Every `machineRef` requires `os.provided: false` and makes that Machine an
-OpenShift node, declaring no role on it ([substrate arm](machines.md#substrate-arm)).
+Every `machineRef` requires `os.clusterInstalled` and makes that Machine an
+OpenShift node, declaring no role on it ([hardware and substrate](machines.md#hardware-and-substrate)).
 The cluster domain publishes these bindings as the cluster's membership
 (`containercluster.MemberMachines`), which Environment selection, node binding
 uniqueness and machine targeting read without naming this kind.

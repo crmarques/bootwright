@@ -91,14 +91,12 @@ kind: Machine
 metadata:
   name: acceptance-clone-node
 spec:
-  substrate:
+  hardware:
     providerRef: acceptance-vsphere
-    vsphere:
-      profileRef: clone
+    profileRef: clone
   os:
-    provided: false
-    installProfileRef: acceptance-clone
     install:
+      profileRef: acceptance-clone
       ntp:
         - serverRef: default-01
         - serverRef: default-02
@@ -129,7 +127,7 @@ metadata:
   name: acceptance-hypervisor
 spec:
   os:
-    provided: true
+    provided: {}
   proxy:
     direct: {}
   network:
@@ -149,21 +147,16 @@ kind: Machine
 metadata:
   name: acceptance-sno-node
 spec:
-  substrate:
-    providerRef: kubevirt-ocp-multidc-01
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
   hardware:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: primary
@@ -188,7 +181,7 @@ metadata:
   name: controller
 spec:
   os:
-    provided: true
+    provided: {}
   proxy:
     proxyRef: default
     noProxy:
@@ -205,7 +198,7 @@ spec:
       - name: ip
         address: 192.0.2.127
   access:
-    local: true
+    local: {}
     rootLogin: keep
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -215,36 +208,27 @@ metadata:
   labels:
     datacenter: site-a
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: bare-metal
-    baremetal:
-      bmc:
-        address: https://bmc-edge-a-01.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ocp-bmc-credentials
-        tls:
-          verify: true
-        virtualMedia:
-          tls:
-            trust: established
-            enableVerification: true
-      nics:
-        - nicRef: eth0
-          macAddress: 02:00:00:00:00:18
-          segmentRef: ocp-bare-metal-network
-        - nicRef: eth2
-          macAddress: 02:00:00:00:00:19
-          segmentRef: ocp-bare-metal-network
-      rootDevice:
-        wwn: "0x500000000000f101"
+  site: site-a
   hardware:
+    providerRef: bare-metal
+    bmc:
+      address: https://bmc-edge-a-01.example.com/redfish/v1/Systems/1
+      credentialsRef: ocp-bmc-credentials
+      virtualMedia:
+        tls:
+          trust: established
+          enableVerification: true
     nics:
       - name: eth0
+        macAddress: 02:00:00:00:00:18
+        segmentRef: ocp-bare-metal-network
       - name: eth2
+        macAddress: 02:00:00:00:00:19
+        segmentRef: ocp-bare-metal-network
+    rootDisk:
+      wwn: "0x500000000000f101"
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: ocp-bare-metal-network
     installAddressRef: ip
@@ -271,36 +255,27 @@ metadata:
   labels:
     datacenter: site-a
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: bare-metal
-    baremetal:
-      bmc:
-        address: https://bmc-edge-a-02.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ocp-bmc-credentials
-        tls:
-          verify: true
-        virtualMedia:
-          tls:
-            trust: established
-            enableVerification: true
-      nics:
-        - nicRef: eth0
-          macAddress: 02:00:00:00:00:1a
-          segmentRef: ocp-bare-metal-network
-        - nicRef: eth2
-          macAddress: 02:00:00:00:00:1b
-          segmentRef: ocp-bare-metal-network
-      rootDevice:
-        wwn: "0x500000000000f102"
+  site: site-a
   hardware:
+    providerRef: bare-metal
+    bmc:
+      address: https://bmc-edge-a-02.example.com/redfish/v1/Systems/1
+      credentialsRef: ocp-bmc-credentials
+      virtualMedia:
+        tls:
+          trust: established
+          enableVerification: true
     nics:
       - name: eth0
+        macAddress: 02:00:00:00:00:1a
+        segmentRef: ocp-bare-metal-network
       - name: eth2
+        macAddress: 02:00:00:00:00:1b
+        segmentRef: ocp-bare-metal-network
+    rootDisk:
+      wwn: "0x500000000000f102"
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: ocp-bare-metal-network
     installAddressRef: ip
@@ -327,36 +302,27 @@ metadata:
   labels:
     datacenter: site-a
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: bare-metal
-    baremetal:
-      bmc:
-        address: https://bmc-edge-a-03.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ocp-bmc-credentials
-        tls:
-          verify: true
-        virtualMedia:
-          tls:
-            trust: established
-            enableVerification: true
-      nics:
-        - nicRef: eth0
-          macAddress: 02:00:00:00:00:1c
-          segmentRef: ocp-bare-metal-network
-        - nicRef: eth2
-          macAddress: 02:00:00:00:00:1d
-          segmentRef: ocp-bare-metal-network
-      rootDevice:
-        wwn: "0x500000000000f103"
+  site: site-a
   hardware:
+    providerRef: bare-metal
+    bmc:
+      address: https://bmc-edge-a-03.example.com/redfish/v1/Systems/1
+      credentialsRef: ocp-bmc-credentials
+      virtualMedia:
+        tls:
+          trust: established
+          enableVerification: true
     nics:
       - name: eth0
+        macAddress: 02:00:00:00:00:1c
+        segmentRef: ocp-bare-metal-network
       - name: eth2
+        macAddress: 02:00:00:00:00:1d
+        segmentRef: ocp-bare-metal-network
+    rootDisk:
+      wwn: "0x500000000000f103"
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: ocp-bare-metal-network
     installAddressRef: ip
@@ -383,36 +349,27 @@ metadata:
   labels:
     datacenter: site-b
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: bare-metal
-    baremetal:
-      bmc:
-        address: https://bmc-edge-b-01.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ocp-bmc-credentials
-        tls:
-          verify: true
-        virtualMedia:
-          tls:
-            trust: established
-            enableVerification: true
-      nics:
-        - nicRef: eth0
-          macAddress: 02:00:00:00:00:1e
-          segmentRef: ocp-bare-metal-network
-        - nicRef: eth2
-          macAddress: 02:00:00:00:00:1f
-          segmentRef: ocp-bare-metal-network
-      rootDevice:
-        wwn: "0x500000000000f104"
+  site: site-b
   hardware:
+    providerRef: bare-metal
+    bmc:
+      address: https://bmc-edge-b-01.example.com/redfish/v1/Systems/1
+      credentialsRef: ocp-bmc-credentials
+      virtualMedia:
+        tls:
+          trust: established
+          enableVerification: true
     nics:
       - name: eth0
+        macAddress: 02:00:00:00:00:1e
+        segmentRef: ocp-bare-metal-network
       - name: eth2
+        macAddress: 02:00:00:00:00:1f
+        segmentRef: ocp-bare-metal-network
+    rootDisk:
+      wwn: "0x500000000000f104"
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: ocp-bare-metal-network
     installAddressRef: ip
@@ -439,36 +396,27 @@ metadata:
   labels:
     datacenter: site-b
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: bare-metal
-    baremetal:
-      bmc:
-        address: https://bmc-edge-b-02.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ocp-bmc-credentials
-        tls:
-          verify: true
-        virtualMedia:
-          tls:
-            trust: established
-            enableVerification: true
-      nics:
-        - nicRef: eth0
-          macAddress: 02:00:00:00:00:20
-          segmentRef: ocp-bare-metal-network
-        - nicRef: eth2
-          macAddress: 02:00:00:00:00:21
-          segmentRef: ocp-bare-metal-network
-      rootDevice:
-        wwn: "0x500000000000f105"
+  site: site-b
   hardware:
+    providerRef: bare-metal
+    bmc:
+      address: https://bmc-edge-b-02.example.com/redfish/v1/Systems/1
+      credentialsRef: ocp-bmc-credentials
+      virtualMedia:
+        tls:
+          trust: established
+          enableVerification: true
     nics:
       - name: eth0
+        macAddress: 02:00:00:00:00:20
+        segmentRef: ocp-bare-metal-network
       - name: eth2
+        macAddress: 02:00:00:00:00:21
+        segmentRef: ocp-bare-metal-network
+    rootDisk:
+      wwn: "0x500000000000f105"
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: ocp-bare-metal-network
     installAddressRef: ip
@@ -495,36 +443,27 @@ metadata:
   labels:
     datacenter: site-b
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: bare-metal
-    baremetal:
-      bmc:
-        address: https://bmc-edge-b-03.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ocp-bmc-credentials
-        tls:
-          verify: true
-        virtualMedia:
-          tls:
-            trust: established
-            enableVerification: true
-      nics:
-        - nicRef: eth0
-          macAddress: 02:00:00:00:00:22
-          segmentRef: ocp-bare-metal-network
-        - nicRef: eth2
-          macAddress: 02:00:00:00:00:23
-          segmentRef: ocp-bare-metal-network
-      rootDevice:
-        wwn: "0x500000000000f106"
+  site: site-b
   hardware:
+    providerRef: bare-metal
+    bmc:
+      address: https://bmc-edge-b-03.example.com/redfish/v1/Systems/1
+      credentialsRef: ocp-bmc-credentials
+      virtualMedia:
+        tls:
+          trust: established
+          enableVerification: true
     nics:
       - name: eth0
+        macAddress: 02:00:00:00:00:22
+        segmentRef: ocp-bare-metal-network
       - name: eth2
+        macAddress: 02:00:00:00:00:23
+        segmentRef: ocp-bare-metal-network
+    rootDisk:
+      wwn: "0x500000000000f106"
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: ocp-bare-metal-network
     installAddressRef: ip
@@ -549,23 +488,17 @@ kind: Machine
 metadata:
   name: hub-multidc-01-infra-01
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: kubevirt-ocp-multidc-01
-    kubevirt:
-      profileRef: large
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-a
   hardware:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: large
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -590,23 +523,17 @@ kind: Machine
 metadata:
   name: hub-multidc-01-infra-02
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: kubevirt-ocp-multidc-01
-    kubevirt:
-      profileRef: large
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-a
   hardware:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: large
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -631,23 +558,17 @@ kind: Machine
 metadata:
   name: hub-multidc-01-infra-03
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: kubevirt-ocp-multidc-01
-    kubevirt:
-      profileRef: large
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-a
   hardware:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: large
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -672,23 +593,17 @@ kind: Machine
 metadata:
   name: hub-multidc-01-master-01
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: kubevirt-ocp-multidc-01
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-a
   hardware:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -713,23 +628,17 @@ kind: Machine
 metadata:
   name: hub-multidc-01-master-02
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: kubevirt-ocp-multidc-01
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-a
   hardware:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -754,23 +663,17 @@ kind: Machine
 metadata:
   name: hub-multidc-01-master-03
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: kubevirt-ocp-multidc-01
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-a
   hardware:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -795,23 +698,17 @@ kind: Machine
 metadata:
   name: hub-multidc-01-worker-01
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: kubevirt-ocp-multidc-01
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-a
   hardware:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -836,23 +733,17 @@ kind: Machine
 metadata:
   name: hub-multidc-01-worker-02
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: kubevirt-ocp-multidc-01
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-a
   hardware:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -877,23 +768,17 @@ kind: Machine
 metadata:
   name: hub-multidc-01-worker-03
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: kubevirt-ocp-multidc-01
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-a
   hardware:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -918,23 +803,17 @@ kind: Machine
 metadata:
   name: hub-multidc-02-infra-01
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: kubevirt-ocp-multidc-02
-    kubevirt:
-      profileRef: large
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-b
   hardware:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: large
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -959,23 +838,17 @@ kind: Machine
 metadata:
   name: hub-multidc-02-infra-02
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: kubevirt-ocp-multidc-02
-    kubevirt:
-      profileRef: large
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-b
   hardware:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: large
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -1000,23 +873,17 @@ kind: Machine
 metadata:
   name: hub-multidc-02-infra-03
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: kubevirt-ocp-multidc-02
-    kubevirt:
-      profileRef: large
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-b
   hardware:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: large
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -1041,23 +908,17 @@ kind: Machine
 metadata:
   name: hub-multidc-02-master-01
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: kubevirt-ocp-multidc-02
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-b
   hardware:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -1082,23 +943,17 @@ kind: Machine
 metadata:
   name: hub-multidc-02-master-02
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: kubevirt-ocp-multidc-02
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-b
   hardware:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -1123,23 +978,17 @@ kind: Machine
 metadata:
   name: hub-multidc-02-master-03
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: kubevirt-ocp-multidc-02
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-b
   hardware:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -1164,23 +1013,17 @@ kind: Machine
 metadata:
   name: hub-multidc-02-worker-01
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: kubevirt-ocp-multidc-02
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-b
   hardware:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -1205,23 +1048,17 @@ kind: Machine
 metadata:
   name: hub-multidc-02-worker-02
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: kubevirt-ocp-multidc-02
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-b
   hardware:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -1246,23 +1083,17 @@ kind: Machine
 metadata:
   name: hub-multidc-02-worker-03
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: kubevirt-ocp-multidc-02
-    kubevirt:
-      profileRef: general
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
+  site: site-b
   hardware:
+    providerRef: kubevirt-ocp-multidc-02
+    profileRef: general
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: hub-vm-network
     installAddressRef: ip
@@ -1287,46 +1118,34 @@ kind: Machine
 metadata:
   name: storage-a-01
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: bare-metal
-    baremetal:
-      bmc:
-        address: https://bmc-storage-a-01.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ceph-bmc-credentials
-        tls:
-          verify: true
-        virtualMedia:
-          tls:
-            trust: established
-            enableVerification: true
-      nics:
-        - nicRef: nic0
-          macAddress: 02:00:00:00:00:00
-          segmentRef: ceph-network
-        - nicRef: nic1
-          macAddress: 02:00:00:00:00:01
-          segmentRef: ceph-network
-        - nicRef: nic2
-          macAddress: 02:00:00:00:00:02
-          segmentRef: ceph-network
-        - nicRef: nic3
-          macAddress: 02:00:00:00:00:03
-          segmentRef: ceph-network
-      rootDevice:
-        wwn: "0x5000c500a1b2c311"
+  site: site-a
   hardware:
+    providerRef: bare-metal
+    bmc:
+      address: https://bmc-storage-a-01.example.com/redfish/v1/Systems/1
+      credentialsRef: ceph-bmc-credentials
+      virtualMedia:
+        tls:
+          trust: established
+          enableVerification: true
     nics:
       - name: nic0
+        macAddress: 02:00:00:00:00:00
+        segmentRef: ceph-network
       - name: nic1
+        macAddress: 02:00:00:00:00:01
+        segmentRef: ceph-network
       - name: nic2
+        macAddress: 02:00:00:00:00:02
+        segmentRef: ceph-network
       - name: nic3
+        macAddress: 02:00:00:00:00:03
+        segmentRef: ceph-network
+    rootDisk:
+      wwn: "0x5000c500a1b2c311"
   os:
-    provided: false
-    installProfileRef: rhel-ceph-node
     install:
+      profileRef: rhel-ceph-node
       hostKeyRef: storage-a-01-host-key
       ntp:
         - serverRef: default-01
@@ -1375,46 +1194,34 @@ kind: Machine
 metadata:
   name: storage-a-02
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: bare-metal
-    baremetal:
-      bmc:
-        address: https://bmc-storage-a-02.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ceph-bmc-credentials
-        tls:
-          verify: true
-        virtualMedia:
-          tls:
-            trust: established
-            enableVerification: true
-      nics:
-        - nicRef: nic0
-          macAddress: 02:00:00:00:00:04
-          segmentRef: ceph-network
-        - nicRef: nic1
-          macAddress: 02:00:00:00:00:05
-          segmentRef: ceph-network
-        - nicRef: nic2
-          macAddress: 02:00:00:00:00:06
-          segmentRef: ceph-network
-        - nicRef: nic3
-          macAddress: 02:00:00:00:00:07
-          segmentRef: ceph-network
-      rootDevice:
-        wwn: "0x5000c500a1b2c312"
+  site: site-a
   hardware:
+    providerRef: bare-metal
+    bmc:
+      address: https://bmc-storage-a-02.example.com/redfish/v1/Systems/1
+      credentialsRef: ceph-bmc-credentials
+      virtualMedia:
+        tls:
+          trust: established
+          enableVerification: true
     nics:
       - name: nic0
+        macAddress: 02:00:00:00:00:04
+        segmentRef: ceph-network
       - name: nic1
+        macAddress: 02:00:00:00:00:05
+        segmentRef: ceph-network
       - name: nic2
+        macAddress: 02:00:00:00:00:06
+        segmentRef: ceph-network
       - name: nic3
+        macAddress: 02:00:00:00:00:07
+        segmentRef: ceph-network
+    rootDisk:
+      wwn: "0x5000c500a1b2c312"
   os:
-    provided: false
-    installProfileRef: rhel-ceph-node
     install:
+      profileRef: rhel-ceph-node
       hostKeyRef: storage-a-02-host-key
       ntp:
         - serverRef: default-01
@@ -1463,46 +1270,34 @@ kind: Machine
 metadata:
   name: storage-a-03
 spec:
-  placement:
-    site: site-a
-  substrate:
-    providerRef: bare-metal
-    baremetal:
-      bmc:
-        address: https://bmc-storage-a-03.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ceph-bmc-credentials
-        tls:
-          verify: true
-        virtualMedia:
-          tls:
-            trust: established
-            enableVerification: true
-      nics:
-        - nicRef: nic0
-          macAddress: 02:00:00:00:00:08
-          segmentRef: ceph-network
-        - nicRef: nic1
-          macAddress: 02:00:00:00:00:09
-          segmentRef: ceph-network
-        - nicRef: nic2
-          macAddress: 02:00:00:00:00:0a
-          segmentRef: ceph-network
-        - nicRef: nic3
-          macAddress: 02:00:00:00:00:0b
-          segmentRef: ceph-network
-      rootDevice:
-        wwn: "0x5000c500a1b2c313"
+  site: site-a
   hardware:
+    providerRef: bare-metal
+    bmc:
+      address: https://bmc-storage-a-03.example.com/redfish/v1/Systems/1
+      credentialsRef: ceph-bmc-credentials
+      virtualMedia:
+        tls:
+          trust: established
+          enableVerification: true
     nics:
       - name: nic0
+        macAddress: 02:00:00:00:00:08
+        segmentRef: ceph-network
       - name: nic1
+        macAddress: 02:00:00:00:00:09
+        segmentRef: ceph-network
       - name: nic2
+        macAddress: 02:00:00:00:00:0a
+        segmentRef: ceph-network
       - name: nic3
+        macAddress: 02:00:00:00:00:0b
+        segmentRef: ceph-network
+    rootDisk:
+      wwn: "0x5000c500a1b2c313"
   os:
-    provided: false
-    installProfileRef: rhel-ceph-node
     install:
+      profileRef: rhel-ceph-node
       hostKeyRef: storage-a-03-host-key
       ntp:
         - serverRef: default-01
@@ -1551,46 +1346,34 @@ kind: Machine
 metadata:
   name: storage-b-01
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: bare-metal
-    baremetal:
-      bmc:
-        address: https://bmc-storage-b-01.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ceph-bmc-credentials
-        tls:
-          verify: true
-        virtualMedia:
-          tls:
-            trust: established
-            enableVerification: true
-      nics:
-        - nicRef: nic0
-          macAddress: 02:00:00:00:00:0c
-          segmentRef: ceph-network
-        - nicRef: nic1
-          macAddress: 02:00:00:00:00:0d
-          segmentRef: ceph-network
-        - nicRef: nic2
-          macAddress: 02:00:00:00:00:0e
-          segmentRef: ceph-network
-        - nicRef: nic3
-          macAddress: 02:00:00:00:00:0f
-          segmentRef: ceph-network
-      rootDevice:
-        wwn: "0x5000c500a1b2c314"
+  site: site-b
   hardware:
+    providerRef: bare-metal
+    bmc:
+      address: https://bmc-storage-b-01.example.com/redfish/v1/Systems/1
+      credentialsRef: ceph-bmc-credentials
+      virtualMedia:
+        tls:
+          trust: established
+          enableVerification: true
     nics:
       - name: nic0
+        macAddress: 02:00:00:00:00:0c
+        segmentRef: ceph-network
       - name: nic1
+        macAddress: 02:00:00:00:00:0d
+        segmentRef: ceph-network
       - name: nic2
+        macAddress: 02:00:00:00:00:0e
+        segmentRef: ceph-network
       - name: nic3
+        macAddress: 02:00:00:00:00:0f
+        segmentRef: ceph-network
+    rootDisk:
+      wwn: "0x5000c500a1b2c314"
   os:
-    provided: false
-    installProfileRef: rhel-ceph-node
     install:
+      profileRef: rhel-ceph-node
       hostKeyRef: storage-b-01-host-key
       ntp:
         - serverRef: default-01
@@ -1639,46 +1422,34 @@ kind: Machine
 metadata:
   name: storage-b-02
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: bare-metal
-    baremetal:
-      bmc:
-        address: https://bmc-storage-b-02.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ceph-bmc-credentials
-        tls:
-          verify: true
-        virtualMedia:
-          tls:
-            trust: established
-            enableVerification: true
-      nics:
-        - nicRef: nic0
-          macAddress: 02:00:00:00:00:10
-          segmentRef: ceph-network
-        - nicRef: nic1
-          macAddress: 02:00:00:00:00:11
-          segmentRef: ceph-network
-        - nicRef: nic2
-          macAddress: 02:00:00:00:00:12
-          segmentRef: ceph-network
-        - nicRef: nic3
-          macAddress: 02:00:00:00:00:13
-          segmentRef: ceph-network
-      rootDevice:
-        wwn: "0x5000c500a1b2c315"
+  site: site-b
   hardware:
+    providerRef: bare-metal
+    bmc:
+      address: https://bmc-storage-b-02.example.com/redfish/v1/Systems/1
+      credentialsRef: ceph-bmc-credentials
+      virtualMedia:
+        tls:
+          trust: established
+          enableVerification: true
     nics:
       - name: nic0
+        macAddress: 02:00:00:00:00:10
+        segmentRef: ceph-network
       - name: nic1
+        macAddress: 02:00:00:00:00:11
+        segmentRef: ceph-network
       - name: nic2
+        macAddress: 02:00:00:00:00:12
+        segmentRef: ceph-network
       - name: nic3
+        macAddress: 02:00:00:00:00:13
+        segmentRef: ceph-network
+    rootDisk:
+      wwn: "0x5000c500a1b2c315"
   os:
-    provided: false
-    installProfileRef: rhel-ceph-node
     install:
+      profileRef: rhel-ceph-node
       hostKeyRef: storage-b-02-host-key
       ntp:
         - serverRef: default-01
@@ -1727,46 +1498,34 @@ kind: Machine
 metadata:
   name: storage-b-03
 spec:
-  placement:
-    site: site-b
-  substrate:
-    providerRef: bare-metal
-    baremetal:
-      bmc:
-        address: https://bmc-storage-b-03.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ceph-bmc-credentials
-        tls:
-          verify: true
-        virtualMedia:
-          tls:
-            trust: established
-            enableVerification: true
-      nics:
-        - nicRef: nic0
-          macAddress: 02:00:00:00:00:14
-          segmentRef: ceph-network
-        - nicRef: nic1
-          macAddress: 02:00:00:00:00:15
-          segmentRef: ceph-network
-        - nicRef: nic2
-          macAddress: 02:00:00:00:00:16
-          segmentRef: ceph-network
-        - nicRef: nic3
-          macAddress: 02:00:00:00:00:17
-          segmentRef: ceph-network
-      rootDevice:
-        wwn: "0x5000c500a1b2c316"
+  site: site-b
   hardware:
+    providerRef: bare-metal
+    bmc:
+      address: https://bmc-storage-b-03.example.com/redfish/v1/Systems/1
+      credentialsRef: ceph-bmc-credentials
+      virtualMedia:
+        tls:
+          trust: established
+          enableVerification: true
     nics:
       - name: nic0
+        macAddress: 02:00:00:00:00:14
+        segmentRef: ceph-network
       - name: nic1
+        macAddress: 02:00:00:00:00:15
+        segmentRef: ceph-network
       - name: nic2
+        macAddress: 02:00:00:00:00:16
+        segmentRef: ceph-network
       - name: nic3
+        macAddress: 02:00:00:00:00:17
+        segmentRef: ceph-network
+    rootDisk:
+      wwn: "0x5000c500a1b2c316"
   os:
-    provided: false
-    installProfileRef: rhel-ceph-node
     install:
+      profileRef: rhel-ceph-node
       hostKeyRef: storage-b-03-host-key
       ntp:
         - serverRef: default-01
@@ -1815,10 +1574,9 @@ kind: Machine
 metadata:
   name: storage-witness-01
 spec:
-  placement:
-    site: site-c
+  site: site-c
   os:
-    provided: true
+    provided: {}
   proxy:
     direct: {}
   network:
@@ -2300,8 +2058,6 @@ spec:
     defaults:
       bmc:
         credentialsRef: ocp-bmc-credentials
-        tls:
-          verify: true
         virtualMedia:
           tls:
             trust: established

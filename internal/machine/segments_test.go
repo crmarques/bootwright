@@ -20,12 +20,11 @@ func twoNICConfig(interfaces ...api.Value) api.Object {
 
 func twoNICMachine(eth1Segment string) api.Object {
 	machine, _ := fixture()
-	nics := list(m("nicRef", "eth0", "macAddress", "02:00:00:00:00:01", "segmentRef", "net"), m("nicRef", "eth1", "macAddress", "02:00:00:00:00:02"))
+	nics := list(m("name", "eth0", "macAddress", "02:00:00:00:00:01", "segmentRef", "net"), m("name", "eth1", "macAddress", "02:00:00:00:00:02"))
 	if eth1Segment != "" {
 		nics = list(nics.Items()[0], nics.Items()[1].With("segmentRef", api.StringValue(eth1Segment)))
 	}
-	machine = withNetwork(machine, []string{"substrate", "baremetal", "nics"}, nics)
-	return withNetwork(machine, []string{"hardware", "nics"}, list(m("name", "eth0"), m("name", "eth1")))
+	return withNetwork(machine, []string{"hardware", "nics"}, nics)
 }
 
 func issueWith(issues []api.Issue, field, text string) (api.Issue, bool) {
@@ -45,8 +44,8 @@ func TestABareMetalNICOnASharedProviderNamesItsSegment(t *testing.T) {
 	two := metalProvider(m("name", "net", "untaggedNetworkRef", "lan", "baremetal", m()), m("name", "storage", "baremetal", m()))
 	network := lan(m("ipv4", m("cidr", "192.0.2.0/24")))
 	cabled := twoNICConfig(m("name", "eth0", "type", "ethernet"), m("name", "eth1", "type", "ethernet"))
-	issue, found := issueWith(membershipIssues(t, twoNICMachine(""), two, network, cabled), "$.spec.substrate.baremetal.nics[1]", "NIC eth1 of Machine/node carries interface eth1")
-	if !found || !strings.Contains(issue.Message, "declares segments net, storage") || !strings.Contains(issue.Remediation, "set segmentRef on the spec.substrate.baremetal.nics entry of NIC eth1 on Machine/node to one of net, storage") {
+	issue, found := issueWith(membershipIssues(t, twoNICMachine(""), two, network, cabled), "$.spec.hardware.nics[1].segmentRef", "NIC eth1 of Machine/node carries interface eth1")
+	if !found || !strings.Contains(issue.Message, "declares segments net, storage") || !strings.Contains(issue.Remediation, "set segmentRef on NIC eth1 in spec.hardware.nics of Machine/node to one of net, storage") {
 		t.Fatalf("issue = %+v (found %v)", issue, found)
 	}
 	if issues := membershipIssues(t, twoNICMachine("storage"), two, network, cabled); len(issues) != 0 {
@@ -57,12 +56,13 @@ func TestABareMetalNICOnASharedProviderNamesItsSegment(t *testing.T) {
 		t.Fatalf("an unmatched NIC without a segment was refused: %+v", issues)
 	}
 	if _, found := issueWith(membershipIssues(t, twoNICMachine("absent-arm"), metalProvider(m("name", "net", "untaggedNetworkRef", "lan", "baremetal", m()), m("name", "absent-arm", "libvirt", m("bridge", "br0"))), network, cabled),
-		"$.spec.substrate.baremetal.nics[1].segmentRef", "segment must name a matching arm"); !found {
+		"$.spec.hardware.nics[1].segmentRef", "segment must name a matching arm"); !found {
 		t.Fatal("a segment of another arm was admitted")
 	}
 	bastion, _ := fixture()
-	bastion = bastion.WithSpec(bastion.Spec().Without("substrate").WithPath(m("nics", list(m("nicRef", "eth0", "macAddress", "02:00:00:00:00:01", "segmentRef", "net"))), "substrate", "baremetal"))
-	if _, found := issueWith(Validate(bastion, api.NewCatalog([]api.Object{bastion})), "$.spec.substrate.baremetal.nics[0].segmentRef", "names no provider whose segments it could select"); !found {
+	bastion = bastion.WithSpec(bastion.Spec().WithPath(bastion.Spec().Get("hardware").Without("providerRef"), "hardware").
+		WithPath(list(m("name", "eth0", "macAddress", "02:00:00:00:00:01", "segmentRef", "net")), "hardware", "nics"))
+	if _, found := issueWith(Validate(bastion, api.NewCatalog([]api.Object{bastion})), "$.spec.hardware.nics[0].segmentRef", "names no provider whose segments it could select"); !found {
 		t.Fatal("a segmentRef without a provider was admitted")
 	}
 }
@@ -93,7 +93,7 @@ func TestAnAssignmentsStackAgreesWithItsSegmentsCarriage(t *testing.T) {
 	machine, _ := fixture()
 	network := lan(m("ipv4", m("cidr", "192.0.2.0/24")))
 	issue, found := issueWith(membershipIssues(t, machine, network, metalProvider(m("name", "net", "baremetal", m()))), "$.spec.network.addresses[0].interface", "interface eth0 of Machine/node reaches Network/lan untagged on NIC eth0, and segment net (spec.segments[0] of InfraProvider/metal) carries no Network untagged")
-	if !found || issue.Remediation != "set spec.segments[0].untaggedNetworkRef of InfraProvider/metal to lan, or set segmentRef on the spec.substrate.baremetal.nics entry of NIC eth0 on Machine/node to a segment that carries it" {
+	if !found || issue.Remediation != "set spec.segments[0].untaggedNetworkRef of InfraProvider/metal to lan, or set spec.hardware.nics[0].segmentRef on Machine/node to a segment that carries it" {
 		t.Fatalf("issue = %+v (found %v)", issue, found)
 	}
 	other := object(api.Network, "other", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24")))
@@ -126,7 +126,7 @@ func TestAManagedSegmentCarriesOnlyItsOwnNetworkUntagged(t *testing.T) {
 	machine := guest(m("configRef", "net", "addresses", list(m("name", "ip", "address", "198.51.100.11", "interface", "enp1s0"))))
 	other := object(api.Network, "other", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24")))
 	issue, found := issueWith(admission(machine, append(lab, other)...), "$.spec.network.addresses[0].interface", "reaches Network/other untagged on NIC enp1s0, and segment net (managed Network/net of InfraProvider/lab) carries Network/net untagged")
-	if !found || issue.Remediation != "add an entry {nicRef: enp1s0, segmentRef: <segment>} to spec.substrate.libvirt.nics of Machine/guest naming a segment that carries Network/other untagged" {
+	if !found || issue.Remediation != "set spec.hardware.nics[0].segmentRef on Machine/guest to a segment that carries Network/other untagged" {
 		t.Fatalf("issue = %+v (found %v)", issue, found)
 	}
 }
@@ -188,7 +188,7 @@ func TestABridgeAcrossSegmentsNeedsEachToCarryItsNetwork(t *testing.T) {
 func TestAFabricSegmentNeverOffersTaggedCarriage(t *testing.T) {
 	provider := object(api.InfraProvider, "kv", m("kubevirt", m("kubeconfigRef", "host", "namespace", "guests"), "segments", list(
 		m("name", "primary", "untaggedNetworkRef", "other", "kubevirt", m()), m("name", "storage", "untaggedNetworkRef", "lan", "kubevirt", m()))))
-	machine := object(api.Machine, "node", m("substrate", m("providerRef", "kv", "kubevirt", m("nics", list(m("nicRef", "eth0", "segmentRef", "primary")))), "hardware", m("nics", list(m("name", "eth0")))))
+	machine := object(api.Machine, "node", m("hardware", m("providerRef", "kv", "nics", list(m("name", "eth0", "segmentRef", "primary")))))
 	native := m("interfaces", list(m("name", "eth0", "type", "ethernet"), m("name", "eth0.200", "type", "vlan", "vlan", m("base-iface", "eth0", "id", api.IntegerValue("200")))))
 	tagged := lan(m("vlan", api.IntegerValue("200"), "ipv4", m("cidr", "192.0.2.0/24")))
 	issues := validateCarriage(machine, api.NewCatalog([]api.Object{machine, provider, tagged}), native, tagged, "eth0.200", "$.spec.network.addresses[0].interface")
@@ -199,8 +199,8 @@ func TestAFabricSegmentNeverOffersTaggedCarriage(t *testing.T) {
 }
 
 // An interface without an mtu of its own runs at 1500, so above a smaller
-// capacity the step is to set one, and a bare-metal NIC without a nics entry is
-// told the entry it needs, macAddress included.
+// capacity the step is to set one, and an interface no NIC carries is told to
+// declare the NIC.
 func TestRemediesNameTheFieldsTheOperatorAdds(t *testing.T) {
 	machine, _ := fixture()
 	narrow := metalProvider(m("name", "net", "untaggedNetworkRef", "lan", "mtu", api.IntegerValue("1400"), "baremetal", m()))
@@ -211,9 +211,9 @@ func TestRemediesNameTheFieldsTheOperatorAdds(t *testing.T) {
 	two := metalProvider(m("name", "net", "untaggedNetworkRef", "lan", "baremetal", m()), m("name", "storage", "baremetal", m()))
 	cabled := twoNICConfig(m("name", "eth0", "type", "ethernet"), m("name", "eth1", "type", "ethernet"))
 	unlisted := twoNICMachine("")
-	unlisted = withNetwork(unlisted, []string{"substrate", "baremetal", "nics"}, list(unlisted.Spec().Get("substrate", "baremetal", "nics").Items()[0]))
-	issue, found = issueWith(membershipIssues(t, unlisted, two, lan(m("ipv4", m("cidr", "192.0.2.0/24"))), cabled), "$.spec.substrate.baremetal.nics", "NIC eth1 of Machine/node carries interface eth1")
-	if !found || issue.Remediation != "add an entry {nicRef: eth1, macAddress: <its MAC>, segmentRef: <segment>} to spec.substrate.baremetal.nics of Machine/node, with segmentRef one of net, storage" {
+	unlisted = withNetwork(unlisted, []string{"hardware", "nics"}, list(unlisted.Spec().Get("hardware", "nics").Items()[0]))
+	issue, found = issueWith(membershipIssues(t, unlisted, two, lan(m("ipv4", m("cidr", "192.0.2.0/24"))), cabled), "$.spec.network.interfaceMatches", "ethernet interface eth1 of Machine/node matches no NIC")
+	if !found || issue.Remediation != "declare NIC eth1 in spec.hardware.nics on Machine/node, or match interface eth1 to a NIC in spec.network.interfaceMatches" {
 		t.Fatalf("issue = %+v (found %v)", issue, found)
 	}
 }

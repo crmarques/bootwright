@@ -194,7 +194,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placem
 	}
 	profile, found := provider.Spec().Get("libvirt", "machineProfiles").Named("name", substrate.MachineProfileRef(machine))
 	if !found {
-		return MachineRequest{}, refusal("api.reference", "the Machine's profile does not resolve on its provider", "correct spec.substrate.libvirt.profileRef on "+machine.Identity())
+		return MachineRequest{}, refusal("api.reference", "the Machine's profile does not resolve on its provider", "correct spec.hardware.profileRef on "+machine.Identity())
 	}
 	disks, err := disksFor(profile, machine.Identity(), contextName, name)
 	if err != nil {
@@ -281,7 +281,7 @@ func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextNam
 		reference := substrate.NICSegment(catalog, provider, machine, nic.Name)
 		segment, found := substrate.Segments(catalog, provider).Named("name", reference)
 		if !found || !segment.Has("libvirt") {
-			return nil, refusal("api.reference", "NIC "+nic.Name+" of the Machine selects no libvirt segment of its provider", "add a spec.substrate.libvirt.nics entry for NIC "+nic.Name+" naming a libvirt segment of "+provider.Identity()+" on "+machine.Identity())
+			return nil, refusal("api.reference", "NIC "+nic.Name+" of the Machine selects no libvirt segment of its provider", "set spec.hardware.nics[].segmentRef of NIC "+nic.Name+" to a libvirt segment of "+provider.Identity()+" on "+machine.Identity())
 		}
 		defined := ""
 		if network, managed := substrate.ManagedSegmentNetwork(segment); managed && !network.Tagged() {

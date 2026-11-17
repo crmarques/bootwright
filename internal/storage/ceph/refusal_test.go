@@ -159,7 +159,7 @@ func TestADirtyOSDDiskRefusesByItsOwnNameAndLeavesTheAttemptFailed(t *testing.T)
 			!strings.HasPrefix(d[0].Remediation, osdDiskRemedy) || lifecycle.AttemptOutcome(err) != reconciliation.OutcomeFailed {
 			t.Fatalf("a %s refusal reached the operator as %+v", reason, d)
 		}
-		for _, step := range []string{"wipefs --no-act <disk>", "spec.hardware.clearOnInstall", "clear it yourself on the host after confirming it is that disk", "Bootwright never clears a disk it cannot prove its own"} {
+		for _, step := range []string{"wipefs --no-act <disk>", "spec.hardware.dataDisks", "clear it yourself on the host after confirming it is that disk", "Bootwright never clears a disk it cannot prove its own"} {
 			if !strings.Contains(d[0].Remediation, step) {
 				t.Fatalf("the %s remedy omits %q: %q", reason, step, d[0].Remediation)
 			}

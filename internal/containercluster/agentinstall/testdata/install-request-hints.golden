@@ -1,55 +1,62 @@
 {
   "budgets": {
-    "bootSeconds": 900,
+    "bootSeconds": 1800,
     "bootstrapSeconds": 5400,
-    "fanOut": 4,
+    "fanOut": 16,
     "installSeconds": 5400,
-    "roundMarginSeconds": 660
+    "roundMarginSeconds": 2520
   },
   "deliveryKind": "fetch",
   "endpoints": [
     {
-      "address": "198.51.100.10",
-      "name": "api-int.ocp.lab.example.test"
+      "address": "198.51.100.20",
+      "name": "api-int.metal.lab.example.test"
     },
     {
-      "address": "198.51.100.10",
-      "name": "api.ocp.lab.example.test"
+      "address": "198.51.100.20",
+      "name": "api.metal.lab.example.test"
     },
     {
-      "address": "198.51.100.11",
-      "name": "console-openshift-console.apps.ocp.lab.example.test"
+      "address": "198.51.100.21",
+      "name": "console-openshift-console.apps.metal.lab.example.test"
     }
   ],
   "identity": {
-    "block": "cluster-install-ocp",
-    "cluster": "ocp",
+    "block": "cluster-install-metal",
+    "cluster": "metal",
     "context": "lab"
   },
   "image": {
-    "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/clusters/ocp",
-    "url": "https://192.0.2.1:8443/private/clusters/ocp"
+    "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/clusters/metal",
+    "url": "https://192.0.2.1:8443/private/clusters/metal"
   },
   "nodes": [
     {
-      "address": "198.51.100.31",
+      "address": "198.51.100.41",
       "controller": {
-        "credentialsRef": "lab-bmc-credentials",
-        "endpoint": "https://192.0.2.1:8000/redfish/v1/Systems/566b9a1d-0751-86e3-ae9d-87255c81379e",
+        "credentialsRef": "metal-bmc",
+        "endpoint": "https://metal-01-bmc.lab.example.test/redfish/v1/Systems/1",
         "tlsVerify": true,
-        "trustBundleRef": "lab-bmc-tls",
         "virtualMedia": {
           "enableVerification": true,
-          "removeCertificate": true,
+          "removeCertificate": false,
           "restoreVerification": false,
           "trust": "importCertificate"
         }
       },
-      "controllerKind": "emulated",
-      "machine": "ocp-01",
+      "controllerKind": "physical",
+      "hardware": {
+        "interfaces": [
+          {
+            "macAddress": "aa:bb:cc:dd:ee:01",
+            "name": "enp1s0"
+          }
+        ],
+        "rootSelector": "wwn"
+      },
+      "machine": "metal-01",
       "machinePort": {
-        "caVariable": "controllerCANode0",
-        "endpoint": "https://192.0.2.1:8000/redfish/v1/Systems/566b9a1d-0751-86e3-ae9d-87255c81379e",
+        "endpoint": "https://metal-01-bmc.lab.example.test/redfish/v1/Systems/1",
         "passwordVariable": "controllerPasswordNode0",
         "pinnedSerialVariable": "pinnedSerialBase64Node0",
         "pinnedUUIDVariable": "pinnedUUIDBase64Node0",
@@ -57,29 +64,36 @@
         "verify": true
       },
       "name": "master-0",
-      "physical": false,
-      "stateReadSeconds": 120,
-      "substrate": "libvirt"
+      "physical": true,
+      "stateReadSeconds": 600,
+      "substrate": "baremetal"
     },
     {
-      "address": "198.51.100.32",
+      "address": "198.51.100.42",
       "controller": {
-        "credentialsRef": "lab-bmc-credentials",
-        "endpoint": "https://192.0.2.1:8001/redfish/v1/Systems/ae08d076-33d5-8cb7-9edd-060818340b06",
+        "credentialsRef": "metal-bmc",
+        "endpoint": "https://metal-02-bmc.lab.example.test/redfish/v1/Systems/1",
         "tlsVerify": true,
-        "trustBundleRef": "lab-bmc-tls",
         "virtualMedia": {
           "enableVerification": true,
-          "removeCertificate": true,
+          "removeCertificate": false,
           "restoreVerification": false,
           "trust": "importCertificate"
         }
       },
-      "controllerKind": "emulated",
-      "machine": "ocp-02",
+      "controllerKind": "physical",
+      "hardware": {
+        "interfaces": [
+          {
+            "macAddress": "aa:bb:cc:dd:ee:02",
+            "name": "enp1s0"
+          }
+        ],
+        "rootSelector": "wwn"
+      },
+      "machine": "metal-02",
       "machinePort": {
-        "caVariable": "controllerCANode1",
-        "endpoint": "https://192.0.2.1:8001/redfish/v1/Systems/ae08d076-33d5-8cb7-9edd-060818340b06",
+        "endpoint": "https://metal-02-bmc.lab.example.test/redfish/v1/Systems/1",
         "passwordVariable": "controllerPasswordNode1",
         "pinnedSerialVariable": "pinnedSerialBase64Node1",
         "pinnedUUIDVariable": "pinnedUUIDBase64Node1",
@@ -87,29 +101,36 @@
         "verify": true
       },
       "name": "master-1",
-      "physical": false,
-      "stateReadSeconds": 120,
-      "substrate": "libvirt"
+      "physical": true,
+      "stateReadSeconds": 600,
+      "substrate": "baremetal"
     },
     {
-      "address": "198.51.100.33",
+      "address": "198.51.100.43",
       "controller": {
-        "credentialsRef": "lab-bmc-credentials",
-        "endpoint": "https://192.0.2.1:8002/redfish/v1/Systems/9b149228-70e9-86ab-b2fa-998239057cb5",
+        "credentialsRef": "metal-bmc",
+        "endpoint": "https://metal-03-bmc.lab.example.test/redfish/v1/Systems/1",
         "tlsVerify": true,
-        "trustBundleRef": "lab-bmc-tls",
         "virtualMedia": {
           "enableVerification": true,
-          "removeCertificate": true,
+          "removeCertificate": false,
           "restoreVerification": false,
           "trust": "importCertificate"
         }
       },
-      "controllerKind": "emulated",
-      "machine": "ocp-03",
+      "controllerKind": "physical",
+      "hardware": {
+        "interfaces": [
+          {
+            "macAddress": "aa:bb:cc:dd:ee:03",
+            "name": "enp1s0"
+          }
+        ],
+        "rootSelector": "wwn"
+      },
+      "machine": "metal-03",
       "machinePort": {
-        "caVariable": "controllerCANode2",
-        "endpoint": "https://192.0.2.1:8002/redfish/v1/Systems/9b149228-70e9-86ab-b2fa-998239057cb5",
+        "endpoint": "https://metal-03-bmc.lab.example.test/redfish/v1/Systems/1",
         "passwordVariable": "controllerPasswordNode2",
         "pinnedSerialVariable": "pinnedSerialBase64Node2",
         "pinnedUUIDVariable": "pinnedUUIDBase64Node2",
@@ -117,9 +138,9 @@
         "verify": true
       },
       "name": "master-2",
-      "physical": false,
-      "stateReadSeconds": 120,
-      "substrate": "libvirt"
+      "physical": true,
+      "stateReadSeconds": 600,
+      "substrate": "baremetal"
     }
   ],
   "placement": {
@@ -127,14 +148,14 @@
     "machine": "controller"
   },
   "publicationRoot": {
-    "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/clusters/ocp",
-    "url": "https://192.0.2.1:8443/private/clusters/ocp"
+    "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/clusters/metal",
+    "url": "https://192.0.2.1:8443/private/clusters/metal"
   },
   "release": {
     "distribution": "openshift",
     "version": "4.21.15"
   },
-  "rendezvous": "198.51.100.31",
+  "rendezvous": "198.51.100.41",
   "tlsCertificateRef": "artifact-server-tls",
   "tool": {
     "compatibility": "openshift",
@@ -142,22 +163,6 @@
     "version": "4.21.15"
   },
   "version": "cluster-install-agent-v1",
-  "vips": [
-    {
-      "address": "198.51.100.10",
-      "bridge": "virbr-lab",
-      "slot": "api"
-    },
-    {
-      "address": "198.51.100.10",
-      "bridge": "virbr-lab",
-      "slot": "api-int"
-    },
-    {
-      "address": "198.51.100.11",
-      "bridge": "virbr-lab",
-      "slot": "ingress"
-    }
-  ],
-  "workRoot": "/var/lib/bootwright-hosted/lab/clusters/ocp"
+  "vips": [],
+  "workRoot": "/var/lib/bootwright-hosted/lab/clusters/metal"
 }

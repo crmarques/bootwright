@@ -26,7 +26,7 @@ func TestEveryTrustReferenceAcceptsPublicTrustMaterialAndHasAnExplicitClientPoli
 				if !slices.Equal(ref.SecretTypes, []string{"caBundle", "trustBundle"}) {
 					t.Errorf("%s.%s does not accept both public trust types", path, field.Name)
 				}
-				if field.Name != "additionalTrustBundleRefs" {
+				if field.Name != "additionalTrustBundleRefs" && !strings.HasSuffix(path, ".defaults.bmc.tls") {
 					policy := "tlsVerification"
 					if field.Name == "packageRepositoryTrustBundleRef" {
 						policy = "packageRepositoryTLSVerification"
@@ -51,16 +51,16 @@ func TestEveryTrustReferenceAcceptsPublicTrustMaterialAndHasAnExplicitClientPoli
 }
 
 func TestTLSVerificationPolicyCannotBeIgnoredOrContradictItsTrust(t *testing.T) {
-	for _, kind := range []api.Kind{api.Machine, api.InfraProvider, api.Registry, api.Proxy, api.Environment, api.Entitlement, api.CephCluster} {
+	for _, kind := range []api.Kind{api.Machine, api.Registry, api.Proxy, api.Environment, api.Entitlement, api.CephCluster} {
 		for _, mode := range []string{"full", "certificate", "none"} {
 			spec := api.MapValue()
 			path := map[api.Kind][]string{
-				api.Machine: {"substrate", "baremetal", "bmc", "tls"}, api.InfraProvider: {"baremetal", "defaults", "bmc", "tls"},
+				api.Machine:  {"hardware", "bmc", "tls"},
 				api.Registry: {}, api.Proxy: {"connection"}, api.Environment: {"mirror", "artifacts"},
 				api.Entitlement: {"registry"}, api.CephCluster: {},
 			}[kind]
 			policy, ref := "tlsVerification", "trustBundleRef"
-			if kind == api.Machine || kind == api.InfraProvider {
+			if kind == api.Machine {
 				policy = "verification"
 			} else if kind == api.CephCluster {
 				policy, ref = "packageRepositoryTLSVerification", "packageRepositoryTrustBundleRef"
@@ -92,9 +92,8 @@ func TestCertificateIdentityRefusesCAOnlySecretsAndContradictoryPolicies(t *test
 		{api.MapValue(field("verification", "certificate"), field("trustBundleRef", "trust")), "caBundle", true},
 		{api.MapValue(field("verification", "certificate")), "trustBundle", true},
 		{api.MapValue(field("verification", "none"), field("trustBundleRef", "trust")), "trustBundle", true},
-		{api.MapValue(field("verification", "full"), api.FieldValue{Name: "verify", Value: api.BoolValue(false)}), "trustBundle", true},
 	} {
-		machine := api.NewObject(api.Machine, "test", api.MapValue(), api.MapValue().WithPath(test.tls, "substrate", "baremetal", "bmc", "tls"))
+		machine := api.NewObject(api.Machine, "test", api.MapValue(), api.MapValue().WithPath(test.tls, "hardware", "bmc", "tls"))
 		secret := api.NewObject(api.Secret, "trust", api.MapValue(), api.MapValue(field("type", test.kind)))
 		issues := ValidateTrust(machine, api.NewCatalog([]api.Object{secret}), func(api.Object, string) bool { return true })
 		if (len(issues) > 0) != test.refused {

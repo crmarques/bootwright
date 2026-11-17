@@ -706,7 +706,7 @@ func (c Capability) pinValues(execution lifecycle.Execution, request Request) (m
 		}
 		for _, target := range hardware.ClearOnInstall {
 			if canonicalWWN(target.WWN) == canonicalWWN(pin.RootVolume.WWN) {
-				return nil, refusal("api.invariant", "a data clear target is the resolved logical root volume", "remove the root from clearOnInstall")
+				return nil, refusal("api.invariant", "a data clear target is the resolved logical root volume", "set onInstall to retain on the spec.hardware.dataDisks entry that is the root volume")
 			}
 		}
 	}

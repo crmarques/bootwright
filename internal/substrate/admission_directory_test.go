@@ -13,7 +13,7 @@ func TestALibvirtMachineCanShareItsProvidersName(t *testing.T) {
 	lab := topologyProvider("lab", "host", "8000", topologyProfile())
 	other := topologyProvider("other", "host", "8100", topologyProfile())
 	hostedOn := func(provider string) api.Object {
-		return obj(api.Machine, "lab", m("substrate", m("providerRef", provider, "libvirt", m("profileRef", "small"))))
+		return obj(api.Machine, "lab", m("hardware", m("providerRef", provider, "profileRef", "small")))
 	}
 	for name, catalog := range map[string]api.Catalog{
 		"hosted on the provider it is named after": api.NewCatalog([]api.Object{lab, host, hostedOn("lab")}),
@@ -33,7 +33,7 @@ func TestALibvirtMachineCanShareItsProvidersName(t *testing.T) {
 	metal := obj(api.InfraProvider, "metal", m("baremetal", m()))
 	for name, catalog := range map[string]api.Catalog{
 		"hosted on a baremetal provider": api.NewCatalog([]api.Object{lab, host, metal, hostedOn("metal")}),
-		"with no substrate":              api.NewCatalog([]api.Object{lab, host, obj(api.Machine, "lab", m())}),
+		"with no hardware":               api.NewCatalog([]api.Object{lab, host, obj(api.Machine, "lab", m())}),
 		"the provider's own host": api.NewCatalog([]api.Object{
 			topologyProvider("lab", "lab", "8000", topologyProfile()), topologyHost("lab")}),
 	} {

@@ -4,31 +4,21 @@ metadata:
   name: nv-bond
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: rhel
-
-      nics:
-        - nicRef: nic0
-          segmentRef: nv-lab
-
-        - nicRef: nic1
-          segmentRef: nv-lab
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: rhel
+
     nics:
       - name: nic0
-      - name: nic1
+        segmentRef: nv-lab
 
-    rootDevice:
-      deviceName: /dev/vda
+      - name: nic1
+        segmentRef: nv-lab
 
   os:
-    provided: false
-    installProfileRef: rhel
-
     install:
+      profileRef: rhel
+
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip

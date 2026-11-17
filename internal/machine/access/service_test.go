@@ -50,26 +50,26 @@ func list(values ...api.Value) api.Value { return api.ListValue(values...) }
 func catalog() api.Catalog {
 	network := m("addresses", list(m("name", "ssh", "address", "192.0.2.10")))
 	host := object(api.Machine, "host", m(
-		"os", m("provided", true), "network", network,
+		"os", m("provided", m()), "network", network,
 		"access", m("ssh", m("addressRef", "ssh", "user", "operator", "port", api.IntegerValue("2222"),
 			"auth", m("operatorIdentity", m())))))
 	guest := object(api.Machine, "guest", m(
-		"os", m("provided", false, "installProfileRef", "rhel"), "network", network,
+		"os", m("install", m("profileRef", "rhel")), "network", network,
 		"access", m("ssh", m("addressRef", "ssh", "user", "bootwright",
 			"auth", m("privateKeyRef", "fleet")))))
 	declared := object(api.Machine, "declared", m(
-		"os", m("provided", true), "network", network,
+		"os", m("provided", m()), "network", network,
 		"access", m("ssh", m("addressRef", "ssh", "user", "admin", "knownHostsRef", "declared-host-key",
 			"auth", m("privateKeyRef", "admin-key")))))
 	secured := object(api.Machine, "secured", m(
-		"os", m("provided", true), "network", network,
+		"os", m("provided", m()), "network", network,
 		"access", m("ssh", m("addressRef", "ssh", "user", "admin", "auth", m("passwordRef", "admin-password")))))
-	local := object(api.Machine, "controller", m("os", m("provided", true), "access", m("local", true)))
+	local := object(api.Machine, "controller", m("os", m("provided", m()), "access", m("local", m())))
 	peer := object(api.Machine, "peer", m(
-		"os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", "192.0.2.11"))),
+		"os", m("provided", m()), "network", m("addresses", list(m("name", "ssh", "address", "192.0.2.11"))),
 		"access", m("ssh", m("addressRef", "ssh", "user", "operator", "auth", m("operatorIdentity", m())))))
 	keyed := object(api.Machine, "keyed", m(
-		"os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", "192.0.2.12"))),
+		"os", m("provided", m()), "network", m("addresses", list(m("name", "ssh", "address", "192.0.2.12"))),
 		"access", m("ssh", m("addressRef", "ssh", "user", "admin", "auth", m("privateKeyRef", "admin-key")))))
 	return api.NewCatalog([]api.Object{host, guest, declared, secured, local, peer, keyed})
 }

@@ -108,7 +108,7 @@ func installationWaits(catalog api.Catalog, machine api.Object) ([]api.Object, [
 			}
 		}
 	}
-	profile, _ := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
+	profile, _ := catalog.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(machine))
 	place(api.ArtifactServer, artifactEndpoints(profile.Spec()))
 	ntp := profile.Spec().Get("ntp")
 	if override := machine.Spec().Get("os", "install", "ntp"); override.Present() {

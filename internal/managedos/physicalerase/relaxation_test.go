@@ -23,11 +23,8 @@ const (
 )
 
 func relaxableMachine(method, dataMethod string) api.Object {
-	machine := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
-	hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", method), field("targets", api.ListValue(
-		api.MapValue(text("deviceName", relaxedRoot), text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "serial-example"), number("sizeBytes", "8192")),
-		api.MapValue(text("deviceName", relaxedData), text("wwn", "0x5000c500a1b2c3d9"), text("serialNumber", "DATA"), number("sizeBytes", "2000398934016"), text("method", dataMethod))))))
-	return api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", hardware))
+	return erasing(server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "serial-example"), number("sizeBytes", "8192"))), method,
+		dataDisk("DATA", "2000398934016", "0x5000c500a1b2c3d9", dataMethod))
 }
 
 func relaxableErase(t *testing.T, machine api.Object) (EraseRequest, reconciliation.Block, lifecycle.BlockEvidence) {
@@ -163,7 +160,7 @@ func TestAnEraseRelaxationThatChangesNothingOrIsNoRelaxationRefuses(t *testing.T
 		remedy  string
 	}{
 		"metadataClear over a metadata-only policy": {cleared, lifecycle.EraseMetadataClear,
-			"--authorize erase=metal-01:metadataClear names Machine/metal-01, whose spec.hardware.eraseOnRemoval already clears only metadata on every target, so the relaxation changes nothing",
+			"--authorize erase=metal-01:metadataClear names Machine/metal-01, whose onRemoval already clears only metadata on every disk it erases, so the relaxation changes nothing",
 			"repeat bootwright destroy --context lab without --authorize erase=metal-01:metadataClear, or name erase=metal-01:retain to waive the erase"},
 		"the declared method": {declared, EraseLogicalOverwrite, "names logicalOverwrite, and an erase relaxation is metadataClear or retain",
 			"repeat bootwright destroy --context lab without --authorize erase=metal-01:logicalOverwrite"},

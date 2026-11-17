@@ -7,15 +7,15 @@ import (
 )
 
 func viewMachine(name string, os Value) Object {
-	return NewObject(Machine, name, Value{}, scopeMap("os", os, "substrate", scopeMap("providerRef", "lab")))
+	return NewObject(Machine, name, Value{}, scopeMap("os", os, "hardware", scopeMap("providerRef", "lab")))
 }
 
 func TestAMachineViewReadsWhatTheTreeHolds(t *testing.T) {
-	installed := viewMachine("installed", scopeMap("provided", BoolValue(false), "installProfileRef", "rhel"))
-	provided := viewMachine("provided", scopeMap("provided", BoolValue(true)))
-	unset := viewMachine("unset", scopeMap("installProfileRef", "rhel"))
-	textual := viewMachine("textual", scopeMap("provided", "false"))
-	catalog := NewCatalog([]Object{installed, provided, unset, textual})
+	installed := viewMachine("installed", scopeMap("install", scopeMap("profileRef", "rhel")))
+	provided := viewMachine("provided", scopeMap("provided", MapValue()))
+	cluster := viewMachine("cluster", scopeMap("clusterInstalled", MapValue()))
+	unset := viewMachine("unset", scopeMap("profileRef", "rhel"))
+	catalog := NewCatalog([]Object{installed, provided, cluster, unset})
 	for _, test := range []struct {
 		object                      Object
 		declared, provided, install bool
@@ -23,14 +23,14 @@ func TestAMachineViewReadsWhatTheTreeHolds(t *testing.T) {
 	}{
 		{installed, true, false, true, "rhel"},
 		{provided, true, true, false, ""},
-		{unset, false, false, false, "rhel"},
-		{textual, false, false, false, ""},
+		{cluster, true, false, false, ""},
+		{unset, false, false, false, ""},
 	} {
 		view, found := catalog.Machine(test.object.Name())
 		if !found || !reflect.DeepEqual(view.Object, test.object) || view.ProviderRef != "lab" {
 			t.Fatalf("%s: view %+v, found %t", test.object.Name(), view, found)
 		}
-		if view.ProvidedDeclared != test.declared || view.Provided != test.provided || view.Installed() != test.install || view.InstallProfileRef != test.profile {
+		if view.ProvidedDeclared != test.declared || view.Provided != test.provided || view.Installed() != test.install || view.InstallProfileRef != test.profile || view.ClusterInstalled != (test.object.Name() == "cluster") {
 			t.Errorf("%s: view %+v, installed %t", test.object.Name(), view, view.Installed())
 		}
 	}
@@ -40,7 +40,7 @@ func TestAMachineViewReadsWhatTheTreeHolds(t *testing.T) {
 }
 
 func TestTheMachineViewsFollowTheCatalogsOwnOrderAndUniqueness(t *testing.T) {
-	first, second := viewMachine("twin", scopeMap("installProfileRef", "a")), viewMachine("twin", scopeMap("installProfileRef", "b"))
+	first, second := viewMachine("twin", scopeMap("install", scopeMap("profileRef", "a"))), viewMachine("twin", scopeMap("install", scopeMap("profileRef", "b")))
 	other := viewMachine("other", Value{})
 	catalog := NewCatalog([]Object{first, other, second})
 	views := catalog.Machines()
@@ -73,7 +73,7 @@ func TestACephClusterViewReadsItsNodesServicesAndStretch(t *testing.T) {
 }
 
 func TestTheViewsAreBuiltOnceAndReadConcurrently(t *testing.T) {
-	catalog := NewCatalog([]Object{viewMachine("a", scopeMap("provided", BoolValue(true)))}).WithUndecodable(nil)
+	catalog := NewCatalog([]Object{viewMachine("a", scopeMap("provided", MapValue()))}).WithUndecodable(nil)
 	var wait sync.WaitGroup
 	for range 8 {
 		wait.Go(func() {

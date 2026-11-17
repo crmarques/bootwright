@@ -10,9 +10,9 @@ import (
 func nodeIdentityCatalog(nodes ...api.Value) api.Catalog {
 	return api.NewCatalog([]api.Object{
 		object(api.Environment, "environment", m("domains", m("base", "example.test"), "sites", []api.Value{m("name", "site-a"), m("name", "site-b")})),
-		object(api.Machine, "machine-1", m("placement", m("site", "site-b"), "os", m("provided", false, "installProfileRef", "rhel"),
+		object(api.Machine, "machine-1", m("site", "site-b", "os", m("install", m("profileRef", "rhel")),
 			"network", m("addresses", []api.Value{m("name", "fqdn", "address", "machine-1.example.test")}))),
-		object(api.Machine, "machine-2", m("os", m("provided", true))),
+		object(api.Machine, "machine-2", m("os", m("provided", m()))),
 		object(api.CephCluster, "storage", m("topology", m("nodes", nodes))),
 	})
 }

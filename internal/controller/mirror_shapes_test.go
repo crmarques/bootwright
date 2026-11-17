@@ -16,7 +16,7 @@ func mirrorGraph(mirror api.Value, bridge string, services ...api.Object) []api.
 	addresses := api.ListValue(api.MapValue().With("name", api.StringValue("ip")).With("address", api.StringValue("192.0.2.10")))
 	objects := []api.Object{
 		api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef").With("mirror", mirror)),
-		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.MapValue(), "os", "provided").WithPath(api.MapValue(), "access", "local").
 			WithPath(api.MapValue(), "proxy", "direct").WithPath(addresses, "network", "addresses")),
 		api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "libvirt", "machineRef")),
 		api.NewObject(api.Network, "lab-net", api.Value{}, api.MapValue().With("provided", api.BoolValue(false)).
@@ -97,9 +97,9 @@ func TestInstallerMediaToolingNeedsAnAnacondaInstallation(t *testing.T) {
 	other := api.NewObject(api.MachineInstallProfile, "rhel", api.Value{}, api.MapValue().WithPath(api.StringValue("lab-artifacts"), "installer", "other", "serverRef"))
 	unresolved := api.NewObject(api.MachineInstallProfile, "rhel", api.Value{}, api.MapValue().
 		WithPath(api.StringValue("absent"), "installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint", "serverRef"))
-	installed := api.NewObject(api.Machine, "node", api.Value{}, api.MapValue().WithPath(api.BoolValue(false), "os", "provided").WithPath(api.StringValue("rhel"), "os", "installProfileRef"))
-	undeclared := api.NewObject(api.Machine, "node", api.Value{}, api.MapValue().WithPath(api.StringValue("rhel"), "os", "installProfileRef"))
-	unprofiled := api.NewObject(api.Machine, "node", api.Value{}, api.MapValue().WithPath(api.BoolValue(false), "os", "provided").WithPath(api.StringValue("absent"), "os", "installProfileRef"))
+	installed := api.NewObject(api.Machine, "node", api.Value{}, api.MapValue().WithPath(api.StringValue("rhel"), "os", "install", "profileRef"))
+	undeclared := api.NewObject(api.Machine, "node", api.Value{}, api.MapValue().WithPath(api.MapValue(), "os", "provided"))
+	unprofiled := api.NewObject(api.Machine, "node", api.Value{}, api.MapValue().WithPath(api.StringValue("absent"), "os", "install", "profileRef"))
 	server := api.NewObject(api.ArtifactServer, "lab-artifacts", api.Value{}, api.MapValue().With("machineRef", api.StringValue("controller")))
 	for _, test := range []struct {
 		name    string
@@ -109,7 +109,7 @@ func TestInstallerMediaToolingNeedsAnAnacondaInstallation(t *testing.T) {
 		{"an Anaconda installation", []api.Object{anaconda, installed, server}, true},
 		{"another installer", []api.Object{other, installed, server}, false},
 		{"an unresolved artifact server", []api.Object{unresolved, installed, server}, false},
-		{"no os.provided", []api.Object{anaconda, undeclared, server}, false},
+		{"an OS-ready Machine", []api.Object{anaconda, undeclared, server}, false},
 		{"an unresolved profile", []api.Object{anaconda, unprofiled, server}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {

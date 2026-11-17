@@ -101,7 +101,7 @@ func render(value api.Value) string {
 }
 
 func machineSpec() api.Value {
-	return api.MapValue(field("substrate", api.MapValue(text("providerRef", "lab-libvirt"))))
+	return api.MapValue(field("hardware", api.MapValue(text("providerRef", "lab-libvirt"))))
 }
 
 func TestMachineProjectionRendersObservedDiskSizes(t *testing.T) {
@@ -283,14 +283,14 @@ func TestMachineProjectionRefusesEvidenceOfAnotherRequest(t *testing.T) {
 
 func TestMachineProjectionRefusesAMachineTheAppliedRevisionDoesNotPlace(t *testing.T) {
 	unplaced := api.NewObject(api.Machine, "rhel-01", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 	))
 	noProfile := api.NewObject(api.Machine, "rhel-01", api.Value{}, api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"))),
+		field("hardware", api.MapValue(text("providerRef", "lab-libvirt"))),
 	))
 	for name, catalog := range map[string]api.Catalog{
 		"missing":       catalogOf(controller(), provider()),
-		"no substrate":  catalogOf(controller(), provider(), unplaced),
+		"no hardware":   catalogOf(controller(), provider(), unplaced),
 		"no profileRef": catalogOf(controller(), provider(), noProfile),
 	} {
 		t.Run(name, func(t *testing.T) {

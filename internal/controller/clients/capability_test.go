@@ -25,9 +25,9 @@ func text(name, value string) api.FieldValue { return field(name, api.StringValu
 
 func machine() api.Object {
 	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("proxy", api.MapValue(field("direct", api.MapValue()))),
-		field("access", api.MapValue(field("local", api.BoolValue(true)))),
+		field("access", api.MapValue(field("local", api.MapValue()))),
 	))
 }
 

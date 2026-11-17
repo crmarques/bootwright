@@ -24,7 +24,7 @@ var (
 
 func (MachineCapability) ProjectedPaths() []lifecycle.ProjectedPath {
 	return []lifecycle.ProjectedPath{
-		{Kind: api.Machine, Path: "spec.substrate.providerRef"},
+		{Kind: api.Machine, Path: "spec.hardware.providerRef"},
 		{Kind: api.InfraProvider, Path: "spec.libvirt.machineProfiles[].name"},
 		{Kind: api.InfraProvider, Path: "spec.libvirt.machineProfiles[].diskGiB"},
 		{Kind: api.InfraProvider, Path: "spec.libvirt.machineProfiles[].dataDisks[].name"},
@@ -52,7 +52,7 @@ func (MachineCapability) Project(applied api.Catalog, block reconciliation.Block
 	}
 	machine := lifecycle.Projection{
 		Kind: api.Machine, Name: name, Notes: machineNotes(name, observed),
-		Observed: nestedMap([]string{"substrate"}, api.FieldValue{Name: "providerRef", Value: api.StringValue(providerRef)}),
+		Observed: nestedMap([]string{"hardware"}, api.FieldValue{Name: "providerRef", Value: api.StringValue(providerRef)}),
 	}
 	profile := lifecycle.Projection{
 		Kind: api.InfraProvider, Name: providerRef, Notes: boundedNotes(name, slices.Concat(missingDiskNotes(name, request, observed), unnamedDiskNotes(name, request, observed))),
@@ -76,7 +76,7 @@ func placement(applied api.Catalog, machine string) (string, string) {
 	if !found {
 		return "", ""
 	}
-	return object.Spec().Get("substrate", "providerRef").Text(), substrate.MachineProfileRef(object)
+	return api.MachineProviderRef(object), substrate.MachineProfileRef(object)
 }
 
 func machineNotes(name string, observed MachineEvidence) []string {

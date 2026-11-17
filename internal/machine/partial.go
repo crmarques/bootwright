@@ -29,8 +29,8 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 		issues = api.AppendIssues(issues, invariant("$."+substrate.BMCPath+".tls.verification", "non-full TLS verification is per-Machine intent and never a kind default", "declare tls.verification on each Machine that needs it"))
 	}
 	issues = api.AppendIssues(issues, validateDefaultMediaTrust(substrate.MachineBMC(o))...)
-	issues = api.AppendIssues(issues, validateDefaultFirmware(o)...)
-	if o.Spec().Get("os", "provided").Bool() {
+	issues = api.AppendIssues(issues, validateDefaultPerMachineHardware(o)...)
+	if api.MachineProvided(o) {
 		if o.Spec().Has("os", "install", "ntp") {
 			issues = api.AppendIssues(issues, invariant("$.spec.os.install.ntp", "OS-ready Machines forbid installation NTP choices", "remove os.install.ntp"))
 		}
@@ -51,14 +51,25 @@ func validateDefaultMediaTrust(bmc api.Value) []api.Issue {
 	}
 	return []api.Issue{{Code: "api.invariant", Field: "$." + substrate.BMCPath + ".virtualMedia.tls.trust",
 		Message:     "disableVerification is a per-Machine exception and never a kind default",
-		Remediation: "declare substrate.baremetal.bmc.virtualMedia.tls.trust: disableVerification on each Machine that needs it"}}
+		Remediation: "declare hardware.bmc.virtualMedia.tls.trust: disableVerification on each Machine that needs it"}}
 }
 
-func validateDefaultFirmware(o api.Object) []api.Issue {
-	if substrate.MachineFirmware(o) == nil {
-		return nil
+func validateDefaultPerMachineHardware(o api.Object) []api.Issue {
+	issues := []api.Issue{}
+	if substrate.MachineFirmware(o) != nil {
+		issues = append(issues, perMachineIntent("$."+substrate.FirmwarePath, "firmware"))
 	}
-	return []api.Issue{{Code: "api.invariant", Field: "$." + substrate.FirmwarePath,
-		Message:     "firmware is per-Machine intent and never a kind default",
-		Remediation: "declare substrate.baremetal.firmware on each Machine that needs it"}}
+	if substrate.MachineRootDisk(o).Has("onRemoval") {
+		issues = append(issues, perMachineIntent("$."+substrate.RootDiskPath+".onRemoval", "rootDisk.onRemoval"))
+	}
+	if o.Spec().Has("hardware", "dataDisks") {
+		issues = append(issues, perMachineIntent("$."+substrate.DataDisksPath, "dataDisks"))
+	}
+	return issues
+}
+
+func perMachineIntent(field, name string) api.Issue {
+	return api.Issue{Code: "api.invariant", Field: field,
+		Message:     name + " is per-Machine intent and never a kind default",
+		Remediation: "declare hardware." + name + " on each Machine that needs it"}
 }

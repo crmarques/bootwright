@@ -73,8 +73,8 @@ their capabilities' refusal tables and raise no warning here. `api.deferred`
 stays the warning for a declaration that plans but changes nothing: an
 OpenShift endpoint `dnsName` and node `labels` and `taints`
 ([inert fields](openshift-clusters.md#selection-and-refusal)), an OS-ready
-Machine's root-device hints other than `deviceName` and `wwn`
-([root device](api/machines.md#bmc-and-root-device-shape)), a disabled
+Machine's root-disk hints other than `hints.deviceName` and `wwn`
+([root disk](api/machines.md#root-disk)), a disabled
 `CustomPlaybook`, and a Ceph stretch topology without a tiebreaker.
 
 ## Version authority
@@ -214,8 +214,7 @@ decoding is another: while a selected document of a referenced kind and name
 does not decode, a reference field naming it, and an Environment cluster
 selection entry naming it, add no diagnostic, so the document's own
 diagnostics are the only ones. A reference field that a domain invariant of
-its own object refuses, such as an OS-ready Machine's `os.installProfileRef` or
-`network.configRef`, is not also refused as an unresolved reference: the
+its own object refuses, such as an OS-ready Machine's `network.configRef`, is not also refused as an unresolved reference: the
 invariant is the field's only diagnostic. The same holds for checks that refuse at a
 containing field: while a selected add-on, add-on profile or add-on input
 target fails decoding, the selection, input, configuration and capability
@@ -320,7 +319,7 @@ One rule decides between a presence arm and an enum, and
 4. Omission may select one stated arm, which effective output shows.
 
 Presence unions select `InfraProvider` and `ClusterAddon` (a `type` field on
-either is unknown), the Machine [substrate arm](api/machines.md#substrate-arm),
+either is unknown), the Machine's [OS lifecycle arm](api/machines.md#os-lifecycle-and-substrate-invariants),
 provider segments, machine-install backends and package sources,
 authentication, proxy choices, `Secret.spec.source`,
 `OpenShiftCluster.spec.install.agent` and `spec.install.platform`,
@@ -372,7 +371,7 @@ These rules govern every new kind, field, arm, enum value and reference.
 - A new field whose value names a Bootwright object ends in `Ref`, and a list
   of such names in `Refs`. A row for a value the native product owns says
   "native value" or "native ID" and keeps the native spelling.
-- `management: managed|external` says who runs a shared service, `os.provided`
+- `management: managed|external` says who runs a shared service, the `os` arm
   says only who installs the operating system, and an add-on's `provides` names
   ordering tokens. The three are never synonyms.
 - A field with exactly one legal value enters `v1alpha1` only when a spec

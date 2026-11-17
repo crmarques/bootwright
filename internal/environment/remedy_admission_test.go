@@ -21,11 +21,12 @@ func controllerEnvironment() api.Object {
 }
 
 func controllerMachine(provided, local bool) api.Object {
-	spec := []api.FieldValue{
-		field("os", api.MapValue(field("provided", api.BoolValue(provided)))),
+	spec := []api.FieldValue{field("os", api.MapValue(field("clusterInstalled", api.MapValue())))}
+	if provided {
+		spec = []api.FieldValue{field("os", api.MapValue(field("provided", api.MapValue())))}
 	}
 	if local {
-		spec = append(spec, field("access", api.MapValue(field("local", api.BoolValue(true)))))
+		spec = append(spec, field("access", api.MapValue(field("local", api.MapValue()))))
 	}
 	return api.NewObject(api.Machine, "ctl", api.Value{}, api.MapValue(spec...))
 }
@@ -65,7 +66,7 @@ func TestEveryEnvironmentRefusalNamesItsStep(t *testing.T) {
 		field("nodes", api.ListValue(api.MapValue(text("machineRef", "ctl")))),
 	))
 	other := api.NewObject(api.Machine, "other", api.Value{}, api.MapValue(
-		field("access", api.MapValue(field("local", api.BoolValue(true)))),
+		field("access", api.MapValue(field("local", api.MapValue()))),
 	))
 	env := controllerEnvironment()
 	for _, row := range []struct {
@@ -75,13 +76,13 @@ func TestEveryEnvironmentRefusalNamesItsStep(t *testing.T) {
 		field, message, remediation string
 	}{
 		{"not OS-ready", env, []api.Object{controllerMachine(false, true)}, controllerField,
-			"controller must reference an OS-ready Machine with os.provided: true",
-			"set spec.os.provided to true on Machine/ctl, or set spec.controller.machineRef to an OS-ready Machine"},
+			"controller must reference an OS-ready Machine with os.provided: {}",
+			"set spec.os.provided: {} on Machine/ctl, or set spec.controller.machineRef to an OS-ready Machine"},
 		{"not local", env, []api.Object{controllerMachine(true, false)}, controllerField,
-			"controller must reference the local Machine with access.local: true and no SSH access",
-			"give Machine/ctl access.local: true and no spec.access.ssh"},
+			"controller must reference the local Machine with access.local: {} and no SSH access",
+			"give Machine/ctl access.local: {} and no spec.access.ssh"},
 		{"another local Machine", env, []api.Object{controllerMachine(true, true), other}, controllerField,
-			"only the controller Machine may declare local access; Machine/other also declares access.local: true",
+			"only the controller Machine may declare local access; Machine/other also declares access.local: {}",
 			"remove spec.access.local from Machine/other"},
 		{"cluster node", env, []api.Object{controllerMachine(true, true), cluster}, controllerField,
 			"controller must remain outside cluster node membership; it is a node of OpenShiftCluster/apps",
@@ -91,11 +92,11 @@ func TestEveryEnvironmentRefusalNamesItsStep(t *testing.T) {
 			"remove spec.lifecycle.rescue from Environment/lab"},
 		{"artifact server on a Machine without an OS", rescueEnvironment("", endpoint),
 			[]api.Object{media("local-media:rhel-9.8-x86_64-boot.iso"), artifactServer("host"), api.NewObject(api.Machine, "host", api.Value{}, api.MapValue(
-				field("os", api.MapValue(field("provided", api.BoolValue(false)))),
+				field("os", api.MapValue(field("clusterInstalled", api.MapValue()))),
 			))},
 			"$.spec.lifecycle.rescue.artifactServerEndpoint.serverRef",
 			"rescue artifact server requires an OS-ready Machine",
-			"set spec.machineRef on ArtifactServer/artifacts to a Machine with os.provided: true"},
+			"set spec.machineRef on ArtifactServer/artifacts to a Machine with os.provided: {}"},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			issues := environment.Validate(row.environment, api.NewCatalog(append([]api.Object{row.environment}, row.others...)), testClusterMembers)

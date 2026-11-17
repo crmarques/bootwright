@@ -229,7 +229,6 @@ func goFunctionsAwaitingSplit() []string {
 		"internal/controller/ansiblelocal/runner_linux_amd64.go.protocolRun.Judge",
 		"internal/controller/privilege/sudo.go.Supervisor.Run",
 		"internal/machine/diskselection/selection.go.Select",
-		"internal/machine/erase_admission.go.validateErase",
 		"internal/managedos/diskdiscovery/inventory.go.Capability.ProveRoot",
 		"internal/managedos/physicalerase/unstarted.go.PhysicalEraseUnstarted",
 		"internal/secrets/localkeyring/localkeyring.go.validateIndex",

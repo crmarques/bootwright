@@ -55,7 +55,7 @@ func TestUseDiagnosticNamesWhatTheUsedKeyClassMeans(t *testing.T) {
 		if !strings.HasPrefix(got.Remediation, "act on the machine through context alpha, or run bootwright destroy --context alpha first") {
 			t.Errorf("%s: remediation = %q", class, got.Remediation)
 		}
-		if class == "bmc" && !strings.HasSuffix(got.Remediation, ", or change spec.substrate.baremetal.bmc.address on Machine/node") {
+		if class == "bmc" && !strings.HasSuffix(got.Remediation, ", or change spec.hardware.bmc.address on Machine/node") {
 			t.Errorf("bmc remediation = %q", got.Remediation)
 		}
 		if got.Object == nil || got.Object.Kind != "Machine" || got.Object.Name != "node" {

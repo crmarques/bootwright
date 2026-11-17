@@ -1012,11 +1012,11 @@ one a row's field path names on its object while a block realizes the target.
 
 | Block | Requires | Named by |
 | --- | --- | --- |
-| `substrate-machine` `Machine` | `InfraProvider` | `spec.substrate.providerRef` |
+| `substrate-machine` `Machine` | `InfraProvider` | `spec.hardware.providerRef` |
 | `substrate-machine` `Machine` | `Registry` | the managed image mirror its BMC pulls through |
 | `os-install` `Machine` | `Machine` from `substrate-machine` | the Machine itself, realized by its substrate |
-| `os-install` `Machine` | `Machine` from `physical-erase` | the Machine itself, when it declares `spec.hardware.eraseOnRemoval` |
-| `os-install` `Machine` | `MachineInstallProfile` | `spec.os.installProfileRef`, realized when its package tree is hosted |
+| `os-install` `Machine` | `Machine` from `physical-erase` | the Machine itself, when a disk of `spec.hardware` declares an `onRemoval` other than `retain` |
+| `os-install` `Machine` | `MachineInstallProfile` | `spec.os.install.profileRef`, realized when its package tree is hosted |
 | `os-install` `Machine` | `ArtifactServer` | the install profile's and the Machine's artifact endpoints |
 | `os-install` `Machine` | `DNSServer` | the `dns` selections of the Machine's network configuration |
 | `os-install` `Machine` | `NTPServer` | `spec.os.install.ntp[].serverRef` |
@@ -1069,7 +1069,7 @@ one a row's field path names on its object while a block realizes the target.
 | `storage-consumer` `CephConsumer` | `CephObjectGateway` | `spec.dataFoundation.objectGatewayRef` |
 | `storage-consumer` `CephConsumer` | `DNSServer` | every DNSServer of the selection, when the export names an object gateway |
 | `storage-host` `CephCluster` | `Machine` | `spec.topology.nodes[].machineRef` |
-| `storage-host` `CephCluster` | `MachineInstallProfile` | each node Machine's `spec.os.installProfileRef` |
+| `storage-host` `CephCluster` | `MachineInstallProfile` | each node Machine's `spec.os.install.profileRef` |
 | `storage-physical-retirement` `CephCluster` | `Machine` from `substrate-machine` | `spec.topology.nodes[].machineRef` |
 | `storage-replication` `CephReplication` | `CephPool` | `spec.poolRef`, `spec.peerPoolRef` |
 | `storage-replication` `CephReplication` | `CephRBDImage` | `spec.imageRefs[]` |
@@ -1244,7 +1244,7 @@ reason and remedy is the diagnostic's message and remediation, in which
 | An unclaimed effect-bearing kind | an InfraProvider, OpenShiftCluster, storage or add-on object of a kind no capability claims | `no capability of this executable realizes the <kind> kind` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
 | An unclaimed managed service | a `management: managed` Proxy, DNSServer, NTPServer, Registry or ArtifactServer of a kind no capability claims | `no capability of this executable manages the <kind> kind` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
 | An unclaimed managed LoadBalancer | a `management: managed` LoadBalancer, which no capability claims | `no capability of this executable manages the <kind> kind` | `declare spec.management: external on <object> to use a <kind> the operator runs, or remove it from the selected Environment` |
-| A Machine to install with no capability | a Machine with `spec.os.provided: false`, its kind unbound | `no capability of this executable realizes a Machine whose operating system is not provided` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
+| A Machine to install with no capability | a Machine with `spec.os.install` or `spec.os.clusterInstalled`, its kind unbound | `no capability of this executable realizes a Machine whose operating system is not provided` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
 | An enabled CustomPlaybook | a CustomPlaybook with `spec.enabled: true`, its kind unbound | `no capability of this executable runs an enabled CustomPlaybook` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
 | An unclaimed object of a claimed kind | an effect-bearing object of a bound kind none claims | `no implementation of this executable claims <object>` | `remove <object> from the selected Environment, or use an example within the supported shape such as examples/machines/lab-rhel` |
 
@@ -2250,7 +2250,7 @@ and joined by `, ` before `render` when several.
 **Attribution.** A projection may name its *holder*, the object whose own
 block read it, and the holder's field that names the projected object, as an
 installation of `Machine/<m>` that reads the release of the
-`MachineInstallProfile` its `spec.os.installProfileRef` names. When fragments
+`MachineInstallProfile` its `spec.os.install.profileRef` names. When fragments
 that name holders observe a field differently, their holders are grouped by
 the values they observe at the fields in dispute; a holder that observes none
 of them joins no group and keeps the object. The group observing the
@@ -2287,10 +2287,10 @@ projection claiming any other field is refused as above.
 
 | Implementation | Object | Observed fields | Notes |
 | --- | --- | --- | --- |
-| `machine-libvirt-v1` | `Machine` | `spec.substrate.providerRef` | domain state; emulated BMC power |
+| `machine-libvirt-v1` | `Machine` | `spec.hardware.providerRef` | domain state; emulated BMC power |
 | `machine-libvirt-v1` | `InfraProvider` | `spec.libvirt.machineProfiles[].name`, `[].diskGiB`, `[].dataDisks[].name`, `[].dataDisks[].sizeGiB`, `[].dataDisks[].media` | missing disks; a data disk attached by hand, also beside a profile that declares none |
 | `cluster-install-agent-v1` | `OpenShiftCluster` | `spec.nodes[].name`, `[].labels`, `[].taints` | declared labels and taints a node lacks |
-| `os-install-anaconda-v1` | `MachineInstallProfile` | `spec.os.version`, held by the `Machine` whose `spec.os.installProfileRef` names it | `ID` and `VERSION_ID` of `/etc/os-release`; the running kernel |
+| `os-install-anaconda-v1` | `MachineInstallProfile` | `spec.os.version`, held by the `Machine` whose `spec.os.install.profileRef` names it | `ID` and `VERSION_ID` of `/etc/os-release`; the running kernel |
 | `storage-ceph-core-v1` | `CephPool` | `spec.replicated.size`, `spec.replicated.minSize`, `spec.application`, `spec.autoscale.mode`, `spec.quota.maxBytes`, `spec.quota.maxObjects` | a pool's own block |
 | `storage-ceph-core-v1` | `CephPool`, discovered | `spec.clusterRef`, `spec.nativeName` and the fields above | the cluster block's pools that no applied object declares or derives, each named `<cluster>-<pool>` when the applied revision declares several clusters |
 | `storage-ceph-core-v1` | `CephCluster` | `spec.services[]` of `service_type` `osd` | an OSD no declared OSD service explains, as one service per host; one it cannot place on a declared host and device, as a count in a note |
@@ -2534,7 +2534,7 @@ machine. Before changing it, an implementation must durably hold an exclusive
 context claim, prove the exact management controller/System identity, prove
 the complete live MAC set matches the immutable `Machine`, select one whole
 root disk by a durable identity in one of the forms of the
-[root-device rule](api/machines.md#bmc-and-root-device-shape): a WWN, a
+[root-disk rule](api/machines.md#root-disk): a WWN, a
 serial number and exact size, or a logical volume proved through verified BMC
 TLS by its NAA identifier and exact capacity and found again by that
 identifier inside the installer. The selector resolves to exactly one whole
@@ -2574,9 +2574,9 @@ system. Offline erase follows its separate safety contract below
 ([B70](milestones/m1.md#b70)).
 
 An erase recognises the root disk under the
-[root-target rule](api/machines.md#physical-erase-policy) at three points,
+[disk action rules](api/machines.md#data-disks-and-disk-actions) at three points,
 each comparing what it can see. Admission and the erase request compare each
-target's declared identities with the root's declaration. The removal, before
+data-disk target's declared identities with the root's declaration. The removal, before
 any effect, also compares each target with the WWN a root declared by serial
 number [reported at installation](managed-os.md#physical-removal), read from
 that installation's original apply record, and refuses a target that names it
@@ -2587,23 +2587,27 @@ refuses `lifecycle.state`. Only the RAM worker sees the disk a target without
 reported one, and its declared serial number: a target without `deviceName`
 that does not name that serial number, but whose disk reports that WWN, is the
 root unrecognised, and refuses `root-target-unrecognised` before any holder
-release and again on the exclusively held disk before the first write. A target
-names a root declared by `wwn` alone by the `deviceName` and `wwn` pair. A root
-whose WWN is unknown keeps the serial number and size comparison.
+release and again on the exclusively held disk before the first write. The root
+target of a root declared by `wwn` is its derived by-id `deviceName` and `wwn`
+pair, and that of a root declared by serial number is a target without
+`deviceName`. A root whose WWN is unknown keeps the serial number and size
+comparison.
 
 ### Opt-in physical logical overwrite
 
-`Machine.spec.hardware.eraseOnRemoval` is an explicit removal policy whose
-`method` is `logicalOverwrite` or `metadataClear`; omission retains disks. Each
+The erase policy is an explicit removal policy derived from the `onRemoval` of
+`Machine.spec.hardware.rootDisk` and each `hardware.dataDisks[]` entry
+([disk actions](api/machines.md#data-disks-and-disk-actions)); a disk whose
+`onRemoval` is `retain` or absent is retained. Each
 target supplies `serialNumber` and exact `sizeBytes`, and either both
-`deviceName` and `wwn` or neither; a target without them is the one whole disk
+`deviceName` and `wwn` or neither, the pair derived from a declared `wwn`; a target without them is the one whole disk
 the RAM worker finds reporting that serial number, which must be fixed,
 writable and exactly that size, and none or several refuse before the first
 write; a partition and a hidden NVMe path node (its `hidden` attribute reads
-`1`) are not candidates, the node being its head node's own disk. A target may name its own `method`, which overrides the policy's for
-that disk; the frozen request records each target's resolved method. The
-policy lists the root only when it names it, as the
-[root-target rule](api/machines.md#physical-erase-policy) identifies it; an
+`1`) are not candidates, the node being its head node's own disk. A target's `method` is its disk's `onRemoval`; the frozen request records each
+target's resolved method. The policy lists the root only when its `onRemoval`
+is not `retain`, as the
+[disk action rules](api/machines.md#data-disks-and-disk-actions) state; an
 omitted root is retained, and data disks are individually listed.
 The initial execution bound is 16 whole disks, each at most 64 TiB with a
 4096-byte aligned logical size. These are implementation bounds, not hardware
@@ -2915,7 +2919,7 @@ relaxation changes, that relaxation is one more member of the `data-loss`
 digest, so the relaxed removal is reviewed in its plan and bound by its digest
 while every unrelaxed block's digest stays what it was. A token naming a
 Machine that none of the removal's blocks relaxes, which is a Machine that
-declares no `spec.hardware.eraseOnRemoval`, one whose erase this removal no
+declares no `onRemoval` other than `retain`, one whose erase this removal no
 longer performs, or any Machine of a `destroy` that settles, refuses
 `lifecycle.authorization` before registration, naming the token and the
 command without it; the capability's own refusal of a method, such as for a

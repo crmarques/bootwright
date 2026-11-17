@@ -132,7 +132,7 @@ func requirePositiveCapacity(arm api.Value, variant Arm, label string) []api.Iss
 }
 
 func validateFirmware(o api.Object) []api.Issue {
-	block := o.Spec().Get("substrate", "baremetal", "firmware")
+	block := o.Spec().Get("hardware", "firmware")
 	if !block.Present() {
 		return nil
 	}
@@ -147,8 +147,8 @@ func validateFirmware(o api.Object) []api.Issue {
 	if !MachineBMC(o).Present() {
 		issues = api.AppendIssues(issues, refuse(path, "firmware settings are applied through the Machine's BMC and none is declared", "declare "+BMCPath+" beside "+FirmwarePath+", or remove "+FirmwarePath))
 	}
-	if o.Spec().Get("os", "provided").Bool() {
-		issues = api.AppendIssues(issues, refuse(path, "an OS-ready Machine is not installed by Bootwright, so nothing applies its firmware block", "remove "+FirmwarePath+", or set os.provided: false so Bootwright installs the Machine"))
+	if api.MachineProvided(o) {
+		issues = api.AppendIssues(issues, refuse(path, "an OS-ready Machine is not installed by Bootwright, so nothing applies its firmware block", "remove "+FirmwarePath+", or replace os.provided with os.install or os.clusterInstalled so the Machine is installed"))
 	}
 	attributes := block.Get("biosAttributes")
 	if !attributes.Present() {

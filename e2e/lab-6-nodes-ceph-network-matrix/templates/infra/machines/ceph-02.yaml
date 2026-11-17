@@ -6,29 +6,20 @@ metadata:
   name: ceph-02
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: ceph
-
-      nics:
-        - nicRef: nic0
-          segmentRef: ceph-public
-
-        - nicRef: nic1
-          segmentRef: ceph-public
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: ceph
+
     nics:
       - name: nic0
-      - name: nic1
+        segmentRef: ceph-public
 
-    rootDevice:
-      deviceName: /dev/vda
+      - name: nic1
+        segmentRef: ceph-public
 
   os:
-    provided: false
-    installProfileRef: rhel
+    install:
+      profileRef: rhel
 
   network:
     configRef: ceph-vlan-bond

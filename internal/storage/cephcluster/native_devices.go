@@ -64,7 +64,7 @@ func (a *admission) nativeOSD(spec api.Value, field string, nodes []api.Value, p
 				continue
 			}
 			for _, device := range nativeDevicePaths(selector) {
-				if rootDevice(machine, device) {
+				if rootDevice(a.catalog, machine, device) {
 					a.invalid(field+"."+key, rootOSDReason, rootOSDRemedy)
 				} else if _, _, reason, remedy := SerialSelection(a.catalog, machine, device); reason != "" {
 					a.invalid(field+"."+key, reason, remedy)
@@ -120,7 +120,7 @@ func SerialSelection(catalog api.Catalog, m api.Object, path string) (serial str
 		}
 		return "", 0, "", ""
 	}
-	provider, _ := catalog.Find(api.InfraProvider, m.Spec().Get("substrate", "providerRef").Text())
+	provider, _ := catalog.Find(api.InfraProvider, api.MachineProviderRef(m))
 	if !machine.Installed(m) || !substrate.RealizesPhysicalNICs(provider) {
 		return "", 0, "a /dev/disk/by-serial/ path names a disk that a Bootwright-installed bare-metal Machine declares by serial number, and Machine " + m.Name() + " is not one", "select a device path that exists on this host"
 	}
@@ -129,8 +129,8 @@ func SerialSelection(catalog api.Catalog, m api.Object, path string) (serial str
 	}
 	size, byDevice, found := substrate.SerialEraseTarget(m, serial)
 	if !found || byDevice {
-		return "", 0, "the serial number " + serial + " that this OSD selection names is no eraseOnRemoval target of Machine " + m.Name() + " declared without deviceName, which would give its exact size",
-			"declare the disk in spec.hardware.eraseOnRemoval.targets of Machine " + m.Name() + " with its serialNumber and sizeBytes and no deviceName, or select it by that target's deviceName"
+		return "", 0, "the serial number " + serial + " that this OSD selection names is no hardware.dataDisks entry of Machine " + m.Name() + " with a non-retain onRemoval and no wwn, which would give its exact size",
+			"declare the disk in spec.hardware.dataDisks of Machine " + m.Name() + " with its serialNumber, sizeBytes and a non-retain onRemoval and no wwn, or select it by its wwn path"
 	}
 	return serial, size, "", ""
 }

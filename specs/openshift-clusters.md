@@ -28,7 +28,7 @@ port for, before any media is inserted.
 **Supported shape.** An OpenShift cluster declaring an exact
 `distribution.release.version`, installed by the `agent` method in `connected`
 mode through direct access, whose nodes are Machines on a realized
-substrate with `os.provided: false` and no install profile. A single-node
+substrate with `os.clusterInstalled`. A single-node
 cluster resolves its three endpoint slots from that node; a multi-node cluster
 resolves them from authored or load-balancer addresses. Every other declaration
 refuses before operation registration, in `plan` as in `apply`, with one
@@ -40,11 +40,12 @@ management controller under the trust its Machine declares, with the
 [private delivery](#boot-media) rules below.
 At [Machine admission](api/machines.md#os-lifecycle-and-substrate-invariants),
 a physical agent node names its root in one of the forms of the
-[root-device rule](api/machines.md#bmc-and-root-device-shape): a WWN as `wwn`;
+[root-disk rule](api/machines.md#root-disk): a WWN as `rootDisk.wwn`;
 a serial number with exact `sizeBytes`; or `volumeRef` or `bootVolume`,
 declared or defaulted, under verified BMC TLS ([D252](milestones/backlog.md#d252)).
-A `hardware.rootDevice.deviceName` refuses there, and each declared selector
-must be valid.
+A `hardware.rootDisk.hints.deviceName` refuses there, and each declared selector
+must be valid. A virtual node declares no root disk: its root is `/dev/vda`,
+derived.
 
 The installation freezes a serial-selected root's serial and capacity into its
 hardware proof. Immediately before media insertion, and again after a firmware
@@ -146,16 +147,15 @@ every selected `OpenShiftCluster`, and both belong to the
 | An endpoint prefix length | `spec.install.endpoints.<slot>.prefixLength` | `no agent installer input consumes endpoint <slot>'s prefixLength` | `remove spec.install.endpoints.<slot>.prefixLength from <cluster>` |
 | Endpoint interface networks | a non-empty `spec.install.endpoints.<slot>.interfaceNetworks` | `no agent installer input consumes endpoint <slot>'s interfaceNetworks` | `remove spec.install.endpoints.<slot>.interfaceNetworks from <cluster>, or leave it empty` |
 | Several nodes on another platform | `spec.install.platform.vsphere` or `external` with more than one of `spec.nodes` | `this executable installs no multi-node cluster on the declared platform` | `correct <cluster>` |
-| A node with an install profile | `spec.os.installProfileRef` on a node's Machine | `a declared node selects an install profile, so two installations would write its disk` | `remove spec.os.installProfileRef from <machine> or drop it from <cluster>` |
+| A node with an install profile | `spec.os.install` on a node's Machine | `a declared node selects an install profile, so two installations would write its disk` | `declare spec.os.clusterInstalled on <machine> instead of spec.os.install, or drop it from <cluster>` |
 | A node on an unrealized substrate | a node's Machine whose provider declares a substrate this executable does not realize | `a declared node is on a substrate this executable does not realize` | `correct <cluster>` |
 | A node whose emulated BMC port does not allocate | a virtual node whose provider's `spec.libvirt.bmcEmulation.port` plus the node's position among that provider's Machines is past 65535 | `node <node> (<machine>): the Machine's emulated BMC port does not allocate` | `correct spec.libvirt.bmcEmulation.port on <provider>` |
 | A node's provider with no emulated BMC credential | a virtual node whose provider declares no `spec.libvirt.bmcEmulation.auth.credentialsRef` | `node <node> (<machine>): the provider declares no emulated BMC credential` | `set spec.libvirt.bmcEmulation.auth.credentialsRef on <provider>` |
-| A physical node with an HTTP BMC | a physical node's BMC uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.substrate.baremetal.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
-| A physical node with unverified BMC TLS | a physical node disables BMC TLS verification | `a physical node's private boot image requires a BMC connection that verifies its certificate` | `enable spec.substrate.baremetal.bmc.tls.verify on <machine> and declare its trust bundle when needed` |
-| A physical node without a stable root selector | a physical node names its root in none of the forms of the [root-device rule](api/machines.md#bmc-and-root-device-shape), declares a malformed selector, or a `volumeRef` or `bootVolume` beside another root hint | `a physical agent installation requires a stable root selector: a wwn, serialNumber with exact sizeBytes, or a volumeRef or bootVolume logical volume` | `set spec.substrate.baremetal.rootDevice.wwn on <machine> to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root hint to default to bootVolume` |
-| A physical node's root named by a device path | any `hardware.rootDevice.deviceName` on a physical node | `a bare-metal Machine an installer writes names its root WWN as spec.substrate.baremetal.rootDevice.wwn, never by spec.hardware.rootDevice.deviceName` | `<remedy>` |
-| A root device the installer cannot name | a virtual node's `spec.hardware.rootDevice.deviceName` other than `/dev/<name>` or `/dev/disk/by-path/<name>` | `the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>` | `set spec.hardware.rootDevice.deviceName on <machine> to such a path` |
-| A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.hardware.rootDevice` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.hardware.rootDevice.minSizeGigabytes on <machine> as at most 9007199254740991` |
+| A physical node with an HTTP BMC | a physical node's BMC uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.hardware.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
+| A physical node with unverified BMC TLS | a physical node disables BMC TLS verification | `a physical node's private boot image requires a BMC connection that verifies its certificate` | `remove tls.verification: none from spec.hardware.bmc on <machine> and declare its trust bundle when needed` |
+| A physical node without a stable root selector | a physical node names its root in none of the forms of the [root-disk rule](api/machines.md#root-disk), declares a malformed selector, or a `volumeRef` or `bootVolume` beside another root-disk field | `a physical agent installation requires a stable root selector: a wwn, serialNumber with exact sizeBytes, or a volumeRef or bootVolume logical volume` | `set spec.hardware.rootDisk.wwn on <machine> to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root-disk field to default to bootVolume` |
+| A physical node's root named by a device path | any `hardware.rootDisk.hints.deviceName` on a physical node | `a bare-metal Machine an installer writes names its root WWN as spec.hardware.rootDisk.wwn, never by spec.hardware.rootDisk.hints.deviceName` | `<remedy>` |
+| A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.hardware.rootDisk.hints` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.hardware.rootDisk.hints.minSizeGigabytes on <machine> as at most 9007199254740991` |
 
 A row lifts with the code of the item that delivers what it refuses, and the
 table and its test change in that commit:
@@ -178,7 +178,7 @@ the virtual-media trust, the server's certificate part, private delivery and
 the restore and removal settings to the insert and the eject. Because the image
 is private, a physical node whose BMC leg is `http` or does not verify refuses
 before registration. Media trust is verified and configured by default, with
-the explicit per-Machine [unverified-fetch exception](api/machines.md#bmc-and-root-device-shape)
+the explicit per-Machine [unverified-fetch exception](api/machines.md#bmc)
 recorded in the request and plan. An insert under `established` requires the
 deciding setting on, enabling it by default when permitted.
 
@@ -314,16 +314,16 @@ and requires no synchronized time of it.
 ### Root-device hint projection
 
 Each admitted root-device hint reaches a host record's `rootDeviceHints` as
-follows; a node that declares none gets no `rootDeviceHints`.
+follows; a physical node that declares none gets no `rootDeviceHints`.
 
 | Machine hint | `rootDeviceHints` key |
 | --- | --- |
-| `hardware.rootDevice.deviceName`, on a virtual node only, `/dev/<name>` or `/dev/disk/by-path/<name>` | `deviceName` |
-| `substrate.baremetal.rootDevice.wwn`, `hctl`, `serialNumber` | the same name |
-| `hardware.rootDevice.model`, `vendor` | the same name |
-| `hardware.rootDevice.minSizeGigabytes`, `rotational` | the same name, as an integer and a boolean |
-| `substrate.baremetal.rootDevice.sizeBytes` | not carried; the [pre-boot serial proof](#selection) compares it |
-| `substrate.baremetal.rootDevice.volumeRef`, `bootVolume` | not carried at planning; the media block writes the proved volume's NAA identifier as the only key, `wwn` |
+| a virtual node's derived root, `/dev/vda` | `deviceName` |
+| `hardware.rootDisk.wwn`, `serialNumber`, `hints.hctl` | the same name |
+| `hardware.rootDisk.hints.model`, `vendor` | the same name |
+| `hardware.rootDisk.hints.minSizeGigabytes`, `rotational` | the same name, as an integer and a boolean |
+| `hardware.rootDisk.sizeBytes` | not carried; the [pre-boot serial proof](#selection) compares it |
+| `hardware.rootDisk.volumeRef`, `bootVolume` | not carried at planning; the media block writes the proved volume's NAA identifier as the only key, `wwn` |
 
 The attempt writes `install-config.yaml`, with the bound material substituted,
 and `agent-config.yaml` in JSON's syntax, which is YAML whose every string is

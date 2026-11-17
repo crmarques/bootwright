@@ -111,7 +111,7 @@ func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextNam
 		if !resolved.pin.Present() {
 			if resolved.expected = declaredMACs(object); len(resolved.expected) == 0 {
 				return target{}, refusedOn(name, "Machine/"+name+" has no identity this context's current apply proved and declares no MAC address, so nothing could prove the machine a power request would reach",
-					"declare spec.substrate.baremetal.nics[] (nicRef and macAddress) on Machine/"+name+", or apply the context so its bare-metal block proves it")
+					"declare spec.hardware.nics[].macAddress on Machine/"+name+", or apply the context so its bare-metal block proves it")
 			}
 		}
 	}
@@ -150,7 +150,7 @@ func (s Service) controllerHost(ctx context.Context, name string) (HostIdentity,
 
 func declaredMACs(object api.Object) []string {
 	var macs []string
-	for _, nic := range substrate.MachineMACs(object).Items() {
+	for _, nic := range object.Spec().Get("hardware", "nics").Items() {
 		if address := strings.ToLower(strings.TrimSpace(nic.Get("macAddress").Text())); address != "" {
 			macs = append(macs, address)
 		}

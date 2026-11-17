@@ -20,7 +20,7 @@ metadata:
   name: controller
 spec:
   os:
-    provided: true
+    provided: {}
   proxy:
     direct: {}
   network:
@@ -30,7 +30,7 @@ spec:
       - name: fqdn
         address: controller.metal.example.test
   access:
-    local: true
+    local: {}
     rootLogin: keep
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -38,37 +38,30 @@ kind: Machine
 metadata:
   name: metal-01
 spec:
-  substrate:
-    providerRef: lab-metal
-    baremetal:
-      bmc:
-        address: https://bmc-01.metal.example.test/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: lab-bmc-credentials
-        tls:
-          verify: true
-          trustBundleRef: lab-bmc-ca
-        virtualMedia:
-          tls:
-            trust: importCertificate
-            enableVerification: true
-            removeCertificateAfterBoot: false
-      nics:
-        - nicRef: eno1
-          macAddress: 52:54:00:9a:1b:01
-      rootDevice:
-        wwn: "0x5000c500a1b2c301"
-      firmware:
-        mode: prove
-        secureBoot: true
-        bootMode: UEFI
   hardware:
+    providerRef: lab-metal
+    bmc:
+      address: https://bmc-01.metal.example.test/redfish/v1/Systems/1
+      credentialsRef: lab-bmc-credentials
+      tls:
+        trustBundleRef: lab-bmc-ca
+      virtualMedia:
+        tls:
+          trust: importCertificate
+          enableVerification: true
+          removeCertificateAfterBoot: false
+    firmware:
+      mode: prove
+      secureBoot: true
+      bootMode: UEFI
     nics:
       - name: eno1
+        macAddress: 52:54:00:9a:1b:01
+    rootDisk:
+      wwn: "0x5000c500a1b2c301"
   os:
-    provided: false
-    installProfileRef: rhel-9-8
     install:
+      profileRef: rhel-9-8
       hostKeyRef: metal-01-host-key
       ntp:
         - serverRef: lab-ntp
@@ -198,7 +191,6 @@ spec:
       bmc:
         credentialsRef: lab-bmc-credentials
         tls:
-          verify: true
           trustBundleRef: lab-bmc-ca
         virtualMedia:
           tls:

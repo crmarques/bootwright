@@ -201,7 +201,7 @@ func TestSNOCaseOwnsIsolatedVLANNetworks(t *testing.T) {
 				}
 			}
 			machine := requireObject(t, catalog, api.Machine, "sno-01")
-			nics := machine.Spec().Get("substrate", "libvirt", "nics").Items()
+			nics := machine.Spec().Get("hardware", "nics").Items()
 			if len(nics) != 2 || nics[1].Get("segmentRef").Text() != "staging" {
 				t.Fatal("node does not attach to the managed tagged segment")
 			}

@@ -18,7 +18,7 @@ func TestEveryKindIsEffectBearingByExactlyOneDomainOrListedAsBearingNone(t *test
 	bearing := api.MapValue(
 		api.FieldValue{Name: "management", Value: api.StringValue("managed")},
 		api.FieldValue{Name: "enabled", Value: api.BoolValue(true)},
-		api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(false)})},
+		api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "install", Value: api.MapValue(api.FieldValue{Name: "profileRef", Value: api.StringValue("profile")})})},
 	)
 	for _, kind := range api.Kinds() {
 		object := api.NewObject(kind, "probe", api.Value{}, bearing)

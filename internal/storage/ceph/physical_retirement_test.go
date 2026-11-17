@@ -408,14 +408,14 @@ func TestPhysicalPolicyCleanupGoldenRequiresPositiveCoreAndInstallationNoEffectP
 }
 
 func TestPhysicalRetirementPolicyCountsEitherEraseMethodAndNothingElse(t *testing.T) {
-	for method, counted := range map[string]bool{"logicalOverwrite": true, "metadataClear": true, "secureErase": false} {
+	for method, counted := range map[string]bool{"logicalOverwrite": true, "metadataClear": true, "retain": false} {
 		t.Run(method, func(t *testing.T) {
 			catalog, object := physicalCatalog()
 			objects := catalog.Objects()
 			for i, machine := range objects {
 				if machine.Kind() == api.Machine {
-					target := requestMap("deviceName", "/dev/disk/by-id/wwn-0x7000000000000001", "wwn", "0x7000000000000001", "serialNumber", "root-serial", "sizeBytes", 1<<40)
-					objects[i] = machine.WithSpec(machine.Spec().WithPath(requestMap("method", method, "targets", api.ListValue(target)), "hardware", "eraseOnRemoval"))
+					disk := requestMap("wwn", "0x7000000000000001", "serialNumber", "root-serial", "sizeBytes", 1<<40, "onRemoval", method)
+					objects[i] = machine.WithSpec(machine.Spec().WithPath(api.ListValue(disk), "hardware", "dataDisks"))
 				}
 			}
 			catalog = api.NewCatalog(objects)

@@ -37,8 +37,8 @@ Effective output emits the fields in this order, which is the schema's.
 
 ### Lifecycle
 
-`spec.provided` mirrors a Machine's
-[`os.provided`](machines.md#os-lifecycle-and-substrate-invariants) and sits
+`spec.provided` is a boolean, the counterpart of a Machine's
+[`os.provided`](machines.md#os-lifecycle-and-substrate-invariants) arm, and sits
 beside the arms as the [union rule](../api.md#unions) allows: the arms are a
 presence union of at most one. A provided Network with an arm is refused at the
 arm, since nothing realizes it; one not provided that names no arm is refused
@@ -180,7 +180,7 @@ fabric carriage and Ceph networks:
 
 - **Interface assignments** (Machine, at `spec.network.addresses[].address`):
   every [interface assignment](machines.md#addresses-and-access) lies in
-  exactly one Network of its family, scoped to the Machine's `placement.site`,
+  exactly one Network of its family, scoped to the Machine's `site`,
   and takes its prefix, which NMState, Kickstart and the node subnets read.
 - **VLAN agreement** (Machine, at `spec.network.addresses[].interface`): every
   VLAN in the assigned interface's stack, itself or along a bridge or bond port

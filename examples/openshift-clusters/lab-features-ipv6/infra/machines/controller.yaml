@@ -5,7 +5,7 @@ metadata:
 
 spec:
   os:
-    provided: true
+    provided: {}
 
   proxy:
     direct: {}
@@ -19,4 +19,4 @@ spec:
         address: 2001:db8:1::1
 
   access:
-    local: true
+    local: {}

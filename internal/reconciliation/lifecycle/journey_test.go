@@ -2135,16 +2135,16 @@ func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
 	cluster := Refusal{
 		Kind: "OpenShiftCluster", Name: "sno",
 		Reason:      "a declared node selects an install profile, so two installations would write its disk",
-		Remediation: "remove spec.os.installProfileRef from Machine/sno-01 or drop it from OpenShiftCluster/sno",
+		Remediation: "remove spec.os.install from Machine/sno-01 or drop it from OpenShiftCluster/sno",
 	}
 	h.capability.unsupported = []Refusal{
-		{Kind: "Machine", Name: "guest", Field: "$.spec.os.installProfileRef", Reason: "the install profile selects spec.subscription"},
+		{Kind: "Machine", Name: "guest", Field: "$.spec.os.install.profileRef", Reason: "the install profile selects spec.subscription"},
 		cluster, cluster,
 	}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	want := []diagnostics.Diagnostic{
 		{
-			Severity: "error", Code: "lifecycle.unsupported", Message: "the install profile selects spec.subscription", Field: "$.spec.os.installProfileRef", Remediation: "correct Machine/guest",
+			Severity: "error", Code: "lifecycle.unsupported", Message: "the install profile selects spec.subscription", Field: "$.spec.os.install.profileRef", Remediation: "correct Machine/guest",
 			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "Machine", Name: "guest"},
 		},
 		{
@@ -4609,10 +4609,10 @@ func TestUnclaimedKindsRefuseBeforeRegistration(t *testing.T) {
 		api.NewObject(api.CephCluster, "ceph", api.Value{}, api.MapValue()),
 		api.NewObject(api.LoadBalancer, "lab-balancer", api.Value{}, api.MapValue(api.FieldValue{Name: "management", Value: api.StringValue("managed")})),
 		api.NewObject(api.Machine, "bare", api.Value{}, api.MapValue(
-			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(false)})},
+			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "clusterInstalled", Value: api.MapValue()})},
 		)),
 		api.NewObject(api.Machine, "installed", api.Value{}, api.MapValue(
-			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(true)})},
+			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.MapValue()})},
 		)),
 	})
 	h.service.compiler = testCompiler{state: compilation.NewState(catalog, catalog, nil)}

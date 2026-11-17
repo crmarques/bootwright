@@ -26,13 +26,13 @@ const token = "apiVersion: v1\nusers:\n- user:\n    token: minted-sa-token-01234
 func kubevirtCatalog() api.Catalog {
 	return api.NewCatalog([]api.Object{
 		object(api.Environment, "lab", m("controller", m("machineRef", "controller"))),
-		object(api.Machine, "controller", m("os", m("provided", true), "access", m("local", true))),
+		object(api.Machine, "controller", m("os", m("provided", m()), "access", m("local", m()))),
 		object(api.NetworkConfig, "guests", m("nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet", "state", "up"))))),
 		object(api.InfraProvider, "ext", m("kubevirt", m("kubeconfigRef", "ext-kubeconfig", "namespace", "guests"))),
 		object(api.InfraProvider, "kv", m("kubevirt", m("hostClusterRef", "host", "namespace", "nested"))),
-		object(api.Machine, "node-0", m("substrate", m("providerRef", "kv"), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "guests"))),
-		object(api.Machine, "node-1", m("substrate", m("providerRef", "kv"), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "guests"))),
-		object(api.Machine, "vm-0", m("substrate", m("providerRef", "ext"), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "guests"))),
+		object(api.Machine, "node-0", m("os", m("clusterInstalled", m()), "hardware", m("providerRef", "kv", "nics", list(m("name", "enp1s0"))), "network", m("configRef", "guests"))),
+		object(api.Machine, "node-1", m("os", m("clusterInstalled", m()), "hardware", m("providerRef", "kv", "nics", list(m("name", "enp1s0"))), "network", m("configRef", "guests"))),
+		object(api.Machine, "vm-0", m("os", m("clusterInstalled", m()), "hardware", m("providerRef", "ext", "nics", list(m("name", "enp1s0"))), "network", m("configRef", "guests"))),
 	})
 }
 

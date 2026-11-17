@@ -13,7 +13,7 @@ func TestInstallerMediaHostsListTheServersOfInstalledAnacondaMachines(t *testing
 		return obj(api.MachineInstallProfile, name, m("installer", m("anaconda", m("redfishVirtualMedia", m("artifactServerEndpoint", m("serverRef", server))))))
 	}
 	machine := func(name, profileRef string, provided bool) api.Object {
-		return obj(api.Machine, name, m("os", m("provided", provided, "installProfileRef", profileRef)))
+		return obj(api.Machine, name, m("os", osOf(provided, profileRef)))
 	}
 	catalog := api.NewCatalog([]api.Object{
 		obj(api.ArtifactServer, "near", m("machineRef", "zeta")),
@@ -44,17 +44,18 @@ func TestEffectBearingNamesAMachineWhoseOperatingSystemIsNotProvided(t *testing.
 		object  api.Object
 		bearing bool
 	}{
-		"provided false":      {obj(api.Machine, "n", m("os", m("provided", false))), true},
-		"provided true":       {obj(api.Machine, "n", m("os", m("provided", true))), false},
+		"installed":           {obj(api.Machine, "n", m("os", m("install", m("profileRef", "install")))), true},
+		"cluster installed":   {obj(api.Machine, "n", m("os", m("clusterInstalled", m()))), true},
+		"provided":            {obj(api.Machine, "n", m("os", m("provided", m()))), false},
 		"provided undeclared": {obj(api.Machine, "n", m("os", m())), false},
-		"another kind":        {obj(api.Proxy, "n", m("os", m("provided", false))), false},
+		"another kind":        {obj(api.Proxy, "n", m("os", m("clusterInstalled", m()))), false},
 	} {
 		reason, bearing := EffectBearing(test.object)
 		if bearing != test.bearing || bearing != (reason != "") {
 			t.Errorf("%s: EffectBearing = %q, %t", name, reason, bearing)
 		}
 	}
-	if reason, _ := EffectBearing(obj(api.Machine, "n", m("os", m("provided", false)))); !strings.Contains(reason, "operating system is not provided") {
+	if reason, _ := EffectBearing(obj(api.Machine, "n", m("os", m("clusterInstalled", m())))); !strings.Contains(reason, "operating system is not provided") {
 		t.Errorf("reason = %q", reason)
 	}
 }

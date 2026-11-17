@@ -159,14 +159,14 @@ type Target struct {
 // same reason a bare-metal Machine is: the hardware exists without Bootwright,
 // so reaching it needs no realization to have happened first.
 func TargetFor(catalog api.Catalog, machine api.Object, contextName, controllerMachine string) (Target, error) {
-	reference := machine.Spec().Get("substrate", "providerRef").Text()
+	reference := MachineProviderRef(machine)
 	if reference == "" {
 		return authoredTarget(catalog, machine, controllerMachine)
 	}
 	provider, found := catalog.Find(api.InfraProvider, reference)
 	if !found {
 		return Target{}, refusal("api.reference", "the Machine's provider is not in the selected graph",
-			"declare "+reference+" or correct spec.substrate.providerRef on "+machine.Identity())
+			"declare "+reference+" or correct "+ProviderPath+" on "+machine.Identity())
 	}
 	arm := Variant(provider)
 	if !IsRealized(provider) {
@@ -220,7 +220,7 @@ func authoredController(machine api.Object) (Controller, error) {
 	}
 	return Controller{
 		Endpoint: endpoint, CredentialsRef: credentials,
-		TLSVerify:       !bmc.Get("tls").Has("verify") || bmc.Get("tls", "verify").Bool(),
+		TLSVerify:       BMCVerified(bmc),
 		TrustBundleRef:  bmc.Get("tls", "trustBundleRef").Text(),
 		TLSVerification: bmc.Get("tls", "verification").Text(),
 		VirtualMedia:    virtualMediaTrust(bmc.Get("virtualMedia", "tls")),
@@ -363,13 +363,13 @@ func declaredInterfaces(machine api.Object) ([]Interface, error) {
 		address := MachineMAC(machine, nic.Get("name").Text())
 		if address == "" {
 			return nil, refusal("api.required", "a declared NIC carries no hardware address",
-				"set a spec.substrate.baremetal.nics[] entry with the macAddress of every hardware NIC on "+machine.Identity())
+				"set "+NICsPath+"[].macAddress on every hardware NIC of "+machine.Identity())
 		}
 		interfaces = append(interfaces, Interface{Name: nic.Get("name").Text(), MACAddress: strings.ToLower(address)})
 	}
 	if len(interfaces) == 0 {
 		return nil, refusal("api.required", "the Machine declares no hardware NIC to prove it by",
-			"declare hardware.nics on "+machine.Identity())
+			"declare "+NICsPath+" on "+machine.Identity())
 	}
 	return interfaces, nil
 }

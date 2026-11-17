@@ -146,7 +146,7 @@ metadata:
 
 spec:
   os:
-    provided: true
+    provided: {}
 
   proxy:
     direct: {}
@@ -431,7 +431,7 @@ func TestAProvidedMachineBesideTheMirrorHostAddsNoBMCImageToTheMirror(t *testing
 	t.Parallel()
 	sources := editedSources(t, installedImageMirror(t), sourceEdits{
 		replace: map[string][2]string{
-			"infra/machines/edge.yaml": {"spec:\n", "spec:\n  substrate:\n    providerRef: lab-libvirt\n\n"},
+			"infra/machines/edge.yaml": {"spec:\n", "spec:\n  hardware:\n    providerRef: lab-libvirt\n\n"},
 		},
 	})
 	state, _ := compileAcceptance(t, sources)

@@ -32,10 +32,8 @@ type refusalCase struct {
 // either side fails here.
 func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 	unverified := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
-	unverified = unverified.WithSpec(unverified.Spec().WithPath(api.BoolValue(false), "substrate", "baremetal", "bmc", "tls", "verify"))
-	rotational := guest()
-	rotational = rotational.WithSpec(rotational.Spec().WithPath(
-		api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))), "hardware", "rootDevice"))
+	unverified = unverified.WithSpec(unverified.Spec().WithPath(api.StringValue("none"), "hardware", "bmc", "tls", "verification"))
+	rotational := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"), field("rotational", api.BoolValue(false))))
 	onMetal := map[string]string{"<machine>": "Machine/metal-01"}
 	onProfile := map[string]string{"<machine>": "Machine/rhel-01", "<profile>": "MachineInstallProfile/rhel-9-8"}
 	onGuest := map[string]string{"<machine>": "Machine/rhel-01"}
@@ -64,10 +62,10 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		"A physical Machine naming no root device": {
 			labCatalog(metalProvider(), server(api.MapValue(text("model", "PERC H755")))), "Machine/metal-01", onMetal,
 		},
-		"A root-device hint other than deviceName": {labCatalog(rotational), "Machine/rhel-01",
-			map[string]string{"<machine>": "Machine/rhel-01", "<hints>": "spec.hardware.rootDevice.rotational"}},
+		"A root-device hint other than deviceName": {labCatalog(metalProvider(), rotational), "Machine/metal-01",
+			map[string]string{"<machine>": "Machine/metal-01", "<hints>": "spec.hardware.rootDisk.hints.rotational"}},
 		"A physical root named by a device path": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))),
-			"Machine/metal-01", map[string]string{"<remedy>": "replace spec.hardware.rootDevice.deviceName on Machine/metal-01 with spec.substrate.baremetal.rootDevice.wwn: 0x5000c500a1b2c3d4, the WWN /dev/disk/by-id/wwn-0x5000c500a1b2c3d4 names"}},
+			"Machine/metal-01", map[string]string{"<remedy>": "replace spec.hardware.rootDisk.hints.deviceName on Machine/metal-01 with spec.hardware.rootDisk.wwn: 0x5000c500a1b2c3d4, the WWN /dev/disk/by-id/wwn-0x5000c500a1b2c3d4 names"}},
 		"A root-device wwn in another form": {labCatalog(metalProvider(), server(api.MapValue(text("wwn", "0X5000C500A1B2C3D4")))), "Machine/metal-01", onMetal},
 		"A root-device serial number the installer cannot compare": {labCatalog(metalProvider(), server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"),
 			text("serialNumber", "ZC1A 2B3C")))), "Machine/metal-01", onMetal},

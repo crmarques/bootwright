@@ -244,7 +244,11 @@ func TestOneHostHoldsAtMostTwentyManagedNetworks(t *testing.T) {
 
 func TestTheEmulatedBMCRangeCountsOnlyRealizedMachines(t *testing.T) {
 	machine := func(name, provider string, provided bool) api.Object {
-		return obj(api.Machine, name, m("substrate", m("providerRef", provider), "os", m("provided", provided)))
+		os := m("install", m("profileRef", "rhel"))
+		if provided {
+			os = m("provided", m())
+		}
+		return obj(api.Machine, name, m("hardware", m("providerRef", provider), "os", os))
 	}
 	host := topologyHost("host")
 	last := topologyProvider("last", "host", "65535", topologyProfile())

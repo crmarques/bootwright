@@ -27,7 +27,7 @@ func text(name, value string) api.FieldValue { return field(name, api.StringValu
 
 func sshHost(name, address string, extra ...api.FieldValue) api.Object {
 	fields := append([]api.FieldValue{
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", address)))))),
 		field("access", api.MapValue(field("ssh", api.MapValue(text("addressRef", "ip"), text("knownHostsRef", name+"-known-hosts"),
 			field("auth", api.MapValue(text("privateKeyRef", name+"-key"))))))),
@@ -86,7 +86,7 @@ func evidenceOf(t *testing.T, digest string, addresses ...string) []byte {
 // on get none (D257 (2)).
 func TestAnOSReadyMachineReachedOverSSHIsClaimedByItsHardware(t *testing.T) {
 	installed := api.NewObject(api.Machine, "installed", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(false)), text("installProfileRef", "rhel")))))
+		field("os", api.MapValue(field("install", api.MapValue(text("profileRef", "rhel")))))))
 	catalog := catalogOf(sshHost("services", "192.0.2.9"), sshHost("idle", "192.0.2.10"), installed,
 		proxyOn("services"), proxyOn("controller"), proxyOn("installed"),
 		api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(field("libvirt", api.MapValue(text("machineRef", "services"))))))
@@ -272,7 +272,7 @@ func tiebreakerCatalog(fleet bool) api.Catalog {
 		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(field("access", api.MapValue(field("local", api.BoolValue(true)))))),
 		api.NewObject(api.Secret, "fleet-key", api.Value{}, api.MapValue(text("type", "sshKeyPair"))),
 		api.NewObject(api.Machine, "tie", api.Value{}, api.MapValue(
-			field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+			field("os", api.MapValue(field("provided", api.MapValue()))),
 			field("network", api.MapValue(field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "198.51.100.10")))))),
 			field("access", api.MapValue(field("ssh", api.MapValue(text("addressRef", "ip"), text("user", "operator"), text("knownHostsRef", "tie-known-hosts"),
 				field("auth", api.MapValue(field("operatorIdentity", api.MapValue()))))))))),
@@ -325,7 +325,7 @@ func TestAClusterNodeWhoseOperatingSystemIsNotProvidedPlansNoClaim(t *testing.T)
 		switch object.Kind() {
 		case api.Machine:
 			if object.Name() == "tie" {
-				objects[index] = object.WithSpec(object.Spec().WithPath(api.BoolValue(false), "os", "provided"))
+				objects[index] = object.WithSpec(object.Spec().WithPath(api.MapValue(field("clusterInstalled", api.MapValue())), "os"))
 			}
 		case api.CephCluster:
 			objects[index] = api.NewObject(api.OpenShiftCluster, "ocp", api.Value{}, api.MapValue(field("nodes", api.ListValue(
@@ -339,7 +339,7 @@ func TestAClusterNodeWhoseOperatingSystemIsNotProvidedPlansNoClaim(t *testing.T)
 		api.MapValue(text("name", "tie"), text("machineRef", "tie"))))))
 	for index, object := range objects {
 		if object.Kind() == api.Machine && object.Name() == "tie" {
-			objects[index] = object.WithSpec(object.Spec().WithPath(api.BoolValue(true), "os", "provided"))
+			objects[index] = object.WithSpec(object.Spec().WithPath(api.MapValue(field("provided", api.MapValue())), "os"))
 		}
 	}
 	if plan := planned(t, api.NewCatalog(objects), reconciliation.Apply); len(plan.Definitions) != 1 {

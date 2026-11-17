@@ -51,7 +51,7 @@ func clusterNode(catalog api.Catalog, machine string) bool {
 func clusterDialed(catalog api.Catalog, host api.Object) (Placement, bool) {
 	fleet, declared := FleetKey(catalog)
 	ssh, reached := SSH(host)
-	if !declared || !reached || !host.Spec().Get("os", "provided").Bool() || ssh.User == "" || ssh.KnownHostsRef == "" || !clusterNode(catalog, host.Name()) {
+	if !declared || !reached || !api.MachineProvided(host) || ssh.User == "" || ssh.KnownHostsRef == "" || !clusterNode(catalog, host.Name()) {
 		return Placement{}, false
 	}
 	return Placement{Address: ssh.Address, Connection: ConnectionSSH, KnownHostsRef: ssh.KnownHostsRef, Machine: host.Name(), Port: ssh.Port, PrivateKeyRef: fleet, User: ssh.User}, true

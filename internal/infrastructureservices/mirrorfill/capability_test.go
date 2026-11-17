@@ -32,7 +32,7 @@ func mirrorCatalog(host string) api.Catalog {
 		api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(
 			field("mirror", api.MapValue(field("artifacts", api.MapValue(text("serverRef", "mirror"), text("endpointRef", "ip"))))),
 			field("controller", api.MapValue(text("machineRef", "controller"))))),
-		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(field("access", api.MapValue(field("local", api.BoolValue(true)))))),
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(field("access", api.MapValue(field("local", api.MapValue()))))),
 		api.NewObject(api.Machine, "mirror", api.Value{}, api.MapValue(
 			field("proxy", api.MapValue(field("direct", api.MapValue()))),
 			field("network", api.MapValue(field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "203.0.113.20")))))),

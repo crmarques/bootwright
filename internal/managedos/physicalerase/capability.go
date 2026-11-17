@@ -53,7 +53,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	catalog := input.State.Effective()
 	selected := map[string]api.Object{}
 	for _, machine := range catalog.Objects() {
-		if machine.Kind() == api.Machine && machine.Spec().Has("hardware", "eraseOnRemoval") {
+		if machine.Kind() == api.Machine && len(substrate.EraseTargets(machine)) > 0 {
 			selected[machine.Name()] = machine
 		}
 	}
@@ -112,7 +112,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		})
 	}
 	if len(selected) > 0 {
-		return plan, refusal("api.invariant", "eraseOnRemoval requires a Bootwright-installed physical Machine", "omit eraseOnRemoval on provided or virtual Machines")
+		return plan, refusal("api.invariant", "a non-retain onRemoval requires a Bootwright-installed physical Machine", "set onRemoval to retain, or omit it, on spec.hardware.rootDisk and every spec.hardware.dataDisks entry of provided or virtual Machines")
 	}
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
@@ -452,7 +452,7 @@ func (c Capability) WithDiscoveredRoots(roots installation.DiscoveredRoots) Capa
 func (Capability) Claimed(catalog api.Catalog) []string {
 	var claimed []string
 	for _, machine := range installation.InstalledMachines(catalog) {
-		if machine.Spec().Has("hardware", "eraseOnRemoval") {
+		if len(substrate.EraseTargets(machine)) > 0 {
 			claimed = append(claimed, machine.Identity())
 		}
 	}

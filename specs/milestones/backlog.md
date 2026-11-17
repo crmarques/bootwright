@@ -9276,3 +9276,29 @@ until E2E acceptance, each slice lands on its focused checks, the changed
 packages' tests and, in the safety class, their race runs, and records that
 `make check` was deferred. No real-host operation, release or push is
 authorized.
+
+### D275
+
+**owner** (2026-11-17): shown a review of the Machine schema, which declared
+one disk in up to three blocks and one NIC in two, and a proposed layout with
+a bare-metal and a virtual example, the owner said "proceed implementation of
+this new api. no backward compatibility wanted. fix examples, e2e, templates
+including in bootwright-template-input repo". This authorizes, out of sequence
+for implementation, X568 (M1, [B1546](m1.md#b1546) and [B1547](m1.md#b1547)),
+and the edit of the sibling chart repository. It reverses [D183](#d183)'s
+Q79 (b) narrow substrate arm. Taken by the session, pending the owner's review:
+
+1. The field is `hardware.rootDisk`, not `rootDevice`; its narrowing hints
+   live under `rootDisk.hints`, `hctl` included.
+2. A virtual Machine declares no root disk: the provider creates it and every
+   installer on libvirt and KubeVirt uses `/dev/vda`.
+3. A root disk is erased only when it declares `serialNumber` and `sizeBytes`;
+   a root selected by `volumeRef`, `bootVolume` or `discover` refuses a
+   non-retain `onRemoval`.
+4. A `dataDisks` entry with no action refuses.
+5. The BMC's `tls.verify` boolean and one-value `protocol` leave the API;
+   `tls.verification: none` replaces `verify: false`, and a provider default
+   keeps only `trustBundleRef`.
+6. `Network.spec.provided` stays a boolean.
+
+No push, release or live command is authorized.

@@ -9,9 +9,23 @@ type MachineView struct {
 	Object            Object
 	ProvidedDeclared  bool
 	Provided          bool
+	ClusterInstalled  bool
 	InstallProfileRef string
 	ProviderRef       string
+	installed         bool
 }
+
+func MachineProvided(o Object) bool { return o.Spec().Has("os", "provided") }
+
+func MachineInstalled(o Object) bool { return o.Spec().Has("os", "install") }
+
+func MachineClusterInstalled(o Object) bool { return o.Spec().Has("os", "clusterInstalled") }
+
+func MachineInstallProfileRef(o Object) string {
+	return o.Spec().Get("os", "install", "profileRef").Text()
+}
+
+func MachineProviderRef(o Object) string { return o.Spec().Get("hardware", "providerRef").Text() }
 
 type CephClusterView struct {
 	Object    Object
@@ -31,18 +45,18 @@ type CephServiceView struct {
 }
 
 func machineViewOf(o Object) MachineView {
-	spec := o.Spec()
-	provided := spec.Get("os", "provided")
 	return MachineView{
 		Object:            o,
-		ProvidedDeclared:  provided.Type() == Boolean,
-		Provided:          provided.Bool(),
-		InstallProfileRef: spec.Get("os", "installProfileRef").Text(),
-		ProviderRef:       spec.Get("substrate", "providerRef").Text(),
+		ProvidedDeclared:  MachineProvided(o) || MachineInstalled(o) || MachineClusterInstalled(o),
+		Provided:          MachineProvided(o),
+		ClusterInstalled:  MachineClusterInstalled(o),
+		InstallProfileRef: MachineInstallProfileRef(o),
+		ProviderRef:       MachineProviderRef(o),
+		installed:         MachineInstalled(o),
 	}
 }
 
-func (v MachineView) Installed() bool { return v.ProvidedDeclared && !v.Provided }
+func (v MachineView) Installed() bool { return v.installed }
 
 func cephClusterViewOf(o Object) CephClusterView {
 	spec := o.Spec()

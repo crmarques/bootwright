@@ -34,12 +34,12 @@ func Environment() api.Object {
 
 func Controller() api.Object {
 	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		Field("os", api.MapValue(Field("provided", api.BoolValue(true)))),
+		Field("os", api.MapValue(Field("provided", api.MapValue()))),
 		Field("network", api.MapValue(Field("addresses", api.ListValue(
 			api.MapValue(Text("name", "fqdn"), Text("address", "controller.lab.example.test")),
 			api.MapValue(Text("name", "ip"), Text("address", "192.0.2.1")),
 		)))),
-		Field("access", api.MapValue(Field("local", api.BoolValue(true)))),
+		Field("access", api.MapValue(Field("local", api.MapValue()))),
 	))
 }
 
@@ -94,7 +94,7 @@ func ArtifactServer(fields ...api.FieldValue) api.Object {
 
 func ServicesHost() api.Object {
 	return api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
-		Field("os", api.MapValue(Field("provided", api.BoolValue(true)))),
+		Field("os", api.MapValue(Field("provided", api.MapValue()))),
 		Field("network", api.MapValue(Field("addresses", api.ListValue(
 			api.MapValue(Text("name", "fqdn"), Text("address", "services.lab.example.test")),
 			api.MapValue(Text("name", "ip"), Text("address", "192.0.2.2")),
@@ -171,11 +171,8 @@ func InstallProfile(fields ...api.FieldValue) api.Object {
 
 func Guest(fields ...api.FieldValue) api.Object {
 	spec := api.MapValue(
-		Field("substrate", api.MapValue(Text("providerRef", "lab-libvirt"), Field("libvirt", api.MapValue(Text("profileRef", "rhel"))))),
-		Field("hardware", api.MapValue(Field("nics", api.ListValue(api.MapValue(Text("name", "enp1s0")))), Field("rootDevice", api.MapValue(Text("deviceName", "/dev/vda"))))),
-		Field("os", api.MapValue(
-			Field("provided", api.BoolValue(false)), Text("installProfileRef", "rhel-9-8"),
-		)),
+		Field("hardware", api.MapValue(Text("providerRef", "lab-libvirt"), Text("profileRef", "rhel"), Field("nics", api.ListValue(api.MapValue(Text("name", "enp1s0")))))),
+		Field("os", api.MapValue(Field("install", api.MapValue(Text("profileRef", "rhel-9-8"))))),
 		Field("network", api.MapValue(
 			Text("configRef", "lab-guests"), Text("installAddressRef", "ip"),
 			Field("addresses", api.ListValue(
@@ -199,28 +196,20 @@ func MetalProvider() api.Object {
 }
 
 func Server(hints api.Value) api.Object {
-	declared, physical := SplitRootDevice(hints)
-	baremetal := api.MapValue(
+	hardware := api.MapValue(
+		Text("providerRef", "lab-metal"),
 		Field("bmc", api.MapValue(
 			Text("address", "https://bmc-01.lab.example.test/redfish/v1/Systems/1"),
 			Text("credentialsRef", "lab-bmc-credentials"),
 		)),
-		Field("nics", api.ListValue(api.MapValue(Text("nicRef", "enp1s0"), Text("macAddress", "52:54:00:9a:1b:01")))),
+		Field("nics", api.ListValue(HardwareNIC("enp1s0", "52:54:00:9a:1b:01"))),
 	)
-	if len(physical.Fields()) != 0 {
-		baremetal = baremetal.With("rootDevice", physical)
+	if disk := RootDisk(hints); len(disk.Fields()) != 0 {
+		hardware = hardware.With("rootDisk", disk)
 	}
 	return api.NewObject(api.Machine, "metal-01", api.Value{}, api.MapValue(
-		Field("substrate", api.MapValue(Text("providerRef", "lab-metal"), Field("baremetal", baremetal))),
-		Field("os", api.MapValue(
-			Field("provided", api.BoolValue(false)), Text("installProfileRef", "rhel-9-8"),
-			Field("install", api.MapValue(Text("hostKeyRef", "metal-01-host-key"))),
-		)),
-		Field("hardware", api.MapValue(
-			Field("nics", api.ListValue(api.MapValue(Text("name", "enp1s0")))),
-			Field("boot", api.MapValue(Text("nicRef", "enp1s0"))),
-			Field("rootDevice", declared),
-		)),
+		Field("hardware", hardware),
+		Field("os", api.MapValue(Field("install", api.MapValue(Text("profileRef", "rhel-9-8"), Text("hostKeyRef", "metal-01-host-key"))))),
 		Field("network", api.MapValue(
 			Text("configRef", "lab-guests"), Text("installAddressRef", "ip"),
 			Field("addresses", api.ListValue(
@@ -231,17 +220,20 @@ func Server(hints api.Value) api.Object {
 	))
 }
 
-func SplitRootDevice(hints api.Value) (declared, physical api.Value) {
-	declared, physical = api.MapValue(), api.MapValue()
-	for _, hint := range hints.Fields() {
-		switch hint.Name {
-		case "wwn", "hctl", "serialNumber", "sizeBytes":
-			physical = physical.With(hint.Name, hint.Value)
+func RootDisk(fields api.Value) api.Value {
+	disk, hints := api.MapValue(), api.MapValue()
+	for _, declared := range fields.Fields() {
+		switch declared.Name {
+		case "wwn", "serialNumber", "sizeBytes", "volumeRef", "bootVolume", "discover", "onRemoval", "hints":
+			disk = disk.With(declared.Name, declared.Value)
 		default:
-			declared = declared.With(hint.Name, hint.Value)
+			hints = hints.With(declared.Name, declared.Value)
 		}
 	}
-	return declared, physical
+	if len(hints.Fields()) != 0 {
+		disk = disk.With("hints", hints)
+	}
+	return disk
 }
 
 func CatalogOf(objects ...api.Object) api.Catalog { return api.NewCatalog(objects) }
@@ -287,6 +279,12 @@ func WithGuestNICs(objects []api.Object) []api.Object {
 			}
 		}
 	}
+	libvirt := map[string]bool{}
+	for _, object := range objects {
+		if object.Kind() == api.InfraProvider && object.Spec().Has("libvirt") {
+			libvirt[object.Name()] = true
+		}
+	}
 	for index, object := range objects {
 		names := slices.Clone(ethernet[object.Spec().Get("network", "configRef").Text()])
 		for _, iface := range object.Spec().Get("network", "overrides", "interfaces").Items() {
@@ -294,7 +292,7 @@ func WithGuestNICs(objects []api.Object) []api.Object {
 				names = append(names, named)
 			}
 		}
-		if object.Kind() == api.Machine && object.Spec().Has("substrate", "libvirt") && len(names) > 0 {
+		if object.Kind() == api.Machine && libvirt[object.Spec().Get("hardware", "providerRef").Text()] && len(names) > 0 {
 			objects[index] = object.WithSpec(object.Spec().WithPath(api.ListValue(names...), "hardware", "nics"))
 		}
 	}
@@ -350,9 +348,7 @@ func ExpectRefusal(t *testing.T, err error, code string) {
 }
 
 func EraseMachine() api.Object {
-	machine := Server(api.MapValue(Text("wwn", "0x5000c500a1b2c3d4")))
-	hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(Text("method", "logicalOverwrite"), Field("targets", api.ListValue(api.MapValue(Text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), Text("wwn", "0x5000c500a1b2c3d4"), Text("serialNumber", "serial-example"), Number("sizeBytes", "8192"))))))
-	return api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", hardware))
+	return Server(api.MapValue(Text("wwn", "0x5000c500a1b2c3d4"), Text("serialNumber", "serial-example"), Number("sizeBytes", "8192"), Text("onRemoval", "logicalOverwrite")))
 }
 
 func DeclaredInterface(name, kind string, fields ...api.FieldValue) api.Value {
@@ -365,14 +361,8 @@ func HardwareNIC(name, mac string) api.Value {
 
 func MetalOn(iface string, nics ...api.Value) api.Object {
 	metal := Server(api.MapValue(Text("wwn", "0x5000c500a1b2c3d4")))
-	var names, addresses []api.Value
-	for _, nic := range nics {
-		names = append(names, api.MapValue(Text("name", nic.Get("name").Text())))
-		addresses = append(addresses, api.MapValue(Text("nicRef", nic.Get("name").Text()), Text("macAddress", nic.Get("macAddress").Text())))
-	}
 	return metal.WithSpec(metal.Spec().
-		WithPath(api.ListValue(names...), "hardware", "nics").
-		WithPath(api.ListValue(addresses...), "substrate", "baremetal", "nics").
+		WithPath(api.ListValue(nics...), "hardware", "nics").
 		WithPath(api.StringValue("metal-net"), "network", "configRef").
 		WithPath(api.ListValue(
 			api.MapValue(Text("name", "fqdn"), Text("address", "metal-01.lab.example.test")),

@@ -49,7 +49,7 @@ func libvirtDeclaration(diskGiB string) []api.Object {
 			))),
 		)))),
 		api.NewObject(api.Machine, "rhel-01", api.Value{}, api.MapValue(
-			field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "rhel"))))),
+			field("hardware", api.MapValue(text("providerRef", "lab-libvirt"), text("profileRef", "rhel"))),
 		)),
 	}
 }
@@ -113,7 +113,7 @@ func TestALibvirtDiskResizedByHandShowsAsAHunk(t *testing.T) {
 		t.Fatal("the resized disk shows no difference")
 	}
 	machine := observedObject(t, journey, api.Machine, "rhel-01")
-	if got := machine.Real.Object.Spec().Get("substrate", "providerRef").Text(); got != "lab-libvirt" {
+	if got := machine.Real.Object.Spec().Get("hardware", "providerRef").Text(); got != "lab-libvirt" {
 		t.Fatalf("the machine reads providerRef %q", got)
 	}
 }

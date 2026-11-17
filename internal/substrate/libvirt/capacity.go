@@ -25,7 +25,7 @@ func CapacityAllocations(catalog api.Catalog, contextName string) ([]capacity.Al
 	result := make([]capacity.Allocation, 0, len(requests))
 	for _, request := range requests {
 		object, _ := catalog.Find(api.Machine, request.Identity.Object)
-		provider := object.Spec().Get("substrate", "providerRef").Text()
+		provider := api.MachineProviderRef(object)
 		allocation := capacity.Allocation{Machine: request.Identity.Object, Provider: provider, Host: request.Placement.Machine, Pool: request.Directory, Staging: substrate.PoolPath(contextName, provider), Context: contextName, Domain: request.Domain, UUID: request.UUID, Local: request.Placement.Local(), Quantities: capacity.Quantities{CPU: int64(request.VCPU)}}
 		if int64(request.MemoryMiB) > math.MaxInt64/(1<<20) {
 			return nil, capacityProjectionFailure()

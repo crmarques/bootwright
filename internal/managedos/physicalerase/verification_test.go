@@ -10,7 +10,7 @@ import (
 
 func TestInstallationAndEraseKeepTheExplicitVerificationPolicy(t *testing.T) {
 	m := metalOn("eno1", hardwareNIC("eno1", "52:54:00:9a:1b:01"))
-	m = m.WithSpec(m.Spec().WithPath(api.BoolValue(true), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "enableVerification"))
+	m = m.WithSpec(m.Spec().WithPath(api.BoolValue(true), "hardware", "bmc", "virtualMedia", "tls", "enableVerification"))
 	request := requestOf(t, metalCatalog(m, metalNetwork(declaredInterface("eno1", "ethernet"))), m.Name())
 	if !request.Target.Controller.VirtualMedia.EnableVerification {
 		t.Fatal("installation lost verification setup intent")

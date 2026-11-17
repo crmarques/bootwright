@@ -74,7 +74,7 @@ func Installed(o api.Object) bool { return installed(o) }
 // store, so the store's record of an exempt Machine is never read.
 func TrustExemption(o api.Object) string {
 	switch {
-	case o.Spec().Get("access", "local").Bool():
+	case ReachedLocally(o):
 		return trust.ExemptReachedLocally
 	case installed(o):
 		return "host key comes from its installation evidence"
@@ -107,14 +107,16 @@ func Memberships(c api.Catalog) map[string][]string {
 	return memberships
 }
 
-func OSProvided(o api.Object) bool {
-	provided := o.Spec().Get("os", "provided")
-	return provided.Type() == api.Boolean && provided.Bool()
-}
+func OSProvided(o api.Object) bool { return api.MachineProvided(o) }
+
+func ClusterInstalled(o api.Object) bool { return api.MachineClusterInstalled(o) }
+
+func InstallProfileRef(o api.Object) string { return api.MachineInstallProfileRef(o) }
+
+func ReachedLocally(o api.Object) bool { return o.Spec().Has("access", "local") }
 
 func ReachedOnlyLocally(o api.Object) bool {
-	local := o.Spec().Get("access", "local")
-	return local.Type() == api.Boolean && local.Bool() && !o.Spec().Has("access", "ssh")
+	return ReachedLocally(o) && !o.Spec().Has("access", "ssh")
 }
 
 func ProxyChoice(o api.Object) api.Value { return o.Spec().Get("proxy") }
@@ -122,7 +124,7 @@ func ProxyChoice(o api.Object) api.Value { return o.Spec().Get("proxy") }
 func NamesControllerHost(o api.Object, c api.Catalog, controllerName string) bool {
 	ssh := o.Spec().Get("access", "ssh")
 	if !ssh.Present() {
-		return o.Spec().Get("access", "local").Bool()
+		return ReachedLocally(o)
 	}
 	controller, found := c.Find(api.Machine, controllerName)
 	if !found {

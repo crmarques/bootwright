@@ -155,12 +155,8 @@ func physicalRetirementRequest(catalog api.Catalog, cluster Request) PhysicalRet
 		}
 		machine, _ := catalog.Find(api.Machine, host.Machine)
 		entry := PhysicalRetirementHost{RetainRoot: host.RetainRoot, Name: host.Name, Machine: host.Machine, Devices: slices.Clone(host.Devices), EraseTargets: []PhysicalEraseTarget{}}
-		policy := machine.Spec().Get("hardware", "eraseOnRemoval")
-		if method := policy.Get("method").Text(); method == "logicalOverwrite" || method == "metadataClear" {
-			for _, target := range policy.Get("targets").Items() {
-				size, _ := target.Get("sizeBytes").Int64()
-				entry.EraseTargets = append(entry.EraseTargets, PhysicalEraseTarget{Serial: target.Get("serialNumber").Text(), SizeBytes: size, WWN: target.Get("wwn").Text()})
-			}
+		for _, target := range substrate.EraseTargets(machine) {
+			entry.EraseTargets = append(entry.EraseTargets, PhysicalEraseTarget{Serial: target.SerialNumber, SizeBytes: target.SizeBytes, WWN: target.WWN})
 		}
 		slices.SortFunc(entry.EraseTargets, func(a, b PhysicalEraseTarget) int { return strings.Compare(a.Serial, b.Serial) })
 		r.Hosts = append(r.Hosts, entry)
@@ -186,7 +182,7 @@ func (r PhysicalRetirementRequest) authorized() error {
 				return target.Serial == device.Serial && target.SizeBytes == device.SizeBytes
 			})
 			if !covered {
-				return failure("lifecycle.unsupported", "physical Ceph retirement requires explicit erasure of every selected data, DB and WAL disk", "include every selected Ceph disk, by its WWN or its serial number and size, in each Machine's original eraseOnRemoval policy")
+				return failure("lifecycle.unsupported", "physical Ceph retirement requires explicit erasure of every selected data, DB and WAL disk", "include every selected Ceph disk, by its WWN or its serial number and size, in a hardware.dataDisks entry of each Machine, as originally applied, with a non-retain onRemoval")
 			}
 		}
 	}

@@ -217,9 +217,6 @@ func ValidateTrust(object api.Object, catalog api.Catalog, exceptions func(api.O
 				if mode == "none" && value.Has(refField) {
 					add("disabled TLS verification cannot use a trust bundle", "remove "+path+"."+refField+" or select full or certificate verification")
 				}
-				if allowsExceptions && value.Has("verify") && value.Get("verify").Bool() != (mode != "none") {
-					add("tls.verify and tls.verification disagree", "remove tls.verify and use tls.verification alone, or make both settings agree")
-				}
 				if !allowsExceptions && mode != "full" {
 					add("this connection's consumer does not implement "+mode+" TLS verification", "select full verification and use a certificate matching this endpoint")
 				}

@@ -22,18 +22,17 @@ kind: Machine
 metadata:
   name: compact-01
 spec:
-  substrate:
+  hardware:
     providerRef: lab-metal
-    baremetal:
-      rootDevice:
-        wwn: "0x500000000000f201"
-      bmc:
-        address: https://bmc-01.example.test/redfish/v1/Systems/1
-      nics:
-        - nicRef: enp1s0
-          macAddress: 52:54:00:9a:1b:21
+    bmc:
+      address: https://bmc-01.example.test/redfish/v1/Systems/1
+    nics:
+      - name: enp1s0
+        macAddress: 52:54:00:9a:1b:21
+    rootDisk:
+      wwn: "0x500000000000f201"
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -43,9 +42,6 @@ spec:
       - name: ip
         address: 198.51.100.21
         interface: enp1s0
-  hardware:
-    nics:
-      - name: enp1s0
 `
 
 const metalProvider = `apiVersion: bootwright.io/v1alpha1

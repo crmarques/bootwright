@@ -41,7 +41,7 @@ metadata:
 
 spec:
   os:
-    provided: true
+    provided: {}
 
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -51,7 +51,7 @@ metadata:
 
 spec:
   os:
-    provided: true
+    provided: {}
 
   network:
     addresses: []
@@ -59,6 +59,7 @@ spec:
   access:
     ssh:
       port: 2222
+
       auth:
         operatorIdentity: {}
 
@@ -70,10 +71,10 @@ metadata:
 
 spec:
   os:
-    provided: true
+    provided: {}
 
   access:
-    local: true
+    local: {}
 
 ---
 apiVersion: bootwright.io/v1alpha1

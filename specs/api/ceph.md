@@ -331,7 +331,7 @@ value is preserved:
   the Machine has one, else as `<node>.<cluster>.<storage domain>` when the
   single Environment declares a storage domain (`domains.storageClusters`,
   else `domains.clusters`, else `domains.base`);
-- each topology node's `site` as its Machine's `placement.site`, the only
+- each topology node's `site` as its Machine's `site`, the only
   authored owner of a node's site; an authored `topology.nodes[].site`
   refuses `api.invariant`;
 - a `topology.stretch` block's `ruleName: stretch-rule`, its tiebreaker
@@ -353,7 +353,7 @@ checks:
 - management mode, distribution, entitlement, image, package, bootstrap,
   topology, network, FIPS, CephX, and cluster-login declarations agree;
 - each `topology.nodes[].machineRef` names a Machine, which is a Ceph node
-  because the topology names it ([substrate arm](machines.md#substrate-arm));
+  because the topology names it ([hardware and substrate](machines.md#hardware-and-substrate));
 - on a Bootwright-installed Machine, an authored `topology.nodes[].fqdn` that
   differs from the Machine's effective `fqdn` refuses `api.invariant` at
   `topology.nodes[i].fqdn`, naming both; removing the override gives the
@@ -365,8 +365,8 @@ checks:
   data, DB, and WAL paths (a root declared by serial number that a WWN path
   names is refused by host preparation as `device-root`, once the live disk
   reports its serial), and admit a `/dev/disk/by-serial/<serialNumber>` path only on a
-  Bootwright-installed bare-metal Machine whose `hardware.eraseOnRemoval`
-  declares that serial without `deviceName`;
+  Bootwright-installed bare-metal Machine that declares that serial as a
+  `hardware.dataDisks[].serialNumber` with a non-retain `onRemoval` and no `wwn`;
 - policies, pools, filesystems, gateways, NFS exports, SMB resources, and
   consumers reference the same cluster under each kind's management-mode constraints and
   use compatible pool roles and protection modes;

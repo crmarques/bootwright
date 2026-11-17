@@ -29,7 +29,7 @@ selects `machine-baremetal-v1`, and `kubevirt` selects
 host through `kubeconfigRef` or `hostClusterRef`. A provider host block
 is planned for every libvirt and KubeVirt `InfraProvider` in the selected
 graph, and a machine block for every Machine on any realized provider whose
-effective `os.provided` is `false`. A bare-metal `InfraProvider` plans no block
+OS is not provided (`os.install` or `os.clusterInstalled`). A bare-metal `InfraProvider` plans no block
 of its own: `machine-baremetal-v1` claims it, realized only through its
 Machines. A KubeVirt provider's block only proves the host it is given and
 changes nothing on it. Provided Machines are never realized; one reached over
@@ -64,7 +64,7 @@ to [`substrate.Target`](../internal/substrate/target.go).
 | --- | --- |
 | `Delivery` | The arm's boot-media delivery method. |
 | `Provider` | The selected InfraProvider's name, when one is declared. |
-| `Substrate` | The Machine's authored substrate arm. |
+| `Substrate` | The Machine's substrate arm, which follows its provider ([hardware and substrate](api/machines.md#hardware-and-substrate)). |
 | `Port` | The arm whose machine port reaches it. |
 | `Physical` | Whether operator-owned hardware exists before and outlives this context. |
 | `Controller` | The exact management endpoint, its credential and transport trust, including an arm's management API and the volume a pushed image is written to. |
@@ -75,7 +75,7 @@ to [`substrate.Target`](../internal/substrate/target.go).
 | `PlacementMachine` | The Machine whose host reaches the management endpoint. |
 
 The KubeVirt and vSphere arms realize installer-provisioned Machines, those
-with `os.provided: false` and no install profile, as
+with `os.clusterInstalled`, as
 [KubeVirt machine realization](#kubevirt-machine-realization) and
 [vSphere machine realization](#vsphere-machine-realization) state. Their
 management-controller slot holds the arm's management API endpoint and
@@ -128,8 +128,8 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 | A KubeVirt provider on a host without OpenShift Virtualization | a KubeVirt provider's `spec.kubevirt.hostClusterRef` naming a cluster on which no add-on instance provides `kubevirt` | `a KubeVirt provider hosted by <cluster> needs an add-on instance on that cluster that provides kubevirt, which owns the provider's namespace and access` | `bind the kubevirt package to <cluster>, or name the host through spec.kubevirt.kubeconfigRef on <provider>` |
 | A KubeVirt provider on a host whose kubevirt add-on is authored | a KubeVirt provider's `spec.kubevirt.hostClusterRef` naming a cluster on which only an authored `ClusterAddon` that declares `provides: [kubevirt]` provides `kubevirt` | `a KubeVirt provider hosted by <cluster> needs the built-in kubevirt package on that cluster, which alone renders the provider's namespace, service account and roles, and <addon> that provides kubevirt does not` | `bind the kubevirt package to <cluster>, or name the host through spec.kubevirt.kubeconfigRef on <provider>` |
 | A hosted KubeVirt provider's segment on no host secondary network | a segment of a KubeVirt provider with `spec.kubevirt.hostClusterRef` whose `networkRef` names no `ClusterUserDefinedNetwork` among the host's `spec.networking.secondaryNetworks` | `a KubeVirt provider hosted by <cluster> attaches only to that cluster's secondary networks, whose selectors label the namespace its kubevirt instance owns, and segment <segment> names another network` | `name a ClusterUserDefinedNetwork among spec.networking.secondaryNetworks of <cluster> in segment <segment> of <provider>` |
-| A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal, kubevirt or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
-| A Bootwright-installed Machine on KubeVirt | a Machine on a KubeVirt provider that names `spec.os.installProfileRef` | `a KubeVirt Machine is realized for an installer that supplies its operating system, and this one names an install profile` | `remove spec.os.installProfileRef from <machine>, or host it on a baremetal or libvirt provider` |
+| A Machine on an unrealized substrate | a Machine with `os.install` or `os.clusterInstalled` whose `spec.hardware.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal, kubevirt or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
+| A Bootwright-installed Machine on KubeVirt | a Machine on a KubeVirt provider that declares `spec.os.install` | `a KubeVirt Machine is realized for an installer that supplies its operating system, and this one names an install profile` | `declare spec.os.clusterInstalled on <machine> instead of spec.os.install, or host it on a baremetal or libvirt provider` |
 | A KubeVirt profile without a size | a non-provided Machine on a KubeVirt provider whose profile's `cpu`, `memoryMiB` or `diskGiB` is `0` | `a KubeVirt machine is created with the CPU count, memory and root disk its profile declares, and its profile <profile> declares one as zero` | `set cpu, memoryMiB and diskGiB above zero on profile <profile> of <provider>` |
 | A KubeVirt NIC on an unrealized network kind | a NIC of such a Machine whose segment's `networkRef` is neither a `k8s.ovn.org` `ClusterUserDefinedNetwork` nor a `k8s.cni.cncf.io` `NetworkAttachmentDefinition` | `a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and segment <segment> names another kind` | `select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition segment for every NIC of <machine>` |
 | An emulated BMC no endpoint can name | a libvirt provider's `spec.libvirt.bmcEmulation.bindAddress` that is not one unicast host address | `an emulated BMC listens on one unicast address its Machines' BMC endpoints can name, and this provider's bindAddress is not one` | `set spec.libvirt.bmcEmulation.bindAddress on <provider> to one unicast host address` |
@@ -962,7 +962,8 @@ Virtual media type proves guest presentation rather than physical storage
 performance. The explicit-media semantic change is included in the automation
 digest;
 old applied requests are never reinterpreted. The root carries no WWN or serial
-for a [root-device hint](api/machines.md#bmc-and-root-device-shape) to match.
+for a [root-disk hint](api/machines.md#root-disk) to match; the installer
+uses `/dev/vda`, derived.
 Each interface carries the
 same derived address the realized target reports, so a consumer that must
 declare this Machine's hardware to an installer names exactly what the domain
@@ -1014,7 +1015,7 @@ The BMC
 endpoint is `https://<bindAddress>:<port>/redfish/v1/Systems/<uuid>`, with an
 IPv6 `bindAddress` bracketed (`https://[fd00::1]:8000/redfish/v1/Systems/<uuid>`),
 so it meets the BMC address grammar of
-[machines](api/machines.md#bmc-and-root-device-shape); the plan's listener impact
+[machines](api/machines.md#bmc-endpoint-identity); the plan's listener impact
 prints the socket in the same form. The password file keeps the hash it
 holds while bcrypt's `checkpw` still verifies the bound password with it,
 because bcrypt salts every hash afresh: hashing the password again would
@@ -1233,7 +1234,7 @@ identity every later effect depends on, proved once, in one place, rather than
 re-derived by each consumer. A declared [firmware block](#physical-firmware)
 is applied by an installation's pre-boot proof, never by this block.
 
-**Target proof.** The Machine's `substrate.baremetal.bmc.address` names one
+**Target proof.** The Machine's `hardware.bmc.address` names one
 exact ComputerSystem. The block reads that resource with the bound credential
 and records its reported `UUID`, `SerialNumber`, `Manufacturer` and `Model`;
 then reads the system's complete `EthernetInterfaces` collection and requires
@@ -1320,7 +1321,7 @@ drives the server by its BMC never use it at once ([D257](milestones/backlog.md#
 Each Machine, other than the controller and a Machine Bootwright installs
 (whose own realization claims it), that a managed service, an artifact server
 or a libvirt provider host is placed on through the SSH arm, or that a
-cluster names as a node with `os.provided: true`, dialed as its `access.ssh` user with the
+cluster names as a node with `os.provided: {}`, dialed as its `access.ssh` user with the
 Environment's fleet key as Ceph dials an OS-ready node, plans one block `machine-hardware-<machine>` of
 `machine-hardware-v1` in the infrastructure services stage. Every block placed
 there requires it, and so does each Ceph host and core block that names the
@@ -1746,7 +1747,7 @@ so no Ceph OSD runs on one. Each
 `hardware.nics` entry becomes, in order, one interface named `nic<index>` with
 the `bridge` binding and a pinned `macAddress`, libvirt's derivation from the
 context, Machine and NIC names with QEMU's locally administered prefix
-`52:54:00`, never authored (the KubeVirt [substrate arm](api/machines.md#substrate-arm) has no
+`52:54:00`, never authored (a KubeVirt [Machine NIC](api/machines.md#hardware-and-substrate) has no
 MAC field; planning refuses, naming both Machines and the address, two
 NICs of the selected graph that derive one address, with the remedy to
 rename a NIC of one Machine or that Machine, because the derivation hashes
@@ -2051,7 +2052,7 @@ whose credential answers it, then cross the same adapter boundary a lifecycle bl
 the context's shared lock. They register no operation and publish no ownership, because a power
 state is not desired state. On the libvirt and bare-metal arms, where the
 endpoint comes from is the only difference: a Machine that authors
-`substrate.baremetal.bmc` is reached at that address from the controller, and
+`hardware.bmc` is reached at that address from the controller, and
 a Machine whose provider emulates a BMC is reached at its allocated port from
 the provider host, and only while the context owns the realization that BMC
 belongs to. A pin is read from the apply behind the current operation: the
@@ -2095,7 +2096,7 @@ is to act on the machine through that context or destroy it first
 The [CLI journey](cli.md#machine-power-operations) owns the rest.
 
 Every BMC leg carries the trust its declaration sets. The
-controller-to-BMC leg follows `bmc.tls.verify` and, when the Machine declares
+controller-to-BMC leg follows `bmc.tls.verification` and, when the Machine declares
 `bmc.tls.trustBundleRef`, verifies against that bundle alone and never against
 the system trust store beside it. A physical BMC whose certificate an
 internal authority issued is therefore verified against that authority, and an
@@ -2109,7 +2110,7 @@ and B73 retain that rehearsal gate.
 
 The BMC-to-artifact-server leg follows the realized target's frozen
 `bmc.virtualMedia.tls` policy under the
-[Machine contract](api/machines.md#bmc-and-root-device-shape). Its default
+[Machine contract](api/machines.md#bmc). Its default
 imports trust and enables the deciding verification setting. Device collections
 use the serving leaf; a qualified discovered SecurityService imports the
 chain's terminal issuer. `established` imports no trust. The explicit
@@ -2289,7 +2290,7 @@ read in full, remedied by running the refusing apply's continuation once
 the machine reports the declared hardware in full or, to correct the
 declaration instead, by taking the context back with
 `bootwright destroy --context <context>`, correcting
-`spec.substrate.baremetal.bmc.address` or `spec.substrate.baremetal.nics`, importing that
+`spec.hardware.bmc.address` or `spec.hardware.nics`, importing that
 input with `bootwright context update --name <context> --input-dir <directory>`
 and running `bootwright apply --context <context>`; `identity-mismatch`, a
 physical machine answering as another system than its pin, remedied by the same

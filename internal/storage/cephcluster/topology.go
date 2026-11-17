@@ -165,9 +165,9 @@ func (a *admission) topology(ceph api.Value) {
 				a.issue("api.invariant", field+".fqdn", "storage node "+textOf(node, "name")+" registers as "+NativeHostname(node)+", but Bootwright installs Machine/"+host.Name()+" with hostname "+fqdn,
 					"remove topology.nodes[].fqdn so the node takes its Machine's fqdn, or change the Machine's fqdn contact in spec.network.addresses")
 			}
-			provided := host.Spec().Get("os", "provided").Bool()
+			provided := api.MachineProvided(host)
 			if ceph.Get("security", "fips", "enabled").Bool() && !provided {
-				if profile, ok := a.catalog.Find(api.MachineInstallProfile, textOf(host.Spec(), "os", "installProfileRef")); !ok || !profile.Spec().Get("customizations", "security", "fips", "enabled").Bool() {
+				if profile, ok := a.catalog.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(host)); !ok || !profile.Spec().Get("customizations", "security", "fips", "enabled").Bool() {
 					a.invalid(field+".machineRef", "FIPS storage requires a FIPS install profile on installed nodes", "select Machines installed with FIPS enabled or disable FIPS for the storage cluster")
 				}
 			}

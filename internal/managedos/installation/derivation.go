@@ -87,7 +87,7 @@ func InstallationFor(catalog api.Catalog, machine, profile api.Object, request R
 		PackageTLS:       request.Tree != nil && strings.HasPrefix(request.Tree.URL, "https://"),
 		Prefix:           prefix,
 		Repositories:     repositories,
-		RootDevice:       substrate.RootDevicePath(machine),
+		RootDevice:       substrate.RootDevicePath(catalog, machine),
 		SELinux:          customizations.Get("security", "selinux", "mode").Text(),
 		Timezone:         orDefault(customizations.Get("localization", "timezone").Text(), "UTC"),
 		User:             installUser,

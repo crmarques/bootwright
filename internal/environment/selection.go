@@ -172,8 +172,7 @@ func (r *retention) keepStandaloneMachines(catalog api.Catalog) {
 	}
 	used := r.hostClosure(catalog, r.nodeMachines(catalog, roots))
 	for _, machine := range catalog.OfKind(api.Machine) {
-		os := machine.Spec().Get("os")
-		if !os.Get("provided").Bool() && os.Get("installProfileRef").Text() != "" && !used[machine.Identity()] {
+		if api.MachineInstalled(machine) && !used[machine.Identity()] {
 			r.keep(api.Machine, machine.Name())
 		}
 	}
@@ -378,7 +377,7 @@ func (r *retention) retainDependencies(catalog api.Catalog, object api.Object) {
 	}
 	switch kind {
 	case api.Machine:
-		r.keep(api.InfraProvider, spec.Get("substrate", "providerRef").Text())
+		r.keep(api.InfraProvider, spec.Get("hardware", "providerRef").Text())
 	case api.Network:
 		retainReferences(spec, api.Schema(kind), func(referenced api.Kind) bool { return referenced == api.InfraProvider }, r.keep)
 	case api.InfraProvider:

@@ -17,7 +17,7 @@ the service kind with its `spec.implementation`, which an ArtifactServer lacks
 and an external service forbids ([API](api/infrastructure-services.md)).
 
 A managed service becomes a block only when its placement Machine has effective
-`os.provided: true`, or is one Bootwright installs, whose installation its
+`os.provided: {}`, or is one Bootwright installs, whose installation its
 block then requires, and the service's declared requirements hold; admission
 refuses another placement Machine at `$.spec.machineRef`
 ([placement](api/infrastructure-services.md#management-and-placement)). Reference

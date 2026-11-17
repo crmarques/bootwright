@@ -518,7 +518,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 			h.RetainRoot = !machine.RootEraseSelected(m)
 			h.RootSerial = substrate.MachineRootDeviceHints(m).SerialNumber
 			h.RootWWN = substrate.MachineRootDeviceHints(m).WWN
-			if path := substrate.RootDevicePath(m); strings.HasPrefix(path, "/dev/disk/by-id/wwn-0x") {
+			if path := substrate.RootDevicePath(c, m); strings.HasPrefix(path, "/dev/disk/by-id/wwn-0x") {
 				h.RootWWN = strings.TrimPrefix(path, "/dev/disk/by-id/wwn-")
 			}
 			h.Devices, err = physicalDevices(c, cluster, m, name)

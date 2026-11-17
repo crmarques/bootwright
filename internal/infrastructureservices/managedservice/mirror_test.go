@@ -181,7 +181,7 @@ func TestAnInstalledMirrorHostsInstallationPullsFromTheOrigins(t *testing.T) {
 	origin := "quay.io/metal3-io/sushy-tools@sha256:" + strings.Repeat("a", 64)
 	installed := func(name, profile string, extra ...api.FieldValue) api.Object {
 		return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(append([]api.FieldValue{
-			field("os", api.MapValue(field("provided", api.BoolValue(false)), text("installProfileRef", profile))),
+			field("os", api.MapValue(field("install", api.MapValue(text("profileRef", profile))))),
 			field("network", api.MapValue(text("configRef", "guests"), field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "203.0.113.20")))))),
 		}, extra...)...))
 	}
@@ -192,9 +192,9 @@ func TestAnInstalledMirrorHostsInstallationPullsFromTheOrigins(t *testing.T) {
 	endpoint := api.MapValue(field("artifactServerEndpoint", api.MapValue(text("serverRef", "media"))))
 	objects := slices.DeleteFunc(managedMirror(), func(object api.Object) bool { return object.Kind() == api.Machine })
 	objects = append(objects,
-		installed("mirror-host", "mirror", field("substrate", api.MapValue(text("providerRef", "lab-libvirt")))),
-		installed("time-host", "time", field("substrate", api.MapValue(text("providerRef", "lab-libvirt")))),
-		installed("guest", "time", field("substrate", api.MapValue(text("providerRef", "lab-libvirt")))),
+		installed("mirror-host", "mirror", field("hardware", api.MapValue(text("providerRef", "lab-libvirt")))),
+		installed("time-host", "time", field("hardware", api.MapValue(text("providerRef", "lab-libvirt")))),
+		installed("guest", "time", field("hardware", api.MapValue(text("providerRef", "lab-libvirt")))),
 		api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(field("libvirt", api.MapValue(text("machineRef", "hypervisor"))))),
 		api.NewObject(api.MachineInstallProfile, "mirror", api.Value{}, api.MapValue(field("installer", api.MapValue(field("anaconda", api.MapValue(field("redfishVirtualMedia", endpoint))))),
 			field("ntp", selecting("time")))),

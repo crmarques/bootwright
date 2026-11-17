@@ -50,7 +50,7 @@ func nodeSite(c api.Catalog, node api.Value) string {
 		return site
 	}
 	m, _ := c.Find(api.Machine, node.Get("machineRef").Text())
-	return m.Spec().Get("placement", "site").Text()
+	return m.Spec().Get("site").Text()
 }
 
 func stretchLocation(s *Stretch, site string) map[string]string {

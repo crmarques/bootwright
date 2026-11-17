@@ -8,7 +8,7 @@ import (
 
 func TestHostFirewallPolicyPreservesExternalOwnershipAndRequiresPinnedRemoteAccess(t *testing.T) {
 	for _, management := range []string{"", "external", "managed"} {
-		host := object(api.Machine, "controller", m("os", m("provided", true)))
+		host := object(api.Machine, "controller", m("os", m("provided", m())))
 		if management != "" {
 			host = host.WithSpec(host.Spec().WithPath(api.StringValue(management), "firewall", "management"))
 		}

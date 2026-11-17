@@ -4,31 +4,21 @@ metadata:
   name: nv-vlan-bond
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: rhel
-
-      nics:
-        - nicRef: nic0
-          segmentRef: nv-trunk
-
-        - nicRef: nic1
-          segmentRef: nv-trunk
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: rhel
+
     nics:
       - name: nic0
-      - name: nic1
+        segmentRef: nv-trunk
 
-    rootDevice:
-      deviceName: /dev/vda
+      - name: nic1
+        segmentRef: nv-trunk
 
   os:
-    provided: false
-    installProfileRef: rhel-9-8
-
     install:
+      profileRef: rhel-9-8
+
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip

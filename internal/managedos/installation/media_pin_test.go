@@ -204,7 +204,7 @@ func TestPlanWithoutAMediaReaderRefusesAnInstallation(t *testing.T) {
 		t.Fatalf("diagnostic = %+v", reported)
 	}
 	provided := guest()
-	provided = provided.WithSpec(provided.Spec().With("os", api.MapValue(field("provided", api.BoolValue(true)))))
+	provided = provided.WithSpec(provided.Spec().With("os", api.MapValue(field("provided", api.MapValue()))))
 	plan, err := planWith(nil, labCatalog(provided))
 	if err != nil || len(plan.Definitions) != 0 {
 		t.Fatalf("a plan installing nothing = %+v (%v)", plan, diagnostics.Of(err))

@@ -49,15 +49,15 @@ func TestTheControllerMachineAndProxyRefusalsKeepTheirWords(t *testing.T) {
 		edit func([]api.Object) []api.Object
 		want string
 	}{
-		{"os not provided", withMachine(func(spec api.Value) api.Value { return spec.WithPath(api.BoolValue(false), "os", "provided") }),
-			"Machine/controller | api.invariant | $.spec.os.provided | controller setup requires an OS-ready Machine with os.provided: true | set spec.os.provided: true on Machine/controller"},
-		{"os provided as text", withMachine(func(spec api.Value) api.Value { return spec.WithPath(api.StringValue("true"), "os", "provided") }),
-			"Machine/controller | api.invariant | $.spec.os.provided | controller setup requires an OS-ready Machine with os.provided: true | set spec.os.provided: true on Machine/controller"},
+		{"os not provided", withMachine(func(spec api.Value) api.Value {
+			return spec.With("os", api.MapValue().With("clusterInstalled", api.MapValue()))
+		}),
+			"Machine/controller | api.invariant | $.spec.os.provided | controller setup requires an OS-ready Machine with os.provided: {} | set spec.os.provided: {} on Machine/controller"},
 		{"ssh access", withMachine(func(spec api.Value) api.Value {
 			return spec.WithPath(api.StringValue("ip"), "access", "ssh", "addressRef")
-		}), "Machine/controller | api.invariant | $.spec.access | controller setup requires access.local: true and no SSH access | set spec.access.local: true and remove spec.access.ssh on Machine/controller"},
-		{"not local", withMachine(func(spec api.Value) api.Value { return spec.WithPath(api.BoolValue(false), "access", "local") }),
-			"Machine/controller | api.invariant | $.spec.access | controller setup requires access.local: true and no SSH access | set spec.access.local: true and remove spec.access.ssh on Machine/controller"},
+		}), "Machine/controller | api.invariant | $.spec.access | controller setup requires access.local: {} and no SSH access | set spec.access.local: {} and remove spec.access.ssh on Machine/controller"},
+		{"not local", withMachine(func(spec api.Value) api.Value { return spec.Without("access") }),
+			"Machine/controller | api.invariant | $.spec.access | controller setup requires access.local: {} and no SSH access | set spec.access.local: {} and remove spec.access.ssh on Machine/controller"},
 		{"proxy choice not a mapping", withMachine(func(spec api.Value) api.Value { return spec.With("proxy", api.StringValue("direct")) }),
 			"Machine/controller | api.value | $.spec.proxy | controller setup requires a normalized proxy choice | set spec.proxy on Machine/controller to direct: {} or a proxyRef"},
 		{"managed proxy", viaProxy(api.MapValue().With("management", api.StringValue("managed")).With("endpoints", api.ListValue(api.MapValue().With("name", api.StringValue("only")))), ref),

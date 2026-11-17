@@ -26,7 +26,7 @@ const tieAddress = "198.51.100.10"
 // identity; the Environment's fleet key is the one Ceph dials it with.
 func tiebreakerCatalog(change func(machine, cluster api.Value) (api.Value, api.Value)) (api.Catalog, api.Object) {
 	objects := packageCatalogOf(4).Objects()
-	tie := requestMap("os", requestMap("provided", true),
+	tie := requestMap("os", requestMap("provided", api.MapValue()),
 		"network", requestMap("addresses", api.ListValue(requestMap("name", "ip", "address", tieAddress))),
 		"access", requestMap("ssh", requestMap("addressRef", "ip", "user", "operator", "knownHostsRef", "tie-known-hosts", "auth", requestMap("operatorIdentity", api.MapValue()))))
 	objects = append(objects, api.NewObject(api.Environment, "environment", api.Value{}, requestMap("remoteMachinesAccessKey", requestMap("keyRef", "fleet-key"))),

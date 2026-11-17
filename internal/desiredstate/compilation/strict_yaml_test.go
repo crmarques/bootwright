@@ -175,7 +175,7 @@ func strictYAMLRefusals() []strictYAMLRow {
 		{"quoted merge key", strictYAMLSecret("  '<<': {type: opaque}\n"), []string{"yaml.alias $.spec"}},
 		{"tagged merge key", strictYAMLSecret("  !!merge <<: {type: opaque}\n"), []string{"yaml.alias $.spec"}},
 		{"unknown field", strictYAMLSecret("  type: opaque\n  unexpected: value\n"), []string{"api.field $.spec.unexpected"}},
-		{"null NIC element", strictYAMLMachine("  hardware: {nics: [{name: eth0}, null]}\n  os: {provided: true}\n  access: {local: true}\n"), []string{"api.type $.spec.hardware.nics[1]"}},
+		{"null NIC element", strictYAMLMachine("  hardware: {nics: [{name: eth0}, null]}\n  os: {provided: {}}\n  access: {local: {}}\n"), []string{"api.type $.spec.hardware.nics[1]"}},
 	}
 	for _, tag := range []string{"!custom opaque", "!!binary b3BhcXVl", "!!timestamp 2001-12-14"} {
 		rows = append(rows, strictYAMLRow{"tag " + tag, strictYAMLSecret("  type: " + tag + "\n"), []string{"yaml.tag $.spec.type"}},
@@ -188,7 +188,7 @@ func strictYAMLRefusals() []strictYAMLRow {
 		rows = append(rows, strictYAMLRow{"source " + null, strictYAMLSecret("  type: opaque\n  source: " + null + "\n"), []string{"api.type $.spec.source"}})
 	}
 	for _, boolean := range []string{"'true'", "True", "yes"} {
-		rows = append(rows, strictYAMLRow{"provided " + boolean, strictYAMLMachine("  os: {provided: " + boolean + "}\n  access: {local: true}\n"), []string{"api.type $.spec.os.provided"}})
+		rows = append(rows, strictYAMLRow{"provided " + boolean, strictYAMLMachine("  os: {provided: " + boolean + "}\n  access: {local: {}}\n"), []string{"api.type $.spec.os.provided"}})
 	}
 	for _, integer := range []string{"'32'", "3_2", "0x20", "0o40", "3.5", "0100", "00", "-010", "!!int 0100"} {
 		rows = append(rows, strictYAMLRow{"bytes " + integer, strictYAMLBytes(integer), []string{"api.type $.spec.source.generated.bytes"}})

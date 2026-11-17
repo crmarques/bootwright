@@ -122,7 +122,7 @@ func diffProvider(diskGiB string) *api.Object {
 
 func diffMachine(name string) *api.Object {
 	object := api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
-		api.FieldValue{Name: "substrate", Value: api.MapValue(api.FieldValue{Name: "providerRef", Value: api.StringValue("lab-libvirt")})},
+		api.FieldValue{Name: "hardware", Value: api.MapValue(api.FieldValue{Name: "providerRef", Value: api.StringValue("lab-libvirt")})},
 	))
 	return &object
 }
@@ -141,7 +141,7 @@ func diffObserved() *lifecycle.DiffResult {
 		Desired: diffMachine("rhel-01"),
 		Real: lifecycle.RealSide{
 			Source: "observed", State: "partial", Object: diffMachine("rhel-01"),
-			NotCompared: []string{"spec.substrate.libvirt.profileRef", "spec.hardware", "spec.os", "spec.network", "spec.access"},
+			NotCompared: []string{"spec.hardware.profileRef", "spec.hardware", "spec.os", "spec.network", "spec.access"},
 			Notes: []string{
 				"machine-rhel-01: part of this effect is realized as its frozen request states",
 				"machine-rhel-01: domain running; its BMC reports power On",

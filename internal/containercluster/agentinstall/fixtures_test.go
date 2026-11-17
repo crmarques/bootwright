@@ -27,12 +27,12 @@ func environment() api.Object {
 
 func controller() api.Object {
 	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "controller.lab.example.test")),
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.1")),
 		)))),
-		field("access", api.MapValue(field("local", api.BoolValue(true)))),
+		field("access", api.MapValue(field("local", api.MapValue()))),
 	))
 }
 
@@ -117,9 +117,8 @@ func metalProvider() api.Object {
 // substrate realizes its hardware and the cluster installer supplies its OS.
 func guest(name, address string) api.Object {
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "sno"))))),
-		field("hardware", api.MapValue(field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))), field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
+		field("hardware", api.MapValue(text("providerRef", "lab-libvirt"), text("profileRef", "sno"), field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))))),
+		field("os", api.MapValue(field("clusterInstalled", api.MapValue()))),
 		field("network", api.MapValue(
 			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(
@@ -134,19 +133,16 @@ func guest(name, address string) api.Object {
 // declares the hardware every later effect is proved against.
 func server(name, address, mac string) api.Object {
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "floor"), field("baremetal", api.MapValue(
-			field("rootDevice", api.MapValue(text("wwn", "0x5000c500a1b2c3d4"))),
+		field("hardware", api.MapValue(
+			text("providerRef", "floor"),
 			field("bmc", api.MapValue(
 				text("address", "https://"+name+"-bmc.lab.example.test/redfish/v1/Systems/1"),
 				text("credentialsRef", "metal-bmc"),
 			)),
-			field("nics", api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("macAddress", mac)))),
-		)))),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
-		field("hardware", api.MapValue(
-			field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))),
-			field("boot", api.MapValue(text("nicRef", "enp1s0"))),
+			field("nics", api.ListValue(api.MapValue(text("name", "enp1s0"), text("macAddress", mac)))),
+			field("rootDisk", api.MapValue(text("wwn", "0x5000c500a1b2c3d4"))),
 		)),
+		field("os", api.MapValue(field("clusterInstalled", api.MapValue()))),
 		field("network", api.MapValue(
 			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(
@@ -231,65 +227,34 @@ func compactCatalog() api.Catalog {
 	return api.NewCatalog(objects)
 }
 
-// withHints replaces the root-device hints a Machine declares: the wwn, SCSI
-// address and serial number go to its bare-metal arm, every other hint to its
-// hardware.
+// withHints replaces the root disk a Machine declares: the wwn, serial number
+// and size are identity on the disk, every other hint is one of its hints.
 func withHints(machine api.Object, hints ...api.FieldValue) api.Object {
-	declared, physical := api.MapValue(), api.MapValue()
+	declared, root := api.MapValue(), api.MapValue()
 	for _, hint := range hints {
 		switch hint.Name {
-		case "wwn", "hctl", "serialNumber", "sizeBytes":
-			physical = physical.With(hint.Name, hint.Value)
+		case "wwn", "serialNumber", "sizeBytes":
+			root = root.With(hint.Name, hint.Value)
 		default:
 			declared = declared.With(hint.Name, hint.Value)
 		}
 	}
-	spec := machine.Spec().WithPath(declared, "hardware", "rootDevice")
-	if len(physical.Fields()) != 0 {
-		spec = spec.WithPath(physical, "substrate", "baremetal", "rootDevice")
+	if len(declared.Fields()) != 0 {
+		root = root.With("hints", declared)
 	}
-	return machine.WithSpec(spec)
-}
-
-// virtualHints is every root-device hint admission accepts on a Machine its
-// libvirt provider creates, each string one a YAML 1.1 reader would take for a
-// number, with a size of zero and a disk that is not rotational, so the frozen
-// input must keep each type and value.
-func virtualHints() []api.FieldValue {
-	return []api.FieldValue{
-		text("deviceName", "/dev/disk/by-path/pci-0000:00:04.0"), text("model", "1e3"), text("vendor", "0o17"),
-		number("minSizeGigabytes", "0"), field("rotational", api.BoolValue(false)),
-	}
+	return machine.WithSpec(machine.Spec().WithPath(root, "hardware", "rootDisk"))
 }
 
 // everyHint is every root-device hint admission accepts on a bare-metal
-// Machine: the non-path hints, WWN, SCSI address and serial number.
+// Machine an installer writes: the non-path hints, each string one a YAML 1.1
+// reader would take for a number, with a size of zero and a disk that is not
+// rotational, so the frozen input must keep each type and value, beside the
+// WWN, SCSI address and serial number.
 func everyHint() []api.FieldValue {
-	return append(virtualHints()[1:],
-		text("hctl", "1:0:0:0"), text("serialNumber", "0987654321"), text("wwn", "0x5000c500a1b2c3d4"))
-}
-
-// hintsCatalog is the compact topology whose first node declares every hint a
-// virtual node is admitted with, whose second selects its disk by size alone
-// and whose third names its device.
-func hintsCatalog() api.Catalog {
-	objects := append(base(),
-		withHints(guest("ocp-01", "198.51.100.31"), virtualHints()...),
-		withHints(guest("ocp-02", "198.51.100.32"), number("minSizeGigabytes", "100")),
-		guest("ocp-03", "198.51.100.33"))
-	compact, _ := compactCatalog().Find(api.OpenShiftCluster, "ocp")
-	return api.NewCatalog(append(objects, compact))
-}
-
-// singleNodeWith is the lab-sno shape with its node declaring the given hints.
-func singleNodeWith(hints ...api.FieldValue) api.Catalog {
-	objects := singleNodeCatalog().Objects()
-	for index, object := range objects {
-		if object.Kind() == api.Machine && object.Name() == "sno-01" {
-			objects[index] = withHints(object, hints...)
-		}
+	return []api.FieldValue{
+		text("model", "1e3"), text("vendor", "0o17"), number("minSizeGigabytes", "0"), field("rotational", api.BoolValue(false)),
+		text("hctl", "1:0:0:0"), text("serialNumber", "0987654321"), text("wwn", "0x5000c500a1b2c3d4"),
 	}
-	return api.NewCatalog(objects)
 }
 
 // singleNodeOnProvider is the lab-sno shape with its node's libvirt provider

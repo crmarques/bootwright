@@ -12,7 +12,7 @@ import (
 func selectionObjects() []api.Object {
 	return []api.Object{
 		api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef")),
-		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.MapValue(), "os", "provided").WithPath(api.MapValue(), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
 	}
 }
 
@@ -62,7 +62,7 @@ func TestLibvirtClientFollowsTheReferencedProvider(t *testing.T) {
 			case "provider", "unused-provider":
 				objects = append(objects, api.NewObject(api.InfraProvider, "hypervisor", api.Value{}, api.MapValue().With("libvirt", api.MapValue())))
 				if selectedBy == "provider" {
-					objects = append(objects, api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("hypervisor"), "substrate", "providerRef")))
+					objects = append(objects, api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("hypervisor"), "hardware", "providerRef")))
 				}
 			}
 			selection, err := controller.Select(api.NewCatalog(objects))
@@ -180,7 +180,7 @@ func TestEverySelectionRefusalNamesItsRemedy(t *testing.T) {
 	for _, edit := range []func([]api.Object) []api.Object{
 		func(objects []api.Object) []api.Object { return objects[1:] },
 		func(objects []api.Object) []api.Object {
-			objects[1] = objects[1].WithSpec(objects[1].Spec().WithPath(api.BoolValue(false), "os", "provided"))
+			objects[1] = objects[1].WithSpec(objects[1].Spec().With("os", api.MapValue().With("clusterInstalled", api.MapValue())))
 			return objects
 		},
 		func(objects []api.Object) []api.Object {
@@ -236,7 +236,7 @@ func TestHypervisorClosureFollowsTheProvidersHostMachine(t *testing.T) {
 		t.Run(host, func(t *testing.T) {
 			objects := append(selectionObjects(),
 				api.NewObject(api.InfraProvider, "lab", api.Value{}, api.MapValue().WithPath(api.StringValue(host), "libvirt", "machineRef")),
-				api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("lab"), "substrate", "providerRef")),
+				api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("lab"), "hardware", "providerRef")),
 			)
 			selection, err := controller.Select(api.NewCatalog(objects))
 			if err != nil {
@@ -282,7 +282,7 @@ func TestInstallerMediaToolingFollowsTheArtifactServersMachine(t *testing.T) {
 	profile := api.NewObject(api.MachineInstallProfile, "rhel", api.Value{}, api.MapValue().
 		WithPath(api.StringValue("lab-artifacts"), "installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint", "serverRef"))
 	installed := api.NewObject(api.Machine, "node", api.Value{}, api.MapValue().
-		WithPath(api.BoolValue(false), "os", "provided").WithPath(api.StringValue("rhel"), "os", "installProfileRef"))
+		WithPath(api.StringValue("rhel"), "os", "install", "profileRef"))
 	for placement, selected := range map[string]bool{"controller": true, "second-host": false} {
 		t.Run(placement, func(t *testing.T) {
 			objects := append(selectionObjects(), profile, installed,
@@ -298,7 +298,7 @@ func TestInstallerMediaToolingFollowsTheArtifactServersMachine(t *testing.T) {
 	}
 	// A Machine whose operating system is already provided installs nothing, so
 	// it selects no tooling however its profile reads.
-	provided := installed.WithSpec(installed.Spec().WithPath(api.BoolValue(true), "os", "provided"))
+	provided := installed.WithSpec(installed.Spec().With("os", api.MapValue().With("provided", api.MapValue())))
 	objects := append(selectionObjects(), profile, provided,
 		api.NewObject(api.ArtifactServer, "lab-artifacts", api.Value{}, api.MapValue().With("machineRef", api.StringValue("controller"))))
 	selection, err := controller.Select(api.NewCatalog(objects))

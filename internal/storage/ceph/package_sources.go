@@ -67,7 +67,7 @@ func packageSources(c api.Catalog, r Request, contextName string) (*PackageReque
 		if host.Provided {
 			m = bootstrapMachine(c, r)
 		}
-		profile, ok := c.Find(api.MachineInstallProfile, m.Spec().Get("os", "installProfileRef").Text())
+		profile, ok := c.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(m))
 		if !ok || profile.Spec().Get("os", "family").Text() != "rhel" || profile.Spec().Get("os", "architecture").Text() != "x86_64" {
 			return nil, failure("lifecycle.unsupported", "Ceph package acquisition requires the owned RHEL x86_64 DVD installation profile", "select the hosted DVD profile used to install each Ceph Machine")
 		}

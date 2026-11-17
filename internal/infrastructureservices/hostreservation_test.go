@@ -105,7 +105,7 @@ func TestASharedAndAnExclusiveBMCKeyConflictInEitherOrder(t *testing.T) {
 		t.Fatalf("an exclusive bmc key over a shared holder = %+v", found)
 	}
 	if diagnostic := ConflictDiagnostic(found[0]); diagnostic.Code != "controller.conflict" ||
-		!strings.HasSuffix(diagnostic.Remediation, ", or change spec.substrate.baremetal.bmc.address on Machine/metal-01") {
+		!strings.HasSuffix(diagnostic.Remediation, ", or change spec.hardware.bmc.address on Machine/metal-01") {
 		t.Fatalf("diagnostic = %+v", diagnostic)
 	}
 	twin := emulated

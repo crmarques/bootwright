@@ -139,7 +139,7 @@ func TestATaggedStackMustCarryItsNetworksVLAN(t *testing.T) {
 
 func TestAPlacedMachineUsesOnlyNetworksOfItsSite(t *testing.T) {
 	machine, _ := fixture()
-	machine = withNetwork(machine, []string{"placement", "site"}, api.StringValue("a"))
+	machine = withNetwork(machine, []string{"site"}, api.StringValue("a"))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test"), "sites", list(m("name", "a"), m("name", "b"))))
 	if issues := membershipIssues(t, machine, env, lan(m("sites", list(api.StringValue("b")), "ipv4", m("cidr", "192.0.2.0/24")))); !issueAt(issues, "$.spec.network.addresses[0].address", "not scoped to site a") {
 		t.Fatalf("issues = %+v", issues)

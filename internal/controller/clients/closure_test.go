@@ -22,7 +22,7 @@ func installerMedia() []api.Object {
 		api.NewObject(api.MachineInstallProfile, "rhel", api.Value{}, api.MapValue().
 			WithPath(api.StringValue("lab-artifacts"), "installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint", "serverRef")),
 		api.NewObject(api.Machine, "node", api.Value{}, api.MapValue().
-			WithPath(api.BoolValue(false), "os", "provided").WithPath(api.StringValue("rhel"), "os", "installProfileRef")),
+			WithPath(api.StringValue("rhel"), "os", "install", "profileRef")),
 		api.NewObject(api.ArtifactServer, "lab-artifacts", api.Value{}, api.MapValue().With("management", api.StringValue("managed")).With("machineRef", api.StringValue("controller"))),
 	}
 }
@@ -36,7 +36,7 @@ func hostedProvider() api.Object {
 func guestOnLibvirt() []api.Object {
 	return []api.Object{
 		api.NewObject(api.InfraProvider, "lab", api.Value{}, api.MapValue().WithPath(api.StringValue("hypervisor-host"), "libvirt", "machineRef")),
-		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("lab"), "substrate", "providerRef")),
+		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("lab"), "hardware", "providerRef")),
 	}
 }
 

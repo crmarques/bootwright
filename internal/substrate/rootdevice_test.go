@@ -10,12 +10,12 @@ import (
 )
 
 // Every admitted root-device hint reaches the realized target with the type it
-// was declared with, on a Machine its substrate creates and on a physical one
-// alike; the hints only a physical disk can carry (wwn, hctl, serialNumber,
-// sizeBytes) are
-// declared in the bare-metal arm and never reach a Machine its substrate
-// creates. A hint declared as zero or false is present, so a consumer never reads
-// it as one never declared, and a size no integer type holds keeps its text.
+// was declared with; the identity a physical disk carries (wwn, serialNumber,
+// sizeBytes) is declared on rootDisk itself and the other hints under
+// rootDisk.hints. A Machine its provider creates declares no root disk, so its
+// target carries none. A hint declared as zero or false is present, so a
+// consumer never reads it as one never declared, and a size no integer type
+// holds keeps its text.
 func TestTheRootDeviceHintsAreReadAsDeclared(t *testing.T) {
 	rotational, fixed := true, false
 	for name, test := range map[string]struct {
@@ -46,59 +46,36 @@ func TestTheRootDeviceHintsAreReadAsDeclared(t *testing.T) {
 			RootDeviceHints{MinSizeGigabytes: "100000000000000000000000"}, []string{"minSizeGigabytes"},
 		},
 	} {
-		for _, machine := range []string{"guest", "server"} {
-			t.Run(name+" on "+machine, func(t *testing.T) {
-				objects := targetCatalog().Objects()
-				declared, physical, want := m(), m(), test.want
-				for _, hint := range test.declared.Fields() {
-					if slices.Contains([]string{"hctl", "serialNumber", "sizeBytes", "wwn"}, hint.Name) {
-						physical = physical.With(hint.Name, hint.Value)
-					} else {
-						declared = declared.With(hint.Name, hint.Value)
-					}
+		t.Run(name, func(t *testing.T) {
+			objects := targetCatalog().Objects()
+			hints, identity := m(), m()
+			for _, hint := range test.declared.Fields() {
+				if slices.Contains([]string{"serialNumber", "sizeBytes", "wwn"}, hint.Name) {
+					identity = identity.With(hint.Name, hint.Value)
+				} else {
+					hints = hints.With(hint.Name, hint.Value)
 				}
-				if machine == "guest" {
-					physical, want.HCTL, want.SerialNumber, want.WWN, want.SizeBytes = m(), "", "", "", ""
+			}
+			for index, object := range objects {
+				if object.Kind() == api.Machine && object.Name() == "server" {
+					objects[index] = object.WithSpec(object.Spec().WithPath(identity.With("hints", hints), "hardware", "rootDisk"))
 				}
-				for index, object := range objects {
-					if object.Kind() == api.Machine && object.Name() == machine {
-						spec := object.Spec().WithPath(declared, "hardware", "rootDevice")
-						if machine == "server" {
-							spec = spec.WithPath(physical, "substrate", "baremetal", "rootDevice")
-						}
-						objects[index] = object.WithSpec(spec)
-					}
-				}
-				catalog := api.NewCatalog(objects)
-				subject, _ := catalog.Find(api.Machine, machine)
-				target, err := TargetFor(catalog, subject, "lab", "controller")
-				if err != nil {
-					t.Fatalf("deriving: %v", diagnostics.Of(err))
-				}
-				if !reflect.DeepEqual(target.RootDeviceHints, want) {
-					t.Fatalf("hints = %+v, want %+v", target.RootDeviceHints, want)
-				}
-				if names := target.RootDeviceHints.Names(); !slices.Equal(names, want.Names()) {
-					t.Fatalf("names = %v, want %v", names, want.Names())
-				}
-				if machine == "server" && !slices.Equal(want.Names(), test.names) {
-					t.Fatalf("names = %v, want %v", want.Names(), test.names)
-				}
-			})
-		}
+			}
+			catalog := api.NewCatalog(objects)
+			subject, _ := catalog.Find(api.Machine, "server")
+			target, err := TargetFor(catalog, subject, "lab", "controller")
+			if err != nil {
+				t.Fatalf("deriving: %v", diagnostics.Of(err))
+			}
+			if !reflect.DeepEqual(target.RootDeviceHints, test.want) {
+				t.Fatalf("hints = %+v, want %+v", target.RootDeviceHints, test.want)
+			}
+			if names := target.RootDeviceHints.Names(); !slices.Equal(names, test.names) {
+				t.Fatalf("names = %v, want %v", names, test.names)
+			}
+		})
 	}
-}
-
-// A hint only a physical disk carries is declared in the bare-metal arm, so a
-// refusal naming it points there; every other hint is under hardware.
-func TestEachRootDeviceHintNamesTheFieldThatDeclaresIt(t *testing.T) {
-	for name, want := range map[string]string{
-		"hctl": "spec.substrate.baremetal.rootDevice.hctl", "serialNumber": "spec.substrate.baremetal.rootDevice.serialNumber",
-		"sizeBytes": "spec.substrate.baremetal.rootDevice.sizeBytes", "wwn": "spec.substrate.baremetal.rootDevice.wwn",
-		"deviceName": "spec.hardware.rootDevice.deviceName", "minSizeGigabytes": "spec.hardware.rootDevice.minSizeGigabytes",
-	} {
-		if got := RootDeviceHintPath(name); got != want {
-			t.Errorf("RootDeviceHintPath(%q) = %q, want %q", name, got, want)
-		}
+	if hints := targetOf(t, "guest").RootDeviceHints; !reflect.DeepEqual(hints, RootDeviceHints{}) {
+		t.Fatalf("a Machine its provider creates carries hints %+v", hints)
 	}
 }

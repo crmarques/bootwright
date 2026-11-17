@@ -38,8 +38,8 @@ metadata:
   name: controller
 
 spec:
-  os: {provided: true}
-  access: {local: true}
+  os: {provided: {}}
+  access: {local: {}}
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
@@ -75,15 +75,13 @@ kind: Machine
 metadata:
   name: node
 spec:
-  substrate:
-    providerRef: host-provider
-    kubevirt:
-      profileRef: standard
   hardware:
+    providerRef: host-provider
+    profileRef: standard
     nics:
       - name: eth0
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     inline:
       nmstate:
@@ -168,7 +166,7 @@ func TestExcludedMachineServiceReferencesDoNotFailSelectedGraph(t *testing.T) {
 		name, choice, field string
 	}{
 		{"proxy", "  proxy: {proxyRef: missing-egress}", "$.spec.proxy.proxyRef"},
-		{"ntp", "  os:\n    provided: false\n    installProfileRef: deferred-profile\n    install:\n      ntp: [{serverRef: missing-clock}]", "$.spec.os.install.ntp[0].serverRef"},
+		{"ntp", "  os:\n    install:\n      profileRef: deferred-profile\n      ntp: [{serverRef: missing-clock}]", "$.spec.os.install.ntp[0].serverRef"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			deferred := `
@@ -180,7 +178,7 @@ metadata:
 spec:
 ` + tc.choice + "\n"
 			if tc.name == "proxy" {
-				deferred += "  os: {provided: false, installProfileRef: deferred-profile}\n"
+				deferred += "  os: {install: {profileRef: deferred-profile}}\n"
 			}
 			deferred += "---\napiVersion: bootwright.io/v1alpha1\nkind: OpenShiftCluster\nmetadata:\n  name: deferred-cluster\nspec:\n  nodes: [{name: deferred, role: controlPlane, machineRef: deferred}]\n"
 			content := strings.Replace(clusterYAML, "spec:\n  domains:", "spec:\n  containerClusters: [cluster]\n  domains:", 1) + deferred

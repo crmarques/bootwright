@@ -4,33 +4,22 @@ metadata:
   name: host-01
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-
-    libvirt:
-      profileRef: master
-
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-
-        - nicRef: enp2s0
-          segmentRef: lab-secondary
-
-        - nicRef: enp3s0
-          segmentRef: lab-routed
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: master
+
     nics:
       - name: enp1s0
-      - name: enp2s0
-      - name: enp3s0
+        segmentRef: lab-guests
 
-    rootDevice:
-      deviceName: /dev/vda
+      - name: enp2s0
+        segmentRef: lab-secondary
+
+      - name: enp3s0
+        segmentRef: lab-routed
 
   os:
-    provided: false
+    clusterInstalled: {}
 
   network:
     configRef: lab-guests

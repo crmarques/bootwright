@@ -20,7 +20,7 @@ metadata:
   name: controller
 spec:
   os:
-    provided: true
+    provided: {}
   proxy:
     direct: {}
   network:
@@ -30,7 +30,7 @@ spec:
       - name: ip
         address: 192.0.2.1
   access:
-    local: true
+    local: {}
     rootLogin: keep
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -38,25 +38,17 @@ kind: Machine
 metadata:
   name: nv-bond
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: rhel
-      nics:
-        - nicRef: nic0
-          segmentRef: nv-lab
-        - nicRef: nic1
-          segmentRef: nv-lab
   hardware:
+    providerRef: lab-libvirt
+    profileRef: rhel
     nics:
       - name: nic0
+        segmentRef: nv-lab
       - name: nic1
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: nv-lab
   os:
-    provided: false
-    installProfileRef: rhel-9-8
     install:
+      profileRef: rhel-9-8
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
@@ -97,22 +89,15 @@ kind: Machine
 metadata:
   name: nv-vlan
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: rhel
-      nics:
-        - nicRef: nic0
-          segmentRef: nv-trunk
   hardware:
+    providerRef: lab-libvirt
+    profileRef: rhel
     nics:
       - name: nic0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: nv-trunk
   os:
-    provided: false
-    installProfileRef: rhel-9-8
     install:
+      profileRef: rhel-9-8
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
@@ -151,25 +136,17 @@ kind: Machine
 metadata:
   name: nv-vlan-bond
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: rhel
-      nics:
-        - nicRef: nic0
-          segmentRef: nv-trunk
-        - nicRef: nic1
-          segmentRef: nv-trunk
   hardware:
+    providerRef: lab-libvirt
+    profileRef: rhel
     nics:
       - name: nic0
+        segmentRef: nv-trunk
       - name: nic1
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: nv-trunk
   os:
-    provided: false
-    installProfileRef: rhel-9-8
     install:
+      profileRef: rhel-9-8
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip

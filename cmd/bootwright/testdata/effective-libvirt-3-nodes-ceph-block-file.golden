@@ -34,7 +34,7 @@ metadata:
   name: controller
 spec:
   os:
-    provided: true
+    provided: {}
   proxy:
     direct: {}
   network:
@@ -44,7 +44,7 @@ spec:
       - name: ip
         address: 192.0.2.1
   access:
-    local: true
+    local: {}
     rootLogin: keep
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -52,22 +52,15 @@ kind: Machine
 metadata:
   name: rhel-01
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: rhel
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
   hardware:
+    providerRef: lab-libvirt
+    profileRef: rhel
     nics:
       - name: enp1s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-guests
   os:
-    provided: false
-    installProfileRef: rhel-9-8
     install:
+      profileRef: rhel-9-8
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
@@ -99,22 +92,15 @@ kind: Machine
 metadata:
   name: rhel-02
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: rhel
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
   hardware:
+    providerRef: lab-libvirt
+    profileRef: rhel
     nics:
       - name: enp1s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-guests
   os:
-    provided: false
-    installProfileRef: rhel-9-8
     install:
+      profileRef: rhel-9-8
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
@@ -146,22 +132,15 @@ kind: Machine
 metadata:
   name: rhel-03
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: rhel
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
   hardware:
+    providerRef: lab-libvirt
+    profileRef: rhel
     nics:
       - name: enp1s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-guests
   os:
-    provided: false
-    installProfileRef: rhel-9-8
     install:
+      profileRef: rhel-9-8
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip

@@ -70,6 +70,13 @@ func TestSMBFilesystemWideBackingCannotCrossClusters(t *testing.T) {
 	}
 }
 
+func osOf(provided bool) api.Value {
+	if provided {
+		return m("provided", m())
+	}
+	return m("install", m("profileRef", "rhel"))
+}
+
 func TestEnrollmentAddressesMatchFleetSSHAtAdmission(t *testing.T) {
 	for _, row := range []struct {
 		name                       string
@@ -91,7 +98,7 @@ func TestEnrollmentAddressesMatchFleetSSHAtAdmission(t *testing.T) {
 			if row.equal {
 				address = "192.0.2.11"
 			}
-			machine = machine.WithSpec(machine.Spec().WithPath(api.ListValue(m("name", "ip", "address", "192.0.2.11"), m("name", "storage", "address", address)), "network", "addresses").WithPath(api.StringValue("ip"), "access", "ssh", "addressRef").WithPath(api.StringValue("operator"), "access", "ssh", "user").WithPath(api.BoolValue(row.provided), "os", "provided"))
+			machine = machine.WithSpec(machine.Spec().WithPath(api.ListValue(m("name", "ip", "address", "192.0.2.11"), m("name", "storage", "address", address)), "network", "addresses").WithPath(api.StringValue("ip"), "access", "ssh", "addressRef").WithPath(api.StringValue("operator"), "access", "ssh", "user").WithPath(osOf(row.provided), "os"))
 			spec := cluster.Spec().WithPath(api.StringValue(nodes[0].Get("name").Text()), "cephadm", "bootstrap", "nodeRef")
 			if row.bootstrap {
 				spec = spec.WithPath(api.StringValue("storage"), "cephadm", "bootstrap", "addressRef")

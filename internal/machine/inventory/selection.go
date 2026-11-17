@@ -57,7 +57,7 @@ func row(object api.Object, members []string, evidence machine.OwnershipState) M
 	current := MachineRow{
 		Name: object.Name(), OS: "provided", Lifecycle: lifecycle(evidence),
 		IPs:      machine.IPAddresses(object),
-		Provider: object.Spec().Get("substrate", "providerRef").Text(),
+		Provider: api.MachineProviderRef(object),
 		Clusters: slices.Clone(members),
 	}
 	if machine.Installed(object) {

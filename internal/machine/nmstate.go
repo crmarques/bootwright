@@ -12,7 +12,7 @@ import (
 )
 
 func Provider(o api.Object, c api.Catalog) (api.Object, bool) {
-	return c.Find(api.InfraProvider, o.Spec().Get("substrate", "providerRef").Text())
+	return c.Find(api.InfraProvider, substrate.MachineProviderRef(o))
 }
 
 func NetworkConfig(o api.Object, c api.Catalog) (api.Value, bool) {
@@ -405,8 +405,7 @@ func resolveMatches(o api.Object, c api.Catalog, native api.Value) (api.Value, [
 
 func realizesNICs(o api.Object, c api.Catalog) bool {
 	provider, found := Provider(o, c)
-	provided := o.Spec().Get("os", "provided")
-	if !found || !provided.Present() || provided.Bool() {
+	if !found || !api.MachineInstalled(o) && !api.MachineClusterInstalled(o) {
 		return false
 	}
 	return substrate.RealizesPhysicalNICs(provider) || substrate.VirtualArm(substrate.Variant(provider))

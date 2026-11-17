@@ -3,6 +3,7 @@ package physicalerase
 import (
 	"context"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/managedos/installationtest"
 	"github.com/crmarques/bootwright/internal/managedos/installfixtures"
@@ -56,4 +57,26 @@ func (r *pinReader) PinnedIdentity(name string, proved []lifecycle.BlockEvidence
 	r.asked = append(r.asked, name)
 	r.handed = append(r.handed, proved)
 	return r.identity, r.pinned, r.err
+}
+
+func dataDisk(serial, size, wwn, onRemoval string) api.Value {
+	disk := api.MapValue(text("serialNumber", serial), number("sizeBytes", size))
+	if wwn != "" {
+		disk = disk.With("wwn", api.StringValue(wwn))
+	}
+	if onRemoval != "" {
+		disk = disk.With("onRemoval", api.StringValue(onRemoval))
+	}
+	return disk
+}
+
+func erasing(machine api.Object, root string, data ...api.Value) api.Object {
+	spec := machine.Spec()
+	if root != "" {
+		spec = spec.WithPath(api.StringValue(root), "hardware", "rootDisk", "onRemoval")
+	}
+	if len(data) != 0 {
+		spec = spec.WithPath(api.ListValue(data...), "hardware", "dataDisks")
+	}
+	return machine.WithSpec(spec)
 }

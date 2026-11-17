@@ -180,7 +180,7 @@ func FirewallRequests(catalog api.Catalog, controllerMachine, contextName string
 		byMachine[requirement.Machine] = append(byMachine[requirement.Machine], requirement)
 	}
 	for _, object := range catalog.OfKind(api.Machine) {
-		if object.Spec().Get("firewall", "management").Text() == "managed" && object.Spec().Get("os", "provided").Bool() {
+		if object.Spec().Get("firewall", "management").Text() == "managed" && api.MachineProvided(object) {
 			if _, found := byMachine[object.Name()]; !found {
 				byMachine[object.Name()] = nil
 			}

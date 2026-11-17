@@ -18,7 +18,7 @@ metadata:
   name: controller
 spec:
   os:
-    provided: true
+    provided: {}
   proxy:
     direct: {}
   network:
@@ -28,7 +28,7 @@ spec:
       - name: ip
         address: 192.0.2.1
   access:
-    local: true
+    local: {}
     rootLogin: keep
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -36,20 +36,14 @@ kind: Machine
 metadata:
   name: sno-01
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: sno
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
   hardware:
+    providerRef: lab-libvirt
+    profileRef: sno
     nics:
       - name: enp1s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-guests
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip

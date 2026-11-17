@@ -186,7 +186,7 @@ func TestCompilerInheritancePreservesExplicitModesAndNestedSuppression(t *testin
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: {name: node}
-spec: {os: {provided: true}}
+spec: {os: {provided: {}}}
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: OpenShiftCluster
@@ -241,7 +241,7 @@ spec:
       ingress: {}
   nodes: [{name: master, role: controlPlane, machineRef: node}]
 `
-	input := sources(environmentYAML + "  containerClusters: [kept]\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: node}\nspec: {os: {provided: true}}\n" +
+	input := sources(environmentYAML + "  containerClusters: [kept]\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: node}\nspec: {os: {provided: {}}}\n" +
 		strings.Replace(cluster, "NAME", "kept", 1) + strings.Replace(cluster, "NAME", "dropped", 1))
 	compiler := compilation.NewCompiler(yamlstream.Parser{}, environmentSelection, compilation.Rules{Normalize: environment.Normalize, Validate: testEnvironmentValidate})
 	state, report, err := compiler.Compile(context.Background(), input)

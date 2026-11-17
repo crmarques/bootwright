@@ -8,11 +8,11 @@ metadata:
   name: libvirt-host
 
 spec:
+  os:
+    provided: {}
+
   firewall:
     management: managed
-
-  os:
-    provided: true
 
   network:
     addresses:

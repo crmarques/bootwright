@@ -39,7 +39,7 @@ spec:
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: {name: controller}
-spec: {os: {provided: true}}
+spec: {os: {provided: {}}}
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: MachineImage

@@ -145,7 +145,7 @@ func TestLabBaremetalAdmissionRefusesANewlineInTheRootWWN(t *testing.T) {
 				t.Fatal("a root WWN carrying a line break was admitted")
 			}
 			for _, diagnostic := range diagnostics.Of(err) {
-				if diagnostic.Field == "$.spec.substrate.baremetal.rootDevice.wwn" &&
+				if diagnostic.Field == "$.spec.hardware.rootDisk.wwn" &&
 					diagnostic.Object != nil && diagnostic.Object.Kind == string(api.Machine) && diagnostic.Object.Name == "metal-01" {
 					return
 				}

@@ -14,4 +14,4 @@ metadata:
   name: controller
 spec:
   os:
-    provided: true
+    provided: {}

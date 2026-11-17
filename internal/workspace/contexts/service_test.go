@@ -48,8 +48,8 @@ const controllerInput = `apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: {name: controller}
 spec:
-  os: {provided: true}
-  access: {local: true}
+  os: {provided: {}}
+  access: {local: {}}
 `
 
 type repository struct {

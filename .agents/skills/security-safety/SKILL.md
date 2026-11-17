@@ -18,11 +18,11 @@ Each is, or must become, an executable guard. Check every one a change touches.
 - A destructive physical path proves the exact target (system identity, complete
   MAC set, powered off) immediately before it inserts media, and again inside
   the installer. On bare metal a root disk is named only in a form of the
-  [root-device rule](../../../specs/api/machines.md#bmc-and-root-device-shape):
-  a `substrate.baremetal.rootDevice.wwn` (installers derive its by-id path or
+  [root-disk rule](../../../specs/api/machines.md#root-disk):
+  a `hardware.rootDisk.wwn` (installers derive its by-id path or
   hint), a serial number with exact size, or a logical volume (`volumeRef`, or
   the defaulted `bootVolume`) proved by its NAA identifier under verified BMC
-  TLS. A `hardware.rootDevice.deviceName` there refuses; a kernel name such as
+  TLS. A `hardware.rootDisk.hints.deviceName` there refuses; a kernel name such as
   `/dev/sda` is no disk identity. `%pre` refuses before any storage directive
   unless the selector resolves to exactly one whole disk
   ([physical installation](../../../specs/managed-os.md#physical-installation)).

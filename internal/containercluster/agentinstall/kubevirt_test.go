@@ -48,9 +48,8 @@ func providedNetwork() api.Object {
 // realizes the VirtualMachine and the cluster installer supplies its OS.
 func kubevirtGuest(name, address string) api.Object {
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "lab-kubevirt"), field("kubevirt", api.MapValue(text("profileRef", "kubevirt"))))),
-		field("hardware", api.MapValue(field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))), field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
+		field("hardware", api.MapValue(text("providerRef", "lab-kubevirt"), text("profileRef", "kubevirt"), field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))))),
+		field("os", api.MapValue(field("clusterInstalled", api.MapValue()))),
 		field("network", api.MapValue(
 			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(
@@ -340,7 +339,7 @@ func hostedCatalogOf(masters, workers int, extra ...string) api.Catalog {
 		case api.InfraProvider:
 			object = hosted(object)
 		case api.Machine:
-			object = object.WithSpec(object.Spec().WithPath(api.StringValue(providers[machines%len(providers)]), "substrate", "providerRef"))
+			object = object.WithSpec(object.Spec().WithPath(api.StringValue(providers[machines%len(providers)]), "hardware", "providerRef"))
 			machines++
 		}
 		objects = append(objects, object)

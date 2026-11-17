@@ -21,11 +21,11 @@ type RootDeviceHints struct {
 }
 
 func MachineDiscoveryPolicy(machine api.Object) api.Value {
-	return machine.Spec().Get("substrate", "baremetal", "rootDevice", "discover")
+	return machine.Spec().Get("hardware", "rootDisk", "discover")
 }
 
 func WithMachineDiscoveryPolicy(machine api.Object, policy api.Value) api.Object {
-	return machine.WithSpec(machine.Spec().WithPath(policy, "substrate", "baremetal", "rootDevice", "discover"))
+	return machine.WithSpec(machine.Spec().WithPath(policy, "hardware", "rootDisk", "discover"))
 }
 
 // Names are the admitted names of the hints present, sorted.
@@ -58,11 +58,11 @@ func (h RootDeviceHints) Names() []string {
 }
 
 func rootDeviceHints(machine api.Object) RootDeviceHints {
-	declared := machine.Spec().Get("hardware", "rootDevice")
-	physical := machine.Spec().Get("substrate", "baremetal", "rootDevice")
+	physical := MachineRootDisk(machine)
+	declared := physical.Get("hints")
 	hints := RootDeviceHints{
 		Discovery:  physical.Has("discover"),
-		DeviceName: declared.Get("deviceName").Text(), HCTL: physical.Get("hctl").Text(),
+		DeviceName: declared.Get("deviceName").Text(), HCTL: declared.Get("hctl").Text(),
 		Model: declared.Get("model").Text(), Vendor: declared.Get("vendor").Text(),
 		SerialNumber: physical.Get("serialNumber").Text(), WWN: physical.Get("wwn").Text(),
 		MinSizeGigabytes: declared.Get("minSizeGigabytes").Text(), SizeBytes: physical.Get("sizeBytes").Text(),
@@ -81,19 +81,19 @@ func rootDeviceHints(machine api.Object) RootDeviceHints {
 }
 
 func RootDeviceHintPath(name string) string {
-	if slices.Contains([]string{"hctl", "serialNumber", "sizeBytes", "wwn", "volumeRef", "bootVolume", "discover"}, name) {
-		return "spec.substrate.baremetal.rootDevice." + name
+	if slices.Contains([]string{"serialNumber", "sizeBytes", "wwn", "volumeRef", "bootVolume", "discover", "onRemoval"}, name) {
+		return RootDiskPath + "." + name
 	}
-	return "spec.hardware.rootDevice." + name
+	return RootDiskPath + ".hints." + name
 }
 
-// RootDevicePath is the path a Machine's root disk is written through: its
-// declared deviceName, or the /dev/disk/by-id path its physical wwn derives.
-func RootDevicePath(machine api.Object) string {
-	if declared := machine.Spec().Get("hardware", "rootDevice", "deviceName").Text(); declared != "" {
+// DeclaredRootDevicePath is the path a Machine's declared root disk is written
+// through: its hints.deviceName, or the /dev/disk/by-id path its wwn derives.
+func DeclaredRootDevicePath(machine api.Object) string {
+	if declared := MachineRootDisk(machine).Get("hints", "deviceName").Text(); declared != "" {
 		return declared
 	}
-	return WWNDevicePath(machine.Spec().Get("substrate", "baremetal", "rootDevice", "wwn").Text())
+	return WWNDevicePath(MachineRootDisk(machine).Get("wwn").Text())
 }
 
 // WWNDevicePath is the /dev/disk/by-id path of a root wwn, or nothing when
@@ -122,12 +122,10 @@ func SerialDevicePath(path string) (string, bool) {
 }
 
 func SerialEraseTarget(machine api.Object, serial string) (size int64, byDevice bool, found bool) {
-	for _, target := range machine.Spec().Get("hardware", "eraseOnRemoval", "targets").Items() {
-		if target.Get("serialNumber").Text() != serial {
-			continue
+	for _, target := range EraseTargets(machine) {
+		if target.SerialNumber == serial {
+			return target.SizeBytes, target.DeviceName != "", true
 		}
-		size, _ = target.Get("sizeBytes").Int64()
-		return size, target.Has("deviceName"), true
 	}
 	return 0, false, false
 }

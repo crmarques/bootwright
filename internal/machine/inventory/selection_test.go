@@ -39,19 +39,19 @@ func addresses(value string) api.Value {
 
 func catalog() api.Catalog {
 	guest := object(api.Machine, "guest", m(
-		"substrate", m("providerRef", "lab"),
-		"os", m("provided", false, "installProfileRef", "rhel"),
+		"hardware", m("providerRef", "lab"),
+		"os", m("install", m("profileRef", "rhel")),
 		"network", m("addresses", list(
 			m("name", "ssh", "address", "192.0.2.20"),
 			m("name", "fqdn", "address", "guest.lab.example.test"),
 			m("name", "storage", "address", "198.51.100.20"))),
 		"access", m("ssh", m("addressRef", "ssh", "user", "bootwright", "auth", m("privateKeyRef", "fleet")))))
 	host := object(api.Machine, "host", m(
-		"os", m("provided", true),
+		"os", m("provided", m()),
 		"network", addresses("192.0.2.10"),
 		"access", m("ssh", m("addressRef", "ssh", "user", "root", "auth", m("privateKeyRef", "host-key")))))
 	node := object(api.Machine, "node", m(
-		"os", m("provided", true),
+		"os", m("provided", m()),
 		"network", addresses("192.0.2.30")))
 	cluster := object(api.OpenShiftCluster, "ocp", m("nodes", list(m("name", "master-0", "machineRef", "node"))))
 	return api.NewCatalog([]api.Object{guest, host, node, cluster})

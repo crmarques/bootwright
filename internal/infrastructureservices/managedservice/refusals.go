@@ -67,7 +67,7 @@ func PlacementRefusals(catalog api.Catalog, service api.Object) []lifecycle.Refu
 func InstalledHostRefusals(catalog api.Catalog, service, machine api.Object) []lifecycle.Refusal {
 	server, host := service.Identity(), machine.Identity()
 	var refused []lifecycle.Refusal
-	profile, found := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
+	profile, found := catalog.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(machine))
 	if enabled := profile.Spec().Get("customizations", "security", "firewall", "enabled"); found && enabled.Type() != api.Boolean && !machineref.ManagesFirewall(catalog, machine.Name()) {
 		refused = append(refused, lifecycle.RefusalOf(service,
 			"a managed service on an installed host requires an explicit firewall choice, and "+host+", where "+server+" runs, is installed by "+profile.Identity()+", which leaves its firewall choice implicit",

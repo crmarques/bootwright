@@ -4,20 +4,15 @@ metadata:
   name: compact-03
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: compact
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: compact
+
     nics:
       - name: enp1s0
 
-    rootDevice:
-      deviceName: /dev/vda
-
   os:
-    provided: false
+    clusterInstalled: {}
 
   network:
     configRef: lab-guests

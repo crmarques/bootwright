@@ -503,7 +503,7 @@ another domain's prerequisites itself. Preflight names unmet prerequisites and
 their owners; [B490](milestones/m2.md#b490) qualifies host and capacity proofs.
 
 Topology placement binds nodes to proved Machines, which are Ceph nodes because
-the topology names them ([substrate arm](api/machines.md#substrate-arm),
+the topology names them ([hardware and substrate](api/machines.md#hardware-and-substrate),
 [admission](api/ceph.md#complete-graph-invariants)), and to declared sites. Native cluster size and role counts are the native tools' to
 judge ([release qualification](ceph-coverage.md#release-qualification));
 acceptance-profile sizes impose no additional restriction. Native stretch mode
@@ -608,7 +608,7 @@ topology; this section owns what the plan derives and realizes (D196).
   an authored service other than `mon` whose resolved placement includes it
   refuses; the derived per-host crash collector still runs there
   ([B686](milestones/m2.md#b686)). It may be a provided Machine
-  (`os.provided: true`), the only place a provided Machine joins a Ceph
+  (`os.provided: {}`), the only place a provided Machine joins a Ceph
   cluster. A provided tiebreaker is reached over the fleet connection with
   the [fleet key](api/environment.md#remote-machine-access-and-install-defaults),
   which its Machine never names, because that key is effect material and a
@@ -1185,8 +1185,8 @@ root, and explicit root erasure keeps its existing whole-disk semantics.
 
 Physical retirement requires explicit original erase authority for every
 selected data, DB and WAL disk, and for the root only when the policy names it
-([root-target rule](api/machines.md#physical-erase-policy)); an omitted root is
-retained. Machine removal erases only its frozen explicit targets; an
+([disk actions](api/machines.md#data-disks-and-disk-actions)); an omitted root
+is retained. Machine removal erases only its frozen explicit targets; an
 OS reinstall still overwrites its independently selected root volume.
 The Machine's proved logical-volume NAA is excluded from OSD selection at the
 live disk-identity boundary, even when the authored root uses firmware discovery.
@@ -1238,10 +1238,10 @@ here to `/dev/disk/by-id/wwn-0x` plus 16 or 32 lowercase hexadecimal digits,
 or `/dev/disk/by-serial/<serialNumber>` with 1 to 128 ASCII letters, digits
 and `._:+-`. No such directory exists on a host: the second form names the
 disk its Machine declares as a
-[`hardware.eraseOnRemoval`](api/machines.md#physical-erase-policy) target
-without `deviceName` and with that `serialNumber`, whose `sizeBytes` it takes,
-because physical retirement needs that target anyway. A serial the Machine
-declares no such target for, one its target names by `deviceName`, and the
+[`hardware.dataDisks[]`](api/machines.md#data-disks-and-disk-actions) entry with
+that `serialNumber`, no `wwn` and a non-retain `onRemoval`, whose `sizeBytes` it
+takes, because physical retirement needs that erase target anyway. A serial the
+Machine declares no such entry for, one whose entry declares a `wwn`, and the
 root disk's serial refuse `api.invariant` at the selector. Preparation refuses
 `device-root` a disk reporting a serial-declared root's serial.
 It resolves the serial path on the live host, before the first destructive
@@ -1264,7 +1264,7 @@ and the serials its host selects, and the first binding raises them before
 any disk is written.
 A physical host admits up to 15 distinct local whole disks its OSD services
 select, data, DB and WAL paths together: the
-[install-time clear](api/machines.md#install-time-data-disk-clear) bound, within
+[data disk](api/machines.md#data-disks-and-disk-actions) bound, within
 the 16 targets of its Machine's
 [erase policy](state-reconciliation.md#opt-in-physical-logical-overwrite)
 ([D198](milestones/backlog.md#d198), confirmed by
@@ -1284,7 +1284,7 @@ rechecks that aggregate before any service effect. The request records WWN inten
 or capacity, or a serial selection's serial and size from its Machine.
 A fresh installation of a managed physical host can clear declared OSD disks
 that a destroyed or abandoned cluster left, through its Machine's
-[`hardware.clearOnInstall`](managed-os.md#physical-data-disk-clear); nothing
+[`onInstall: metadataClear`](managed-os.md#physical-data-disk-clear) data disks; nothing
 here clears a disk.
 
 Not yet met: a host's device-identity, device-proof, OSD-preparation (its
@@ -1370,7 +1370,7 @@ this operation did not create, on the disk or in the cluster map, refuses
 `foreign-osd`; both are coded `lifecycle.unsupported`, because no retry clears
 them. Their remedy names `wipefs --no-act <disk>` to see what the disk holds
 and, for a disk of a Ceph cluster the operator destroyed or abandoned, either
-declaring it in its Machine's `spec.hardware.clearOnInstall`
+declaring it in its Machine's `spec.hardware.dataDisks` with `onInstall: metadataClear`
 ([physical installation](managed-os.md#physical-installation)) and installing the
 Machine again, or clearing it on the host after confirming the disk. The
 refusal's detail names the token and the code site that refused, never the

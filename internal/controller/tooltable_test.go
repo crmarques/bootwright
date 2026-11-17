@@ -53,7 +53,7 @@ func openshiftCluster(distribution string) api.Object {
 func TestADeclaredArtifactMirrorServesEveryPublicOriginClientAndNoVendorOne(t *testing.T) {
 	same := func(spec api.Value) api.Value { return spec }
 	vsphere := api.NewObject(api.InfraProvider, "vsphere", api.Value{}, api.MapValue().With("vsphere", api.MapValue()))
-	guest := api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("vsphere"), "substrate", "providerRef"))
+	guest := api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("vsphere"), "hardware", "providerRef"))
 	tools, err := controller.SelectTools(mirroredGraph(same, openshiftCluster("openshift"), vsphere, guest))
 	if err != nil {
 		t.Fatal(err)

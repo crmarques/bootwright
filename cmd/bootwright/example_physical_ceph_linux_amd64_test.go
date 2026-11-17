@@ -114,8 +114,7 @@ func TestPhysicalCephCompositionValidatesOriginalMachinePresence(t *testing.T) {
 func TestPhysicalCephExampleSelectsAnOSDDiskByItsMachineDeclaredSerialNumber(t *testing.T) {
 	t.Parallel()
 	sources := editedExample(t, "physical-3-nodes-ceph",
-		exampleEdit{"infra/machines/metal-02.yaml", "        - deviceName: /dev/disk/by-id/wwn-0x5000000000000002\n          wwn: '0x5000000000000002'\n          serialNumber: SYNTHETIC-CEPH-02\n          sizeBytes: 107374182400\n          method: metadataClear\n",
-			"        - serialNumber: SYNTHETIC-CEPH-02\n          sizeBytes: 107374182400\n          method: metadataClear\n"},
+		exampleEdit{"infra/machines/metal-02.yaml", "      - wwn: '0x5000000000000002'\n        serialNumber: SYNTHETIC-CEPH-02\n", "      - serialNumber: SYNTHETIC-CEPH-02\n"},
 		exampleEdit{"storage/cluster.yaml", "            - /dev/disk/by-id/wwn-0x5000000000000002\n", "            - /dev/disk/by-serial/SYNTHETIC-CEPH-02\n"})
 	state, _ := compileAcceptance(t, sources)
 	if refused := productionUnsupported(t, state); len(refused) != 0 {

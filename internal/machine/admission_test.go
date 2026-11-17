@@ -31,9 +31,9 @@ func m(kv ...any) api.Value {
 }
 func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 func fixture() (api.Object, api.Catalog) {
-	provider := object(api.InfraProvider, "metal", m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc", "tls", m("verify", false), "virtualMedia", m("tls", m("trust", "established"))))), "segments", list(m("name", "net", "untaggedNetworkRef", "lan", "baremetal", m()))))
+	provider := object(api.InfraProvider, "metal", m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc", "virtualMedia", m("tls", m("trust", "established"))))), "segments", list(m("name", "net", "untaggedNetworkRef", "lan", "baremetal", m()))))
 	network := object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0"))))))
-	machine := object(api.Machine, "node", m("substrate", m("providerRef", "metal", "baremetal", m("rootDevice", m("wwn", "0x5000c500a1b2c3d4"), "bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1"), "nics", list(m("nicRef", "eth0", "macAddress", "02-00-00-00-00-01")))), "os", m("provided", false), "hardware", m("nics", list(m("name", "eth0"))), "network", m("configRef", "net", "addresses", list(m("name", "primary", "address", "192.0.2.11", "interface", "eth0")))))
+	machine := object(api.Machine, "node", m("hardware", m("providerRef", "metal", "rootDisk", m("wwn", "0x5000c500a1b2c3d4"), "bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1", "tls", m("verification", "none")), "nics", list(m("name", "eth0", "macAddress", "02-00-00-00-00-01"))), "os", m("clusterInstalled", m()), "network", m("configRef", "net", "addresses", list(m("name", "primary", "address", "192.0.2.11", "interface", "eth0")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
 	lan := object(api.Network, "lan", m("provided", true, "ipv4", m("cidr", "192.0.2.0/24")))
 	return machine, api.NewCatalog([]api.Object{machine, network, provider, env, lan})
@@ -48,11 +48,14 @@ func TestBaremetalNormalizationPreservesDeclarations(t *testing.T) {
 	if got := Validate(normalized, c); len(got) > 0 {
 		t.Fatal(got)
 	}
-	if got := normalized.Spec().Get("substrate", "baremetal", "nics").Items()[0].Get("macAddress").Text(); got != "02:00:00:00:00:01" {
+	if got := normalized.Spec().Get("hardware", "nics").Items()[0].Get("macAddress").Text(); got != "02:00:00:00:00:01" {
 		t.Fatal(got)
 	}
-	if normalized.Spec().Get("substrate", "baremetal", "bmc", "tls", "verify").Bool() {
-		t.Fatal("provider TLS choice lost")
+	if normalized.Spec().Get("hardware", "bmc", "tls", "verification").Text() != "none" {
+		t.Fatal("machine TLS choice lost")
+	}
+	if bmc := normalized.Spec().Get("hardware", "bmc"); bmc.Has("protocol") || bmc.Has("tls", "verify") {
+		t.Fatalf("a field the schema no longer has was materialized: %v", bmc)
 	}
 	if normalized.Spec().Get("network", "installAddressRef").Text() != "primary" {
 		t.Fatal("network defaults missing")
@@ -71,9 +74,9 @@ func TestBaremetalNormalizationPreservesDeclarations(t *testing.T) {
 	if normalized.Spec().Get("network").Has("nmstate") || o.Spec().Get("network").Has("installAddressRef") {
 		t.Fatal("authored or canonical state replaced by composition")
 	}
-	local := o.WithSpec(o.Spec().WithPath(m("tls", m("trust", "importCertificate")), "substrate", "baremetal", "bmc", "virtualMedia"))
+	local := o.WithSpec(o.Spec().WithPath(m("tls", m("trust", "importCertificate")), "hardware", "bmc", "virtualMedia"))
 	local, _ = Normalize(local, c)
-	tls := local.Spec().Get("substrate", "baremetal", "bmc", "virtualMedia", "tls")
+	tls := local.Spec().Get("hardware", "bmc", "virtualMedia", "tls")
 	if tls.Get("trust").Text() != "importCertificate" || tls.Has("restoreVerificationAfterBoot") {
 		t.Fatal("machine virtual-media block did not replace provider block")
 	}
@@ -85,18 +88,18 @@ func TestMediaVerificationSetupInheritsAsExplicitProviderIntent(t *testing.T) {
 	for index, object := range objects {
 		if object.Kind() == api.InfraProvider {
 			objects[index] = object.WithSpec(object.Spec().
-				WithPath(api.BoolValue(true), "baremetal", "defaults", "bmc", "tls", "verify").
 				WithPath(api.BoolValue(true), "baremetal", "defaults", "bmc", "virtualMedia", "tls", "enableVerification"))
 		}
 	}
 	catalog = api.NewCatalog(objects)
+	machine = machine.WithSpec(machine.Spec().WithPath(m("verification", "full"), "hardware", "bmc", "tls"))
 	normalized, issues := Normalize(machine, catalog)
-	if len(issues) != 0 || !normalized.Spec().Get("substrate", "baremetal", "bmc", "virtualMedia", "tls", "enableVerification").Bool() {
+	if len(issues) != 0 || !normalized.Spec().Get("hardware", "bmc", "virtualMedia", "tls", "enableVerification").Bool() {
 		t.Fatalf("provider intent lost: %v %v", normalized.Spec(), issues)
 	}
-	local := machine.WithSpec(machine.Spec().WithPath(api.BoolValue(false), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "enableVerification"))
+	local := machine.WithSpec(machine.Spec().WithPath(api.BoolValue(false), "hardware", "bmc", "virtualMedia", "tls", "enableVerification"))
 	normalized, issues = Normalize(local, catalog)
-	if len(issues) != 0 || normalized.Spec().Get("substrate", "baremetal", "bmc", "virtualMedia", "tls", "enableVerification").Bool() {
+	if len(issues) != 0 || normalized.Spec().Get("hardware", "bmc", "virtualMedia", "tls", "enableVerification").Bool() {
 		t.Fatalf("local opt-out lost: %v %v", normalized.Spec(), issues)
 	}
 }
@@ -132,7 +135,7 @@ func TestInstallAddressSelectionHasNoOrderFallback(t *testing.T) {
 	configuration, _ := c.Find(api.NetworkConfig, "net")
 	lan, _ := c.Find(api.Network, "lan")
 	configuration = configuration.WithSpec(configuration.Spec().WithPath(list(m("name", "eth0", "type", "ethernet"), m("name", "eth1", "type", "ethernet")), "nmstate", "interfaces"))
-	o = o.WithSpec(o.Spec().Without("hardware").Without("substrate").WithPath(list(m("name", "second", "address", "192.0.2.22", "interface", "eth1"), m("name", "first", "address", "192.0.2.11", "interface", "eth0")), "network", "addresses"))
+	o = o.WithSpec(o.Spec().Without("hardware").WithPath(list(m("name", "second", "address", "192.0.2.22", "interface", "eth1"), m("name", "first", "address", "192.0.2.11", "interface", "eth0")), "network", "addresses"))
 	c = api.NewCatalog([]api.Object{configuration, lan})
 	selected, issues := InstallAddress(o, c)
 	if len(issues) != 0 || selected.Get("name").Text() != "first" {
@@ -172,7 +175,7 @@ func TestNativeListMergeContract(t *testing.T) {
 
 func TestAccessLifecycleAndGlobalIdentities(t *testing.T) {
 	o, c := fixture()
-	ready := object(api.Machine, "ready", m("os", m("provided", true)))
+	ready := object(api.Machine, "ready", m("os", m("provided", m())))
 	ready, _ = Normalize(ready, c)
 	if !ready.Spec().Has("access", "ssh", "auth", "operatorIdentity") || ready.Spec().Get("access", "ssh", "addressRef").Text() != "fqdn" {
 		t.Fatal("operator defaults missing")
@@ -181,9 +184,9 @@ func TestAccessLifecycleAndGlobalIdentities(t *testing.T) {
 		t.Fatal(got)
 	}
 	for name, changed := range map[string]api.Object{
-		"installed authored access": o.WithSpec(o.Spec().WithPath(api.StringValue("install"), "os", "installProfileRef").With("access", m("local", true))),
+		"installed authored access": o.WithSpec(o.Spec().With("os", m("install", m("profileRef", "install"))).With("access", m("local", m()))),
 		"password without user":     ready.WithSpec(ready.Spec().WithPath(m("passwordRef", "password"), "access", "ssh", "auth")),
-		"empty media TLS":           o.WithSpec(o.Spec().WithPath(m(), "substrate", "baremetal", "bmc", "virtualMedia", "tls")),
+		"empty media TLS":           o.WithSpec(o.Spec().WithPath(m(), "hardware", "bmc", "virtualMedia", "tls")),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if issues := ValidateAuthored(changed, c); len(issues) == 0 {
@@ -206,7 +209,7 @@ func TestAnInstalledMachineDialsItsInstallAddress(t *testing.T) {
 	node, fixtures := fixture()
 	addresses := list(m("name", "ip", "address", "192.0.2.11", "interface", "eth0"))
 	spec := node.Spec().WithPath(addresses, "network", "addresses")
-	installed := node.WithSpec(spec.With("os", spec.Get("os").With("installProfileRef", api.StringValue("rhel"))))
+	installed := node.WithSpec(spec.With("os", m("install", m("profileRef", "rhel"))))
 	objects := []api.Object{object(api.MachineInstallProfile, "rhel", m()), object(api.Secret, "fleet", m("type", "sshKeyPair")),
 		object(api.Environment, "env", m("domains", m("base", "example.test"), "remoteMachinesAccessKey", m("keyRef", "fleet")))}
 	for _, existing := range fixtures.Objects() {
@@ -239,7 +242,7 @@ func TestAnInstalledMachineDialsItsInstallAddress(t *testing.T) {
 	if got := dialed(declared).Get("access", "ssh", "addressRef").Text(); got != "ssh" {
 		t.Fatalf("an installed Machine that declares an ssh address dials %q", got)
 	}
-	ready := installed.WithSpec(spec.With("os", m("provided", true)).WithPath(api.StringValue("ip"), "network", "installAddressRef"))
+	ready := installed.WithSpec(spec.With("os", m("provided", m())).WithPath(api.StringValue("ip"), "network", "installAddressRef"))
 	if got := dialed(ready).Get("access", "ssh", "addressRef").Text(); got != "fqdn" {
 		t.Fatalf("an OS-ready Machine dials %q", got)
 	}
@@ -253,18 +256,18 @@ func TestAnInstalledMachineDialsItsInstallAddress(t *testing.T) {
 // reads, whether or not anything installs the Machine, and one address raises
 // one issue.
 func TestEveryAuthoredBMCAddressNamesOneExactSystem(t *testing.T) {
-	const field = "$.spec.substrate.baremetal.bmc.address"
+	const field = "$.spec.hardware.bmc.address"
 	installed, catalog := fixture()
-	provided := object(api.Machine, "bastion", m("os", m("provided", true),
-		"substrate", m("providerRef", "metal", "baremetal", m("bmc", m("address", "https://bastion-bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "bmc")))))
+	provided := object(api.Machine, "bastion", m("os", m("provided", m()),
+		"hardware", m("providerRef", "metal", "bmc", m("address", "https://bastion-bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "bmc", "tls", m("verification", "none")))))
 	for name, machine := range map[string]api.Object{"bare-metal installation": installed, "OS-ready": provided} {
 		with := func(address string) []api.Issue {
-			edited := machine.WithSpec(machine.Spec().WithPath(api.StringValue(address), "substrate", "baremetal", "bmc", "address"))
+			edited := machine.WithSpec(machine.Spec().WithPath(api.StringValue(address), "hardware", "bmc", "address"))
 			normalized, _ := Normalize(edited, catalog)
 			return Validate(normalized, catalog)
 		}
 		t.Run(name, func(t *testing.T) {
-			if issues := with(machine.Spec().Get("substrate", "baremetal", "bmc", "address").Text()); len(issues) != 0 {
+			if issues := with(machine.Spec().Get("hardware", "bmc", "address").Text()); len(issues) != 0 {
 				t.Fatal("a canonical address was refused", issues)
 			}
 			for _, address := range []string{
@@ -288,14 +291,14 @@ func TestNativeMergeDiagnosticsDoNotExposeMapKeys(t *testing.T) {
 }
 
 func TestManagedLibvirtSegmentContainsTheInstallAddress(t *testing.T) {
-	host := object(api.Machine, "host", m("os", m("provided", true)))
+	host := object(api.Machine, "host", m("os", m("provided", m())))
 	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small")))))
 	managed := managedNet("net", "lab", "192.0.2.0/24", "192.0.2.1")
 	other := object(api.Network, "other", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24")))
 	network := object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
 	for address, valid := range map[string]bool{"192.0.2.11": true, "198.51.100.11": false} {
-		guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", address, "interface", "enp1s0")))))
+		guest := object(api.Machine, "guest", m("hardware", m("providerRef", "lab", "profileRef", "small", "nics", list(m("name", "enp1s0"))), "os", m("clusterInstalled", m()), "network", m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", address, "interface", "enp1s0")))))
 		c := api.NewCatalog([]api.Object{guest, host, provider, network, env, managed, other})
 		guest, _ = Normalize(guest, c)
 		issues := Validate(guest, c)
@@ -305,18 +308,10 @@ func TestManagedLibvirtSegmentContainsTheInstallAddress(t *testing.T) {
 	}
 }
 
-// withRootDevice is a Machine of the catalog, normalized, with its declared
-// root-device hints replaced and, when physical is present, the bare-metal
-// arm's own hints set in place of its substrate.
-func withRootDevice(machine api.Object, catalog api.Catalog, declared, physical api.Value, arm api.Value) (api.Object, api.Catalog) {
-	spec := machine.Spec().WithPath(declared, "hardware", "rootDevice")
-	if physical.Present() {
-		spec = spec.WithPath(physical, "substrate", "baremetal", "rootDevice")
-	}
-	if arm.Present() {
-		spec = spec.With("substrate", arm)
-	}
-	machine = machine.WithSpec(spec)
+// withRootDisk is a Machine of the catalog, normalized, with its declared
+// root disk replaced.
+func withRootDisk(machine api.Object, catalog api.Catalog, rootDisk api.Value) (api.Object, api.Catalog) {
+	machine = machine.WithSpec(machine.Spec().WithPath(rootDisk, "hardware", "rootDisk"))
 	objects := []api.Object{machine}
 	for _, existing := range catalog.Objects() {
 		if existing.Identity() != machine.Identity() {
@@ -328,47 +323,63 @@ func withRootDevice(machine api.Object, catalog api.Catalog, declared, physical 
 	return machine, api.NewCatalog(objects)
 }
 
-// The disks a libvirt domain presents carry no WWN, SCSI address or serial
-// number, so those hints live only in the bare-metal arm: a libvirt Machine
-// admits the hints every disk can carry, and authoring the bare-metal arm's
-// hints on it refuses at the arm. A physical machine's own disks may carry
-// every one of them, so bare metal keeps them all.
-func TestARootDeviceHintFollowsItsArm(t *testing.T) {
-	host := object(api.Machine, "host", m("os", m("provided", true)))
+// The disks a libvirt domain presents are created by the provider and every
+// installer on them writes /dev/vda, so a libvirt Machine declares no root disk
+// and any of its selectors or hints refuses at hardware.rootDisk. A physical
+// machine's own disks may carry every one of them, so bare metal keeps them all.
+func TestARootDiskFollowsItsProvider(t *testing.T) {
+	host := object(api.Machine, "host", m("os", m("provided", m())))
 	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small")))))
 	managed := managedNet("net", "lab", "192.0.2.0/24", "192.0.2.1")
 	network := object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
-	guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11", "interface", "enp1s0")))))
+	guest := object(api.Machine, "guest", m("hardware", m("providerRef", "lab", "profileRef", "small", "nics", list(m("name", "enp1s0"))), "os", m("clusterInstalled", m()), "network", m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11", "interface", "enp1s0")))))
 	virtual := api.NewCatalog([]api.Object{guest, host, provider, network, env, managed})
 	server, physical := fixture()
-	admitted := api.MapValue(
-		api.FieldValue{Name: "deviceName", Value: api.StringValue("/dev/vda")}, api.FieldValue{Name: "minSizeGigabytes", Value: api.IntegerValue("0")},
-		api.FieldValue{Name: "model", Value: api.StringValue("1e3")}, api.FieldValue{Name: "vendor", Value: api.StringValue("0o17")},
-		api.FieldValue{Name: "rotational", Value: api.BoolValue(false)})
-	if machine, catalog := withRootDevice(guest, virtual, admitted, api.Value{}, api.Value{}); len(Validate(machine, catalog)) != 0 {
-		t.Fatalf("a libvirt Machine's admitted hints were refused: %v", Validate(machine, catalog))
+	if issues := Validate(normalizedIn(guest, virtual)); len(issues) != 0 {
+		t.Fatalf("a libvirt Machine that declares no root disk was refused: %v", issues)
 	}
-	every := m("hctl", "1:0:0:0", "serialNumber", "0987654321", "wwn", "0x5000c500a1b2c3d4")
-	for _, hint := range every.Fields() {
-		t.Run(hint.Name, func(t *testing.T) {
-			declared := m(hint.Name, hint.Value)
-			arm := m("providerRef", "lab", "baremetal", m("rootDevice", declared))
-			machine, catalog := withRootDevice(guest, virtual, admitted, api.Value{}, arm)
-			want := api.Issue{Code: "api.invariant", Field: "$.spec.substrate.baremetal",
-				Message:     "the Machine's substrate arm baremetal does not match the libvirt arm of its provider InfraProvider/lab",
-				Remediation: "move the fields of spec.substrate.baremetal to spec.substrate.libvirt on Machine/guest, or select a provider with the baremetal arm"}
+	hints := m("minSizeGigabytes", api.IntegerValue("0"), "model", "1e3", "vendor", "0o17", "rotational", false)
+	every := map[string]api.Value{
+		"hctl":         m("hints", hints.With("hctl", api.StringValue("1:0:0:0"))),
+		"serialNumber": m("serialNumber", "0987654321"),
+		"wwn":          m("wwn", "0x5000c500a1b2c3d4"),
+		"deviceName":   m("hints", m("deviceName", "/dev/vda")),
+		"model":        m("hints", hints),
+	}
+	for name, declared := range every {
+		t.Run(name, func(t *testing.T) {
+			machine, catalog := withRootDisk(guest, virtual, declared)
+			want := api.Issue{Code: "api.invariant", Field: "$.spec.hardware.rootDisk",
+				Message:     "a libvirt Machine declares no spec.hardware.rootDisk: the provider creates the root disk, and every installer on it writes /dev/vda",
+				Remediation: "remove spec.hardware.rootDisk from Machine/guest"}
 			if issues := Validate(machine, catalog); !slices.Contains(issues, want) {
-				t.Fatalf("a libvirt Machine's %s hint gave %v", hint.Name, issues)
+				t.Fatalf("a libvirt Machine's %s root disk declaration gave %v", name, issues)
 			}
-			if machine, catalog := withRootDevice(server, physical, admitted.Without("deviceName"), declared.Default("wwn", api.StringValue("0x5000c500a1b2c3d4")), api.Value{}); len(Validate(machine, catalog)) != 0 {
-				t.Fatalf("a bare-metal Machine's %s hint was refused: %v", hint.Name, Validate(machine, catalog))
+			if name == "deviceName" || name == "model" {
+				return
+			}
+			rootDisk := m("wwn", "0x5000c500a1b2c3d4", "hints", hints)
+			if name == "hctl" {
+				rootDisk = rootDisk.WithPath(api.StringValue("1:0:0:0"), "hints", "hctl")
+			}
+			if name == "serialNumber" {
+				rootDisk = rootDisk.With("serialNumber", api.StringValue("0987654321"))
+			}
+			if machine, catalog := withRootDisk(server, physical, rootDisk); len(Validate(machine, catalog)) != 0 {
+				t.Fatalf("a bare-metal Machine's %s hint was refused: %v", name, Validate(machine, catalog))
 			}
 		})
 	}
-	if machine, catalog := withRootDevice(server, physical, admitted.Without("deviceName"), every, api.Value{}); len(Validate(machine, catalog)) != 0 {
+	all := m("wwn", "0x5000c500a1b2c3d4", "serialNumber", "0987654321", "hints", hints.With("hctl", api.StringValue("1:0:0:0")))
+	if machine, catalog := withRootDisk(server, physical, all); len(Validate(machine, catalog)) != 0 {
 		t.Fatalf("a bare-metal Machine's hints were refused: %v", Validate(machine, catalog))
 	}
+}
+
+func normalizedIn(machine api.Object, catalog api.Catalog) (api.Object, api.Catalog) {
+	normalized, _ := Normalize(machine, catalog)
+	return normalized, catalog
 }
 
 // installedFixture is the bare-metal fixture as a Bootwright-installed
@@ -376,12 +387,7 @@ func TestARootDeviceHintFollowsItsArm(t *testing.T) {
 func installedFixture() (api.Object, api.Catalog) {
 	machine, catalog := fixture()
 	machine = rootDeclared(machine, "", m("wwn", "0x5000c500a1b2c3d4"))
-	spec := machine.Spec()
-	install := spec.Get("os", "install").With("hostKeyRef", api.StringValue("node-host-key"))
-	spec = spec.With("os", spec.Get("os").
-		With("installProfileRef", api.StringValue("rhel")).
-		With("install", install))
-	machine = machine.WithSpec(spec)
+	machine = machine.WithSpec(machine.Spec().With("os", m("install", m("profileRef", "rhel", "hostKeyRef", "node-host-key"))))
 	objects := []api.Object{machine, object(api.MachineInstallProfile, "rhel", m())}
 	for _, existing := range catalog.Objects() {
 		if existing.Identity() != machine.Identity() {
@@ -411,14 +417,19 @@ func TestBaremetalInstallationRequiresTheHostKeyItDelivers(t *testing.T) {
 	}
 }
 
-// The key belongs to the one lifecycle that delivers it. A machine nothing
-// installs, and one its substrate creates and proves another way, declare none.
+// The key belongs to the one lifecycle that delivers it. A machine its
+// substrate creates and proves another way declares none.
 func TestInstalledLibvirtAndBaremetalMayDeclareAHostKey(t *testing.T) {
 	machine, catalog := installedFixture()
-	spec := machine.Spec()
-	provided := machine.WithSpec(spec.With("os", m("provided", true, "install", m("hostKeyRef", "node-host-key"))))
-	if !mentions(Validate(provided, catalog), "$.spec.os.install.hostKeyRef") {
-		t.Fatal("an OS-ready Machine was allowed to deliver a host key")
+	kubevirt := object(api.InfraProvider, "metal", m("kubevirt", m("kubeconfigRef", "host", "namespace", "guests")))
+	others := []api.Object{machine, kubevirt}
+	for _, existing := range catalog.Objects() {
+		if existing.Kind() != api.InfraProvider && existing.Identity() != machine.Identity() {
+			others = append(others, existing)
+		}
+	}
+	if !mentions(Validate(machine, api.NewCatalog(others)), "$.spec.os.install.hostKeyRef") {
+		t.Fatal("a KubeVirt Machine was allowed to deliver a host key")
 	}
 	virtual := object(api.InfraProvider, "metal", m("libvirt", m("machineRef", "host", "uri", "qemu:///system",
 		"bmcEmulation", m("auth", m("credentialsRef", "bmc")))))
@@ -465,47 +476,28 @@ func withProviderBMC(bmc api.Value) (api.Object, api.Catalog) {
 	return machine, api.NewCatalog(objects)
 }
 
-const bundleField = "$.spec.substrate.baremetal.bmc.tls.trustBundleRef"
-
-// A Machine may author its own bundle, but not beneath a provider that turns
-// verification off: the authored block is consistent on its own, and the
-// effective one, which inherited the opt-out, refuses.
-func TestAMachineBundleWithAnInheritedOptOutRefuses(t *testing.T) {
-	machine, catalog := fixture()
-	machine = machine.WithSpec(machine.Spec().WithPath(api.StringValue("node-ca"), "substrate", "baremetal", "bmc", "tls", "trustBundleRef"))
-	if mentions(ValidateAuthored(machine, catalog), bundleField) {
-		t.Fatal("an authored bundle without an authored opt-out refused")
-	}
-	normalized, _ := Normalize(machine, catalog)
-	if normalized.Spec().Get("substrate", "baremetal", "bmc", "tls", "verify").Bool() {
-		t.Fatal("the fixture provider's opt-out was not inherited")
-	}
-	if !mentions(Validate(normalized, catalog), bundleField) {
-		t.Fatal("a bundle beside an inherited opt-out was admitted")
-	}
-}
-
 // A provider's bundle reaches only the Machines that keep verification. One
 // that turns it off inherits no bundle and is admitted; one that keeps it
 // inherits the provider's; and a Machine's own bundle always wins.
 func TestAProviderBundleIsNotInheritedByAMachineThatOptsOut(t *testing.T) {
-	machine, catalog := withProviderBMC(m("credentialsRef", "bmc", "tls", m("verify", true, "trustBundleRef", "metal-ca")))
+	machine, catalog := withProviderBMC(m("credentialsRef", "bmc", "tls", m("trustBundleRef", "metal-ca")))
 	for name, test := range map[string]struct {
 		tls  api.Value
 		want string
 	}{
-		"opts out":       {m("verify", false), ""},
-		"keeps":          {m("verify", true), "metal-ca"},
+		"opts out":       {m("verification", "none"), ""},
+		"keeps":          {m("verification", "full"), "metal-ca"},
 		"authors none":   {api.Value{}, "metal-ca"},
 		"its own bundle": {m("trustBundleRef", "node-ca"), "node-ca"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			local := machine
+			bmc := machine.Spec().Get("hardware", "bmc").Without("tls")
 			if test.tls.Present() {
-				local = machine.WithSpec(machine.Spec().WithPath(test.tls, "substrate", "baremetal", "bmc", "tls"))
+				bmc = bmc.With("tls", test.tls)
 			}
+			local := machine.WithSpec(machine.Spec().WithPath(bmc, "hardware", "bmc"))
 			normalized, _ := Normalize(local, catalog)
-			if got := normalized.Spec().Get("substrate", "baremetal", "bmc", "tls", "trustBundleRef").Text(); got != test.want {
+			if got := normalized.Spec().Get("hardware", "bmc", "tls", "trustBundleRef").Text(); got != test.want {
 				t.Fatalf("effective bundle = %q, want %q", got, test.want)
 			}
 			if issues := Validate(normalized, catalog); len(issues) != 0 {
@@ -519,9 +511,9 @@ func TestAProviderBundleIsNotInheritedByAMachineThatOptsOut(t *testing.T) {
 // Machine that authors no trust, so it refuses there; any other trust is an
 // ordinary default.
 func TestAMachineKindDefaultCannotDefaultDisableVerification(t *testing.T) {
-	const field = "$.spec.substrate.baremetal.bmc.virtualMedia.tls.trust"
+	const field = "$.spec.hardware.bmc.virtualMedia.tls.trust"
 	for trust, refused := range map[string]bool{"disableVerification": true, "importCertificate": false, "established": false} {
-		partial := object(api.Machine, "", m("substrate", m("baremetal", m("bmc", m("virtualMedia", m("tls", m("trust", trust)))))))
+		partial := object(api.Machine, "", m("hardware", m("bmc", m("virtualMedia", m("tls", m("trust", trust))))))
 		issues := ValidatePartial(partial, api.Catalog{})
 		if mentions(issues, field) != refused {
 			t.Fatalf("a %s kind default: issues %v", trust, issues)
@@ -537,12 +529,12 @@ func TestAMachineKindDefaultCannotDefaultDisableVerification(t *testing.T) {
 // state with verification restored after boot unless the Machine says not to.
 func TestMachineVirtualMediaDisableVerificationIsAnExplicitException(t *testing.T) {
 	machine, catalog := fixture()
-	machine = machine.WithSpec(machine.Spec().WithPath(m("tls", m("trust", "disableVerification")), "substrate", "baremetal", "bmc", "virtualMedia"))
+	machine = machine.WithSpec(machine.Spec().WithPath(m("tls", m("trust", "disableVerification")), "hardware", "bmc", "virtualMedia"))
 	if issues := ValidateAuthored(machine, catalog); len(issues) != 0 {
 		t.Fatalf("an authored per-Machine exception refused: %v", issues)
 	}
 	normalized, _ := Normalize(machine, catalog)
-	tls := normalized.Spec().Get("substrate", "baremetal", "bmc", "virtualMedia", "tls")
+	tls := normalized.Spec().Get("hardware", "bmc", "virtualMedia", "tls")
 	if tls.Get("trust").Text() != "disableVerification" || !tls.Get("restoreVerificationAfterBoot").Bool() || tls.Has("removeCertificateAfterBoot") {
 		t.Fatalf("effective virtual-media trust = %v", tls)
 	}
@@ -559,18 +551,17 @@ func TestAnacondaInstallationRequiresAStaticIPv4Address(t *testing.T) {
 	const field = "$.spec.network.installAddressRef"
 	build := func(osSpec, interfaces api.Value, cidr string, addresses api.Value) (api.Object, api.Catalog) {
 		machine, catalog := fixture()
-		var routes, nics, macs []api.Value
+		var routes, nics []api.Value
 		for i, iface := range interfaces.Items() {
 			routes = append(routes, m("destination", "0.0.0.0/0", "next-hop-interface", iface.Get("name").Text()))
-			nics = append(nics, m("name", iface.Get("name").Text()))
-			macs = append(macs, m("nicRef", iface.Get("name").Text(), "macAddress", fmt.Sprintf("02:00:00:00:00:%02x", i+1)))
+			nics = append(nics, m("name", iface.Get("name").Text(), "macAddress", fmt.Sprintf("02:00:00:00:00:%02x", i+1)))
 		}
 		network := object(api.NetworkConfig, "net", m("nmstate", m("interfaces", interfaces, "routes", m("config", list(routes...)))))
 		family := "ipv4"
 		if strings.Contains(cidr, ":") {
 			family = "ipv6"
 		}
-		machine = machine.WithSpec(machine.Spec().With("os", osSpec).WithPath(addresses, "network", "addresses").WithPath(list(nics...), "hardware", "nics").WithPath(list(macs...), "substrate", "baremetal", "nics"))
+		machine = machine.WithSpec(machine.Spec().With("os", osSpec).WithPath(addresses, "network", "addresses").WithPath(list(nics...), "hardware", "nics"))
 		objects := []api.Object{machine, network, object(api.MachineInstallProfile, "rhel", m("installer", m("anaconda", m("imageRef", "image")))), object(api.Network, "lan", m("provided", true, family, m("cidr", cidr)))}
 		for _, existing := range catalog.Objects() {
 			if existing.Kind() != api.Machine && existing.Kind() != api.NetworkConfig && existing.Kind() != api.Network {
@@ -590,7 +581,7 @@ func TestAnacondaInstallationRequiresAStaticIPv4Address(t *testing.T) {
 		}
 		return found
 	}
-	installed := m("provided", false, "installProfileRef", "rhel")
+	installed := m("install", m("profileRef", "rhel"))
 	dhcp := list(m("name", "eth0", "type", "ethernet", "ipv4", m("enabled", true, "dhcp", true)))
 	contactOnly := list(m("name", "fqdn", "address", "node.example.test"))
 	refused := map[string]func() (api.Object, api.Catalog){
@@ -630,9 +621,9 @@ func TestAnacondaInstallationRequiresAStaticIPv4Address(t *testing.T) {
 		})
 	}
 	admitted := map[string]func() (api.Object, api.Catalog){
-		"a provided Machine on DHCP": func() (api.Object, api.Catalog) { return build(m("provided", true), dhcp, "192.0.2.0/24", contactOnly) },
+		"a provided Machine on DHCP": func() (api.Object, api.Catalog) { return build(m("provided", m()), dhcp, "192.0.2.0/24", contactOnly) },
 		"a cluster node on DHCP": func() (api.Object, api.Catalog) {
-			return build(m("provided", false), dhcp, "192.0.2.0/24", contactOnly)
+			return build(m("clusterInstalled", m()), dhcp, "192.0.2.0/24", contactOnly)
 		},
 		"a static IPv4 install address": func() (api.Object, api.Catalog) {
 			return build(installed, list(m("name", "eth0", "type", "ethernet")), "192.0.2.0/24",
@@ -654,40 +645,69 @@ func TestAnacondaInstallationRequiresAStaticIPv4Address(t *testing.T) {
 }
 
 func TestAMachineKindDefaultCannotDeclareFirmware(t *testing.T) {
-	const field = "$.spec.substrate.baremetal.firmware"
-	partial := object(api.Machine, "", m("substrate", m("baremetal", m("firmware", m("secureBoot", true)))))
+	const field = "$.spec.hardware.firmware"
+	partial := object(api.Machine, "", m("hardware", m("firmware", m("secureBoot", true))))
 	issues := ValidatePartial(partial, api.Catalog{})
 	if len(issues) != 1 || issues[0] != (api.Issue{Code: "api.invariant", Field: field,
-		Message: "firmware is per-Machine intent and never a kind default", Remediation: "declare substrate.baremetal.firmware on each Machine that needs it"}) {
+		Message: "firmware is per-Machine intent and never a kind default", Remediation: "declare hardware.firmware on each Machine that needs it"}) {
 		t.Fatalf("a firmware kind default: %+v", issues)
 	}
-	if issues := ValidatePartial(object(api.Machine, "", m("substrate", m("baremetal", m("bmc", m("tls", m("verify", true)))))), api.Catalog{}); mentions(issues, field) {
+	if issues := ValidatePartial(object(api.Machine, "", m("hardware", m("bmc", m("tls", m("verification", "full"))))), api.Catalog{}); mentions(issues, field) {
 		t.Fatalf("a default without firmware was refused: %+v", issues)
 	}
 }
 
-func TestFirmwareOnALibvirtProviderRefusesAtTheArm(t *testing.T) {
+func TestAMachineKindDefaultCannotDeclareDiskRemovalOrDataDisks(t *testing.T) {
+	for _, tc := range []struct{ field, message, remediation string }{
+		{"$.spec.hardware.rootDisk.onRemoval", "rootDisk.onRemoval is per-Machine intent and never a kind default", "declare hardware.rootDisk.onRemoval on each Machine that needs it"},
+		{"$.spec.hardware.dataDisks", "dataDisks is per-Machine intent and never a kind default", "declare hardware.dataDisks on each Machine that needs it"},
+	} {
+		hardware := m("rootDisk", m("onRemoval", "logicalOverwrite"))
+		if tc.field == "$.spec.hardware.dataDisks" {
+			hardware = m("dataDisks", list(m("serialNumber", "SER-1", "sizeBytes", api.IntegerValue("1099511627776"), "onRemoval", "logicalOverwrite")))
+		}
+		issues := ValidatePartial(object(api.Machine, "", m("hardware", hardware)), api.Catalog{})
+		if len(issues) != 1 || issues[0] != (api.Issue{Code: "api.invariant", Field: tc.field, Message: tc.message, Remediation: tc.remediation}) {
+			t.Fatalf("a %s kind default: %+v", tc.field, issues)
+		}
+	}
+	if issues := ValidatePartial(object(api.Machine, "", m("hardware", m("rootDisk", m("hints", m("minSizeGigabytes", api.IntegerValue("100")))))), api.Catalog{}); len(issues) != 0 {
+		t.Fatalf("a rootDisk default without onRemoval was refused: %+v", issues)
+	}
+}
+
+func TestFirmwareOnALibvirtProviderRefusesAtItsField(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	attached := installOn("192.0.2.11")
-	arm := m("providerRef", "lab", "baremetal", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "bmc"), "firmware", m("secureBoot", true)))
-	machine := attached.WithSpec(attached.Spec().With("substrate", arm))
-	mismatch := api.Issue{Code: "api.invariant", Field: "$.spec.substrate.baremetal",
-		Message:     "the Machine's substrate arm baremetal does not match the libvirt arm of its provider InfraProvider/lab",
-		Remediation: "move the fields of spec.substrate.baremetal to spec.substrate.libvirt on Machine/guest, or select a provider with the baremetal arm"}
-	if issues := admission(machine, lab...); !slices.Contains(issues, mismatch) {
+	machine := attached.WithSpec(attached.Spec().WithPath(m("secureBoot", true), "hardware", "firmware"))
+	refusal := api.Issue{Code: "api.invariant", Field: "$.spec.hardware.firmware",
+		Message:     "a libvirt Machine declares no spec.hardware.firmware: the provider creates the machine's firmware, so it declares no firmware settings",
+		Remediation: "remove spec.hardware.firmware from Machine/guest"}
+	if issues := admission(machine, lab...); !slices.Contains(issues, refusal) {
 		t.Fatalf("firmware on a libvirt provider: %#v", issues)
 	}
 }
 
-// rootDeclared replaces a Machine's root-device declaration: the
-// substrate-neutral deviceName and the bare-metal hints.
+// rootDeclared replaces a Machine's root-disk declaration: physical is the
+// rootDisk record, deviceName its hints.deviceName. The other hints and the
+// onRemoval the Machine already declares stay.
 func rootDeclared(machine api.Object, deviceName string, physical api.Value) api.Object {
-	spec := machine.Spec().WithPath(physical, "substrate", "baremetal", "rootDevice")
-	declared := spec.Get("hardware", "rootDevice").Without("deviceName")
-	if deviceName != "" {
-		declared = declared.With("deviceName", api.StringValue(deviceName))
+	current := machine.Spec().Get("hardware", "rootDisk")
+	hints := current.Get("hints").Without("deviceName").Without("hctl")
+	for _, hint := range physical.Get("hints").Fields() {
+		hints = hints.With(hint.Name, hint.Value)
 	}
-	return machine.WithSpec(spec.WithPath(declared, "hardware", "rootDevice"))
+	if deviceName != "" {
+		hints = hints.With("deviceName", api.StringValue(deviceName))
+	}
+	declared := physical.Without("hints")
+	if hints.Len() > 0 {
+		declared = declared.With("hints", hints)
+	}
+	if current.Has("onRemoval") && !declared.Has("onRemoval") {
+		declared = declared.With("onRemoval", current.Get("onRemoval"))
+	}
+	return machine.WithSpec(machine.Spec().WithPath(declared, "hardware", "rootDisk"))
 }
 
 func replaced(catalog api.Catalog, objects ...api.Object) api.Catalog {
@@ -711,23 +731,23 @@ func TestABaremetalRootDiskMayBeNamedBySerialNumberAndSize(t *testing.T) {
 		t.Fatalf("a root disk named by serial number and size was refused: %v", issues)
 	}
 	alone := rootDeclared(machine, "", m("serialNumber", "SYNTHETIC-ROOT-01"))
-	if issues := Validate(alone, replaced(catalog, alone)); !mentions(issues, "$.spec.substrate.baremetal.rootDevice") {
+	if issues := Validate(alone, replaced(catalog, alone)); !mentions(issues, "$.spec.hardware.rootDisk") {
 		t.Fatalf("a serial number without its size was admitted as a root selector: %v", issues)
 	}
 	unaligned := rootDeclared(machine, "", bySerial.With("sizeBytes", api.IntegerValue("480103981057")))
 	issues := Validate(unaligned, replaced(catalog, unaligned))
-	if len(issues) != 1 || issues[0].Field != "$.spec.substrate.baremetal.rootDevice.sizeBytes" || issues[0].Remediation != "set sizeBytes to the root disk's exact logical capacity, as blockdev --getsize64 reports it" {
+	if len(issues) != 1 || issues[0].Field != "$.spec.hardware.rootDisk.sizeBytes" || issues[0].Remediation != "set sizeBytes to the root disk's exact logical capacity, as blockdev --getsize64 reports it" {
 		t.Fatalf("issues = %+v", issues)
 	}
 	provisioned, provisionedCatalog := fixture()
 	provisioned = rootDeclared(provisioned, "/dev/sda", bySerial)
-	provided := provisioned.WithSpec(provisioned.Spec().WithPath(api.BoolValue(true), "os", "provided"))
+	provided := provisioned.WithSpec(provisioned.Spec().With("os", m("provided", m())))
 	for name, other := range map[string]api.Object{"OS-ready": provided} {
 		issues := Validate(other, replaced(provisionedCatalog, other))
 		refused := false
 		for _, issue := range issues {
-			if issue.Field == "$.spec.substrate.baremetal.rootDevice.sizeBytes" {
-				refused = issue.Code == "api.invariant" && issue.Remediation == "remove spec.substrate.baremetal.rootDevice.sizeBytes"
+			if issue.Field == "$.spec.hardware.rootDisk.sizeBytes" {
+				refused = issue.Code == "api.invariant" && issue.Remediation == "remove spec.hardware.rootDisk.sizeBytes"
 			}
 		}
 		if !refused {
@@ -741,10 +761,10 @@ func TestABaremetalRootDiskMayBeNamedBySerialNumberAndSize(t *testing.T) {
 func TestASelectingSerialNumberIsDeclaredByNoOtherMachine(t *testing.T) {
 	machine, catalog := installedFixture()
 	serial := rootDeclared(machine, "", m("serialNumber", "SYNTHETIC-SHARED-01").With("sizeBytes", api.IntegerValue("480103981056")))
-	other := object(api.Machine, "other", m("os", m("provided", true), "hardware", m("rootDevice", m("deviceName", "/dev/disk/by-id/wwn-0x5000000000000001"))))
+	other := object(api.Machine, "other", m("os", m("provided", m())))
 	other = rootDeclared(other, "/dev/disk/by-id/wwn-0x5000000000000001", m("serialNumber", "SYNTHETIC-SHARED-01"))
 	issues := validateSelectingSerials(serial, replaced(catalog, serial, other))
-	if len(issues) != 1 || issues[0].Field != "$.spec.substrate.baremetal.rootDevice.serialNumber" ||
+	if len(issues) != 1 || issues[0].Field != "$.spec.hardware.rootDisk.serialNumber" ||
 		issues[0].Message != "a disk selected by its serial number needs a serial number no other Machine declares, and Machine/other declares SYNTHETIC-SHARED-01" {
 		t.Fatalf("issues = %+v", issues)
 	}
@@ -752,8 +772,8 @@ func TestASelectingSerialNumberIsDeclaredByNoOtherMachine(t *testing.T) {
 	if issues := validateSelectingSerials(byPath, replaced(catalog, byPath, other)); len(issues) != 0 {
 		t.Fatalf("a serial number beside its path was refused: %v", issues)
 	}
-	clear := byPath.WithSpec(byPath.Spec().WithPath(m("targets", list(m("serialNumber", "SYNTHETIC-SHARED-01").With("sizeBytes", api.IntegerValue("8192")))), "hardware", "clearOnInstall"))
-	if issues := validateSelectingSerials(clear, replaced(catalog, clear, other)); len(issues) != 1 || issues[0].Field != "$.spec.hardware.clearOnInstall.targets[0].serialNumber" {
+	clear := byPath.WithSpec(byPath.Spec().WithPath(list(m("serialNumber", "SYNTHETIC-SHARED-01", "sizeBytes", api.IntegerValue("8192"), "onInstall", "metadataClear")), "hardware", "dataDisks"))
+	if issues := validateSelectingSerials(clear, replaced(catalog, clear, other)); len(issues) != 1 || issues[0].Field != "$.spec.hardware.dataDisks[0].serialNumber" {
 		t.Fatalf("issues = %+v", issues)
 	}
 }
@@ -812,8 +832,8 @@ func TestPhysicalAgentSerialAndSizeRejectsAmbiguousDeclarations(t *testing.T) {
 		t.Fatal(issues)
 	}
 	selected := rootDeclared(original, "", m("serialNumber", "SYNTHETIC-SHARED-AGENT").With("sizeBytes", api.IntegerValue("8192")))
-	other := rootDeclared(object(api.Machine, "other", m("os", m("provided", true))), "/dev/disk/by-id/wwn-0x5000000000000001", m("serialNumber", "SYNTHETIC-SHARED-AGENT"))
-	if issues := Validate(selected, replaced(catalog, selected, other)); len(issues) != 1 || issues[0].Field != "$.spec.substrate.baremetal.rootDevice.serialNumber" || !strings.Contains(issues[0].Remediation, "rootDevice.wwn") || strings.Contains(issues[0].Remediation, "/dev/") {
+	other := rootDeclared(object(api.Machine, "other", m("os", m("provided", m()))), "/dev/disk/by-id/wwn-0x5000000000000001", m("serialNumber", "SYNTHETIC-SHARED-AGENT"))
+	if issues := Validate(selected, replaced(catalog, selected, other)); len(issues) != 1 || issues[0].Field != "$.spec.hardware.rootDisk.serialNumber" || !strings.Contains(issues[0].Remediation, "rootDisk.wwn") || strings.Contains(issues[0].Remediation, "/dev/") {
 		t.Fatalf("duplicate selecting serial = %+v", issues)
 	}
 	sized := rootDeclared(original, "", m("wwn", "0x5000000000000001").With("sizeBytes", api.IntegerValue("8192")))
@@ -822,22 +842,24 @@ func TestPhysicalAgentSerialAndSizeRejectsAmbiguousDeclarations(t *testing.T) {
 	}
 }
 
-// The new policy and legacy boolean both preserve Machine-local precedence.
+// The verification policy preserves Machine-local precedence over a provider's
+// bundle: a Machine that turns verification off inherits no bundle, and one that
+// authors its own bundle keeps it.
 func TestBMCTLSVerificationPolicyPreservesLocalOverrides(t *testing.T) {
-	machine, catalog := withProviderBMC(m("credentialsRef", "bmc", "tls", m("verification", "full", "verify", true, "trustBundleRef", "metal-ca")))
+	machine, catalog := withProviderBMC(m("credentialsRef", "bmc", "tls", m("trustBundleRef", "metal-ca")))
 	for _, test := range []struct {
 		tls            api.Value
-		verify         bool
 		policy, bundle string
 	}{
-		{m("verify", false), false, "", ""},
-		{m("verification", "none"), false, "none", ""},
-		{m("verification", "certificate", "trustBundleRef", "node-trust"), true, "certificate", "node-trust"},
+		{m("verification", "none"), "none", ""},
+		{m("verification", "certificate", "trustBundleRef", "node-trust"), "certificate", "node-trust"},
+		{m("verification", "full"), "full", "metal-ca"},
+		{m(), "", "metal-ca"},
 	} {
-		local := machine.WithSpec(machine.Spec().WithPath(test.tls, "substrate", "baremetal", "bmc", "tls"))
+		local := machine.WithSpec(machine.Spec().WithPath(test.tls, "hardware", "bmc", "tls"))
 		normalized, _ := Normalize(local, catalog)
-		got := normalized.Spec().Get("substrate", "baremetal", "bmc", "tls")
-		if got.Get("verify").Bool() != test.verify || got.Get("verification").Text() != test.policy || got.Get("trustBundleRef").Text() != test.bundle {
+		got := normalized.Spec().Get("hardware", "bmc", "tls")
+		if got.Has("verify") || got.Get("verification").Text() != test.policy || got.Get("trustBundleRef").Text() != test.bundle {
 			t.Fatalf("local TLS override lost: %v", got)
 		}
 	}
@@ -846,19 +868,19 @@ func TestBMCTLSVerificationPolicyPreservesLocalOverrides(t *testing.T) {
 func TestAutomaticRootDiscoveryRequiresExclusivePolicyAndVerifiedPhysicalInstallation(t *testing.T) {
 	target, catalog := installedFixture()
 	target = rootDeclared(target, "", m("discover", m()))
-	target = target.WithSpec(target.Spec().WithPath(m("verify", true, "verification", "full"), "substrate", "baremetal", "bmc", "tls"))
+	target = target.WithSpec(target.Spec().WithPath(m("verification", "full"), "hardware", "bmc", "tls"))
 	if issues := Validate(target, replaced(catalog, target)); len(issues) != 0 {
 		t.Fatalf("automatic policy refused: %+v", issues)
 	}
 	changes := []api.Object{
 		rootDeclared(target, "", m("discover", m(), "bootVolume", m())),
-		target.WithSpec(target.Spec().WithPath(api.BoolValue(true), "os", "provided")),
-		target.WithSpec(target.Spec().WithPath(m("verify", false, "verification", "none"), "substrate", "baremetal", "bmc", "tls")),
+		target.WithSpec(target.Spec().With("os", m("provided", m()))),
+		target.WithSpec(target.Spec().WithPath(m("verification", "none"), "hardware", "bmc", "tls")),
 		rootDeclared(target, "", m("discover", m("match", m("controllerPCIAddress", "unknown")))),
 		rootDeclared(target, "", m("discover", m("match", m("minSizeBytes", api.IntegerValue("8192"), "maxSizeBytes", api.IntegerValue("4096"))))),
 	}
 	for _, changed := range changes {
-		if issues := Validate(changed, replaced(catalog, changed)); !mentions(issues, "$.spec.substrate.baremetal.rootDevice.discover") {
+		if issues := Validate(changed, replaced(catalog, changed)); !mentions(issues, "$.spec.hardware.rootDisk.discover") {
 			t.Fatalf("invalid discovery admitted: %+v", issues)
 		}
 	}

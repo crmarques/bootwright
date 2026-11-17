@@ -33,7 +33,7 @@ func resolveTarget(catalog api.Catalog, name, contextName string) (target, error
 		return target{}, failure("access.target", "the selected context declares no Machine named "+name,
 			"list the Machines this context selects with bootwright machine list --context "+contextName)
 	}
-	if object.Spec().Get("access", "local").Bool() {
+	if object.Spec().Has("access", "local") {
 		return target{}, failure("access.unavailable", "this Machine is reached locally and is not an SSH target",
 			"run the command directly on "+object.Identity())
 	}

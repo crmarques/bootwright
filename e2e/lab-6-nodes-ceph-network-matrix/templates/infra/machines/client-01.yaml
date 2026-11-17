@@ -6,29 +6,20 @@ metadata:
   name: client-01
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: client
-
-      nics:
-        - nicRef: nic0
-          segmentRef: app-users
-
-        - nicRef: nic1
-          segmentRef: app-users
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: client
+
     nics:
       - name: nic0
-      - name: nic1
+        segmentRef: app-users
 
-    rootDevice:
-      deviceName: /dev/vda
+      - name: nic1
+        segmentRef: app-users
 
   os:
-    provided: false
-    installProfileRef: rhel
+    install:
+      profileRef: rhel
 
   network:
     configRef: client

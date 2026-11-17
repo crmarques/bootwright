@@ -456,11 +456,11 @@ func serialDeviceRefusals(host Host) map[string]error {
 	selected, of := strings.Join(serials, ", "), "Ceph host "+host.Name+" of Machine "+host.Machine
 	return map[string]error{
 		"device-serial-absent": failure("lifecycle.unsupported", of+" presents no whole disk whose serial number is one its OSD services select by serial ("+selected+")",
-			"compare each selected serial number with the disk's sysfs serial attribute or VPD page 0x80 on Machine "+host.Machine+", and its exact size with the sizeBytes of its eraseOnRemoval target"),
+			"compare each selected serial number with the disk's sysfs serial attribute or VPD page 0x80 on Machine "+host.Machine+", and its exact size with the sizeBytes of its hardware.dataDisks entry"),
 		"device-serial-ambiguous": failure("lifecycle.unsupported", of+" presents more than one whole disk with a serial number its OSD services select ("+selected+"), such as two paths of one multipath disk, two namespaces of one NVMe controller or a cloned serial",
 			"select that disk by its /dev/disk/by-id/wwn-0x path, or detach the duplicate path; Bootwright never chooses between disks that share a serial number"),
-		"device-serial-mismatch": failure("lifecycle.unsupported", "the disk with a serial number that "+of+" selects ("+selected+") is not a fixed, writable sd or nvme disk of the size its eraseOnRemoval target declares",
-			"correct that target's sizeBytes on Machine "+host.Machine+" to the disk's exact capacity, as blockdev --getsize64 reports it, or select another disk"),
+		"device-serial-mismatch": failure("lifecycle.unsupported", "the disk with a serial number that "+of+" selects ("+selected+") is not a fixed, writable sd or nvme disk of the size its hardware.dataDisks entry declares",
+			"correct that entry's sizeBytes on Machine "+host.Machine+" to the disk's exact capacity, as blockdev --getsize64 reports it, or select another disk"),
 		"device-alias": failure("lifecycle.unsupported", "the disk with a serial number that "+of+" selects ("+selected+") has no stable /dev/disk/by-id link to give cephadm",
 			"select that disk by its /dev/disk/by-id/wwn-0x path if it has one"),
 	}

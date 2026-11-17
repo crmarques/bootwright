@@ -110,7 +110,7 @@ func refusesDeclaration(refusal lifecycle.Refusal, object api.Object, catalog ap
 	if refusal.Kind != string(api.Machine) || !found {
 		return false
 	}
-	profileName := machine.Spec().Get("os", "installProfileRef").Text()
+	profileName := api.MachineInstallProfileRef(machine)
 	switch object.Kind() {
 	case api.MachineInstallProfile:
 		return profileName == object.Name()

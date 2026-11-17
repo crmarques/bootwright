@@ -56,7 +56,7 @@ An OpenShift-installed Machine with no access block resolves the cluster's
 on port 22. This access-only view is shared by sessions, trust enrollment and
 inspection; it changes no authored or effective-state serialization, plan or
 power operation. It requires exactly one selected cluster membership,
-`os.provided: false` and no Machine OS install profile. Authored access wins as
+`os.clusterInstalled`. Authored access wins as
 a whole; ambiguous membership and public-only cluster keys derive no access.
 A split opaque private key reads its value part, while a keypair reads its
 private part. These nodes use declared or enrolled host keys, or interactive

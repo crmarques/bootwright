@@ -39,8 +39,8 @@ type refusalCase struct {
 func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 	vsphere := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("vsphere", api.MapValue())))
 	hosted := api.NewObject(api.Machine, "node-01", api.Value{}, api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "vc"))),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
+		field("hardware", api.MapValue(text("providerRef", "vc"))),
+		field("os", api.MapValue(field("clusterInstalled", api.MapValue()))),
 	))
 	defaults := provider().Spec().Get("libvirt", "bmcEmulation").With("bindAddress", api.StringValue("0.0.0.0"))
 	wildcard := provider(field("libvirt", provider().Spec().Get("libvirt").With("bmcEmulation", defaults)))
@@ -60,7 +60,7 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 		"A hosted KubeVirt provider's segment on no host secondary network": {catalogOf(controller(), api.NewObject(api.OpenShiftCluster, "host", api.Value{}, api.MapValue()), kubevirtProvider("hostClusterRef", "")),
 			"InfraProvider/kv", map[string]string{"<provider>": "InfraProvider/kv", "<cluster>": "OpenShiftCluster/host", "<segment>": "lab-guests"}},
 		"A Bootwright-installed Machine on KubeVirt": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", ""),
-			kubevirtGuest(text("installProfileRef", "rhel-9-8"))), "Machine/node-01", map[string]string{"<machine>": "Machine/node-01"}},
+			kubevirtGuest(field("install", api.MapValue(text("profileRef", "rhel-9-8"))))), "Machine/node-01", map[string]string{"<machine>": "Machine/node-01"}},
 		"A KubeVirt profile without a size": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "", number("cpu", "0")), kubevirtGuest()),
 			"Machine/node-01", map[string]string{"<provider>": "InfraProvider/kv", "<profile>": "node"}},
 		"A KubeVirt NIC on an unrealized network kind": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "UserDefinedNetwork"), kubevirtGuest()),
@@ -196,14 +196,13 @@ func kubevirtProvider(credential, kind string, profile ...api.FieldValue) api.Ob
 }
 
 func kubevirtGuest(os ...api.FieldValue) api.Object {
-	declared := api.MapValue(field("provided", api.BoolValue(false)))
-	for _, extra := range os {
-		declared = declared.With(extra.Name, extra.Value)
+	declared := api.MapValue(field("clusterInstalled", api.MapValue()))
+	if len(os) > 0 {
+		declared = api.MapValue(os...)
 	}
 	return api.NewObject(api.Machine, "node-01", api.Value{}, api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "kv"), field("kubevirt", api.MapValue(text("profileRef", "node"))))),
+		field("hardware", api.MapValue(text("providerRef", "kv"), text("profileRef", "node"), field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))))),
 		field("os", declared),
-		field("hardware", api.MapValue(field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))))),
 		field("network", api.MapValue(text("configRef", "lab-guests"))),
 	))
 }

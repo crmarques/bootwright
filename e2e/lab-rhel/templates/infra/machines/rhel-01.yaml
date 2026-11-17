@@ -4,21 +4,16 @@ metadata:
   name: rhel-01
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: rhel
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: rhel
+
     nics:
       - name: enp1s0
 
-    rootDevice:
-      deviceName: /dev/vda
-
   os:
-    provided: false
-    installProfileRef: rhel
+    install:
+      profileRef: rhel
 
   network:
     configRef: lab-guests

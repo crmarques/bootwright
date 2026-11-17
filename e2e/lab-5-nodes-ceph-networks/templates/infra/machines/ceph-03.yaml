@@ -5,25 +5,17 @@ metadata:
   name: ceph-03
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: ceph
-
-      nics:
-        - nicRef: nic0
-          segmentRef: ceph-public
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: ceph
+
     nics:
       - name: nic0
-
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: ceph-public
 
   os:
-    provided: false
-    installProfileRef: rhel
+    install:
+      profileRef: rhel
 
   network:
     configRef: ceph-node

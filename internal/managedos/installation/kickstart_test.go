@@ -165,17 +165,12 @@ func TestTheAgentFilterEditIsProvedRatherThanAssumed(t *testing.T) {
 	}
 }
 
-// A Machine with no root-device hint lets the installer choose, because a
-// predicate the graph never declared is not a target selector.
+// A libvirt Machine declares no root disk: the provider creates it, so the
+// installation writes the derived /dev/vda and no other disk.
 func TestAMachineWithoutHintsPartitionsAutomatically(t *testing.T) {
-	noHints := guest(field("hardware", api.MapValue()), field("os", api.MapValue(
-		field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"),
-	)))
-	kickstart := kickstartOf(t, labCatalog(noHints))
-	if strings.Contains(kickstart, "ignoredisk") {
-		t.Fatalf("an undeclared device was selected:\n%s", kickstart)
-	}
-	requireLine(t, kickstart, "clearpart --all --initlabel")
+	kickstart := kickstartOf(t, labCatalog(guest()))
+	requireLine(t, kickstart, "ignoredisk --only-use=vda")
+	requireLine(t, kickstart, "clearpart --all --initlabel --drives=vda")
 }
 
 // One revision always renders one file, because every derived list is ordered

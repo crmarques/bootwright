@@ -10,7 +10,11 @@ import (
 const consumerDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func consumerHost(provided bool, addresses ...api.Value) api.Object {
-	return obj(api.Machine, "host", m("os", m("provided", provided), "network", m("addresses", list(addresses...))))
+	system := m("clusterInstalled", m())
+	if provided {
+		system = m("provided", m())
+	}
+	return obj(api.Machine, "host", m("os", system, "network", m("addresses", list(addresses...))))
 }
 
 func consumerAddresses() []api.Value {
@@ -173,20 +177,20 @@ func TestAManagedServiceRunsOnlyWhereItsMachineProvidesTheOSOrBootwrightInstalls
 		t.Run(string(kind), func(t *testing.T) {
 			service := managedService(kind, consumerSpec(kind, m("name", "contact", "addressRef", "ip")))
 			found := refusalsAt(admit(service, consumerHost(false, consumerAddresses()...)), "$.spec.machineRef")
-			if len(found) != 1 || !mentionsAll(found[0].Message, "Machine/host", "os.provided: false", "names no install profile") ||
-				found[0].Remediation != "set spec.machineRef to a Machine with os.provided: true, or to one with os.installProfileRef" {
+			if len(found) != 1 || !mentionsAll(found[0].Message, "Machine/host", "os.clusterInstalled", "another installer owns it") ||
+				found[0].Remediation != "set spec.machineRef to a Machine with os.provided or os.install" {
 				t.Fatalf("placement on a Machine another installer owns = %#v, want one refusal at $.spec.machineRef", found)
 			}
 			if issues := admit(service, consumerHost(true, consumerAddresses()...)); len(issues) != 0 {
 				t.Fatalf("placement on a Machine that provides its OS was refused: %v", issues)
 			}
-			installed := obj(api.Machine, "host", m("os", m("provided", false, "installProfileRef", "rhel"), "network", m("addresses", list(consumerAddresses()...))))
+			installed := obj(api.Machine, "host", m("os", m("install", m("profileRef", "rhel")), "network", m("addresses", list(consumerAddresses()...))))
 			if found := refusalsAt(admit(service, installed), "$.spec.machineRef"); len(found) != 0 {
 				t.Fatalf("placement on a Machine Bootwright installs was refused: %v", found)
 			}
 			undeclared := obj(api.Machine, "host", m("network", m("addresses", list(consumerAddresses()...))))
 			if found := refusalsAt(admit(service, undeclared), "$.spec.machineRef"); len(found) != 0 {
-				t.Fatalf("a Machine the schema refuses for its missing os.provided got a second diagnostic: %v", found)
+				t.Fatalf("a Machine the schema refuses for its missing os got a second diagnostic: %v", found)
 			}
 		})
 	}

@@ -17,26 +17,18 @@ kind: Machine
 metadata:
   name: anysize-01
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: master
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-guests
-        - nicRef: enp3s0
-          segmentRef: lab-secondary
   hardware:
+    providerRef: lab-libvirt
+    profileRef: master
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-guests
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-secondary
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -59,26 +51,18 @@ kind: Machine
 metadata:
   name: anysize-02
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: master
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-guests
-        - nicRef: enp3s0
-          segmentRef: lab-secondary
   hardware:
+    providerRef: lab-libvirt
+    profileRef: master
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-guests
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-secondary
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -101,26 +85,18 @@ kind: Machine
 metadata:
   name: anysize-03
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: master
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-guests
-        - nicRef: enp3s0
-          segmentRef: lab-secondary
   hardware:
+    providerRef: lab-libvirt
+    profileRef: master
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-guests
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-secondary
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -143,26 +119,18 @@ kind: Machine
 metadata:
   name: anysize-04
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: compute
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-guests
-        - nicRef: enp3s0
-          segmentRef: lab-secondary
   hardware:
+    providerRef: lab-libvirt
+    profileRef: compute
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-guests
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-secondary
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -185,26 +153,18 @@ kind: Machine
 metadata:
   name: anysize-05
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: compute
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-guests
-        - nicRef: enp3s0
-          segmentRef: lab-secondary
   hardware:
+    providerRef: lab-libvirt
+    profileRef: compute
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-guests
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-secondary
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -227,26 +187,18 @@ kind: Machine
 metadata:
   name: anysize-06
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: compute
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-guests
-        - nicRef: enp3s0
-          segmentRef: lab-secondary
   hardware:
+    providerRef: lab-libvirt
+    profileRef: compute
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-guests
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-secondary
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -269,26 +221,18 @@ kind: Machine
 metadata:
   name: anysize-07
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: compute
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-guests
-        - nicRef: enp3s0
-          segmentRef: lab-secondary
   hardware:
+    providerRef: lab-libvirt
+    profileRef: compute
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-guests
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-secondary
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -311,26 +255,18 @@ kind: Machine
 metadata:
   name: anysize-08
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: compute
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-guests
-        - nicRef: enp3s0
-          segmentRef: lab-secondary
   hardware:
+    providerRef: lab-libvirt
+    profileRef: compute
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-guests
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-secondary
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -353,26 +289,18 @@ kind: Machine
 metadata:
   name: anysize-09
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: compute
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-guests
-        - nicRef: enp3s0
-          segmentRef: lab-secondary
   hardware:
+    providerRef: lab-libvirt
+    profileRef: compute
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-guests
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-secondary
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -395,26 +323,18 @@ kind: Machine
 metadata:
   name: anysize-10
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: compute
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-        - nicRef: enp2s0
-          segmentRef: lab-guests
-        - nicRef: enp3s0
-          segmentRef: lab-secondary
   hardware:
+    providerRef: lab-libvirt
+    profileRef: compute
     nics:
       - name: enp1s0
+        segmentRef: lab-guests
       - name: enp2s0
+        segmentRef: lab-guests
       - name: enp3s0
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: lab-secondary
   os:
-    provided: false
+    clusterInstalled: {}
   network:
     configRef: lab-guests
     installAddressRef: ip
@@ -438,7 +358,7 @@ metadata:
   name: controller
 spec:
   os:
-    provided: true
+    provided: {}
   proxy:
     direct: {}
   network:
@@ -448,7 +368,7 @@ spec:
       - name: ip
         address: 192.0.2.1
   access:
-    local: true
+    local: {}
     rootLogin: keep
 ---
 apiVersion: bootwright.io/v1alpha1

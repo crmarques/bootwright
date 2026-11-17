@@ -60,8 +60,12 @@ func TestUnclaimedObjectTableMatchesTheEngine(t *testing.T) {
 		return api.NewObject(kind, name, api.Value{}, api.MapValue(api.FieldValue{Name: "management", Value: api.StringValue(management)}))
 	}
 	machine := func(name string, provided bool) api.Object {
+		system := "clusterInstalled"
+		if provided {
+			system = "provided"
+		}
 		return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
-			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(provided)})}))
+			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: system, Value: api.MapValue()})}))
 	}
 	playbook := func(name string, enabled bool) api.Object {
 		return api.NewObject(api.CustomPlaybook, name, api.Value{}, api.MapValue(api.FieldValue{Name: "enabled", Value: api.BoolValue(enabled)}))

@@ -30,13 +30,13 @@ func text(name, value string) api.FieldValue { return field(name, api.StringValu
 
 func controller() api.Object {
 	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("proxy", api.MapValue(field("direct", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "controller.lab.example.test")),
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.1")),
 		)))),
-		field("access", api.MapValue(field("local", api.BoolValue(true)))),
+		field("access", api.MapValue(field("local", api.MapValue()))),
 	))
 }
 
@@ -129,7 +129,7 @@ func TestRequestCanonicalFormIsStableAndOrdered(t *testing.T) {
 // own context compares their sockets there.
 func TestSSHPlacementRequiresKeyAndHostKeyAndClaimsOnItsHostAlone(t *testing.T) {
 	remote := api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.9")),
 		)))),
@@ -165,7 +165,7 @@ func TestSSHPlacementRequiresKeyAndHostKeyAndClaimsOnItsHostAlone(t *testing.T) 
 		t.Fatalf("secrets = %v", plan.Secrets)
 	}
 	unusable := api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("access", api.MapValue(field("ssh", api.MapValue(
 			field("auth", api.MapValue(field("operatorIdentity", api.MapValue()))),
 		)))),
@@ -691,7 +691,7 @@ func clusterCatalog() api.Catalog {
 		)))),
 	))
 	node := api.NewObject(api.Machine, "sno-01", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
+		field("os", api.MapValue(field("clusterInstalled", api.MapValue()))),
 		field("network", api.MapValue(
 			text("configRef", "guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(
@@ -732,9 +732,9 @@ func clientMachine(name, site, installRef string, addresses ...api.Value) api.Ob
 	if installRef != "" {
 		network = append(network, text("installAddressRef", installRef))
 	}
-	fields := []api.FieldValue{field("os", api.MapValue(field("provided", api.BoolValue(false)))), field("network", api.MapValue(network...))}
+	fields := []api.FieldValue{field("os", api.MapValue(field("clusterInstalled", api.MapValue()))), field("network", api.MapValue(network...))}
 	if site != "" {
-		fields = append(fields, field("placement", api.MapValue(text("site", site))))
+		fields = append(fields, text("site", site))
 	}
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(fields...))
 }
@@ -934,7 +934,7 @@ func TestTwoDefinitionsOfOneKindPlanEachObjectExactlyOnce(t *testing.T) {
 
 func TestAnApplyOnAnSSHPlacementHandsTheRunnerItsContainerRuntimeRefusal(t *testing.T) {
 	remote := api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.9")),
 		)))),
@@ -989,7 +989,7 @@ func TestAnApplyOnAnSSHPlacementHandsTheRunnerItsContainerRuntimeRefusal(t *test
 
 func TestAServiceOnAProviderHostMachineReachedOverSSHRequiresTheHostBlock(t *testing.T) {
 	remote := api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.9")),
 		)))),

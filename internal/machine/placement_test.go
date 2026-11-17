@@ -29,7 +29,7 @@ func admitPlacementHost(machine api.Object) []api.Issue {
 }
 
 func providedHost(name string, ssh api.Value) api.Object {
-	return object(api.Machine, name, m("os", m("provided", true), "access", m("ssh", ssh)))
+	return object(api.Machine, name, m("os", m("provided", m()), "access", m("ssh", ssh)))
 }
 
 func privilegeInvariants(issues []api.Issue) []string {
@@ -52,7 +52,7 @@ func TestALifecyclePlacementHostConnectsAsRoot(t *testing.T) {
 		"libvirt provider host as another account": {providedHost("hypervisor", m("user", "operator", "auth", key)), "$.spec.access.ssh.user"},
 		"operator identity as another account":     {providedHost("services", m("user", "operator", "auth", m("operatorIdentity", m()))), "$.spec.access.ssh.user"},
 		"root host with an escalation Secret":      {providedHost("services", m("user", "root", "auth", key, "sudoPasswordRef", "services-sudo")), "$.spec.access.ssh.sudoPasswordRef"},
-		"installed host of a libvirt provider":     {object(api.Machine, "hypervisor", m("os", m("provided", false, "installProfileRef", "rhel"))), "$.spec.access.ssh.user"},
+		"installed host of a libvirt provider":     {object(api.Machine, "hypervisor", m("os", m("install", m("profileRef", "rhel")))), "$.spec.access.ssh.user"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if issues := admitPlacementHost(tc.machine); !slices.Equal(privilegeInvariants(issues), []string{tc.field}) {
@@ -71,11 +71,11 @@ func TestALifecyclePlacementHostConnectsAsRoot(t *testing.T) {
 			}
 		})
 	}
-	if issues := admitPlacementHost(object(api.Machine, "services", m("os", m("provided", false, "installProfileRef", "rhel")))); len(privilegeInvariants(issues)) != 0 {
+	if issues := admitPlacementHost(object(api.Machine, "services", m("os", m("install", m("profileRef", "rhel"))))); len(privilegeInvariants(issues)) != 0 {
 		t.Fatalf("an installed host of a managed service, whose services escalate as its installation configured, was refused its account: %v", issues)
 	}
 	host := func(ssh api.Value) api.Object {
-		return object(api.Machine, "services", m("os", m("provided", true), "network", m("addresses", list(m("name", "ip", "address", "192.0.2.2"))), "access", m("ssh", ssh)))
+		return object(api.Machine, "services", m("os", m("provided", m()), "network", m("addresses", list(m("name", "ip", "address", "192.0.2.2"))), "access", m("ssh", ssh)))
 	}
 	root := m("addressRef", "ip", "auth", key, "knownHostsRef", "services-host-key")
 	for _, ssh := range []api.Value{root, root.With("user", api.StringValue("root"))} {
@@ -125,7 +125,7 @@ func TestAPlacementNeverBindsAnEscalationSecret(t *testing.T) {
 func TestAServiceOnAnInstalledMachineTakesTheInstalledArm(t *testing.T) {
 	addresses := list(m("name", "fqdn", "address", "mirror.example.test"), m("name", "ip", "address", "198.51.100.20"))
 	installed := func(ssh api.Value) api.Object {
-		spec := m("os", m("provided", false, "installProfileRef", "rhel"), "network", m("installAddressRef", "ip", "addresses", addresses))
+		spec := m("os", m("install", m("profileRef", "rhel")), "network", m("installAddressRef", "ip", "addresses", addresses))
 		if ssh.Present() {
 			spec = spec.With("access", m("ssh", ssh))
 		}

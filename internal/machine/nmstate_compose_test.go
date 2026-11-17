@@ -15,9 +15,8 @@ func TestAdmissionAndRealizationComposeOneNetwork(t *testing.T) {
 		"interfaces", list(m("name", "eth0", "mtu", api.IntegerValue("9000")), m("name", "eth1", "type", "ethernet", "state", "down")),
 		"routes", m("config", list(m("next-hop-address", "192.0.2.1"))),
 	)
-	nics := list(m("name", "eth0"), m("name", "eth1"))
-	macs := list(m("nicRef", "eth0", "macAddress", "02-00-00-00-00-01"), m("nicRef", "eth1", "macAddress", "02-00-00-00-00-02"))
-	o = o.WithSpec(o.Spec().WithPath(overrides, "network", "overrides").WithPath(nics, "hardware", "nics").WithPath(macs, "substrate", "baremetal", "nics"))
+	nics := list(m("name", "eth0", "macAddress", "02-00-00-00-00-01"), m("name", "eth1", "macAddress", "02-00-00-00-00-02"))
+	o = o.WithSpec(o.Spec().WithPath(overrides, "network", "overrides").WithPath(nics, "hardware", "nics"))
 	objects := []api.Object{o}
 	for _, other := range c.Objects() {
 		if other.Kind() != api.Machine {

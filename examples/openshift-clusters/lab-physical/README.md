@@ -15,7 +15,7 @@ is claimed. The accepted [lab-sno](../lab-sno/) and
 
 - Machines `physical-01` to `physical-05` on the `lab-metal` bare-metal
   provider, each with a Redfish BMC address, a declared NIC (`eno1` and its
-  MAC) and a stable root-disk selector in `substrate.baremetal.rootDevice`.
+  MAC) and a stable root-disk selector in `hardware.rootDisk`.
   `physical-01` uses `serialNumber` and exact `sizeBytes`; the other nodes demonstrate
   `wwn`. Every BMC name, MAC and disk identity is synthetic; replace them
   with verified identities and all physical NICs. Physical agent installs
@@ -46,7 +46,7 @@ is claimed. The accepted [lab-sno](../lab-sno/) and
   the disks.
 
 For a connection that intentionally skips certificate checks, set
-`substrate.baremetal.bmc.tls.verification: none` on that Machine and author no
+`hardware.bmc.tls.verification: none` on that Machine and author no
 `trustBundleRef`. This is the per-connection YAML setting; it is available for
 claims and power operations. This installation profile's private delivery and
 logical-root/erase proofs require verified BMC identity and refuse that mode.

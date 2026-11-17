@@ -4,33 +4,22 @@ metadata:
   name: anysize-05
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-
-    libvirt:
-      profileRef: compute
-
-      nics:
-        - nicRef: enp1s0
-          segmentRef: lab-guests
-
-        - nicRef: enp2s0
-          segmentRef: lab-guests
-
-        - nicRef: enp3s0
-          segmentRef: lab-secondary
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: compute
+
     nics:
       - name: enp1s0
-      - name: enp2s0
-      - name: enp3s0
+        segmentRef: lab-guests
 
-    rootDevice:
-      deviceName: /dev/vda
+      - name: enp2s0
+        segmentRef: lab-guests
+
+      - name: enp3s0
+        segmentRef: lab-secondary
 
   os:
-    provided: false
+    clusterInstalled: {}
 
   network:
     configRef: lab-guests

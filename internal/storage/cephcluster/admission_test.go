@@ -59,7 +59,7 @@ func fixtureCatalog() api.Catalog {
 		name := fmt.Sprintf("node-%d", i)
 		machine := fmt.Sprintf("machine-%d", i)
 		nodes = append(nodes, m("name", name, "machineRef", machine, "labels", api.StringList("mon", "mgr", "storage")))
-		objects = append(objects, object(api.Machine, machine, m("placement", m("site", "site-a"), "hardware", m("rootDevice", m("deviceName", "/dev/vda")), "os", m("provided", true), "network", m("addresses", []api.Value{assignedAddress("ssh", fmt.Sprintf("192.0.2.%d", i))}), "access", m("ssh", m("addressRef", "ssh")))))
+		objects = append(objects, object(api.Machine, machine, m("site", "site-a", "hardware", m("rootDisk", m("hints", m("deviceName", "/dev/vda"))), "os", m("provided", m()), "network", m("addresses", []api.Value{assignedAddress("ssh", fmt.Sprintf("192.0.2.%d", i))}), "access", m("ssh", m("addressRef", "ssh")))))
 	}
 	objects = append(objects, lanNetwork("public", "192.0.2.0/24"),
 		object(api.CephCluster, "storage", m("release", "19.2.1", "cephadm", m("clusterSSH", m("user", "root"), "bootstrap", m("nodeRef", "node-1")), "networks", m("publicCIDRs", api.StringList("192.0.2.0/24")), "services", coreServices(), "topology", m("nodes", nodes), "config", m("global", m("osd_pool_default_size", "2", "osd_pool_default_min_size", "2")))),
@@ -212,6 +212,34 @@ func TestOSDOwnershipRootDeviceAndPlacement(t *testing.T) {
 	services[0] = services[0].With("placement", m("hosts", api.StringList("machine-1")))
 	mutated = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "services"))
 	requireIssue(t, Validate(mutated, replace(catalog, mutated)), "$.spec.services[0].placement.hosts[0]")
+}
+
+func TestOSDOwnershipRefusesTheVirtualRootOfAProviderMachine(t *testing.T) {
+	catalog := fixtureCatalog()
+	cluster := find(t, catalog, api.CephCluster, "storage")
+	services := cluster.Spec().Get("services").Items()
+	services[2] = services[2].WithPath(m("paths", api.StringList("/dev/vda")), "spec", "data_devices")
+	mutated := cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "services"))
+	for _, arm := range []string{"libvirt", "kubevirt"} {
+		for _, os := range []string{"install", "provided"} {
+			spec := m()
+			if os == "install" {
+				spec = m("profileRef", "rhel")
+			}
+			withVirtual := replace(replace(catalog, mutated), object(api.InfraProvider, "lab", m(arm, m())))
+			for i := 1; i <= 3; i++ {
+				machine := find(t, catalog, api.Machine, fmt.Sprintf("machine-%d", i))
+				withVirtual = replace(withVirtual, machine.WithSpec(machine.Spec().Without("hardware").WithPath(m("providerRef", "lab"), "hardware").With("os", m(os, spec))))
+			}
+			found := false
+			for _, issue := range Validate(mutated, withVirtual) {
+				found = found || issue.Field == "$.spec.services[2].spec.data_devices" && issue.Message == rootOSDReason
+			}
+			if !found {
+				t.Errorf("a %s Machine with os.%s admitted /dev/vda as an OSD data device", arm, os)
+			}
+		}
+	}
 }
 
 func TestExternalStorageAndEntitlementVariants(t *testing.T) {
@@ -393,7 +421,7 @@ func TestStretchConstrainsProtection(t *testing.T) {
 		}
 		name := fmt.Sprintf("stretch-%d", i)
 		nodes = append(nodes, m("name", name, "fqdn", name+".example.test", "machineRef", name, "site", site, "labels", api.StringList("mon", "mgr", "storage")))
-		catalog = replace(catalog, object(api.Machine, name, m("placement", m("site", site), "os", m("provided", true))))
+		catalog = replace(catalog, object(api.Machine, name, m("site", site, "os", m("provided", m()))))
 	}
 	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(nodes...), "topology", "nodes").WithPath(m("failureDomain", "datacenter", "dataSites", api.StringList("site-a", "site-b"), "tiebreaker", api.MapValue()), "topology", "stretch").WithPath(m("nodeRef", "stretch-0"), "cephadm", "bootstrap"))
 	catalog = replace(catalog, cluster)
@@ -492,30 +520,30 @@ func TestOSDRootExclusionMatchesADeclaredWWN(t *testing.T) {
 	catalog := fixtureCatalog()
 	machine := find(t, catalog, api.Machine, "machine-1")
 	for _, wwn := range []string{"0x5000C500A1B2C3D4", "5000c500a1b2c3d4"} {
-		rooted := machine.WithSpec(machine.Spec().WithPath(m("wwn", wwn), "substrate", "baremetal", "rootDevice"))
+		rooted := machine.WithSpec(machine.Spec().WithPath(api.StringValue(wwn), "hardware", "rootDisk", "wwn"))
 		withRoot := replace(catalog, rooted)
 		cluster := find(t, withRoot, api.CephCluster, "storage")
 		services := cluster.Spec().Get("services").Items()
 		services[2] = services[2].WithPath(m("paths", api.StringList("/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")), "spec", "data_devices")
 		mutated := cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "services"))
 		requireIssue(t, Validate(mutated, replace(withRoot, mutated)), "$.spec.services[2].spec.data_devices")
-		if !rootDevice(rooted, "/dev/vda") || rootDevice(rooted, "/dev/disk/by-id/wwn-0x5000c500a1b2c3d5") {
+		if !rootDevice(withRoot, rooted, "/dev/vda") || rootDevice(withRoot, rooted, "/dev/disk/by-id/wwn-0x5000c500a1b2c3d5") {
 			t.Fatalf("the root of a Machine declaring wwn %s and /dev/vda is misread", wwn)
 		}
 	}
-	installed := machine.WithSpec(machine.Spec().Without("hardware").WithPath(m("wwn", "0x5000c500a1b2c3d4"), "substrate", "baremetal", "rootDevice").
-		WithPath(api.BoolValue(false), "os", "provided").WithPath(api.StringValue("rhel"), "os", "installProfileRef"))
-	if !rootDevice(installed, "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4") || rootDevice(installed, "/dev/disk/by-id/wwn-0x5000c500a1b2c3d5") {
+	installed := machine.WithSpec(machine.Spec().Without("hardware").WithPath(api.StringValue("0x5000c500a1b2c3d4"), "hardware", "rootDisk", "wwn").
+		WithPath(m("install", m("profileRef", "rhel")), "os"))
+	if !rootDevice(catalog, installed, "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4") || rootDevice(catalog, installed, "/dev/disk/by-id/wwn-0x5000c500a1b2c3d5") {
 		t.Fatal("the root an installed physical Machine declares by wwn alone is misread")
 	}
 }
 
-func TestASerialOSDPathNamesOnlyADiskItsInstalledBareMetalMachineDeclaresWithoutDeviceName(t *testing.T) {
+func TestASerialOSDPathNamesOnlyADiskItsInstalledBareMetalMachineDeclaresWithoutWWN(t *testing.T) {
 	provider := object(api.InfraProvider, "rack", m("baremetal", m()))
-	targets := []api.Value{m("serialNumber", "ROOT-1", "sizeBytes", 4096*1024), m("serialNumber", "SER-1", "sizeBytes", 1<<40),
-		m("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", "wwn", "0x5000c500a1b2c3d4", "serialNumber", "SER-WWN", "sizeBytes", 1<<40)}
-	machine := object(api.Machine, "machine-1", m("substrate", m("providerRef", "rack", "baremetal", m("rootDevice", m("serialNumber", "ROOT-1", "sizeBytes", 4096*1024))),
-		"os", m("provided", false, "installProfileRef", "rhel"), "hardware", m("eraseOnRemoval", m("method", "logicalOverwrite", "targets", targets))))
+	disks := []api.Value{m("serialNumber", "SER-1", "sizeBytes", 1<<40, "onRemoval", "logicalOverwrite"),
+		m("wwn", "0x5000c500a1b2c3d4", "serialNumber", "SER-WWN", "sizeBytes", 1<<40, "onRemoval", "logicalOverwrite")}
+	machine := object(api.Machine, "machine-1", m("hardware", m("providerRef", "rack", "rootDisk", m("serialNumber", "ROOT-1", "sizeBytes", 4096*1024), "dataDisks", disks),
+		"os", m("install", m("profileRef", "rhel"))))
 	catalog := api.NewCatalog([]api.Object{provider, machine})
 	if serial, size, reason, _ := SerialSelection(catalog, machine, "/dev/disk/by-serial/SER-1"); serial != "SER-1" || size != 1<<40 || reason != "" {
 		t.Fatalf("serial selection %q %d %q", serial, size, reason)
@@ -523,8 +551,8 @@ func TestASerialOSDPathNamesOnlyADiskItsInstalledBareMetalMachineDeclaresWithout
 	if serial, _, reason, _ := SerialSelection(catalog, machine, "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"); serial != "" || reason != "" {
 		t.Fatal("a WWN path read as a serial selection")
 	}
-	undeclared := "declare the disk in spec.hardware.eraseOnRemoval.targets of Machine machine-1 with its serialNumber and sizeBytes and no deviceName, or select it by that target's deviceName"
-	provided := machine.WithSpec(machine.Spec().WithPath(api.BoolValue(true), "os", "provided"))
+	undeclared := "declare the disk in spec.hardware.dataDisks of Machine machine-1 with its serialNumber, sizeBytes and a non-retain onRemoval and no wwn, or select it by its wwn path"
+	provided := machine.WithSpec(machine.Spec().WithPath(m("provided", m()), "os"))
 	for _, test := range []struct {
 		name, path     string
 		machine        api.Object
@@ -532,15 +560,15 @@ func TestASerialOSDPathNamesOnlyADiskItsInstalledBareMetalMachineDeclaresWithout
 	}{
 		{"not installed", "/dev/disk/by-serial/SER-1", provided, "a /dev/disk/by-serial/ path names a disk that a Bootwright-installed bare-metal Machine declares by serial number, and Machine machine-1 is not one", "select a device path that exists on this host"},
 		{"grammar", "/dev/disk/by-serial/SER/1", machine, "a /dev/disk/by-serial/ path carries a serial number of 1 to 128 ASCII letters, digits and ._:+- characters", "select this disk by its /dev/disk/by-id/wwn-0x path"},
-		{"undeclared", "/dev/disk/by-serial/SER-2", machine, "the serial number SER-2 that this OSD selection names is no eraseOnRemoval target of Machine machine-1 declared without deviceName, which would give its exact size", undeclared},
-		{"by deviceName", "/dev/disk/by-serial/SER-WWN", machine, "the serial number SER-WWN that this OSD selection names is no eraseOnRemoval target of Machine machine-1 declared without deviceName, which would give its exact size", undeclared},
+		{"undeclared", "/dev/disk/by-serial/SER-2", machine, "the serial number SER-2 that this OSD selection names is no hardware.dataDisks entry of Machine machine-1 with a non-retain onRemoval and no wwn, which would give its exact size", undeclared},
+		{"with a wwn", "/dev/disk/by-serial/SER-WWN", machine, "the serial number SER-WWN that this OSD selection names is no hardware.dataDisks entry of Machine machine-1 with a non-retain onRemoval and no wwn, which would give its exact size", undeclared},
 		{"root", "/dev/disk/by-serial/ROOT-1", machine, "explicit OSD allocation cannot use the Machine root device", "remove the Machine root device from the OSD selector and select a dedicated data device"},
 	} {
 		if _, _, reason, remedy := SerialSelection(catalog, test.machine, test.path); reason != test.reason || remedy != test.remedy {
 			t.Errorf("%s: %q %q", test.name, reason, remedy)
 		}
 	}
-	if !rootDevice(machine, "/dev/disk/by-serial/ROOT-1") || rootDevice(machine, "/dev/disk/by-serial/SER-1") {
+	if !rootDevice(catalog, machine, "/dev/disk/by-serial/ROOT-1") || rootDevice(catalog, machine, "/dev/disk/by-serial/SER-1") {
 		t.Fatal("the root disk declared by serial number is misread")
 	}
 	fixture := fixtureCatalog()

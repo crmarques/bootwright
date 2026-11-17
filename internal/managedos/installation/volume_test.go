@@ -54,7 +54,7 @@ func TestLogicalVolumeSelectorsReachFrozenRequestGolden(t *testing.T) {
 		"volume-ref":  api.MapValue().With("volumeRef", api.MapValue().With("storageId", api.StringValue("RAID")).With("volumeId", api.StringValue("OS"))),
 	} {
 		machine := server(api.MapValue())
-		machine = machine.WithSpec(machine.Spec().WithPath(selector, "substrate", "baremetal", "rootDevice"))
+		machine = machine.WithSpec(machine.Spec().WithPath(selector, "hardware", "rootDisk"))
 		request := requestOf(t, labCatalog(metalProvider(), machine, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), machine.Name())
 		data, err := request.Canonical()
 		if err != nil {

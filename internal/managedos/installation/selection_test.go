@@ -87,9 +87,7 @@ func TestRequirementsNameEveryServiceTheGuestUses(t *testing.T) {
 // A Machine's own NTP override replaces the profile's list as a whole, which is
 // what the API contract says it does.
 func TestAMachineNTPOverrideReplacesTheProfileList(t *testing.T) {
-	override := guest(field("os", guest().Spec().Get("os").With("install", api.MapValue(
-		field("ntp", api.ListValue()),
-	))))
+	override := guest(field("os", guest().Spec().Get("os").With("install", guest().Spec().Get("os", "install").With("ntp", api.ListValue()))))
 	request, needs := onlyRequest(t, labCatalog(override))
 	if len(needs.NTPServers) != 0 {
 		t.Fatalf("an empty override kept %v", needs.NTPServers)
@@ -210,16 +208,16 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 // name another boot gives another disk, and a by-id WWN path refuses naming
 // the wwn it spells.
 func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
-	const everyForm = "spec.substrate.baremetal.rootDevice.wwn"
+	const everyForm = "spec.hardware.rootDisk.wwn"
 	for name, test := range map[string]struct {
 		hints  api.Value
 		remedy []string
 	}{
 		"predicates only":         {api.MapValue(text("model", "PERC H755"), number("minSizeGigabytes", "400")), []string{everyForm + " on Machine/metal-01", "its volumeRef to an existing logical volume", "default to bootVolume"}},
-		"a kernel name":           {api.MapValue(text("deviceName", "/dev/sda")), []string{"remove spec.hardware.rootDevice.deviceName from Machine/metal-01", everyForm, "volumeRef", "bootVolume"}},
-		"another by-id path":      {api.MapValue(text("deviceName", "/dev/disk/by-id/ata-ST4000NM0035_ZC1A2B3C")), []string{"remove spec.hardware.rootDevice.deviceName from Machine/metal-01", everyForm, "volumeRef", "bootVolume"}},
-		"a by-id partition":       {api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4-part1")), []string{"remove spec.hardware.rootDevice.deviceName from Machine/metal-01", everyForm}},
-		"a by-id WWN path":        {api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")), []string{"replace spec.hardware.rootDevice.deviceName on Machine/metal-01 with " + everyForm + ": 0x5000c500a1b2c3d4"}},
+		"a kernel name":           {api.MapValue(text("deviceName", "/dev/sda")), []string{"remove spec.hardware.rootDisk.hints.deviceName from Machine/metal-01", everyForm, "volumeRef", "bootVolume"}},
+		"another by-id path":      {api.MapValue(text("deviceName", "/dev/disk/by-id/ata-ST4000NM0035_ZC1A2B3C")), []string{"remove spec.hardware.rootDisk.hints.deviceName from Machine/metal-01", everyForm, "volumeRef", "bootVolume"}},
+		"a by-id partition":       {api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4-part1")), []string{"remove spec.hardware.rootDisk.hints.deviceName from Machine/metal-01", everyForm}},
+		"a by-id WWN path":        {api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")), []string{"replace spec.hardware.rootDisk.hints.deviceName on Machine/metal-01 with " + everyForm + ": 0x5000c500a1b2c3d4"}},
 		"a by-id path beside wwn": {api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("wwn", "0x5000c500a1b2c3d4")), []string{everyForm + ": 0x5000c500a1b2c3d4"}},
 		"an uppercase wwn":        {api.MapValue(text("wwn", "0x5000C500A1B2C3D4")), []string{everyForm + " on Machine/metal-01 to the disk's WWN in that form"}},
 		"a wwn of another length": {api.MapValue(text("wwn", "0x5000c500a1b2c3")), []string{everyForm + " on Machine/metal-01 to the disk's WWN in that form"}},
@@ -246,7 +244,7 @@ func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 func TestAPrivateInstallationFreezesExplicitDisabledVerification(t *testing.T) {
 	metal := metalOn("eno1", hardwareNIC("eno1", "52:54:00:9a:1b:01"))
 	metal = metal.WithSpec(metal.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
-		"substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
+		"hardware", "bmc", "virtualMedia", "tls", "trust"))
 	catalog := metalCatalog(metal, metalNetwork(declaredInterface("eno1", "ethernet")))
 	if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
 		t.Fatalf("unsupported = %v", unsupported)
@@ -314,15 +312,15 @@ func TestImportCertificateNeedsAnHttpsImageAndItsCertificate(t *testing.T) {
 func TestAPrivateInstallationRefusesAnUnverifiedController(t *testing.T) {
 	const reason = "a Machine whose installation delivers private material hands its BMC the private installer image URL, " +
 		"so the BMC must be reached over https with its certificate verified"
-	const remedy = "address the BMC of Machine/metal-01 with an https:// spec.substrate.baremetal.bmc.address and remove the tls.verify opt-out " +
-		"on Machine/metal-01 or in spec.baremetal.defaults.bmc of InfraProvider/lab-metal; " +
+	const remedy = "address the BMC of Machine/metal-01 with an https:// spec.hardware.bmc.address and remove the tls.verification: none opt-out " +
+		"on Machine/metal-01; " +
 		"name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it"
 	for name, change := range map[string]func(api.Value) api.Value{
 		"an http controller": func(spec api.Value) api.Value {
-			return spec.WithPath(api.StringValue("http://bmc-01.lab.example.test/redfish/v1/Systems/1"), "substrate", "baremetal", "bmc", "address")
+			return spec.WithPath(api.StringValue("http://bmc-01.lab.example.test/redfish/v1/Systems/1"), "hardware", "bmc", "address")
 		},
 		"verification disabled": func(spec api.Value) api.Value {
-			return spec.WithPath(api.BoolValue(false), "substrate", "baremetal", "bmc", "tls", "verify")
+			return spec.WithPath(api.StringValue("none"), "hardware", "bmc", "tls", "verification")
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -418,7 +416,7 @@ func TestAVerifiedPhysicalInstallationDerivesAPrivateRequest(t *testing.T) {
 func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 	onGuest := func(hints api.Value) api.Object {
 		declared := guest()
-		return declared.WithSpec(declared.Spec().WithPath(hints, "hardware", "rootDevice"))
+		return declared.WithSpec(declared.Spec().WithPath(hints, "hardware", "rootDisk", "hints"))
 	}
 	for name, test := range map[string]struct {
 		overrides   []api.Object
@@ -427,25 +425,25 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 	}{
 		"a physical model": {
 			[]api.Object{metalProvider(), server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"), text("model", "PERC H755")))},
-			"Machine/metal-01", "remove spec.hardware.rootDevice.model from Machine/metal-01",
+			"Machine/metal-01", "remove spec.hardware.rootDisk.hints.model from Machine/metal-01",
 		},
 		"a physical hctl beside its wwn and serial": {
 			[]api.Object{metalProvider(), server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"),
 				text("serialNumber", "ZC1A2B3C"), text("hctl", "0:0:0:0")))},
-			"Machine/metal-01", "remove spec.substrate.baremetal.rootDevice.hctl from Machine/metal-01",
+			"Machine/metal-01", "remove spec.hardware.rootDisk.hints.hctl from Machine/metal-01",
 		},
 		"a guest's rotational": {
-			[]api.Object{onGuest(api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))))},
-			"Machine/rhel-01", "remove spec.hardware.rootDevice.rotational from Machine/rhel-01",
+			[]api.Object{onGuest(api.MapValue(field("rotational", api.BoolValue(false))))},
+			"Machine/rhel-01", "remove spec.hardware.rootDisk.hints.rotational from Machine/rhel-01",
 		},
 		"a guest's model alone": {
 			[]api.Object{onGuest(api.MapValue(text("model", "QEMU HARDDISK")))},
-			"Machine/rhel-01", "remove spec.hardware.rootDevice.model from Machine/rhel-01",
+			"Machine/rhel-01", "remove spec.hardware.rootDisk.hints.model from Machine/rhel-01",
 		},
 		"a guest's vendor and size": {
 			[]api.Object{onGuest(api.MapValue(text("vendor", "QEMU"), number("minSizeGigabytes", "40")))},
 			"Machine/rhel-01",
-			"remove spec.hardware.rootDevice.minSizeGigabytes, spec.hardware.rootDevice.vendor from Machine/rhel-01",
+			"remove spec.hardware.rootDisk.hints.minSizeGigabytes, spec.hardware.rootDisk.hints.vendor from Machine/rhel-01",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -456,7 +454,7 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 			_, _, err := Requests(catalog, "controller", testContext)
 			expectRefusal(t, err, "lifecycle.unsupported")
 			reported := diagnostics.Of(err)[0]
-			if reported.Message != "a managed-OS installation selects its root disk by deviceName on a virtual Machine or, on a physical Machine, by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares" {
+			if reported.Message != "a managed-OS installation selects its root disk by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the root-disk hints the Machine declares" {
 				t.Fatalf("message = %q", reported.Message)
 			}
 			if reported.Remediation != test.remediation {
@@ -471,9 +469,9 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 			}
 		})
 	}
-	request, _ := onlyRequest(t, labCatalog(onGuest(api.MapValue(text("deviceName", "/dev/vda")))))
+	request, _ := onlyRequest(t, labCatalog(guest()))
 	if !strings.Contains(request.Kickstart, "ignoredisk --only-use=vda") {
-		t.Fatal("a guest naming its device alone was not installed onto it")
+		t.Fatal("a libvirt guest was not installed onto its derived /dev/vda")
 	}
 }
 

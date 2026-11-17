@@ -28,8 +28,8 @@ func TestControllerRequiresOneProvidedLocalMachine(t *testing.T) {
 		{"missing reference", strings.Replace(serviceEnvironment, "{machineRef: service-host}", "{}", 1), serviceHost, "", "api.required", "$.spec.controller.machineRef"},
 		{"missing Machine", serviceEnvironment, "", "", "api.reference", "$.spec.controller.machineRef"},
 		{"wrong kind", serviceEnvironment, "", "apiVersion: bootwright.io/v1alpha1\nkind: NTPServer\nmetadata: {name: service-host}\nspec: {management: external, address: time.example.test}\n", "api.reference", "$.spec.controller.machineRef"},
-		{"SSH Machine", serviceEnvironment, strings.Replace(serviceHost, "access: {local: true}", "access: {ssh: {auth: {operatorIdentity: {}}}}", 1), "", "api.invariant", "$.spec.controller.machineRef"},
-		{"unprovided Machine", serviceEnvironment, strings.Replace(serviceHost, "provided: true", "provided: false", 1), "", "api.invariant", "$.spec.controller.machineRef"},
+		{"SSH Machine", serviceEnvironment, strings.Replace(serviceHost, "access: {local: {}}", "access: {ssh: {auth: {operatorIdentity: {}}}}", 1), "", "api.invariant", "$.spec.controller.machineRef"},
+		{"unprovided Machine", serviceEnvironment, strings.Replace(serviceHost, "provided: {}", "install: {profileRef: absent}", 1), "", "api.invariant", "$.spec.controller.machineRef"},
 		{"second local Machine", serviceEnvironment, serviceHost, strings.Replace(serviceHost, "name: service-host", "name: other-local", 1), "api.invariant", "$.spec.controller.machineRef"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -39,7 +39,7 @@ func TestControllerRequiresOneProvidedLocalMachine(t *testing.T) {
 	state, _ := compileAcceptance(t, controllerInputs(serviceEnvironment, serviceHost))
 	env := requireObject(t, state.Effective(), api.Environment, "synthetic")
 	host := requireObject(t, state.Effective(), api.Machine, "service-host")
-	if env.Spec().Get("controller", "machineRef").Text() != host.Name() || !host.Spec().Get("os", "provided").Bool() || !host.Spec().Get("access", "local").Bool() {
+	if env.Spec().Get("controller", "machineRef").Text() != host.Name() || !host.Spec().Has("os", "provided") || !host.Spec().Has("access", "local") {
 		t.Fatal("controller identity was not retained as the declared Machine reference")
 	}
 }
@@ -123,7 +123,7 @@ func TestControllerProxyRetainsItsServiceDependencies(t *testing.T) {
 	t.Parallel()
 	env := serviceEnvironment + "  containerClusters: [trust-cluster]\n"
 	proxyHost := strings.Replace(serviceHost, "name: service-host", "name: proxy-host", 1)
-	proxyHost = strings.Replace(proxyHost, "access: {local: true}", "access: {ssh: {auth: {operatorIdentity: {}}}}", 1)
+	proxyHost = strings.Replace(proxyHost, "access: {local: {}}", "access: {ssh: {auth: {operatorIdentity: {}}}}", 1)
 	proxy := "apiVersion: bootwright.io/v1alpha1\nkind: Proxy\nmetadata: {name: egress}\nspec:\n  management: managed\n  implementation: squid\n  machineRef: proxy-host\n  endpoints: [{name: controller, addressRef: service}]\n"
 	inputs := trustInputs(env, "", proxyHost, proxy)
 	for i, file := range inputs.Files {

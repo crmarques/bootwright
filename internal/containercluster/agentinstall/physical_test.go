@@ -12,7 +12,7 @@ func physicalWithController(change func(api.Value) api.Value) api.Catalog {
 	objects := physicalCatalog().Objects()
 	for i, object := range objects {
 		if object.Kind() == api.Machine && object.Name() == "metal-01" {
-			objects[i] = object.WithSpec(object.Spec().WithPath(change(object.Spec().Get("substrate", "baremetal", "bmc")), "substrate", "baremetal", "bmc"))
+			objects[i] = object.WithSpec(object.Spec().WithPath(change(object.Spec().Get("hardware", "bmc")), "hardware", "bmc"))
 		}
 	}
 	return api.NewCatalog(objects)
@@ -27,7 +27,7 @@ func TestPhysicalPrivateDeliveryRequiresVerifiedManagementAndAnExplicitFetchPoli
 		"HTTP": {func(v api.Value) api.Value {
 			return v.With("address", api.StringValue("http://bmc.example.test/redfish/v1/Systems/1"))
 		}, "HTTPS"},
-		"unverified controller": {func(v api.Value) api.Value { return v.WithPath(api.BoolValue(false), "tls", "verify") }, "verifies"},
+		"unverified controller": {func(v api.Value) api.Value { return v.WithPath(api.StringValue("none"), "tls", "verification") }, "verifies"},
 		"unverified fetch": {func(v api.Value) api.Value {
 			return v.WithPath(api.StringValue("disableVerification"), "virtualMedia", "tls", "trust")
 		}, ""},
@@ -73,11 +73,11 @@ func TestPhysicalAgentRootRefusesBeforeRenderingInstallerInputs(t *testing.T) {
 	for device, remedy := range map[string]string{
 		"/dev/sda":                               "volumeRef",
 		"/dev/disk/by-path/pci-0000:00:04.0":     "volumeRef",
-		"/dev/disk/by-id/wwn-0x5000c500a1b2c3d4": "spec.substrate.baremetal.rootDevice.wwn: 0x5000c500a1b2c3d4",
+		"/dev/disk/by-id/wwn-0x5000c500a1b2c3d4": "spec.hardware.rootDisk.wwn: 0x5000c500a1b2c3d4",
 	} {
 		catalog := physicalWithRoot(text("deviceName", device))
 		refusals := Refusals(catalog)
-		if len(refusals) != 1 || !strings.Contains(refusals[0].Reason, "never by spec.hardware.rootDevice.deviceName") || !strings.Contains(refusals[0].Remediation, "Machine/metal-01") || !strings.Contains(refusals[0].Remediation, remedy) {
+		if len(refusals) != 1 || !strings.Contains(refusals[0].Reason, "never by spec.hardware.rootDisk.hints.deviceName") || !strings.Contains(refusals[0].Remediation, "Machine/metal-01") || !strings.Contains(refusals[0].Remediation, remedy) {
 			t.Fatalf("unsafe root refusal = %+v", refusals)
 		}
 		if _, _, _, err := Requests(catalog, "controller", testContext); err == nil {
@@ -104,7 +104,7 @@ func TestPhysicalAgentWWNReachesTheInstallerAsItsWWNHint(t *testing.T) {
 	}
 	for _, malformed := range []string{"0X5000C500A1B2C3D4", "5000c500a1b2c3d4", "naa.5000c500a1b2c3d4"} {
 		refusals := Refusals(physicalWithRoot(text("wwn", malformed)))
-		if len(refusals) != 1 || !strings.Contains(refusals[0].Remediation, "spec.substrate.baremetal.rootDevice.wwn on Machine/metal-01") {
+		if len(refusals) != 1 || !strings.Contains(refusals[0].Remediation, "spec.hardware.rootDisk.wwn on Machine/metal-01") {
 			t.Fatalf("a malformed wwn %s = %+v", malformed, refusals)
 		}
 	}

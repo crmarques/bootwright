@@ -335,7 +335,7 @@ func installerArguments(catalog api.Catalog, machine api.Object, request Request
 		}
 		arguments = append(arguments, argument)
 	}
-	if !substrate.VirtualArm(substrate.MachineArm(machine)) {
+	if !substrate.VirtualArm(substrate.MachineArm(catalog, machine)) {
 		return arguments, nil
 	}
 	for _, nic := range substrate.MachineNICs(machine) {

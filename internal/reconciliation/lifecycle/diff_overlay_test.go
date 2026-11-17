@@ -96,7 +96,17 @@ func TestAnObservationOverlaysTheAppliedObject(t *testing.T) {
 }
 
 func profileMachine(name, profile string) api.Object {
-	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(field("os", api.MapValue(field("provided", api.BoolValue(true)), text("installProfileRef", profile)))))
+	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(field("os", api.MapValue(field("install", api.MapValue(text("profileRef", profile)))))))
+}
+
+func withClaimedMachines(f diffFixture) diffFixture {
+	f.service.options.EffectBearing = func(object api.Object) (Bearing, bool) {
+		if object.Kind() == api.Machine {
+			return Bearing{}, false
+		}
+		return domainEffects(object)
+	}
+	return f
 }
 
 func installProfile(name, version string) api.Object {
@@ -105,7 +115,7 @@ func installProfile(name, version string) api.Object {
 
 func splitFixture(t *testing.T, applied string, versions map[string]string, extra ...api.Object) (diffFixture, *DiffResult) {
 	t.Helper()
-	f := newDiffHarness(t, "alpha", "bravo", "charlie")
+	f := withClaimedMachines(newDiffHarness(t, "alpha", "bravo", "charlie"))
 	holders := map[string]string{"alpha": "rhel-01", "bravo": "rhel-02", "charlie": "rhel-03"}
 	objects := append([]api.Object{installProfile("rhel", applied)}, servers("v1", "alpha", "bravo", "charlie")...)
 	for _, block := range []string{"alpha", "bravo", "charlie"} {
@@ -125,7 +135,7 @@ func splitFixture(t *testing.T, applied string, versions map[string]string, extr
 			}
 			return []Projection{{
 				Kind: api.MachineInstallProfile, Name: "rhel", Observed: observed,
-				Holder: &ProjectionHolder{Kind: api.Machine, Name: holders[block.Object], Field: "spec.os.installProfileRef"},
+				Holder: &ProjectionHolder{Kind: api.Machine, Name: holders[block.Object], Field: "spec.os.install.profileRef"},
 			}}, nil
 		})
 	return f, f.observe(t)
@@ -144,7 +154,7 @@ func TestHoldersThatReadASharedObjectDifferentlySplitIt(t *testing.T) {
 		t.Fatalf("the copy reads %+v", copied.Real)
 	}
 	for machine, profile := range map[string]string{"rhel-01": "rhel", "rhel-02": "rhel-rhel-02", "rhel-03": "rhel"} {
-		if holder := objectOf(t, result, api.Machine, machine); holder.Real.Object.Spec().Get("os", "installProfileRef").Text() != profile {
+		if holder := objectOf(t, result, api.Machine, machine); holder.Real.Object.Spec().Get("os", "install", "profileRef").Text() != profile {
 			t.Fatalf("%s reads %+v", machine, holder.Real.Object)
 		}
 	}
@@ -163,7 +173,7 @@ func TestAHolderObservingNoDisputedFieldKeepsTheObject(t *testing.T) {
 		t.Fatalf("the split made copies %v", copies)
 	}
 	for machine, profile := range map[string]string{"rhel-01": "rhel", "rhel-02": "rhel-rhel-02", "rhel-03": "rhel"} {
-		if holder := objectOf(t, result, api.Machine, machine); holder.Real.Object.Spec().Get("os", "installProfileRef").Text() != profile {
+		if holder := objectOf(t, result, api.Machine, machine); holder.Real.Object.Spec().Get("os", "install", "profileRef").Text() != profile {
 			t.Fatalf("%s reads %+v", machine, holder.Real.Object)
 		}
 	}
@@ -190,7 +200,7 @@ func TestWithoutAnAppliedGroupTheLargestKeepsTheObjectAndTakenNamesMoveOn(t *tes
 		copied.Real.Path != "profiles/rhel-rhel-02-2.yaml" {
 		t.Fatalf("rhel reads %+v, its copy %+v", rhel.Real, copied.Real)
 	}
-	if holder := objectOf(t, result, api.Machine, "rhel-02"); holder.Real.Object.Spec().Get("os", "installProfileRef").Text() != "rhel-rhel-02-2" {
+	if holder := objectOf(t, result, api.Machine, "rhel-02"); holder.Real.Object.Spec().Get("os", "install", "profileRef").Text() != "rhel-rhel-02-2" {
 		t.Fatalf("rhel-02 reads %+v", holder.Real.Object)
 	}
 	_, tied := splitFixture(t, "9.2", map[string]string{"alpha": "9.6", "bravo": "9.4"})
@@ -206,15 +216,15 @@ func TestAHolderMustBeAppliedAndReferenceTheProjectedKind(t *testing.T) {
 		holder ProjectionHolder
 		reason string
 	}{
-		"an undeclared holder": {ProjectionHolder{Kind: api.Machine, Name: "rhel-09", Field: "spec.os.installProfileRef"},
+		"an undeclared holder": {ProjectionHolder{Kind: api.Machine, Name: "rhel-09", Field: "spec.os.install.profileRef"},
 			"its projection of MachineInstallProfile/rhel names a holder the applied revision does not declare: Machine/rhel-09"},
-		"a path for a holder": {ProjectionHolder{Kind: api.Machine, Name: "../rhel-01", Field: "spec.os.installProfileRef"},
+		"a path for a holder": {ProjectionHolder{Kind: api.Machine, Name: "../rhel-01", Field: "spec.os.install.profileRef"},
 			`its projection of MachineInstallProfile/rhel names a holder by an invalid name: "../rhel-01"`},
-		"a field of another kind": {ProjectionHolder{Kind: api.Machine, Name: "rhel-01", Field: "spec.substrate.providerRef"},
-			"its projection of MachineInstallProfile/rhel names a holder field that does not reference MachineInstallProfile: spec.substrate.providerRef"},
+		"a field of another kind": {ProjectionHolder{Kind: api.Machine, Name: "rhel-01", Field: "spec.hardware.providerRef"},
+			"its projection of MachineInstallProfile/rhel names a holder field that does not reference MachineInstallProfile: spec.hardware.providerRef"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			f := newDiffHarness(t, "alpha")
+			f := withClaimedMachines(newDiffHarness(t, "alpha"))
 			objects := append([]api.Object{installProfile("rhel", "9.4"), profileMachine("rhel-01", "rhel")}, servers("v1", "alpha")...)
 			f.compiler.states[digestOf(f.workspace.inputs)] = filedState(objects, objects, nil)
 			f.apply(t)

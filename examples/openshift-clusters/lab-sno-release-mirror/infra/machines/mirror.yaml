@@ -5,7 +5,7 @@ metadata:
 
 spec:
   os:
-    provided: true
+    provided: {}
 
   proxy:
     direct: {}

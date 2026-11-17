@@ -209,7 +209,7 @@ func withStretchTiebreaker(catalog api.Catalog, fips bool) api.Catalog {
 		}
 		objects[i] = object.WithSpec(spec)
 	}
-	tie := requestMap("os", requestMap("provided", true), "network", requestMap("addresses", api.ListValue(requestMap("name", "ip", "address", "203.0.113.10"))),
+	tie := requestMap("os", requestMap("provided", api.MapValue()), "network", requestMap("addresses", api.ListValue(requestMap("name", "ip", "address", "203.0.113.10"))),
 		"access", requestMap("ssh", requestMap("addressRef", "ip", "user", "operator", "knownHostsRef", "tie-known-hosts", "auth", requestMap("operatorIdentity", api.MapValue()))))
 	objects = append(objects, api.NewObject(api.Machine, "tie", api.Value{}, tie))
 	if len(catalog.OfKind(api.Environment)) == 0 {

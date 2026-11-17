@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"slices"
-	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -20,6 +19,7 @@ import (
 const EraseImplementation = "physical-erase-v1"
 const eraseRequestVersion = "physical-erase-v1"
 const eraseVariable = "bootwright_physical_erase"
+const eraseTargetsRemedy = "correct onRemoval and the disk identity of spec.hardware.rootDisk and spec.hardware.dataDisks"
 
 const (
 	EraseLogicalOverwrite = "logicalOverwrite"
@@ -70,15 +70,15 @@ func DecodeEraseRequest(data []byte) (EraseRequest, error) {
 func IsErase(implementation string) bool { return implementation == EraseImplementation }
 
 func eraseRequest(machine api.Object, install installation.Request) (EraseRequest, error) {
-	policy := machine.Spec().Get("hardware", "eraseOnRemoval")
+	declared := substrate.EraseTargets(machine)
 	request := EraseRequest{Version: eraseRequestVersion, Install: install, DeadlineSeconds: 14400}
 	var err error
 	request.InstallDigest, err = installation.RequestDigestOf(install)
 	if err != nil {
 		return request, err
 	}
-	if !install.Target.Physical || install.Private == nil || machine.Spec().Get("os", "provided").Bool() || !eraseMethod(policy.Get("method").Text()) {
-		return request, refusal("api.invariant", "physical erase requires a managed physical Anaconda Machine and the logicalOverwrite or metadataClear method", "omit spec.hardware.eraseOnRemoval to retain its disks")
+	if !install.Target.Physical || install.Private == nil || !api.MachineInstalled(machine) || len(declared) == 0 {
+		return request, refusal("api.invariant", "physical erase requires a managed physical Anaconda Machine and the logicalOverwrite or metadataClear onRemoval", "set onRemoval to retain, or omit it, on spec.hardware.rootDisk and every spec.hardware.dataDisks entry to retain its disks")
 	}
 	for _, line := range strings.Split(install.Kickstart, "\n") {
 		if strings.HasPrefix(line, "network ") {
@@ -89,44 +89,37 @@ func eraseRequest(machine api.Object, install installation.Request) (EraseReques
 		return request, refusal("api.invariant", "physical erase requires its install network declaration", "declare the Machine install network")
 	}
 	seen := [3]map[string]bool{{}, {}, {}}
-	root := substrate.RootDevicePath(machine)
+	root := substrate.DeclaredRootDevicePath(machine)
 	hardware := install.Target.Hardware
-	for _, value := range policy.Get("targets").Items() {
-		size, err := strconv.ParseInt(value.Get("sizeBytes").Text(), 10, 64)
-		if err != nil {
-			return request, refusal("api.value", "physical erase target size must be an exact integer", "set sizeBytes to the disk's exact logical capacity")
-		}
-		target := EraseTarget{DeviceName: value.Get("deviceName").Text(), Method: policy.Get("method").Text(), WWN: value.Get("wwn").Text(), SerialNumber: value.Get("serialNumber").Text(), SizeBytes: size}
-		if value.Has("method") {
-			target.Method = value.Get("method").Text()
-		}
+	for _, value := range declared {
+		target := EraseTarget{DeviceName: value.DeviceName, Method: value.Method, WWN: value.WWN, SerialNumber: value.SerialNumber, SizeBytes: value.SizeBytes}
 		if !eraseMethod(target.Method) {
-			return request, refusal("api.value", "physical erase target method must be logicalOverwrite or metadataClear", "correct spec.hardware.eraseOnRemoval.targets")
+			return request, refusal("api.value", "physical erase target method must be logicalOverwrite or metadataClear", eraseTargetsRemedy)
 		}
-		if value.Has("deviceName") != value.Has("wwn") {
-			return request, refusal("api.value", "physical erase target names its disk by deviceName with its wwn, or by serialNumber and sizeBytes alone", "correct spec.hardware.eraseOnRemoval.targets")
+		if (target.DeviceName == "") != (target.WWN == "") {
+			return request, refusal("api.value", "physical erase target names its disk by the path its wwn derives, or by serialNumber and sizeBytes alone", eraseTargetsRemedy)
 		}
-		bySerial := !value.Has("deviceName")
-		if !bySerial && !api.ValidLexical(api.LexicalDevicePath, target.DeviceName) || !diskselection.ValidSize(size) {
-			return request, refusal("api.value", "physical erase target needs a whole device path and a 4096-byte aligned exact capacity up to 64 TiB", "correct spec.hardware.eraseOnRemoval.targets")
+		bySerial := target.DeviceName == ""
+		if !bySerial && !api.ValidLexical(api.LexicalDevicePath, target.DeviceName) || !diskselection.ValidSize(target.SizeBytes) {
+			return request, refusal("api.value", "physical erase target needs a whole device path and a 4096-byte aligned exact capacity up to 64 TiB", eraseTargetsRemedy)
 		}
-		if target.Method == EraseLogicalOverwrite && size > machineref.MaxLogicalOverwriteBytes {
-			return request, refusal("api.value", "physical erase logicalOverwrite target "+eraseTargetName(target)+" is larger than 896 GiB, so its write and readback cannot fit the four-hour erase deadline", "declare method metadataClear for this target, or a disk of at most 896 GiB")
+		if target.Method == EraseLogicalOverwrite && target.SizeBytes > machineref.MaxLogicalOverwriteBytes {
+			return request, refusal("api.value", "physical erase logicalOverwrite target "+eraseTargetName(target)+" is larger than 896 GiB, so its write and readback cannot fit the four-hour erase deadline", "set onRemoval to metadataClear for this disk, or declare a disk of at most 896 GiB")
 		}
 		for index, identity := range []string{target.DeviceName, target.WWN, target.SerialNumber} {
 			if bySerial && index < 2 {
 				continue
 			}
 			if identity == "" || len(identity) > 256 || strings.TrimSpace(identity) != identity || strings.ContainsAny(identity, "\r\n\x00") || seen[index][identity] {
-				return request, refusal("api.value", "physical erase target identities must be nonempty, bounded and unique", "correct spec.hardware.eraseOnRemoval.targets")
+				return request, refusal("api.value", "physical erase target identities must be nonempty, bounded and unique", eraseTargetsRemedy)
 			}
 			if index == 2 && !diskselection.ValidSerial(identity) {
-				return request, refusal("api.value", "physical erase target serial numbers must be 1 to 256 ASCII letters, digits and ._:+/=- characters", "correct spec.hardware.eraseOnRemoval.targets")
+				return request, refusal("api.value", "physical erase target serial numbers must be 1 to 256 ASCII letters, digits and ._:+/=- characters", eraseTargetsRemedy)
 			}
 			seen[index][identity] = true
 		}
 		if root == "" && !bySerial && hardware != nil && hardware.SerialNumber != "" && target.SerialNumber == hardware.SerialNumber {
-			return request, refusal("api.invariant", "a serial-selected root erase target uses the original serial-only selector", "omit deviceName and wwn for this root target")
+			return request, refusal("api.invariant", "a serial-selected root erase target uses the original serial-only selector", "omit wwn on the disk that repeats the serial-selected root")
 		}
 		request.Targets = append(request.Targets, target)
 	}
@@ -134,7 +127,7 @@ func eraseRequest(machine api.Object, install installation.Request) (EraseReques
 		return request, err
 	}
 	if len(request.Targets) == 0 || len(request.Targets) > machineref.MaxEraseTargets {
-		return request, refusal("api.invariant", "physical erase requires 1 to 16 explicit whole-disk targets", "list each disk to erase; an omitted root disk is retained")
+		return request, refusal("api.invariant", "physical erase requires 1 to 16 explicit whole-disk targets", "set onRemoval on each disk to erase; a disk without it is retained")
 	}
 	slices.SortFunc(request.Targets, eraseTargetOrder)
 	request.Install.Private = &installation.Publication{Path: install.Private.Path + "-erase", URL: install.Private.URL + "-erase", CertificateRef: install.Private.CertificateRef}
@@ -160,12 +153,12 @@ func eraseRootRules(targets []EraseTarget, root string, hardware *installation.H
 		}
 		if root == "" && target.DeviceName != "" {
 			return refusal("api.invariant", "physical erase target "+eraseTargetName(target)+" names the WWN "+recorded+" the serial-selected root disk reported at installation, and a serial-selected root erase target uses the original serial-only selector",
-				"omit deviceName and wwn for this root target")
+				"omit wwn on the disk that repeats the serial-selected root")
 		}
 		if target.DeviceName != "" && hardware.WWN != "" && eraseWWN(target.WWN) != eraseWWN(hardware.WWN) || hardware.SerialNumber != "" && target.SerialNumber != hardware.SerialNumber ||
 			hardware.SizeBytes != 0 && target.SizeBytes != hardware.SizeBytes {
-			return refusal("api.invariant", "physical erase's root target names another wwn, serialNumber or sizeBytes than spec.substrate.baremetal.rootDevice declares for the same disk",
-				"make the root target of spec.hardware.eraseOnRemoval and spec.substrate.baremetal.rootDevice name the same wwn, serialNumber and sizeBytes")
+			return refusal("api.invariant", "physical erase's root target names another wwn, serialNumber or sizeBytes than spec.hardware.rootDisk declares for the same disk",
+				"declare the root disk once, in spec.hardware.rootDisk, with its wwn, serialNumber and sizeBytes")
 		}
 	}
 	return nil

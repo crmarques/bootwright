@@ -75,11 +75,10 @@ func TestSelectingEitherEndOfAReplicationRetainsBothClustersWhole(t *testing.T) 
 func TestAnAuthoredClusterListKeepsStandaloneInstalledMachines(t *testing.T) {
 	installed := func(name, provider string) api.Object {
 		return selectionObject(api.Machine, name, "os", api.MapValue(
-			api.FieldValue{Name: "provided", Value: api.BoolValue(false)},
-			api.FieldValue{Name: "installProfileRef", Value: api.StringValue("rhel")}),
-			"substrate", selectionValue("providerRef", provider))
+			api.FieldValue{Name: "install", Value: api.MapValue(api.FieldValue{Name: "profileRef", Value: api.StringValue("rhel")})}),
+			"hardware", selectionValue("providerRef", provider))
 	}
-	provided := selectionObject(api.Machine, "existing", "os", api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(true)}))
+	provided := selectionObject(api.Machine, "existing", "os", api.MapValue(api.FieldValue{Name: "provided", Value: api.MapValue()}))
 	objects := selectionFixture(selectionEnvironment("env", "containerClusters", []string{"c0"}),
 		installed("bastion", "prov-bastion"),
 		selectionObject(api.InfraProvider, "prov-bastion", "libvirt", selectionValue("machineRef", "bastion-host")),
@@ -136,7 +135,7 @@ func TestAManagedNetworkRetainsItsProviderClosure(t *testing.T) {
 func TestSelectingANestedClusterRetainsItsHostCluster(t *testing.T) {
 	objects := []api.Object{
 		selectionEnvironment("multidc", "containerClusters", []string{"hub-multidc-01"}),
-		selectionObject(api.Machine, "ctl", "substrate", selectionValue("providerRef", "prov-ctl")),
+		selectionObject(api.Machine, "ctl", "hardware", selectionValue("providerRef", "prov-ctl")),
 		selectionObject(api.InfraProvider, "prov-ctl", "libvirt", selectionValue("machineRef", "host-ctl")),
 		selectionObject(api.Machine, "host-ctl"),
 		selectionObject(api.Machine, "ocp-01-n"),
@@ -144,7 +143,7 @@ func TestSelectingANestedClusterRetainsItsHostCluster(t *testing.T) {
 		selectionObject(api.ClusterAddonBinding, "ocp-01-addons", "clusterRef", "ocp-multidc-01", "addonRefs", []string{"openshift-virtualization"}),
 		selectionObject(api.ClusterAddon, "openshift-virtualization"),
 		selectionObject(api.InfraProvider, "kubevirt-ocp-multidc-01", "kubevirt", selectionValue("hostClusterRef", "ocp-multidc-01")),
-		selectionObject(api.Machine, "hub-01-n", "substrate", selectionValue("providerRef", "kubevirt-ocp-multidc-01")),
+		selectionObject(api.Machine, "hub-01-n", "hardware", selectionValue("providerRef", "kubevirt-ocp-multidc-01")),
 		selectionContainer("hub-multidc-01", "hub-01-n"),
 		selectionObject(api.Machine, "ocp-02-n"),
 		selectionContainer("ocp-multidc-02", "ocp-02-n"),

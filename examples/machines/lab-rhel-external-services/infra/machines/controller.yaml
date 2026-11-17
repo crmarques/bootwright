@@ -5,7 +5,7 @@ metadata:
 
 spec:
   os:
-    provided: true
+    provided: {}
 
   proxy:
     proxyRef: lab-proxy
@@ -23,4 +23,4 @@ spec:
         address: 192.0.2.1
 
   access:
-    local: true
+    local: {}

@@ -470,11 +470,11 @@ func exampleBudget(t *testing.T, catalog api.Catalog) profileBudget {
 	t.Helper()
 	var budget profileBudget
 	for _, machine := range catalog.OfKind(api.Machine) {
-		profileName := machine.Spec().Get("substrate", "libvirt", "profileRef").Text()
+		profileName := machine.Spec().Get("hardware", "profileRef").Text()
 		if profileName == "" {
 			continue
 		}
-		providerName := machine.Spec().Get("substrate", "providerRef").Text()
+		providerName := machine.Spec().Get("hardware", "providerRef").Text()
 		provider, ok := catalog.Find(api.InfraProvider, providerName)
 		if !ok {
 			t.Fatalf("Machine/%s names the missing InfraProvider/%s", machine.Name(), providerName)

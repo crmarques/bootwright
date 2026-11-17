@@ -237,7 +237,7 @@ func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Bl
 		if !systemToken.MatchString(system) {
 			return infrastructureservices.HostReservation{}, false, refusal("lifecycle.state",
 				"the system UUID the management controller at "+request.Controller.Endpoint+" reported cannot name a host claim",
-				"correct spec.substrate.baremetal.bmc.address on Machine/"+request.Identity.Object+" so it names a BMC that reports a standard UUID")
+				"correct spec.hardware.bmc.address on Machine/"+request.Identity.Object+" so it names a BMC that reports a standard UUID")
 		}
 		claim.Keys = append(claim.Keys, infrastructureservices.SystemReservationKey(system).String())
 	}
@@ -245,13 +245,13 @@ func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Bl
 	if len(claim.Keys)+len(addresses) > infrastructureservices.MaxReservationKeys {
 		return infrastructureservices.HostReservation{}, false, refusal("lifecycle.state",
 			"Machine/"+request.Identity.Object+" declares more than "+strconv.Itoa(infrastructureservices.MaxReservationKeys-len(claim.Keys))+" MAC addresses to claim the machine by",
-			"correct spec.substrate.baremetal.nics on Machine/"+request.Identity.Object)
+			"correct spec.hardware.nics on Machine/"+request.Identity.Object)
 	}
 	if identity.UUID == "" && len(addresses) == 0 {
 		return infrastructureservices.HostReservation{}, false, refusal("lifecycle.state",
 			"the management controller at "+request.Controller.Endpoint+" reported no system UUID, and Machine/"+request.Identity.Object+
 				" declares no MAC address to claim the machine by",
-			"correct spec.substrate.baremetal.nics on Machine/"+request.Identity.Object)
+			"correct spec.hardware.nics on Machine/"+request.Identity.Object)
 	}
 	hardware := make([]string, 0, len(addresses))
 	for _, address := range addresses {

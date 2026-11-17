@@ -49,8 +49,12 @@ func TestProviderVariantsAndNormalization(t *testing.T) {
 			}
 			switch variant {
 			case "baremetal":
-				if !o.Spec().Get(variant, "defaults", "bmc", "tls", "verify").Bool() {
-					t.Fatal("TLS verification missing")
+				bmc := o.Spec().Get(variant, "defaults", "bmc")
+				if !BMCVerified(bmc) || bmc.Has("protocol") || bmc.Has("tls", "verify") || bmc.Has("tls", "verification") {
+					t.Fatalf("a provider default materialized a TLS mode: %v", bmc)
+				}
+				if !bmc.Get("virtualMedia", "tls", "enableVerification").Bool() {
+					t.Fatal("media verification not enabled under verified BMC TLS")
 				}
 			case "vsphere":
 				if o.Spec().Get(variant, "machineProfiles").Items()[0].Get("failureDomainRef").Text() != "zone-a" {
@@ -87,7 +91,7 @@ func TestLibvirtBMCPortRangesDoNotOverlapOnOneHost(t *testing.T) {
 		return obj(api.InfraProvider, name, m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("port", api.IntegerValue(port), "bindAddress", "192.0.2.1", "auth", m("credentialsRef", "bmc")))))
 	}
 	machine := func(name, provider string) api.Object {
-		return obj(api.Machine, name, m("substrate", m("providerRef", provider)))
+		return obj(api.Machine, name, m("hardware", m("providerRef", provider)))
 	}
 	host := obj(api.Machine, "host", m())
 	a, b := provider("a", "8000"), provider("b", "8001")
@@ -183,34 +187,45 @@ func fieldsOf(issues []api.Issue) []string {
 	return fields
 }
 
-// A bundle is an anchor only for a verified leg, so one beside verification
-// turned off refuses wherever it meets it: authored on a provider, authored on
-// a Machine, and on the effective Machine whose opt-out it inherited.
-func TestTrustBundleRequiresVerification(t *testing.T) {
-	bundled := m("credentialsRef", "bmc", "tls", m("verify", false, "trustBundleRef", "bmc-ca"))
+// A provider default keeps only its trust bundle, and a bundle beside
+// verification none is the secrets admission's refusal, so the substrate
+// refuses none of these at either the provider or the Machine.
+func TestATrustBundleIsNoSubstrateRefusal(t *testing.T) {
+	bundled := m("credentialsRef", "bmc", "tls", m("trustBundleRef", "bmc-ca"))
 	provider := obj(api.InfraProvider, "floor", m("baremetal", m("defaults", m("bmc", bundled))))
-	want := "$.spec.baremetal.defaults.bmc.tls.trustBundleRef"
 	for name, issues := range map[string][]api.Issue{
 		"authored provider":  ValidateAuthored(provider, api.Catalog{}),
 		"effective provider": Validate(provider, api.Catalog{}),
 	} {
-		if fields := fieldsOf(issues); len(fields) != 1 || fields[0] != want {
-			t.Fatalf("%s: issues at %v, want %s", name, fields, want)
-		}
-		if issues[0].Code != "api.invariant" || issues[0].Remediation != "set tls.verify: true where the bundle is declared, or remove tls.trustBundleRef" ||
-			issues[0].Message != "a BMC trust bundle requires verification, and tls.verify is false here, whether authored or inherited" {
-			t.Fatalf("%s: issue = %+v", name, issues[0])
+		if len(issues) != 0 {
+			t.Fatalf("%s: %v", name, issues)
 		}
 	}
-	machine := m("address", "https://bmc.example.test/redfish/v1/Systems/1", "tls", bundled.Get("tls"))
-	for name, authored := range map[string]bool{"authored Machine": true, "effective Machine under an inherited opt-out": false} {
-		if fields := fieldsOf(ValidateBMCDefaults(machine, "$.spec.substrate.baremetal.bmc", authored)); len(fields) != 1 || fields[0] != "$.spec.substrate.baremetal.bmc.tls.trustBundleRef" {
-			t.Fatalf("%s: issues at %v", name, fields)
+	for _, tls := range []api.Value{
+		m("verification", "full", "trustBundleRef", "bmc-ca"), m("verification", "certificate", "trustBundleRef", "bmc-ca"),
+		m("trustBundleRef", "bmc-ca"), m("verification", "none"), m("verification", "none", "trustBundleRef", "bmc-ca"),
+	} {
+		machine := m("address", "https://bmc.example.test/redfish/v1/Systems/1", "tls", tls)
+		for _, authored := range []bool{true, false} {
+			if issues := ValidateBMCDefaults(machine, "$.spec.hardware.bmc", authored); len(issues) != 0 {
+				t.Fatalf("tls %v refused: %v", tls, issues)
+			}
 		}
 	}
-	for _, tls := range []api.Value{m("verify", true, "trustBundleRef", "bmc-ca"), m("trustBundleRef", "bmc-ca"), m("verify", false)} {
-		if issues := ValidateBMCDefaults(m("tls", tls), "$.spec.substrate.baremetal.bmc", true); len(issues) != 0 {
-			t.Fatalf("tls %v refused: %v", tls, issues)
+}
+
+func TestCertificateVerificationRequiresAnHTTPSControllerEndpoint(t *testing.T) {
+	plain := m("address", "http://bmc.example.test/redfish/v1/Systems/1", "tls", m("verification", "certificate"))
+	if fields := fieldsOf(ValidateBMCDefaults(plain, "$.spec.hardware.bmc", true)); len(fields) != 1 || fields[0] != "$.spec.hardware.bmc.tls.verification" {
+		t.Fatalf("issues at %v", fields)
+	}
+	for _, bmc := range []api.Value{
+		m("address", "https://bmc.example.test/redfish/v1/Systems/1", "tls", m("verification", "certificate")),
+		m("address", "http://bmc.example.test/redfish/v1/Systems/1", "tls", m("verification", "full")),
+		m("address", "http://bmc.example.test/redfish/v1/Systems/1", "tls", m("verification", "none")),
+	} {
+		if issues := ValidateBMCDefaults(bmc, "$.spec.hardware.bmc", true); len(issues) != 0 {
+			t.Fatalf("bmc %v refused: %v", bmc, issues)
 		}
 	}
 }
@@ -236,7 +251,6 @@ func TestVirtualMediaTrustDefaultsToImportCertificate(t *testing.T) {
 
 func TestEnablingMediaVerificationRequiresVerifiedBMCAndCompatibleTrust(t *testing.T) {
 	for name, bmc := range map[string]api.Value{
-		"unverified BMC":    m("tls", m("verify", false), "virtualMedia", m("tls", m("enableVerification", true))),
 		"disabled trust":    m("virtualMedia", m("tls", m("trust", TrustDisableVerification, "enableVerification", true))),
 		"none verification": m("tls", m("verification", "none"), "virtualMedia", m("tls", m("enableVerification", true))),
 	} {
@@ -265,7 +279,7 @@ func TestProviderVirtualMediaDisableVerificationRefuses(t *testing.T) {
 			t.Fatalf("%s: issues at %v, want %s", name, fields, want)
 		}
 		if issues[0].Message != "disableVerification is a per-Machine exception and never a provider default" ||
-			issues[0].Remediation != "declare substrate.baremetal.bmc.virtualMedia.tls.trust: disableVerification on each Machine that needs it" {
+			issues[0].Remediation != "declare hardware.bmc.virtualMedia.tls.trust: disableVerification on each Machine that needs it" {
 			t.Fatalf("%s: issue = %+v", name, issues[0])
 		}
 	}
@@ -276,7 +290,7 @@ func TestProviderVirtualMediaDisableVerificationRefuses(t *testing.T) {
 		}
 	}
 	machine := m("virtualMedia", m("tls", m("trust", TrustDisableVerification, "restoreVerificationAfterBoot", false)))
-	if issues := ValidateBMCDefaults(machine, "$.spec.substrate.baremetal.bmc", true); len(issues) != 0 {
+	if issues := ValidateBMCDefaults(machine, "$.spec.hardware.bmc", true); len(issues) != 0 {
 		t.Fatalf("a Machine's own exception refused: %v", issues)
 	}
 }

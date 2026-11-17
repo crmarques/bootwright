@@ -14,7 +14,7 @@ ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 NAA = re.compile(r"[0-9a-f]{16}(?:[0-9a-f]{16})?")
 REFUSAL = (
     "the existing root volume could not be proved with one unique OS-correlatable NAA identifier and exact capacity; "
-    "declare a directly mappable spec.substrate.baremetal.rootDevice.volumeRef, or select the OS-visible disk by serialNumber and sizeBytes"
+    "declare a directly mappable spec.hardware.rootDisk.volumeRef, or select the OS-visible disk by serialNumber and sizeBytes"
 )
 Refused = redfish_root_disk.Refused
 

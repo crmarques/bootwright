@@ -4,20 +4,15 @@ metadata:
   name: sno-01
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: sno
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: sno
+
     nics:
       - name: enp1s0
 
-    rootDevice:
-      deviceName: /dev/vda
-
   os:
-    provided: false
+    clusterInstalled: {}
 
   network:
     configRef: lab-guests

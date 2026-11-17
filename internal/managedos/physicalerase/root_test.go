@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -17,10 +18,8 @@ import (
 
 const serialRootSize = "480103981056"
 
-func serialRootMachine(targets ...api.Value) api.Object {
-	machine := server(api.MapValue(text("serialNumber", "ZC1A2B3C"), number("sizeBytes", serialRootSize)))
-	hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", "metadataClear"), field("targets", api.ListValue(targets...))))
-	return api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", hardware))
+func serialRootMachine(root string, data ...api.Value) api.Object {
+	return erasing(server(api.MapValue(text("serialNumber", "ZC1A2B3C"), number("sizeBytes", serialRootSize))), root, data...)
 }
 
 type rootErase struct {
@@ -60,6 +59,18 @@ func installedRootErase(t *testing.T, machine api.Object, state reconciliation.B
 	return rootErase{request: request, execution: execution}
 }
 
+func withTargets(t *testing.T, erase rootErase, targets ...EraseTarget) rootErase {
+	t.Helper()
+	erase.request.Targets = slices.Clone(targets)
+	slices.SortFunc(erase.request.Targets, eraseTargetOrder)
+	canonical, err := erase.request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	erase.execution.Block.Request = canonical
+	return erase
+}
+
 func completedWith(wwn string) func(installation.Request, string) installation.Evidence {
 	return func(install installation.Request, digest string) installation.Evidence {
 		return installation.Evidence{Address: install.Address, HostKey: "ssh-ed25519 AAAAHOST", Postcondition: true, Power: "On", Reachable: true, Request: digest,
@@ -77,20 +88,20 @@ func eraseRun(t *testing.T, erase rootErase) (*fakeRunner, error) {
 
 // A root declared by serial number has the WWN it reported at installation
 // recorded in that installation's evidence, and its erase compares it: a
-// target naming that WWN, by its wwn under any path or by the by-id path an
+// frozen target naming that WWN, by its wwn under any path or by the by-id path an
 // NAA identifier derives, is the root, which a serial-selected root's target
 // names by its serial number alone, so it refuses before the worker runs. The
 // worker is handed that WWN to compare with every disk a target selects. A
 // root that reported no WWN keeps the serial number and size comparison, and
 // an installation record that proves no completion records none.
 func TestPhysicalEraseComparesTheWWNASerialRootReportedAtInstallation(t *testing.T) {
-	data := func(device, wwn string) api.Value {
-		return api.MapValue(text("deviceName", device), text("wwn", wwn), text("serialNumber", "DATA-01"), number("sizeBytes", "8192"))
+	data := func(device, wwn string) EraseTarget {
+		return EraseTarget{DeviceName: device, Method: EraseMetadataClear, WWN: wwn, SerialNumber: "DATA-01", SizeBytes: 8192}
 	}
-	root := api.MapValue(text("serialNumber", "ZC1A2B3C"), number("sizeBytes", serialRootSize))
+	root := EraseTarget{Method: EraseMetadataClear, SerialNumber: "ZC1A2B3C", SizeBytes: 480103981056}
 	const recorded = "naa.5000c500a1b2c3d4"
 	for name, test := range map[string]struct {
-		target   api.Value
+		target   EraseTarget
 		state    reconciliation.BlockState
 		reported string
 		refused  bool
@@ -106,7 +117,7 @@ func TestPhysicalEraseComparesTheWWNASerialRootReportedAtInstallation(t *testing
 		"an installation never completed":  {data("/dev/sdb", recorded), reconciliation.BlockFailed, recorded, false, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
-			erase := installedRootErase(t, serialRootMachine(test.target), test.state, completedWith(test.reported))
+			erase := withTargets(t, installedRootErase(t, serialRootMachine(EraseMetadataClear), test.state, completedWith(test.reported)), test.target)
 			runner, err := eraseRun(t, erase)
 			if test.refused {
 				if err == nil || len(runner.requests) != 0 || !strings.Contains(diagnostics.Of(err)[0].Message, "uses the original serial-only selector") {
@@ -122,7 +133,7 @@ func TestPhysicalEraseComparesTheWWNASerialRootReportedAtInstallation(t *testing
 			}
 		})
 	}
-	erase := installedRootErase(t, serialRootMachine(root), reconciliation.BlockDone, func(install installation.Request, digest string) installation.Evidence {
+	erase := installedRootErase(t, serialRootMachine(EraseMetadataClear), reconciliation.BlockDone, func(install installation.Request, digest string) installation.Evidence {
 		evidence := completedWith(recorded)(install, digest)
 		evidence.Postcondition = false
 		return evidence
@@ -133,26 +144,22 @@ func TestPhysicalEraseComparesTheWWNASerialRootReportedAtInstallation(t *testing
 }
 
 // A root declared by its wwn hands the worker that wwn, so the worker
-// recognises the root in any target that selects it; a target without
+// recognises the root in any target that selects it; a frozen target without
 // deviceName naming the root's declared serial number is that root, whose
 // size must be the root's.
 func TestPhysicalEraseHandsTheWorkerTheDeclaredRootWWN(t *testing.T) {
-	declared := func(size string) api.Object {
-		machine := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "ZC1A2B3C"), number("sizeBytes", "8192")))
-		hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", "metadataClear"), field("targets", api.ListValue(
-			api.MapValue(text("serialNumber", "DATA-01"), number("sizeBytes", "8192")), api.MapValue(text("serialNumber", "ZC1A2B3C"), number("sizeBytes", size))))))
-		return api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", hardware))
+	machine := erasing(server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "ZC1A2B3C"), number("sizeBytes", "8192"))), EraseMetadataClear,
+		dataDisk("DATA-01", "8192", "", EraseMetadataClear))
+	if !machineref.RootEraseSelected(machine) {
+		t.Fatal("a root declaring onRemoval is not selected")
 	}
-	if !machineref.RootEraseSelected(declared("8192")) {
-		t.Fatal("a target naming the root's serial number and size does not select the root")
-	}
-	runner, _ := eraseRun(t, installedRootErase(t, declared("8192"), reconciliation.BlockDone, nil))
+	runner, _ := eraseRun(t, installedRootErase(t, machine, reconciliation.BlockDone, nil))
 	if len(runner.requests) != 1 || runner.requests[0].MaterialValues["rootWWNBase64"] != base64.StdEncoding.EncodeToString([]byte("0x5000c500a1b2c3d4")) {
 		t.Fatalf("the worker was not handed the declared root WWN: %+v", runner.requests)
 	}
-	machine := declared("12288")
 	install := requestOf(t, labCatalog(metalProvider(), machine, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), machine.Name())
-	if _, err := eraseRequest(machine, install); err == nil || !strings.Contains(diagnostics.Of(err)[0].Message, "root target names another wwn, serialNumber or sizeBytes") {
+	resized := EraseTarget{Method: EraseMetadataClear, SerialNumber: "ZC1A2B3C", SizeBytes: 12288}
+	if err := eraseRootRules([]EraseTarget{resized}, install.Target.Hardware.RootDevice, install.Target.Hardware, ""); err == nil || !strings.Contains(diagnostics.Of(err)[0].Message, "root target names another wwn, serialNumber or sizeBytes") {
 		t.Fatalf("a root target of another size was not refused: %v", diagnostics.Of(err))
 	}
 }
@@ -175,7 +182,7 @@ func TestInstallationEvidenceRecordsTheWWNOfASerialDeclaredRoot(t *testing.T) {
 		data, _ := json.Marshal(evidence)
 		return installation.ValidatePresence(data, install, digest, string(marker))
 	}
-	serial := serialRootMachine(api.MapValue(text("serialNumber", "ZC1A2B3C"), number("sizeBytes", serialRootSize)))
+	serial := serialRootMachine(EraseMetadataClear)
 	install := requestOf(t, labCatalog(metalProvider(), serial, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), serial.Name())
 	for _, wwn := range []string{"naa.5000c500a1b2c3d4", "eui.0025388b91c0a2f1", "t10.ATA     EXAMPLE DISK", ""} {
 		if err := present(install, wwn); err != nil {

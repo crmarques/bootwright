@@ -152,7 +152,7 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		// its one disk written by two installations.
 		if machine.Installed(bound) {
 			return "a declared node selects an install profile, so two installations would write its disk",
-				"remove spec.os.installProfileRef from " + bound.Identity() + " or drop it from " + cluster.Identity()
+				"declare spec.os.clusterInstalled on " + bound.Identity() + " instead of spec.os.install, or drop it from " + cluster.Identity()
 		}
 		if native, errors := machine.ComposeNetwork(bound, catalog); len(errors) == 0 {
 			if issues := openshift.NodeNetworkIssues(bound, catalog, native); len(issues) > 0 {
@@ -172,7 +172,7 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 				return reason, remedy
 			}
 		}
-		if _, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints); reason != "" {
+		if _, reason, remediation := installerRootDeviceHints(catalog, bound, target.RootDeviceHints); reason != "" {
 			return reason, remediation
 		}
 	}
@@ -188,7 +188,7 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 // remedy naming the object to change. A reason the error does not carry still
 // refuses, because an empty reason would admit the cluster.
 func nodeTargetRefusal(catalog api.Catalog, bound api.Object, err error) (reason, remediation string) {
-	provider, found := catalog.Find(api.InfraProvider, bound.Spec().Get("substrate", "providerRef").Text())
+	provider, found := catalog.Find(api.InfraProvider, api.MachineProviderRef(bound))
 	if found && !slices.Contains(substrate.Realized(), substrate.Variant(provider)) {
 		return "a declared node is on a substrate this executable does not realize", ""
 	}
@@ -405,11 +405,14 @@ const maxInstallerRootDeviceGigabytes = 1<<53 - 1
 // under their admitted names and declared types, or nothing when it declares
 // none: sizeBytes is proved only before boot, and a volume becomes its proved
 // WWN later. A hint the agent installer or the frozen request cannot carry refuses
-// instead, naming the bound Machine, because that is what an operator changes;
-// the rule on a virtual node's deviceName is the installer's own.
-func installerRootDeviceHints(bound api.Object, hints substrate.RootDeviceHints) (rendered map[string]any, reason, remediation string) {
-	if reason, remedy := machine.AgentRootDeviceRefusal(bound); reason != "" {
+// instead, naming the bound Machine, because that is what an operator changes.
+// A virtual node declares no root disk: its hint is the derived /dev/vda.
+func installerRootDeviceHints(catalog api.Catalog, bound api.Object, hints substrate.RootDeviceHints) (rendered map[string]any, reason, remediation string) {
+	if reason, remedy := machine.AgentRootDeviceRefusal(catalog, bound); reason != "" {
 		return nil, reason, remedy
+	}
+	if substrate.VirtualArm(substrate.MachineArm(catalog, bound)) {
+		return map[string]any{"deviceName": substrate.RootDevicePath(catalog, bound)}, "", ""
 	}
 	if hints.VolumeRef != nil {
 		return nil, "", ""
@@ -417,17 +420,12 @@ func installerRootDeviceHints(bound api.Object, hints substrate.RootDeviceHints)
 	if len(hints.Names()) == 0 {
 		return nil, "", ""
 	}
-	remainder := strings.TrimPrefix(strings.TrimPrefix(hints.DeviceName, "/dev/"), "disk/by-path/")
-	if strings.Contains(remainder, "/") {
-		return nil, "the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>",
-			"set spec.hardware.rootDevice.deviceName on " + bound.Identity() + " to such a path"
-	}
 	rendered = map[string]any{}
 	if hints.MinSizeGigabytes != "" {
 		size, err := strconv.ParseInt(hints.MinSizeGigabytes, 10, 64)
 		if err != nil || size > maxInstallerRootDeviceGigabytes {
 			return nil, "a node's minSizeGigabytes is larger than the frozen installer input carries exactly",
-				"declare spec.hardware.rootDevice.minSizeGigabytes on " + bound.Identity() + " as at most " +
+				"declare " + substrate.RootDeviceHintPath("minSizeGigabytes") + " on " + bound.Identity() + " as at most " +
 					strconv.FormatInt(maxInstallerRootDeviceGigabytes, 10)
 		}
 		rendered["minSizeGigabytes"] = size
@@ -465,7 +463,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		if err != nil {
 			return nil, err
 		}
-		hints, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints)
+		hints, reason, remediation := installerRootDeviceHints(catalog, bound, target.RootDeviceHints)
 		if reason != "" {
 			return nil, refusal("lifecycle.unsupported", reason, remediation)
 		}

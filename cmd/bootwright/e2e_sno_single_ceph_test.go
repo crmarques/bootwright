@@ -69,7 +69,7 @@ func TestSingleCephSNOHasFiveNetworksAndOnlyClientStorageAccess(t *testing.T) {
 	}
 	sno := requireObject(t, catalog, api.Machine, "sno-01")
 	segments := []string{}
-	for _, nic := range sno.Spec().Get("substrate", "libvirt", "nics").Items() {
+	for _, nic := range sno.Spec().Get("hardware", "nics").Items() {
 		segments = append(segments, nic.Get("segmentRef").Text())
 	}
 	if !slices.Equal(segments, []string{"openshift-infra", "staging", "ceph-client"}) {

@@ -309,7 +309,7 @@ func sshPolicyRefusals() map[string]error {
 }
 
 const osdDiskRemedy = "preserve any disk that may hold this cluster's data, DB or WAL; an unproved allocation must not be cleared to force continuation; the adapter detail names the code site that refused, not the disk; run wipefs --no-act <disk> on each declared OSD disk of the Ceph hosts to see what it holds; " +
-	"if it is a disk of a Ceph cluster you destroyed or abandoned, declare it in its Machine's spec.hardware.clearOnInstall and install that Machine again, " +
+	"if it is a disk of a Ceph cluster you destroyed or abandoned, declare it in its Machine's spec.hardware.dataDisks with onInstall: metadataClear and install that Machine again, " +
 	"or clear it yourself on the host after confirming it is that disk, then apply again; Bootwright never clears a disk it cannot prove its own"
 
 func osdDeviceRefusals() map[string]error {

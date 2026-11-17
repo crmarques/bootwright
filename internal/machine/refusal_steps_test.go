@@ -12,34 +12,37 @@ func TestMachineRefusalsNameTheirStep(t *testing.T) {
 		name, code, field, remediation string
 		setup                          func() (api.Object, api.Catalog)
 	}{
-		{"an OS-ready Machine with an install profile", "api.invariant", "$.spec.os.installProfileRef",
-			"remove spec.os.installProfileRef, or set spec.os.provided to false for a Machine Bootwright installs",
-			func() (api.Object, api.Catalog) {
-				return alone(object(api.Machine, "probe", m("os", m("provided", true, "installProfileRef", "rhel"))))
-			}},
 		{"an OS-ready Machine with a network configuration", "api.invariant", "$.spec.network.configRef",
 			"remove spec.network.configRef; an OS-ready Machine declares contacts only",
 			func() (api.Object, api.Catalog) {
-				return alone(object(api.Machine, "probe", m("os", m("provided", true), "network", m("configRef", "net"))))
+				return alone(object(api.Machine, "probe", m("os", m("provided", m()), "network", m("configRef", "net"))))
 			}},
-		{"a non-provided Machine without a provider", "api.invariant", "$.spec.substrate.providerRef",
-			"set spec.substrate.providerRef to the InfraProvider that realizes this Machine, or set spec.os.provided to true for a Machine whose OS is already installed",
+		{"a Bootwright-installed Machine without a provider", "api.invariant", "$.spec.hardware.providerRef",
+			"set spec.hardware.providerRef to the InfraProvider that realizes this Machine, or declare os.provided: {} for a Machine whose OS is already installed",
 			func() (api.Object, api.Catalog) {
-				return alone(object(api.Machine, "probe", m("os", m("provided", false))))
+				return alone(object(api.Machine, "probe", m("os", m("install", m("profileRef", "rhel")))))
 			}},
-		{"a host key outside a bare-metal installation", "api.invariant", "$.spec.os.install.hostKeyRef",
+		{"a cluster-installed Machine without a provider", "api.invariant", "$.spec.hardware.providerRef",
+			"set spec.hardware.providerRef to the InfraProvider that realizes this Machine, or declare os.provided: {} for a Machine whose OS is already installed",
+			func() (api.Object, api.Catalog) {
+				return alone(object(api.Machine, "probe", m("os", m("clusterInstalled", m()))))
+			}},
+		{"a host key outside a libvirt or bare-metal installation", "api.invariant", "$.spec.os.install.hostKeyRef",
 			"remove spec.os.install.hostKeyRef; only a libvirt or bare-metal Bootwright-installed Machine delivers its own host key",
 			func() (api.Object, api.Catalog) {
-				machine, catalog := installedFixture()
-				return machine.WithSpec(machine.Spec().With("os", m("provided", true, "install", m("hostKeyRef", "node-host-key")))), catalog
+				provider := object(api.InfraProvider, "kv", m("kubevirt", m("kubeconfigRef", "host", "namespace", "guests")))
+				machine := object(api.Machine, "probe", m(
+					"hardware", m("providerRef", "kv", "profileRef", "small"),
+					"os", m("install", m("profileRef", "rhel", "hostKeyRef", "node-host-key"))))
+				return machine, api.NewCatalog([]api.Object{machine, provider})
 			}},
-		{"a BMC without credentials on a bare-metal provider", "api.invariant", "$.spec.substrate.baremetal.bmc.credentialsRef",
-			"set spec.substrate.baremetal.bmc.credentialsRef, or inherit it from the provider's spec.baremetal.defaults.bmc.credentialsRef",
+		{"a BMC without credentials on a bare-metal provider", "api.invariant", "$.spec.hardware.bmc.credentialsRef",
+			"set spec.hardware.bmc.credentialsRef, or inherit it from the provider's spec.baremetal.defaults.bmc.credentialsRef",
 			func() (api.Object, api.Catalog) {
 				machine, catalog := installedFixture()
 				spec := machine.Spec()
-				bmc := spec.Get("substrate", "baremetal", "bmc").Without("credentialsRef")
-				return machine.WithSpec(spec.WithPath(bmc, "substrate", "baremetal", "bmc")), catalog
+				bmc := spec.Get("hardware", "bmc").Without("credentialsRef")
+				return machine.WithSpec(spec.WithPath(bmc, "hardware", "bmc")), catalog
 			}},
 		{"native interfaces that are not a list", "api.type", "$.spec.nmstate.interfaces", "write interfaces as a list",
 			func() (api.Object, api.Catalog) {
@@ -64,7 +67,7 @@ func TestMachineRefusalsNameTheirStep(t *testing.T) {
 func TestAnacondaInstallAddressWithoutANetworkIsRefusedOnce(t *testing.T) {
 	machine, catalog := fixture()
 	machine = machine.WithSpec(machine.Spec().
-		With("os", m("provided", false, "installProfileRef", "rhel")).
+		With("os", m("install", m("profileRef", "rhel"))).
 		With("network", m("installAddressRef", "primary", "addresses", list(
 			m("name", "fqdn", "address", "node.example.test"),
 			m("name", "primary", "address", "192.0.2.11")))))

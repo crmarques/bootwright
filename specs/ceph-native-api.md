@@ -735,7 +735,7 @@ plus a native `location` map for qualified CRUSH bucket types and
 names. `location` retains the native HostSpec spelling and string values.
 Host identity and address are derived from the proved Machine/address binding;
 the registered hostname must agree with the installed host's native hostname,
-and a node's `site` is its Machine's `placement.site`, never authored on the
+and a node's `site` is its Machine's `site`, never authored on the
 node ([normalization](api/ceph.md#normalization)).
 The generated native HostSpec is visible as non-secret plan intent. A raw
 `service_type: host` entry in `services` refuses because it would create a
@@ -744,7 +744,7 @@ second infrastructure owner.
 Native [HostSpec location](https://docs.ceph.com/en/tentacle/cephadm/host-management/#setting-the-initial-crush-location-of-host)
 describes initial hierarchy placement, not a live hierarchy-edit API: later
 changes to it are ignored. Native `host` identity is generated, not
-overridden through `location`. Each site is a Machine's `placement.site`,
+overridden through `location`. Each site is a Machine's `site`,
 which names an Environment site. `location` is admitted only on a stretch
 topology and names only its failure-domain bucket, whose value is the node's
 site ([stretch topology](ceph.md#stretch-topology)); it cannot put the host in

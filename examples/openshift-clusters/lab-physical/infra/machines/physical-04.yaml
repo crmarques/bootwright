@@ -4,22 +4,21 @@ metadata:
   name: physical-04
 
 spec:
-  substrate:
+  hardware:
     providerRef: lab-metal
 
-    baremetal:
-      rootDevice:
-        wwn: "0x500000000000f004"
+    bmc:
+      address: https://bmc-04.example.test/redfish/v1/Systems/1
 
-      bmc:
-        address: https://bmc-04.example.test/redfish/v1/Systems/1
+    nics:
+      - name: eno1
+        macAddress: 52:54:00:9a:1b:04
 
-      nics:
-        - nicRef: eno1
-          macAddress: 52:54:00:9a:1b:04
+    rootDisk:
+      wwn: "0x500000000000f004"
 
   os:
-    provided: false
+    clusterInstalled: {}
 
   network:
     configRef: lab-metal
@@ -32,7 +31,3 @@ spec:
       - name: ip
         address: 198.51.100.24
         interface: eno1
-
-  hardware:
-    nics:
-      - name: eno1

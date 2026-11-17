@@ -208,7 +208,7 @@ func (c Capability) Roots(ctx context.Context, input lifecycle.PlanInput) (map[s
 		}
 		proof, err := diskselection.Prove(report, report.Binding, policy, protected)
 		if err != nil {
-			return nil, refusal("lifecycle.state", "Machine/"+r.Identity.Object+": "+err.Error(), "inspect the recorded inventory, refine rootDevice.discover.match, or set rootDevice.discover.inventory to boot when the BMC inventory cannot answer it, and update the context before planning again")
+			return nil, refusal("lifecycle.state", "Machine/"+r.Identity.Object+": "+err.Error(), "inspect the recorded inventory, refine spec.hardware.rootDisk.discover.match, or set spec.hardware.rootDisk.discover.inventory to boot when the BMC inventory cannot answer it, and update the context before planning again")
 		}
 		proofs[r.Identity.Object] = proof
 	}

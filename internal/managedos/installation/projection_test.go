@@ -64,7 +64,7 @@ func versionFragment(version string) api.Value {
 
 func requireRelease(t *testing.T, got []lifecycle.Projection, machine string, observed api.Value, notes ...string) {
 	t.Helper()
-	holder := lifecycle.ProjectionHolder{Kind: api.Machine, Name: machine, Field: "spec.os.installProfileRef"}
+	holder := lifecycle.ProjectionHolder{Kind: api.Machine, Name: machine, Field: "spec.os.install.profileRef"}
 	if len(got) != 1 || got[0].Kind != api.MachineInstallProfile || got[0].Name != "rhel-9-8" || !got[0].Observed.Equal(observed) ||
 		!slices.Equal(got[0].Notes, notes) || got[0].Holder == nil || *got[0].Holder != holder {
 		t.Fatalf("project = %+v, want MachineInstallProfile/rhel-9-8 observing %+v with notes %q held by %+v", got, observed, notes, holder)
@@ -118,7 +118,7 @@ func TestAnUnreachedOrProvidedMachineProjectsNoRelease(t *testing.T) {
 	if got := projectRelease(t, labCatalog(), "rhel-01", OSEvidence{}); len(got) != 0 {
 		t.Errorf("an unreached system projected %+v", got)
 	}
-	provided := guest(field("os", api.MapValue(field("provided", api.BoolValue(true)))))
+	provided := guest(field("os", api.MapValue(field("provided", api.MapValue()))))
 	if got := projectRelease(t, labCatalog(provided), "rhel-01", OSEvidence{ID: "rhel", Kernel: releaseKernel, VersionID: "9.8"}); len(got) != 0 {
 		t.Errorf("a provided OS projected %+v", got)
 	}
@@ -169,8 +169,8 @@ func TestReleaseObservableFieldTableMatchesProjector(t *testing.T) {
 		}
 		kind := api.Kind(strings.Trim(strings.TrimSpace(cells[1]), "`"))
 		fields, held, _ := strings.Cut(cells[2], ", held by ")
-		if !strings.Contains(held, "`Machine` whose `spec.os.installProfileRef`") {
-			t.Errorf("the %s row names no Machine holder through spec.os.installProfileRef: %q", Implementation, cells[2])
+		if !strings.Contains(held, "`Machine` whose `spec.os.install.profileRef`") {
+			t.Errorf("the %s row names no Machine holder through spec.os.install.profileRef: %q", Implementation, cells[2])
 		}
 		for _, path := range strings.Split(fields, ",") {
 			documented = append(documented, lifecycle.ProjectedPath{Kind: kind, Path: strings.Trim(strings.TrimSpace(path), "`")})

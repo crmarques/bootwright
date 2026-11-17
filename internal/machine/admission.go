@@ -21,34 +21,33 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 		return o, nil
 	}
 	s := o.Spec()
-	if arm := substrate.MachineArm(o); s.Has("substrate", string(arm), "nics") {
-		nics := s.Get("substrate", string(arm), "nics").Items()
+	if s.Has("hardware", "nics") {
+		nics := s.Get("hardware", "nics").Items()
 		for i, nic := range nics {
 			if mac, ok := canonicalMAC(nic.Get("macAddress").Text()); ok {
 				nics[i] = nic.With("macAddress", api.StringValue(mac))
 			}
 		}
-		s = s.WithPath(api.ListValue(nics...), "substrate", string(arm), "nics")
+		s = s.WithPath(api.ListValue(nics...), "hardware", "nics")
 	}
 	network := normalizedContacts(o, c, s.Get("network"))
 	provider, found := Provider(o, c)
-	if arm := substrate.MachineArm(o); found && substrate.VirtualArm(arm) && s.Get("hardware", "nics").Len() > 0 && !s.Get("os", "provided").Bool() {
+	if found && substrate.VirtualArm(substrate.Variant(provider)) && s.Get("hardware", "nics").Len() > 0 && !api.MachineProvided(o) {
 		if entries, ok := defaultedNICSegments(c, o, provider); ok {
-			s = s.WithPath(entries, "substrate", string(arm), "nics")
+			s = s.WithPath(entries, "hardware", "nics")
 		}
 	}
 	if network.Present() {
 		s = s.With("network", network)
 	}
-	if bmc := s.Get("substrate", "baremetal", "bmc"); bmc.Present() {
+	if bmc := s.Get("hardware", "bmc"); bmc.Present() {
 		if found && substrate.RealizesPhysicalNICs(provider) {
 			bmc = inherit(bmc, providerBMCDefaults(bmc, provider))
 		}
-		bmc = substrate.NormalizeBMCDefaults(bmc).Default("protocol", api.StringValue("redfish"))
-		s = s.WithPath(bmc, "substrate", "baremetal", "bmc")
+		s = s.WithPath(substrate.NormalizeBMCDefaults(bmc), "hardware", "bmc")
 	}
-	if found && substrate.RealizesPhysicalNICs(provider) && !s.Get("os", "provided").Bool() && len(substrate.MachineRootDeviceHints(o.WithSpec(s)).Names()) == 0 {
-		s = s.WithPath(api.MapValue(), "substrate", "baremetal", "rootDevice", "bootVolume")
+	if found && substrate.RealizesPhysicalNICs(provider) && !api.MachineProvided(o) && len(substrate.MachineRootDeviceHints(o.WithSpec(s)).Names()) == 0 {
+		s = s.WithPath(api.MapValue(), "hardware", "rootDisk", "bootVolume")
 	}
 	o = o.WithSpec(s)
 	if native, issues := ComposeNetwork(o, c); native.Present() && len(issues) == 0 {
@@ -134,7 +133,7 @@ func normalizedAccess(o api.Object, c api.Catalog, s, network api.Value) api.Val
 		if key, ok := FleetKey(c); ok {
 			access = api.MapValue().WithPath(api.StringValue("bootwright"), "ssh", "user").WithPath(api.StringValue(key), "ssh", "auth", "privateKeyRef")
 		}
-	} else if s.Get("os", "provided").Bool() && !access.Has("local") && !access.Has("ssh") {
+	} else if api.MachineProvided(o) && !access.Has("local") && !access.Has("ssh") {
 		access = access.WithPath(api.MapValue(), "ssh", "auth", "operatorIdentity")
 	}
 	if access.Has("ssh") {
@@ -194,7 +193,7 @@ func sshAddressRef(o api.Object, network api.Value) string {
 func normalizedInstallation(o api.Object, c api.Catalog, s api.Value) api.Value {
 	if installed(o) {
 		install := s.Get("os", "install")
-		if profile, ok := c.Find(api.MachineInstallProfile, s.Get("os", "installProfileRef").Text()); ok {
+		if profile, ok := c.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(o)); ok {
 			if value := profile.Spec().Get("proxy"); value.Present() {
 				s = s.Default("proxy", value)
 			}
@@ -209,7 +208,7 @@ func normalizedInstallation(o api.Object, c api.Catalog, s api.Value) api.Value 
 			s = s.WithPath(install, "os", "install")
 		}
 	}
-	if s.Get("os", "provided").Bool() || installed(o) {
+	if api.MachineProvided(o) || installed(o) {
 		s = s.With("proxy", infrastructureservices.NormalizeProxy(s.Get("proxy"), c))
 	}
 	return s
@@ -221,7 +220,7 @@ func NormalizationOrigins(before, after api.Object, c api.Catalog) []api.FieldOr
 	if before.Kind() != api.Machine || !installed(before) {
 		return nil
 	}
-	profile, ok := c.Find(api.MachineInstallProfile, before.Spec().Get("os", "installProfileRef").Text())
+	profile, ok := c.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(before))
 	if !ok {
 		return nil
 	}
@@ -270,25 +269,26 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	s := o.Spec()
 	issues := []api.Issue{}
 	issues = api.AppendIssues(issues, validateServices(o, c)...)
-	if envs := c.OfKind(api.Environment); len(envs) == 1 && s.Has("placement", "site") {
-		if _, ok := namedValue(envs[0].Spec().Get("sites"), s.Get("placement", "site").Text()); !ok {
-			issues = api.AppendIssues(issues, api.ReferenceIssue("$.spec.placement.site", "site must name an Environment site", "set spec.placement.site to a site declared in the Environment's spec.sites"))
+	if envs := c.OfKind(api.Environment); len(envs) == 1 && s.Has("site") {
+		if _, ok := namedValue(envs[0].Spec().Get("sites"), s.Get("site").Text()); !ok {
+			issues = api.AppendIssues(issues, api.ReferenceIssue("$.spec.site", "site must name an Environment site", "set spec.site to a site declared in the Environment's spec.sites"))
 		}
 	}
-	issues = api.AppendIssues(issues, validateProvision(o)...)
 	provider, found := Provider(o, c)
 	variant := substrate.Variant(provider)
-	armIssues := validateArm(o, provider, found, variant)
+	issues = api.AppendIssues(issues, validateProvision(o, variant)...)
+	armIssues := validateArm(o, found, variant)
 	issues = api.AppendIssues(issues, armIssues...)
 	if found && variant != "" && len(armIssues) == 0 {
 		issues = api.AppendIssues(issues, validateSubstrate(c, o, provider, variant)...)
 	}
 	issues = api.AppendIssues(issues, validateSegmentRefs(c, o, provider, found && len(armIssues) == 0)...)
 	issues = api.AppendIssues(issues, validateHardware(o, c, variant)...)
-	issues = api.AppendIssues(issues, validateErase(o, variant)...)
-	issues = api.AppendIssues(issues, validateClear(o, variant == substrate.ArmBaremetal)...)
-	issues = api.AppendIssues(issues, validateVolumeRoot(o, variant)...)
-	issues = api.AppendIssues(issues, validateRootSize(o)...)
+	if !virtualProvider(variant) {
+		issues = api.AppendIssues(issues, validateDisks(o, variant == substrate.ArmBaremetal)...)
+		issues = api.AppendIssues(issues, validateVolumeRoot(o, variant)...)
+		issues = api.AppendIssues(issues, validateRootSize(o)...)
+	}
 	issues = api.AppendIssues(issues, validateSelectingSerials(o, c)...)
 	network := s.Get("network")
 	configured := network.Has("configRef") || network.Has("inline")
@@ -300,82 +300,103 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = api.AppendIssues(issues, validateFirewall(o, c)...)
 	issues = api.AppendIssues(issues, validatePlacementHost(o, c)...)
 	issues = api.AppendIssues(issues, validateHostKey(o, c)...)
-	return api.AppendIssues(issues, validateBMC(substrate.MachineBMC(o), s.Has("substrate", "providerRef") && !found)...)
+	return api.AppendIssues(issues, validateBMC(substrate.MachineBMC(o), s.Has("hardware", "providerRef") && !found)...)
 }
 
-func validateProvision(o api.Object) []api.Issue {
+func validateProvision(o api.Object, variant substrate.Arm) []api.Issue {
 	var issues []api.Issue
 	s := o.Spec()
-	provided := s.Get("os", "provided")
 	network := s.Get("network")
-	if provided.Bool() {
-		for _, key := range []string{"installProfileRef", "install"} {
-			if s.Has("os", key) {
-				issues = api.AppendIssues(issues, invariant("$.spec.os."+key, "OS-ready Machines forbid installation declarations", "remove spec.os."+key+", or set spec.os.provided to false for a Machine Bootwright installs"))
-			}
-		}
+	if api.MachineProvided(o) {
 		for _, key := range []string{"configRef", "inline", "interfaceMatches", "installAddressRef", "overrides"} {
 			if network.Has(key) {
 				issues = api.AppendIssues(issues, invariant("$.spec.network."+key, "OS-ready Machines declare contacts only", "remove spec.network."+key+"; an OS-ready Machine declares contacts only"))
 			}
 		}
-		if arm := substrate.MachineArm(o); substrate.VirtualArm(arm) && s.Has("substrate", string(arm), "nics") {
-			path := "spec.substrate." + string(arm) + ".nics"
-			issues = api.AppendIssues(issues, invariant("$."+path, "OS-ready Machines declare contacts only", "remove "+path+"; an OS-ready Machine declares contacts only"))
-		}
-		for _, name := range substrate.MachineRootDeviceHints(o).Names() {
-			if path := substrate.RootDeviceHintPath(name); name != "deviceName" && name != "wwn" && name != "sizeBytes" {
-				issues = api.AppendIssues(issues, api.Issue{Code: "api.deferred", Field: "$." + path,
-					Message:     "nothing installs an OS-ready Machine, so " + path + " selects no disk; only deviceName and wwn name its root disk, to keep it out of Ceph OSD selections",
-					Remediation: "remove " + path + ", or keep it knowing nothing reads it on an OS-ready Machine"})
+		if substrate.VirtualArm(variant) {
+			for i, nic := range s.Get("hardware", "nics").Items() {
+				if nic.Has("segmentRef") {
+					path := fmt.Sprintf("spec.hardware.nics[%d].segmentRef", i)
+					issues = api.AppendIssues(issues, invariant("$."+path, "OS-ready Machines declare contacts only", "remove "+path+"; an OS-ready Machine declares contacts only"))
+				}
 			}
 		}
-	} else if provided.Present() && !s.Has("substrate", "providerRef") {
-		issues = api.AppendIssues(issues, invariant("$.spec.substrate.providerRef", "non-provided Machines require a substrate provider", "set spec.substrate.providerRef to the InfraProvider that realizes this Machine, or set spec.os.provided to true for a Machine whose OS is already installed"))
+		if !virtualProvider(variant) {
+			for _, name := range substrate.MachineRootDeviceHints(o).Names() {
+				if path := substrate.RootDeviceHintPath(name); !slices.Contains([]string{"deviceName", "wwn", "sizeBytes", "volumeRef", "bootVolume", "discover"}, name) {
+					issues = api.AppendIssues(issues, api.Issue{Code: "api.deferred", Field: "$." + path,
+						Message:     "nothing installs an OS-ready Machine, so " + path + " selects no disk; only hints.deviceName and wwn name its root disk, to keep it out of Ceph OSD selections",
+						Remediation: "remove " + path + ", or keep it knowing nothing reads it on an OS-ready Machine"})
+				}
+			}
+		}
+	} else if (api.MachineInstalled(o) || api.MachineClusterInstalled(o)) && !s.Has("hardware", "providerRef") {
+		issues = api.AppendIssues(issues, invariant("$."+substrate.ProviderPath, "an installed Machine requires the hardware provider that realizes it", "set "+substrate.ProviderPath+" to the InfraProvider that realizes this Machine, or declare os.provided: {} for a Machine whose OS is already installed"))
 	}
 	return issues
 }
 
-func validateArm(o, provider api.Object, found bool, variant substrate.Arm) []api.Issue {
-	arm := substrate.MachineArm(o)
-	if arm == "" {
-		return nil
+func virtualProvider(variant substrate.Arm) bool {
+	return substrate.VirtualArm(variant) || variant == substrate.ArmVSphere
+}
+
+func validateArm(o api.Object, found bool, variant substrate.Arm) []api.Issue {
+	s := o.Spec()
+	issues := []api.Issue{}
+	if s.Has("hardware", "profileRef") {
+		path := "$." + substrate.ProfilePath
+		switch {
+		case !s.Has("hardware", "providerRef"):
+			issues = append(issues, invariant(path, "a machine profile belongs to the Machine's provider, and "+o.Identity()+" names none", "set "+substrate.ProviderPath+" to the provider whose machineProfiles declares it, or remove "+substrate.ProfilePath))
+		case found && variant == substrate.ArmBaremetal:
+			issues = append(issues, invariant(path, "a bare-metal provider realizes no machine profile; the hardware itself is the machine", "remove "+substrate.ProfilePath+" from "+o.Identity()))
+		}
 	}
-	path := "$.spec.substrate." + string(arm)
-	if !o.Spec().Has("substrate", "providerRef") && arm != substrate.ArmBaremetal {
-		return []api.Issue{invariant(path, "a "+string(arm)+" arm requires the provider whose arm it matches; only a bare-metal arm stands without a provider",
-			"set spec.substrate.providerRef on "+o.Identity()+", or remove spec.substrate."+string(arm))}
+	if !found || !virtualProvider(variant) {
+		return issues
 	}
-	if found && variant != "" && arm != variant {
-		return []api.Issue{invariant(path, "the Machine's substrate arm "+string(arm)+" does not match the "+string(variant)+" arm of its provider "+provider.Identity(),
-			"move the fields of spec.substrate."+string(arm)+" to spec.substrate."+string(variant)+" on "+o.Identity()+", or select a provider with the "+string(arm)+" arm")}
+	for _, key := range []struct{ field, reason string }{
+		{"bmc", "the provider controls the machine it creates, so it declares no BMC"},
+		{"firmware", "the provider creates the machine's firmware, so it declares no firmware settings"},
+		{"rootDisk", "the provider creates the root disk, and every installer on it writes " + substrate.VirtualRootDev},
+		{"dataDisks", "the provider creates the machine's data disks from its machine profile"},
+	} {
+		if s.Has("hardware", key.field) {
+			path := substrate.HardwarePath + "." + key.field
+			issues = append(issues, invariant("$."+path, "a "+string(variant)+" Machine declares no "+path+": "+key.reason, "remove "+path+" from "+o.Identity()))
+		}
 	}
-	return nil
+	if variant == substrate.ArmVSphere {
+		return issues
+	}
+	for i, nic := range s.Get("hardware", "nics").Items() {
+		if nic.Has("macAddress") {
+			path := fmt.Sprintf("%s[%d].macAddress", substrate.NICsPath, i)
+			issues = append(issues, invariant("$."+path, "a "+string(variant)+" provider derives each vNIC's MAC from the context, Machine and NIC names", "remove "+path+" from "+o.Identity()))
+		}
+	}
+	return issues
 }
 
 func validateSubstrate(c api.Catalog, o, provider api.Object, variant substrate.Arm) []api.Issue {
 	var issues []api.Issue
 	s := o.Spec()
-	provided := s.Get("os", "provided")
-	path := "$.spec.substrate." + string(variant) + ".profileRef"
-	profileRef := s.Get("substrate", string(variant), "profileRef")
-	if variant != substrate.ArmBaremetal {
-		if provided.Present() && !provided.Bool() && !profileRef.Present() {
-			issues = api.AppendIssues(issues, invariant(path, "virtual installation requires a provider-local machine profile", "set "+path[2:]+" to a machine profile of the selected provider"))
-		}
+	installs := api.MachineInstalled(o) || api.MachineClusterInstalled(o)
+	if variant != substrate.ArmBaremetal && installs && !s.Has("hardware", "profileRef") {
+		issues = api.AppendIssues(issues, invariant("$."+substrate.ProfilePath, "virtual installation requires a provider-local machine profile", "set "+substrate.ProfilePath+" to a machine profile of the selected provider"))
 	}
-	if substrate.VirtualArm(variant) && provided.Present() && !provided.Bool() {
+	if substrate.VirtualArm(variant) && installs {
 		issues = api.AppendIssues(issues, validateVirtualNICs(c, o, provider, variant)...)
 	}
-	if variant == substrate.ArmBaremetal && provided.Present() && !provided.Bool() {
-		issues = api.AppendIssues(issues, validateBaremetal(o)...)
+	if variant == substrate.ArmBaremetal && installs {
+		issues = api.AppendIssues(issues, validateBaremetal(c, o)...)
 	}
 	return issues
 }
 
 func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api.Issue {
 	var issues []api.Issue
-	provided := o.Spec().Get("os", "provided")
+	provided := api.MachineProvided(o)
 	network := o.Spec().Get("network")
 	if network.Has("overrides") && !network.Has("configRef") {
 		issues = api.AppendIssues(issues, invariant("$.spec.network.overrides", "network overrides require configRef", "select a reusable configuration with spec.network.configRef, or remove spec.network.overrides"))
@@ -385,7 +406,7 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 			continue
 		}
 		path := "spec.network." + key
-		if network.Has(key) && !configured && !provided.Bool() {
+		if network.Has(key) && !configured && !provided {
 			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$." + path, Message: "network selections and bindings require a configured network",
 				Remediation: "select a network configuration on " + o.Identity() + " with spec.network.configRef or spec.network.inline, or remove " + path})
 		}
@@ -395,9 +416,9 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 	}
 	for i, address := range network.Get("addresses").Items() {
 		path := fmt.Sprintf("$.spec.network.addresses[%d]", i)
-		if address.Has("interface") && (!configured || provided.Bool()) {
+		if address.Has("interface") && (!configured || provided) {
 			remediation := "select a network configuration on " + o.Identity() + " with spec.network.configRef or spec.network.inline, or remove " + path[2:] + ".interface"
-			if provided.Bool() {
+			if provided {
 				remediation = "remove " + path[2:] + ".interface from " + o.Identity() + "; an OS-ready Machine declares contacts only"
 			}
 			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path + ".interface", Message: "interface assignment requires a non-provided Machine with configured network", Remediation: remediation})
@@ -461,12 +482,12 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 }
 
 func anacondaInstalled(o api.Object, c api.Catalog) bool {
-	profile, ok := c.Find(api.MachineInstallProfile, o.Spec().Get("os", "installProfileRef").Text())
+	profile, ok := c.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(o))
 	return installed(o) && ok && profile.Spec().Has("installer", "anaconda")
 }
 
 func validateDomainInterfaces(o api.Object, c api.Catalog, native api.Value, configured bool) []api.Issue {
-	if provided := o.Spec().Get("os", "provided"); !provided.Present() || provided.Bool() {
+	if !api.MachineInstalled(o) && !api.MachineClusterInstalled(o) {
 		return nil
 	}
 	if !configured {
@@ -493,9 +514,8 @@ func validateDomainInterfaces(o api.Object, c api.Catalog, native api.Value, con
 func validateAccess(o api.Object, c api.Catalog) []api.Issue {
 	var issues []api.Issue
 	s := o.Spec()
-	provided := s.Get("os", "provided")
-	if local := s.Get("access", "local"); local.Present() && (!local.Bool() || !provided.Bool()) {
-		issues = api.AppendIssues(issues, invariant("$.spec.access.local", "local access must be true and requires an OS-ready Machine", "remove spec.access.local, or set it to true on an OS-ready Machine"))
+	if s.Has("access", "local") && !api.MachineProvided(o) {
+		issues = api.AppendIssues(issues, invariant("$.spec.access.local", "local access requires an OS-ready Machine", "remove spec.access.local, or declare it on an OS-ready Machine"))
 	}
 	if s.Get("access", "rootLogin").Text() == "revoke" && (installed(o) || !successorLogin(o, c)) {
 		issues = api.AppendIssues(issues, invariant("$.spec.access.rootLogin", "revoking root login requires a managed storage-cluster non-root successor login", "remove spec.access.rootLogin, or make this Machine a node of "+successorLoginHolders()))
@@ -642,7 +662,7 @@ func hostKeyCredentialCollisions(o api.Object, c api.Catalog, key string) []api.
 		}
 	}
 	for _, machine := range c.OfKind(api.Machine) {
-		if machine.Identity() != o.Identity() && !machine.Spec().Has("os", "installProfileRef") && machine.Spec().Get("access", "ssh", "auth", "privateKeyRef").Text() == key {
+		if machine.Identity() != o.Identity() && !api.MachineInstalled(machine) && machine.Spec().Get("access", "ssh", "auth", "privateKeyRef").Text() == key {
 			collide(machine, "spec.access.ssh.auth.privateKeyRef")
 		}
 	}
@@ -654,16 +674,17 @@ func hostKeyCredentialCollisions(o api.Object, c api.Catalog, key string) []api.
 	return issues
 }
 
-func validateBaremetal(o api.Object) []api.Issue {
+func validateBaremetal(c api.Catalog, o api.Object) []api.Issue {
 	s := o.Spec()
 	issues := []api.Issue{}
 	if s.Get("hardware", "nics").Len() == 0 {
 		issues = api.AppendIssues(issues, invariant("$.spec.hardware.nics", "bare-metal installation requires hardware NICs", "declare the install NICs in spec.hardware.nics"))
 	}
 	for i, nic := range s.Get("hardware", "nics").Items() {
-		if substrate.MachineMAC(o, nic.Get("name").Text()) == "" {
-			issues = api.AppendIssues(issues, invariant(fmt.Sprintf("$.spec.hardware.nics[%d]", i), "every bare-metal install NIC requires a MAC",
-				fmt.Sprintf("add a spec.substrate.baremetal.nics entry with nicRef %s and its macAddress", nic.Get("name").Text())))
+		if !nic.Has("macAddress") {
+			path := fmt.Sprintf("%s[%d].macAddress", substrate.NICsPath, i)
+			issues = api.AppendIssues(issues, invariant("$."+path, "every bare-metal install NIC requires a MAC",
+				"set "+path+" to the hardware address of NIC "+nic.Get("name").Text()))
 		}
 	}
 	if !substrate.MachineBMC(o).Present() {
@@ -673,23 +694,23 @@ func validateBaremetal(o api.Object) []api.Issue {
 	if installed(o) && !s.Has("os", "install", "hostKeyRef") {
 		issues = api.AppendIssues(issues, invariant("$.spec.os.install.hostKeyRef", "bare-metal installation requires the SSH host key it delivers", "set spec.os.install.hostKeyRef to the sshKeyPair Secret whose pair the installation delivers as the host key"))
 	}
-	if reason, remedy := PhysicalRootDeviceNameRefusal(o); reason != "" {
-		return api.AppendIssues(issues, invariant("$.spec.hardware.rootDevice.deviceName", reason, remedy))
+	if reason, remedy := PhysicalRootDeviceNameRefusal(c, o); reason != "" {
+		return api.AppendIssues(issues, invariant("$."+substrate.RootDiskPath+".hints.deviceName", reason, remedy))
 	}
-	if wwn := s.Get("substrate", "baremetal", "rootDevice", "wwn"); wwn.Present() && !substrate.ValidRootWWN(wwn.Text()) {
-		return api.AppendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice.wwn", "a root disk's wwn is 0x followed by 16 or 32 lowercase hexadecimal digits",
-			"set spec.substrate.baremetal.rootDevice.wwn on "+o.Identity()+" to the disk's WWN in that form, as its /dev/disk/by-id/wwn-0x link names it"))
+	if wwn := substrate.MachineRootDisk(o).Get("wwn"); wwn.Present() && !substrate.ValidRootWWN(wwn.Text()) {
+		return api.AppendIssues(issues, invariant("$."+substrate.RootDiskPath+".wwn", "a root disk's wwn is 0x followed by 16 or 32 lowercase hexadecimal digits",
+			"set "+substrate.RootDiskPath+".wwn on "+o.Identity()+" to the disk's WWN in that form, as its /dev/disk/by-id/wwn-0x link names it"))
 	}
 	if !installed(o) {
-		if reason, remedy := AgentRootDeviceRefusal(o); reason != "" {
-			issues = api.AppendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice", reason, remedy))
+		if reason, remedy := AgentRootDeviceRefusal(c, o); reason != "" {
+			issues = api.AppendIssues(issues, invariant("$."+substrate.RootDiskPath, reason, remedy))
 		}
 		return issues
 	}
-	physical := s.Get("substrate", "baremetal", "rootDevice")
+	physical := substrate.MachineRootDisk(o)
 	bySerial := physical.Has("serialNumber") && physical.Has("sizeBytes")
 	if !physical.Has("wwn") && !bySerial && !physical.Has("volumeRef") && !physical.Has("bootVolume") && !physical.Has("discover") {
-		issues = api.AppendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice", "bare-metal installation requires a root selector: a wwn, serialNumber with sizeBytes, or a volumeRef or bootVolume logical volume",
+		issues = api.AppendIssues(issues, invariant("$."+substrate.RootDiskPath, "bare-metal installation requires a root selector: a wwn, serialNumber with sizeBytes, or a volumeRef or bootVolume logical volume",
 			RootFormsRemedy(" on "+o.Identity())))
 	}
 	return issues
@@ -697,29 +718,30 @@ func validateBaremetal(o api.Object) []api.Issue {
 
 // RootFormsRemedy names every root form of a bare-metal Machine an installer writes.
 func RootFormsRemedy(on string) string {
-	return "set spec.substrate.baremetal.rootDevice.wwn" + on + " to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root hint to default to bootVolume"
+	return "set " + substrate.RootDiskPath + ".wwn" + on + " to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root-disk field to default to bootVolume"
 }
 
-// PhysicalRootDeviceNameRefusal refuses a deviceName on a bare-metal Machine
-// an installer writes, whose WWN root form is substrate.baremetal.rootDevice.wwn.
-func PhysicalRootDeviceNameRefusal(o api.Object) (reason, remedy string) {
-	declared := o.Spec().Get("hardware", "rootDevice", "deviceName").Text()
-	if substrate.MachineArm(o) != substrate.ArmBaremetal || o.Spec().Get("os", "provided").Bool() || declared == "" {
+// PhysicalRootDeviceNameRefusal refuses a hints.deviceName on a bare-metal
+// Machine an installer writes, whose WWN root form is rootDisk.wwn.
+func PhysicalRootDeviceNameRefusal(c api.Catalog, o api.Object) (reason, remedy string) {
+	declared := substrate.MachineRootDisk(o).Get("hints", "deviceName").Text()
+	if substrate.MachineArm(c, o) != substrate.ArmBaremetal || api.MachineProvided(o) || declared == "" {
 		return "", ""
 	}
-	reason = "a bare-metal Machine an installer writes names its root WWN as spec.substrate.baremetal.rootDevice.wwn, never by spec.hardware.rootDevice.deviceName"
+	path := substrate.RootDiskPath + ".hints.deviceName"
+	reason = "a bare-metal Machine an installer writes names its root WWN as " + substrate.RootDiskPath + ".wwn, never by " + path
 	if match := clearDevicePath.FindStringSubmatch(declared); match != nil {
-		return reason, "replace spec.hardware.rootDevice.deviceName on " + o.Identity() + " with spec.substrate.baremetal.rootDevice.wwn: 0x" + match[1] + ", the WWN " + declared + " names"
+		return reason, "replace " + path + " on " + o.Identity() + " with " + substrate.RootDiskPath + ".wwn: 0x" + match[1] + ", the WWN " + declared + " names"
 	}
-	return reason, "remove spec.hardware.rootDevice.deviceName from " + o.Identity() + " and " + RootFormsRemedy("")
+	return reason, "remove " + path + " from " + o.Identity() + " and " + RootFormsRemedy("")
 }
 
 // AgentRootDeviceRefusal requires the durable selector the agent can carry.
-func AgentRootDeviceRefusal(o api.Object) (string, string) {
-	if substrate.MachineArm(o) != substrate.ArmBaremetal {
+func AgentRootDeviceRefusal(c api.Catalog, o api.Object) (string, string) {
+	if substrate.MachineArm(c, o) != substrate.ArmBaremetal {
 		return "", ""
 	}
-	if reason, remedy := PhysicalRootDeviceNameRefusal(o); reason != "" {
+	if reason, remedy := PhysicalRootDeviceNameRefusal(c, o); reason != "" {
 		return reason, remedy
 	}
 	hints := substrate.MachineRootDeviceHints(o)
@@ -731,7 +753,7 @@ func AgentRootDeviceRefusal(o api.Object) (string, string) {
 			return "", ""
 		}
 		return "a volumeRef or bootVolume selects the root alone, and a volumeRef requires safe storageId and volumeId segments",
-			"declare only spec.substrate.baremetal.rootDevice.volumeRef or bootVolume on " + o.Identity() + ", without other root hints"
+			"declare only " + substrate.RootDiskPath + ".volumeRef or bootVolume on " + o.Identity() + ", without other root hints"
 	}
 	wwn := substrate.ValidRootWWN(hints.WWN)
 	serial := diskselection.ValidSerial(hints.SerialNumber)
@@ -746,20 +768,13 @@ func AgentRootDeviceRefusal(o api.Object) (string, string) {
 
 func validateHardware(o api.Object, c api.Catalog, variant substrate.Arm) []api.Issue {
 	issues := []api.Issue{}
-	arm := substrate.MachineArm(o)
-	seen, bound := map[string]bool{}, map[string]bool{}
-	for i, entry := range substrate.MachineMACs(o).Items() {
-		path := fmt.Sprintf("$.spec.substrate.%s.nics[%d]", arm, i)
-		nicRef := entry.Get("nicRef").Text()
-		if bound[nicRef] {
-			issues = api.AppendIssues(issues, invariant(path+".nicRef", "each hardware NIC has one MAC", "remove the repeated "+path[2:]+" entry"))
-		}
-		bound[nicRef] = true
+	seen := map[string]bool{}
+	for i, entry := range o.Spec().Get("hardware", "nics").Items() {
 		mac, ok := canonicalMAC(entry.Get("macAddress").Text())
 		if !ok {
 			continue
 		}
-		path += ".macAddress"
+		path := fmt.Sprintf("$.%s[%d].macAddress", substrate.NICsPath, i)
 		if seen[mac] {
 			issues = api.AppendIssues(issues, invariant(path, "canonical hardware MACs must be unique", "correct "+path[2:]+"; another NIC of this Machine declares the same MAC"))
 		}
@@ -771,7 +786,7 @@ func validateHardware(o api.Object, c api.Catalog, variant substrate.Arm) []api.
 			if other.Identity() == o.Identity() {
 				continue
 			}
-			for _, peer := range substrate.MachineMACs(other).Items() {
+			for _, peer := range other.Spec().Get("hardware", "nics").Items() {
 				pm, ok := canonicalMAC(peer.Get("macAddress").Text())
 				if ok && pm == mac {
 					issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path, Message: "authored hardware MACs must be unique across Machines",
@@ -785,44 +800,32 @@ func validateHardware(o api.Object, c api.Catalog, variant substrate.Arm) []api.
 
 func defaultedNICSegments(c api.Catalog, o, provider api.Object) (api.Value, bool) {
 	segments := substrate.Segments(c, provider)
-	entries := substrate.MachineNICSegments(o)
+	nics := o.Spec().Get("hardware", "nics")
 	if segments.Len() != 1 {
-		return entries, false
+		return nics, false
 	}
 	sole := segments.Items()[0].Get("name")
 	if sole.Type() != api.String || sole.Text() == "" {
-		return entries, false
+		return nics, false
 	}
-	values := []api.Value{}
-	for _, nic := range substrate.MachineNICs(o) {
-		entry, found := namedValueBy(entries, "nicRef", nic)
-		if !found {
-			entry = api.MapValue(api.FieldValue{Name: "nicRef", Value: api.StringValue(nic)}, api.FieldValue{Name: "segmentRef", Value: sole})
-		}
-		values = append(values, entry)
-	}
-	for _, entry := range entries.Items() {
-		if !slices.Contains(substrate.MachineNICs(o), entry.Get("nicRef").Text()) {
-			values = append(values, entry)
-		}
+	values := nics.Items()
+	for i, nic := range values {
+		values[i] = nic.Default("segmentRef", sole)
 	}
 	return api.ListValue(values...), true
 }
 
 func validateSegmentRefs(c api.Catalog, o, provider api.Object, found bool) []api.Issue {
-	arm := substrate.MachineArm(o)
+	arm := substrate.Variant(provider)
 	issues := []api.Issue{}
 	for i, entry := range substrate.MachineNICSegments(o).Items() {
 		if !entry.Has("segmentRef") {
 			continue
 		}
-		field := fmt.Sprintf("$.spec.substrate.%s.nics[%d].segmentRef", arm, i)
-		if !o.Spec().Has("substrate", "providerRef") {
-			if arm != substrate.ArmBaremetal {
-				continue
-			}
-			issues = api.AppendIssues(issues, invariant(field, "NIC "+entry.Get("nicRef").Text()+" of "+o.Identity()+" names segment "+entry.Get("segmentRef").Text()+", and the Machine names no provider whose segments it could select",
-				"set spec.substrate.providerRef on "+o.Identity()+" to the InfraProvider that declares the segment, or remove "+field[2:]))
+		field := fmt.Sprintf("$.%s[%d].segmentRef", substrate.NICsPath, i)
+		if !o.Spec().Has("hardware", "providerRef") {
+			issues = api.AppendIssues(issues, invariant(field, "NIC "+entry.Get("name").Text()+" of "+o.Identity()+" names segment "+entry.Get("segmentRef").Text()+", and the Machine names no provider whose segments it could select",
+				"set "+substrate.ProviderPath+" on "+o.Identity()+" to the InfraProvider that declares the segment, or remove "+field[2:]))
 			continue
 		}
 		if segment, ok := namedValue(substrate.Segments(c, provider), entry.Get("segmentRef").Text()); found && ok && !segment.Has(string(arm)) {
@@ -839,7 +842,7 @@ func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant substrat
 			"declare each vNIC of "+o.Identity()+" in spec.hardware.nics, in device order, such as one entry named enp1s0")}
 	}
 	segments := substrate.Segments(c, provider)
-	path := "$.spec.substrate." + string(variant) + ".nics"
+	path := "$." + substrate.NICsPath
 	issues := []api.Issue{}
 	for i, nic := range nics {
 		if !api.ValidLexical(api.LexicalIfname, nic) {
@@ -860,10 +863,11 @@ func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant substrat
 		offered = "across spec.segments and the managed Networks whose spec.libvirt.providerRef names it"
 		named += " or a managed Network whose spec.libvirt.providerRef names " + provider.Name()
 	}
-	for _, nic := range nics {
+	for i, nic := range nics {
 		if substrate.NICSegment(c, provider, o, nic) == "" && !c.UndecodableOfKind(api.Network) {
-			issues = api.AppendIssues(issues, invariant(path, fmt.Sprintf("NIC %s of %s selects no segment, and %s offers %d segments %s, not exactly one that every NIC defaults to", nic, o.Identity(), provider.Identity(), segments.Len(), offered),
-				"add a "+path[2:]+" entry with nicRef "+nic+" and a segmentRef naming "+named+" on "+o.Identity()))
+			field := fmt.Sprintf("%s[%d].segmentRef", path, i)
+			issues = api.AppendIssues(issues, invariant(field, fmt.Sprintf("NIC %s of %s selects no segment, and %s offers %d segments %s, not exactly one that every NIC defaults to", nic, o.Identity(), provider.Identity(), segments.Len(), offered),
+				"set "+field[2:]+" to "+named+" on "+o.Identity()))
 		}
 	}
 	return issues
@@ -957,11 +961,8 @@ func validateConfiguration(config api.Value, c api.Catalog, path string) []api.I
 func validateServiceIntent(o api.Object) []api.Issue {
 	s := o.Spec()
 	issues := infrastructureservices.ValidateProxyChoice(s.Get("proxy"), "$.spec.proxy")
-	if provided := s.Get("os", "provided"); s.Has("proxy") && provided.Present() && !provided.Bool() && !installed(o) {
+	if s.Has("proxy") && api.MachineClusterInstalled(o) {
 		issues = api.AppendIssues(issues, invariant("$.spec.proxy", "installer-provisioned Machines use their cluster's installation proxy choice", "remove spec.proxy; the installation proxy choice of this Machine's cluster applies"))
-	}
-	if s.Has("os", "install", "ntp") && !installed(o) {
-		issues = api.AppendIssues(issues, invariant("$.spec.os.install.ntp", "installation NTP choices require a Bootwright-installed Machine with installProfileRef", "remove spec.os.install.ntp, or name a MachineInstallProfile in spec.os.installProfileRef"))
 	}
 	return issues
 }
@@ -992,9 +993,7 @@ func successorLogin(o api.Object, c api.Catalog) bool {
 	}
 	return false
 }
-func installed(o api.Object) bool {
-	return o.Spec().Get("os", "provided").Present() && !o.Spec().Get("os", "provided").Bool() && o.Spec().Has("os", "installProfileRef")
-}
+func installed(o api.Object) bool { return api.MachineInstalled(o) }
 func inherit(local, defaults api.Value) api.Value {
 	for _, f := range defaults.Fields() {
 		if !local.Has(f.Name) {
@@ -1012,16 +1011,10 @@ func inherit(local, defaults api.Value) api.Value {
 // bundle is an anchor only for a verified leg.
 func providerBMCDefaults(bmc api.Value, provider api.Object) api.Value {
 	defaults := provider.Spec().Get("baremetal", "defaults", "bmc")
-	if bmc.Get("tls").Has("verification") {
-		defaults = defaults.With("tls", defaults.Get("tls").Without("verify"))
-	}
-	if bmc.Get("tls").Has("verify") {
-		defaults = defaults.With("tls", defaults.Get("tls").Without("verification"))
-	}
 	if bmc.Has("virtualMedia") {
 		defaults = defaults.Without("virtualMedia")
 	}
-	if (bmc.Get("tls").Has("verify") && !bmc.Get("tls", "verify").Bool() || bmc.Get("tls", "verification").Text() == "none") && defaults.Get("tls").Has("trustBundleRef") {
+	if !substrate.BMCVerified(bmc) && defaults.Get("tls").Has("trustBundleRef") {
 		defaults = defaults.With("tls", defaults.Get("tls").Without("trustBundleRef"))
 	}
 	return defaults
@@ -1099,7 +1092,7 @@ func validateBondSegments(o api.Object, native api.Value, nicsPath string) []api
 			nic := substrate.InterfaceNIC(o, leaf)
 			for index, entry := range entries {
 				reference := entry.Get("segmentRef").Text()
-				if entry.Get("nicRef").Text() != nic || reference == "" {
+				if entry.Get("name").Text() != nic || reference == "" {
 					continue
 				}
 				placed = append(placed, leaf+" on "+reference)
@@ -1128,25 +1121,30 @@ func validateBondSegments(o api.Object, native api.Value, nicsPath string) []api
 }
 
 func validateVolumeRoot(o api.Object, variant substrate.Arm) []api.Issue {
-	if o.Spec().Has("substrate", "baremetal", "rootDevice", "discover") {
+	root := substrate.MachineRootDisk(o)
+	if root.Has("discover") {
 		return validateDiscoveryRoot(o, variant)
 	}
 	hints := substrate.MachineRootDeviceHints(o)
-	if o.Spec().Has("substrate", "baremetal", "rootDevice", "volumeRef") && o.Spec().Has("substrate", "baremetal", "rootDevice", "bootVolume") {
-		return []api.Issue{invariant("$.spec.substrate.baremetal.rootDevice", "bootVolume and volumeRef are mutually exclusive", "choose one root-volume selector")}
+	if root.Has("volumeRef") && root.Has("bootVolume") {
+		return []api.Issue{invariant("$."+substrate.RootDiskPath, "bootVolume and volumeRef are mutually exclusive", "choose one root-volume selector")}
 	}
 	if hints.VolumeRef == nil {
 		return nil
 	}
-	path := "$.spec.substrate.baremetal.rootDevice.volumeRef"
+	path := "$." + substrate.RootDiskPath + ".volumeRef"
 	if hints.VolumeRef.Firmware {
-		path = "$.spec.substrate.baremetal.rootDevice.bootVolume"
+		path = "$." + substrate.RootDiskPath + ".bootVolume"
 	}
-	if variant != substrate.ArmBaremetal || o.Spec().Get("os", "provided").Bool() || !hints.VolumeRef.Valid() || len(hints.Names()) != 1 {
+	if variant != substrate.ArmBaremetal || api.MachineProvided(o) || !hints.VolumeRef.Valid() || len(hints.Names()) != 1 {
 		return []api.Issue{invariant(path, "volumeRef and bootVolume select an installed physical root alone, and volumeRef uses 1 to 128 ASCII letters, digits, underscores or hyphens for each ID", "declare volumeRef with storageId and volumeId, or bootVolume, and remove other root hints")}
 	}
-	if !substrate.MachineBMC(o).Get("tls", "verify").Bool() || !strings.HasPrefix(substrate.MachineBMC(o).Get("address").Text(), "https://") {
-		return []api.Issue{invariant(path, "logical-volume discovery requires verified BMC TLS", "set spec.substrate.baremetal.bmc.tls.verify true on an https BMC address, or name the root by spec.substrate.baremetal.rootDevice.wwn or by serialNumber and sizeBytes")}
+	if !verifiedHTTPS(substrate.MachineBMC(o)) {
+		return []api.Issue{invariant(path, "logical-volume discovery requires verified BMC TLS", "set "+substrate.BMCPath+".tls.verification to full or certificate on an https BMC address, or name the root by "+substrate.RootDiskPath+".wwn or by serialNumber and sizeBytes")}
 	}
 	return nil
+}
+
+func verifiedHTTPS(bmc api.Value) bool {
+	return bmc.Present() && substrate.BMCVerified(bmc) && strings.HasPrefix(bmc.Get("address").Text(), "https://")
 }

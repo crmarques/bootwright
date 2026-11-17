@@ -28,7 +28,7 @@ func (s fixedStorage) ReadController(_ context.Context, _ string, read func(Stor
 }
 
 func controllerMachine() api.Object {
-	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct"))
+	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.MapValue(), "os", "provided").WithPath(api.MapValue(), "access", "local").WithPath(api.MapValue(), "proxy", "direct"))
 }
 
 func agentClusterObjects(spec api.Value, extra ...api.Object) []api.Object {

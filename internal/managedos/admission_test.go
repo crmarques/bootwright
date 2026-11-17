@@ -12,6 +12,13 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
+func osOf(provided bool, profile string) api.Value {
+	if provided {
+		return m("provided", m())
+	}
+	return m("install", m("profileRef", profile))
+}
+
 func m(kv ...any) api.Value {
 	fields := []api.FieldValue{}
 	for i := 0; i < len(kv); i += 2 {
@@ -38,7 +45,7 @@ func anaconda() api.Object {
 func TestInstallProfileNormalizationAndCustomization(t *testing.T) {
 	o := anaconda()
 	o = o.WithSpec(o.Spec().With("customizations", m("localization", m("language", "en_US.UTF-8"), "repositories", m("configure", list(m("id", "custom", "baseURL", "https://packages.example.test/repo", "gpgCheck", false))), "security", m("diskEncryption", m("unlock", m("tpm2", m("pcrIds", list(api.IntegerValue("7")))))))))
-	machine := obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "install")))
+	machine := obj(api.Machine, "node", m("os", m("install", m("profileRef", "install"))))
 	normalized, issues := Normalize(o, api.NewCatalog([]api.Object{machine}))
 	if len(issues) > 0 {
 		t.Fatal(issues)
@@ -62,7 +69,7 @@ func TestInstallProfileNormalizationAndCustomization(t *testing.T) {
 func TestCloneRestrictionsAndProviderBinding(t *testing.T) {
 	profile := obj(api.MachineInstallProfile, "clone", m("os", m("family", "rhel", "version", "9", "architecture", "x86_64"), "installer", m("templateClone", m("seed", m("cloudInit", m("growRootFilesystem", true)))), "customizations", m("services", m("enabled", api.StringList("sshd"))), "updates", m("policy", "none")))
 	provider := obj(api.InfraProvider, "virtual", m("vsphere", m("machineProfiles", list(m("name", "template", "template", "Templates/rhel")))))
-	machine := obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "clone"), "substrate", m("providerRef", "virtual", "vsphere", m("profileRef", "template"))))
+	machine := obj(api.Machine, "node", m("os", m("install", m("profileRef", "clone")), "hardware", m("providerRef", "virtual", "profileRef", "template")))
 	c := api.NewCatalog([]api.Object{provider, machine})
 	if issues := Validate(profile, c); len(issues) > 0 {
 		t.Fatal(issues)
@@ -210,8 +217,8 @@ func TestHostedTreeAcceptsOnlyStoreMedia(t *testing.T) {
 func TestAnInstalledConsumerNeedsTheVirtualMediaEndpoint(t *testing.T) {
 	const field = "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint"
 	provider := obj(api.InfraProvider, "virtual", m("libvirt", m("machineProfiles", list(m("name", "small")))))
-	virtual := obj(api.Machine, "virtual-node", m("os", m("provided", false, "installProfileRef", "install"), "substrate", m("providerRef", "virtual", "libvirt", m("profileRef", "small"))))
-	loose := obj(api.Machine, "loose-node", m("os", m("provided", false, "installProfileRef", "install")))
+	virtual := obj(api.Machine, "virtual-node", m("os", m("install", m("profileRef", "install")), "hardware", m("providerRef", "virtual", "profileRef", "small")))
+	loose := obj(api.Machine, "loose-node", m("os", m("install", m("profileRef", "install"))))
 	for name, objects := range map[string][]api.Object{
 		"a libvirt consumer":        {provider, virtual},
 		"a provider-less consumer":  {loose},
@@ -225,7 +232,7 @@ func TestAnInstalledConsumerNeedsTheVirtualMediaEndpoint(t *testing.T) {
 			}
 		})
 	}
-	provided := obj(api.Machine, "provided-node", m("os", m("provided", true, "installProfileRef", "install")))
+	provided := obj(api.Machine, "provided-node", m("os", m("provided", m())))
 	for name, catalog := range map[string]api.Catalog{"a provided Machine": api.NewCatalog([]api.Object{provided}), "no consumer": {}} {
 		if issues := Validate(anaconda(), catalog); len(issues) != 0 {
 			t.Fatalf("%s: %v", name, issues)
@@ -251,7 +258,7 @@ func TestAMachineAndAProfileOfOneNameShareNoServedDirectory(t *testing.T) {
 			WithPath(m("fromMedia", "local-media:dvd.iso", "artifactServerEndpoint", m("serverRef", treeServer, "endpointRef", "packages")), "installer", "anaconda", "packageSource", "hostedTree"))
 	}
 	machine := func(name, selected string, provided bool) api.Object {
-		return obj(api.Machine, name, m("os", m("provided", provided, "installProfileRef", selected)))
+		return obj(api.Machine, name, m("os", osOf(provided, selected)))
 	}
 	servers := []api.Object{server("lab-artifacts"), server("other-artifacts")}
 	refused := map[string]struct {
@@ -298,7 +305,7 @@ func TestAMachineAndAProfileOfOneNameShareNoServedDirectory(t *testing.T) {
 // installation, and the refusal says so rather than the opposite rule.
 func TestTheBootstrapCycleIsStatedAsRefused(t *testing.T) {
 	profile, catalog := hostedTreeProfile("local-media:dvd.iso")
-	objects := []api.Object{obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "install")))}
+	objects := []api.Object{obj(api.Machine, "node", m("os", m("install", m("profileRef", "install"))))}
 	for _, existing := range catalog.Objects() {
 		if existing.Kind() == api.ArtifactServer {
 			existing = existing.WithSpec(existing.Spec().With("machineRef", api.StringValue("node")))
@@ -341,7 +348,7 @@ func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
 	}
 	clone := obj(api.MachineInstallProfile, "install", m("os", m("family", "rhel", "version", "9", "architecture", "x86_64"), "installer", m("templateClone", m())))
 	provider := obj(api.InfraProvider, "virtual", m("libvirt", m("machineProfiles", list(m("name", "small")))))
-	consumer := obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "install"), "substrate", m("providerRef", "virtual", "libvirt", m("profileRef", "small"))))
+	consumer := obj(api.Machine, "node", m("os", m("install", m("profileRef", "install")), "hardware", m("providerRef", "virtual", "profileRef", "small")))
 	consumed := api.NewCatalog([]api.Object{provider, consumer})
 	served, servedCatalog := hostedTreeProfile("local-media:dvd.iso")
 	cycle := []api.Object{consumer}
@@ -382,7 +389,7 @@ func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
 		"a clone on libvirt":                {Validate(clone, consumed), "$.spec.installer.templateClone"},
 		"no virtual media endpoint":         {Validate(anaconda(), consumed), "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint"},
 		"encryption without a TPM":          {Validate(custom(m("security", m("diskEncryption", m()))), consumed), "$.spec.customizations.security.diskEncryption"},
-		"a shared served directory":         {Validate(sameName, api.NewCatalog(append(servedCatalog.Objects(), sameName, obj(api.Machine, "node", m("os", m("provided", false, "installProfileRef", "node")))))), "$.spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint.serverRef"},
+		"a shared served directory":         {Validate(sameName, api.NewCatalog(append(servedCatalog.Objects(), sameName, obj(api.Machine, "node", m("os", m("install", m("profileRef", "node"))))))), "$.spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint.serverRef"},
 		"boot media off the store":          {Validate(obj(api.MachineImage, "image", m("bootMedia", "https://images.example.test/rhel.iso")), api.Catalog{}), "$.spec.bootMedia"},
 		"no RHSM intent":                    {Validate(obj(api.Entitlement, "rhel", m("type", "redhatRhel")), api.Catalog{}), "$.spec.rhsm"},
 		"external RHSM detail":              {Validate(rhel(m("management", "external", "organizationRef", "organization")), api.Catalog{}), "$.spec.rhsm.organizationRef"},
@@ -422,7 +429,7 @@ spec:
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: {name: controller}
-spec: {os: {provided: true}}
+spec: {os: {provided: {}}}
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: MachineInstallProfile
@@ -514,7 +521,7 @@ spec:
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata: {name: controller}
-spec: {os: {provided: true}}
+spec: {os: {provided: {}}}
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: MachineInstallProfile

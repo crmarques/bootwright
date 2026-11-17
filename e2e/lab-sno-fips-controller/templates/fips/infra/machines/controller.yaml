@@ -6,14 +6,14 @@ metadata:
   name: controller
 
 spec:
-  firewall:
-    management: managed
-
   os:
-    provided: true
+    provided: {}
 
   proxy:
     direct: {}
+
+  firewall:
+    management: managed
 
   network:
     addresses:
@@ -24,4 +24,4 @@ spec:
         address: {{ .Values.controller.address }}
 
   access:
-    local: true
+    local: {}

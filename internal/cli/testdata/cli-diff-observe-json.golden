@@ -48,7 +48,7 @@
           "path": "machines/rhel.yaml",
           "document": null,
           "notCompared": [
-            "spec.substrate.libvirt.profileRef",
+            "spec.hardware.profileRef",
             "spec.hardware",
             "spec.os",
             "spec.network",

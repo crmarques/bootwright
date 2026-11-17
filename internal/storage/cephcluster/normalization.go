@@ -89,8 +89,8 @@ func normalizeCluster(object api.Object, catalog api.Catalog) api.Value {
 		if !node.Has("fqdn") && textOf(node, "name") != "" && domain != "" {
 			node = node.With("fqdn", api.StringValue(textOf(node, "name")+"."+object.Name()+"."+domain))
 		}
-		if placed && host.Spec().Has("placement", "site") {
-			node = node.With("site", host.Spec().Get("placement", "site"))
+		if placed && host.Spec().Has("site") {
+			node = node.With("site", host.Spec().Get("site"))
 		} else if placed {
 			node = node.Without("site")
 		}

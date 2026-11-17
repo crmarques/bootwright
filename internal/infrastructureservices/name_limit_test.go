@@ -44,7 +44,7 @@ func managedOf(kind api.Kind, name string) api.Object {
 }
 
 func nameIssues(o api.Object) []api.Issue {
-	host := api.NewObject(api.Machine, "host", api.Value{}, api.MapValue().With("os", api.MapValue().With("provided", api.BoolValue(true))))
+	host := api.NewObject(api.Machine, "host", api.Value{}, api.MapValue().With("os", api.MapValue().With("provided", api.MapValue())))
 	var found []api.Issue
 	for _, issue := range infrastructureservices.Validate(o, api.NewCatalog([]api.Object{host, o})) {
 		if issue.Field == "$.metadata.name" {

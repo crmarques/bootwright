@@ -7,39 +7,33 @@ metadata:
     datacenter: site-a
 
 spec:
-  placement:
-    site: site-a
+  site: site-a
 
-  substrate:
+  hardware:
     providerRef: bare-metal
 
-    baremetal:
-      rootDevice:
-        wwn: "0x500000000000f101"
+    bmc:
+      address: https://bmc-edge-a-01.example.com/redfish/v1/Systems/1
+      credentialsRef: ocp-bmc-credentials
 
-      bmc:
-        address: https://bmc-edge-a-01.example.com/redfish/v1/Systems/1
-        protocol: redfish
-        credentialsRef: ocp-bmc-credentials
-
+      virtualMedia:
         tls:
-          verify: true
+          trust: established
 
-        virtualMedia:
-          tls:
-            trust: established
+    nics:
+      - name: eth0
+        macAddress: 02:00:00:00:00:18
+        segmentRef: ocp-bare-metal-network
 
-      nics:
-        - nicRef: eth0
-          macAddress: 02:00:00:00:00:18
-          segmentRef: ocp-bare-metal-network
+      - name: eth2
+        macAddress: 02:00:00:00:00:19
+        segmentRef: ocp-bare-metal-network
 
-        - nicRef: eth2
-          macAddress: 02:00:00:00:00:19
-          segmentRef: ocp-bare-metal-network
+    rootDisk:
+      wwn: "0x500000000000f101"
 
   os:
-    provided: false
+    clusterInstalled: {}
 
   network:
     configRef: ocp-bare-metal-network
@@ -58,8 +52,3 @@ spec:
         interface: bond0.200
 
     overrides: {}
-
-  hardware:
-    nics:
-      - name: eth0
-      - name: eth2

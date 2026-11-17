@@ -27,7 +27,7 @@ metadata:
 
 spec:
   os:
-    provided: true
+    provided: {}
 
   access:
     ssh:
@@ -119,14 +119,13 @@ metadata:
   name: acceptance-clone-node
 
 spec:
-  substrate:
+  hardware:
     providerRef: acceptance-vsphere
-    vsphere:
-      profileRef: clone
+    profileRef: clone
 
   os:
-    provided: false
-    installProfileRef: acceptance-clone
+    install:
+      profileRef: acceptance-clone
 
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -273,26 +272,19 @@ metadata:
   name: acceptance-sno-node
 
 spec:
-  substrate:
-    providerRef: kubevirt-ocp-multidc-01
-
-    kubevirt:
-      profileRef: general
-
-      nics:
-        - nicRef: primary
-          segmentRef: hub-vm-machine
-
-        - nicRef: ceph-public
-          segmentRef: hub-vm-ceph-public
-
   hardware:
+    providerRef: kubevirt-ocp-multidc-01
+    profileRef: general
+
     nics:
       - name: primary
+        segmentRef: hub-vm-machine
+
       - name: ceph-public
+        segmentRef: hub-vm-ceph-public
 
   os:
-    provided: false
+    clusterInstalled: {}
 
   network:
     configRef: hub-vm-network

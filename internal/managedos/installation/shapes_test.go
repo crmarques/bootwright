@@ -23,7 +23,7 @@ func withRoutes(config api.Object, routes ...api.Value) api.Object {
 // libvirt, so a provider placed on it emulates its guests' controllers there.
 func hypervisorHost() api.Object {
 	return api.NewObject(api.Machine, "hv-01", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "hv-01.lab.example.test")),
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.3")),
@@ -215,7 +215,7 @@ func TestADefaultRouteTheLineDoesNotCarryInstalls(t *testing.T) {
 func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 	hinted := guest()
 	hinted = hinted.WithSpec(hinted.Spec().WithPath(
-		api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))), "hardware", "rootDevice"))
+		api.MapValue(field("rotational", api.BoolValue(false))), "hardware", "rootDisk", "hints"))
 	kernelNamed := networkWith(declaredInterface("enp1s0", "ethernet"), declaredInterface("eth0", "ethernet"))
 	kernel, kernelRemedy := kernelReason("eth0")
 	onServices := artifactServer(text("machineRef", "services"), text("bindAddress", "192.0.2.2"))
@@ -224,8 +224,8 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 		reason, remediation string
 	}{
 		"a target before its network": {labCatalog(hinted, kernelNamed),
-			"a managed-OS installation selects its root disk by deviceName on a virtual Machine or, on a physical Machine, by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares",
-			"remove spec.hardware.rootDevice.rotational from Machine/rhel-01"},
+			"a managed-OS installation selects its root disk by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the root-disk hints the Machine declares",
+			"remove spec.hardware.rootDisk.hints.rotational from Machine/rhel-01"},
 		"a network before its profile": {labCatalog(kernelNamed, registeringProfile(), externalEntitlement()), kernel, kernelRemedy},
 		"a profile before its servers": {labCatalog(registeringProfile(), externalEntitlement(), servicesHost(), onServices),
 			"subscription repositories are enabled on a registration this executable performs, and Entitlement/rhel sets spec.rhsm.management to external",

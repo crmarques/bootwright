@@ -78,7 +78,7 @@ func TestLabSNOExampleSelectsItsInstallerFromTheDeclaredRelease(t *testing.T) {
 	// and the cluster installer writes its operating system, so it selects no
 	// install profile and Bootwright installs nothing on it.
 	node := requireObject(t, effective, api.Machine, "sno-01")
-	if node.Spec().Has("os", "installProfileRef") || node.Spec().Get("os", "provided").Bool() {
+	if !api.MachineClusterInstalled(node) {
 		t.Fatal("the cluster node is not installer-provisioned", node.Spec().Get("os"))
 	}
 }
@@ -158,36 +158,12 @@ func TestLabSNOExampleDerivesItsInstallerInputs(t *testing.T) {
 	}
 }
 
-// snoExampleWithHints is the example with its node's root device selected by
-// the given hints in place of its device name.
-func snoExampleWithHints(t *testing.T, hints string) desiredstate.Sources {
-	t.Helper()
-	const selected = "deviceName: /dev/vda\n"
-	sources := snoExampleSources(t)
-	replaced := 0
-	for index, file := range sources.Files {
-		body := string(file.Bytes())
-		replaced += strings.Count(body, selected)
-		sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(strings.Replace(body, selected, hints, 1)))
-	}
-	if replaced != 1 {
-		t.Fatalf("the example selects %d root devices, want 1", replaced)
-	}
-	return sources
-}
-
-// Every root-device hint a virtual node is admitted with is admitted on the
-// example's node with its type and reaches the agent configuration unchanged:
-// strings a YAML 1.1 reader would take for numbers, a size of zero and a disk
-// that is not rotational.
-func TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig(t *testing.T) {
+// An agent-installed node on a libvirt provider declares no root disk: the
+// provider creates it, and the agent configuration selects the one device
+// every installer writes, derived from the provider.
+func TestLabSNOExampleDerivesItsRootDeviceHintFromTheCreatedDisk(t *testing.T) {
 	t.Parallel()
-	sources := snoExampleWithHints(t, "deviceName: \"/dev/vda\"\n"+
-		"      model: \"1e3\"\n"+
-		"      vendor: \"0o17\"\n"+
-		"      minSizeGigabytes: 0\n"+
-		"      rotational: false\n")
-	state, _ := compileAcceptance(t, sources)
+	state, _ := compileAcceptance(t, snoExampleSources(t))
 	if unsupported := lifecycle.Identities(agentinstall.Refusals(state.Effective())); len(unsupported) != 0 {
 		t.Fatalf("the example declares a cluster this contract cannot install: %v", unsupported)
 	}
@@ -200,45 +176,42 @@ func TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig(t *testing.T) {
 		t.Fatalf("hosts = %#v", hosts)
 	}
 	host, _ := hosts[0].(map[string]any)
-	want := map[string]any{
-		"deviceName": "/dev/vda", "model": "1e3", "vendor": "0o17", "minSizeGigabytes": int64(0), "rotational": false,
-	}
+	want := map[string]any{"deviceName": "/dev/vda"}
 	if !reflect.DeepEqual(host["rootDeviceHints"], want) {
 		t.Fatalf("hints = %#v, want %#v", host["rootDeviceHints"], want)
 	}
 }
 
 // The example's node installs to a disk its libvirt provider creates, which
-// carries no WWN, SCSI address or serial number, so the schema admits those
-// hints only in a bare-metal arm, and a bare-metal arm on a libvirt provider's
-// Machine is refused at the arm, naming the Machine, before anything is
-// planned.
-func TestLabSNOExampleRefusesAHintItsCreatedDiskCannotMatch(t *testing.T) {
+// the Machine does not declare: a root disk of any kind on a libvirt provider's
+// Machine is refused at spec.hardware.rootDisk, naming the Machine, before
+// anything is planned.
+func TestLabSNOExampleRefusesARootDiskItsCreatedDiskCannotMatch(t *testing.T) {
 	t.Parallel()
-	for hint, value := range map[string]string{"hctl": "1:0:0:0", "serialNumber": "0987654321", "wwn": "0x5000c500a1b2c3d4"} {
-		t.Run(hint, func(t *testing.T) {
-			const arm = "      profileRef: sno\n"
+	for name, disk := range map[string]string{"hctl": "      hints:\n        hctl: \"1:0:0:0\"\n", "serialNumber": "      serialNumber: \"0987654321\"\n", "wwn": "      wwn: \"0x5000c500a1b2c3d4\"\n"} {
+		t.Run(name, func(t *testing.T) {
+			const arm = "    profileRef: sno\n"
 			sources := snoExampleSources(t)
 			replaced := 0
 			for index, file := range sources.Files {
 				body := string(file.Bytes())
 				replaced += strings.Count(body, arm)
-				sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(strings.Replace(body, arm, arm+"    baremetal:\n      rootDevice:\n        "+hint+": \""+value+"\"\n", 1)))
+				sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(strings.Replace(body, arm, arm+"\n    rootDisk:\n"+disk, 1)))
 			}
 			if replaced != 1 {
 				t.Fatalf("the example selects %d libvirt profiles, want 1", replaced)
 			}
 			state, _, err := wireCompiler().Compile(context.Background(), sources)
 			if state != nil || err == nil {
-				t.Fatalf("a %s hint on a created disk was admitted", hint)
+				t.Fatalf("a %s on a created disk was admitted", name)
 			}
 			for _, diagnostic := range diagnostics.Of(err) {
-				if diagnostic.Code == "api.invariant" && diagnostic.Field == "$.spec.substrate.baremetal" &&
+				if diagnostic.Code == "api.invariant" && diagnostic.Field == "$.spec.hardware.rootDisk" &&
 					diagnostic.Object != nil && diagnostic.Object.Kind == string(api.Machine) && diagnostic.Object.Name == "sno-01" {
 					return
 				}
 			}
-			t.Fatalf("no %s refusal naming Machine/sno-01: %#v", hint, diagnostics.Of(err))
+			t.Fatalf("no %s refusal naming Machine/sno-01: %#v", name, diagnostics.Of(err))
 		})
 	}
 }

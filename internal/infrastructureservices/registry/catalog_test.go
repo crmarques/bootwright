@@ -56,13 +56,13 @@ func text(name, value string) api.FieldValue { return field(name, api.StringValu
 
 func catalog(credentialType string) api.Catalog {
 	host := api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("proxy", api.MapValue(field("direct", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "controller.lab.example.test")),
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.1")),
 		)))),
-		field("access", api.MapValue(field("local", api.BoolValue(true)))),
+		field("access", api.MapValue(field("local", api.MapValue()))),
 	))
 	mirror := api.NewObject(api.Registry, "mirror", api.Value{}, api.MapValue(
 		text("management", "managed"), text("machineRef", "controller"), text("implementation", "distribution"),

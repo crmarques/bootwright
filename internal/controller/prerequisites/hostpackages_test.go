@@ -93,7 +93,7 @@ func TestTheRequirementGrammarAdmitsNamesAndCapabilitiesOnly(t *testing.T) {
 func TestAgentMediaSelectsNMStateFromItsClusterNodes(t *testing.T) {
 	objects := []api.Object{
 		api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef")),
-		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.MapValue(), "os", "provided").WithPath(api.MapValue(), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
 		api.NewObject(api.Machine, "node", api.Value{}, api.MapValue()),
 		api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.MapValue(), "install", "agent").With("nodes", api.ListValue(api.MapValue().With("machineRef", api.StringValue("node"))))),
 	}
@@ -112,7 +112,7 @@ func TestAgentMediaSelectsNMStateFromItsClusterNodes(t *testing.T) {
 func TestOnlyAProbedInstallerVIPSelectsIPUtils(t *testing.T) {
 	objects := []api.Object{
 		api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef")),
-		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().WithPath(api.MapValue(), "os", "provided").WithPath(api.MapValue(), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
 		api.NewObject(api.InfraProvider, "hosted", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "libvirt", "machineRef")),
 		api.NewObject(api.Network, "lab-guests", api.Value{}, api.MapValue().With("provided", api.BoolValue(false)).WithPath(api.StringValue("198.51.100.0/24"), "ipv4", "cidr").With("libvirt", api.MapValue().With("providerRef", api.StringValue("hosted")).With("bridge", api.StringValue("virbr-lab")).With("hostAddress", api.StringValue("198.51.100.1")))),
 	}

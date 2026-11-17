@@ -102,7 +102,7 @@ func TestEveryIngressHostIsOnTheVirtualIPSubnet(t *testing.T) {
 	moved, _ := catalog.Find(api.Machine, "machine-2")
 	catalog = replace(catalog, lanNetwork("public", "192.0.2.0/24", "site-a"))
 	catalog = replace(catalog, lanNetwork("narrow", "192.0.2.0/25", "site-b"))
-	catalog = replace(catalog, moved.WithSpec(moved.Spec().WithPath(api.StringValue("site-b"), "placement", "site")))
+	catalog = replace(catalog, moved.WithSpec(moved.Spec().WithPath(api.StringValue("site-b"), "site")))
 	services := graphServices()
 	services[1] = services[1].WithPath(api.StringValue("192.0.2.200/24"), "spec", "virtual_ip")
 	cluster, changed := withGraph(t, catalog, services)

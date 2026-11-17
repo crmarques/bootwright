@@ -44,9 +44,9 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 			node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))))
 	}
 	installed := guest("sno-01", "198.51.100.21")
-	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel-9-8"), "os", "installProfileRef"))
+	installed = installed.WithSpec(installed.Spec().With("os", api.MapValue(field("install", api.MapValue(text("profileRef", "rhel-9-8"))))))
 	unrealized := guest("sno-01", "198.51.100.21")
-	unrealized = unrealized.WithSpec(unrealized.Spec().WithPath(api.StringValue("vc"), "substrate", "providerRef"))
+	unrealized = unrealized.WithSpec(unrealized.Spec().WithPath(api.StringValue("vc"), "hardware", "providerRef"))
 	vsphere := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("vsphere", api.MapValue())))
 	multiNode := api.NewCatalog(append(base(),
 		guest("ocp-01", "198.51.100.31"), guest("ocp-02", "198.51.100.32"), guest("ocp-03", "198.51.100.33"),
@@ -140,13 +140,13 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		"A physical node with an HTTP BMC": {physicalWithController(func(v api.Value) api.Value {
 			return v.With("address", api.StringValue("http://bmc.example.test/redfish/v1/Systems/1"))
 		}), "OpenShiftCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
-		"A physical node with unverified BMC TLS":        {physicalWithController(func(v api.Value) api.Value { return v.WithPath(api.BoolValue(false), "tls", "verify") }), "OpenShiftCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
+		"A physical node with unverified BMC TLS":        {physicalWithController(func(v api.Value) api.Value { return v.WithPath(api.StringValue("none"), "tls", "verification") }), "OpenShiftCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
 		"A physical node without a stable root selector": {physicalWithRoot(text("wwn", "0X5000C500A1B2C3D4")), "OpenShiftCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
 		"A physical node's root named by a device path": {physicalWithRoot(text("deviceName", "/dev/sda")), "OpenShiftCluster/metal",
-			map[string]string{"<remedy>": "remove spec.hardware.rootDevice.deviceName from Machine/metal-01 and set spec.substrate.baremetal.rootDevice.wwn to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root hint to default to bootVolume"}},
-		"A root device the installer cannot name": {singleNodeWith(text("deviceName", "/dev/mapper/root")), "OpenShiftCluster/sno", onNode},
+			map[string]string{"<remedy>": "remove spec.hardware.rootDisk.hints.deviceName from Machine/metal-01 and set spec.hardware.rootDisk.wwn to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root-disk field to default to bootVolume"}},
 		"A root device size the frozen input cannot carry": {
-			singleNodeWith(text("deviceName", "/dev/vda"), number("minSizeGigabytes", "9007199254740992")), "OpenShiftCluster/sno", onNode,
+			physicalWithRoot(text("wwn", "0x5000c500a1b2c3d4"), number("minSizeGigabytes", "9007199254740992")), "OpenShiftCluster/metal",
+			map[string]string{"<machine>": "Machine/metal-01"},
 		},
 	}
 	for _, row := range refusalTable(t) {

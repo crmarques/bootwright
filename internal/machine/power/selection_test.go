@@ -43,8 +43,8 @@ func addresses(value string) api.Value {
 // its own controller.
 func catalog() api.Catalog {
 	environment := object(api.Environment, "env", m("controller", m("machineRef", "controller")))
-	controller := object(api.Machine, "controller", m("os", m("provided", true), "network", addresses("192.0.2.5/24")))
-	host := object(api.Machine, "host", m("os", m("provided", true), "network", addresses("192.0.2.10/24"),
+	controller := object(api.Machine, "controller", m("os", m("provided", m()), "network", addresses("192.0.2.5/24")))
+	host := object(api.Machine, "host", m("os", m("provided", m()), "network", addresses("192.0.2.10/24"),
 		"access", m("ssh", m("addressRef", "ssh", "user", "root", "knownHostsRef", "host-key",
 			"auth", m("privateKeyRef", "host-identity")))))
 	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system",
@@ -52,13 +52,12 @@ func catalog() api.Catalog {
 			"auth", m("credentialsRef", "bmc")))))
 	guests := object(api.NetworkConfig, "guests", m("nmstate", m("interfaces",
 		list(m("name", "enp1s0", "type", "ethernet")))))
-	guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab"),
-		"os", m("provided", false, "installProfileRef", "rhel"), "hardware", m("nics", list(m("name", "enp1s0"))),
+	guest := object(api.Machine, "guest", m("os", m("install", m("profileRef", "rhel")),
+		"hardware", m("providerRef", "lab", "nics", list(m("name", "enp1s0"))),
 		"network", addresses("192.0.2.20/24").With("configRef", api.StringValue("guests"))))
-	physical := object(api.Machine, "metal", m("os", m("provided", true), "network", addresses("192.0.2.30/24"),
-		"hardware", m("nics", list(m("name", "eno1"))),
-		"substrate", m("baremetal", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1",
-			"credentialsRef", "metal-bmc"), "nics", list(m("nicRef", "eno1", "macAddress", "52:54:00:9A:1B:01"))))))
+	physical := object(api.Machine, "metal", m("os", m("provided", m()), "network", addresses("192.0.2.30/24"),
+		"hardware", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1",
+			"credentialsRef", "metal-bmc"), "nics", list(m("name", "eno1", "macAddress", "52:54:00:9A:1B:01")))))
 	return api.NewCatalog([]api.Object{environment, controller, host, provider, guests, guest, physical})
 }
 
@@ -220,7 +219,7 @@ func TestAnUnresolvableTargetOrVerbRefuses(t *testing.T) {
 	if code(t, err) != "access.unavailable" {
 		t.Fatalf("a Machine with no controller at all: %v", err)
 	}
-	if remedy := diagnostics.Of(err)[0].Remediation; remedy != "declare spec.substrate.baremetal.bmc on Machine/controller, or place it on a provider that emulates a management controller" {
+	if remedy := diagnostics.Of(err)[0].Remediation; remedy != "declare spec.hardware.bmc on Machine/controller, or place it on a provider that emulates a management controller" {
 		t.Fatalf("a Machine with no controller remedy = %q", remedy)
 	}
 	if _, _, _, err := requestFor(catalog(), "lab", "guest", "suspend", false, realized()); code(t, err) != "lifecycle.state" {

@@ -267,7 +267,7 @@ func withValues(names map[string]string, pairs ...string) map[string]string {
 
 func localMirrorMachine() api.Object {
 	local := mirrorMachine()
-	return local.WithSpec(local.Spec().With("access", api.MapValue(field("local", api.BoolValue(true)))))
+	return local.WithSpec(local.Spec().With("access", api.MapValue(field("local", api.MapValue()))))
 }
 
 // A second name for the controller host, a Machine reached locally or over

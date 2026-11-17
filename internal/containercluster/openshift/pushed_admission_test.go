@@ -49,7 +49,7 @@ func TestAKubeVirtAttachmentRefusesOncePerNodeWhateverTheNICOrder(t *testing.T) 
 				m("name", "good", "kubevirt", m("networkRef", m("kind", "ClusterUserDefinedNetwork", "name", "good")))))
 		}
 		if object.Kind() == api.Machine && object.Name() == "node-0" {
-			spec = spec.WithPath(list(m("nicRef", "eth0", "segmentRef", "bad"), m("nicRef", "eth1", "segmentRef", "good"), m("nicRef", "eth2", "segmentRef", "bad"), m("nicRef", "eth3", "segmentRef", "bad")), "substrate", "kubevirt", "nics")
+			spec = spec.WithPath(list(m("name", "eth0", "segmentRef", "bad"), m("name", "eth1", "segmentRef", "good"), m("name", "eth2", "segmentRef", "bad"), m("name", "eth3", "segmentRef", "bad")), "hardware", "nics")
 		}
 		objects[index] = object.WithSpec(spec)
 	}
@@ -73,7 +73,7 @@ func TestKubeVirtClusterRefusesFetchSelectionAndMixedArms(t *testing.T) {
 	objects := catalog.Objects()
 	for index, object := range objects {
 		if object.Kind() == api.Machine && object.Name() == "node-0" {
-			objects[index] = object.WithSpec(object.Spec().WithPath(api.StringValue("other"), "substrate", "providerRef"))
+			objects[index] = object.WithSpec(object.Spec().WithPath(api.StringValue("other"), "hardware", "providerRef"))
 		}
 	}
 	objects = append(objects, obj(api.InfraProvider, "other", m("libvirt", m())))
@@ -113,7 +113,7 @@ func TestAnEncryptedKubeVirtNodeNeedsAPersistentVTPM(t *testing.T) {
 				}
 				objects[index] = object.WithSpec(object.Spec().WithPath(list(profile), "kubevirt", "machineProfiles"))
 			case api.Machine:
-				objects[index] = object.WithSpec(object.Spec().WithPath(api.StringValue("node"), "substrate", "kubevirt", "profileRef"))
+				objects[index] = object.WithSpec(object.Spec().WithPath(api.StringValue("node"), "hardware", "profileRef"))
 			}
 		}
 		return cluster, api.NewCatalog(objects)

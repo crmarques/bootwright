@@ -70,13 +70,13 @@ func installedRowGraph(row string, kind api.Kind, place func(machine string) api
 	default:
 		return api.Catalog{}, nil, false
 	}
-	substrate := api.MapValue()
+	hardware := api.MapValue()
 	if len(extra) != 0 && extra[0].Kind() == api.InfraProvider {
-		substrate = api.MapValue(text("providerRef", "lab-vsphere"))
+		hardware = api.MapValue(text("providerRef", "lab-vsphere"))
 	}
 	machine := api.NewObject(api.Machine, "mirror", api.Value{}, api.MapValue(
-		field("substrate", substrate),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)), text("installProfileRef", "rhel"))),
+		field("hardware", hardware),
+		field("os", api.MapValue(field("install", api.MapValue(text("profileRef", "rhel"))))),
 		field("proxy", api.MapValue(field("direct", api.MapValue()))),
 		field("network", api.MapValue(text("configRef", "guests"), text("installAddressRef", "ip"), field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "mirror.lab.example.test")), api.MapValue(text("name", "ip"), text("address", "198.51.100.20")))))),
@@ -205,7 +205,7 @@ func TestManagedServiceRefusalTableMatchesUnsupported(t *testing.T) {
 
 func TestAServiceOnTheControllerHasNoSSHRow(t *testing.T) {
 	declaring := api.NewObject(api.Machine, "controller", api.Value{}, controller().Spec().With("access", api.MapValue(
-		field("local", api.BoolValue(true)),
+		field("local", api.MapValue()),
 		field("ssh", api.MapValue(field("auth", api.MapValue(field("operatorIdentity", api.MapValue()))))),
 	)))
 	for _, kind := range []api.Kind{api.Proxy, api.DNSServer, api.NTPServer, api.Registry, api.ArtifactServer} {

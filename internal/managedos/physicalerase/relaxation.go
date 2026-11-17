@@ -43,7 +43,7 @@ func (c Capability) Relax(_ context.Context, block reconciliation.Block, method 
 	case lifecycle.EraseMetadataClear:
 		if !slices.ContainsFunc(request.Targets, func(target EraseTarget) bool { return target.Method != EraseMetadataClear }) {
 			return lifecycle.Removal{}, refusal("lifecycle.authorization",
-				token+" names Machine/"+block.Object+", whose spec.hardware.eraseOnRemoval already clears only metadata on every target, so the relaxation changes nothing",
+				token+" names Machine/"+block.Object+", whose onRemoval already clears only metadata on every disk it erases, so the relaxation changes nothing",
 				without+", or name "+lifecycle.EraseAuthorization+block.Object+":"+lifecycle.EraseRetain+" to waive the erase")
 		}
 	default:

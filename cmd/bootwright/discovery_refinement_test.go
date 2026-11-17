@@ -91,26 +91,30 @@ func TestDiscoveryRefinesRenderedDiskPoliciesBeforeInstallation(t *testing.T) {
 		mutate func(api.Object) api.Object
 	}{
 		{"BMC", func(m api.Object) api.Object {
-			return m.WithSpec(m.Spec().WithPath(api.StringValue("https://other.example.test/redfish/v1/Systems/1"), "substrate", "baremetal", "bmc", "address"))
+			return m.WithSpec(m.Spec().WithPath(api.StringValue("https://other.example.test/redfish/v1/Systems/1"), "hardware", "bmc", "address"))
 		}},
 		{"method", func(m api.Object) api.Object {
-			return m.WithSpec(m.Spec().WithPath(api.StringValue(refinementOtherMethod(m)), "hardware", "eraseOnRemoval", "method"))
+			disks := m.Spec().Get("hardware", "dataDisks").Items()
+			for i := range disks {
+				disks[i] = disks[i].With("onRemoval", api.StringValue(refinementOtherMethod(disks[i])))
+			}
+			return m.WithSpec(m.Spec().WithPath(api.ListValue(disks...), "hardware", "dataDisks"))
 		}},
 		{"wrong size", func(m api.Object) api.Object {
-			targets := m.Spec().Get("hardware", "eraseOnRemoval", "targets").Items()
-			size, _ := targets[0].Get("sizeBytes").Int64()
-			targets[0] = targets[0].With("sizeBytes", api.IntegerValue(fmt.Sprint(size+4096)))
-			return m.WithSpec(m.Spec().WithPath(api.ListValue(targets...), "hardware", "eraseOnRemoval", "targets"))
+			disks := m.Spec().Get("hardware", "dataDisks").Items()
+			size, _ := disks[0].Get("sizeBytes").Int64()
+			disks[0] = disks[0].With("sizeBytes", api.IntegerValue(fmt.Sprint(size+4096)))
+			return m.WithSpec(m.Spec().WithPath(api.ListValue(disks...), "hardware", "dataDisks"))
 		}},
-		{"kernel path", func(m api.Object) api.Object {
-			targets := m.Spec().Get("hardware", "eraseOnRemoval", "targets").Items()
-			targets[0] = targets[0].With("deviceName", api.StringValue("/dev/sda"))
-			return m.WithSpec(m.Spec().WithPath(api.ListValue(targets...), "hardware", "eraseOnRemoval", "targets"))
+		{"wrong wwn", func(m api.Object) api.Object {
+			disks := m.Spec().Get("hardware", "dataDisks").Items()
+			disks[0] = disks[0].With("wwn", api.StringValue("0x5000c500deadbeef"))
+			return m.WithSpec(m.Spec().WithPath(api.ListValue(disks...), "hardware", "dataDisks"))
 		}},
 		{"wrong serial", func(m api.Object) api.Object {
-			targets := m.Spec().Get("hardware", "eraseOnRemoval", "targets").Items()
-			targets[0] = targets[0].With("serialNumber", api.StringValue("FOREIGN-SERIAL"))
-			return m.WithSpec(m.Spec().WithPath(api.ListValue(targets...), "hardware", "eraseOnRemoval", "targets"))
+			disks := m.Spec().Get("hardware", "dataDisks").Items()
+			disks[0] = disks[0].With("serialNumber", api.StringValue("FOREIGN-SERIAL"))
+			return m.WithSpec(m.Spec().WithPath(api.ListValue(disks...), "hardware", "dataDisks"))
 		}},
 	} {
 		t.Run(change.name, func(t *testing.T) {
@@ -141,7 +145,7 @@ func refinementInventories(t *testing.T, catalog api.Catalog, plan reconciliatio
 		object, _ := catalog.Find(api.Machine, block.Object)
 		rootDigest := sha256.Sum256([]byte(block.Object))
 		disks := []diskselection.Disk{{DiskIdentity: diskselection.DiskIdentity{WWN: "0x6" + hex.EncodeToString(rootDigest[:])[:15], SerialNumber: "EXAMPLE-ROOT-" + block.Object, SizeBytes: 64 << 30}, Model: "EXAMPLE BOOT SSD", ControllerPCIAddress: "0000:01:00.0", Transport: "scsi", Fixed: true, Writable: true, Whole: true}}
-		for _, target := range object.Spec().Get("hardware", "eraseOnRemoval", "targets").Items() {
+		for _, target := range object.Spec().Get("hardware", "dataDisks").Items() {
 			size, _ := target.Get("sizeBytes").Int64()
 			disks = append(disks, diskselection.Disk{DiskIdentity: diskselection.DiskIdentity{WWN: target.Get("wwn").Text(), SerialNumber: target.Get("serialNumber").Text(), SizeBytes: size}, Model: "EXAMPLE DATA SSD", ControllerPCIAddress: "0000:02:00.0", Transport: "scsi", Fixed: true, Writable: true, Whole: true})
 		}
@@ -197,12 +201,11 @@ func discoveryRefinementCatalogs(t *testing.T) (api.Catalog, api.Catalog) {
 	objects := compiled.Effective().Objects()
 	replacements := map[string]string{}
 	for i, object := range objects {
-		if object.Kind() != api.Machine || object.Spec().Get("os", "provided").Bool() {
+		if object.Kind() != api.Machine || !api.MachineInstalled(object) {
 			continue
 		}
-		spec := object.Spec().WithPath(api.MapValue(api.FieldValue{Name: "discover", Value: api.MapValue()}), "substrate", "baremetal", "rootDevice")
-		root := substrate.MachineRootDeviceHints(object).WWN
-		targets := slices.DeleteFunc(spec.Get("hardware", "eraseOnRemoval", "targets").Items(), func(target api.Value) bool { return target.Get("wwn").Text() == root })
+		spec := object.Spec().WithPath(api.MapValue(api.FieldValue{Name: "discover", Value: api.MapValue()}), "hardware", "rootDisk")
+		targets := spec.Get("hardware", "dataDisks").Items()
 		for index, target := range targets {
 			old := target.Get("wwn").Text()
 			fresh := fmt.Sprintf("0x500000000000%04x", i*16+index+256)
@@ -210,7 +213,7 @@ func discoveryRefinementCatalogs(t *testing.T) (api.Catalog, api.Catalog) {
 			replacements[substrate.WWNDevicePath(old)] = substrate.WWNDevicePath(fresh)
 			replacements[target.Get("serialNumber").Text()] = "DISCOVERED-" + object.Name() + fmt.Sprint(index)
 		}
-		objects[i] = object.WithSpec(spec.WithPath(api.ListValue(targets...), "hardware", "eraseOnRemoval", "targets"))
+		objects[i] = object.WithSpec(spec)
 	}
 	before := api.NewCatalog(objects)
 	for i, object := range objects {
@@ -241,8 +244,8 @@ func rewriteRefinementValues(value api.Value, replacements map[string]string) ap
 	return value
 }
 
-func refinementOtherMethod(m api.Object) string {
-	if m.Spec().Get("hardware", "eraseOnRemoval", "method").Text() == "metadataClear" {
+func refinementOtherMethod(disk api.Value) string {
+	if disk.Get("onRemoval").Text() == "metadataClear" {
 		return "logicalOverwrite"
 	}
 	return "metadataClear"

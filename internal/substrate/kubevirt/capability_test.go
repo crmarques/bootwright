@@ -350,7 +350,7 @@ func TestTheProofRefusesWhatItCouldNotProve(t *testing.T) {
 
 func TestUnsupportedRefusesWhatTheArmDoesNotRealize(t *testing.T) {
 	installed := node("master-0")
-	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel"), "os", "installProfileRef"))
+	installed = installed.WithSpec(installed.Spec().With("os", api.MapValue(field("install", api.MapValue(text("profileRef", "rhel"))))))
 	udn := provider()
 	attachments := udn.Spec().Get("segments").Items()
 	attachments[1] = attachments[1].WithPath(api.MapValue(text("apiGroup", "k8s.ovn.org"), text("kind", "UserDefinedNetwork"), text("name", "tenant")), "kubevirt", "networkRef")

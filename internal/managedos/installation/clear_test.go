@@ -18,14 +18,21 @@ func clearTarget(hex, serial string, size int64) ClearTarget {
 	return ClearTarget{DeviceName: "/dev/disk/by-id/wwn-0x" + hex, Intervals: MetadataClearRegions(size), SerialNumber: serial, SizeBytes: size, WWN: "0x" + hex}
 }
 
-func TestTheRequestFreezesClearTargetsInDeviceNameOrder(t *testing.T) {
-	target := func(hex, wwn, serial string) api.Value {
-		return api.MapValue(api.FieldValue{Name: "deviceName", Value: api.StringValue("/dev/disk/by-id/wwn-0x" + hex)},
-			api.FieldValue{Name: "wwn", Value: api.StringValue(wwn)}, api.FieldValue{Name: "serialNumber", Value: api.StringValue(serial)},
-			api.FieldValue{Name: "sizeBytes", Value: api.IntegerValue("2000398934016")})
+func declaredClear(serial, size, wwn string) api.Value {
+	disk := api.MapValue(text("serialNumber", serial), number("sizeBytes", size), text("onInstall", "metadataClear"))
+	if wwn != "" {
+		disk = disk.With("wwn", api.StringValue(wwn))
 	}
-	machine := api.NewObject(api.Machine, "metal-01", api.MapValue(), api.MapValue()).WithSpec(api.MapValue().WithPath(api.MapValue(api.FieldValue{Name: "targets",
-		Value: api.ListValue(target("5000000000000002", "0X5000000000000002", "B"), target("5000000000000001", "5000000000000001", "A"))}), "hardware", "clearOnInstall"))
+	return disk
+}
+
+func clearingMachine(disks ...api.Value) api.Object {
+	return api.NewObject(api.Machine, "metal-01", api.MapValue(), api.MapValue()).WithSpec(api.MapValue().WithPath(api.ListValue(disks...), "hardware", "dataDisks"))
+}
+
+func TestTheRequestFreezesClearTargetsInDeviceNameOrder(t *testing.T) {
+	machine := clearingMachine(declaredClear("B", "2000398934016", "0x5000000000000002"), declaredClear("A", "2000398934016", "0x5000000000000001"),
+		api.MapValue(text("serialNumber", "C"), number("sizeBytes", "8192"), text("onRemoval", "metadataClear")))
 	got := clearTargetsFor(machine)
 	want := []ClearTarget{clearTarget("5000000000000001", "A", 2000398934016), clearTarget("5000000000000002", "B", 2000398934016)}
 	if len(got) != 2 || !slices.EqualFunc(got, want, func(a, b ClearTarget) bool {
@@ -473,9 +480,8 @@ func TestADeclaredClearReachesTheRequestKickstartAndPlan(t *testing.T) {
 	objects := catalog.Objects()
 	for index, object := range objects {
 		if object.Kind() == api.Machine && object.Name() == "metal-01" {
-			target := api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000000000000001"), text("wwn", "0x5000000000000001"),
-				text("serialNumber", "SYNTHETIC-CEPH-01"), field("sizeBytes", api.IntegerValue("2000398934016")))
-			objects[index] = object.WithSpec(object.Spec().WithPath(api.MapValue(field("targets", api.ListValue(target))), "hardware", "clearOnInstall"))
+			disk := declaredClear("SYNTHETIC-CEPH-01", "2000398934016", "0x5000000000000001")
+			objects[index] = object.WithSpec(object.Spec().WithPath(api.ListValue(disk), "hardware", "dataDisks"))
 		}
 	}
 	catalog = api.NewCatalog(objects)
@@ -504,18 +510,11 @@ func serialClearTarget(serial string, size int64) ClearTarget {
 	return ClearTarget{Intervals: MetadataClearRegions(size), SerialNumber: serial, SizeBytes: size}
 }
 
-// A clear target declared without deviceName and wwn freezes before every
+// A clear target declared without wwn freezes before every
 // target named by its path, in serialNumber order, and plans its clear as
 // serial:<serialNumber>, since it has no WWN to name.
 func TestASerialClearTargetFreezesFirstAndIsPlannedBySerialNumber(t *testing.T) {
-	size := api.FieldValue{Name: "sizeBytes", Value: api.IntegerValue("8192")}
-	serial := func(value string) api.FieldValue {
-		return api.FieldValue{Name: "serialNumber", Value: api.StringValue(value)}
-	}
-	byPath := api.MapValue(api.FieldValue{Name: "deviceName", Value: api.StringValue("/dev/disk/by-id/wwn-0x5000000000000001")},
-		api.FieldValue{Name: "wwn", Value: api.StringValue("0x5000000000000001")}, serial("A"), size)
-	machine := api.NewObject(api.Machine, "metal-01", api.MapValue(), api.MapValue()).WithSpec(api.MapValue().WithPath(api.MapValue(api.FieldValue{Name: "targets",
-		Value: api.ListValue(byPath, api.MapValue(serial("NVME-02"), size), api.MapValue(serial("NVME-01"), size))}), "hardware", "clearOnInstall"))
+	machine := clearingMachine(declaredClear("A", "8192", "0x5000000000000001"), declaredClear("NVME-02", "8192", ""), declaredClear("NVME-01", "8192", ""))
 	got := clearTargetsFor(machine)
 	want := []ClearTarget{serialClearTarget("NVME-01", 8192), serialClearTarget("NVME-02", 8192), clearTarget("5000000000000001", "A", 8192)}
 	if !slices.EqualFunc(got, want, func(a, b ClearTarget) bool {

@@ -10,7 +10,7 @@ import (
 
 func accessFixture(ssh api.Value) (api.Object, api.Object) {
 	cluster := api.NewObject(api.OpenShiftCluster, "example", api.MapValue(), api.MapValue().WithPath(ssh, "install", "nodeSSH").With("nodes", api.ListValue(api.MapValue().With("name", api.StringValue("node")).With("machineRef", api.StringValue("host")))))
-	host := api.NewObject(api.Machine, "host", api.MapValue(), api.MapValue().WithPath(api.BoolValue(false), "os", "provided").WithPath(api.StringValue("ip"), "network", "installAddressRef").WithPath(api.ListValue(api.MapValue().With("name", api.StringValue("ip")).With("address", api.StringValue("192.0.2.10"))), "network", "addresses"))
+	host := api.NewObject(api.Machine, "host", api.MapValue(), api.MapValue().WithPath(api.MapValue(), "os", "clusterInstalled").WithPath(api.StringValue("ip"), "network", "installAddressRef").WithPath(api.ListValue(api.MapValue().With("name", api.StringValue("ip")).With("address", api.StringValue("192.0.2.10"))), "network", "addresses"))
 	return cluster, host
 }
 
@@ -41,9 +41,9 @@ func TestAccessCatalogPreservesAuthoredAccessAndRefusesAmbiguousOrPublicOnlyIden
 	for name, objects := range map[string][]api.Object{
 		"public only":        {cluster.WithSpec(cluster.Spec().WithPath(api.MapValue().With("publicKeyRef", api.StringValue("public")), "install", "nodeSSH")), host},
 		"two memberships":    {cluster, api.NewObject(api.OpenShiftCluster, "other", api.MapValue(), cluster.Spec()), host},
-		"provided":           {cluster, host.WithSpec(host.Spec().WithPath(api.BoolValue(true), "os", "provided"))},
-		"machine installer":  {cluster, host.WithSpec(host.Spec().WithPath(api.StringValue("installer"), "os", "installProfileRef"))},
-		"authored local":     {cluster, host.WithSpec(host.Spec().WithPath(api.BoolValue(true), "access", "local"))},
+		"provided":           {cluster, host.WithSpec(host.Spec().With("os", api.MapValue().With("provided", api.MapValue())))},
+		"machine installer":  {cluster, host.WithSpec(host.Spec().With("os", api.MapValue().With("install", api.MapValue().With("profileRef", api.StringValue("installer")))))},
+		"authored local":     {cluster, host.WithSpec(host.Spec().WithPath(api.MapValue(), "access", "local"))},
 		"authored ssh":       {cluster, host.WithSpec(host.Spec().WithPath(api.StringValue("operator"), "access", "ssh", "user"))},
 		"missing membership": {host},
 		"no endpoint":        {cluster, host.WithSpec(host.Spec().Without("network"))},

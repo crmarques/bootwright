@@ -541,7 +541,7 @@ func cliGoldens() []cliGolden {
 			api.FieldValue{Name: "controller", Value: api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue("controller")})},
 		))
 		controller := api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(true)})},
+			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.MapValue()})},
 		))
 		return &compilation.EffectiveResult{Counts: compilation.Counts{FilesSeen: 2, ObjectsDecoded: 2}, Effective: api.NewCatalog([]api.Object{controller, environment})}
 	}

@@ -4,29 +4,23 @@ metadata:
   name: rhel-01
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: rhel
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: rhel
+
     nics:
       - name: enp1s0
 
-    rootDevice:
-      deviceName: /dev/vda
-
   os:
-    provided: false
-    installProfileRef: rhel-9-8
+    install:
+      profileRef: rhel-9-8
 
-    # The install profile's NTP selections apply; a Machine list overrides
-    # them, and [] clears them:
-    # install:
-    #   ntp:
-    #     - serverRef: lab-ntp
-    #       endpointRef: ip
-
+  # The install profile's NTP selections apply; a Machine list overrides
+  # them, and [] clears them:
+  # install:
+  #   ntp:
+  #     - serverRef: lab-ntp
+  #       endpointRef: ip
   network:
     configRef: lab-guests
     installAddressRef: ip

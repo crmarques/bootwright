@@ -14,8 +14,7 @@ func fleetMachine(name string, spec api.Value) api.Object {
 
 func installedMachine(name string) api.Object {
 	return fleetMachine(name, api.MapValue(api.FieldValue{Name: "os", Value: api.MapValue(
-		api.FieldValue{Name: "provided", Value: api.BoolValue(false)},
-		api.FieldValue{Name: "installProfileRef", Value: api.StringValue("rhel")},
+		api.FieldValue{Name: "install", Value: api.MapValue(api.FieldValue{Name: "profileRef", Value: api.StringValue("rhel")})},
 	)}))
 }
 
@@ -38,7 +37,7 @@ func TestReusedFleetKeyNamesTheProvidedMachine(t *testing.T) {
 		api.FieldValue{Name: "remoteMachinesAccessKey", Value: api.MapValue(api.FieldValue{Name: "keyRef", Value: api.StringValue("fleet-key")})},
 	))
 	provided := fleetMachine("bastion", api.MapValue(
-		api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(true)})},
+		api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.MapValue()})},
 		api.FieldValue{Name: "access", Value: api.MapValue(api.FieldValue{Name: "ssh", Value: api.MapValue(api.FieldValue{Name: "auth", Value: api.MapValue(
 			api.FieldValue{Name: "privateKeyRef", Value: api.StringValue("fleet-key")},
 		)})})},
@@ -55,16 +54,15 @@ func TestReusedFleetKeyNamesTheProvidedMachine(t *testing.T) {
 	}
 }
 
-func TestAnOSReadyMachineWithAnInstallProfileNeedsNoFleetKey(t *testing.T) {
+func TestAMachineBootwrightDoesNotInstallNeedsNoFleetKey(t *testing.T) {
 	env := api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue())
 	osReady := fleetMachine("probe", api.MapValue(api.FieldValue{Name: "os", Value: api.MapValue(
-		api.FieldValue{Name: "provided", Value: api.BoolValue(true)},
-		api.FieldValue{Name: "installProfileRef", Value: api.StringValue("rhel")},
+		api.FieldValue{Name: "provided", Value: api.MapValue()},
 	)}))
-	unset := fleetMachine("bare", api.MapValue(api.FieldValue{Name: "os", Value: api.MapValue(
-		api.FieldValue{Name: "installProfileRef", Value: api.StringValue("rhel")},
+	clusterInstalled := fleetMachine("node", api.MapValue(api.FieldValue{Name: "os", Value: api.MapValue(
+		api.FieldValue{Name: "clusterInstalled", Value: api.MapValue()},
 	)}))
-	if issues := environment.Validate(env, api.NewCatalog([]api.Object{env, osReady, unset}), testClusterMembers); len(issues) != 0 {
+	if issues := environment.Validate(env, api.NewCatalog([]api.Object{env, osReady, clusterInstalled}), testClusterMembers); len(issues) != 0 {
 		t.Fatalf("issues = %+v, want none", issues)
 	}
 }

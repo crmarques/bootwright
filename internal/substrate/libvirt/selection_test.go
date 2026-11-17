@@ -198,8 +198,8 @@ func TestTheDomainPresentsTheInterfacesTheRealizedTargetReports(t *testing.T) {
 			t.Fatalf("interface %d: target %+v, domain %+v", index, reported, presented)
 		}
 	}
-	if target.RootDeviceHints.DeviceName != "/dev/vda" {
-		t.Fatalf("root device = %q", target.RootDeviceHints.DeviceName)
+	if path := substrate.RootDevicePath(catalog, machine); path != "/dev/vda" {
+		t.Fatalf("root device = %q", path)
 	}
 }
 
@@ -309,7 +309,7 @@ func TestDataDisksBecomeTheirOwnImagesInTargetOrder(t *testing.T) {
 
 // A provided Machine is never realized, whatever provider it names.
 func TestProvidedMachinesAreNeverRealized(t *testing.T) {
-	provided := guest("ready", field("os", api.MapValue(field("provided", api.BoolValue(true)))))
+	provided := guest("ready", field("os", api.MapValue(field("provided", api.MapValue()))))
 	requests, err := MachineRequests(catalogOf(controller(), provider(), networkConfig(), provided), "controller", testContext)
 	if err != nil || len(requests) != 0 {
 		t.Fatalf("requests = %d (%v)", len(requests), err)
@@ -317,8 +317,8 @@ func TestProvidedMachinesAreNeverRealized(t *testing.T) {
 }
 
 func TestSelectionRefusesWhatItCannotDerive(t *testing.T) {
-	noProfile := guest("rhel-01", field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "absent"))))))
-	noAttachment := guest("rhel-01", field("substrate", guest("rhel-01").Spec().Get("substrate").WithPath(api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("segmentRef", "absent"))), "libvirt", "nics")))
+	noProfile := guest("rhel-01", field("hardware", guest("rhel-01").Spec().Get("hardware").With("profileRef", api.StringValue("absent"))))
+	noAttachment := guest("rhel-01", field("hardware", guest("rhel-01").Spec().Get("hardware").With("nics", api.ListValue(api.MapValue(text("name", "enp1s0"), text("segmentRef", "absent"))))))
 	for name, test := range map[string]struct {
 		catalog api.Catalog
 		code    string
@@ -341,8 +341,8 @@ func TestUnsupportedNamesEveryObjectThisContractCannotRealize(t *testing.T) {
 	// only the arms no capability implements and every Machine hosted on one.
 	vsphere := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("vsphere", api.MapValue())))
 	hosted := api.NewObject(api.Machine, "node-01", api.Value{}, api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "vc"))),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
+		field("hardware", api.MapValue(text("providerRef", "vc"))),
+		field("os", api.MapValue(field("clusterInstalled", api.MapValue()))),
 	))
 	metal := api.NewObject(api.InfraProvider, "rack", api.Value{}, api.MapValue(field("baremetal", api.MapValue())))
 	unsupported := lifecycle.Identities(Refusals(catalogOf(controller(), provider(), networkConfig(), guest("rhel-01"), vsphere, hosted, metal)))

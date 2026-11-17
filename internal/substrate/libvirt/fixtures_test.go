@@ -18,12 +18,12 @@ func number(name, value string) api.FieldValue { return field(name, api.IntegerV
 
 func controller() api.Object {
 	return api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "controller.lab.example.test")),
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.1")),
 		)))),
-		field("access", api.MapValue(field("local", api.BoolValue(true)))),
+		field("access", api.MapValue(field("local", api.MapValue()))),
 	))
 }
 
@@ -31,7 +31,7 @@ func controller() api.Object {
 // lifecycle placement requires.
 func remoteHost() api.Object {
 	return api.NewObject(api.Machine, "hypervisor", api.Value{}, api.MapValue(
-		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("os", api.MapValue(field("provided", api.MapValue()))),
 		field("network", api.MapValue(field("addresses", api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "hypervisor.lab.example.test")),
 			api.MapValue(text("name", "ip"), text("address", "192.0.2.5")),
@@ -79,10 +79,9 @@ func networkConfig() api.Object {
 
 func guest(name string, fields ...api.FieldValue) api.Object {
 	spec := api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "rhel"),
-			field("nics", api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("segmentRef", "lab-guests")))))))),
-		field("os", api.MapValue(field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"))),
-		field("hardware", api.MapValue(field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))), field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
+		field("hardware", api.MapValue(text("providerRef", "lab-libvirt"), text("profileRef", "rhel"),
+			field("nics", api.ListValue(api.MapValue(text("name", "enp1s0"), text("segmentRef", "lab-guests")))))),
+		field("os", api.MapValue(field("install", api.MapValue(text("profileRef", "rhel-9-8"))))),
 		field("network", api.MapValue(
 			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(

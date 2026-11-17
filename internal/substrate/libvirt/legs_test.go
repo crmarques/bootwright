@@ -26,7 +26,7 @@ func taggedObjects() []api.Object {
 	public := legNetwork("ceph-public", "203.0.113.65/26", "140", field("taggedNetworkRefs", api.StringList("ceph-cluster")), field("routedNetworkRefs", api.StringList("ceph-arbiter")))
 	arbiter := legNetwork("ceph-arbiter", "203.0.113.129/26", "150", text("forward", "none"))
 	g := guest("ceph-01")
-	g = g.WithSpec(g.Spec().WithPath(api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("segmentRef", "ceph-public"))), "substrate", "libvirt", "nics"))
+	g = g.WithSpec(g.Spec().WithPath(api.ListValue(api.MapValue(text("name", "enp1s0"), text("segmentRef", "ceph-public"))), "hardware", "nics"))
 	return []api.Object{controller(), provider(), networkConfig(), labNetwork(), cluster, public, arbiter, g}
 }
 

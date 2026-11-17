@@ -112,12 +112,12 @@ func Select(catalog api.Catalog) (Selection, error) {
 			"declare the Machine spec.controller.machineRef names on "+environment.Identity()+", or name a declared one")
 	}
 	if !machineref.OSProvided(machine) {
-		return Selection{}, refuseSelection(machine, "api.invariant", "$.spec.os.provided", "controller setup requires an OS-ready Machine with os.provided: true",
-			"set spec.os.provided: true on "+machine.Identity())
+		return Selection{}, refuseSelection(machine, "api.invariant", "$.spec.os.provided", "controller setup requires an OS-ready Machine with os.provided: {}",
+			"set spec.os.provided: {} on "+machine.Identity())
 	}
 	if !machineref.ReachedOnlyLocally(machine) {
-		return Selection{}, refuseSelection(machine, "api.invariant", "$.spec.access", "controller setup requires access.local: true and no SSH access",
-			"set spec.access.local: true and remove spec.access.ssh on "+machine.Identity())
+		return Selection{}, refuseSelection(machine, "api.invariant", "$.spec.access", "controller setup requires access.local: {} and no SSH access",
+			"set spec.access.local: {} and remove spec.access.ssh on "+machine.Identity())
 	}
 	// The executable's own limits refuse before anything is selected, exactly
 	// as the plan reports them, so both name the same field and remedy.

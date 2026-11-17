@@ -20,7 +20,7 @@ import (
 func TestAZonedSSHAddressRefusesAtValidate(t *testing.T) {
 	compiler := compilation.NewCompiler(yamlstream.Parser{}, nil)
 	for _, address := range []string{"fe80::1%eth0", "fe80::1%eth0/64", "fe80::1"} {
-		machine := "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: host}\nspec:\n  os: {provided: true}\n  network:\n    addresses: [{name: ssh, address: '" + address + "'}]\n  access:\n    ssh: {addressRef: ssh, auth: {operatorIdentity: {}}}\n"
+		machine := "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: host}\nspec:\n  os: {provided: {}}\n  network:\n    addresses: [{name: ssh, address: '" + address + "'}]\n  access:\n    ssh: {addressRef: ssh, auth: {operatorIdentity: {}}}\n"
 		_, _, err := compiler.Compile(context.Background(), sources(environmentYAML+machine))
 		got := []string{}
 		for _, d := range diagnostics.Of(err) {

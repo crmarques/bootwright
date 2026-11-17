@@ -12,7 +12,7 @@ import (
 )
 
 func assignmentNetwork(o api.Object, c api.Catalog, address netip.Addr) (network.Held, []network.Held, []network.Held) {
-	site := o.Spec().Get("placement", "site").Text()
+	site := o.Spec().Get("site").Text()
 	held := network.Containing(c, address)
 	var scoped []network.Held
 	for _, candidate := range held {
@@ -33,7 +33,7 @@ func assignmentIssues(o api.Object, c api.Catalog, entry api.Value, path string)
 		return []api.Issue{invariant(path+".address", "address "+entry.Get("address").Text()+" of interface "+iface+" on "+o.Identity()+" is no IP address, and an interface assignment configures one",
 			"write "+path[2:]+".address on "+o.Identity()+" as a bare IP address, or remove "+path[2:]+".interface to keep a DNS name as a contact")}
 	}
-	site := o.Spec().Get("placement", "site").Text()
+	site := o.Spec().Get("site").Text()
 	family := network.Family(address)
 	match, held, scoped := assignmentNetwork(o, c, address)
 	switch {
@@ -47,7 +47,7 @@ func assignmentIssues(o api.Object, c api.Catalog, entry api.Value, path string)
 			"add site "+site+" to spec.sites of "+heldNames(held)+", or assign "+o.Identity()+" an address in a Network of site "+site)}
 	case len(scoped) > 1:
 		return []api.Issue{invariant(path+".address", "address "+address.String()+" of interface "+iface+" on "+o.Identity()+" lies in more than one Network, "+heldNames(scoped),
-			"set spec.placement.site on "+o.Identity()+" to the site whose Network it uses, or scope those Networks to disjoint spec.sites")}
+			"set spec.site on "+o.Identity()+" to the site whose Network it uses, or scope those Networks to disjoint spec.sites")}
 	}
 	return nil
 }

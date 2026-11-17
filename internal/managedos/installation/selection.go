@@ -46,7 +46,7 @@ func privateInstallation(catalog api.Catalog, machine api.Object, channel string
 	if channel == substrate.ChannelDeliveredKey {
 		return true
 	}
-	profile, ok := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
+	profile, ok := catalog.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(machine))
 	return ok && diskEncryption(profile).Present()
 }
 
@@ -93,12 +93,12 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 		derived, err := substrate.TargetFor(catalog, machine, "", controllerMachine)
 		derivedOK := err == nil
 		if derivedOK {
-			if reason, remediation := refusedTarget(machine, derived, privateInstallation(catalog, machine, derived.Identity.Channel)); reason != "" {
+			if reason, remediation := refusedTarget(catalog, machine, derived, privateInstallation(catalog, machine, derived.Identity.Channel)); reason != "" {
 				found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
 				continue
 			}
 		}
-		profile, ok := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
+		profile, ok := catalog.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(machine))
 		if !ok {
 			continue
 		}
@@ -199,9 +199,9 @@ func DeriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, c
 	if !substrate.SafeSegment(name) {
 		return Request{}, Requirements{}, refusal("lifecycle.state", "the Machine name is not a safe host identifier", "rename "+machine.Identity())
 	}
-	profile, ok := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
+	profile, ok := catalog.Find(api.MachineInstallProfile, api.MachineInstallProfileRef(machine))
 	if !ok {
-		return Request{}, Requirements{}, refusal("api.reference", "the Machine's install profile is not in the selected graph", "declare it or correct spec.os.installProfileRef on "+machine.Identity())
+		return Request{}, Requirements{}, refusal("api.reference", "the Machine's install profile is not in the selected graph", "declare it or correct spec.os.install.profileRef on "+machine.Identity())
 	}
 	if !substrate.SafeSegment(profile.Name()) {
 		return Request{}, Requirements{}, refusal("lifecycle.state", "the install profile name is not a safe host identifier", "rename "+profile.Identity())
@@ -235,7 +235,7 @@ func DeriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, c
 		BootMedia:         boot,
 		Budgets:           installationBudgets,
 		DiskEncryption:    requestEncryption(profile),
-		EraseOnRemoval:    machine.Spec().Has("hardware", "eraseOnRemoval"),
+		EraseOnRemoval:    len(substrate.EraseTargets(machine)) > 0,
 		FleetKeyRef:       fleetKeyRef(catalog),
 		HostKeyPath:       HostKeyPath,
 		Identity:          Identity{Block: BlockID(name), Context: contextName, Object: name, Profile: profile.Name()},
@@ -570,7 +570,7 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 	if err != nil {
 		return Target{}, err
 	}
-	if reason, remediation := refusedTarget(machine, derived, privateInstallation(catalog, machine, derived.Identity.Channel)); reason != "" {
+	if reason, remediation := refusedTarget(catalog, machine, derived, privateInstallation(catalog, machine, derived.Identity.Channel)); reason != "" {
 		return Target{}, refusal("lifecycle.unsupported", reason, remediation)
 	}
 	target := Target{
@@ -661,15 +661,15 @@ func serialRoot(hints substrate.RootDeviceHints) bool {
 // refusedTarget says why this contract cannot install onto a Machine's
 // realized target, or nothing when it can. It is the one statement of that
 // refusal, so Unsupported and the request builder never disagree about it.
-func refusedTarget(machine api.Object, target substrate.Target, private bool) (reason, remediation string) {
+func refusedTarget(catalog api.Catalog, machine api.Object, target substrate.Target, private bool) (reason, remediation string) {
 	hints := rootHints(target)
 	if target.Physical {
-		if reason, remediation := machineref.PhysicalRootDeviceNameRefusal(machine); reason != "" {
+		if reason, remediation := machineref.PhysicalRootDeviceNameRefusal(catalog, machine); reason != "" {
 			return reason, remediation
 		}
 		if hints.WWN != "" && !substrate.ValidRootWWN(hints.WWN) {
 			return "a physical installation names its root disk by a wwn of 0x followed by 16 or 32 lowercase hexadecimal digits, and the wwn the Machine declares is not one",
-				"set spec.substrate.baremetal.rootDevice.wwn on " + machine.Identity() + " to the disk's WWN in that form"
+				"set spec.hardware.rootDisk.wwn on " + machine.Identity() + " to the disk's WWN in that form"
 		}
 	}
 	if target.Physical && !durableRootDevice(hints.DeviceName) && !serialRoot(hints) && hints.VolumeRef == nil && !hints.Discovery {
@@ -678,7 +678,7 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 	}
 	// The Kickstart selects its disk by name alone, so any other hint would be
 	// ignored, but a physical %pre compares the wwn, serialNumber and sizeBytes it carries.
-	carried := []string{"deviceName"}
+	var carried []string
 	if target.Physical {
 		carried = physicalRootIdentity
 	}
@@ -689,12 +689,12 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 		}
 	}
 	if len(uncarried) != 0 {
-		return "a managed-OS installation selects its root disk by deviceName on a virtual Machine or, on a physical Machine, by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares",
+		return "a managed-OS installation selects its root disk by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the root-disk hints the Machine declares",
 			"remove " + strings.Join(uncarried, ", ") + " from " + machine.Identity()
 	}
 	if serial := hints.SerialNumber; serial != "" && !diskselection.ValidSerial(serial) {
 		return "a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare",
-			"set spec.substrate.baremetal.rootDevice.serialNumber on " + machine.Identity() +
+			"set spec.hardware.rootDisk.serialNumber on " + machine.Identity() +
 				" to the disk's serial number, at most 256 ASCII letters, digits and ._:+/=- characters, or remove it"
 	}
 	// The controller is handed the tokenized URL of the private installer
@@ -704,9 +704,8 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 	if private &&
 		(!strings.HasPrefix(target.Controller.Endpoint, "https://") || !target.Controller.TLSVerify) {
 		return "a Machine whose installation delivers private material hands its BMC the private installer image URL, so the BMC must be reached over https with its certificate verified",
-			"address the BMC of " + machine.Identity() + " with an https:// spec.substrate.baremetal.bmc.address and remove the tls.verify opt-out on " +
-				machine.Identity() + " or in spec.baremetal.defaults.bmc of InfraProvider/" + target.Provider +
-				"; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it"
+			"address the BMC of " + machine.Identity() + " with an https:// spec.hardware.bmc.address and remove the tls.verification: none opt-out on " +
+				machine.Identity() + "; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it"
 	}
 	return "", ""
 }

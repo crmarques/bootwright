@@ -17,8 +17,8 @@ func TestDiscoveryPlanFreezesVerificationSetupWithoutRunningIt(t *testing.T) {
 	catalog := discoveryCatalog()
 	objects := catalog.Objects()
 	for index, object := range objects {
-		if object.Kind() == api.Machine && object.Spec().Has("substrate", "baremetal", "bmc") {
-			objects[index] = object.WithSpec(object.Spec().WithPath(api.BoolValue(true), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "enableVerification"))
+		if object.Kind() == api.Machine && object.Spec().Has("hardware", "bmc") {
+			objects[index] = object.WithSpec(object.Spec().WithPath(api.BoolValue(true), "hardware", "bmc", "virtualMedia", "tls", "enableVerification"))
 		}
 	}
 	catalog = api.NewCatalog(objects)

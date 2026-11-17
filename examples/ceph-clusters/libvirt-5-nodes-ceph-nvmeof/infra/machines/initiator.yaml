@@ -4,23 +4,17 @@ metadata:
   name: initiator
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: initiator
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: initiator
+
     nics:
       - name: enp1s0
 
-    rootDevice:
-      deviceName: /dev/vda
-
   os:
-    provided: false
-    installProfileRef: rhel-9-8
-
     install:
+      profileRef: rhel-9-8
+
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip

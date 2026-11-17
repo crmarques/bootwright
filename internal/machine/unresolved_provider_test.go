@@ -9,11 +9,11 @@ import (
 func TestAMachineWhoseProviderDoesNotResolveGetsNoProviderRefusal(t *testing.T) {
 	machine, catalog := installedFixture()
 	spec := machine.Spec()
-	bmc := spec.Get("substrate", "baremetal", "bmc")
+	bmc := spec.Get("hardware", "bmc")
 	if !bmc.Present() {
 		t.Fatal("the fixture declares no BMC, so the test proves nothing")
 	}
-	spec = spec.WithPath(bmc.Without("credentialsRef"), "substrate", "baremetal", "bmc")
+	spec = spec.WithPath(bmc.Without("credentialsRef"), "hardware", "bmc")
 	machine = machine.WithSpec(spec)
 	objects := []api.Object{machine}
 	for _, existing := range catalog.Objects() {
@@ -26,13 +26,13 @@ func TestAMachineWhoseProviderDoesNotResolveGetsNoProviderRefusal(t *testing.T) 
 		t.Fatal("the provider still resolves")
 	}
 	issues := Validate(machine, unresolved)
-	for _, field := range []string{"$.spec.os.install.hostKeyRef", "$.spec.substrate.baremetal.bmc.credentialsRef"} {
+	for _, field := range []string{"$.spec.os.install.hostKeyRef", "$.spec.hardware.bmc.credentialsRef"} {
 		if mentions(issues, field) {
 			t.Fatalf("a Machine whose provider does not resolve was refused at %s: %v", field, issues)
 		}
 	}
 	resolved := api.NewCatalog(append(objects, catalog.OfKind(api.InfraProvider)...))
-	if !mentions(Validate(machine, resolved), "$.spec.substrate.baremetal.bmc.credentialsRef") {
+	if !mentions(Validate(machine, resolved), "$.spec.hardware.bmc.credentialsRef") {
 		t.Fatal("a resolved bare-metal provider no longer requires BMC credentials")
 	}
 }

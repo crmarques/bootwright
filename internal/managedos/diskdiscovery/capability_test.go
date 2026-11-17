@@ -59,7 +59,7 @@ func (r *inventoryRunner) Run(_ context.Context, request lifecycle.RunRequest) (
 
 func discoveryCatalog() api.Catalog {
 	m := metalOn("eno1", hardwareNIC("eno1", "52:54:00:9a:1b:01"))
-	m = m.WithSpec(m.Spec().WithPath(api.MapValue(field("discover", api.MapValue())), "substrate", "baremetal", "rootDevice"))
+	m = m.WithSpec(m.Spec().WithPath(api.MapValue(field("discover", api.MapValue())), "hardware", "rootDisk"))
 	return metalCatalog(m, metalNetwork(declaredInterface("eno1", "ethernet")))
 }
 
@@ -225,7 +225,7 @@ func TestDiscoveryInventoryBecomesAnExactInstallerTarget(t *testing.T) {
 func TestDiscoveryRefinementChangesOnlyUninstalledSelectionPolicy(t *testing.T) {
 	before := discoveryCatalog()
 	m := installation.InstalledMachines(before)[0]
-	changed := m.WithSpec(m.Spec().WithPath(api.MapValue(field("model", api.StringValue("EXAMPLE BOOT SSD"))), "substrate", "baremetal", "rootDevice", "discover", "match"))
+	changed := m.WithSpec(m.Spec().WithPath(api.MapValue(field("model", api.StringValue("EXAMPLE BOOT SSD"))), "hardware", "rootDisk", "discover", "match"))
 	objects := before.Objects()
 	for i, object := range objects {
 		if object.Kind() == changed.Kind() && object.Name() == changed.Name() {
@@ -243,7 +243,7 @@ func TestDiscoveryRefinementChangesOnlyUninstalledSelectionPolicy(t *testing.T) 
 	}
 	for i, object := range objects {
 		if object.Kind() == changed.Kind() && object.Name() == changed.Name() {
-			objects[i] = changed.WithSpec(changed.Spec().WithPath(api.StringValue("https://another.example.test/redfish/v1/Systems/1"), "substrate", "baremetal", "bmc", "address"))
+			objects[i] = changed.WithSpec(changed.Spec().WithPath(api.StringValue("https://another.example.test/redfish/v1/Systems/1"), "hardware", "bmc", "address"))
 		}
 	}
 	if err := owner.refinement(before, api.NewCatalog(objects), reconciliation.Plan{}, nil); err == nil {
@@ -314,7 +314,7 @@ func TestDiscoveryStorageRefinementCannotBypassInstallationOwnership(t *testing.
 func TestDiscoveryFreezesOnlyTheDeclaredInventoryChoice(t *testing.T) {
 	withPolicy := func(policy api.Value) api.Catalog {
 		m := metalOn("eno1", hardwareNIC("eno1", "52:54:00:9a:1b:01"))
-		m = m.WithSpec(m.Spec().WithPath(api.MapValue(field("discover", policy)), "substrate", "baremetal", "rootDevice"))
+		m = m.WithSpec(m.Spec().WithPath(api.MapValue(field("discover", policy)), "hardware", "rootDisk"))
 		return metalCatalog(m, metalNetwork(declaredInterface("eno1", "ethernet")))
 	}
 	plan := func(policy api.Value, claims []diskselection.DiskIdentity) DiscoveryRequest {
@@ -425,7 +425,7 @@ func TestABMCInventoryFreezesASerialRootTheInstallerReproves(t *testing.T) {
 		return []diskselection.DiskIdentity{{WWN: "0x5000000000000002"}}, nil
 	})
 	_, err = wwnClaim.Roots(ctx, input)
-	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "inventory to boot") || !strings.Contains(found[0].Remediation, "rootDevice.discover.inventory to boot") {
+	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "inventory to boot") || !strings.Contains(found[0].Remediation, "rootDisk.discover.inventory to boot") {
 		t.Fatalf("a WWN-named claim was decided against a BMC inventory: %v", found)
 	}
 }

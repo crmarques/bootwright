@@ -339,8 +339,8 @@ func TestMissingEvidenceReportsUnavailableWithTheApplyRemedy(t *testing.T) {
 }
 
 func TestUnprovedSessionRemedyFollowsWhetherBootwrightInstallsTheMachine(t *testing.T) {
-	provided := api.NewObject(api.Machine, "machine-a", api.Value{}, api.MapValue(field("os", api.MapValue(field("provided", api.BoolValue(true))))))
-	installed := api.NewObject(api.Machine, "machine-a", api.Value{}, api.MapValue(field("os", api.MapValue(field("provided", api.BoolValue(false)), field("installProfileRef", text("profile"))))))
+	provided := api.NewObject(api.Machine, "machine-a", api.Value{}, api.MapValue(field("os", api.MapValue(field("provided", api.MapValue())))))
+	installed := api.NewObject(api.Machine, "machine-a", api.Value{}, api.MapValue(field("os", api.MapValue(field("install", api.MapValue(field("profileRef", text("profile"))))))))
 	for name, machine := range map[string]api.Object{"provided": provided, "installed": installed} {
 		f := newFixture(t)
 		delete(f.proved, "machine-a")

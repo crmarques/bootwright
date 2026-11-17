@@ -72,6 +72,8 @@ func requestMap(pairs ...any) api.Value {
 			value = api.StringValue(v)
 		case int:
 			value = api.IntegerValue(fmt.Sprint(v))
+		case int64:
+			value = api.IntegerValue(fmt.Sprint(v))
 		case bool:
 			value = api.BoolValue(v)
 		default:
@@ -147,8 +149,8 @@ func poolRequestCatalog(hostCount, osdHosts int) api.Catalog {
 		}
 		nodes = append(nodes, requestMap("name", name, "machineRef", name, "labels", api.StringList(labels...)))
 		objects = append(objects, api.NewObject(api.Machine, name, api.Value{}, requestMap(
-			"substrate", requestMap("providerRef", "hypervisor", "libvirt", requestMap("profileRef", "guest")),
-			"os", requestMap("provided", false, "installProfileRef", "rhel"),
+			"hardware", requestMap("providerRef", "hypervisor", "profileRef", "guest"),
+			"os", requestMap("install", requestMap("profileRef", "rhel")),
 			"network", requestMap("addresses", api.ListValue(requestMap("name", "ip", "address", nodeAddress(i)))),
 			"access", requestMap("ssh", requestMap("addressRef", "ip", "user", "operator", "auth", requestMap("privateKeyRef", "fleet-key"))),
 		)))

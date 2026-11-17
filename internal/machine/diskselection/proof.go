@@ -183,7 +183,7 @@ func Prove(report Report, expected Binding, policy Policy, protected []DiskIdent
 func bmcAnswers(p Policy, protected []DiskIdentity) error {
 	unanswerable := func(d DiskIdentity) bool { return d.SerialNumber == "" || d.WWN != "" }
 	if p.Match.ControllerPCIAddress != "" || slices.ContainsFunc(p.Exclude, func(d DiskIdentity) bool { return d.SerialNumber == "" }) || slices.ContainsFunc(protected, unanswerable) {
-		return fmt.Errorf("the BMC drive inventory reports no WWN or controller PCI address; name exclusions and storage claims by serial number only, or set rootDevice.discover.inventory to boot")
+		return fmt.Errorf("the BMC drive inventory reports no WWN or controller PCI address; name exclusions and storage claims by serial number only, or set rootDisk.discover.inventory to boot")
 	}
 	return nil
 }

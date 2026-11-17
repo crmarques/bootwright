@@ -4,27 +4,18 @@ metadata:
   name: secondary-04
 
 spec:
-  substrate:
-    providerRef: lab-libvirt
-    libvirt:
-      profileRef: mirror
-
-      nics:
-        - nicRef: enp1s0
-          segmentRef: secondary
-
   hardware:
+    providerRef: lab-libvirt
+    profileRef: mirror
+
     nics:
       - name: enp1s0
-
-    rootDevice:
-      deviceName: /dev/vda
+        segmentRef: secondary
 
   os:
-    provided: false
-    installProfileRef: rhel-9-8
-
     install:
+      profileRef: rhel-9-8
+
       ntp:
         - serverRef: lab-ntp
           endpointRef: ip
