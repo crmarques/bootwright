@@ -436,6 +436,35 @@ def details(runner, uuid, fields):
     return found
 
 
+def interface_names(runner, uuids):
+    """{UUID: connection.interface-name} of every named profile from one nmcli call, or None when it did not answer for each."""
+    if not uuids:
+        return {}
+    arguments = [NMCLI, "-t", "-f", "connection.uuid,connection.interface-name", "connection", "show"]
+    for uuid in uuids:
+        arguments += ["uuid", uuid]
+    code, output, _error = command(runner, arguments)
+    if code != 0 or len(output) >= MAX_OUTPUT:
+        return None
+    groups, current = [], {}
+    for line in output.splitlines():
+        key, separator, value = line.partition(":")
+        if not separator:
+            continue
+        if key in current:
+            groups.append(current)
+            current = {}
+        current[key] = value
+    groups.append(current)
+    names = {}
+    for group in groups:
+        if group and "connection.uuid" not in group:
+            return None
+        if group:
+            names[group["connection.uuid"]] = group.get("connection.interface-name", "")
+    return names if all(uuid in names for uuid in uuids) else None
+
+
 def judge(runner, entry, listing, root, owner):
     """One wanted connection as the host holds it, and what of it collides."""
     record = dict(entry, answered=True, present=False, owned=False, active=False, definition=False, zone="",
@@ -543,29 +572,30 @@ def foreign_devices(runner, listing, records, skipped=()):
     ours = {record["uuid"] for record in records} | set(skipped)
     devices = {record["device"]: record for record in records}
     found = []
-    for profile in listing:
-        if profile["uuid"] in ours:
-            continue
-        shown = details(runner, profile["uuid"], "connection.interface-name")
-        if shown is None:
-            return None
-        for device in {shown.get("connection.interface-name", ""), profile["device"]} & set(devices):
+    others = [profile for profile in listing if profile["uuid"] not in ours]
+    names = interface_names(runner, list(dict.fromkeys(profile["uuid"] for profile in others)))
+    if names is None:
+        return None
+    for profile in others:
+        for device in {names[profile["uuid"]], profile["device"]} & set(devices):
             found.append("connection %s (UUID %s) binds device %s of %s %s: delete it or change the trunk bridge" % (
                 profile["name"], profile["uuid"], device, devices[device]["role"], devices[device]["name"]))
     return sorted(set(found))
 
 
-def inspect(runner, request, root=None, owner=0):
+def inspect(runner, request, root=None, owner=0, reuse=None):
     """What the host holds of every frozen connection and of every owned one it no longer freezes, read-only.
 
     `ready` is whether NetworkManager is active and nmcli is installed;
     `answered` whether every read answered. A host with neither the
     NetworkManager unit nor nmcli holds no profile, which is positive absence.
     `unfrozen` holds each owned keyfile the request does not freeze; NetworkManager
-    is read only when one exists or a connection is frozen.
+    is read only when one exists or a connection is frozen. `reuse` is an
+    earlier inspection of the same settle: its foreign-device read stands, so
+    the profiles bound to a frozen device are not read again.
     """
     root = CONNECTIONS if root is None else root
-    seen = {"ready": False, "answered": True, "records": [], "unfrozen": [], "collisions": []}
+    seen = {"ready": False, "answered": True, "records": [], "unfrozen": [], "collisions": [], "foreign": []}
     entries = wanted(request)
     context, provider = identity(request)
     seen["carrierPolicy"] = carrier.inspect(context, provider, [entry for entry in entries if entry["role"] == "leg"],
@@ -588,7 +618,11 @@ def inspect(runner, request, root=None, owner=0):
     seen["records"] = [judge(runner, entry, listing, root, owner) for entry in entries]
     seen["unfrozen"] = [judge_unfrozen(runner, entry, listing, root) for entry in unfrozen]
     seen["answered"] = all(record["answered"] for record in seen["records"] + seen["unfrozen"])
-    foreign = foreign_devices(runner, listing, seen["records"], [entry["uuid"] for entry in unfrozen])
+    if reuse is None:
+        foreign = foreign_devices(runner, listing, seen["records"], [entry["uuid"] for entry in unfrozen])
+    else:
+        foreign = reuse["foreign"]
+    seen["foreign"] = foreign
     if foreign is None:
         seen["answered"] = False
         foreign = []
@@ -721,10 +755,10 @@ def settle(runner, request, guests, conflicts, root, owner):
         if record["role"] == "trunk":
             changed = converge(runner, record, root) or changed
     # Reactivating a trunk takes its legs down with it, so the legs are read again.
-    for record in inspect(runner, request, root, owner)["records"]:
+    for record in inspect(runner, request, root, owner, reuse=seen)["records"]:
         if record["role"] == "leg":
             changed = converge(runner, record, root) or changed
-    after = inspect(runner, request, root, owner)
+    after = inspect(runner, request, root, owner, reuse=seen)
     missing = [record["name"] for record in after["records"]
                if not (record["answered"] and record["owned"] and record["active"] and record["definition"] and record["zone"] == ZONE)]
     if not after["answered"] or missing:
@@ -793,7 +827,7 @@ def remove(runner, request, guests, root, owner, sleep=time.sleep):
     """Delete the legs, then the trunks, frozen or no longer frozen, once nothing runs on a trunk; prove each gone."""
     seen = inspect(runner, request, root, owner)
     changed, devices = remove_all(runner, seen, seen["records"] + seen["unfrozen"], guests, root, "trunks and VLAN legs")
-    after = inspect(runner, request, root, owner)
+    after = inspect(runner, request, root, owner, reuse=seen)
     left = [record["name"] for record in after["records"] if record["present"] or record["file"]] + [
         record["name"] for record in after["unfrozen"]]
     if not after["answered"] or left:
@@ -831,7 +865,7 @@ def prune(runner, request, guests, root, owner, sleep=time.sleep):
         return False
     changed, devices = remove_all(runner, seen, seen["unfrozen"], guests, root, "trunks and VLAN legs no longer frozen",
                                   kept=[record["device"] for record in seen["records"]])
-    after = inspect(runner, request, root, owner)
+    after = inspect(runner, request, root, owner, reuse=seen)
     if not after["answered"] or after["unfrozen"]:
         raise ValueError("NetworkManager still holds a trunk or VLAN leg the request no longer freezes: %s" % (
             ", ".join(record["name"] for record in after["unfrozen"]) or "an nmcli read did not answer"))

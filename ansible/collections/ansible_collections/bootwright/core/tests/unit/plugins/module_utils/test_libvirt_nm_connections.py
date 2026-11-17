@@ -156,14 +156,17 @@ class NetworkManager:
             return 0, "", ""
         if words[-2:] == ["connection", "show"]:
             return 0, self.listing(), ""
-        if words[:2] == ["-t", "-f"] and words[-2] == "uuid":
-            profile = self.profiles.get(words[-1])
-            if profile is None:
-                return 10, "", "Error: no such connection profile."
-            values = dict(profile["properties"], **{"connection.interface-name": profile["interface"]})
-            fields = words[2].split(",")
-            return 0, "".join("%s:%s\n" % (key, value) for key, value in sorted(values.items())
-                              if key in fields or key.split(".")[0] in fields), ""
+        if words[:2] == ["-t", "-f"] and "uuid" in words[3:]:
+            shown = ""
+            for uuid in [words[index + 1] for index in range(4, len(words) - 1) if words[index] == "uuid"]:
+                profile = self.profiles.get(uuid)
+                if profile is None:
+                    return 10, "", "Error: no such connection profile."
+                values = dict(profile["properties"], **{"connection.interface-name": profile["interface"], "connection.uuid": uuid})
+                fields = words[2].split(",")
+                shown += "".join("%s:%s\n" % (key, value) for key, value in sorted(values.items())
+                                 if key in fields or key.split(".")[0] in fields)
+            return 0, shown, ""
         if words[:2] == ["connection", "load"]:
             self.load(words[2])
             return 0, "", ""
@@ -616,3 +619,55 @@ def test_file_only_carrier_policy_is_removed_with_networkmanager_stopped_or_abse
     assert manage(host, "absent", plain) and not path.exists()
     assert host.effects() == []
     assert not manage(host, "absent", plain)
+
+
+def foreign_reads(host):
+    ours = set(UUIDS.values())
+    return [call for call in host.calls if call[0] == nm.NMCLI and "-f" in call and "uuid" in call
+            and any(call[index + 1] not in ours for index in range(len(call) - 1) if call[index] == "uuid")]
+
+
+def other_profiles(host, count, device="elsewhere"):
+    for index in range(count):
+        host.profile("external-%d" % index, "ffffffff-0000-8000-8000-%012d" % index, "tun", device + str(index))
+
+
+def test_the_foreign_profiles_interfaces_are_read_in_one_call_with_the_same_verdict(host):
+    other_profiles(host, 12)
+    host.profile("hand-made", "ffffffff-0000-8000-8000-00000000000a", "802-3-ethernet", "br-lab")
+    seen = nm.inspect(host.run, REQUEST, str(host.root), os.geteuid())
+    assert len(foreign_reads(host)) == 1 and seen["answered"]
+    assert seen["collisions"] == ["connection hand-made (UUID ffffffff-0000-8000-8000-00000000000a) binds device br-lab of trunk "
+                                  "%s: delete it or change the trunk bridge" % TRUNK]
+
+
+def test_an_apply_a_replay_and_a_removal_read_the_foreign_profiles_once_per_settle(host):
+    other_profiles(host, 12)
+    host.calls.clear()
+    assert manage(host, "present")
+    assert len(foreign_reads(host)) == 2
+    host.calls.clear()
+    assert not manage(host, "present")
+    assert len(foreign_reads(host)) == 2
+    host.calls.clear()
+    assert manage(host, "absent")
+    assert len(foreign_reads(host)) == 1
+
+
+@pytest.mark.parametrize("output", ["", "connection.interface-name:x\n", "connection.uuid:ffffffff-0000-8000-8000-000000000000\n"])
+def test_a_foreign_read_that_does_not_answer_for_every_profile_is_unanswered(output):
+    def runner(_argv, **_kwargs):
+        return 0, output, ""
+    listing = [{"name": "external-%d" % index, "uuid": "ffffffff-0000-8000-8000-%012d" % index, "device": ""} for index in range(2)]
+    assert nm.foreign_devices(runner, listing, [{"uuid": UUIDS[TRUNK], "device": "br-lab", "role": "trunk", "name": TRUNK}]) is None
+
+
+def test_the_foreign_read_is_bounded_in_one_argv_and_failure_is_unanswered():
+    seen = []
+
+    def runner(argv, **_kwargs):
+        seen.append(argv)
+        return 1, "", "Error"
+    listing = [{"name": "external-%d" % index, "uuid": "ffffffff-0000-8000-8000-%012d" % index, "device": ""} for index in range(3)]
+    assert nm.foreign_devices(runner, listing, []) is None and len(seen) == 1
+    assert seen[0][-6:] == ["uuid", listing[0]["uuid"], "uuid", listing[1]["uuid"], "uuid", listing[2]["uuid"]]
