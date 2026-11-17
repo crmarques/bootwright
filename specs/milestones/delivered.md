@@ -17128,5 +17128,20 @@ reservation key is built through a typed builder in Infrastructure services,
 each key's text pinned before the move; the Ceph child admissions share their
 cluster's resolved placements (a stretch cluster's three pool admissions went
 from about 83 µs to 55 µs). No contract moved. nginx as a managed service row
-is [B1537](m1.md#b1537).
+is [B1537](#b1537), delivered by X558.
+
+## X558 — nginx on the managed service role
+
+### B1537
+
+Split from B1527 under [D274](backlog.md#d274). The artifact server's nginx is
+one more row of the managed service role, reached through thin
+`artifact_server_*` entry points that keep its request, version and variables;
+one inspection module reads each kind by its request version, and one protocol
+plugin takes the kind from its task arguments, so the artifact server keeps
+its capability name, evidence schema and refusals on the wire. Walks of every
+entry point and scenario, pinned before the fold, match byte for byte after
+it, and no contract moved. The artifact server now publishes its certificate
+when its request asks for TLS, which is when Go lends it, and refuses a TLS
+request without its material before any effect.
 
