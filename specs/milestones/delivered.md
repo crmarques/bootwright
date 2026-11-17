@@ -16547,3 +16547,20 @@ are not one per action. Pin tests written on the earlier code (every action
 with its own, no and a foreign arm, 132 evidence shapes, 93 executor cases)
 pass unchanged.
 
+## X526 — Structure fitness rules
+
+### B1496
+
+Split from B1469 under [D274](backlog.md#d274) (audit 005 W8.1 and part of
+W8.7). `contextDependencies` in `test/architecture` holds the 91 edges between
+bounded contexts with a reason each and fails a new, stale, duplicate or
+unexplained edge; seven rows covering eight edges the specs do not explain
+are marked questionable (the controller reading five other contexts' facts,
+infrastructure services reading container-cluster facts, machine and
+infrastructure services depending on each other, Ceph validating through
+managed OS) for W8.2 to settle. A second rule resolves every literal `Get` and
+`Has` path production code reads against the schemas; it found no undeclared
+read, and 21 paths of foreign vocabularies (NMState, Ceph options, IAM
+policies, the document envelope) are listed with their owner. The architecture
+names the two sanctioned Go network contacts. No production code changed.
+
