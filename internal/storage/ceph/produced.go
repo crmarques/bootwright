@@ -106,7 +106,7 @@ func clientCaps(c Client) (map[string]string, bool) {
 	return scopeCaps(c)
 }
 
-func withCaps(r Request) (Request, error) {
+func WithClientCaps(r Request) (Request, error) {
 	caps, ok := scopeCaps(*r.Client)
 	if !ok {
 		return Request{}, failure("api.invariant", "CephClient "+r.Client.Name+" declares no scope this build grants", "set spec.access to readOnly or readWrite and exactly one of spec.poolRef, spec.filesystemRef or spec.subvolumeRef")

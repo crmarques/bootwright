@@ -200,6 +200,13 @@ func fleetRequest(t *testing.T, change func(*ceph.Request)) json.RawMessage {
 		r.Packages = nil
 		change(&r)
 	}
+	if r.Client != nil {
+		frozen, err := ceph.WithClientCaps(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r = frozen
+	}
 	data, err := r.Canonical()
 	if err != nil {
 		t.Fatal(err)

@@ -53,6 +53,7 @@ func TestCephInspectionReportsTheHostSpecializationsTheLifecycleEvidenceCarries(
 			Health: "HEALTH_OK", Hosts: []string{"rhel-01.lab.test"}, Monitors: []string{"rhel-01.lab.test"}, MGRActive: "rhel-01.lab.test", MGRStandbys: []string{},
 			OSDs: []ceph.OSDEvidence{}, Daemons: []ceph.UnitDaemon{}, MonAddrs: []ceph.MonitorAddress{{Host: "rhel-01.lab.test", Address: "198.51.100.11"}},
 			Specializations: []string{"ceph-bootstrap-license-call-continues"},
+			Readiness:       ceph.ReadinessEvidence{Checks: []string{}, Scoped: []string{}, Pools: []string{}, Filesystems: []string{}, PGs: ceph.PGEvidence{Total: 32, Clean: 32}, License: "accepted"},
 		}),
 	})
 	if _, err := journey.Service.Apply(ctx, lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}); err != nil {
