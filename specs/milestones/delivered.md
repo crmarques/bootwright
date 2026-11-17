@@ -16578,7 +16578,7 @@ controller bundle area among them), retirement, run retirement, setup and
 runtime holds and uninstall, the ansiblerunner holder, sweep, scratch and
 claim paths, and the controller staging sweep and discard. The adapter job
 lock and the automation stage lock are shared with the adapter on purpose and
-still close only; their fork window is [B1498](m1.md#b1498). Five tests keep a
+still close only; their fork window is [B1498](#b1498). Five tests keep a
 duplicate of the locked descriptor, as a forked child does, and show a fresh
 non-blocking lock succeeds after release; they failed before. The flaky
 context test passed 20 runs in a row.
@@ -16706,4 +16706,21 @@ reported changed unless `dnf` did nothing. Each verdict, refusal and recorded
 evidence is unchanged apart from the budget wording. An independent review
 found no wrong verdict; its fixes are applied. An operator libvirt host apply
 is owed.
+
+## X536 — Releases wait out forks in flight
+
+### B1498
+
+Found by the independent review of X527, taken under [D274](backlog.md#d274)
+at the owner's request of 2026-11-17 to complete the plan. The adapter job lock
+and the automation stage lock are shared with the adapter, so their release
+cannot unlock first; the release now closes such a lock while holding Go's
+fork lock for reading, which waits out every fork in flight (a fork holds the
+lock from before it clones until its vfork child has executed) and lets no fork
+start meanwhile, so no child still holds the lock when a sibling sweep looks.
+The staging release, never shared, unlocks before it closes. `setupRun.Close`,
+which the item named, holds no lock. The barrier relies on Go cloning with
+vfork, which it does unless a fork asks for a new user namespace; no
+production fork does. Tests that hold the fork lock with a duplicated
+descriptor, as a fork in flight does, failed before and pass now.
 
