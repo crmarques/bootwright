@@ -109,6 +109,10 @@ class Refused(Exception):
         self.detail = detail
 
 
+class Oversized(Refused):
+    """A tooling failure whose cause is output beyond its bound, which a caller may answer another way."""
+
+
 def failed(cause):
     return Refused("host-firewall-failed", cause)
 
@@ -211,7 +215,7 @@ def run_command(argv):
     except (OSError, subprocess.TimeoutExpired):
         raise failed("tooling") from None
     if len(completed.stdout) > MAX_COMMAND_OUTPUT:
-        raise failed("tooling")
+        raise Oversized("host-firewall-failed", "tooling")
     return completed.returncode, completed.stdout
 
 
@@ -246,6 +250,7 @@ class Guest:
         self.preserve_runtime = preserve_runtime
         self.owned_names = set()
         self.snapshots = {True: None, False: None}
+        self.per_zone = {True: False, False: False}
         self.run = run
         self.directory = directory
         self.owner = owner
@@ -358,19 +363,42 @@ class Guest:
         return all(name.encode("ascii") in loaded for name in names)
 
     def snapshot(self, permanent):
-        """Every zone's listed services on one side, read once until a change of that side forgets it."""
+        """Every zone's listed services on one side, read once until a change of that side forgets it.
+
+        None when the one listing cannot be used: it exceeds the output bound or is not ASCII, as a host with many
+        foreign rich rules or a UTF-8 log prefix gives. That side is then answered zone by zone, and stays so."""
+        if self.per_zone[permanent]:
+            return None
         if self.snapshots[permanent] is None:
-            code, output = self.command(*((["--permanent"] if permanent else []) + ["--list-all-zones"]))
+            try:
+                code, output = self.command(*((["--permanent"] if permanent else []) + ["--list-all-zones"]))
+            except Oversized:
+                self.per_zone[permanent] = True
+                return None
             if code != 0:
                 raise failed("tooling")
+            if len(output) > MAX_COMMAND_OUTPUT or not output.isascii():
+                self.per_zone[permanent] = True
+                return None
             self.snapshots[permanent] = zone_services(output)
         return self.snapshots[permanent]
 
     def lists(self, zone, name, permanent):
         services = self.snapshot(permanent)
+        if services is None:
+            return self.queries(zone, name, permanent)
         if zone not in services:
             raise failed("tooling")
         return name in services[zone]
+
+    def queries(self, zone, name, permanent):
+        arguments = (["--permanent"] if permanent else []) + ["--zone=" + zone, "--query-service=" + name]
+        code, _output = self.command(*arguments)
+        if code == 0:
+            return True
+        if code in NOT_LISTED:
+            return False
+        raise failed("tooling")
 
     def path(self, name):
         return os.path.join(self.directory, name + ".xml")
@@ -559,7 +587,7 @@ def zone_services(output):
             zones[current] = None
         elif current is None:
             raise failed("tooling")
-        elif stripped.startswith("services:"):
+        elif line.startswith("  services:") and not line.startswith("   "):
             if zones[current] is not None:
                 raise failed("tooling")
             zones[current] = frozenset(stripped.split()[1:])

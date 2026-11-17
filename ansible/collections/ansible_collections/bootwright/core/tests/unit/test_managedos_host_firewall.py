@@ -1184,3 +1184,74 @@ def test_a_zone_listing_outside_the_closed_shape_is_a_tooling_failure(listing):
     with pytest.raises(worker.Refused) as refused:
         worker.zone_services(listing)
     assert refused.value.cause == "tooling"
+
+
+REALISTIC_RUNTIME = (
+    "public (default, active)\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n"
+    "  interfaces: eth0\n  sources: \n  services: cockpit dhcpv6-client ssh\n  ports: 8443/tcp\n  protocols: \n  forward: yes\n"
+    "  masquerade: no\n  forward-ports: \n\tport=80:proto=tcp:toport=8080:toaddr=\n  source-ports: \n  icmp-blocks: \n  rich rules: \n"
+    "\trule service name=\"http\" accept\n"
+    "\trule family=\"ipv4\" source address=\"192.0.2.9\" log prefix=\"services: x\" level=\"warning\" drop\n"
+    "\ndrop (active)\n  target: DROP\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: eth1\n"
+    "  sources: \n  services: \n  ports: \n  protocols: \n  forward: no\n  masquerade: no\n  forward-ports: \n  source-ports: \n"
+    "  icmp-blocks: \n  rich rules: \n"
+    "\ninternal\n  target: default\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: lab-ceph-ingress-rgw ssh\n"
+    "  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n"
+    "  rich rules: \n\trule service name=\"nfs\" accept\n"
+)
+REALISTIC_PERMANENT = REALISTIC_RUNTIME.replace("public (default, active)", "public (default)").replace("drop (active)", "drop")
+
+
+@pytest.mark.parametrize("listing", [REALISTIC_RUNTIME, REALISTIC_PERMANENT], ids=["runtime", "permanent"])
+def test_a_realistic_firewalld_listing_gives_exactly_each_zones_listed_services(listing):
+    assert worker.zone_services(listing.encode()) == {
+        "public": frozenset({"cockpit", "dhcpv6-client", "ssh"}), "drop": frozenset(), "internal": frozenset({RGW, "ssh"})}
+
+
+class Listed(FakeFirewalld):
+    """A firewalld whose one whole-zone listing is replaced; the per-zone queries still answer."""
+
+    def __init__(self, directory, listing):
+        super().__init__(directory)
+        self.listing = listing
+
+    def __call__(self, argv):
+        if "--list-all-zones" in argv:
+            self.calls.append(list(argv))
+            if self.listing is worker.Oversized:
+                raise worker.Oversized("host-firewall-failed", "tooling")
+            return 0, self.listing
+        return super().__call__(argv)
+
+
+UTF8_LISTING = "public\n  services: ssh\n  rich rules: \n\trule log prefix=\"caf\u00e9\" drop\n".encode()
+
+
+@pytest.mark.parametrize("listing", [worker.Oversized, b"x" * (worker.MAX_COMMAND_OUTPUT + 1), UTF8_LISTING],
+                         ids=["refused by the runner", "over the output bound", "not ASCII"])
+def test_a_listing_that_overflows_or_is_not_ascii_is_answered_zone_by_zone_as_before(directory, listing):
+    host = Listed(directory, listing)
+    wanted = [service(RGW), service(NFS, port=2049)]
+    reply = ask(host, "apply", wanted)
+    assert reply["ok"] and reply["result"]["services"] == [entry(RGW, content=wanted[0]["content"]), entry(NFS, content=wanted[1]["content"])]
+    host.calls.clear()
+    replay = ask(host, "apply", wanted)
+    assert replay["ok"] and replay["result"]["changed"] is False
+    assert zone_reads(host)[1] == 2 and zone_reads(host)[0] > 0
+    host.calls.clear()
+    inspected = ask(host, "inspect", wanted)
+    assert inspected["ok"] and inspected["result"]["services"][0]["memberships"] == [{"interface": "eth0", "zone": "public"}]
+    assert ask(host, "remove", wanted)["ok"] and host.permanent["public"] == set()
+
+
+def test_a_listing_inside_its_bounds_that_is_malformed_stays_a_tooling_failure(directory):
+    host = Listed(directory, b"public\n  ports: 1/tcp\n")
+    assert ask(host, "inspect", [service()]) == {"ok": False, "reason": "host-firewall-failed", "cause": "tooling"}
+    assert zone_reads(host)[0] == 0
+
+
+def test_output_beyond_the_bound_is_a_tooling_failure_the_caller_can_tell_apart(monkeypatch):
+    monkeypatch.setattr(worker.subprocess, "run", lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout=b"x" * (worker.MAX_COMMAND_OUTPUT + 1)))
+    with pytest.raises(worker.Oversized) as refused:
+        worker.run_command(["/usr/bin/true"])
+    assert (refused.value.reason, refused.value.cause) == ("host-firewall-failed", "tooling")
