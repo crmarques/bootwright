@@ -6,6 +6,7 @@ from __future__ import annotations
 # pylint: disable=unidiomatic-typecheck
 
 import concurrent.futures
+import functools
 import hashlib
 import inspect
 import ipaddress
@@ -494,6 +495,20 @@ def ssh_argv(host, key, known_hosts, source, worker_budget=None, *, worker_ceili
     return argv
 
 
+@functools.cache
+def shipped_native_sources():
+    modules = (native_diagnostics, native_specializations, canonical_json, ceph_monitoring_template, bounded_process, tls_trust,
+               private_files, registry_auth, held_directory, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
+               ceph_native_resources, ceph_native_stretch, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability,
+               ceph_native_units, ceph_native_object, ceph_smb_native,
+               ceph_replication_native, ceph_export_dns, ceph_export_native,
+               ceph_host_route_probe, ceph_pull_broker, physical_machine_identity, physical_erase_worker,
+               ceph_host_runtime, ceph_admin_credentials_native)
+    sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
+    ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
+    return tuple(sources.items())
+
+
 class Transport:
     """No material value appears in arguments, environment, errors or logs."""
 
@@ -584,16 +599,7 @@ class Transport:
 
     @staticmethod
     def native_sources():
-        modules = (native_diagnostics, native_specializations, canonical_json, ceph_monitoring_template, bounded_process, tls_trust,
-                   private_files, registry_auth, held_directory, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
-                   ceph_native_resources, ceph_native_stretch, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability,
-                   ceph_native_units, ceph_native_object, ceph_smb_native,
-                   ceph_replication_native, ceph_export_dns, ceph_export_native,
-                   ceph_host_route_probe, ceph_pull_broker, physical_machine_identity, physical_erase_worker,
-                   ceph_host_runtime, ceph_admin_credentials_native)
-        sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
-        ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
-        return sources
+        return dict(shipped_native_sources())
 
     def call(self, host, phase, private=None, *, timeout=660, devices=None, service=None, names=None, orphans=None):
         nvme_long = (self.request.get("action") == "nvmeof" and phase in ("nvmeof", "nvmeof_observe")

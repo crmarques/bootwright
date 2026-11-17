@@ -18,7 +18,7 @@ import zipimport
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_worker, ceph_native_object, ceph_native_worker, native_diagnostics, native_specializations,
+    ceph_core, ceph_host_worker, ceph_native, ceph_native_object, ceph_native_worker, native_diagnostics, native_specializations,
 )
 
 
@@ -60,6 +60,27 @@ def test_specialization_registry_ships_in_the_closed_bundle_after_diagnostics():
         assert all(names.index(shared) < names.index(user) for user in ("ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native"))
     sources = ceph_core.Transport.native_sources()
     assert tuple(sources) == names and sources["native_specializations"] == inspect.getsource(native_specializations)
+
+
+def test_native_sources_are_assembled_once_and_handed_out_as_copies():
+    ceph_core.shipped_native_sources.cache_clear()
+    first = ceph_core.Transport.native_sources()
+    hits = ceph_core.shipped_native_sources.cache_info().hits
+    first["ceph_native"] = "tampered"
+    second = ceph_core.Transport.native_sources()
+    assert ceph_core.shipped_native_sources.cache_info().hits == hits + 1
+    assert second is not first and second["ceph_native"] == inspect.getsource(ceph_native)
+    assert ceph_core.shipped_native_sources.cache_info().misses == 1
+
+
+def test_the_shipped_bundle_keeps_headroom_under_the_worker_input_cap():
+    ceiling = ceph_native.MAX_INPUT * 3 // 4
+    assert ceph_native.MAX_INPUT == ceph_native_worker.MAX_INPUT
+    sources = ceph_core.Transport.native_sources()
+    shipped = ceph_native.canonical({"sources": sources, "payload": {}, "budget": 1})
+    assert len(shipped) <= ceiling, (
+        "the native bundle is %d bytes against %d allowed (75%% of the %d-byte input cap); "
+        "every call ships it before its request and private values" % (len(shipped), ceiling, ceph_native.MAX_INPUT))
 
 
 def test_isolated_loader_binds_fixed_source_and_keeps_commands_in_owned_group():
