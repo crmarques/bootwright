@@ -69,6 +69,7 @@ func (instant) Observe(_ context.Context, target capacity.Target) (capacity.Fact
 type crowding struct {
 	mu            sync.Mutex
 	inFlight, top int
+	signalled     bool
 	reached       chan struct{}
 	release       chan struct{}
 }
@@ -77,7 +78,8 @@ func (c *crowding) Observe(ctx context.Context, target capacity.Target) (capacit
 	c.mu.Lock()
 	c.inFlight++
 	c.top = max(c.top, c.inFlight)
-	if c.inFlight == capacity.HostProbeConcurrency {
+	if c.inFlight == capacity.HostProbeConcurrency && !c.signalled {
+		c.signalled = true
 		close(c.reached)
 	}
 	c.mu.Unlock()
