@@ -16754,3 +16754,21 @@ client or NVMe-oF request an earlier build froze is refused. An independent
 review found the grants byte-identical and no path around Go's admission; its
 should-fix is applied.
 
+## X537 — Managed OS values frozen by Go
+
+### B1506
+
+Split from B1464 under [D274](backlog.md#d274) (the managed OS part of audit
+005 W3.2). The installation request carries a `requires` block (FIPS,
+registration, root encryption, root WWN, update) that Go derives, decodes and
+judges the evidence against, the registration, unregistration and update
+session budgets that size Go's run bounds, and its served root; the firewall
+request carries its session budget; the package tree request carries its area,
+server and served root. The roles and the protocol plugin read the frozen
+values instead of deriving them by Jinja and path arithmetic. The
+`os-install-anaconda-v1`, `os-package-tree-v1`, `os-host-firewall-v1` and
+`physical-erase-v1` contracts moved: a request an earlier build froze is
+refused. The unregistration bound the spec stated (300 s) is corrected to the
+330 s session the role always ran. A pin test shows the frozen values equal the
+roles' former Jinja over every request golden.
+
