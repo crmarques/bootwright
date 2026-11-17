@@ -54,7 +54,7 @@ func compiledKey(sources desiredstate.Sources) string {
 	for _, file := range slices.Concat(sources.Files, sources.Markers) {
 		order = append(order, file.Path())
 	}
-	key, _ := json.Marshal([]any{digestOf(sources), order, sources.Roots, sources.SkippedSecrets})
+	key, _ := json.Marshal([]any{digestOf(sources), len(sources.Files), order, sources.Roots, sources.SkippedSecrets})
 	return string(key)
 }
 
