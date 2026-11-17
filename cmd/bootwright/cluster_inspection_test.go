@@ -51,6 +51,7 @@ func decodeInspected(t *testing.T, out string) inspectedEnvelope {
 }
 
 func TestClusterListAndInfoReadOnlyLocalStateForAnExplicitOrCurrentContext(t *testing.T) {
+	t.Parallel()
 	services, _, _ := snoContext(t)
 	for _, args := range [][]string{{"--context", "lab-sno"}, {}} {
 		out, stderr := contextRun(t, services, 0, append([]string{"cluster", "list"}, args...)...)
@@ -91,6 +92,7 @@ func TestClusterListAndInfoReadOnlyLocalStateForAnExplicitOrCurrentContext(t *te
 }
 
 func TestClusterInfoRefusesAnUnselectedNameAndNonApplicableSecretsWithoutReadingCustody(t *testing.T) {
+	t.Parallel()
 	services, repository, _ := snoContext(t)
 	produceThroughLentArea(t, services, repository, "lab-sno", agentinstall.InstallBlockID("sno"), agentinstall.KubeconfigOutput, snoKubeconfig)
 	for name, code := range map[string]string{"missing": "access.target", "sno-01": "access.target"} {
@@ -140,6 +142,7 @@ func (k keyFake) HostKey(context.Context, string, string) (machine.HostKeyEviden
 }
 
 func TestInspectionWiringMapsEvidenceReadersToProofs(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	done := func(implementation string, kind api.Kind, object string) lifecycle.BlockEvidence {
 		return lifecycle.BlockEvidence{Kind: string(kind), Object: object, Implementation: implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone}
@@ -224,6 +227,7 @@ func inspectedClusterProofs(t *testing.T) []lifecycle.BlockEvidence {
 }
 
 func TestCephInspectionReportsAReasonWithoutProofsAndTheFSIDWithThem(t *testing.T) {
+	t.Parallel()
 	catalog, cluster := inspectedStorageCluster()
 	reader := &readerFake{}
 	proof, err := (cephInspection{reconciler: reader}).ManagedStorage(context.Background(), "lab", catalog, cluster)
@@ -259,6 +263,7 @@ func (p *producedFake) ReadProduced(_ context.Context, contextName, block, name 
 }
 
 func TestObjectUserCustodyChecksUIDAndExactProtectedEntry(t *testing.T) {
+	t.Parallel()
 	for _, value := range []string{`{"accessKey":"ACCESS","secretKey":"PRIVATE","uid":"documents"}`, `{"accessKey":"ACCESS","secretKey":"PRIVATE","uid":"foreign"}`, `{"accessKey":"ACCESS","secretKey":"PRIVATE","uid":"documents","extra":"PRIVATE"}`} {
 		material := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)})
 		reader := &producedFake{material: material, found: true}
@@ -279,6 +284,7 @@ func TestObjectUserCustodyChecksUIDAndExactProtectedEntry(t *testing.T) {
 }
 
 func TestDashboardCustodyReadsTheClusterBlocksDashboardEntry(t *testing.T) {
+	t.Parallel()
 	reader := &producedFake{material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_")}), unproved: true, found: true}
 	got, found, err := (inspectionCustody{administrator: adminPasswordReaderFake{reader: reader}}).DashboardPassword(context.Background(), "lab", "storage")
 	value, _ := got.Material.Part(secrets.ValuePart)
@@ -301,6 +307,7 @@ func zeroed(material secrets.Material) bool {
 }
 
 func TestClientCustodyReadsTheClientBlocksEntry(t *testing.T) {
+	t.Parallel()
 	const key = "AQBx57l5Y2FuYXJ5LWNsaWVudC1rZXk9PQ=="
 	entry := `[{"caps":{"mgr":"profile rbd pool=volumes","mon":"profile rbd","osd":"profile rbd pool=volumes"},"entity":"client.vm-disks","key":"` + key + `"}]`
 	source := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(entry)})
@@ -331,6 +338,7 @@ func TestClientCustodyReadsTheClientBlocksEntry(t *testing.T) {
 }
 
 func TestCephInspectionReadsEndpointEvidence(t *testing.T) {
+	t.Parallel()
 	catalog, cluster := inspectedStorageCluster()
 	frozen := func(kind, object string, r ceph.Request, digest string) reconciliation.Block {
 		r.Version = ceph.Version

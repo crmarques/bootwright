@@ -520,6 +520,7 @@ func storeFormats() map[string]string {
 // name no automation literal also claims, so a moved setup format is a new,
 // classified literal rather than a silent reuse.
 func TestEveryStoreFormatIsClassified(t *testing.T) {
+	t.Parallel()
 	versioned := regexp.MustCompile(`-v[0-9]+$`)
 	automation := automationFormats()
 	for literal, class := range storeFormats() {
@@ -626,6 +627,7 @@ func automationLiterals() (map[string][]string, []string) {
 // contract goldens list. A dynamically built value, or one naming no
 // Bootwright token, is outside what it sees.
 func TestEveryAutomationVersionLiteralIsClassified(t *testing.T) {
+	t.Parallel()
 	found, unread := automationLiterals()
 	formats := automationFormats()
 	if len(found) == 0 {
@@ -832,6 +834,7 @@ func contractOfferedImplementations(t *testing.T, versions []contractVersion) {
 var contractListSections = []string{"effect-pins", "request-identity", "request-schema", "evidence-schema"}
 
 func TestExecutionFingerprintIncludesOptionalSchemaAndPersistedContracts(t *testing.T) {
+	t.Parallel()
 	type original struct {
 		Name string `json:"name"`
 	}

@@ -142,6 +142,7 @@ func failedApplyNaming(t *testing.T, repository *contextfs.Store, binding string
 // without the acknowledgement refuses, and with it removes the context and
 // its keyring.
 func TestALostFrozenBindingLeavesOnlyTheOrphanAcknowledgedDelete(t *testing.T) {
+	t.Parallel()
 	for _, loss := range []struct {
 		name string
 		lose func(*testing.T, cli.Services, string, string)

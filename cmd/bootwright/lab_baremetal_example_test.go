@@ -71,6 +71,7 @@ func machineBlocks(blocks []reconciliation.BlockDefinition) []reconciliation.Blo
 // all: a bare-metal provider runs nothing Bootwright installs, so its
 // substrates stage is empty.
 func TestLabBaremetalExamplePlansTheClaim(t *testing.T) {
+	t.Parallel()
 	blocks := machineBlocks(baremetalPlanBlocks(t, reconciliation.Apply))
 	identities := make([]string, 0, len(blocks))
 	for _, block := range blocks {
@@ -85,6 +86,7 @@ func TestLabBaremetalExamplePlansTheClaim(t *testing.T) {
 // claim back, so neither acknowledges a loss. The installation's own
 // authorization is TestLabBaremetalExamplePlansItsInstallation's.
 func TestLabBaremetalClaimConsumesNoAuthorization(t *testing.T) {
+	t.Parallel()
 	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
 		for _, block := range machineBlocks(baremetalPlanBlocks(t, verb)) {
 			if !strings.HasPrefix(block.ID, "machine-") {
@@ -100,6 +102,7 @@ func TestLabBaremetalClaimConsumesNoAuthorization(t *testing.T) {
 // One physical machine is one claim, so a second context targeting the same
 // controller refuses rather than driving the same server.
 func TestLabBaremetalClaimsTheMachineByItsController(t *testing.T) {
+	t.Parallel()
 	_, claims := baremetalPlan(t, reconciliation.Apply)
 	requireCanonicalReservations(t, claims)
 	var machine []string
@@ -117,6 +120,7 @@ func TestLabBaremetalClaimsTheMachineByItsController(t *testing.T) {
 // admission refuses a Machine whose deviceName carries a line break, naming the
 // Machine and the field, before anything is planned.
 func TestLabBaremetalAdmissionRefusesANewlineInTheRootWWN(t *testing.T) {
+	t.Parallel()
 	for name, value := range map[string]string{
 		"embedded directive": `"0x5000c500a1b2c301\nclearpart --all --initlabel"`,
 		"trailing newline":   `"0x5000c500a1b2c301\n"`,

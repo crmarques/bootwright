@@ -68,6 +68,7 @@ func loadIngressFixture(t *testing.T, name string) ingressFixture {
 // and every object of the cluster meets exactly the refusal table's
 // auxiliary-image row filled for that ingress.
 func TestIngressFixturesWithoutTheirImagesRefuseNamingTheField(t *testing.T) {
+	t.Parallel()
 	table := markdownTable(t, cephStorageSpec, "### Refusal table", cephRefusalColumns)
 	row := slices.IndexFunc(table, func(r map[string]string) bool { return r["Refusal"] == auxiliaryImageRefusalRow })
 	if row < 0 {
@@ -103,6 +104,7 @@ func TestIngressFixturesWithoutTheirImagesRefuseNamingTheField(t *testing.T) {
 // plans, the image and cluster blocks carry exactly the selected images, and
 // the effective CephCluster matches its golden.
 func TestIngressFixturesPlanWithSelectedImages(t *testing.T) {
+	t.Parallel()
 	for _, name := range ingressFixtureNames {
 		t.Run(name, func(t *testing.T) {
 			fixture := loadIngressFixture(t, name)

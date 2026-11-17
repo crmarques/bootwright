@@ -38,6 +38,7 @@ func readinessCatalog() api.Catalog {
 }
 
 func TestStatusReadinessListsMissingSecretsThenMediaTheStoreLacks(t *testing.T) {
+	t.Parallel()
 	secrets := fakeSecretReadiness{rows: []custody.ReadinessRow{
 		{Name: "key", Status: "stale", Remedy: "bootwright secret generate --context lab --name key"},
 		{Name: "token", Status: "missing", Remedy: "bootwright secret set --context lab --name token --value-file <path>"},
@@ -55,6 +56,7 @@ func TestStatusReadinessListsMissingSecretsThenMediaTheStoreLacks(t *testing.T) 
 }
 
 func TestStatusReadinessNamesNothingWhenNothingIsMissing(t *testing.T) {
+	t.Parallel()
 	media := fakeMediaRecords{held: map[string]installation.MediaRecord{"rhel.iso": {}, "held.iso": {}}}
 	gaps, err := statusReadiness(fakeSecretReadiness{}, media)(context.Background(), "lab", readinessCatalog())
 	if err != nil || len(gaps) != 0 {
@@ -63,6 +65,7 @@ func TestStatusReadinessNamesNothingWhenNothingIsMissing(t *testing.T) {
 }
 
 func TestStatusReadinessKeepsOneStoresGapsWhenTheOtherFails(t *testing.T) {
+	t.Parallel()
 	broken := errors.New("store unreadable")
 	secrets := fakeSecretReadiness{rows: []custody.ReadinessRow{{Name: "token", Status: "missing", Remedy: "bootwright secret set --context lab --name token --value-file <path>"}}}
 	gaps, err := statusReadiness(secrets, fakeMediaRecords{err: broken})(context.Background(), "lab", readinessCatalog())

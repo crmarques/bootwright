@@ -51,6 +51,7 @@ func secretResult(t *testing.T, services cli.Services, want int, args ...string)
 }
 
 func TestCompleteSecretCommandAndBindingJourney(t *testing.T) {
+	t.Parallel()
 	for _, implementation := range []string{"local-keyring", "session-test"} {
 		t.Run(implementation, func(t *testing.T) { secretCommandAndBindingJourney(t, implementation) })
 	}
@@ -267,6 +268,7 @@ func sameFingerprints(a, b map[string]string) bool {
 }
 
 func TestSecretContextReplacementAndProtectedDeletion(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	declaration := secretDocument("token", "token", "  source: {generated: {bytes: 32}}\n")
 	addSecretInput(t, input, "secret.yaml", declaration)
@@ -318,6 +320,7 @@ func TestSecretContextReplacementAndProtectedDeletion(t *testing.T) {
 }
 
 func TestSecretNameReuseCannotExposeAnotherContextIdentity(t *testing.T) {
+	t.Parallel()
 	services, repository, input, _ := contextFixture(t)
 	declaration := secretDocument("token", "token", "  source: {generated: {}}\n")
 	addSecretInput(t, input, "secret.yaml", declaration)
@@ -353,6 +356,7 @@ func TestSecretNameReuseCannotExposeAnotherContextIdentity(t *testing.T) {
 // under secret.store.conflict with its reason in the message and the command
 // it confirms, repeated with --yes, as next, and changes nothing.
 func TestConfirmationPromptsNameTheSecretAndTheContext(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)

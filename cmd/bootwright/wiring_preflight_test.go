@@ -16,6 +16,7 @@ import (
 )
 
 func TestStorageCapacityAdmissionSkipsTransitionsThatAllocateNoGuest(t *testing.T) {
+	t.Parallel()
 	sources := editedExample(t, "libvirt-3-nodes-ceph", exampleEdit{
 		file: "infra/providers/lab-libvirt.yaml",
 		old:  "    capacityReserve:\n      cpu: 1\n      memoryMiB: 2048\n      diskGiB: 10\n",
@@ -62,6 +63,7 @@ func (f capacityCheckFunc) Check(ctx context.Context, a []capacity.Allocation, _
 }
 
 func TestContainerOnlyApplyProvesAllDeclaredLibvirtGuestsBeforeAdmission(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno"))
 	catalog := state.Effective()
 	if len(catalog.OfKind(api.CephCluster)) != 0 {
@@ -92,6 +94,7 @@ func TestContainerOnlyApplyProvesAllDeclaredLibvirtGuestsBeforeAdmission(t *test
 }
 
 func TestRemoteCapacityCommandsRefuseWithoutALifecycleOrAVerifiedRun(t *testing.T) {
+	t.Parallel()
 	for name, remote := range map[string]remoteCommands{
 		"no lifecycle":          {},
 		"an unavailable access": {reconciler: &lifecycle.Service{}},

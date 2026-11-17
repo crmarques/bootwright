@@ -13,6 +13,7 @@ import (
 )
 
 func TestNativeServiceRefusalsPointAtTheAuthoredService(t *testing.T) {
+	t.Parallel()
 	const authored = "    - service_type: mds\n      service_id: odf-cephfs\n"
 	sources := exampleSources(t)
 	var edited []byte
@@ -39,6 +40,7 @@ func TestNativeServiceRefusalsPointAtTheAuthoredService(t *testing.T) {
 }
 
 func TestMultidcExampleDeclaresItsReferenceFilesystem(t *testing.T) {
+	t.Parallel()
 	sources := exampleSources(t)
 	var out, errOut bytes.Buffer
 	run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
@@ -70,6 +72,7 @@ func TestMultidcExampleDeclaresItsReferenceFilesystem(t *testing.T) {
 }
 
 func TestReferenceStretchSitesMustBeEnvironmentSites(t *testing.T) {
+	t.Parallel()
 	const authored = "        - site-b\n\n      tiebreaker:\n        node: node-07\n        site: site-c\n"
 	for _, test := range []struct {
 		field, replacement, changedLine string

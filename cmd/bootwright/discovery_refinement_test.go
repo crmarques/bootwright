@@ -35,6 +35,7 @@ func (refinementIdentity) PinnedIdentity(name string, _ []lifecycle.BlockEvidenc
 }
 
 func TestDiscoveryRefinesRenderedDiskPoliciesBeforeInstallation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	before, after := discoveryRefinementCatalogs(t)
 	controller, err := lifecycle.ControllerMachine(after)

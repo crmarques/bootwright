@@ -121,6 +121,7 @@ func writeRecords(t *testing.T, repository *contextfs.Store, write func(context.
 // the exit, and that deletion, with no orphan acknowledgement, removes the
 // context.
 func TestAPlainDeleteClearsTheRefusedRecordStatesBesidePristineEvidence(t *testing.T) {
+	t.Parallel()
 	applied, removal := "op-"+strings.Repeat("01", 16), "op-"+strings.Repeat("02", 16)
 	for name, arrange := range map[string]func(*testing.T, *contextfs.Store, string){
 		"a lost index beside a started operation directory": func(t *testing.T, repository *contextfs.Store, root string) {
@@ -179,6 +180,7 @@ var namedDeletion = regexp.MustCompile(`bootwright (context delete[^,\n]*)`)
 // acknowledgement over any other, which over evidence it cannot read abandons
 // what it cannot list.
 func TestTheDeletionARefusalNamesOverUnrecognizedEvidenceRuns(t *testing.T) {
+	t.Parallel()
 	acknowledged := []string{"context", "delete", "--name", "alpha", "--purge", "--allow-orphans"}
 	unrecognized := "the mutation evidence reads an unrecognized record"
 	for name, test := range map[string]struct {
@@ -228,6 +230,7 @@ func TestTheDeletionARefusalNamesOverUnrecognizedEvidenceRuns(t *testing.T) {
 // next apply then refuses naming the destroy it needs, registers no operation
 // and changes nothing.
 func TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	ctx := context.Background()

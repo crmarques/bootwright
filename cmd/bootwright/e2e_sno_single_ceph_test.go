@@ -21,6 +21,7 @@ import (
 )
 
 func TestSingleCephControllerDeclaresItsInstallLayout(t *testing.T) {
+	t.Parallel()
 	directories := renderE2ECase(t, e2eRenderScript(t), "lab-sno-single-ceph-fdf", e2eRender{name: "default", sets: fipsControllerSubscriptions()})
 	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{directories[0]})
 	if err != nil {
@@ -44,6 +45,7 @@ func TestSingleCephControllerDeclaresItsInstallLayout(t *testing.T) {
 }
 
 func TestSingleCephSNOHasFiveNetworksAndOnlyClientStorageAccess(t *testing.T) {
+	t.Parallel()
 	directories := renderE2ECase(t, e2eRenderScript(t), "lab-sno-single-ceph-fdf", e2eRender{name: "default", sets: fipsControllerSubscriptions()})
 	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{directories[1]})
 	if err != nil {
@@ -101,6 +103,7 @@ func TestSingleCephSNOHasFiveNetworksAndOnlyClientStorageAccess(t *testing.T) {
 }
 
 func TestSingleCephStorageAndIsolationFixtures(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "e2e")
 	caseRoot := filepath.Join(root, "lab-sno-single-ceph-fdf")
 	image := "registry.example.test/python@sha256:" + strings.Repeat("a", 64)

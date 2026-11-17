@@ -17,6 +17,7 @@ import (
 // lookup; the test builds with the recipe's own environment and flags and
 // reads the result.
 func TestMakeBuildYieldsAStaticExecutable(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds the executable")
 	}

@@ -117,6 +117,7 @@ func registeredCephBaselineMatches(repository, baseline, build string) bool {
 }
 
 func TestCephProfileCompletionRequiresAcceptedMatrix(t *testing.T) {
+	t.Parallel()
 	milestone := "../../specs/milestones/m2.md"
 	section := markdownSection(t, milestone, "### M2c", 3)
 	state := regexp.MustCompile(`\*\*State: ([a-z ]+)\.\*\*`).FindStringSubmatch(section)
@@ -164,6 +165,7 @@ func completeCephEvidence() cephCompletionEvidence {
 }
 
 func TestCephProfileCompletionRejectsIncompleteEvidence(t *testing.T) {
+	t.Parallel()
 	if problems := cephCompletionViolations(completeCephEvidence()); len(problems) != 0 {
 		t.Fatal(problems)
 	}
@@ -205,6 +207,7 @@ func TestCephProfileCompletionRejectsIncompleteEvidence(t *testing.T) {
 }
 
 func TestCephProfileCompletionRequiresRegistrationBeforeTheRun(t *testing.T) {
+	t.Parallel()
 	repository := t.TempDir()
 	git := func(arguments ...string) string {
 		t.Helper()

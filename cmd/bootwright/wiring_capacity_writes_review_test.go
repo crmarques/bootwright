@@ -20,6 +20,7 @@ import (
 )
 
 func TestAdmissionCountsNoMediaWhenOnlyAFirewallOrGuestBlockStarts(t *testing.T) {
+	t.Parallel()
 	fixture := capacityWritesFixture(t)
 	for _, implementation := range []string{installation.FirewallImplementation, libvirt.MachineImplementation} {
 		starting := []reconciliation.Block{{BlockDefinition: reconciliation.BlockDefinition{Kind: libvirt.MachineKind, Object: "rhel-01", Implementation: implementation}}}
@@ -44,6 +45,7 @@ func (c completionOwnership) Completed(_ context.Context, _, kind, implementatio
 }
 
 func TestPreflightReadsTheInstallationBlockItselfNotTheWorstMachineBlock(t *testing.T) {
+	t.Parallel()
 	fixture := capacityWritesFixture(t)
 	failedFirewall := map[string]machine.OwnershipState{"MachineInstallProfile/rhel-9-8": {Verb: "apply", State: "done"}}
 	for _, name := range []string{"rhel-01", "rhel-02", "rhel-03"} {
@@ -61,6 +63,7 @@ func TestPreflightReadsTheInstallationBlockItselfNotTheWorstMachineBlock(t *test
 }
 
 func TestPreflightMatchesAdmissionOverAPartlyCompletedApply(t *testing.T) {
+	t.Parallel()
 	fixture := capacityWritesFixture(t)
 	var pending []reconciliation.Block
 	for _, block := range fixture.starting {
@@ -103,6 +106,7 @@ func (c countingFacts) Observe(ctx context.Context, target capacity.Target) (cap
 }
 
 func TestAdmissionObservesEachServerAndPoolOnce(t *testing.T) {
+	t.Parallel()
 	fixture := capacityWritesFixture(t)
 	facts := countingFacts{filesystemFacts{available: 1 << 50}, &sync.Mutex{}, map[string]int{}}
 	if err := libvirtCapacityAdmission(capacity.Budget{Observer: facts})(context.Background(), "lab", fixture.catalog, map[string]lifecycle.ObjectOwnership{}, fixture.starting); err != nil {
@@ -114,6 +118,7 @@ func TestAdmissionObservesEachServerAndPoolOnce(t *testing.T) {
 }
 
 func TestPreflightProjectsNoWritesInADryRunOrWithoutLibvirtGuests(t *testing.T) {
+	t.Parallel()
 	fixture := capacityWritesFixture(t)
 	refuse := installation.CapacityWrites(func(context.Context) (map[string]int64, error) {
 		t.Fatal("media sizes were read")

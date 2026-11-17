@@ -33,6 +33,7 @@ func onlyRefusal(t *testing.T, sources desiredstate.Sources) diagnostics.Diagnos
 // realize, and a mistake in a name or a fleet key yields only its own
 // diagnostic.
 func TestMachineAdmissionRefusesWhatItsSubstrateCannotRealize(t *testing.T) {
+	t.Parallel()
 	compileAcceptance(t, exampleDirectory(t, "lab-rhel"))
 	const guest = "Machine/rhel-01"
 	t.Run("an invalid name without its contact", func(t *testing.T) {
@@ -89,6 +90,7 @@ func TestMachineAdmissionRefusesWhatItsSubstrateCannotRealize(t *testing.T) {
 // A bare-metal provider may declare no segment, since a segment configures
 // nothing.
 func TestABaremetalProviderMayDeclareNoSegment(t *testing.T) {
+	t.Parallel()
 	compileAcceptance(t, editedExample(t, "lab-baremetal",
 		exampleEdit{"infra/providers/lab-metal.yaml", "\n  segments:\n    - name: lab-metal\n      untaggedNetworkRef: lab-metal\n      baremetal: {}\n", ""}))
 }
@@ -97,6 +99,7 @@ func TestABaremetalProviderMayDeclareNoSegment(t *testing.T) {
 // its management controller in a bare-metal arm with no provider, and power
 // targets it through that controller from the controller host.
 func TestAProviderlessMachineIsPoweredThroughTheControllerItAuthors(t *testing.T) {
+	t.Parallel()
 	const address = "https://bastion-bmc.lab.example.test/redfish/v1/Systems/1"
 	root := t.TempDir()
 	copySources(t, exampleDirectory(t, "lab-rhel"), root)
@@ -129,6 +132,7 @@ func TestAProviderlessMachineIsPoweredThroughTheControllerItAuthors(t *testing.T
 // serve it at, and an artifact server's also names its Machine's fqdn; an
 // authored value overrides either.
 func TestSingleDerivationValuesAreDerived(t *testing.T) {
+	t.Parallel()
 	const proxy, tls, bmc = "infra/components/proxy.yaml", "secret-descriptors/artifact-server-tls.yaml", "secret-descriptors/lab-bmc-tls.yaml"
 	state, _ := compileAcceptance(t, editedExample(t, "lab-rhel",
 		exampleEdit{bmc, "      dnsNames:\n        - localhost\n\n      ipAddresses:\n        - 127.0.0.1\n\n", ""}))

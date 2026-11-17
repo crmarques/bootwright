@@ -21,6 +21,7 @@ import (
 // Persist a synthetic completed removal through the real store, then inspect it
 // through the command and production wiring without running any native effect.
 func TestClusterInfoAfterDestroyReadsRemovalEvidenceAsUnavailable(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph"))
@@ -90,6 +91,7 @@ func TestClusterInfoAfterDestroyReadsRemovalEvidenceAsUnavailable(t *testing.T) 
 }
 
 func TestMachineHostKeysRequiresCompletedApplyEvidence(t *testing.T) {
+	t.Parallel()
 	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICG+RadYRVwHqO7OQsOpyh8SDf1tbTQ8PUmgn7UEmou/"
 	present, err := json.Marshal(installation.Evidence{Address: "192.0.2.11", HostKey: key, Postcondition: true})
 	if err != nil {

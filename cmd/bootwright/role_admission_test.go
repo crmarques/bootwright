@@ -249,6 +249,7 @@ func lentMaterial(request lifecycle.RunRequest) map[string]any {
 // lifecycle capability sends to its entry point through roleRefusals; these
 // are the refusals it reports.
 func TestRoleRefusalsNameEachRequestAnEntryPointWouldRefuse(t *testing.T) {
+	t.Parallel()
 	options := map[string]roleOption{"example_request": {Type: "dict", Required: true, Options: map[string]roleOption{
 		"version": {Type: "str", Required: true, Choices: []string{"example-v2"}},
 		"budget":  {Type: "int", Required: true},
@@ -289,6 +290,7 @@ func TestRoleRefusalsNameEachRequestAnEntryPointWouldRefuse(t *testing.T) {
 // checked against the request goldens its package pins as the exact bytes this
 // build sends, and each version the goldens carry is the one this build names.
 func TestThePowerRolesAdmitTheRequestsThisBuildSends(t *testing.T) {
+	t.Parallel()
 	for _, bound := range []struct {
 		implementation, operation, variable, version string
 		goldens                                      []string
@@ -320,6 +322,7 @@ func TestThePowerRolesAdmitTheRequestsThisBuildSends(t *testing.T) {
 // Discovery preparation has its own request, outside the installed-OS run.
 // Check its actual Go encoding against every bound role entry point too.
 func TestTheDiscoveryRolesAdmitTheRequestsThisBuildSends(t *testing.T) {
+	t.Parallel()
 	for _, port := range []int{22, 2222} {
 		request := installation.DiscoveryRequest{
 			Version: installation.DiscoveryImplementation, Inventory: installation.InventoryAutomatic,
@@ -346,6 +349,7 @@ func TestTheDiscoveryRolesAdmitTheRequestsThisBuildSends(t *testing.T) {
 // every block on the controller, so a material mapping that declares its keys
 // and not these would refuse only the runs placed off the controller.
 func TestEveryEntryPointAdmitsTheMaterialAnSSHPlacementLends(t *testing.T) {
+	t.Parallel()
 	lent := lifecycle.Materials(machine.Placement{Connection: machine.ConnectionSSH, KnownHostsRef: "known-hosts", Machine: "host", PrivateKeyRef: "identity"})
 	if len(lent) != 2 {
 		t.Fatalf("an SSH placement lends %d material files, want its identity and its host key", len(lent))

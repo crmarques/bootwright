@@ -124,6 +124,7 @@ func heldReservations(t *testing.T, repository *contextfs.Store) []prerequisites
 // with it, the deletion reports and releases exactly that context's
 // reservations, and another context's stay held.
 func TestDeletingAContextHoldingAnUnknownBlockReleasesItsReservations(t *testing.T) {
+	t.Parallel()
 	services, repository, input, _ := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "context", "init", "--name", "bravo", "--input-dir", input)

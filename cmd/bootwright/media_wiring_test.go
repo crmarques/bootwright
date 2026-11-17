@@ -89,6 +89,7 @@ func (p *acceptingMediaPrompt) Confirm(context.Context, string, string) error {
 // assembled media service applies both, so a checksum's check row and the
 // image a deletion confirms reach the invocation's standard output.
 func TestTheShippedMediaServiceReportsAndPresentsOnStdout(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	args := []string{"media", "list", "--checksums"}
 	var out, errOut bytes.Buffer

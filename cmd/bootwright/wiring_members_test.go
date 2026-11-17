@@ -11,6 +11,7 @@ import (
 // domain that owns it, so selection, admission and compilation find every
 // node Machine without reading a field path themselves.
 func TestCompositionBindsEveryClusterKindsMembership(t *testing.T) {
+	t.Parallel()
 	node := api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("node-1")}, api.FieldValue{Name: "machineRef", Value: api.StringValue("machine-1")})
 	nodes := api.ListValue(node)
 	container := api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue(api.FieldValue{Name: "nodes", Value: nodes}))

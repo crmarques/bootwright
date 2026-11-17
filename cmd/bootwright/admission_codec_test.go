@@ -15,6 +15,7 @@ import (
 )
 
 func TestActualCompilerEffectiveYAMLAndJSONRoundTrips(t *testing.T) {
+	t.Parallel()
 	sources := exampleDirectory(t, "lab-rhel")
 	sources.Files = append(sources.Files, desiredstate.NewSourceFile("/synthetic/roundtrip-playbook.yaml", []byte(`apiVersion: bootwright.io/v1alpha1
 kind: CustomPlaybook

@@ -65,6 +65,7 @@ func sshMachine(name, address, pin string, installed bool) api.Object {
 }
 
 func TestHostKeyProofsCountsEverySourceASessionProvesWithoutFirstUse(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	stored := trustRecord(t, "m1", "192.0.2.11", 22)
 	tests := []struct {
@@ -139,6 +140,7 @@ func stretchSessions(t *testing.T, machines []api.Object, records trustRecords, 
 // session template names the administrator node, ceph-01, a provided Machine
 // whose pinned key proves it.
 func TestClusterInfoTreatsAPinnedProvidedNodeAsProved(t *testing.T) {
+	t.Parallel()
 	machines := []api.Object{
 		sshMachine("ceph-01", "192.0.2.11", "ceph-known-hosts", false),
 		sshMachine("arbiter-01", "192.0.2.50", "", true),
@@ -153,6 +155,7 @@ func TestClusterInfoTreatsAPinnedProvidedNodeAsProved(t *testing.T) {
 }
 
 func TestClusterInfoRemedyForAnUnprovedProvidedMachineNamesMachineTrust(t *testing.T) {
+	t.Parallel()
 	machines := []api.Object{
 		sshMachine("arbiter-01", "192.0.2.50", "", true),
 		sshMachine("ceph-01", "192.0.2.11", "", false),
@@ -173,6 +176,7 @@ func TestClusterInfoRemedyForAnUnprovedProvidedMachineNamesMachineTrust(t *testi
 }
 
 func TestClusterInfoKeepsTheMachinesStageRemedyForAnInstalledMachine(t *testing.T) {
+	t.Parallel()
 	machines := []api.Object{sshMachine("ceph-01", "192.0.2.11", "", true)}
 	commands, reads := stretchSessions(t, machines, &recordsFake{data: trustRecord(t, "ceph-01", "192.0.2.11", 22)}, "ceph-01")
 	command := commands[inspection.CommandExec]

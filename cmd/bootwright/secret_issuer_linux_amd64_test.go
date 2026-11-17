@@ -20,6 +20,7 @@ import (
 )
 
 func TestGeneratedIssuerThroughProductionCustodyAndFrozenBinding(t *testing.T) {
+	t.Parallel()
 	services, _, input, _ := contextFixture(t)
 	addSecretInput(t, input, "issuer.yaml", strings.Join([]string{
 		secretDocument("a-leaf", "tlsCertificate", "  source: {generated: {issuerRef: z-root, commonName: bmc.example.test, dnsNames: [bmc.example.test], validityDays: 30}}\n"),
@@ -92,6 +93,7 @@ func TestGeneratedIssuerThroughProductionCustodyAndFrozenBinding(t *testing.T) {
 }
 
 func TestCAIssuedLeafKeepsSubstrateAndInstallationOwnersSeparate(t *testing.T) {
+	t.Parallel()
 	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{filepath.Join("testdata", "issuer-substrate")})
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))

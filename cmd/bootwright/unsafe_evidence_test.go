@@ -17,6 +17,7 @@ import (
 // acknowledged deletion abandons the context and leaves anything outside the
 // store intact.
 func TestUnsafeEvidenceIsRefusedNamingItsContextEntryAndExit(t *testing.T) {
+	t.Parallel()
 	prefix := "  error  context.state\n    context alpha cannot be verified: contexts/alpha/state/mutation.json: "
 	suffix := "\n    Next: remove contexts/alpha/state/mutation.json beneath the state root, which leaves nothing to prove what the context owns, " +
 		"then abandon whatever it owns with bootwright context delete --name alpha --purge --allow-orphans; or restore the whole store from a matching backup\n"

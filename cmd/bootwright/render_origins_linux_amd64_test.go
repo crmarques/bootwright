@@ -13,6 +13,7 @@ import (
 // render effective --origins marks every leaf of each effective object as
 // authored, defaults.<Kind>, built-in or derived, in text and in JSON alike.
 func TestRenderEffectiveOriginsMarkEachLeaf(t *testing.T) {
+	t.Parallel()
 	services, _, input, _ := contextFixture(t)
 	files := map[string]string{
 		"environment.yaml": syntheticEnvironment + "  defaults:\n    LoadBalancer:\n      management: external\n",

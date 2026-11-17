@@ -19,6 +19,7 @@ const objectExample = "libvirt-3-nodes-ceph-object"
 // gateway capability plans exactly the eight derived zone pool blocks and the
 // gateway block, which depends on each of them.
 func TestExampleObjectPlansTheGatewayBlocks(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, objectExample))
 	if refused := productionUnsupported(t, state); len(refused) != 0 {
 		t.Fatalf("the capabilities refuse %+v", refused)
@@ -57,6 +58,7 @@ func TestExampleObjectPlansTheGatewayBlocks(t *testing.T) {
 // gateway request binds both rgw TLS leaves to one generated Secret, and that
 // Secret names the endpoint the certificate proof and readiness check.
 func TestExampleObjectServesItsEndpointOverTLS(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, objectExample))
 	definitions := productionDefinitions(t, state, objectExample)
 	index := slices.IndexFunc(definitions, func(d reconciliation.BlockDefinition) bool { return d.ID == ceph.GatewayBlockID("objects") })

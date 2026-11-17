@@ -45,6 +45,7 @@ func requireContextRefusal(t *testing.T, services cli.Services, want string, arg
 // both ways forward, whether the store is absent, holds other contexts, or the
 // selection names a context that is gone.
 func TestEveryCommandNamesAnAbsentContextAndItsNextCommand(t *testing.T) {
+	t.Parallel()
 	explicit := func(input string) [][]string {
 		return [][]string{
 			{"context", "use", "--name", "ghost"},
@@ -102,6 +103,7 @@ func TestEveryCommandNamesAnAbsentContextAndItsNextCommand(t *testing.T) {
 // A context that exists without desired state is refused under one code and
 // one remedy by every command that needs that state.
 func TestOneCodeNamesAMissingInput(t *testing.T) {
+	t.Parallel()
 	services, _, _, _ := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "empty")
 	for _, args := range [][]string{
@@ -130,6 +132,7 @@ func TestOneCodeNamesAMissingInput(t *testing.T) {
 // in the same words, and three packages that cannot share the constructor
 // keep byte-identical copies of it.
 func TestNoSelectionReadsTheSameEverywhere(t *testing.T) {
+	t.Parallel()
 	for _, store := range []struct {
 		name    string
 		prepare func(t *testing.T, services cli.Services, input string)
@@ -165,6 +168,7 @@ func TestNoSelectionReadsTheSameEverywhere(t *testing.T) {
 // open itself refuses; an init that cannot select its new context names the
 // same object.
 func TestAnUnsafeSelectionFileIsNamedWithItsRepair(t *testing.T) {
+	t.Parallel()
 	const (
 		marker    = "selection file ~/.bootwright/context has an unsafe owner, type, link count or mode"
 		markerFix = "remove it and select again with bootwright context use --name <context>"
@@ -211,6 +215,7 @@ func TestAnUnsafeSelectionFileIsNamedWithItsRepair(t *testing.T) {
 // A Context file whose secret-store type no implementation serves is refused
 // under that file's path, as every other Context file refusal is.
 func TestAnUnavailableSecretStoreTypeIsRefusedUnderItsContextFile(t *testing.T) {
+	t.Parallel()
 	services, _, _, root := contextFixture(t)
 	file := filepath.Join(filepath.Dir(root), "context.yaml")
 	if err := os.WriteFile(file, []byte("apiVersion: bootwright.io/v1alpha1\nkind: Context\nmetadata:\n  name: demo\nspec:\n  secretStore:\n    type: vault\n"), 0600); err != nil {

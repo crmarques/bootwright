@@ -12,6 +12,7 @@ import (
 )
 
 func TestExamplePoolsPlansSixHostsAndOwnedECImages(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-6-nodes-ceph-pools"))
 	if refused := productionUnsupported(t, state); len(refused) != 0 {
 		t.Fatalf("refused %+v", refused)

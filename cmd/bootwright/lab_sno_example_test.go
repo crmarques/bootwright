@@ -34,6 +34,7 @@ func snoExampleSources(t *testing.T) desiredstate.Sources {
 // by that graph rather than by the baseline setup: the controller stage
 // installs the installer whose release the cluster declares.
 func TestLabSNOExampleSelectsItsInstallerFromTheDeclaredRelease(t *testing.T) {
+	t.Parallel()
 	sources := snoExampleSources(t)
 	if len(sources.Files) != snoExampleFiles {
 		t.Fatalf("sno example discovery: got %d files, want %d", len(sources.Files), snoExampleFiles)
@@ -83,6 +84,7 @@ func TestLabSNOExampleSelectsItsInstallerFromTheDeclaredRelease(t *testing.T) {
 }
 
 func TestLabSNOExampleBMCListenerUsesLoopback(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, snoExampleSources(t))
 	provider := requireObject(t, state.Effective(), api.InfraProvider, "lab-libvirt")
 	if got := provider.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text(); got != "127.0.0.1" {
@@ -93,6 +95,7 @@ func TestLabSNOExampleBMCListenerUsesLoopback(t *testing.T) {
 // A single-node cluster answers at its own node, so normalization resolves all
 // three endpoint slots from that one address rather than repeating it.
 func TestLabSNOExampleResolvesEveryEndpointFromItsOneNode(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, snoExampleSources(t))
 	cluster := requireObject(t, state.Effective(), api.OpenShiftCluster, "sno")
 	for _, slot := range []string{"api", "api-int", "ingress"} {
@@ -121,6 +124,7 @@ func TestLabSNOExampleResolvesEveryEndpointFromItsOneNode(t *testing.T) {
 // The example derives one complete frozen request per block, because that
 // request is what an operator's apply would freeze.
 func TestLabSNOExampleDerivesItsInstallerInputs(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, snoExampleSources(t))
 	if unsupported := lifecycle.Identities(agentinstall.Refusals(state.Effective())); len(unsupported) != 0 {
 		t.Fatalf("the example declares a cluster this contract cannot install: %v", unsupported)
@@ -177,6 +181,7 @@ func snoExampleWithHints(t *testing.T, hints string) desiredstate.Sources {
 // strings a YAML 1.1 reader would take for numbers, a size of zero and a disk
 // that is not rotational.
 func TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig(t *testing.T) {
+	t.Parallel()
 	sources := snoExampleWithHints(t, "deviceName: \"/dev/vda\"\n"+
 		"      model: \"1e3\"\n"+
 		"      vendor: \"0o17\"\n"+
@@ -209,6 +214,7 @@ func TestLabSNOExampleCarriesEveryRootDeviceHintToItsAgentConfig(t *testing.T) {
 // Machine is refused at the arm, naming the Machine, before anything is
 // planned.
 func TestLabSNOExampleRefusesAHintItsCreatedDiskCannotMatch(t *testing.T) {
+	t.Parallel()
 	for hint, value := range map[string]string{"hctl": "1:0:0:0", "serialNumber": "0987654321", "wwn": "0x5000c500a1b2c3d4"} {
 		t.Run(hint, func(t *testing.T) {
 			const arm = "      profileRef: sno\n"
@@ -241,6 +247,7 @@ func TestLabSNOExampleRefusesAHintItsCreatedDiskCannotMatch(t *testing.T) {
 // orders into one plan whose cluster work waits for the services it publishes
 // through.
 func TestLabSNOExamplePlansTheWholeGraph(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, snoExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	input := lifecycle.PlanInput{
@@ -306,6 +313,7 @@ func TestLabSNOExamplePlansTheWholeGraph(t *testing.T) {
 // 253 bytes refuses at validate, at the cluster's name and at each node whose
 // FQDN is derived; a shorter zone compiles.
 func TestADerivedClusterNameLongerThanADNSNameRefuses(t *testing.T) {
+	t.Parallel()
 	zone := func(last int) exampleEdit {
 		long := strings.Repeat("a", 59) + "." + strings.Repeat("b", 59) + "." + strings.Repeat("c", 59) + "." + strings.Repeat("d", last) + ".test"
 		return exampleEdit{"environment.yaml", "    base: lab.example.test\n", "    base: lab.example.test\n    containerClusters: " + long + "\n"}

@@ -74,6 +74,7 @@ func withRepository(baseURL string) exampleEdit {
 // Every authored value that reaches the Kickstart is refused before a plan is
 // made when it could end its line, open a section or add an option.
 func TestAuthoredKickstartValuesAreRefusedBeforePlan(t *testing.T) {
+	t.Parallel()
 	compileAcceptance(t, exampleDirectory(t, "lab-rhel"))
 	withAddressInterface := exampleEdit{"infra/machines/rhel-01.yaml", "interface: enp1s0", `interface: "enp1s0\nnetwork --bootproto=dhcp"`}
 	cases := map[string]struct {
@@ -105,6 +106,7 @@ func TestAuthoredKickstartValuesAreRefusedBeforePlan(t *testing.T) {
 // A field that names a Kickstart device carries its grammar, not only the rule
 // it shares with others: a matched interface name is a Linux interface name.
 func TestEveryKickstartBoundFieldCarriesItsGrammar(t *testing.T) {
+	t.Parallel()
 	binding := exampleEdit{"infra/machines/metal-01.yaml", "    installAddressRef: ip\n",
 		"    installAddressRef: ip\n\n    interfaceMatches:\n      - interface: \"eno1\\nnetwork --bootproto=dhcp\"\n        nicRef: eno1\n"}
 	cases := map[string]struct {
@@ -127,6 +129,7 @@ func TestEveryKickstartBoundFieldCarriesItsGrammar(t *testing.T) {
 // daemon's: no remote or command transport, and no value that could leave its
 // string literal.
 func TestALibvirtProviderConnectsOnlyToTheLocalSystemDaemon(t *testing.T) {
+	t.Parallel()
 	for _, uri := range []string{
 		`qemu:///system' + __import__('os').system('id') + '`,
 		"qemu+ssh://root@hv.example.test/system",
@@ -144,6 +147,7 @@ func TestALibvirtProviderConnectsOnlyToTheLocalSystemDaemon(t *testing.T) {
 // A bare-metal host key that is also the fleet key would let every holder of
 // the fleet key answer as this machine; the refusal names both objects.
 func TestABaremetalHostKeyIsNotTheFleetKey(t *testing.T) {
+	t.Parallel()
 	compileAcceptance(t, exampleDirectory(t, "lab-baremetal"))
 	edit := exampleEdit{"infra/machines/metal-01.yaml", "hostKeyRef: metal-01-host-key", "hostKeyRef: bootwright-machine-key"}
 	refusal := requireRefusal(t, editedExample(t, "lab-baremetal", edit), "api.invariant", "Machine/metal-01", "$.spec.os.install.hostKeyRef")
@@ -155,6 +159,7 @@ func TestABaremetalHostKeyIsNotTheFleetKey(t *testing.T) {
 
 // Generation refuses a NUL, so validate refuses it first.
 func TestAGeneratedSecretParameterHoldingNULIsRefused(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		edit          exampleEdit
 		object, field string

@@ -156,6 +156,7 @@ func authoredMembers(shape *api.Shape, value api.Value, path string, into *[]str
 }
 
 func TestSchemaMaximalPackagesCompileDecodePlanAndCoverEveryMember(t *testing.T) {
+	t.Parallel()
 	packagesShape, ok := api.Schema(api.ClusterAddonBinding).Field("packages")
 	if !ok {
 		t.Fatal("the binding schema has no spec.packages")

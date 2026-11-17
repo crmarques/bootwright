@@ -21,6 +21,7 @@ var stubCommands = map[string]map[string][]string{
 // specs/cli/commands.md lists the commands whose use case is unavailable. The
 // list is the commands the services wireStubs binds back.
 func TestUnavailableCommandsMatchTheStubWiring(t *testing.T) {
+	t.Parallel()
 	services := reflect.ValueOf(wireStubs())
 	var bound, derived []string
 	for index := range services.NumField() {
@@ -52,6 +53,7 @@ func TestUnavailableCommandsMatchTheStubWiring(t *testing.T) {
 // Each command a stub backs answers cli.not-implemented, whatever else is
 // wired.
 func TestStubCommandsAnswerNotImplemented(t *testing.T) {
+	t.Parallel()
 	for _, commands := range stubCommands {
 		for command, args := range commands {
 			var stdout, stderr bytes.Buffer

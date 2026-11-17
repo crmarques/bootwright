@@ -11,6 +11,7 @@ import (
 )
 
 func TestClusterInfoIncludesOpenShiftURLsAndTopologyBeforeInstallation(t *testing.T) {
+	t.Parallel()
 	services, _, _ := snoContext(t)
 	out, stderr := contextRun(t, services, 0, "cluster", "info", "--output", "json")
 	var envelope struct {
@@ -59,6 +60,7 @@ func TestClusterInfoIncludesOpenShiftURLsAndTopologyBeforeInstallation(t *testin
 }
 
 func TestClusterInfoConsolePasswordIsExplicitAndPrefersUpdatedCustody(t *testing.T) {
+	t.Parallel()
 	services, repository, _ := snoContext(t)
 	const initial = "synthetic-initial-console-password"
 	const rotated = "synthetic-rotated-console-password"

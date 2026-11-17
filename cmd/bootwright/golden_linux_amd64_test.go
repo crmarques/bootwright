@@ -111,6 +111,7 @@ const (
 // canonical YAML is compared with testdata/effective-<example>.golden. A new
 // example needs its golden, and a golden whose example is gone fails.
 func TestEveryExampleEffectiveStateMatchesItsGolden(t *testing.T) {
+	t.Parallel()
 	directories := exampleDirectories(t)
 	var examples []string
 	for name := range directories {

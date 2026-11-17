@@ -50,6 +50,7 @@ func (h *fleetOnlyHost) Observe(context.Context, string, int) (trust.HostKey, er
 }
 
 func TestStoragePreflightReadsAProvidedTiebreakerWithTheFleetKey(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, tiebreakerSources(t, witnessAccess))
 	catalog := state.Effective()
 	witness := requireObject(t, catalog, api.Machine, "witness")
@@ -90,6 +91,7 @@ func TestStoragePreflightReadsAProvidedTiebreakerWithTheFleetKey(t *testing.T) {
 }
 
 func TestOperatorSessionsOfferAProvidedTiebreakerItsOwnIdentity(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, tiebreakerSources(t, witnessAccess))
 	catalog := state.Effective()
 	lender := &labSessionLender{held: map[string]secrets.Material{
@@ -135,6 +137,7 @@ func (h *unresolvingHost) Run(ctx context.Context, session machine.Session, in i
 }
 
 func TestAPrerequisiteCommandsExitStatusIsAFailedCheck(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, tiebreakerSources(t, witnessAccess))
 	catalog := state.Effective()
 	lender := &labSessionLender{held: map[string]secrets.Material{

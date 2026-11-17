@@ -57,6 +57,7 @@ func secondInput(t *testing.T) string {
 // the retry admits, and until then every command over the name names both
 // ways out: finishing the init and discarding it.
 func TestAnInterruptedInitResumesFromAnotherDirectoryAndFromNoInput(t *testing.T) {
+	t.Parallel()
 	for _, interrupted := range []struct {
 		name      string
 		reservedA bool

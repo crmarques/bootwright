@@ -21,6 +21,7 @@ const nfsExample = "libvirt-3-nodes-ceph-nfs"
 // waits on the cluster, its image, the nfs service unit and, through its
 // requirement, the subvolume block.
 func TestExampleNFSPlansTheExportBlock(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, nfsExample))
 	if refused := productionUnsupported(t, state); len(refused) != 0 {
 		t.Fatalf("the capabilities refuse %+v", refused)
@@ -46,6 +47,7 @@ func TestExampleNFSPlansTheExportBlock(t *testing.T) {
 // check writes through the export as the frozen subvolume's owner, which must
 // not be root.
 func TestExampleNFSAcceptanceWritesAsTheSubvolumeOwner(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, nfsExample))
 	definitions := productionDefinitions(t, state, nfsExample)
 	index := slices.IndexFunc(definitions, func(block reconciliation.BlockDefinition) bool { return block.ID == "ceph-subvolume-docs" })

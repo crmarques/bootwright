@@ -18,6 +18,7 @@ import (
 )
 
 func TestComposedRenderRequiresTheInvokingAccountBeforePublication(t *testing.T) {
+	t.Parallel()
 	deps := testContextWiring(t, filepath.Join(t.TempDir(), "state"))
 	checked := 0
 	deps.Comparison.Account = func(context.Context) (comparisonlocal.Account, error) {
@@ -44,6 +45,7 @@ func renderRun(t *testing.T, args ...string) (int, string, string) {
 }
 
 func TestComposedRenderWritesTheEffectiveStateToThePathInsteadOfStandardOutput(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skip("input admission is qualified for linux/amd64")
 	}
@@ -85,6 +87,7 @@ func TestComposedRenderWritesTheEffectiveStateToThePathInsteadOfStandardOutput(t
 }
 
 func TestComposedRenderRefusesALinkedTargetAndAnOutputInsideTheInput(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skip("input admission is qualified for linux/amd64")
 	}

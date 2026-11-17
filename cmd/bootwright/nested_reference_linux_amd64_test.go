@@ -18,6 +18,7 @@ import (
 // field of the record that holds it. What the edit changes elsewhere, such as
 // a service that loses its binding, stays its own diagnostic.
 func TestEveryNestedReferenceKindRefusesOnlyThroughTheSharedDiagnostic(t *testing.T) {
+	t.Parallel()
 	const machine = "infra/machines/rhel-03.yaml"
 	const cluster = "storage/cluster.yaml"
 	for _, row := range []struct {
@@ -132,6 +133,7 @@ spec:
 // reference into entries a required field leaves absent adds nothing beside
 // the required diagnostic.
 func TestANestedReferenceThroughARefusedOwnerAddsNothing(t *testing.T) {
+	t.Parallel()
 	sources := extendedExample(t, "lab-compact-df", map[string]string{"storage/external.yaml": externalTargets},
 		exampleEdit{"environment.yaml", "  storageClusters:\n    - ceph-lab\n", "  storageClusters:\n    - ceph-lab\n    - ext\n"},
 		exampleEdit{"infra/os/rhel-9-8.yaml", "serverRef: lab-artifacts\n          endpointRef: ip-https", "serverRef: ext-artifacts\n          endpointRef: ip-https"})

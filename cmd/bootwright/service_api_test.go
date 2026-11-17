@@ -31,6 +31,7 @@ func serviceSources(environment string, objects ...string) desiredstate.Sources 
 }
 
 func TestServiceDefaultsPreserveManagementAndAtomicChoices(t *testing.T) {
+	t.Parallel()
 	t.Run("external skips managed fields", func(t *testing.T) {
 		env := serviceEnvironment + `  defaults:
     DNSServer:
@@ -73,6 +74,7 @@ func TestServiceDefaultsPreserveManagementAndAtomicChoices(t *testing.T) {
 }
 
 func TestServiceReferenceDiagnosticsPreserveProfileOrigins(t *testing.T) {
+	t.Parallel()
 	for _, inherited := range []bool{false, true} {
 		t.Run(map[bool]string{false: "profile", true: "kind default"}[inherited], func(t *testing.T) {
 			sources := expandedExampleSources(t)
@@ -123,6 +125,7 @@ func TestServiceReferenceDiagnosticsPreserveProfileOrigins(t *testing.T) {
 }
 
 func TestUnusedProxyDefaultsRejectLocalContradictionsWithoutResolvingReferences(t *testing.T) {
+	t.Parallel()
 	for _, owner := range []struct{ kind, prefix, field string }{
 		{"OpenShiftCluster", "      install:\n        ", "install.proxy"},
 		{"MachineInstallProfile", "      ", "proxy"},

@@ -127,6 +127,7 @@ func refusesDeclaration(refusal lifecycle.Refusal, object api.Object, catalog ap
 // api.unrealized at its path and refused lifecycle.unsupported before
 // registration, and every row is declared by some fixture.
 func TestUnrealizedTableMatchesUnsupported(t *testing.T) {
+	t.Parallel()
 	var want, got [][]string
 	for _, declaration := range api.UnrealizedDeclarations() {
 		if declaration.Item == "" {
@@ -187,6 +188,7 @@ func milestonePage(t *testing.T, item string) string {
 // Planning claims each managed Network through the host block of the provider
 // it names, which defines it.
 func TestPlanningClaimsEveryManagedNetworkThroughItsProviderHost(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-networks"))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	for _, refusal := range lifecycle.Unsupported(resolver, state, effectBearing) {

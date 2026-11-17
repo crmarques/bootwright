@@ -13,6 +13,7 @@ import (
 )
 
 func TestEveryPackageSkeletonCompilesOnceItsPlaceholdersAreReplaced(t *testing.T) {
+	t.Parallel()
 	bases := map[string]struct{ example, cluster, consumer string }{
 		"nmstate":  {"lab-sno-nmstate", "sno", ""},
 		"kubevirt": {"lab-sno-nmstate", "sno", ""},

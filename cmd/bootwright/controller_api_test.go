@@ -22,6 +22,7 @@ func controllerInputs(environment string, objects ...string) desiredstate.Source
 }
 
 func TestControllerRequiresOneProvidedLocalMachine(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, environment, machine, extra, code, field string }{
 		{"missing controller", strings.Replace(serviceEnvironment, "  controller: {machineRef: service-host}\n", "", 1), serviceHost, "", "api.required", "$.spec.controller"},
 		{"missing reference", strings.Replace(serviceEnvironment, "{machineRef: service-host}", "{}", 1), serviceHost, "", "api.required", "$.spec.controller.machineRef"},
@@ -44,6 +45,7 @@ func TestControllerRequiresOneProvidedLocalMachine(t *testing.T) {
 }
 
 func TestControllerCannotBeASelectedClusterNode(t *testing.T) {
+	t.Parallel()
 	t.Run("OpenShiftCluster", func(t *testing.T) {
 		inputs := trustInputs(serviceEnvironment, "")
 		for i, file := range inputs.Files {
@@ -90,6 +92,7 @@ spec:
 }
 
 func TestControllerRetentionRespectsClusterSelection(t *testing.T) {
+	t.Parallel()
 	env := serviceEnvironment + "  containerClusters: [trust-cluster]\n"
 	inputs := trustInputs(env, "")
 	excludedLocal := strings.Replace(serviceHost, "name: service-host", "name: excluded-local", 1)
@@ -103,6 +106,7 @@ func TestControllerRetentionRespectsClusterSelection(t *testing.T) {
 }
 
 func TestExcludedClusterControllerMembershipDoesNotAffectSelectedGraph(t *testing.T) {
+	t.Parallel()
 	env := serviceEnvironment + "  containerClusters: [trust-cluster]\n"
 	inputs := trustInputs(env, "")
 	cluster := strings.Replace(trustClusterPrefix+trustClusterSuffix, "name: trust-cluster", "name: excluded-cluster", 1)
@@ -116,6 +120,7 @@ func TestExcludedClusterControllerMembershipDoesNotAffectSelectedGraph(t *testin
 }
 
 func TestControllerProxyRetainsItsServiceDependencies(t *testing.T) {
+	t.Parallel()
 	env := serviceEnvironment + "  containerClusters: [trust-cluster]\n"
 	proxyHost := strings.Replace(serviceHost, "name: service-host", "name: proxy-host", 1)
 	proxyHost = strings.Replace(proxyHost, "access: {local: true}", "access: {ssh: {auth: {operatorIdentity: {}}}}", 1)
@@ -137,6 +142,7 @@ func TestControllerProxyRetainsItsServiceDependencies(t *testing.T) {
 }
 
 func TestControllerDefaultsAndMachineProxyHaveSeparateOwners(t *testing.T) {
+	t.Parallel()
 	env := strings.Replace(serviceEnvironment, "  controller: {machineRef: service-host}\n", "", 1) + `  defaults:
     Environment:
       controller: {machineRef: service-host}
@@ -169,6 +175,7 @@ func TestControllerDefaultsAndMachineProxyHaveSeparateOwners(t *testing.T) {
 }
 
 func TestControllerMachineProxyDiagnosticsKeepKindDefaultOrigin(t *testing.T) {
+	t.Parallel()
 	env := serviceEnvironment + "  defaults:\n    Machine:\n      proxy: {proxyRef: missing-egress}\n"
 	diagnostic := trustFailure(t, controllerInputs(env, serviceHost), "api.reference", "$.spec.proxy.proxyRef")
 	if diagnostic.Object == nil || diagnostic.Object.Kind != "Machine" || diagnostic.Object.Name != "service-host" || !strings.Contains(diagnostic.Message, "from Environment defaults") || diagnostic.Source == nil {
@@ -181,6 +188,7 @@ func TestControllerMachineProxyDiagnosticsKeepKindDefaultOrigin(t *testing.T) {
 }
 
 func TestControllerAdmissionDoesNotProbeLocalMachine(t *testing.T) {
+	t.Parallel()
 	// The synthetic controller contact is deliberately unrelated to this runner.
 	// Admission must validate the declaration without resolving or probing it.
 	host := strings.Replace(serviceHost, "192.0.2.10", "203.0.113.254", 1)

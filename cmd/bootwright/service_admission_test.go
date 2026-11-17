@@ -23,6 +23,7 @@ func refusedAt(t *testing.T, sources desiredstate.Sources, code, field string) {
 }
 
 func TestServiceShapesNoConsumerCanUseRefuseAtValidate(t *testing.T) {
+	t.Parallel()
 	t.Run("an empty listener list", func(t *testing.T) {
 		object := "apiVersion: bootwright.io/v1alpha1\nkind: ArtifactServer\nmetadata: {name: artifacts}\nspec:\n  management: managed\n  machineRef: service-host\n  bindAddress: 192.0.2.10\n  listeners: []\n"
 		refusedAt(t, serviceSources(serviceEnvironment, object), "api.value", "$.spec.listeners")
@@ -38,6 +39,7 @@ func TestServiceShapesNoConsumerCanUseRefuseAtValidate(t *testing.T) {
 }
 
 func TestPerToolDownloadMirrorsRefuseAsUnknownFields(t *testing.T) {
+	t.Parallel()
 	for _, field := range []string{"openshiftClientsMirror", "helmMirror", "virtctlMirror", "govcMirror"} {
 		t.Run(field, func(t *testing.T) {
 			env := serviceEnvironment + "  downloads:\n    " + field + ": https://mirror.example.test/tools\n"

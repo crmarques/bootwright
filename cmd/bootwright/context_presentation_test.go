@@ -36,6 +36,7 @@ func (c *snapshotConfirmer) Confirm(_ context.Context, action, name string) erro
 // standard error, and a deletion's revisions, keyring and reservations, all
 // before anything is written. Declined, they change nothing.
 func TestUpdateAndDeletePresentWhatTheyChangeBeforeThePrompt(t *testing.T) {
+	t.Parallel()
 	_, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "environment.yaml", syntheticEnvironment)
 	addSecretInput(t, input, "reserved.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: CustomPlaybook\nmetadata: {name: reserved}\nspec:\n  enabled: false\n  gates: base\n  playbook: playbooks/site.yaml\n  target: {machines: [service-host]}\n")

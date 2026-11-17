@@ -61,6 +61,7 @@ func selectedPackages(t *testing.T, state *compilation.State) []string {
 // Environment kind defaults for packages fill the members a binding declares
 // and never select one (specs/api/environment.md, Kind defaults).
 func TestKindDefaultsNeverSelectAPackage(t *testing.T) {
+	t.Parallel()
 	state, err := compileKindDefaults(t, bindingYAML("operators", "  packages:\n"+metallbMember))
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
@@ -75,6 +76,7 @@ func TestKindDefaultsNeverSelectAPackage(t *testing.T) {
 }
 
 func TestKindDefaultsFillADeclaredMember(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct{ name, member, timeout, timeoutOrigin string }{
 		{"member with another field", "    nmstate: {timeout: 20m}\n", "20m", "authored"},
 		{"explicit empty member", "    nmstate: {}\n", "31m", "defaults.ClusterAddonBinding"},
@@ -104,6 +106,7 @@ func TestKindDefaultsFillADeclaredMember(t *testing.T) {
 }
 
 func TestKindDefaultsInheritNoMemberWhenNoneIsDeclared(t *testing.T) {
+	t.Parallel()
 	for name, members := range map[string]string{"absent": "", "empty": "  packages: {}\n"} {
 		t.Run(name, func(t *testing.T) {
 			_, err := compileKindDefaults(t, bindingYAML("operators", members))
@@ -122,6 +125,7 @@ func TestKindDefaultsInheritNoMemberWhenNoneIsDeclared(t *testing.T) {
 }
 
 func TestKindDefaultsRaiseNoDuplicateAcrossBindings(t *testing.T) {
+	t.Parallel()
 	state, err := compileKindDefaults(t,
 		bindingYAML("a-network", "  packages:\n    nmstate: {}\n"),
 		bindingYAML("b-balancer", "  packages:\n"+metallbMember))

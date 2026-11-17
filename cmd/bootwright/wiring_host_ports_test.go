@@ -18,6 +18,7 @@ import (
 )
 
 func TestTheProductionHostPortBindingsCarryEveryCephRequirement(t *testing.T) {
+	t.Parallel()
 	found, err := hostPortRequirements(contractCatalog(t, "lab-rhel+firewall"))
 	if err != nil || len(found) != 0 {
 		t.Fatalf("requirements without an ingress = %+v, %v", found, err)
@@ -59,6 +60,7 @@ func TestTheProductionHostPortBindingsCarryEveryCephRequirement(t *testing.T) {
 }
 
 func TestAHostPortRowNamesTheManagedOSOrTheManualRemedy(t *testing.T) {
+	t.Parallel()
 	catalog := contractCatalog(t, "lab-rhel+firewall")
 	requirement := func(machine string) installation.HostPortRequirement {
 		return installation.HostPortRequirement{Machine: machine, Publisher: "ceph-ingress-rgw", Networks: []string{"198.51.100.60/32", "198.51.100.0/24"}, Protocols: []string{"vrrp"},
@@ -97,6 +99,7 @@ func contractCatalog(t *testing.T, name string) api.Catalog {
 }
 
 func TestACephClusterOnAManagedHostWaitsForItsFirewallAndLeavesBeforeIt(t *testing.T) {
+	t.Parallel()
 	compiled, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph"))
 	var objects []api.Object
 	for _, object := range compiled.Effective().Objects() {

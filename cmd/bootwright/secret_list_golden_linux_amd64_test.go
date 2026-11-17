@@ -14,6 +14,7 @@ import (
 // secret list names each current version by the ordinal the local keyring
 // stored for it, counted per secret (specs/secrets.md, specs/cli/output.md).
 func TestSecretListGoldenNamesTheKeyringOrdinals(t *testing.T) {
+	t.Parallel()
 	services, _, input, _ := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("credential", "opaque", "")+"\n---\n"+secretDocument("other", "opaque", ""))
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)

@@ -33,6 +33,7 @@ spec: {type: opaque}
 const remoteManagedProxy = "apiVersion: bootwright.io/v1alpha1\nkind: Proxy\nmetadata: {name: egress}\nspec:\n  management: managed\n  implementation: squid\n  machineRef: remote-services\n  endpoints: [{name: provisioning, addressRef: service}]\n"
 
 func TestAServicePlacementHostMustConnectAsRoot(t *testing.T) {
+	t.Parallel()
 	trustFailure(t, serviceSources(serviceEnvironment, remoteServiceHost, remoteManagedProxy), "api.invariant", "$.spec.access.ssh.user")
 	root := strings.Replace(remoteServiceHost, "user: operator", "user: root", 1)
 	compileAcceptance(t, serviceSources(serviceEnvironment, root, remoteManagedProxy))

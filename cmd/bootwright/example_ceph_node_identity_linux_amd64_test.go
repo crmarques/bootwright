@@ -15,6 +15,7 @@ import (
 )
 
 func TestExampleCephNodesRegisterUnderTheirMachineFQDN(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph"))
 	effective := state.Effective()
 	cluster := requireObject(t, effective, api.CephCluster, "ceph-lab")
@@ -32,6 +33,7 @@ func TestExampleCephNodesRegisterUnderTheirMachineFQDN(t *testing.T) {
 }
 
 func TestExampleCephNodeRefusesARestatedIdentity(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name, line, field string
 		mentions          []string
@@ -75,6 +77,7 @@ func bindingTypes(t *testing.T, cluster api.Object) []string {
 }
 
 func TestExampleServiceBindingsPlanByTheRoutingTable(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-4-nodes-ceph-observability"))
 	if got := bindingTypes(t, requireObject(t, state.Effective(), api.CephCluster, "ceph-lab")); !slices.Equal(got, []string{"grafana", "mgmt-gateway", "oauth2-proxy", "snmp-gateway"}) {
 		t.Fatalf("the observability example binds %v", got)

@@ -18,6 +18,7 @@ import (
 )
 
 func TestComposedBaselineDryRunReadsNoSetupState(t *testing.T) {
+	t.Parallel()
 	ports, stores := &setupPorts{}, &controllerPorts{}
 	services := assembleServices(serviceDependencies{Controller: ports.setupDependencies(stores, stores)})
 	var out, errOut bytes.Buffer
@@ -29,6 +30,7 @@ func TestComposedBaselineDryRunReadsNoSetupState(t *testing.T) {
 }
 
 func TestTheDryRunJSONListsEveryLockedFileOfTheEmbeddedLock(t *testing.T) {
+	t.Parallel()
 	lock, err := runtimelock.Embedded()
 	if err != nil {
 		t.Fatal(err)
@@ -96,6 +98,7 @@ func (p *controllerPorts) HoldRuntime(context.Context, string) (prerequisites.Ru
 }
 
 func TestComposedControllerSuppliesEveryPort(t *testing.T) {
+	t.Parallel()
 	presenter := cli.NewControllerPresenter(io.Discard, io.Discard, nil)
 	process := processDependencies{Progress: presenter, Presenter: presenter}
 	composed, release := localControllerDependencies(testRepository(t.TempDir()), process)
@@ -125,6 +128,7 @@ func TestComposedControllerSuppliesEveryPort(t *testing.T) {
 }
 
 func TestUnsuppliedControllerPortsRemainUnavailable(t *testing.T) {
+	t.Parallel()
 	services := assembleServices(serviceDependencies{})
 	for _, args := range [][]string{{"controller", "install"}, {"controller", "install", "--dry-run"}, {"controller", "check"}} {
 		var out, errOut bytes.Buffer

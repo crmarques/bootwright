@@ -50,6 +50,7 @@ func openTestTerminal(t *testing.T) (*os.File, *os.File) {
 }
 
 func TestInterruptDuringRealConfirmationPreservesSelection(t *testing.T) {
+	t.Parallel()
 	parent := t.TempDir()
 	input := filepath.Join(parent, "input")
 	stateParent := filepath.Join(parent, "state")
@@ -223,6 +224,7 @@ func TestHangupCancelsTheOperationLikeTerminate(t *testing.T) {
 // A process started with hangups ignored, as nohup starts it, was asked to
 // outlive them, so a hangup leaves its operation running.
 func TestAnIgnoredHangupLeavesTheOperationRunning(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// The shell ignores SIGHUP and the helper inherits that across exec.
@@ -284,6 +286,7 @@ func TestIgnoredHangupHelper(t *testing.T) {
 // supervisor's second signal kills sudo. The test binary is no supervised
 // child, so it never has that proof.
 func TestASecondInterruptLeavesTheCancellationRunning(t *testing.T) {
+	t.Parallel()
 	for _, received := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
 		t.Run(received.String(), func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -331,6 +334,7 @@ func TestASecondInterruptLeavesTheCancellationRunning(t *testing.T) {
 }
 
 func TestASecondInterruptEndsAChildInItsOwnForegroundTerminalAtOnce(t *testing.T) {
+	t.Parallel()
 	for _, received := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
 		t.Run(received.String(), func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -399,6 +403,7 @@ func TestSecondInterruptHelper(t *testing.T) {
 // every invocation finishes its operation before it exits, and must not report
 // the operation as interrupted.
 func TestFinishingAnUninterruptedOperationReturns(t *testing.T) {
+	t.Parallel()
 	ctx, finish := beginSignalOperation(context.Background())
 	if ctx.Err() != nil {
 		t.Fatalf("the operation began canceled: %v", context.Cause(ctx))
@@ -425,6 +430,7 @@ func TestFinishingAnUninterruptedOperationReturns(t *testing.T) {
 // and the CLI's operation reads as an interrupt, so the composition root holds
 // none of its own.
 func TestTheCompositionRootSubscribesToNoSignalOfItsOwn(t *testing.T) {
+	t.Parallel()
 	sources, err := filepath.Glob("*.go")
 	if err != nil || len(sources) == 0 {
 		t.Fatal("no composition source", err)

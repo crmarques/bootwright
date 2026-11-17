@@ -8,6 +8,7 @@ import (
 )
 
 func TestE2EBaseKitsAreNamedAndShared(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "e2e")
 	kits, err := os.ReadDir(filepath.Join(root, "_base"))
 	if err != nil {

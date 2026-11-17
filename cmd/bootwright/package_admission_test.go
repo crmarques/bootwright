@@ -27,6 +27,7 @@ func packageSources(t *testing.T, config map[string]any) desiredstate.Sources {
 	return sources
 }
 func TestPackageBindingCompilerRefusals(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name         string
 		member       string
@@ -61,6 +62,7 @@ func TestPackageBindingCompilerRefusals(t *testing.T) {
 	}
 }
 func TestFixturePackageUsesCompiledProductionBinding(t *testing.T) {
+	t.Parallel()
 	entries := packages.Builtin().Packages()
 	for i := range entries {
 		if entries[i].Name != "nmstate" {
@@ -93,6 +95,7 @@ func TestFixturePackageUsesCompiledProductionBinding(t *testing.T) {
 	}
 }
 func TestCompiledPackageConfigurationDecodesDefaults(t *testing.T) {
+	t.Parallel()
 	state, _, err := wireCompiler().Compile(context.Background(), packageSources(t, map[string]any{"nmstate": map[string]any{"subscription": map[string]any{"channel": "stable", "startingCSV": "operator.v1"}}}))
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
@@ -111,6 +114,7 @@ func TestCompiledPackageConfigurationDecodesDefaults(t *testing.T) {
 }
 
 func TestMetalLBPoolNamesAreDNSLabels(t *testing.T) {
+	t.Parallel()
 	config := map[string]any{"metallb": map[string]any{"subscription": map[string]any{"channel": "stable", "startingCSV": "operator.v1"}, "pools": []any{map[string]any{"name": "dotted.name", "addresses": []string{"192.0.2.80-192.0.2.90"}}}}}
 	_, _, err := wireCompiler().Compile(context.Background(), packageSources(t, config))
 	if err == nil {

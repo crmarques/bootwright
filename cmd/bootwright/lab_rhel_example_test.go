@@ -90,6 +90,7 @@ func exampleControllerPorts(t *testing.T) controllerDependencies {
 }
 
 func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.T) {
+	t.Parallel()
 	sources := labExampleSources(t)
 	if len(sources.Files) != labExampleFiles {
 		t.Fatalf("lab example discovery: got %d files, want %d", len(sources.Files), labExampleFiles)
@@ -175,6 +176,7 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 // refuses before registration: neither a kind no capability claims nor an arm
 // a capability cannot prove.
 func TestLabRHELExampleIsRealizableInFull(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	if unsupported := lifecycle.Unsupported(resolver, state, effectBearing); len(unsupported) != 0 {
@@ -191,6 +193,7 @@ func TestLabRHELExampleIsRealizableInFull(t *testing.T) {
 // alone, because that request is what an operator's apply would freeze, and
 // the whole set must order into one plan.
 func TestAnUnknownFieldInOneLabRHELObjectIsItsOnlyRefusal(t *testing.T) {
+	t.Parallel()
 	sources := labExampleSources(t)
 	probed := 0
 	for i, file := range sources.Files {
@@ -214,6 +217,7 @@ func TestAnUnknownFieldInOneLabRHELObjectIsItsOnlyRefusal(t *testing.T) {
 }
 
 func TestAnUndeclaredInstallAddressIsRefusedOnlyWhereItIsAuthored(t *testing.T) {
+	t.Parallel()
 	sources := labExampleSources(t)
 	files := slices.Clone(sources.Files)
 	replaced := 0
@@ -239,6 +243,7 @@ func TestAnUndeclaredInstallAddressIsRefusedOnlyWhereItIsAuthored(t *testing.T) 
 }
 
 func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	input := lifecycle.PlanInput{
@@ -324,6 +329,7 @@ func TestLabRHELExamplePlansTheWholeGraph(t *testing.T) {
 // every block says what the removal does and lists only effects it performs.
 // Blocks that reused the apply's wording made a destroy read as an install.
 func TestLabRHELExampleDestroyPlanDescribesOnlyRemoval(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	input := lifecycle.PlanInput{
@@ -369,6 +375,7 @@ func TestLabRHELExampleDestroyPlanDescribesOnlyRemoval(t *testing.T) {
 // The clients this host shares outlive the context that selected them, so the
 // one block that removes nothing promises nothing.
 func TestLabRHELExampleDestroyRetainsTheSharedClients(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	capability, ok := resolver.Resolve(clients.Kind, clients.Implementation)
@@ -390,6 +397,7 @@ func TestLabRHELExampleDestroyRetainsTheSharedClients(t *testing.T) {
 // The derived configuration is what the adapter renders, so the frozen request
 // must already carry the graph's own clients, records and upstream sources.
 func TestLabRHELRequestsCarryTheirDerivedIntent(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	requests := map[string]managedservice.Request{}
@@ -480,6 +488,7 @@ func labContextServices(t *testing.T) (cli.Services, string, *setupPorts) {
 }
 
 func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
+	t.Parallel()
 	services, input, ports := labContextServices(t)
 	out, _ := contextRun(t, services, 0, "context", "init", "--name", "lab-rhel", "--input-dir", input)
 	if !strings.Contains(out, "Files copied     16") || !strings.Contains(out, "Objects decoded  16") {
@@ -551,6 +560,7 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 // That request is what an operator's apply would freeze, so it must be
 // complete before any effect.
 func TestLabRHELExamplePlansOneControllerPrerequisitesBlock(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	capability, ok := resolver.Resolve(clients.Kind, clients.Implementation)
@@ -584,6 +594,7 @@ func TestLabRHELExamplePlansOneControllerPrerequisitesBlock(t *testing.T) {
 // A context-free journey must still refuse before touching the store, because
 // an unavailable target is not a reason to read privileged state.
 func TestLifecycleCommandsRequireAResolvedContext(t *testing.T) {
+	t.Parallel()
 	services := isolatedServices(t)
 	for _, args := range [][]string{
 		{"plan", "--context", "missing"},
@@ -603,6 +614,7 @@ func TestLifecycleCommandsRequireAResolvedContext(t *testing.T) {
 // A lifecycle command must reach the real store and refuse there, rather than
 // reporting an unavailable capability for a context that does not exist.
 func TestLifecycleReachesTheStoreForAnUnknownContext(t *testing.T) {
+	t.Parallel()
 	services := isolatedServices(t)
 	_, errOut := contextRun(t, services, 1, "plan", "--context", "missing")
 	if !strings.Contains(errOut, "context.state") {

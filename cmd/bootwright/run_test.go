@@ -83,6 +83,7 @@ func TestAnUnqualifiedRouteRefusesOnlyContextFreeAcquisition(t *testing.T) {
 // while they work, a power verb's log location included, reaches no stream;
 // the same command in text mode names that location as its own field.
 func TestAJSONInvocationWritesNoProgress(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const location = "/var/log/bootwright/contexts/lab/runs/run-000001.output"
 	start := []string{"machine", "start", "--name", "rhel-01"}
@@ -112,6 +113,7 @@ func TestAJSONInvocationWritesNoProgress(t *testing.T) {
 // invocation's own progress, so a JSON media list writes its one document and
 // no check row, and a text one opens Checks with the image being read.
 func TestAJSONMediaListWritesNoProgress(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	list := []string{"media", "list", "--checksums"}
 	verify := media.ProgressEvent{Check: true, Step: "verify", Label: "Verify demo.iso", Status: "running", Position: 1, Total: 1}

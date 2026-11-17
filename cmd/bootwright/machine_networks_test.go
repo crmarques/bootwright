@@ -22,6 +22,7 @@ func withMachineNetworks(refs ...string) exampleEdit {
 // add a routed one, which the install configuration and the proxy bypass then
 // carry in the authored order.
 func TestAClusterNamesItsMachineNetworks(t *testing.T) {
+	t.Parallel()
 	refusal := requireRefusal(t, editedExample(t, "lab-networks", withMachineNetworks("lab-routed")), "api.invariant", "OpenShiftCluster/networks", "$.spec.networking.machineNetworkRefs")
 	if !strings.Contains(refusal.Message, "omits Network/lab-guests") || !strings.Contains(refusal.Remediation, "add lab-guests") {
 		t.Fatalf("refusal = %+v", refusal)

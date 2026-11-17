@@ -12,6 +12,7 @@ import (
 // native packages belong to context-independent setup, which reads no
 // Environment, so their former keys are no longer part of the schema.
 func TestEnvironmentDependencyVersionsPreserveExplicitIntent(t *testing.T) {
+	t.Parallel()
 	environment := serviceEnvironment + `  dependencyVersions:
     libvirt: latest
     helm: "v4.3.0"
@@ -47,6 +48,7 @@ func TestEnvironmentDependencyVersionsPreserveExplicitIntent(t *testing.T) {
 }
 
 func TestEnvironmentDependencyVersionsDefaultsAndOmission(t *testing.T) {
+	t.Parallel()
 	environment := serviceEnvironment + `  defaults:
     Environment:
       dependencyVersions:
@@ -71,6 +73,7 @@ func TestEnvironmentDependencyVersionsDefaultsAndOmission(t *testing.T) {
 }
 
 func TestEnvironmentDependencyVersionsRejectAmbiguousOverrides(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, value, code, field string }{
 		{"unknown dependency", "unknown: latest", "api.field", "unknown"},
 		{"coupled installer", "openshift-install: latest", "api.field", "openshift-install"},
@@ -101,6 +104,7 @@ func TestEnvironmentDependencyVersionsRejectAmbiguousOverrides(t *testing.T) {
 }
 
 func TestEnvironmentDependencyVersionsAdmitAnyPublisherReleaseTag(t *testing.T) {
+	t.Parallel()
 	environment := serviceEnvironment + `  dependencyVersions:
     govc: "0.54"
     virtctl: "1.9.0rc1"

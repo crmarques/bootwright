@@ -145,6 +145,7 @@ func operatorFileServices(t *testing.T, files *virtualOperatorFiles) cli.Service
 }
 
 func TestTheRootChildOpensNoOperatorPathItself(t *testing.T) {
+	t.Parallel()
 	files := newVirtualOperatorFiles(t)
 	environment := files.write(t, "env/environment.yaml", syntheticEnvironment)
 	host := files.write(t, "env/controller.yaml", serviceHost)
@@ -181,6 +182,7 @@ func TestTheRootChildOpensNoOperatorPathItself(t *testing.T) {
 }
 
 func TestValidateAndContextInitAgreeOnOneDirectory(t *testing.T) {
+	t.Parallel()
 	files := newVirtualOperatorFiles(t)
 	environment := files.write(t, "env/environment.yaml", syntheticEnvironment)
 	host := files.write(t, "env/controller.yaml", serviceHost)
@@ -219,6 +221,7 @@ func sameDiagnostic(got, want diagnostics.Diagnostic) bool {
 }
 
 func TestMediaSourcesOpenThroughTheBoundOpener(t *testing.T) {
+	t.Parallel()
 	files := newVirtualOperatorFiles(t)
 	virtual := files.write(t, "image.iso", "installer")
 	deps := localMediaDependencies(nil, nil, nil, nil, controller.Route{}, files)
@@ -238,6 +241,7 @@ func TestMediaSourcesOpenThroughTheBoundOpener(t *testing.T) {
 }
 
 func TestAnUnboundOpenerReachesTheAdaptersAsNil(t *testing.T) {
+	t.Parallel()
 	if reader := inputReader(nil); reader.Files != nil {
 		t.Fatalf("the input reader received %#v for no opener", reader.Files)
 	}
@@ -256,6 +260,7 @@ func TestAnUnboundOpenerReachesTheAdaptersAsNil(t *testing.T) {
 // opener: an adapter handed none opens operator-named paths with this
 // process's own credentials, which in the elevated child are root's.
 func TestProductionBindsTheInvokingAccountsOpener(t *testing.T) {
+	t.Parallel()
 	deps, release := localServiceDependencies(processDependencies{})
 	defer release()
 	bound, ok := deps.Files.(openerFiles)
@@ -279,6 +284,7 @@ func TestProductionBindsTheInvokingAccountsOpener(t *testing.T) {
 // which a process that is not root runs in-process, through both adapters, so
 // every open they ask of it passes its flag and name rules.
 func TestTheBoundOpenerServesInputAndSecretFiles(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("a root process would resolve the invoking account and start the helper")
 	}

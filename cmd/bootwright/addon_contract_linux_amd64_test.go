@@ -110,6 +110,7 @@ func contractAddonPresence(t *testing.T, execution lifecycle.Execution) map[stri
 	return fields
 }
 func TestRetirementOnlyCapabilitiesRefuseMalformedFrozenRequest(t *testing.T) {
+	t.Parallel()
 	resolver := buildCapabilities(systemClock{}, controllerDependencies{}, nil)
 	for _, row := range contractRows() {
 		if !row.retirementOnly {

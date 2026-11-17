@@ -3,13 +3,18 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -51,16 +56,33 @@ func examplePath(t *testing.T, name string) string {
 	return path
 }
 
+var trackedExamples struct {
+	once        sync.Once
+	directories map[string]string
+	err         error
+}
+
 // Discover tracked scenarios without entering ignored or untracked local input.
+// The listing runs once per test binary; each caller gets its own copy.
 func exampleDirectories(t *testing.T) map[string]string {
 	t.Helper()
+	trackedExamples.once.Do(func() {
+		trackedExamples.directories, trackedExamples.err = listTrackedExamples()
+	})
+	if trackedExamples.err != nil {
+		t.Fatal(trackedExamples.err)
+	}
+	return maps.Clone(trackedExamples.directories)
+}
+
+func listTrackedExamples() (map[string]string, error) {
 	root := filepath.Join("..", "..")
 	command := exec.Command("git", "ls-files", "-z", "--", "examples")
 	command.Dir = root
 	command.Env = slices.DeleteFunc(os.Environ(), func(value string) bool { return strings.HasPrefix(value, "GIT_") })
 	output, err := command.Output()
 	if err != nil {
-		t.Fatalf("list tracked examples: %v", err)
+		return nil, fmt.Errorf("list tracked examples: %w", err)
 	}
 	examples := map[string]string{}
 	tracked := map[string]bool{}
@@ -72,20 +94,20 @@ func exampleDirectories(t *testing.T) map[string]string {
 		}
 		directory := filepath.Join(root, filepath.FromSlash(strings.Join(parts[:3], "/")))
 		if previous, exists := examples[parts[2]]; exists && previous != directory {
-			t.Fatalf("duplicate example name %q in %s and %s", parts[2], previous, directory)
+			return nil, fmt.Errorf("duplicate example name %q in %s and %s", parts[2], previous, directory)
 		}
 		examples[parts[2]] = directory
 	}
 	for _, directory := range examples {
 		relative, err := filepath.Rel(root, directory)
 		if err != nil || !tracked[filepath.ToSlash(filepath.Join(relative, "environment.yaml"))] {
-			t.Fatalf("example %s needs a tracked environment.yaml file", directory)
+			return nil, fmt.Errorf("example %s needs a tracked environment.yaml file", directory)
 		}
 	}
 	if len(examples) == 0 {
-		t.Fatal("no categorized example was found under examples/")
+		return nil, errors.New("no categorized example was found under examples/")
 	}
-	return examples
+	return examples, nil
 }
 
 func readAcceptanceFixture(t *testing.T, name string) []byte {
@@ -193,13 +215,69 @@ func admissibleExtras(t *testing.T) []byte {
 	return []byte(strings.Join(kept, "\n---\n"))
 }
 
+type acceptanceCompilation struct {
+	once   sync.Once
+	state  *compilation.State
+	report *compilation.Report
+	err    error
+}
+
+var acceptanceCompilations struct {
+	sync.Mutex
+	byContent map[[sha256.Size]byte]*acceptanceCompilation
+}
+
+func acceptanceKey(sources desiredstate.Sources) [sha256.Size]byte {
+	digest := sha256.New()
+	section := func(label string, values ...string) {
+		fmt.Fprintf(digest, "%s %d\n", label, len(values))
+		for _, value := range values {
+			fmt.Fprintf(digest, "%d:%s", len(value), value)
+		}
+	}
+	files := func(label string, group []desiredstate.SourceFile) {
+		section(label)
+		for _, file := range group {
+			section(file.Path(), string(file.Bytes()))
+		}
+	}
+	files("files", sources.Files)
+	files("markers", sources.Markers)
+	section("roots", sources.Roots...)
+	section("skipped", sources.SkippedSecrets...)
+	var key [sha256.Size]byte
+	digest.Sum(key[:0])
+	return key
+}
+
+// compileAcceptance compiles each distinct set of sources once per test
+// binary. The state is an immutable value (every accessor of its catalogs
+// returns copies), and the report's slices are cloned for each caller.
 func compileAcceptance(t *testing.T, sources desiredstate.Sources) (*compilation.State, *compilation.Report) {
 	t.Helper()
-	state, report, err := wireCompiler().Compile(context.Background(), sources)
-	if err != nil {
-		t.Fatal(diagnostics.Of(err))
+	key := acceptanceKey(sources)
+	acceptanceCompilations.Lock()
+	if acceptanceCompilations.byContent == nil {
+		acceptanceCompilations.byContent = map[[sha256.Size]byte]*acceptanceCompilation{}
 	}
-	return state, report
+	entry := acceptanceCompilations.byContent[key]
+	if entry == nil {
+		entry = &acceptanceCompilation{}
+		acceptanceCompilations.byContent[key] = entry
+	}
+	acceptanceCompilations.Unlock()
+	entry.once.Do(func() {
+		entry.state, entry.report, entry.err = wireCompiler().Compile(context.Background(), sources)
+	})
+	if entry.err != nil {
+		t.Fatal(diagnostics.Of(entry.err))
+	}
+	report := *entry.report
+	report.Diagnostics = slices.Clone(report.Diagnostics)
+	report.ExcludedContainerClusters = slices.Clone(report.ExcludedContainerClusters)
+	report.ExcludedStorageClusters = slices.Clone(report.ExcludedStorageClusters)
+	report.Advisories = slices.Clone(report.Advisories)
+	return entry.state, &report
 }
 
 func requireObject(t *testing.T, catalog api.Catalog, kind api.Kind, name string) api.Object {
@@ -214,6 +292,7 @@ func requireObject(t *testing.T, catalog api.Catalog, kind api.Kind, name string
 // The reference includes later service families and stretch intent. Admission
 // refuses those declarations explicitly rather than dropping them from input.
 func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
+	t.Parallel()
 	sources := exampleSources(t)
 	if len(sources.Files) != 103 {
 		t.Fatalf("reference discovery: got %d files, want 103", len(sources.Files))
@@ -238,6 +317,7 @@ func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
 // its diagnostics, every diagnostic belongs to exactly one bullet, and a bullet
 // that claims none or a bullet outside the table fails.
 func TestReferenceReadmeListsExactlyTheReferenceRefusals(t *testing.T) {
+	t.Parallel()
 	modules := func(d diagnosticTuple) bool {
 		return d.field == "$.spec.mgrModules"
 	}
@@ -377,6 +457,7 @@ func requireReferenceRefusals(t *testing.T, sink []diagnostics.Diagnostic, expan
 // supported example declares are what pull the OpenShift clients in, at the
 // versions it declares, and nothing else contributes one.
 func TestActualExampleSelectsTargetToolsFromItsClusters(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno"))
 	tools, err := controller.SelectTools(state.Effective())
 	want := []controller.ToolRequest{
@@ -390,6 +471,7 @@ func TestActualExampleSelectsTargetToolsFromItsClusters(t *testing.T) {
 }
 
 func TestActualCompilerRefusesFutureKindsAndAdditionalVariants(t *testing.T) {
+	t.Parallel()
 	sources := expandedExampleSources(t)
 	state, report, err := wireCompiler().Compile(context.Background(), sources)
 	if err == nil || state != nil || report != nil {
@@ -407,6 +489,7 @@ func TestActualCompilerRefusesFutureKindsAndAdditionalVariants(t *testing.T) {
 // catalog without coverage, or a family admitted without leaving the
 // allow-list, fails here.
 func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testing.T) {
+	t.Parallel()
 	state, report := compileAcceptance(t, admissibleExampleSources(t, true))
 	replication, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-2x4-nodes-ceph-multisite"))
 	networks, _ := compileAcceptance(t, exampleDirectory(t, "lab-networks"))
@@ -446,6 +529,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 }
 
 func TestActualAdmissibleProjectionNormalizesAndDefaultsItsExtras(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, admissibleExampleSources(t, true))
 	playbook := requireObject(t, state.Effective(), api.CustomPlaybook, "acceptance-playbook")
 	if playbook.Spec().Get("enabled").Bool() || playbook.Spec().Get("extraVars", "literal").Type() != api.String || playbook.Spec().Get("extraVars", "fraction").Type() != api.Number {
@@ -488,6 +572,7 @@ func TestActualAdmissibleProjectionNormalizesAndDefaultsItsExtras(t *testing.T) 
 // providers, KubeVirt's client included. The extras are left out: their
 // single-node cluster pins a release image, which tool selection refuses.
 func TestActualAdmissibleProjectionSelectsKubeVirtTools(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, admissibleExampleSources(t, false))
 	tools, err := controller.SelectTools(state.Effective())
 	want := []controller.ToolRequest{
@@ -502,6 +587,7 @@ func TestActualAdmissibleProjectionSelectsKubeVirtTools(t *testing.T) {
 }
 
 func TestActualCompilerSourceOrderIndependence(t *testing.T) {
+	t.Parallel()
 	sources := exampleDirectory(t, "lab-rhel")
 	before := make([][]byte, len(sources.Files))
 	for i, file := range sources.Files {
@@ -537,6 +623,7 @@ func TestActualCompilerSourceOrderIndependence(t *testing.T) {
 }
 
 func TestFutureReferenceRefusalsAreSourceOrderIndependent(t *testing.T) {
+	t.Parallel()
 	sources := exampleSources(t)
 	before := admissionFingerprint(t, sources)
 	reversed := sources
@@ -548,6 +635,7 @@ func TestFutureReferenceRefusalsAreSourceOrderIndependent(t *testing.T) {
 }
 
 func TestActualCompilerDefaultPrecedencePreservesExplicitValues(t *testing.T) {
+	t.Parallel()
 	data := readAcceptanceFixture(t, "defaults.yaml")
 	sources := desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", data)}, Roots: []string{"/synthetic"}}
 	state, _ := compileAcceptance(t, sources)
@@ -573,6 +661,7 @@ func TestActualCompilerDefaultPrecedencePreservesExplicitValues(t *testing.T) {
 }
 
 func TestActualCompilerCanonicalEffectiveOutputIsInspectionOnly(t *testing.T) {
+	t.Parallel()
 	sources := exampleDirectory(t, "lab-rhel")
 	state, _ := compileAcceptance(t, sources)
 	data, err := effectiveencoding.YAML(context.Background(), state.Effective())

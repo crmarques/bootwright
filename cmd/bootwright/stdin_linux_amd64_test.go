@@ -17,6 +17,7 @@ import (
 )
 
 func TestTerminalFileSelectsOnlyTerminalStreams(t *testing.T) {
+	t.Parallel()
 	_, slave := openTestTerminal(t)
 	if file, ok := terminalFile(slave); !ok || file != slave {
 		t.Fatal("terminal stream not selected", ok, file)
@@ -39,6 +40,7 @@ func TestTerminalFileSelectsOnlyTerminalStreams(t *testing.T) {
 // reader follows a resize and a terminal that reports no size falls back to the
 // classic width rather than to an unbounded row.
 func TestTerminalColumnsFollowTheWindowSize(t *testing.T) {
+	t.Parallel()
 	_, slave := openTestTerminal(t)
 	width := terminalColumns(slave)
 	if width == nil {
@@ -203,6 +205,7 @@ func TestConfirmationInputHonorsCancellationAndReadsNoAhead(t *testing.T) {
 }
 
 func TestReadyInputRestoresFlagsOnReadFailure(t *testing.T) {
+	t.Parallel()
 	read, write, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -224,6 +227,7 @@ func TestReadyInputRestoresFlagsOnReadFailure(t *testing.T) {
 }
 
 func TestTerminalColumnsDefersProbeUntilProgressNeedsIt(t *testing.T) {
+	t.Parallel()
 	read, write, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -242,6 +246,7 @@ func TestTerminalColumnsDefersProbeUntilProgressNeedsIt(t *testing.T) {
 }
 
 func TestTerminalEchoHoldSilencesOnlyTheRedrawnTerminal(t *testing.T) {
+	t.Parallel()
 	_, slave := openTestTerminal(t)
 	echo := func() uint32 {
 		t.Helper()

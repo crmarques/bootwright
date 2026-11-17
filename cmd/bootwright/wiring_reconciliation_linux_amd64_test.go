@@ -22,6 +22,7 @@ import (
 )
 
 func TestTheComposedInvocationScopeAdmitsSiblingRunsOfItsRunner(t *testing.T) {
+	t.Parallel()
 	stager := stagelocal.NewAutomationStager(filepath.Join(t.TempDir(), "staging"))
 	scratch := t.TempDir()
 	if err := os.Chmod(scratch, 0700); err != nil {

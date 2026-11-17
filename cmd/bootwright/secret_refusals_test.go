@@ -12,6 +12,7 @@ import (
 // it takes, with the command bound to the context; a flag set it takes is
 // stored.
 func TestSecretSetFlagMistakesExitTwoNamingTheType(t *testing.T) {
+	t.Parallel()
 	services, _, input, _ := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", strings.Join([]string{
 		secretDocument("opaque", "opaque", ""), secretDocument("token", "token", ""), secretDocument("docker", "dockerConfigJson", ""),

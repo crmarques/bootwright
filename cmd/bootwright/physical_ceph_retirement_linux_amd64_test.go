@@ -20,6 +20,7 @@ import (
 )
 
 func TestPhysicalCephRetirementGraphOrdersEraseBeforeProofAndClaimRelease(t *testing.T) {
+	t.Parallel()
 	plan := physicalCephRetirementPlan(t, false)
 	policy := ceph.PhysicalRetirementBlockID("ceph-lab")
 	for _, machine := range []string{"metal-01", "metal-02", "metal-03"} {
@@ -83,6 +84,7 @@ func physicalCephAncestors(plan reconciliation.Plan, id string) map[string]bool 
 }
 
 func TestPhysicalCephUnstartedPoliciesNeverSelectDiskEffects(t *testing.T) {
+	t.Parallel()
 	plan := physicalCephRetirementPlan(t, false)
 	for _, claimsStarted := range []bool{false, true} {
 		states := map[string]reconciliation.BlockState{}
@@ -104,6 +106,7 @@ func TestPhysicalCephUnstartedPoliciesNeverSelectDiskEffects(t *testing.T) {
 }
 
 func TestPhysicalCephPartialApplyCanReleaseUnusedClaimsWithoutErasing(t *testing.T) {
+	t.Parallel()
 	for _, phase := range []string{"before-erase-policy", "after-erase-policy", "omitted-erase-policy"} {
 		t.Run(phase, func(t *testing.T) {
 			plan := physicalCephRetirementPlan(t, phase == "omitted-erase-policy")

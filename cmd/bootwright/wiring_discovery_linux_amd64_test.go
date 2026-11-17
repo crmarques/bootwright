@@ -16,6 +16,7 @@ import (
 )
 
 func TestComposedAutomaticDiscoveryPlansFleetProofWithoutInstallation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	catalog, _ := discoveryRefinementCatalogs(t)
 	controller, err := lifecycle.ControllerMachine(catalog)

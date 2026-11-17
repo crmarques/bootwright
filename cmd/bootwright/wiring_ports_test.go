@@ -13,6 +13,7 @@ type contextRepositoryPort struct{ contexts.Repository }
 type secretWorkspacePort struct{ secretstore.Workspace }
 
 func TestCompositionAcceptsIndependentWorkspacePorts(t *testing.T) {
+	t.Parallel()
 	_, repository, input, root := contextFixture(t)
 	deps := testContextWiring(t, root)
 	deps.Repository, deps.Workspace = contextRepositoryPort{repository}, secretWorkspacePort{repository}

@@ -13,6 +13,7 @@ import (
 )
 
 func TestSecretPipeInputDrainsThenReturnsEOF(t *testing.T) {
+	t.Parallel()
 	reader, writer, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -40,6 +41,7 @@ func TestSecretPipeInputDrainsThenReturnsEOF(t *testing.T) {
 }
 
 func TestComposedSecretStdinIsLazyAndExact(t *testing.T) {
+	t.Parallel()
 	_, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("opaque", "opaque", ""))
 	reader, writer, err := os.Pipe()
@@ -81,6 +83,7 @@ func TestComposedSecretStdinIsLazyAndExact(t *testing.T) {
 // A secret set waiting on standard input holds no store lock, so other
 // commands keep working until the value arrives (D73).
 func TestAWaitingSecretStdinLeavesOtherCommandsUsable(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("opaque", "opaque", ""))
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)

@@ -16,6 +16,7 @@ import (
 // the client's own failure status, so a status from 0 to 254 is always the
 // remote command's. Every other command keeps 1, and an interrupt keeps 130.
 func TestABoundaryRefusalOfASessionExitsTwoFiftyFive(t *testing.T) {
+	t.Parallel()
 	refusal := diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "invoking account cannot be verified"}
 	for _, test := range []struct {
 		args       []string
@@ -67,6 +68,7 @@ func boundaryUnderTest(accounts error, outcome privilege.Outcome, elevated *[]pr
 // account, the elevator or sudo refused, and only a session's elevation lets
 // the child's status stand over an interrupt. Every other command keeps 1.
 func TestTheBoundaryGivesASessionItsOwnStatus(t *testing.T) {
+	t.Parallel()
 	exec := []string{"machine", "exec", "--name", "rhel-01", "uptime"}
 	rsh := []string{"machine", "rsh", "--name", "rhel-01"}
 	stop := []string{"machine", "stop", "--name", "rhel-01"}
@@ -111,6 +113,7 @@ func TestTheBoundaryGivesASessionItsOwnStatus(t *testing.T) {
 // A root invocation sudo started refuses a foreign variable before it resolves
 // an account or runs anything, whether or not its command needs root.
 func TestASudoStartedRootInvocationRefusesAForeignVariableFirst(t *testing.T) {
+	t.Parallel()
 	foreign := &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "this root invocation was given variable GODEBUG"}
 	for _, args := range [][]string{{"machine", "stop", "--name", "rhel-01"}, {"version"}, {"--help"}, {"completion", "bash"}, {strings.Repeat("x", 16385)}} {
 		var elevated []privilege.Invocation

@@ -17,6 +17,7 @@ import (
 )
 
 func TestExampleNVMeOFPlansOwnedImageAndGateway(t *testing.T) {
+	t.Parallel()
 	sources := exampleDirectory(t, "libvirt-5-nodes-ceph-nvmeof")
 	state, _ := compileAcceptance(t, sources)
 	guests := func(catalog api.Catalog) int {
@@ -52,6 +53,7 @@ func TestExampleNVMeOFPlansOwnedImageAndGateway(t *testing.T) {
 // An nvmeof service without a usable spec.pool never reaches a plan: the
 // compiler refuses it by name at the service's own pool field.
 func TestExampleNVMeOFRefusesAGatewayServiceWithoutAUsablePool(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name, replacement, code string
 	}{

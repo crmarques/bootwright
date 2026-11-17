@@ -78,6 +78,7 @@ func requireSplitOrder(t *testing.T, order []string, waits map[string][]string, 
 // this build's own capabilities plan the example, the engine orders it and
 // the plan holds no cycle.
 func TestAManagedArtifactMirrorPrecedesTheControllerStageThatReadsIt(t *testing.T) {
+	t.Parallel()
 	order, waits := mirrorOrder(t, "lab-sno-mirror-host", exampleDirectory(t, "lab-sno-mirror-host"))
 	requireSplitOrder(t, order, waits, true)
 }
@@ -114,6 +115,7 @@ func controllerPlacedMirror(t *testing.T) desiredstate.Sources {
 // stage's host packages, which install the container runtime it runs with,
 // and its fill runs locally after it, both before the clients read from it.
 func TestAManagedArtifactMirrorOnTheControllerSitsBetweenTheStagesBlocks(t *testing.T) {
+	t.Parallel()
 	sources := controllerPlacedMirror(t)
 	order, waits := mirrorOrder(t, "lab-sno-mirror-host", sources)
 	requireSplitOrder(t, order, waits, false)
@@ -152,6 +154,7 @@ func TestAManagedArtifactMirrorOnTheControllerSitsBetweenTheStagesBlocks(t *test
 // with its claims and host checks on the one controller host, previews the
 // same order.
 func TestAControllerPlacedMirrorPlansThroughTheLifecycleService(t *testing.T) {
+	t.Parallel()
 	const name = "lab-sno-mirror-host"
 	services, _ := productionSourcesContext(t, name, name, controllerPlacedMirror(t))
 	out, _ := contextRun(t, services, 0, "plan", "--context", name, "--output", "json")
@@ -166,6 +169,7 @@ func TestAControllerPlacedMirrorPlansThroughTheLifecycleService(t *testing.T) {
 // unsupported-shape checks, claims and host checks, previews the stage's host
 // packages, the mirror's server and fill, and then the clients read from it.
 func TestAManagedArtifactMirrorExamplePlansThroughTheLifecycleService(t *testing.T) {
+	t.Parallel()
 	const name = "lab-sno-mirror-host"
 	services, _ := productionExampleContext(t, name, name)
 	out, _ := contextRun(t, services, 0, "plan", "--context", name, "--output", "json")
@@ -181,6 +185,7 @@ func TestAManagedArtifactMirrorExamplePlansThroughTheLifecycleService(t *testing
 // server was made to wait for, refuses the plan through this build's own
 // capabilities rather than ordering a cycle.
 func TestAControllerStageWaitingForTheClusterMediaRefuses(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno-mirror-host"))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	resolved, err := reconciliation.ResolveRequirements(productionDefinitions(t, state, "lab-sno-mirror-host"))
@@ -206,6 +211,7 @@ func TestAControllerStageWaitingForTheClusterMediaRefuses(t *testing.T) {
 // own image from its origin and waits for nothing but the stage, and the plan
 // holds no cycle.
 func TestAManagedImageMirrorIsFilledAfterTheControllerStageAndBeforeItsConsumers(t *testing.T) {
+	t.Parallel()
 	const name = "lab-rhel-mirror-host"
 	state, _ := compileAcceptance(t, exampleDirectory(t, name))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
@@ -249,6 +255,7 @@ func TestAManagedImageMirrorIsFilledAfterTheControllerStageAndBeforeItsConsumers
 // unsupported-shape checks, claims and host checks, previews the controller
 // stage, the Registry, its fill and then a consumer.
 func TestAManagedImageMirrorExamplePlansThroughTheLifecycleService(t *testing.T) {
+	t.Parallel()
 	const name = "lab-rhel-mirror-host"
 	services, _ := productionExampleContext(t, name, name)
 	out, _ := contextRun(t, services, 0, "plan", "--context", name, "--output", "json")
@@ -266,6 +273,7 @@ func TestAManagedImageMirrorExamplePlansThroughTheLifecycleService(t *testing.T)
 // what they wait for, run between the stage's host packages and its clients,
 // and every other block waits for both.
 func TestAManagedArtifactMirrorPlansBetweenTheStagesBlocksOnEachPlacement(t *testing.T) {
+	t.Parallel()
 	const packages, clients = "controller-prerequisites", "controller-mirrored-clients"
 	for name, placement := range map[string]struct {
 		context string
@@ -324,6 +332,7 @@ func TestAManagedArtifactMirrorPlansBetweenTheStagesBlocksOnEachPlacement(t *tes
 // the mirror host's installation, the mirror's server and its fill between the
 // stage's host packages and its clients.
 func TestAnInstalledMirrorHostPlansThroughTheLifecycleService(t *testing.T) {
+	t.Parallel()
 	const name = "lab-sno-installed-mirror-host"
 	services, _ := productionExampleContext(t, name, name)
 	out, _ := contextRun(t, services, 0, "plan", "--context", name, "--output", "json")
@@ -342,6 +351,7 @@ func TestAnInstalledMirrorHostPlansThroughTheLifecycleService(t *testing.T) {
 // it, its installation after that build, through this build's own
 // capabilities and the engine's ordering, with no cycle.
 func TestAClusterUnderAManagedImageMirrorWaitsForItsReleaseCopy(t *testing.T) {
+	t.Parallel()
 	const name = "lab-sno-release-mirror"
 	_, waits := mirrorOrder(t, name, exampleDirectory(t, name))
 	const registry, release = "registry-mirror-registry", "mirror-release-sno"
@@ -367,6 +377,7 @@ func TestAClusterUnderAManagedImageMirrorWaitsForItsReleaseCopy(t *testing.T) {
 // unsupported-shape checks, claims and host checks, previews the Registry,
 // the release copy and the cluster's image build in that order.
 func TestAReleaseMirrorExamplePlansThroughTheLifecycleService(t *testing.T) {
+	t.Parallel()
 	const name = "lab-sno-release-mirror"
 	services, _ := productionExampleContext(t, name, name)
 	out, _ := contextRun(t, services, 0, "plan", "--context", name, "--output", "json")

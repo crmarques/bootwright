@@ -18,6 +18,7 @@ func (panickingState) RenderEffective(context.Context, compilation.EffectiveRequ
 }
 
 func TestInternalFailureHasOnlyASafeSummaryAndCorrelationIdentity(t *testing.T) {
+	t.Parallel()
 	for _, format := range []string{"text", "json"} {
 		var out, errOut bytes.Buffer
 		var escaped any

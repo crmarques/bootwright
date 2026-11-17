@@ -200,6 +200,7 @@ func calledName(expression ast.Expr) string {
 // exercises (a gated Ceph row) still cannot reach a runner that refuses it as
 // unrecognized.
 func TestEveryInvokedOperationIsBoundToAnEmbeddedPlaybook(t *testing.T) {
+	t.Parallel()
 	pairs := invokedPairs(t)
 	for _, required := range []string{ceph.Implementation + "/apply"} {
 		if pairs[required] == "" {

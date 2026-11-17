@@ -32,6 +32,7 @@ func compiledEffective(t *testing.T, name string) api.Catalog {
 // libvirt-network-variants and lab-baremetal derive with controller Machine
 // controller in context lab, lab-baremetal's private installation included.
 func TestExampleRequestsKeepTheirBytes(t *testing.T) {
+	t.Parallel()
 	const controllerMachine, contextName = "controller", "lab"
 	derive := func(t *testing.T, name string, err error) {
 		t.Helper()

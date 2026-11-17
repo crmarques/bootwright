@@ -9,6 +9,7 @@ import (
 )
 
 func TestTheNetworkVariantsExampleInstallsEachInterfaceShape(t *testing.T) {
+	t.Parallel()
 	const bondOptions = "--bondslaves=nic0,nic1 --bondopts=mode=active-backup,miimon=100"
 	want := map[string]struct {
 		networkLine, gateway, document string

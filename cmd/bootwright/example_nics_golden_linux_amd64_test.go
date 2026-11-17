@@ -36,6 +36,7 @@ type exampleNICs struct {
 // interface pins every tracked example derives, so a change to how NICs are
 // declared moves no realized MAC, name or segment.
 func TestEveryExampleNICDerivationMatchesItsGolden(t *testing.T) {
+	t.Parallel()
 	const contextName = "lab"
 	directories := exampleDirectories(t)
 	var examples []string

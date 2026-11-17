@@ -24,6 +24,7 @@ import (
 )
 
 func TestSNOIsolationFixtures(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "e2e", "lab-sno-fips-controller")
 	image := "registry.example.test/python@sha256:" + strings.Repeat("a", 64)
 	args := []string{"template", "isolation", filepath.Join(root, "isolation"), "-f", filepath.Join(root, "values.yaml"), "--set", "isolation.image=" + image}
@@ -140,6 +141,7 @@ func stringValue(value any) string {
 }
 
 func TestSNOIsolationVerifierFailures(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "e2e", "lab-sno-fips-controller", "app")
 	cmd := exec.Command(pinnedPython(t), "-B", "-m", "unittest", "discover", "-s", root, "-p", "verify_test.py")
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -150,6 +152,7 @@ func TestSNOIsolationVerifierFailures(t *testing.T) {
 // Both networks must be realized by the provider, rather than requiring a
 // manually created bridge; only their common NIC carriage is shared.
 func TestSNOCaseOwnsIsolatedVLANNetworks(t *testing.T) {
+	t.Parallel()
 	for _, sets := range [][]string{
 		nil,
 		{"environments.trunk.bridge=br-fixture", "environments.staging.vlan=110", "environments.production.vlan=120"},
@@ -214,6 +217,7 @@ func TestSNOCaseOwnsIsolatedVLANNetworks(t *testing.T) {
 // The resolver installed on the future controller remains usable for generic
 // bootstrap downloads, then forwards cluster names to the second context.
 func TestSNOCaseRoutesControllerDNSWithoutAResolverSwitch(t *testing.T) {
+	t.Parallel()
 	for _, sets := range [][]string{nil, {"host.domain=other.example.test", "controller.address=198.51.100.12", "host.upstreamDNS[0]=9.9.9.9"}} {
 		catalogs := map[string]api.Catalog{}
 		for _, directory := range renderE2ECase(t, e2eRenderScript(t), "lab-sno-fips-controller", e2eRender{name: "DNS chain", sets: append(fipsControllerSubscriptions(), sets...)}) {

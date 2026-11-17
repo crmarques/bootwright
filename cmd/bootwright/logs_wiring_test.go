@@ -12,6 +12,7 @@ import (
 // Logs and status --paths read through the one context store lifecycle
 // writes, so neither answers from another root.
 func TestLogsAndContextPathsUseTheContextStore(t *testing.T) {
+	t.Parallel()
 	deps, release := localServiceDependencies(processDependencies{})
 	defer release()
 	store, ok := deps.Lifecycle.Workspace.(*contextfs.Store)

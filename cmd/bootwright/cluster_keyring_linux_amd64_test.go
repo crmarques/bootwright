@@ -14,6 +14,7 @@ import (
 // credential ceph auth get-or-create returned for the client; the export
 // renders it in the keyring form that command prints.
 func TestClusterKeyringRevealsOneClientThroughCustody(t *testing.T) {
+	t.Parallel()
 	services, repository := cephExampleContext(t, "lab-ceph")
 	entry := `[{"caps":{"mgr":"profile rbd pool=rbd-data","mon":"profile rbd","osd":"profile rbd pool=rbd-data"},"entity":"client.rbd-canary","key":"` + clientKeyToken + `"}]`
 	produceThroughLentArea(t, services, repository, "lab-ceph", ceph.ClientBlockID("rbd-canary"), ceph.ClientOutput, entry)

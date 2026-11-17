@@ -26,6 +26,7 @@ func buildCapabilities(clock systemClock, controller controllerDependencies, rec
 // must name a playbook the embedded collection actually carries. A renamed or
 // removed entrypoint fails here rather than at the first operation that needs it.
 func TestEveryBoundPlaybookExistsInTheEmbeddedCollection(t *testing.T) {
+	t.Parallel()
 	assets := ansible.Assets()
 	for key, playbook := range operationPlaybook() {
 		if _, ok := assets[playbookRoot+playbook]; !ok {
@@ -37,6 +38,7 @@ func TestEveryBoundPlaybookExistsInTheEmbeddedCollection(t *testing.T) {
 // Every capability this build offers can be run, and nothing is bound that no
 // capability resolves, so the two lists cannot drift apart.
 func TestBoundPlaybooksCoverExactlyTheOfferedCapabilities(t *testing.T) {
+	t.Parallel()
 	bindings := operationPlaybook()
 	implementations := map[string]bool{}
 	offeredImplementations := map[string]bool{}
@@ -113,12 +115,14 @@ var playbookStem = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 // internally (image_resolve, host_prepare) instead of the port operation it
 // binds fails here.
 func TestEveryBoundPlaybookIsNamedForItsCapabilityAndOperation(t *testing.T) {
+	t.Parallel()
 	for _, violation := range playbookNameViolations(operationPlaybook(), capabilityNamedPlaybooks) {
 		t.Error(violation)
 	}
 }
 
 func TestPlaybookNamePatternRefusesAnOffPatternBinding(t *testing.T) {
+	t.Parallel()
 	bindings := map[string]string{
 		"a/apply":   "storage/image_resolve.yml",
 		"b/apply":   "storage/host_apply.yml",
@@ -146,6 +150,7 @@ func TestPlaybookNamePatternRefusesAnOffPatternBinding(t *testing.T) {
 
 // Composition admits only the credential preparation reads and access revoke.
 func TestReadOnlyEntrypointsAreExplicit(t *testing.T) {
+	t.Parallel()
 	admitted := readOnlyOperations()
 	want := []string{"cluster-install-agent-v1/prepare_credentials", "storage-ceph-core-v1/prepare_credentials", "substrate-host-kubevirt-v1/revoke"}
 	if !slices.Equal(admitted, want) {

@@ -220,6 +220,7 @@ func installedImageMirrorWith(t *testing.T, drop []string) desiredstate.Sources 
 // controller; the controller's own services and emulated BMC pull their
 // origins, and nothing waits in a cycle.
 func TestAManagedImageMirrorOnTheControllerIsFilledLocallyAfterTheStage(t *testing.T) {
+	t.Parallel()
 	const name = "lab-rhel-mirror-host"
 	sources := controllerPlacedMirrors(t)
 	order, waits := mirrorOrder(t, name, sources)
@@ -270,6 +271,7 @@ func TestAManagedImageMirrorOnTheControllerIsFilledLocallyAfterTheStage(t *testi
 // the mirror never waits for itself, while the proxy beside them on the
 // controller, which nothing there waits for, pulls through the mirror.
 func TestAManagedImageMirrorOnAnInstalledMachinePlansAfterItsInstallation(t *testing.T) {
+	t.Parallel()
 	const name = "lab-sno-installed-mirror-host"
 	sources := installedImageMirror(t)
 	order, waits := mirrorOrder(t, name, sources)
@@ -319,6 +321,7 @@ func TestAManagedImageMirrorOnAnInstalledMachinePlansAfterItsInstallation(t *tes
 // mirror's host. It pulls its origin before the controller's mirrored clients,
 // without waiting for the Registry or its image fill.
 func TestAPublicArtifactMirrorOnTheInstalledMirrorHostPrecedesTheControllerClients(t *testing.T) {
+	t.Parallel()
 	const name = "lab-sno-installed-mirror-host"
 	public := "docker.io/library/nginx@sha256:" + strings.Repeat("c", 64)
 	sources := editedSources(t, installedImageMirrorWith(t, nil), sourceEdits{
@@ -357,6 +360,7 @@ func TestAPublicArtifactMirrorOnTheInstalledMirrorHostPrecedesTheControllerClien
 // provider host waits for the mirror and pulls through it, while the mirror
 // host's emulated BMC there still reads its origin.
 func TestAnotherGuestsEmulatedBMCBesideAnInstalledMirrorHostPullsThroughTheMirror(t *testing.T) {
+	t.Parallel()
 	const name = "lab-sno-installed-mirror-host"
 	sources := installedImageMirrorWith(t, nil)
 	_, waits := mirrorOrder(t, name, sources)
@@ -388,6 +392,7 @@ func TestAnotherGuestsEmulatedBMCBesideAnInstalledMirrorHostPullsThroughTheMirro
 // through the mirror, for the node's, and the controller's proxy through the
 // mirror beside its resolver at its origin.
 func TestTheAcquisitionListNamesEachEmulatedBMCAndServicePullBesideAnInstalledMirrorHost(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, installedImageMirrorWith(t, nil))
 	acquired, err := listAcquisitions(state.Effective())
 	if err != nil {
@@ -422,6 +427,7 @@ func TestTheAcquisitionListNamesEachEmulatedBMCAndServicePullBesideAnInstalledMi
 // An OS-provided Machine never creates an emulated BMC, even when it names
 // the mirror host's provider, so it adds no mirrored image to the fill.
 func TestAProvidedMachineBesideTheMirrorHostAddsNoBMCImageToTheMirror(t *testing.T) {
+	t.Parallel()
 	sources := editedSources(t, installedImageMirror(t), sourceEdits{
 		replace: map[string][2]string{
 			"infra/machines/edge.yaml": {"spec:\n", "spec:\n  substrate:\n    providerRef: lab-libvirt\n\n"},
@@ -452,6 +458,7 @@ func TestAProvidedMachineBesideTheMirrorHostAddsNoBMCImageToTheMirror(t *testing
 // cluster's release into the image mirror there, over the installed arm after
 // that installation, before the cluster's image build.
 func TestAReleaseCopyOnAnInstalledMirrorHostPlansAfterItsInstallation(t *testing.T) {
+	t.Parallel()
 	const name, release = "lab-sno-installed-mirror-host", "mirror-release-sno"
 	sources := installedImageMirrorWith(t, nil)
 	order, waits := mirrorOrder(t, name, sources)

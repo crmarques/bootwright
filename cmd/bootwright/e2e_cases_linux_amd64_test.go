@@ -222,6 +222,7 @@ func TestE2ECaseRenderingDoesNotReadTheHostsRoutes(t *testing.T) {
 }
 
 func TestE2ERenderNamesAFailedRouteProbe(t *testing.T) {
+	t.Parallel()
 	tools := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tools, "ip"), []byte("#!/bin/sh\nexit 2\n"), 0700); err != nil {
 		t.Fatal(err)
@@ -252,6 +253,7 @@ func e2eRenderScript(t *testing.T) string {
 }
 
 func TestEveryE2ECaseRendersToValidInput(t *testing.T) {
+	t.Parallel()
 	script := e2eRenderScript(t)
 	names := e2eCaseNames(t)
 	for name := range e2eRenders {
@@ -298,6 +300,7 @@ func TestEveryE2ECaseRendersToValidInput(t *testing.T) {
 // A claim another context holds is invisible to that plan, so
 // TestEveryE2ECaseContextsClaimDisjointHostReservations compares the contexts.
 func TestEveryE2ECaseRenderPlansWithoutRefusal(t *testing.T) {
+	t.Parallel()
 	script := e2eRenderScript(t)
 	for _, name := range e2eCaseNames(t) {
 		for _, render := range e2eRenders[name] {
@@ -325,6 +328,7 @@ func TestEveryE2ECaseRenderPlansWithoutRefusal(t *testing.T) {
 // host reservations their plans claim must not conflict, which the controller
 // applies when it publishes the second context's claims.
 func TestEveryE2ECaseContextsClaimDisjointHostReservations(t *testing.T) {
+	t.Parallel()
 	script := e2eRenderScript(t)
 	for _, name := range e2eCaseNames(t) {
 		for _, render := range e2eRenders[name] {

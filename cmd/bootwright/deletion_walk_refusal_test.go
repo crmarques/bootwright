@@ -16,6 +16,7 @@ import (
 // state root, why, and the exit; the deletion removes nothing, and once the
 // entry is removed by hand the deletion completes.
 func TestTheDeletionWalkNamesItsContextEntryAndExit(t *testing.T) {
+	t.Parallel()
 	owner := strconv.Itoa(os.Geteuid()) + ":" + strconv.Itoa(os.Getegid())
 	for name, test := range map[string]struct {
 		damage    func(t *testing.T, base string) string
@@ -113,6 +114,7 @@ func TestTheDeletionWalkNamesItsContextEntryAndExit(t *testing.T) {
 // an ancestor link has: replacing it with a directory, never the guidance for
 // a root nothing repairs.
 func TestAStateRootThatIsALinkIsRefusedAsARootOfAnotherType(t *testing.T) {
+	t.Parallel()
 	owner := strconv.Itoa(os.Geteuid()) + ":" + strconv.Itoa(os.Getegid())
 	services, _, input, root := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)

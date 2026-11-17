@@ -131,6 +131,7 @@ func singleDiagnostic(t *testing.T, stderr, code string) {
 // custody read, and once a completed removal withdraws the entry it reports
 // the access unavailable, naming the apply that restores it.
 func TestClusterKubeconfigJourney(t *testing.T) {
+	t.Parallel()
 	services, repository, _ := snoContext(t)
 	block := agentinstall.InstallBlockID("sno")
 	out, stderr := contextRun(t, services, 1, "cluster", "kubeconfig", "--context", "lab-sno", "--name", "sno")
@@ -169,6 +170,7 @@ func TestClusterKubeconfigJourney(t *testing.T) {
 // access with that identity and the way out, through the resolver composition
 // binds by default.
 func TestTheComposedStoreRefusesAnUnknownKeyring(t *testing.T) {
+	t.Parallel()
 	services, _, root := snoContext(t)
 	record := filepath.Join(root, "contexts", "lab-sno", "secrets", secretstore.RecordPath)
 	data, err := os.ReadFile(record)

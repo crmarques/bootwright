@@ -14,6 +14,7 @@ import (
 // diagnostic for the same field. An IPv6 address compiles in the one spelling
 // netip prints.
 func TestALibvirtProviderMustNameItsEmulatedBMCAddress(t *testing.T) {
+	t.Parallel()
 	const field = "$.spec.libvirt.bmcEmulation.bindAddress"
 	host := serviceHost
 	credential := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: emulated-bmc}\nspec: {type: usernamePassword}\n---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: emulated-bmc-tls}\nspec: {type: tlsCertificate}\n"

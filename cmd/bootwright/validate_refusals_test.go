@@ -13,6 +13,7 @@ import (
 )
 
 func TestValidatePrintsOneRefusalAlikeInTextAndJSON(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	copySources(t, labExampleSources(t), root)
 	machine := filepath.Join(root, "infra", "machines", "rhel-01.yaml")

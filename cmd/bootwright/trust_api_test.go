@@ -127,6 +127,7 @@ func trustFailure(t *testing.T, inputs desiredstate.Sources, code, field string)
 }
 
 func TestClusterInstallTrustStaysOnItsConsumer(t *testing.T) {
+	t.Parallel()
 	env := serviceEnvironment
 	proxy := "apiVersion: bootwright.io/v1alpha1\nkind: Proxy\nmetadata: {name: egress}\nspec:\n  management: external\n  connection: {httpsProxy: 'http://proxy.example.test:3128'}\n"
 	registry := "apiVersion: bootwright.io/v1alpha1\nkind: Registry\nmetadata: {name: images}\nspec:\n  management: external\n  url: registry.example.test\n  trustBundleRef: service-ca\n"
@@ -168,6 +169,7 @@ func TestClusterInstallTrustStaysOnItsConsumer(t *testing.T) {
 }
 
 func TestClusterInstallTrustDefaultsReplaceWholeLists(t *testing.T) {
+	t.Parallel()
 	defaults := serviceEnvironment + "  defaults:\n    OpenShiftCluster:\n      install:\n        additionalTrustBundleRefs: [ca-second, ca-first]\n"
 	for _, tc := range []struct {
 		name, environment, authored string
@@ -194,6 +196,7 @@ func TestClusterInstallTrustDefaultsReplaceWholeLists(t *testing.T) {
 }
 
 func TestClusterInstallTrustRejectsInvalidSecretSelections(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, list, code, field string }{
 		{"missing Secret", "[missing-ca]", "api.reference", "$.spec.install.additionalTrustBundleRefs[0]"},
 		{"wrong Secret type", "[openshift-pull-secret]", "api.reference", "$.spec.install.additionalTrustBundleRefs[0]"},
@@ -208,6 +211,7 @@ func TestClusterInstallTrustRejectsInvalidSecretSelections(t *testing.T) {
 }
 
 func TestClusterInstallTrustDiagnosticsKeepDefaultOrigins(t *testing.T) {
+	t.Parallel()
 	env := serviceEnvironment + "  defaults:\n    OpenShiftCluster:\n      install:\n        additionalTrustBundleRefs: [missing-ca]\n"
 	for _, inherited := range []bool{false, true} {
 		t.Run(map[bool]string{false: "authored", true: "inherited"}[inherited], func(t *testing.T) {
@@ -239,6 +243,7 @@ func TestClusterInstallTrustDiagnosticsKeepDefaultOrigins(t *testing.T) {
 }
 
 func TestUnusedClusterInstallTrustDefaultsValidateStructureOnly(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ list, code, field string }{
 		{"[missing-ca]", "", ""},
 		{"[openshift-pull-secret]", "", ""},
@@ -263,6 +268,7 @@ func TestUnusedClusterInstallTrustDefaultsValidateStructureOnly(t *testing.T) {
 // it directly, and the InfraProvider default would pass it to every Machine
 // that provider hosts.
 func TestDisableVerificationIsNeverAKindDefault(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, defaults, field, message string }{
 		{"Machine", "    Machine:\n      substrate:\n        baremetal:\n          bmc:\n            virtualMedia:\n              tls: {trust: disableVerification}\n",
 			"$.spec.defaults.Machine.substrate.baremetal.bmc.virtualMedia.tls.trust", "disableVerification is a per-Machine exception and never a kind default"},
@@ -301,6 +307,7 @@ func bmcTrustSources() desiredstate.Sources {
 // and never one that authors tls.verify: false, so the opt-out compiles and
 // its effective controller carries no bundle.
 func TestAKindDefaultTrustBundleSkipsAMachineThatOptsOut(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, bmcTrustSources())
 	tls := requireObject(t, state.Effective(), api.Machine, "opted-out").Spec().Get("substrate", "baremetal", "bmc", "tls")
 	if tls.Has("trustBundleRef") || tls.Get("verify").Bool() {

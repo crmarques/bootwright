@@ -12,6 +12,7 @@ import (
 )
 
 func TestComposedApplyRefusesAtTheLibvirtCapacityGateBeforeRegistration(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join(t.TempDir(), "state")
 	repository := testRepository(root)
 	deps := testContextWiring(t, root)

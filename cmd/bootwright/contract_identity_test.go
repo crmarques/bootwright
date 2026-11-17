@@ -233,6 +233,7 @@ func requestIdentities() map[string][]string {
 // power content digest, and to the collection's meta, playbooks, plugins and
 // roles, and holds each listed path to a directory that exists.
 func TestCheckCommitsContractPathsCoverEveryImplementation(t *testing.T) {
+	t.Parallel()
 	script, err := os.ReadFile(filepath.Join("..", "..", "scripts", "check-commits"))
 	if err != nil {
 		t.Fatal(err)

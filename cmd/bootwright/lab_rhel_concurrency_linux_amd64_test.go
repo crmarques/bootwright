@@ -14,6 +14,7 @@ import (
 )
 
 func TestThreeNodeRHELExampleSharesOnePublicationAndAdmitsIndependentWork(t *testing.T) {
+	t.Parallel()
 	sources := exampleDirectory(t, "lab-rhel-3-nodes")
 	state, _ := compileAcceptance(t, sources)
 	if len(sources.Files) != 18 || len(state.Effective().Objects()) != 18 {

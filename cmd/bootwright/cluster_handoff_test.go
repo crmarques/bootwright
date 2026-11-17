@@ -38,6 +38,7 @@ func (f *accessMetadataFixture) ProducedAvailable(context.Context, custody.ReadP
 }
 
 func TestClusterClientMetadataRequiresCustodyAndTheMatchingInstalledClient(t *testing.T) {
+	t.Parallel()
 	var request agentinstall.InstallRequest
 	for _, block := range compactExamplePlan(t).Blocks {
 		if block.Implementation == agentinstall.InstallImplementation {
@@ -83,6 +84,7 @@ func (descriptorMetadata) Client(_ context.Context, _, _, executable string) (co
 }
 
 func TestClusterHandoffCommandWritesOneDescriptorAndKeepsCredentialsPrivate(t *testing.T) {
+	t.Parallel()
 	catalog := api.NewCatalog([]api.Object{api.NewObject(api.OpenShiftCluster, "example", api.Value{}, api.MapValue())})
 	service := containeraccess.New(labSessionState{effective: catalog}, nil, nil, func(context.Context) (string, error) { return "example", nil }).WithMetadata(descriptorMetadata{})
 	services := cli.Services{ClusterAccess: service}

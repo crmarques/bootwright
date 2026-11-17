@@ -26,6 +26,7 @@ func (a fixedAccount) Resolve(context.Context) (privilege.Account, error) {
 // through procfs, so reading the selection never resolves that path: it reads
 // from a program whose directory this process can no longer search.
 func TestASelectionReadNeverResolvesTheExecutablePath(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("root searches any directory, so the refused search cannot be reproduced")
 	}

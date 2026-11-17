@@ -106,6 +106,7 @@ func stateFingerprint(t *testing.T, root string) map[string]string {
 }
 
 func TestCompleteContextJourney(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	contextRun(t, services, 0, "context", "list")
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
@@ -192,6 +193,7 @@ func TestCompleteContextJourney(t *testing.T) {
 }
 
 func TestMissingContextRegistryExplainsSafeRecovery(t *testing.T) {
+	t.Parallel()
 	services, _, _, root := contextFixture(t)
 	if err := os.Mkdir(root, 0700); err != nil {
 		t.Fatal(err)
@@ -221,6 +223,7 @@ func TestMissingContextRegistryExplainsSafeRecovery(t *testing.T) {
 // context, its entry and the kernel's answer; its purge refuses naming the
 // orphan acknowledgement, which then abandons exactly that context.
 func TestAHandRemovedContextIsNamedAndAbandonedByItsPurge(t *testing.T) {
+	t.Parallel()
 	services, _, input, root := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	contextRun(t, services, 0, "context", "init", "--name", "beta", "--input-dir", input)
@@ -245,6 +248,7 @@ func TestAHandRemovedContextIsNamedAndAbandonedByItsPurge(t *testing.T) {
 }
 
 func TestContextInitWithoutInputCreatesSelectableEncryptedContext(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	out, stderr := contextRun(t, services, 0, "context", "init", "--name", "test")
 	if stderr != "" || !strings.Contains(out, "Input    not imported") || strings.Contains(out, "Files copied") {
@@ -315,6 +319,7 @@ func TestContextInitWithoutInputCreatesSelectableEncryptedContext(t *testing.T) 
 // reuse instead of being refused. What still refuses is a marker naming a
 // context that does not exist, and deletion clears the deleting user's own.
 func TestUserSelectionRefusesAnAbsentContextAndFollowsNameReuse(t *testing.T) {
+	t.Parallel()
 	services, _, input, root := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	pointer := testContextWiring(t, root).Selection
@@ -350,6 +355,7 @@ func TestUserSelectionRefusesAnAbsentContextAndFollowsNameReuse(t *testing.T) {
 }
 
 func TestContextReplayAndReadOnlyEffects(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	secret := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: credential\nspec:\n  type: opaque\n  source:\n    contextStore: {}\n"
 	if err := os.WriteFile(filepath.Join(input, "credential.yaml"), []byte(secret), 0600); err != nil {
@@ -413,6 +419,7 @@ func TestContextReplayAndReadOnlyEffects(t *testing.T) {
 }
 
 func TestInvalidAdmissionAndUnavailableRoutesDoNotWrite(t *testing.T) {
+	t.Parallel()
 	services, _, input, root := contextFixture(t)
 	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte("invalid: ["), 0600); err != nil {
 		t.Fatal(err)
@@ -452,6 +459,7 @@ func TestInvalidAdmissionAndUnavailableRoutesDoNotWrite(t *testing.T) {
 }
 
 func TestProtectedContextCannotBeDeleted(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	registry, err := repository.View(context.Background())
@@ -489,6 +497,7 @@ func TestProtectedContextCannotBeDeleted(t *testing.T) {
 // deletion abandons the context. Status and the apply refusal call missing
 // evidence absent or empty, not an unrecognized record.
 func TestMissingEvidenceIsRefusedAndAbandonedAsCorruptEvidenceIs(t *testing.T) {
+	t.Parallel()
 	exit := "bootwright context delete --name alpha --purge --allow-orphans"
 	refusal := "\n    the mutation evidence of context alpha is missing, corrupt or unsupported, so nothing proves what it owns\n    " +
 		"Next: review its records with bootwright status --context alpha, then abandon whatever it owns with " + exit + "\n"
@@ -533,6 +542,7 @@ func TestMissingEvidenceIsRefusedAndAbandonedAsCorruptEvidenceIs(t *testing.T) {
 }
 
 func TestCompleteExampleContextRoundTrip(t *testing.T) {
+	t.Parallel()
 	services, _, input, _ := contextFixture(t)
 	if err := os.RemoveAll(input); err != nil {
 		t.Fatal(err)
@@ -572,6 +582,7 @@ func TestCompleteExampleContextRoundTrip(t *testing.T) {
 }
 
 func TestContextRunOutlastsAHostSlowerThanAnyDeadline(t *testing.T) {
+	t.Parallel()
 	_, repository, input, root := contextFixture(t)
 	deps := testContextWiring(t, root)
 	deps.Selection = loadedHostSelection{deps.Selection}
@@ -597,6 +608,7 @@ func (s loadedHostSelection) Write(ctx context.Context, selection contexts.Selec
 // same revision and frozen bytes. Changed input over that apply asks, and with
 // --yes publishes, warning that apply refuses it until a destroy.
 func TestAnIdenticalReimportOverACompletedApplyPublishesNothing(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	mutation := filepath.Join(root, "contexts", "alpha", "state", "mutation.json")
@@ -634,6 +646,7 @@ func TestAnIdenticalReimportOverACompletedApplyPublishesNothing(t *testing.T) {
 // An identical re-import still reports what admission warned of, once on
 // standard error, while it publishes nothing and asks nothing.
 func TestAnIdenticalReimportReportsItsWarningsOnce(t *testing.T) {
+	t.Parallel()
 	services, _, input, root := contextFixture(t)
 	addSecretInput(t, input, "environment.yaml", syntheticEnvironment)
 	addSecretInput(t, input, "reserved.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: CustomPlaybook\nmetadata: {name: reserved}\nspec:\n  enabled: false\n  gates: base\n  playbook: playbooks/site.yaml\n  target: {machines: [service-host]}\n")

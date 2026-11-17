@@ -22,6 +22,7 @@ import (
 // moved, so no live operation loses a block. A capability that refuses an
 // example is recorded with its refusal code instead of its blocks.
 func TestEveryExampleBlockIdentityKeepsItsBytes(t *testing.T) {
+	t.Parallel()
 	directories := exampleDirectories(t)
 	examples := make([]string, 0, len(directories))
 	for name := range directories {
@@ -70,6 +71,7 @@ func TestEveryExampleBlockIdentityKeepsItsBytes(t *testing.T) {
 // 63-byte name: it validates, and its blocks plan under hashed identities that
 // keep their prefix and differ from those of a guest sharing all but one byte.
 func TestALongMachineNamePlansWithAHashedIdentity(t *testing.T) {
+	t.Parallel()
 	identities := func(name string) map[string]string {
 		state, _ := compileAcceptance(t, editedExample(t, "lab-rhel", exampleEdit{labGuest, "name: rhel-01", "name: " + name}))
 		definitions := productionDefinitions(t, state, "lab-rhel")

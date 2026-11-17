@@ -43,6 +43,7 @@ func installationPlan(t *testing.T, verb reconciliation.Verb) []reconciliation.B
 // subtree, fetched by a controller reached over https and verified against
 // the authority the context carries.
 func TestLabBaremetalExamplePlansItsInstallation(t *testing.T) {
+	t.Parallel()
 	for verb, consumes := range map[reconciliation.Verb][]string{reconciliation.Apply: {"data-loss"}, reconciliation.Destroy: nil} {
 		blocks := installationPlan(t, verb)
 		if len(blocks) != 1 || blocks[0].ID != "os-install-metal-01" {
@@ -83,6 +84,7 @@ func TestLabBaremetalExamplePlansItsInstallation(t *testing.T) {
 // its Kickstart names the private URL only as the placeholder the attempt
 // substitutes.
 func TestLabBaremetalExampleKeepsPrivateURLsOutOfPublicArtifacts(t *testing.T) {
+	t.Parallel()
 	token := regexp.MustCompile(`[0-9a-f]{64}`)
 	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
 		for _, block := range installationPlan(t, verb) {
@@ -146,6 +148,7 @@ func rewritten(t *testing.T, old, replacement string) desiredstate.Sources {
 // setup refuses an HTTP endpoint during admission; the installation refusal
 // table still owns a management TLS opt-out.
 func TestLabBaremetalExampleRefusesAnUnverifiedController(t *testing.T) {
+	t.Parallel()
 	const reason = "a Machine whose installation delivers private material hands its BMC the private installer image URL, " +
 		"so the BMC must be reached over https with its certificate verified"
 	const remedy = "address the BMC of Machine/metal-01 with an https:// spec.substrate.baremetal.bmc.address and remove the tls.verify opt-out " +
@@ -192,6 +195,7 @@ func TestLabBaremetalExampleRefusesAnUnverifiedController(t *testing.T) {
 // An explicitly declared unverified-media policy is frozen per Machine while
 // the private image and management TLS requirements remain enforced.
 func TestLabBaremetalExampleFreezesItsExplicitMediaOptOut(t *testing.T) {
+	t.Parallel()
 	const address = "        address: https://bmc-01.metal.example.test/redfish/v1/Systems/1\n"
 	sources := rewritten(t, address, address+"        virtualMedia:\n          tls:\n            trust: disableVerification\n            restoreVerificationAfterBoot: false\n")
 	if len(sources.Files) != baremetalExampleFiles {

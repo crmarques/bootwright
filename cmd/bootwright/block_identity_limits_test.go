@@ -13,6 +13,7 @@ import (
 )
 
 func TestEveryBlockAMachineOrProviderContributesIsAnIdentityAtAnyName(t *testing.T) {
+	t.Parallel()
 	machine, sibling := strings.Repeat("m", 63), strings.Repeat("m", 62)+"n"
 	for _, block := range []func(string) string{installation.BlockID, installation.EraseBlockID, libvirt.MachineBlockID, baremetal.BlockID, libvirt.HostBlockID} {
 		got := block(machine)

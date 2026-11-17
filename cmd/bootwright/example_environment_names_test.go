@@ -17,6 +17,7 @@ import (
 // label for different graphs. Each categorized example names its Environment
 // differently.
 func TestExampleEnvironmentNamesAreDistinct(t *testing.T) {
+	t.Parallel()
 	owners := map[string][]string{}
 	for example, directory := range exampleDirectories(t) {
 		data, err := os.ReadFile(filepath.Join(directory, "environment.yaml"))

@@ -21,6 +21,7 @@ func (f *firewallProbe) Inspect(_ context.Context, socket firewall.Socket) (fire
 }
 
 func TestControllerFirewallPlanPreflightAndDependentAdmission(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph"))
 	catalog := state.Effective()
 	sockets, err := controllerSockets(catalog, "lab")
@@ -75,6 +76,7 @@ func TestControllerFirewallPlanPreflightAndDependentAdmission(t *testing.T) {
 }
 
 func TestWildcardListenerWithoutEndpointRemainsAnUnknownSocket(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph"))
 	objects := state.Effective().Objects()
 	for index, object := range objects {
@@ -98,6 +100,7 @@ func TestWildcardListenerWithoutEndpointRemainsAnUnknownSocket(t *testing.T) {
 }
 
 func TestSocketTargetNamesTheObjectAddressPortAndProtocol(t *testing.T) {
+	t.Parallel()
 	for _, row := range []struct {
 		socket firewall.Socket
 		want   string

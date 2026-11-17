@@ -94,6 +94,7 @@ func tiebreakerPlan(t *testing.T, sources desiredstate.Sources) ([]reconciliatio
 // a provided tiebreaker that names only the cluster SSH user and its pinned
 // host key validates, and the plan binds it with the Environment's fleet key.
 func TestAProvidedTiebreakerValidatesAndPlansWithTheFleetIdentity(t *testing.T) {
+	t.Parallel()
 	definitions, err := tiebreakerPlan(t, tiebreakerSources(t, witnessAccess))
 	if err != nil {
 		t.Fatalf("the plan refuses: %+v", diagnostics.Of(err))
@@ -120,6 +121,7 @@ func TestAProvidedTiebreakerValidatesAndPlansWithTheFleetIdentity(t *testing.T) 
 }
 
 func TestATiebreakerAuthoringTheFleetKeyIsRefusedWithTheRemedy(t *testing.T) {
+	t.Parallel()
 	access := strings.Replace(witnessAccess, "operatorIdentity: {}", "privateKeyRef: bootwright-machine-key", 1)
 	_, _, err := wireCompiler().Compile(context.Background(), tiebreakerSources(t, access))
 	found := false
@@ -135,6 +137,7 @@ func TestATiebreakerAuthoringTheFleetKeyIsRefusedWithTheRemedy(t *testing.T) {
 }
 
 func TestAProvidedTiebreakerRefusesAtPlanWithoutItsHostKeyPinOrTheClusterUser(t *testing.T) {
+	t.Parallel()
 	for name, access := range map[string]string{
 		"no knownHostsRef": strings.Replace(witnessAccess, "      knownHostsRef: witness-known-hosts\n", "", 1),
 		"another user":     strings.Replace(witnessAccess, "user: bootwright", "user: operator", 1),

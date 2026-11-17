@@ -14,6 +14,7 @@ import (
 )
 
 func TestPresentationPreservesSessionDescriptors(t *testing.T) {
+	t.Parallel()
 	out, err := os.CreateTemp(t.TempDir(), "stdout")
 	if err != nil {
 		t.Fatal(err)
@@ -32,6 +33,7 @@ func TestPresentationPreservesSessionDescriptors(t *testing.T) {
 }
 
 func TestStructuredTerminalSecretInputRefusesBeforePrivilege(t *testing.T) {
+	t.Parallel()
 	for _, format := range []string{"json", "yaml"} {
 		var out, stderr bytes.Buffer
 		probes := 0
@@ -70,6 +72,7 @@ func (t *presentationTerminal) ReadHidden(context.Context, string, []byte) (int,
 }
 
 func TestStructuredSecretTerminalPreservesPipesAndRefusesHiddenReads(t *testing.T) {
+	t.Parallel()
 	for _, interactive := range []bool{false, true} {
 		input := &presentationTerminal{interactive: interactive}
 		terminal := structuredSecretTerminal{source: input}

@@ -67,6 +67,7 @@ func readSNOWorkload[T any](t *testing.T, path string) T {
 // carry (names, domains, networks, ranges) have values.yaml as their one
 // owner, so a default that moves there fails here until workloads/ follows.
 func TestSNOStaticWorkloadsFollowTheCaseDefaults(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "e2e", "lab-sno-fips-controller")
 	var values struct {
 		Host struct {

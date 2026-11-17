@@ -123,6 +123,7 @@ func withFQDN(name, fqdn string) func([]api.Value) []api.Value {
 }
 
 func TestClusterSessionsReachTheSelectedCephNode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		args    []string
@@ -177,6 +178,7 @@ func TestClusterSessionsReachTheSelectedCephNode(t *testing.T) {
 }
 
 func TestClusterSessionRefusalsExitTwoFiftyFiveBeforeAnyCredential(t *testing.T) {
+	t.Parallel()
 	external := func(catalog api.Catalog) api.Catalog {
 		spec := api.MapValue(api.FieldValue{Name: "management", Value: api.StringValue("external")})
 		ocp := api.MapValue(api.FieldValue{Name: "type", Value: api.StringValue("openshift")})
@@ -219,6 +221,7 @@ func TestClusterSessionRefusalsExitTwoFiftyFiveBeforeAnyCredential(t *testing.T)
 }
 
 func TestClusterExecOnSeveralNodesRunsEachMachineOnceTogether(t *testing.T) {
+	t.Parallel()
 	second := func(catalog api.Catalog) api.Catalog {
 		first := requireObject(t, catalog, api.CephCluster, "ceph-lab")
 		nodes := first.Spec().Get("topology", "nodes").Items()
@@ -265,6 +268,7 @@ func (o containerSessionOwnership) Ownership(context.Context, string) (map[strin
 }
 
 func TestOpenShiftClusterCommandsReachTheDeclaredNodeUsingMachineCredentials(t *testing.T) {
+	t.Parallel()
 	compiled, _ := compileAcceptance(t, exampleDirectory(t, "lab-compact"))
 	catalog := openshift.AccessCatalog(compiled.Effective())
 	cluster := catalog.OfKind(api.OpenShiftCluster)[0]

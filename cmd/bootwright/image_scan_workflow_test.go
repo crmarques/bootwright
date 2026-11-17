@@ -25,6 +25,7 @@ type imageScanWorkflow struct {
 }
 
 func TestTheScheduledImageScanTakesItsImagesFromTheBillOfMaterialsAndPinsItsScanner(t *testing.T) {
+	t.Parallel()
 	data, err := os.ReadFile("../../.github/workflows/vulnerability.yml")
 	if err != nil {
 		t.Fatal(err)

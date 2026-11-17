@@ -81,6 +81,7 @@ func withSizedDataDisks(size string, names ...string) exampleEdit {
 // host cannot realize, where plan or apply would otherwise fail, each at its
 // own field.
 func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
+	t.Parallel()
 	compileAcceptance(t, exampleDirectory(t, "lab-rhel"))
 	const provider, guest, network = "InfraProvider/lab-libvirt", "Machine/rhel-01", "Network/lab-guests"
 	cases := map[string]struct {

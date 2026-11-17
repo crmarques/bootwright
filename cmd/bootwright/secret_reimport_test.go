@@ -13,6 +13,7 @@ import (
 // documents reordered, keep every Secret available and re-mint nothing,
 // because a fingerprint covers no provenance (D71).
 func TestAnIdenticalReimportFromAnotherDirectoryKeepsSecretsAvailable(t *testing.T) {
+	t.Parallel()
 	services, _, input, _ := contextFixture(t)
 	documents := []string{
 		secretDocument("token", "token", "  source: {generated: {}}\n"),

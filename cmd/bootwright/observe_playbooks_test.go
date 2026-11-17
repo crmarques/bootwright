@@ -460,6 +460,7 @@ func observeAssetsWith(path, appended string) map[string][]byte {
 }
 
 func TestEveryObservePlaybookRunsOnlyAllowedTasks(t *testing.T) {
+	t.Parallel()
 	for _, problem := range walkObservePlaybooks(ansible.Assets()) {
 		t.Error(problem)
 	}
@@ -516,6 +517,7 @@ func TestEveryObservePlaybookRunsOnlyAllowedTasks(t *testing.T) {
 }
 
 func TestPhysicalEraseObservationRefusesEffectPhases(t *testing.T) {
+	t.Parallel()
 	for _, phase := range []string{"prepare", "build", "start", "await", "ack", "stop-proof", "finish"} {
 		planted := "\n- name: Mutate erase custody\n  bootwright.core.physical_erase:\n    phase: " + phase + "\n"
 		problems := walkObservePlaybooks(observeAssetsWith(observeRoleRoot+"physical_erase/tasks/observe.yml", planted))
@@ -573,6 +575,7 @@ func (w *observeWalk) fixedReadRoles(key, role, name, entry string) {
 }
 
 func TestObserveDispatchRefusesMutationAndUnresolvedBindings(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct{ path, before, after string }{
 		{"containercluster_install_agent/tasks/state_node_serial.yml", "containercluster_install_agent_port_operation: state_read", "containercluster_install_agent_port_operation: media_insert"},
 		{"substrate_machine/defaults/main.yml", "bootwright.core.substrate_libvirt_machine", "{{ untrusted_role }}"},

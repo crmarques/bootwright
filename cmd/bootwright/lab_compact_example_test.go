@@ -42,6 +42,7 @@ func compactExamplePlan(t *testing.T) reconciliation.Plan {
 }
 
 func TestLabCompactExamplePlansThreeMastersAndInstallerVIPsGolden(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-compact"))
 	selection, err := controller.Select(state.Effective())
 	if err != nil || !slices.Contains(prerequisites.StageRequirements(prerequisites.StageNativeOf(selection)), "iputils") {

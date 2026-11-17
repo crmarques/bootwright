@@ -16,6 +16,7 @@ import (
 // children named the cluster block by its identity, so an unchanged golden
 // proves that change moves no block in either order.
 func TestDestroyOrderGoldenBeforeAndAfterBlockIDDependencies(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"libvirt-3-nodes-ceph", "libvirt-3-nodes-ceph-block-file"} {
 		t.Run(name, func(t *testing.T) {
 			state, _ := compileAcceptance(t, exampleDirectory(t, name))

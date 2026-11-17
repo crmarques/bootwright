@@ -21,6 +21,7 @@ func (unverifiableAccount) Resolve(context.Context) (privilege.Account, error) {
 // The privilege boundary refuses before dispatch, so a JSON invocation still
 // gets one envelope on standard output that names a resolvable way to run.
 func TestAnUnverifiableAccountRefusalCarriesItsRemedyInJSON(t *testing.T) {
+	t.Parallel()
 	classification := cli.ClassifyInvocation([]string{"status", "--output", "json"})
 	if !classification.JSON || !classification.RequiresRoot {
 		t.Fatalf("classification = %+v, want a JSON invocation that requires root", classification)

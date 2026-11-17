@@ -53,6 +53,7 @@ func authoredAddonSources(t *testing.T, document string) desiredstate.Sources {
 }
 
 func TestAuthoredExecutableAddonAdmission(t *testing.T) {
+	t.Parallel()
 	if _, _, err := wireCompiler().Compile(context.Background(), authoredAddonSources(t, authoredAddon)); err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -104,6 +105,7 @@ spec:
 `
 
 func TestAuthoredExecutableAddonSelectionAdmission(t *testing.T) {
+	t.Parallel()
 	compile := func(document, selected string) error {
 		sources := authoredAddonSources(t, document)
 		binding := strings.Replace(authoredAddonBinding, "addonRefs: [widgets]", "addonRefs: ["+selected+"]", 1)
@@ -128,6 +130,7 @@ func TestAuthoredExecutableAddonSelectionAdmission(t *testing.T) {
 }
 
 func TestAnAuthoredKubeVirtProviderOrdersTheHostClusterButDoesNotOwnItsAccess(t *testing.T) {
+	t.Parallel()
 	document := strings.Replace(authoredAddon, "spec:\n  olm:", "spec:\n  provides: [kubevirt]\n  olm:", 1)
 	document = strings.Replace(document, "    catalogSource:", "    operatorGroup: {}\n    catalogSource:", 1)
 	sources := authoredAddonSources(t, document)
@@ -146,6 +149,7 @@ func TestAnAuthoredKubeVirtProviderOrdersTheHostClusterButDoesNotOwnItsAccess(t 
 }
 
 func TestAnAuthoredKubeVirtAddOnIsNotAHostedProvidersAccessOwner(t *testing.T) {
+	t.Parallel()
 	registry := addonpackages.Builtin()
 	hostCapability := kubevirt.NewHost(nil, kubevirtHostRequirements(registry)).WithAuthoredProviders(kubevirtAuthoredProviders(registry))
 	kubevirtRefusals := func(sources desiredstate.Sources) []string {

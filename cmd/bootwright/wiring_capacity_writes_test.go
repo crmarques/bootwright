@@ -82,6 +82,7 @@ func capacityWritesFixture(t *testing.T) writesFixture {
 }
 
 func TestCapacityAdmissionCountsWhatTheApplyWritesBesideItsGuests(t *testing.T) {
+	t.Parallel()
 	fixture := capacityWritesFixture(t)
 	admit := func(observer capacity.Observer, starting []reconciliation.Block) error {
 		return libvirtCapacityAdmission(capacity.Budget{Observer: observer})(context.Background(), "lab", fixture.catalog, map[string]lifecycle.ObjectOwnership{}, starting)
@@ -126,6 +127,7 @@ func (r recordedBudget) Check(ctx context.Context, allocations []capacity.Alloca
 }
 
 func TestStoragePreflightReportsTheWritesTheAdmissionCounts(t *testing.T) {
+	t.Parallel()
 	fixture := capacityWritesFixture(t)
 	budget := capacity.Budget{Observer: filesystemFacts{available: fixture.guests + fixture.reserve + fixture.writes - 1}}
 	var admitted []capacity.Check

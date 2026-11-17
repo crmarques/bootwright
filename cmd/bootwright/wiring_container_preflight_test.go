@@ -42,6 +42,7 @@ func (f containerCapacityFacts) Observe(context.Context, capacity.Target) (capac
 }
 
 func TestContainerPreflightUsesCompletedDNSAndApplyCapacityRows(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno"))
 	catalog := state.Effective()
 	allocations, err := libvirt.CapacityAllocations(catalog, "lab-sno")

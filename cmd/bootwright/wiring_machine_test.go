@@ -48,6 +48,7 @@ func provedEvidence(t *testing.T) []byte {
 // proof of the exact Machine it installs, decoded by the bare-metal capability
 // that wrote it; a libvirt realization of the same name proves no identity.
 func TestTheInstallationsReadTheBareMetalPinOfTheirOwnMachine(t *testing.T) {
+	t.Parallel()
 	proof := provedEvidence(t)
 	another := bytes.ReplaceAll(bytes.ReplaceAll(proof,
 		[]byte("4c4c4544-0042-3510-8052-b4c04f4d4e31"), []byte("4c4c4544-0042-3510-8052-b4c04f4d4e32")),
@@ -107,6 +108,7 @@ func (d *destroyCurrent) AppliedEvidence(_ context.Context, contextName, kind, o
 // current operation, so while a destroy is current it is still the identity
 // that apply proved, never an unpinned request.
 func TestAPhysicalMachinesPowerPinIsTheApplysWhileADestroyIsCurrent(t *testing.T) {
+	t.Parallel()
 	reader := &destroyCurrent{proof: provedEvidence(t)}
 	identity, found, err := machineIdentities{reconciler: reader}.ProvedIdentity(context.Background(), "lab", "metal-01")
 	if err != nil || !found || identity != (machine.HardwareIdentity{UUID: "4c4c4544-0042-3510-8052-b4c04f4d4e31", Serial: "CZJ2440ABC"}) {
@@ -139,6 +141,7 @@ func (r *removalReader) AppliedEvidence(context.Context, string, string, string)
 // completed that block was removed by the destroy it replaced; one whose
 // current block stands is read from that block alone.
 func TestARealizationAReplacementDestroyNoLongerNamesIsRemoved(t *testing.T) {
+	t.Parallel()
 	block := func(verb reconciliation.Verb, state reconciliation.BlockState) lifecycle.BlockEvidence {
 		return lifecycle.BlockEvidence{Kind: "Machine", Object: "node-0", Implementation: kubevirt.MachineImplementation, Verb: verb, State: state}
 	}
@@ -168,6 +171,7 @@ func TestARealizationAReplacementDestroyNoLongerNamesIsRemoved(t *testing.T) {
 // it on the same Machine, whatever order the evidence lists them in, nor a
 // bare-metal claim, which creates no controller.
 func TestPowerAsksTheMachineBlockNotTheInstallation(t *testing.T) {
+	t.Parallel()
 	block := func(implementation string, verb reconciliation.Verb, state reconciliation.BlockState) lifecycle.BlockEvidence {
 		return lifecycle.BlockEvidence{Kind: "Machine", Object: "rhel-01", Implementation: implementation, Verb: verb, State: state}
 	}
@@ -220,6 +224,7 @@ func TestPowerAsksTheMachineBlockNotTheInstallation(t *testing.T) {
 // before the prompt; one without an output binds no presenter, and enrollment
 // then refuses to ask.
 func TestTrustEnrollmentPresentsOnTheProcessStandardOutput(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	options := trustOptions(machineDependencies{Streams: machineaccess.Streams{Out: &out}}, nil)
 	if options.Presenter == nil {
@@ -283,6 +288,7 @@ func lendAnswer(invoked lifecycle.RunRequest) lifecycle.RunResult {
 // request's digest, and clears it; a missing or unproved entry lends nothing
 // and names the apply that completes the host.
 func TestAHostedPowerLendBorrowsOnlyTheHostsProvedKubeconfig(t *testing.T) {
+	t.Parallel()
 	lend := power.HostLend{Runtime: lifecycle.Runtime{Context: lifecycle.ContextIdentity{Name: "lab"}}, Cluster: "host", Namespace: "nested",
 		Machine: "node-0", Placement: machine.Placement{Machine: "controller", Connection: "local"}, Digest: strings.Repeat("c", 64), Deadline: 16 * time.Minute}
 	held, runner := &hostCustodyStub{found: true}, &lendRunner{answer: lendAnswer}

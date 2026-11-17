@@ -11,6 +11,7 @@ import (
 // The acceptance rows rest on these workloads, so a signer, validation or
 // comparison fault in one must fail here before it can pass a live run.
 func TestE2EWorkloadsPassTheirUnitTests(t *testing.T) {
+	t.Parallel()
 	for _, directory := range []string{
 		filepath.Join("lab-5-nodes-ceph-networks", "app"),
 		filepath.Join("lab-sno-fips-controller", "app"),

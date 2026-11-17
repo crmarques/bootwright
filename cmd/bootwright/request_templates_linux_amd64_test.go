@@ -107,6 +107,7 @@ func templatedRefusals(t *testing.T, example string, edits []exampleEdit, added 
 // admission names only the objects the value was authored on; that case is
 // reported as skipped, so a lost planning proof stays visible.
 func TestEveryProvenPathToARequestRefusesItsTemplateDelimiter(t *testing.T) {
+	t.Parallel()
 	controllerEgress := exampleEdit{"infra/machines/controller.yaml", "  proxy:\n    direct: {}\n", "  proxy:\n    proxyRef: corp-proxy\n    noProxy:\n      - \"{{ 7*6 }}\"\n"}
 	controllerProxy := exampleEdit{"infra/machines/controller.yaml", "  proxy:\n    direct: {}\n", "  proxy:\n    proxyRef: corp-proxy\n"}
 	egress := func(where string) map[string]string {
@@ -222,6 +223,7 @@ func TestEveryProvenPathToARequestRefusesItsTemplateDelimiter(t *testing.T) {
 // request that plans always runs, observes and is removed, and no key that
 // merely starts as theirs does strands a context.
 func TestThePlanRefusesEveryKeyTheRunnersCannotEncode(t *testing.T) {
+	t.Parallel()
 	for _, key := range []string{
 		"__ansible_unsafe", "__ansible_vault", "__ansible_type",
 		"__ansible", "__ansible_note", "__ansible_unsafe_", "_ansible_vault", "__ANSIBLE_TYPE", "ansible_type",

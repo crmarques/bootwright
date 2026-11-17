@@ -86,6 +86,7 @@ func admittedTogether(plan reconciliation.Plan, states map[string]reconciliation
 }
 
 func TestCephChildrenOfOneClusterStartTogetherUnderTheThrottle(t *testing.T) {
+	t.Parallel()
 	for _, directory := range []string{"libvirt-6-nodes-ceph-services", "libvirt-3-nodes-ceph-object", "libvirt-3-nodes-ceph-block-file"} {
 		t.Run(directory, func(t *testing.T) {
 			plan, catalog := cephExamplePlan(t, directory)
@@ -142,6 +143,7 @@ func TestCephChildrenOfOneClusterStartTogetherUnderTheThrottle(t *testing.T) {
 }
 
 func TestCephServicesExampleStartsItsPoliciesPoolsAndSettingsTogether(t *testing.T) {
+	t.Parallel()
 	plan, catalog := cephExamplePlan(t, "libvirt-6-nodes-ceph-services")
 	cluster := catalog.OfKind(api.CephCluster)[0].Name()
 	states := map[string]reconciliation.BlockState{}

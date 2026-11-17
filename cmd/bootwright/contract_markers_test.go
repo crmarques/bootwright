@@ -158,6 +158,7 @@ func cephMarkerProofs() map[string][]string {
 // A name built only from values, with no quoted record name or operand, is
 // outside what it sees.
 func TestEveryCephMarkerNameIsDeclared(t *testing.T) {
+	t.Parallel()
 	found, sources := cephMarkerLiterals()
 	known := cephMarkerSources()
 	for _, source := range sources {

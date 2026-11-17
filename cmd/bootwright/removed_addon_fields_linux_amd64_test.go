@@ -11,6 +11,7 @@ import (
 )
 
 func TestRemovedAddOnInputFieldsRefuseAsUnknownFields(t *testing.T) {
+	t.Parallel()
 	for name, test := range map[string]struct {
 		suffix, old, replacement, field string
 	}{

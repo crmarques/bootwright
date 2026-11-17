@@ -14,6 +14,7 @@ import (
 // whole, so no peer reference is left unresolved (specs/api/environment.md,
 // Resource and cluster selection).
 func TestSelectingOneReplicationEndPassesAdmission(t *testing.T) {
+	t.Parallel()
 	const example = "libvirt-2x4-nodes-ceph-multisite"
 	for _, end := range []string{"primary", "secondary"} {
 		t.Run(end, func(t *testing.T) {

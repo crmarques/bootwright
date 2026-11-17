@@ -11,6 +11,7 @@ import (
 )
 
 func TestPackageRepositoryTrustBundleMustBePublicTrust(t *testing.T) {
+	t.Parallel()
 	sources := admissibleExampleSources(t, false)
 	replaced := 0
 	for i, file := range sources.Files {

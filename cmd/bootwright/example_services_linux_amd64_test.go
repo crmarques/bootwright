@@ -13,6 +13,7 @@ import (
 const servicesExample = "libvirt-6-nodes-ceph-services"
 
 func TestExampleServicesPlansAllProtocols(t *testing.T) {
+	t.Parallel()
 	sources := exampleDirectory(t, servicesExample)
 	state, report := compileAcceptance(t, sources)
 	if report.Counts.FilesSeen != 46 || report.Counts.ObjectsDecoded != 46 {

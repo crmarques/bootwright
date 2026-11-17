@@ -57,6 +57,7 @@ func plannedInstallations(t *testing.T, name, controllerMachine, contextName str
 // An image the host store does not hold refuses the plan, which every
 // registration follows, naming the image and the command that imports it.
 func TestLabRHELExamplePlanRefusesAnImageMissingFromTheStore(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{without: "rhel-9.8-x86_64-dvd.iso"})
 	capability, ok := resolver.Resolve(installation.Kind, installation.Implementation)
@@ -92,6 +93,7 @@ func (s failedShelf) Entries(context.Context) ([]media.Image, error) {
 // An image the store lists as failed refuses the plan, naming the store's
 // cause, instead of freezing an empty digest an apply would fail on later.
 func TestLabRHELExamplePlanRefusesAnImageTheStoreCannotRead(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	shelf := failedShelf{&mediaShelf{entry: managedos.MediaEntry{Name: "rhel-9.8-x86_64-boot.iso", Size: 9, SHA256: strings.Repeat("a", 64)}}}
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), storeMediaRecords{store: shelf})
@@ -114,6 +116,7 @@ func TestLabRHELExamplePlanRefusesAnImageTheStoreCannotRead(t *testing.T) {
 // The shipped graph plans installations through the context store's own media
 // records, and a graph wired without a store plans none.
 func TestProductionLifecycleWiringReadsTheMediaStore(t *testing.T) {
+	t.Parallel()
 	deps, release := localServiceDependencies(processDependencies{})
 	defer release()
 	if deps.Lifecycle.Media == nil || any(deps.Lifecycle.Media) != any(deps.Repository) {
@@ -137,6 +140,7 @@ func TestProductionLifecycleWiringReadsTheMediaStore(t *testing.T) {
 // store's read-only root snapshot. The adapter still proves media bytes before
 // use; the store supplies only planning records.
 func TestLifecycleSnapshotsAndEffectsAllowReadOnlyMediaRecords(t *testing.T) {
+	t.Parallel()
 	services, repository, input, _ := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	reader := storeMediaRecords{store: repository}

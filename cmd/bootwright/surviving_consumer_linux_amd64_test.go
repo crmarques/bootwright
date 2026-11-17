@@ -106,6 +106,7 @@ func metalCompactInput(t *testing.T, input string) {
 // build's capabilities, refuses before registration naming the cluster, the
 // export and the core cluster, and registers nothing.
 func TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives(t *testing.T) {
+	t.Parallel()
 	parent := t.TempDir()
 	input, root := filepath.Join(parent, "input"), filepath.Join(parent, "state")
 	metalCompactInput(t, input)

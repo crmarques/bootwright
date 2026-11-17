@@ -88,6 +88,7 @@ func (c *labSessionClient) HostKeyAlgorithms(_ context.Context, session machine.
 // session therefore dials that address, so machine exec opens right after the
 // apply with the fleet key and the proved host key, and no trust prompt.
 func TestLabRHELInstalledGuestSessionDialsTheInstallAddress(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	capability, ok := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{}).Resolve(installation.Kind, installation.Implementation)
 	if !ok {

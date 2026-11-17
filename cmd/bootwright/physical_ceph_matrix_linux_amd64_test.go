@@ -23,6 +23,7 @@ import (
 // Adapt the canonical profiles through authored admission, keeping clients on
 // their original substrate. This qualifies composition, never physical effects.
 func TestPhysicalCephMatrixPreservesCanonicalPlans(t *testing.T) {
+	t.Parallel()
 	profiles := linkedProfiles(t)
 	if len(profiles) != 8 {
 		t.Fatal("physical matrix needs the complete P0-P7 catalog")

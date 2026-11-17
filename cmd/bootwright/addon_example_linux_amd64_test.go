@@ -17,6 +17,7 @@ import (
 )
 
 func TestBuiltinAddonExamplePlansGolden(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"lab-sno-nmstate", "lab-sno-authored", "lab-sno-metallb", "lab-sno-ordered", "lab-compact-df", "lab-compact-hub"} {
 		t.Run(name, func(t *testing.T) {
 			state, _ := compileAcceptance(t, exampleDirectory(t, name))
@@ -86,6 +87,7 @@ func TestBuiltinAddonExamplePlansGolden(t *testing.T) {
 }
 
 func TestExportConsumerRetirementFactsReachTheRemovalEngine(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-compact-df"))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, State: state, Controller: "controller", Context: lifecycle.ContextIdentity{Name: "lab-compact-df"}}
@@ -140,6 +142,7 @@ func TestExportConsumerRetirementFactsReachTheRemovalEngine(t *testing.T) {
 }
 
 func TestAddonExamplesPreviewWithAllProducedInputs(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"lab-compact-df", "lab-compact-hub"} {
 		t.Run(name, func(t *testing.T) {
 			services, _ := productionExampleContext(t, name, name)

@@ -9,6 +9,7 @@ import (
 )
 
 func TestGatewayEffectiveGolden(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, admissibleExampleSources(t, false))
 	gateway := requireObject(t, state.Effective(), api.CephObjectGateway, "objects")
 	data, err := effectiveencoding.YAML(context.Background(), api.NewCatalog([]api.Object{gateway}))

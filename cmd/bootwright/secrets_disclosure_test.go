@@ -13,6 +13,7 @@ import (
 )
 
 func TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", strings.Join([]string{
 		secretDocument("payload", "opaque", ""),

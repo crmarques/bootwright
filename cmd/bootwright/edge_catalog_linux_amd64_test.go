@@ -133,6 +133,7 @@ func plannedExamples(t *testing.T) []plannedExample {
 // names on the requiring object, realized by some block, that the family's
 // blocks for that object neither require nor depend on.
 func TestEveryRequirementMatchesTheEdgeCatalog(t *testing.T) {
+	t.Parallel()
 	rows := edgeCatalog(t)
 	catalog := map[string]edgeRow{}
 	for _, row := range rows {
@@ -370,6 +371,7 @@ func referenceViolations(fields []referenceField, rows []edgeRow, realized map[a
 // its family's own ordering on every example occurrence, or to a stated
 // reason, so a new reference field is never silently unordered.
 func TestEveryReferenceFieldHasAnEdgeRowOrAReason(t *testing.T) {
+	t.Parallel()
 	var fields []referenceField
 	for _, kind := range api.Kinds() {
 		fields = append(fields, referenceFields(kind, api.Schema(kind), "spec", 0)...)
@@ -394,6 +396,7 @@ func TestEveryReferenceFieldHasAnEdgeRowOrAReason(t *testing.T) {
 // reason accounts for it; a partly ordered one fails; and a reason for a
 // field that needs none fails as stale.
 func TestTheReferenceFieldRuleRejectsAnUnorderedReference(t *testing.T) {
+	t.Parallel()
 	shape := func(kind api.Kind) *api.Shape { return &api.Shape{Type: api.String, Reference: []api.Kind{kind}} }
 	fields := []referenceField{
 		{api.Machine, "spec.example.serverRef", shape(api.NTPServer)},

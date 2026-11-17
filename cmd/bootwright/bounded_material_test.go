@@ -57,6 +57,7 @@ func keyringOf(t *testing.T, repository *contextfs.Store, services cli.Services,
 // number of reads leaves that keyring's identity reservations and bindings as
 // they were.
 func TestBoundedConsumersOfTwoContextsReadTogetherAndLeaveTheKeyringAsTheyFoundIt(t *testing.T) {
+	t.Parallel()
 	services, repository, input, _ := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("opaque", "opaque", ""))
 	for _, name := range []string{"alpha", "beta"} {

@@ -42,6 +42,7 @@ func (f *objectHandoffFixture) ObjectUserCredentials(_ context.Context, contextN
 }
 
 func TestCompiledObjectUserHandoffUsesPublicGatewayReference(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, contractSources(t, "libvirt-3-nodes-ceph-object+user"))
 	catalog := state.Effective()
 	users := catalog.OfKind(api.CephObjectUser)

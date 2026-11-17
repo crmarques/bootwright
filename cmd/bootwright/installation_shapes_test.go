@@ -16,6 +16,7 @@ const (
 // each on the object and field to change and with the change that fixes it,
 // rather than admitting it and refusing at plan.
 func TestInstallationShapesTheInstallationCannotUseRefuseAtValidate(t *testing.T) {
+	t.Parallel()
 	compileAcceptance(t, exampleDirectory(t, "lab-rhel"))
 	const (
 		bootMedia  = "bootMedia: local-media:rhel-9.8-x86_64-boot.iso"

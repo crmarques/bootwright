@@ -30,6 +30,7 @@ func createCompletionDirectories(t *testing.T, directory string, names ...string
 }
 
 func TestCompletionPathsOfferAtMost256Candidates(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		entries, want int
 	}{{maxCompletionPaths, maxCompletionPaths}, {maxCompletionPaths + 1, maxCompletionPaths}, {2 * maxCompletionPaths, maxCompletionPaths}} {
@@ -55,6 +56,7 @@ func TestCompletionPathsOfferAtMost256Candidates(t *testing.T) {
 }
 
 func TestCompletionPathsReadNoFurtherThanTheirBounds(t *testing.T) {
+	t.Parallel()
 	directory := t.TempDir()
 	for index := range maxCompletionEntriesRead + maxCompletionPaths {
 		createCompletionFiles(t, directory, fmt.Sprintf("entry-%05d", index))
@@ -102,6 +104,7 @@ func TestCompletionPathsReadNoFurtherThanTheirBounds(t *testing.T) {
 // directory, so the prefix length varies while the directory stays readable:
 // only the bound, never ENAMETOOLONG, can refuse the prefix one byte over it.
 func TestCompletionPathsRefuseAnOverlongOrMultilinePrefix(t *testing.T) {
+	t.Parallel()
 	directory := t.TempDir()
 	name := strings.Repeat("n", 200)
 	createCompletionFiles(t, directory, name)
@@ -135,6 +138,7 @@ func TestCompletionPathsRefuseAnOverlongOrMultilinePrefix(t *testing.T) {
 }
 
 func TestCompletionPathsOfferDotEntriesOnlyWhenNamed(t *testing.T) {
+	t.Parallel()
 	directory := t.TempDir()
 	createCompletionFiles(t, directory, "visible", ".hidden")
 	createCompletionDirectories(t, directory, "shown", ".config")
@@ -165,6 +169,7 @@ func TestCompletionPathsOfferDotEntriesOnlyWhenNamed(t *testing.T) {
 }
 
 func TestCompletionPathsWithholdUnsafeNames(t *testing.T) {
+	t.Parallel()
 	directory := t.TempDir()
 	safe := []string{"input.yaml", "naïve", "with-dash_under.score", strings.Repeat("l", 255)}
 	createCompletionFiles(t, directory, safe...)
@@ -187,6 +192,7 @@ func TestCompletionPathsWithholdUnsafeNames(t *testing.T) {
 // Linux refuses a file name over 255 bytes, so the entry bound beyond it is
 // exercised on the name itself.
 func TestSafeCompletionEntryBoundsItsLength(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name string
 		want bool

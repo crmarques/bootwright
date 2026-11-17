@@ -9,6 +9,7 @@ import (
 )
 
 func TestObservabilityAndHostProfilesProductionPlans(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"libvirt-4-nodes-ceph-observability", "libvirt-3-nodes-ceph-host-variants"} {
 		t.Run(name, func(t *testing.T) {
 			state, report := compileAcceptance(t, exampleDirectory(t, name))

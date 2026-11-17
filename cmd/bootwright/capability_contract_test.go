@@ -522,6 +522,7 @@ func (f *contractFindings) record(row contractRow, property, message string) {
 // and one whose removal changes nothing observable runs no adapter and reads
 // everything as completion. A failed or empty probe never reads as quiescent.
 func TestEveryCapabilityHonoursTheCapabilityContract(t *testing.T) {
+	t.Parallel()
 	runner := &contractRunner{}
 	resolver := withContractHostPorts(buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner, exampleMediaRecords{}), runner)
 	resolver = append(resolver, boundCapability{kind: string(api.Machine), implementation: contractDoubleImplementation, family: "contract-double", capability: contractDouble{adapter: runner.Run}})
@@ -1737,6 +1738,7 @@ func contractKeyPair(t *testing.T, comment string) secrets.Material {
 // this build's bindings one list: a binding with no row, or a row naming no
 // binding, fails.
 func TestEveryBindingJoinsTheCapabilityContractSuite(t *testing.T) {
+	t.Parallel()
 	rows := map[lifecycle.CapabilityBinding]bool{}
 	for _, row := range contractRows() {
 		if rows[row.binding()] {
@@ -1759,6 +1761,7 @@ func TestEveryBindingJoinsTheCapabilityContractSuite(t *testing.T) {
 // guessing which blocks use a Secret: a capability this build offers that
 // cannot name them fails here rather than at an operator's rebind.
 func TestEveryBindingNamesTheSecretsItsRequestReferences(t *testing.T) {
+	t.Parallel()
 	resolver := buildCapabilities(systemClock{}, controllerDependencies{}, nil)
 	for _, binding := range resolver.Bindings() {
 		capability, found := resolver.Resolve(binding.Kind, binding.Implementation)
@@ -1776,6 +1779,7 @@ func TestEveryBindingNamesTheSecretsItsRequestReferences(t *testing.T) {
 // class named by its capability, so none is held only because it was left
 // unclassified.
 func TestEveryReferencedSecretIsClassified(t *testing.T) {
+	t.Parallel()
 	runner := &contractRunner{}
 	resolver := withContractHostPorts(buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner, exampleMediaRecords{}), runner)
 	offered := buildCapabilities(systemClock{}, controllerDependencies{}, nil)
@@ -1828,6 +1832,7 @@ func contractHardwarePresence(t *testing.T, execution lifecycle.Execution) map[s
 // by a block that capability planned, so a plan holding that block alone holds
 // it by its class.
 func TestEveryBoundSecretIsNamedByABlockThatBindsIt(t *testing.T) {
+	t.Parallel()
 	runner := &contractRunner{}
 	resolver := withContractHostPorts(buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner, exampleMediaRecords{}), runner)
 	offered := buildCapabilities(systemClock{}, controllerDependencies{}, nil)

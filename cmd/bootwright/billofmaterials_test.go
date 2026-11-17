@@ -18,6 +18,7 @@ import (
 )
 
 func TestTheBillOfMaterialsNamesEveryCarriedAndPinnedArtifact(t *testing.T) {
+	t.Parallel()
 	stamp, ok := debug.ReadBuildInfo()
 	if !ok {
 		t.Fatal("the test binary carries no build stamp")
@@ -94,6 +95,7 @@ func TestTheBillOfMaterialsNamesEveryCarriedAndPinnedArtifact(t *testing.T) {
 var reviewedLicenseIDs = []string{"Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "GPL-2.0-only", "GPL-2.0-or-later", "GPL-3.0-only", "GPL-3.0-or-later", "ISC", "MIT", "MPL-2.0"}
 
 func TestEveryThirdPartyComponentNamesAReviewedSPDXLicense(t *testing.T) {
+	t.Parallel()
 	stamp, _ := debug.ReadBuildInfo()
 	bom, err := composeBillOfMaterials(cli.BuildInfo{}, stamp)
 	if err != nil {
@@ -141,6 +143,7 @@ func TestEveryThirdPartyComponentNamesAReviewedSPDXLicense(t *testing.T) {
 }
 
 func TestTheGoLicenseTableHoldsTheTextOfEveryModuleTheBuildNamesAndNoOther(t *testing.T) {
+	t.Parallel()
 	stamp, _ := debug.ReadBuildInfo()
 	table, err := goLicenses()
 	if err != nil {
@@ -173,6 +176,7 @@ func TestTheGoLicenseTableHoldsTheTextOfEveryModuleTheBuildNamesAndNoOther(t *te
 }
 
 func TestEveryPinnedImageAndToolNamesItsPublishersLicense(t *testing.T) {
+	t.Parallel()
 	pinned := map[string]bool{}
 	for _, image := range pinnedImages() {
 		repository, _, _ := strings.Cut(image.reference, "@sha256:")
@@ -198,6 +202,7 @@ func TestEveryPinnedImageAndToolNamesItsPublishersLicense(t *testing.T) {
 }
 
 func TestABillOfMaterialsRefusesWhatItCannotNameExactly(t *testing.T) {
+	t.Parallel()
 	if _, err := composeBillOfMaterials(cli.BuildInfo{}, nil); err == nil {
 		t.Error("an executable with no build stamp composed a bill of materials")
 	}
@@ -208,6 +213,7 @@ func TestABillOfMaterialsRefusesWhatItCannotNameExactly(t *testing.T) {
 }
 
 func TestEveryLockedWheelIsNamedCarriedOnlyWhenTheExecutableCarriesIt(t *testing.T) {
+	t.Parallel()
 	stamp, _ := debug.ReadBuildInfo()
 	bom, err := composeBillOfMaterials(cli.BuildInfo{}, stamp)
 	if err != nil {
@@ -227,6 +233,7 @@ func TestEveryLockedWheelIsNamedCarriedOnlyWhenTheExecutableCarriesIt(t *testing
 }
 
 func TestEveryReviewedExceptionNamesAComponentAndTravelsAsVEX(t *testing.T) {
+	t.Parallel()
 	stamp, _ := debug.ReadBuildInfo()
 	bom, err := composeBillOfMaterials(cli.BuildInfo{}, stamp)
 	if err != nil {

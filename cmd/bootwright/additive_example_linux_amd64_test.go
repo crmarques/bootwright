@@ -71,6 +71,7 @@ func exampleApplyPlan(t *testing.T, sources desiredstate.Sources, name string) (
 // apply, so this tests the planning of the addition and the capability's
 // admission of it, not a registered second operation.
 func TestTheOrderedExampleIsAnAdditionToTheNMStateExample(t *testing.T) {
+	t.Parallel()
 	root, _ := exampleApplyPlan(t, renamedExample(t, "lab-sno-nmstate", "lab-sno-ordered"), "lab-sno-ordered")
 	fresh, resolver := exampleApplyPlan(t, exampleDirectory(t, "lab-sno-ordered"), "lab-sno-ordered")
 	delta := reconciliation.Compare(root, fresh)

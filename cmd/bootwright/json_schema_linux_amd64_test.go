@@ -196,6 +196,7 @@ func documentsOf(t *testing.T, sources desiredstate.Sources) map[string]any {
 // does under validate, and a shape fault validate refuses the export refuses
 // too (Q110 b).
 func TestEveryExampleValidatesAlikeUnderTheAdvisoryJSONSchema(t *testing.T) {
+	t.Parallel()
 	schema := advisorySchema(t)
 	if schema["$schema"] != api.JSONSchemaDialect {
 		t.Fatalf("the export names dialect %v", schema["$schema"])
@@ -247,6 +248,7 @@ func TestEveryExampleValidatesAlikeUnderTheAdvisoryJSONSchema(t *testing.T) {
 // document, so the export requires a record field only inside a list element
 // or open-map value, which defaults copy whole; validate stays the stricter.
 func TestTheAdvisoryJSONSchemaAdmitsAFieldAKindDefaultSupplies(t *testing.T) {
+	t.Parallel()
 	schema := advisorySchema(t)
 	sources := editedExample(t, "lab-rhel",
 		exampleEdit{"infra/components/ntp.yaml", "  management: managed\n", ""},
@@ -265,6 +267,7 @@ func TestTheAdvisoryJSONSchemaAdmitsAFieldAKindDefaultSupplies(t *testing.T) {
 // decoder refuses there, so the export neither admits it nor recurses into
 // itself.
 func TestTheAdvisoryJSONSchemaStaysBounded(t *testing.T) {
+	t.Parallel()
 	data, err := api.JSONSchema()
 	if err != nil {
 		t.Fatal(err)

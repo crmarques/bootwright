@@ -50,6 +50,7 @@ func sessionFileServices(t *testing.T, files *virtualOperatorFiles) cli.Services
 // the invoking account's opener: the path exists nowhere on disk, so a session
 // that opened it itself would refuse it as absent.
 func TestAnOfferedKeyResolvesOnlyThroughTheBoundOpener(t *testing.T) {
+	t.Parallel()
 	files := newVirtualOperatorFiles(t)
 	environment := files.write(t, "env/environment.yaml", syntheticEnvironment)
 	files.write(t, "env/controller.yaml", serviceHost)
@@ -78,6 +79,7 @@ func TestAnOfferedKeyResolvesOnlyThroughTheBoundOpener(t *testing.T) {
 // all when none is bound, so an offered key refuses rather than being opened
 // with this process's own credentials.
 func TestProductionBindsTheOpenerForSessions(t *testing.T) {
+	t.Parallel()
 	deps, release := localServiceDependencies(processDependencies{})
 	defer release()
 	if files := sessionFiles(deps.Files); files == nil {

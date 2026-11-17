@@ -12,6 +12,7 @@ import (
 const hostedRoot = "/var/lib/bootwright-hosted"
 
 func TestEveryDomainNamesTheOneHostedRoot(t *testing.T) {
+	t.Parallel()
 	for owner, root := range map[string]string{
 		"managedservice.HostedRoot": managedservice.HostedRoot,
 		"agentinstall.HostedRoot":   agentinstall.HostedRoot,

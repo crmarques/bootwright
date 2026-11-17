@@ -17,6 +17,7 @@ import (
 )
 
 func TestManagedControllerFirewallPrecedesReadinessAndRechecksBeforeListenerEffects(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph"))
 	objects := state.Effective().Objects()
 	for i, object := range objects {
@@ -97,6 +98,7 @@ func TestManagedControllerFirewallPrecedesReadinessAndRechecksBeforeListenerEffe
 }
 
 func TestManagedBridgeFirewallGrantsWaitForTheProviderButDaemonPreparationDoesNot(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph"))
 	objects := state.Effective().Objects()
 	for i, object := range objects {

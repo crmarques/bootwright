@@ -85,6 +85,7 @@ func outputRun(t *testing.T, services cli.Services, args ...string) (int, string
 }
 
 func TestNoProducedMaterialInOrdinaryOutput(t *testing.T) {
+	t.Parallel()
 	services, repository := cephExampleContext(t, "lab-ceph")
 	produceThroughLentArea(t, services, repository, "lab-ceph", "ceph-client-rbd-canary", "client", clientCanary)
 	produceThroughLentArea(t, services, repository, "lab-ceph", ceph.DashboardBlock("ceph-lab"), ceph.DashboardOutput, dashboardCanary)

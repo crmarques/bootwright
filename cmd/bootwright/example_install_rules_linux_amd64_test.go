@@ -9,6 +9,7 @@ import (
 )
 
 func TestTheReferenceExamplesInstallUnderTheNewRules(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"lab-rhel", "lab-rhel-3-nodes", "libvirt-3-nodes-ceph", "libvirt-network-variants", "lab-baremetal"} {
 		t.Run(name, func(t *testing.T) {
 			catalog := compiledEffective(t, name)
@@ -40,6 +41,7 @@ func TestTheReferenceExamplesInstallUnderTheNewRules(t *testing.T) {
 }
 
 func TestTheMultidcKubeVirtProvidersPassTheRefusalsBeforeRegistration(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, admissibleExampleSources(t, false))
 	catalog := state.Effective()
 	providers := substrate.ProvidersOn(catalog, substrate.ArmKubeVirt)

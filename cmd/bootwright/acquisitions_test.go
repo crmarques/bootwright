@@ -17,6 +17,7 @@ import (
 )
 
 func TestTheAcquisitionListNamesWhatEachOwnerAcquiresWithItsOrigin(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-compact-df"))
 	acquired, err := listAcquisitions(state.Effective())
 	if err != nil {
@@ -104,6 +105,7 @@ func TestTheAcquisitionListNamesWhatEachOwnerAcquiresWithItsOrigin(t *testing.T)
 }
 
 func TestAManagedArtifactMirrorIsFilledFromThePublisherOnItsHostAndReadByTheController(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno-mirror-host"))
 	acquired, err := listAcquisitions(state.Effective())
 	if err != nil {
@@ -139,6 +141,7 @@ func TestAManagedArtifactMirrorIsFilledFromThePublisherOnItsHostAndReadByTheCont
 // consumer off that host pulls, the consumer reads the mirror's copy at the
 // same digest, and the mirror host's own services read their origins.
 func TestAManagedImageMirrorIsFilledFromThePublicOriginsOnItsHostAndReadByItsConsumers(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-rhel-mirror-host"))
 	acquired, err := listAcquisitions(state.Effective())
 	if err != nil {
@@ -171,6 +174,7 @@ func TestAManagedImageMirrorIsFilledFromThePublicOriginsOnItsHostAndReadByItsCon
 }
 
 func TestAShortImageNameIsClassedByTheRegistryItResolvesTo(t *testing.T) {
+	t.Parallel()
 	row := imageAcquisition("service image", "ubuntu/squid@sha256:"+strings.Repeat("a", 64), []string{"controller"}, "Proxy/egress")
 	if row.Artifact != "docker.io/ubuntu/squid" || row.Class != acquisition.ClassPublic {
 		t.Fatalf("a short name: %+v", row)
@@ -181,6 +185,7 @@ func TestAShortImageNameIsClassedByTheRegistryItResolvesTo(t *testing.T) {
 }
 
 func TestAnInstalledMachineNamesItsHostedSubscriptionAndItsConfiguredRepositories(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph-host-variants"))
 	acquired, err := listAcquisitions(state.Effective())
 	if err != nil {
@@ -204,6 +209,7 @@ func TestAnInstalledMachineNamesItsHostedSubscriptionAndItsConfiguredRepositorie
 }
 
 func TestAMachineRegisteringWithASatelliteNamesTheSatelliteAndItsContentRoot(t *testing.T) {
+	t.Parallel()
 	sources := exampleDirectory(t, "libvirt-3-nodes-ceph-host-variants")
 	satellite := "    activationKeyRef: rhsm-key\n\n    satellite:\n      hostname: satellite.example.test\n      trustBundleRef: satellite-ca\n"
 	bundle := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: satellite-ca\n\nspec:\n  type: caBundle\n\n  source:\n    contextStore: {}\n"
@@ -236,6 +242,7 @@ func TestAMachineRegisteringWithASatelliteNamesTheSatelliteAndItsContentRoot(t *
 }
 
 func TestOnlyARegistryTheListKnowsGetsItsTokenAndDeliveryHosts(t *testing.T) {
+	t.Parallel()
 	rows := withRegistryHosts([]cli.Acquisition{
 		{Kind: "service image", Artifact: "docker.io/ubuntu/squid", Origin: "docker.io/ubuntu/squid", Machines: []string{"b"}, Consumer: "Proxy/two"},
 		{Kind: "service image", Artifact: "docker.io/4km3/dnsmasq", Origin: "docker.io/4km3/dnsmasq", Machines: []string{"a"}, Consumer: "DNSServer/one"},
@@ -258,6 +265,7 @@ func TestOnlyARegistryTheListKnowsGetsItsTokenAndDeliveryHosts(t *testing.T) {
 }
 
 func TestAnImageNamedByTagKeepsTheTagAsItsVersion(t *testing.T) {
+	t.Parallel()
 	row := imageAcquisition("add-on catalog image", "registry.example.test:5000/team/catalog:v1.2", nil, "")
 	if row.Artifact != "registry.example.test:5000/team/catalog" || row.Version != "v1.2" || row.SHA256 != "" {
 		t.Fatalf("a tagged reference: %+v", row)
@@ -268,6 +276,7 @@ func TestAnImageNamedByTagKeepsTheTagAsItsVersion(t *testing.T) {
 }
 
 func TestAnAuthoredAddOnNamesItsCatalogImageAloneOnTheRegistryItsAuthorChose(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno-authored"))
 	acquired, err := listAcquisitions(state.Effective())
 	if err != nil {
@@ -283,6 +292,7 @@ func TestAnAuthoredAddOnNamesItsCatalogImageAloneOnTheRegistryItsAuthorChose(t *
 }
 
 func TestARepositoryKeyURLIsListedWithoutItsCredentialOrQuery(t *testing.T) {
+	t.Parallel()
 	if got := redactedLocation("https://user:secret@keys.example.test/RPM-GPG-KEY?token=abc#frag"); got != "https://keys.example.test/RPM-GPG-KEY" {
 		t.Fatalf("a credentialed key URL is listed as %s", got)
 	}
@@ -291,6 +301,7 @@ func TestARepositoryKeyURLIsListedWithoutItsCredentialOrQuery(t *testing.T) {
 // An image authored by tag and digest is copied by its digest alone into its
 // repository, which a consumer's tagged reference resolves within.
 func TestAMirroredImageNamedByTagAndDigestIsCopiedByItsDigest(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-rhel-mirror-host"))
 	digest := strings.Repeat("c", 64)
 	catalog := state.Effective()
@@ -308,6 +319,7 @@ func TestAMirroredImageNamedByTagAndDigestIsCopiedByItsDigest(t *testing.T) {
 // CDN, and the release's own oc and its publisher's checksum list from the
 // source the controller stage reads that client from.
 func TestAReleaseCopiedIntoAManagedImageMirrorIsReadFromQuayOnItsHostAlone(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno-release-mirror"))
 	acquired, err := listAcquisitions(state.Effective())
 	if err != nil {
@@ -349,6 +361,7 @@ func TestAReleaseCopiedIntoAManagedImageMirrorIsReadFromQuayOnItsHostAlone(t *te
 // A shared CDN remains public for public registry pulls; only a vendor
 // registry's delivery edge is an approved fetch-only exception.
 func TestSharedCDNRowsKeepVendorDeliverySeparateFromPublicPulls(t *testing.T) {
+	t.Parallel()
 	rows := withRegistryHosts([]cli.Acquisition{
 		{Kind: "default catalog image", Origin: "registry.redhat.io/redhat/catalog", Machines: []string{"node"}, Consumer: "OpenShiftCluster/vendor"},
 		{Kind: "mirror release", Origin: "quay.io/openshift-release-dev/ocp-release", Machines: []string{"mirror"}, Consumer: "Registry/mirror"},
@@ -382,6 +395,7 @@ func TestSharedCDNRowsKeepVendorDeliverySeparateFromPublicPulls(t *testing.T) {
 }
 
 func TestTheReleaseMirrorProfileAdmitsVendorDeliveryAndDeniesPublicRegistries(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno-release-mirror"))
 	catalog := state.Effective()
 	proxy, found := catalog.Find(api.Proxy, "lab-proxy")

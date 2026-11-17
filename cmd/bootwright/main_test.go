@@ -19,6 +19,7 @@ import (
 // automation the executable embeds, which version prints as its dependency
 // bundle (D100).
 func TestCompositionSuppliesRuntimeBuildInformation(t *testing.T) {
+	t.Parallel()
 	var stdout, stderr bytes.Buffer
 	if code := run(context.Background(), []string{"version"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("version exit = %d, stderr = %q", code, stderr.String())
@@ -41,6 +42,7 @@ func TestCompositionSuppliesRuntimeBuildInformation(t *testing.T) {
 // the release build left empty, so an injected identity is never overwritten by
 // the toolchain's view of the tree that produced it.
 func TestCompositionIdentifiesTheBuild(t *testing.T) {
+	t.Parallel()
 	stamp := &debug.BuildInfo{
 		Main: debug.Module{Version: "v0.2.0"},
 		Settings: []debug.BuildSetting{
@@ -85,6 +87,7 @@ func TestCompositionIdentifiesTheBuild(t *testing.T) {
 }
 
 func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
+	t.Parallel()
 	services := isolatedServices(t)
 	commandsWithSyntheticInputs := [][]string{
 		{"validate", "-f", filepath.Join(t.TempDir(), "missing.yaml")},
@@ -237,6 +240,7 @@ func TestComposedExplicitValidationIsContextFree(t *testing.T) {
 }
 
 func TestComposedValidationPreservesTypedInputFailures(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skip("input admission is qualified for linux/amd64")
 	}

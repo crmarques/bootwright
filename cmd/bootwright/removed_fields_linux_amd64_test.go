@@ -11,6 +11,7 @@ import (
 )
 
 func TestRemovedSingleValueFieldsRefuseAsUnknownFields(t *testing.T) {
+	t.Parallel()
 	for name, test := range map[string]struct {
 		example, suffix, old, replacement, field string
 	}{

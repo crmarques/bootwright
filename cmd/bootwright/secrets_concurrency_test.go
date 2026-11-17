@@ -20,6 +20,7 @@ func (f secretConfirmationFunc) Confirm(ctx context.Context, action, name string
 }
 
 func TestSecretConfirmationsHoldNoLeaseAndWriteNothingOnRefusal(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
@@ -63,6 +64,7 @@ func TestSecretConfirmationsHoldNoLeaseAndWriteNothingOnRefusal(t *testing.T) {
 }
 
 func TestASecretChangedDuringItsPromptIsRefusedWithNothingWritten(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
@@ -110,6 +112,7 @@ func TestASecretChangedDuringItsPromptIsRefusedWithNothingWritten(t *testing.T) 
 }
 
 func TestSecretExpectedSnapshotRefusesContextUpdateBeforeEffects(t *testing.T) {
+	t.Parallel()
 	services, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "secret.yaml", secretDocument("payload", "opaque", ""))
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)

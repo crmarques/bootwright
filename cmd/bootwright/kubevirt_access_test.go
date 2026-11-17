@@ -12,6 +12,7 @@ import (
 // the arm uses there, each of which the provider proof reviews, so a token
 // minted for it can do what the arm does and nothing that proof would miss.
 func TestTheHostedAccountHoldsEveryVerbTheArmReviews(t *testing.T) {
+	t.Parallel()
 	granted := packages.MachineAccess()
 	for _, access := range kubevirt.Verbs() {
 		resource := access.Resource

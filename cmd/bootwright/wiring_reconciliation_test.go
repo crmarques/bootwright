@@ -7,6 +7,7 @@ import (
 )
 
 func TestLifecycleConcurrencyBound(t *testing.T) {
+	t.Parallel()
 	service, ok := isolatedServices(t).Lifecycle.(lifecycle.Service)
 	if !ok {
 		t.Fatal("the composition root did not assemble the lifecycle engine")

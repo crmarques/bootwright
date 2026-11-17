@@ -49,6 +49,7 @@ func mirroredInput(trust string) api.Catalog {
 // own route, with the anchor Secret lent for the probe alone; a vendor client
 // is never probed.
 func TestThePreflightProbeReadsTheMirroredClientsWithTheLentAnchor(t *testing.T) {
+	t.Parallel()
 	anchor := []byte("-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n")
 	lender := &mirrorLender{held: map[string]secrets.Material{"mirror-ca": secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: anchor})}}
 	var probed []bundlelocal.MirrorFile

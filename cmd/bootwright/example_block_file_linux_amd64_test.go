@@ -23,6 +23,7 @@ const blockFileExample = "libvirt-3-nodes-ceph-block-file"
 // filesystem, subvolume and client blocks, and each resource block requires
 // the object it builds on.
 func TestExampleBlockFilePlansAllBlocks(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, blockFileExample))
 	if refused := productionUnsupported(t, state); len(refused) != 0 {
 		t.Fatalf("the capabilities refuse %+v", refused)

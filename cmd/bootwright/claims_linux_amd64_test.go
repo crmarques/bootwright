@@ -33,6 +33,7 @@ import (
 // refusal never fires: an example's object is claimed, or refused by its
 // domain's own table.
 func TestEveryExampleObjectIsClaimedOncePerFamily(t *testing.T) {
+	t.Parallel()
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	bound := map[string]bool{}
 	for _, binding := range resolver.Bindings() {

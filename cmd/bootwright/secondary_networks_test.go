@@ -14,6 +14,7 @@ const workloadsMapping = "        bridgeMapping:\n          bridge: br-workloads
 
 // A node's bridge interface names a declared secondary network.
 func TestANodeBridgeInterfaceNamesADeclaredSecondaryNetwork(t *testing.T) {
+	t.Parallel()
 	override := exampleEdit{networksCluster, "      machineRef: networks-04\n", "      machineRef: networks-04\n\n      bridgeInterfaces:\n        - networkRef: tenants\n          interface: enp2s0\n"}
 	requireRefusal(t, editedExample(t, "lab-networks", override), "api.reference", "OpenShiftCluster/networks", "$.spec.nodes[3].bridgeInterfaces[0].networkRef")
 }
@@ -21,6 +22,7 @@ func TestANodeBridgeInterfaceNamesADeclaredSecondaryNetwork(t *testing.T) {
 // A secondary network's native vlan and IPAM subnets are checked against the
 // Network the bridge interface's segment carries.
 func TestASecondaryNetworkMatchesTheNetworkItsSegmentCarries(t *testing.T) {
+	t.Parallel()
 	tagged := exampleEdit{networksCluster, workloadsMapping, workloadsMapping + "\n        vlan: 140\n"}
 	refusal := requireRefusal(t, editedExample(t, "lab-networks", tagged), "api.invariant", "OpenShiftCluster/networks", "$.spec.networking.secondaryNetworks[0].vlan")
 	for _, want := range []string{"secondary network workloads reaches interface enp2s0 of node master-0", "carries no tagged Network with vlan 140"} {
@@ -48,6 +50,7 @@ const machineSecondary = "\n      - name: machine\n        topology: Localnet\n\
 // Pod IPAM over a whole Network leaves out every address a host, gateway or
 // endpoint holds on it.
 func TestPodIPAMExcludesTheAddressesHeldOnItsNetwork(t *testing.T) {
+	t.Parallel()
 	network := func(exclude string) exampleEdit {
 		return exampleEdit{networksCluster, "            network.example.test/workloads: enabled\n", "            network.example.test/workloads: enabled\n" + machineSecondary + exclude + "\n        namespaceSelector:\n          matchLabels:\n            network.example.test/machine: enabled\n"}
 	}

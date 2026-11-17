@@ -35,6 +35,7 @@ func (staticCapacity) CheckCapacity(context.Context, api.Catalog, string, bool) 
 }
 
 func TestInfrastructureServicesStageKeepsEveryControllerSocketAsItsOwnCheck(t *testing.T) {
+	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph"))
 	catalog := state.Effective()
 	rows, err := firewallPreflight(&firewallProbe{status: "closed"})(context.Background(), catalog, "lab")

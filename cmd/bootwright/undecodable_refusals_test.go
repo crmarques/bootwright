@@ -11,6 +11,7 @@ import (
 )
 
 func TestAnUndecodableExampleDocumentIsItsOnlyRefusal(t *testing.T) {
+	t.Parallel()
 	sources := exampleDirectory(t, "lab-rhel")
 	compiler := wireCompiler()
 	mutated := 0

@@ -22,6 +22,7 @@ import (
 // Environment, the reason and the remedy. The controller stage's own
 // planning refuses it with the same words, so no path plans it.
 func TestUnsupportedControllerShapesRefuseBeforeRegistration(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name, old, new string
 		reason, remedy string

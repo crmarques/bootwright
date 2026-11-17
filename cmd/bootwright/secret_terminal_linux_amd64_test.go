@@ -79,6 +79,7 @@ func awaitPrompt(t *testing.T, prompts promptWriter) string {
 // error stream, and the terminal's settings are restored once it is read and
 // when the read is canceled (D73).
 func TestTerminalSecretPromptTurnsEchoOffAndRestoresIt(t *testing.T) {
+	t.Parallel()
 	master, slave := openTestTerminal(t)
 	original := termiosOf(t, slave)
 	if original.Lflag&syscall.ECHO == 0 || original.Lflag&syscall.ICANON == 0 {
@@ -162,6 +163,7 @@ func (r *recordingTerminal) ReadHidden(_ context.Context, prompt string, buffer 
 // opaque value refuses before anything is read (D73). An interactive process
 // binds that terminal over standard input and its error stream.
 func TestTheComposedSecretSetReadsFromTheTerminalBehindStandardInput(t *testing.T) {
+	t.Parallel()
 	_, repository, input, root := contextFixture(t)
 	addSecretInput(t, input, "opaque.yaml", secretDocument("opaque", "opaque", ""))
 	addSecretInput(t, input, "token.yaml", secretDocument("token", "token", ""))

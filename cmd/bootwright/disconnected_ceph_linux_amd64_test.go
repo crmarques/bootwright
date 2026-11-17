@@ -14,6 +14,7 @@ import (
 )
 
 func TestDisconnectedProfileFreezesItsEntireMirrorClosure(t *testing.T) {
+	t.Parallel()
 	sources := exampleDirectory(t, "libvirt-3-nodes-ceph-disconnected")
 	state, _ := compileAcceptance(t, sources)
 	if len(sources.Files) != 27 {
@@ -70,6 +71,7 @@ func TestDisconnectedProfileFreezesItsEntireMirrorClosure(t *testing.T) {
 }
 
 func TestDisconnectedProfileMissingAuxiliaryClosureRefusesBeforePlanning(t *testing.T) {
+	t.Parallel()
 	sources := exampleDirectory(t, "libvirt-3-nodes-ceph-disconnected")
 	for i, file := range sources.Files {
 		body := string(file.Bytes())

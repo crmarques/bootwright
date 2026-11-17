@@ -52,6 +52,7 @@ func planAddOns(t *testing.T, state *compilation.State, name string) []reconcili
 const nmstateBinding = "apiVersion: bootwright.io/v1alpha1\nkind: ClusterAddonBinding\nmetadata:\n  name: nmstate\n\nspec:\n  clusterRef: sno\n\n  packages:\n    nmstate:\n      timeout: %s\n\n      subscription:\n        channel: example-channel\n        startingCSV: kubernetes-nmstate-operator.v0.0.0\n"
 
 func TestPackageTimeoutAdmission(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		timeout string
 		seconds int64

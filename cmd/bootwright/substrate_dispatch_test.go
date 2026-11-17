@@ -15,6 +15,7 @@ import (
 // collection's one machine port dispatcher binds, so an arm reaches every
 // consumer through that table alone and none is frozen that no port answers.
 func TestTheMachinePortDispatcherBindsExactlyTheRealizedArms(t *testing.T) {
+	t.Parallel()
 	var defaults struct {
 		Arms map[string]string `yaml:"substrate_machine_arms"`
 	}

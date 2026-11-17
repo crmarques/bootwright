@@ -12,6 +12,7 @@ import (
 // standard input, so a sudo policy that logs input refuses it before the child
 // starts; a file-input set names none.
 func TestTheBoundaryNamesTheStandardInputSecretToTheElevator(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		args []string
 		want string

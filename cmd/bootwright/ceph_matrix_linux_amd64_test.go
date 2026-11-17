@@ -269,6 +269,7 @@ func cephUnsupportedDiff(t *testing.T, state *compilation.State, fixture matrixF
 }
 
 func TestCephMatrixCombinationFixturesRefuse(t *testing.T) {
+	t.Parallel()
 	seen := map[string]bool{}
 	for _, row := range combinationRows(t) {
 		id := row["ID"]
@@ -319,6 +320,7 @@ func runCombinationFixture(t *testing.T, id string) {
 // An omitted cluster SSH transport selects the verified tunnel, so the
 // example without it compiles and no capability refuses it.
 func TestAnOmittedCephTransportCompilesAndPlans(t *testing.T) {
+	t.Parallel()
 	fixture := matrixFixture{Row: "omitted transport", Base: "libvirt-3-nodes-ceph",
 		Edits: []matrixEdit{{File: "storage/cluster.yaml", Replace: "      transport: verifiedTunnel\n", With: ""}}}
 	state, _, err := wireCompiler().Compile(context.Background(), fixture.sources(t))
@@ -333,6 +335,7 @@ func TestAnOmittedCephTransportCompilesAndPlans(t *testing.T) {
 // TestEveryCephMatrixFixtureHasATestedRow lists the fixture directory, which a
 // test that docs-check runs may not, so its name stays outside that pattern.
 func TestEveryCephMatrixFixtureHasATestedRow(t *testing.T) {
+	t.Parallel()
 	tested := map[string]bool{}
 	for _, row := range combinationRows(t) {
 		if row["Status"] == "tested" {
@@ -360,6 +363,7 @@ func catalogProfileID(row map[string]string) string {
 }
 
 func TestCephProfileCatalogCoversEveryVirtualMatrixRow(t *testing.T) {
+	t.Parallel()
 	var families []string
 	for _, row := range markdownTable(t, cephCoverageSpec, "## Feature matrix", cephFeatureColumns) {
 		families = append(families, row["Family"])
@@ -497,6 +501,7 @@ func exampleBudget(t *testing.T, catalog api.Catalog) profileBudget {
 }
 
 func TestCephProfileBudgetsMatchExamples(t *testing.T) {
+	t.Parallel()
 	for _, profile := range linkedProfiles(t) {
 		t.Run(profile.id, func(t *testing.T) {
 			sources := exampleDirectory(t, profile.dir)
@@ -554,6 +559,7 @@ func hostBlockIDs(definitions []reconciliation.BlockDefinition, cluster string) 
 }
 
 func TestCephProfilesPlanWithoutRefusal(t *testing.T) {
+	t.Parallel()
 	for _, profile := range linkedProfiles(t) {
 		t.Run(profile.id, func(t *testing.T) {
 			state, _ := compileAcceptance(t, exampleDirectory(t, profile.dir))
