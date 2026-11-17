@@ -169,5 +169,4 @@ def test_unpublished_stage_never_creates_an_inner_atomic_stage(tmp_path, monkeyp
     monkeypatch.setattr(client.os, "fsync", Mock(side_effect=InterruptedError("fixture cancellation")))
     with pytest.raises(InterruptedError):
         client.stage_file(tmp_path / "known_hosts", b"bounded fixture")
-    assert [path.name for path in tmp_path.iterdir()] == ["known_hosts"]
-    assert (tmp_path / "known_hosts").stat().st_mode & 0o777 == 0o600
+    assert list(tmp_path.iterdir()) == []

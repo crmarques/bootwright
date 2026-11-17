@@ -10,7 +10,7 @@ import secrets
 from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 from ansible_collections.bootwright.core.plugins.module_utils import managedos_guest_ssh as ssh
 from ansible_collections.bootwright.core.plugins.module_utils import private_records as records
-from ansible_collections.bootwright.core.plugins.module_utils import ssh_key_policy
+from ansible_collections.bootwright.core.plugins.module_utils import private_files, ssh_key_policy
 
 FILES = frozenset(("host-key", "host-key.pub", "client-key", "client-key.pub", "ssh_config", "known_hosts"))
 ALGORITHM = "ecdsa-sha2-nistp256"
@@ -71,13 +71,7 @@ def remove(directory):
 def stage_file(path, data):
     # The outer directory is not published yet. Avoid an inner rename stage
     # whose abandoned name could prevent recovery after process death.
-    held = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
-    try:
-        if os.write(held, data) != len(data):
-            raise ValueError("discovery SSH custody")
-        os.fsync(held)
-    finally:
-        os.close(held)
+    private_files.write(path, data)
 
 
 def prepare(root, request, native):

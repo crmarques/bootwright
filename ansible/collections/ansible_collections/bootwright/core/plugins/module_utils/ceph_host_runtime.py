@@ -33,7 +33,7 @@ import uuid
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_host_route_probe as probe, ceph_native, ceph_native_observe as observe, ceph_tunnel, ceph_tunnel_custody as custody, ceph_pull_broker,
-    native_diagnostics, physical_erase_worker, physical_machine_identity,
+    native_diagnostics, physical_erase_worker, physical_machine_identity, private_files,
 )
 
 ROOT = "/var/lib/bootwright/ceph-host"
@@ -529,7 +529,7 @@ class HostRuntime:
             with owned_scratch(durable.path, "pull-") as scratch, authfile(scratch) as auth, \
                     ceph_pull_broker.Broker(scratch, self.request, private, deadline, self.command, trust=trust) as broker:
                 policy = os.path.join(scratch, "policy.json")
-                ceph_native.private_write(policy, signature_policy(image))
+                private_files.write(policy, signature_policy(image))
                 argv = ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth,
                         "--cert-dir", broker.cert_directory, image]
                 # Each invocation has its own budget; the retained records only show that an attempt began.
@@ -624,7 +624,7 @@ class HostRuntime:
                     ceph_pull_broker.Broker(scratch, self.request, private, deadline, command, image=reference,
                                             trust=trust) as broker:
                 policy = os.path.join(scratch, "policy.json")
-                ceph_native.private_write(policy, signature_policy(reference))
+                private_files.write(policy, signature_policy(reference))
                 argv = ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth,
                         "--cert-dir", broker.cert_directory, reference]
                 # Each invocation has its own budget; the retained records only show that an attempt began.
@@ -744,7 +744,7 @@ class HostRuntime:
             shared = os.path.join(scratch, "shared")
             os.mkdir(shared, 0o755)
             path = os.path.join(shared, "proof")
-            ceph_native.private_write(path, SENTINEL)
+            private_files.write(path, SENTINEL)
             os.chmod(path, 0o644)
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
             try:

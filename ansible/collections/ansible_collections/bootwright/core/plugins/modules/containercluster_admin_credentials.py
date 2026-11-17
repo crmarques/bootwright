@@ -51,8 +51,7 @@ import json
 import secrets
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils.admin_credential_io import private_read, private_write
-from ansible_collections.bootwright.core.plugins.module_utils import containercluster_admin_credentials as credentials
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_admin_credentials as credentials, private_files
 
 
 def main():
@@ -67,9 +66,9 @@ def main():
     try:
         if params["operation"] == "prepare":
             guard = credentials.read(params["client"], params["kubeconfig"])
-            private_write(params["output"], json.dumps({"guard": guard, "password": secrets.token_urlsafe(24)}).encode())
+            private_files.write(params["output"], json.dumps({"guard": guard, "password": secrets.token_urlsafe(24)}).encode())
         else:
-            candidate = json.loads(private_read(params["update"]))
+            candidate = json.loads(private_files.read(params["update"], 16384))
             credentials.update(params["client"], params["kubeconfig"], candidate)
     except Exception:
         module.fail_json(msg="The existing console administrator credential could not be proved or updated")

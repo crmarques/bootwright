@@ -33,7 +33,7 @@ import tempfile
 import time
 import uuid
 
-from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, private_files
 from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 MAX_INPUT = 2 * 1024 * 1024
@@ -1100,11 +1100,18 @@ def service_daemon(kind, daemon, services):
 
 def read_regular(path, maximum=MAX_INPUT, private=False):
     """Open once; no symlinks, non-regular files, oversized or writable inputs."""
+    if private:
+        try:
+            data = private_files.read(path, maximum)
+        except private_files.Refused:
+            raise Refusal("file") from None
+        require(data, "file")
+        return data
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
     with os.fdopen(fd, "rb") as handle:
         info = os.fstat(handle.fileno())
         require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid == os.geteuid(), "file")
-        require(info.st_mode & (0o077 if private else 0o022) == 0 and 0 < info.st_size <= maximum, "file")
+        require(info.st_mode & 0o022 == 0 and 0 < info.st_size <= maximum, "file")
         data = handle.read(maximum + 1)
         require(len(data) == info.st_size, "file")
         return data
@@ -1177,14 +1184,6 @@ def lvm_devices_lists(identifier):
     except FileNotFoundError:
         return False
     return any(b"PVID=" + identifier.encode("ascii") in line.split() for line in content.splitlines() if not line.lstrip().startswith(b"#"))
-
-
-def private_write(path, data):
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
-    with os.fdopen(fd, "wb") as handle:
-        handle.write(data)
-        handle.flush()
-        os.fsync(handle.fileno())
 
 
 def publish_regular(directory, name, data, uid):
@@ -2930,7 +2929,7 @@ class Worker:
         self.markers.write("bootstrap-protocol.json", scope)
         self.markers.write("tunnel-stage.json", intent)
         with tempfile.TemporaryDirectory(prefix=".bootstrap-", dir=self.markers.path) as scratch:
-            private_write(os.path.join(scratch, "ceph.conf"), bootstrap_config(self.request))
+            private_files.write(os.path.join(scratch, "ceph.conf"), bootstrap_config(self.request))
             with self.transport_hold() as original:
                 helper, unused = tunnel_helpers()
                 # The bundle holds known_hosts in the form transport() rendered, not the controller's bytes.
@@ -3342,8 +3341,8 @@ class Worker:
                 restarted = manager["active_gid"]
                 self.markers.write("tunnel-redeploy.json", record)
                 with tempfile.TemporaryDirectory(prefix=".tunnel-stage-", dir=self.markers.path) as scratch:
-                    private_write(os.path.join(scratch, "mgr.config"), material["config"])
-                    private_write(os.path.join(scratch, "mgr.keyring"), material["keyring"])
+                    private_files.write(os.path.join(scratch, "mgr.config"), material["config"])
+                    private_files.write(os.path.join(scratch, "mgr.keyring"), material["keyring"])
                     self.command(staging.redeploy_argv(self.request, plan, scratch), timeout=600, json_result=False)
             # An ambiguous previous deployment permits observation only.
             self.verify_manager_mounts(self.daemons())

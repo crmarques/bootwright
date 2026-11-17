@@ -26,6 +26,7 @@ import uuid
 
 import pytest
 
+from ansible_collections.bootwright.core.plugins.module_utils import private_files
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_core, ceph_host_runtime, ceph_native, ceph_native_object, ceph_native_observability, ceph_tunnel_staging,
 )
@@ -1108,7 +1109,7 @@ def test_gateway_tls_material_never_reaches_a_refusal_detail(tmp_path):
 
     def write(name, data):
         path = str(tmp_path / name)
-        ceph_native.private_write(path, data.encode())
+        private_files.write(path, data.encode())
         return path
 
     material = {"sshKey": write("identity", "fleet-private"), "knownHosts": write("known", "192.0.2.1 ssh-ed25519 AAAA\n"),
@@ -1171,7 +1172,7 @@ def test_execute_gateway_passes_bound_material_per_phase(monkeypatch):
 def test_transport_admits_the_gateway_material(tmp_path):
     def write(name, data=None):
         path = str(tmp_path / name)
-        ceph_native.private_write(path, name.encode() if data is None else data)
+        private_files.write(path, name.encode() if data is None else data)
         return path
 
     request = gateway_request()

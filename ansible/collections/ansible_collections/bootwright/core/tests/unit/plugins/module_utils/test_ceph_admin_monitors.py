@@ -9,6 +9,7 @@ import re
 
 import pytest
 
+from ansible_collections.bootwright.core.plugins.module_utils import private_files
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_tunnel_custody as custody
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_bootstrap_recovery as recovery
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as fixtures
@@ -48,7 +49,7 @@ def captured(native):
     recovery.sources(native)
     for name, content in (("config", SEED_CONFIG), ("keyring", KEYRING)):
         os.unlink(native.bootstrap_sources()[name])
-        ceph_native.private_write(native.bootstrap_sources()[name], content)
+        private_files.write(native.bootstrap_sources()[name], content)
     native.daemons = lambda: fixtures.initial_daemons(native)
     native.capture_bootstrap_outputs()
     del native.ceph, native.command
@@ -139,7 +140,7 @@ def test_foreign_material_with_the_same_bytes_refuses_before_any_admin_command(n
     native.run = monitors.run
     path = native.bootstrap_sources()[name]
     replacement = path + ".foreign"
-    ceph_native.private_write(replacement, SEED_CONFIG if name == "config" else KEYRING)
+    private_files.write(replacement, SEED_CONFIG if name == "config" else KEYRING)
     os.replace(replacement, path)
     with pytest.raises((ceph_native.Refusal, custody.CustodyRefusal)):
         native.ceph("quorum_status")

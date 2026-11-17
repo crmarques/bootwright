@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, native_signatures, transport_faults, tls_trust
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, native_signatures, private_files, tls_trust, transport_faults
 
 IBM_BASE = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64"
 IBM_KEY = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH"
@@ -312,7 +312,7 @@ class Acquisition:
         path = Path(scratch, "repositories", identifier)
         path.mkdir(parents=True, mode=0o700)
         (path / "repodata").mkdir(mode=0o700)
-        ceph_native.private_write(str(path / "repodata" / "repomd.xml"), data)
+        private_files.write(str(path / "repodata" / "repomd.xml"), data)
         seen, types = set(), set()
         for record in records:
             kind = record.get("type")

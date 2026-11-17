@@ -86,7 +86,7 @@ from urllib.error import HTTPError, URLError
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.urls import open_url
-from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, private_files
 
 SKOPEO = "/usr/bin/skopeo"
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
@@ -157,19 +157,13 @@ def environment(egress, mirror):
     return route
 
 
-def write_private(path, text):
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-        stream.write(text)
-
-
 def lend(scratch, mirror, username, password, trust):
     """Write the mirror's auth file and certificate directory beneath scratch."""
     token = base64.b64encode(("%s:%s" % (username, password)).encode("utf-8")).decode("ascii")
-    write_private(os.path.join(scratch, "auth.json"), json.dumps({"auths": {mirror: {"auth": token}}}))
+    private_files.write(os.path.join(scratch, "auth.json"), json.dumps({"auths": {mirror: {"auth": token}}}))
     certificates = os.path.join(scratch, "certificates")
     os.mkdir(certificates, 0o700)
-    write_private(os.path.join(certificates, "ca.crt"), trust)
+    private_files.write(os.path.join(certificates, "ca.crt"), trust)
     return os.path.join(scratch, "auth.json"), certificates
 
 
@@ -235,7 +229,7 @@ def reader(username, password, trust, timeout, base):
     """A HEAD of one mirror URL with the lent credential, verified against the anchor alone."""
     scratch = tempfile.mkdtemp(prefix="bootwright-mirror-trust-", dir=base)
     anchor = os.path.join(scratch, "ca.crt")
-    write_private(anchor, trust)
+    private_files.write(anchor, trust)
 
     def read(url):
         try:

@@ -26,6 +26,7 @@ import stat
 
 import pytest
 
+from ansible_collections.bootwright.core.plugins.module_utils import private_files
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_core, ceph_host_runtime, ceph_native, ceph_native_observability as observability, ceph_native_observe as observe, ceph_native_units,
 )
@@ -656,7 +657,7 @@ def test_execute_unit_passes_bound_material_to_its_apply_phase_only(monkeypatch)
 def test_transport_admits_the_unit_material(tmp_path):
     def write(name, data=None):
         path = str(tmp_path / name)
-        ceph_native.private_write(path, name.encode() if data is None else data)
+        private_files.write(path, name.encode() if data is None else data)
         return path
 
     request = monitoring_request()

@@ -12,6 +12,7 @@ import os
 import pytest
 import yaml
 
+from ansible_collections.bootwright.core.plugins.module_utils import private_files
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_tunnel_custody as custody, ceph_tunnel_staging as staging
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as fixtures, test_ceph_core as core_fixtures
 
@@ -32,7 +33,7 @@ def protocol(native):
 
 def sources(native):
     for name, path in native.bootstrap_sources().items():
-        ceph_native.private_write(path, ("private synthetic " + name).encode())
+        private_files.write(path, ("private synthetic " + name).encode())
 
     @contextlib.contextmanager
     def source(path, **kwargs):
@@ -253,7 +254,7 @@ def test_replaced_matching_bootstrap_output_refuses_before_private_read(native):
     native.capture_bootstrap_outputs()
     path = native.bootstrap_sources()["keyring"]
     replacement = path + ".replacement"
-    ceph_native.private_write(replacement, b"private synthetic keyring")
+    private_files.write(replacement, b"private synthetic keyring")
     os.replace(replacement, path)
     source = native.native_source
 

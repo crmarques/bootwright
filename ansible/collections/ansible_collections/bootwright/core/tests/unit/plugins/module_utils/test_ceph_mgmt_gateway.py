@@ -24,6 +24,7 @@ import json
 
 import pytest
 
+from ansible_collections.bootwright.core.plugins.module_utils import private_files
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_core, ceph_host_runtime, ceph_native, ceph_native_observability as observability, ceph_native_observe as observe, ceph_native_units,
 )
@@ -317,7 +318,7 @@ def test_gateway_material_reaches_apply_and_observation_only_as_bound():
 def test_transport_reads_each_phase_material(tmp_path):
     def write(name, data):
         path = str(tmp_path / name)
-        ceph_native.private_write(path, data.encode())
+        private_files.write(path, data.encode())
         return path
 
     request = gateway_request()

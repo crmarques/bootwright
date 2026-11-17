@@ -129,6 +129,7 @@ from urllib.error import HTTPError, URLError
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.urls import open_url
+from ansible_collections.bootwright.core.plugins.module_utils import private_files
 
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 MIRROR = re.compile(r"([a-z0-9]([a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:.]+\]):[0-9]{1,5}\Z")
@@ -347,12 +348,6 @@ def private_directory(path):
     return path
 
 
-def write_private(path, data, mode=0o600):
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, mode)
-    with os.fdopen(descriptor, "wb") as stream:
-        stream.write(data if isinstance(data, bytes) else data.encode("utf-8"))
-
-
 def scratch_checked(scratch):
     """The role's run directory, which must be this user's private, empty directory."""
     status = os.lstat(scratch)
@@ -386,7 +381,7 @@ def download(fetch, client, scratch):
             if member is None or not member.isfile() or member.size > MAX_CLIENT:
                 raise Refused("client-digest-mismatch", "the client archive holds no oc")
             binary = private_directory(os.path.join(scratch, "bin"))
-            write_private(os.path.join(binary, "oc"), opened.extractfile(member).read(), 0o700)
+            private_files.write(os.path.join(binary, "oc"), opened.extractfile(member).read(), 0o700)
     finally:
         os.unlink(archive)
 
@@ -431,8 +426,8 @@ def prepare(fetch, client, scratch, auth, trust, secrets_base=SECRETS_BASE, now=
         private_directory(os.path.join(scratch, name))
     lent = tempfile.mkdtemp(prefix=SECRETS_PREFIX, dir=secrets_base)
     try:
-        write_private(os.path.join(lent, "auth.json"), auth)
-        write_private(os.path.join(private_directory(os.path.join(lent, "trust")), "mirror.pem"), trust)
+        private_files.write(os.path.join(lent, "auth.json"), auth)
+        private_files.write(os.path.join(private_directory(os.path.join(lent, "trust")), "mirror.pem"), trust)
     except OSError:
         shutil.rmtree(lent, ignore_errors=True)
         raise
@@ -470,7 +465,7 @@ def mirror_reads(username, password, trust, timeout, base):
     """A GET and a HEAD of the mirror with the lent credential, verified against the anchor alone."""
     scratch = tempfile.mkdtemp(prefix="bootwright-release-trust-", dir=base)
     anchor = os.path.join(scratch, "ca.crt")
-    write_private(anchor, trust)
+    private_files.write(anchor, trust)
 
     def open_mirror(url, accept, method):
         try:

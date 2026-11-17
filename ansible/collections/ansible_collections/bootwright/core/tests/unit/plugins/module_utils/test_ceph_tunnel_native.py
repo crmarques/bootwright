@@ -18,7 +18,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime, ceph_native, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime, ceph_native, ceph_tunnel, ceph_tunnel_custody, ceph_tunnel_staging, private_files
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources
 from ansible_collections.bootwright.core.plugins.module_utils import native_specializations
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs
@@ -1520,7 +1520,7 @@ class Prepared:
     def __init__(self, path, payload):
         path.mkdir(mode=0o700)
         self.path = str(path)
-        ceph_native.private_write(os.path.join(self.path, ceph_host_runtime.PAYLOAD), payload)
+        private_files.write(os.path.join(self.path, ceph_host_runtime.PAYLOAD), payload)
         self.profile = {"version": ceph_host_runtime.PROFILE_VERSION, "cephadmSHA256": hashlib.sha256(payload).hexdigest()}
 
     def read(self, name):

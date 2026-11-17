@@ -21,6 +21,7 @@ import re
 import time
 from urllib.parse import quote
 
+from ansible_collections.bootwright.core.plugins.module_utils import private_files
 from ansible_collections.bootwright.core.plugins.module_utils.kubevirt_api import Answered, Refused, Unanswered, path
 
 VERSION = "substrate-access-kubevirt-v1"
@@ -201,6 +202,4 @@ def revoke(client, request):
 
 def write(output, data):
     """Write the lent kubeconfig to the run's output file, root-only, never over another file."""
-    descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(descriptor, "w") as handle:
-        handle.write(data)
+    private_files.write(output, data)

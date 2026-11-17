@@ -78,7 +78,7 @@ import json
 # pylint: disable=unidiomatic-typecheck
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
+from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics, private_files
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_export_native, ceph_native
 
 
@@ -111,7 +111,7 @@ def main():
         ceph_native.require(isinstance(reply, dict) and set(reply) == {"changed", "private", "leader", "address"}
                             and type(reply["changed"]) is bool, "evidence")
         ceph_native.require(isinstance(reply["private"], str) and len(reply["private"].encode()) <= 1 << 20, "material")
-        ceph_native.private_write(params["outputs"]["externalDetails"], reply["private"].encode())
+        private_files.write(params["outputs"]["externalDetails"], reply["private"].encode())
         evidence = {"version": ceph_export_native.EVIDENCE_VERSION, "name": request["name"], "owner": request["scope"]["owner"],
                     "fsid": request["scope"]["fsid"], "request": params["digest"], "ready": True,
                     "leader": reply["leader"], "address": reply["address"], "keyType": request["keyType"],

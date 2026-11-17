@@ -26,6 +26,7 @@ from pathlib import Path
 
 import pytest
 
+from ansible_collections.bootwright.core.plugins.module_utils import private_files
 from ansible_collections.bootwright.core.plugins.module_utils import (
     bounded_process, ceph_host_runtime as runtime, ceph_host_route_probe as probe, ceph_host_worker, ceph_native, ceph_native_observe as observe,
     ceph_native_worker,
@@ -282,7 +283,7 @@ def test_invalid_first_disk_backed_attempt_is_never_exempted_or_removed(request_
     outside = tmp_path / "outside"
     outside.write_bytes(b"outside fixture")
     if kind == "malformed":
-        ceph_native.private_write(str(entry), b"{invalid")
+        private_files.write(str(entry), b"{invalid")
     elif kind == "foreign":
         markers.write(entry.name, {"scope": runtime.scope(dict(request_value, owner="apply-other"), "node-1"), "attempt": 1})
     elif kind == "directory":

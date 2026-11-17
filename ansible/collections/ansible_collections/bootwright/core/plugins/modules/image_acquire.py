@@ -70,7 +70,7 @@ import shutil
 import tempfile
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, private_files
 
 PODMAN = "/usr/bin/podman"
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
@@ -120,24 +120,18 @@ def environment(egress):
     return route
 
 
-def write_private(path, text):
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-        stream.write(text)
-
-
 def pull_arguments(image, scratch, host, document, trust):
     """The pull's argv, writing its credential and anchor beneath scratch. A
     mirror pull reads neither the host's own login nor its certs.d."""
     argv = [PODMAN, "pull", "--quiet", "--tls-verify=true"]
     if document is not None:
-        write_private(os.path.join(scratch, "auth.json"), document)
+        private_files.write(os.path.join(scratch, "auth.json"), document)
         argv.append("--authfile=" + os.path.join(scratch, "auth.json"))
     if host:
         certificates = os.path.join(scratch, "certificates")
         os.mkdir(certificates, 0o700)
         if trust:
-            write_private(os.path.join(certificates, "ca.crt"), trust)
+            private_files.write(os.path.join(certificates, "ca.crt"), trust)
         argv.append("--cert-dir=" + certificates)
     return argv + [image]
 

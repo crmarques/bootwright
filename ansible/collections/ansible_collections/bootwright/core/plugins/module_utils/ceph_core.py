@@ -19,7 +19,7 @@ import threading
 import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    adapter_protocol, bounded_process, canonical_json, tls_trust,
+    adapter_protocol, bounded_process, canonical_json, private_files, tls_trust,
     ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_nvmeof,
     ceph_monitoring_template, ceph_native_observability, ceph_native_stretch, ceph_admin_credentials_native,
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
@@ -232,7 +232,7 @@ def user_output(path, value, request):
     ceph_native.require(isinstance(value, str) and value.isascii(), "material")
     data = value.encode("ascii")
     ceph_native_object.user_material(data, request["objectUser"]["name"], reason="material")
-    ceph_native.private_write(path, data)
+    private_files.write(path, data)
 
 
 def specialization_ids(value):
@@ -473,7 +473,7 @@ def dashboard_output(path, value):
     """The password reaches only the runner's protected output file."""
     ceph_native.require(isinstance(value, str) and 0 < len(value.encode()) <= 128, "material")
     ceph_native.require(ceph_native.dashboard_policy(value), "material")
-    ceph_native.private_write(path, value.encode())
+    private_files.write(path, value.encode())
 
 
 def bootstrap_launcher(supervisor_source, host_source):
@@ -545,9 +545,9 @@ class Transport:
             key = os.path.join(scratch, "identity")
             known = os.path.join(scratch, "known_hosts")
             config = os.path.join(scratch, "ssh_config")
-            ceph_native.private_write(key, ceph_native.read_regular(self.material["sshKey"], private=True))
-            ceph_native.private_write(known, known_bytes)
-            ceph_native.private_write(config, self.ssh_policy()["configuration"].encode())
+            private_files.write(key, ceph_native.read_regular(self.material["sshKey"], private=True))
+            private_files.write(known, known_bytes)
+            private_files.write(config, self.ssh_policy()["configuration"].encode())
             argv = ssh_argv(host, key, known, source, worker_budget, worker_ceiling=worker_ceiling, ssh_config=config, host_key_algorithms=algorithms)
             sources = dict(payload.get("sources", {})) if isinstance(payload, dict) else {}
             private = payload.get("payload", {}).get("private", {}) if isinstance(payload, dict) else {}
@@ -585,7 +585,7 @@ class Transport:
     @staticmethod
     def native_sources():
         modules = (native_diagnostics, native_specializations, canonical_json, ceph_monitoring_template, bounded_process, tls_trust,
-                   ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
+                   private_files, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
                    ceph_native_resources, ceph_native_stretch, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability,
                    ceph_native_units, ceph_native_object, ceph_smb_native,
                    ceph_replication_native, ceph_export_dns, ceph_export_native,
@@ -731,7 +731,7 @@ class Transport:
                 raise ceph_native.Refusal("material") from None
             private["packageRepositoryCA"] = self.trust_bundle(bundle)
         modules = (native_diagnostics, canonical_json, bounded_process, tls_trust, ceph_native_worker,
-                   ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
+                   private_files, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
                    ceph_native_stretch, native_resolution, native_signatures, native_apply, transport_faults, ceph_package_sources,
                    ceph_crypto_policy, ceph_packages)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
@@ -1256,7 +1256,7 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
             changed = produced["changed"] or changed
             value = produced.get("private")
             ceph_native.require(isinstance(value, str) and 0 < len(value.encode()) <= 65536, "material")
-            ceph_native.private_write(outputs["client"], value.encode())
+            private_files.write(outputs["client"], value.encode())
     elif operation == "destroy":
         changed = transport.call(bootstrap, "destroy")["changed"]
     pending = []
@@ -1272,7 +1272,7 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
     if operation == "observe" and request["action"] == "client" and observation["ready"] and outputs:
         value = transport.call(bootstrap, "client_read").get("private")
         ceph_native.require(isinstance(value, str) and 0 < len(value.encode()) <= 65536, "material")
-        ceph_native.private_write(outputs["client"], value.encode())
+        private_files.write(outputs["client"], value.encode())
     if request["action"] == "cluster" and operation in ("apply", "observe") and observation["ready"]:
         observation, effect = dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, outputs.get("dashboard"),
                                               now=now, pause=pause, connect=connect)

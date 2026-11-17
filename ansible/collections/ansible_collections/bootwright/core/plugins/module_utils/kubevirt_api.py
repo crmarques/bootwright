@@ -21,6 +21,8 @@ import tempfile
 import time
 from urllib.parse import quote, urlsplit
 
+from ansible_collections.bootwright.core.plugins.module_utils import private_files
+
 MAX_KUBECONFIG = 65536
 MAX_RESPONSE = 4 * 1024 * 1024
 REQUEST_SECONDS = 30
@@ -213,9 +215,7 @@ class Client:
             certificate = os.path.join(directory, "client.crt")
             key = os.path.join(directory, "client.key")
             for name, value in ((certificate, self.connection["certificate"]), (key, self.connection["key"])):
-                descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-                with os.fdopen(descriptor, "w") as handle:
-                    handle.write(value)
+                private_files.write(name, value)
             context.load_cert_chain(certificate, key)
         return context
 

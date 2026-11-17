@@ -47,8 +47,7 @@ proved:
 import json
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native
-from ansible_collections.bootwright.core.plugins.module_utils.admin_credential_io import private_write
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, private_files
 
 
 def main():
@@ -69,7 +68,7 @@ def main():
             result = transport.call(host, "admin_prepare", {"incarnation": incarnation}, timeout=120)
             candidate = result["private"].encode("ascii")
             ceph_native.require(len(candidate) <= 16384, "material")
-            private_write(params["output"], candidate)
+            private_files.write(params["output"], candidate)
         else:
             candidate = json.loads(ceph_native.read_regular(update_path, maximum=16384, private=True))
             result = transport.call(host, "admin_update", {"update": candidate, "incarnation": incarnation}, timeout=120)
