@@ -16463,3 +16463,20 @@ those 101 tests alone instead of the whole tree again, so the suite takes about
 150 s instead of 350 s. The test that signalled its own process signals a
 child. No module changed.
 
+## X521 — One credential run and one mirror fill
+
+### B1491
+
+Split from B1465 under [D274](backlog.md#d274) (audit 005 W4.2 and W4.4).
+`internal/reconciliation/lifecycle` owns the administrator-credential run that
+Ceph and agent-based installation each copied: the prepare and update wiring,
+the fail-closed proof check, the guard and the clearing of produced material on
+every exit. Each capability supplies only its material binding and guard. An
+unconfigured runner refuses instead of panicking, and the runs carry their
+capability's named refusals; native output of a password operation is still
+never appended to a diagnostic. Both paths, untested before, have fake-runner
+tests. One generic fill serves the file, image and release fills, each keeping
+its own effect and removal evidence, and `managedservice.MirrorSource` builds
+the mirror's source once. Requests, digests and goldens are unchanged. An
+independent review of the custody paths found no defect.
+
