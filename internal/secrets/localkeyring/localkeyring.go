@@ -165,6 +165,17 @@ func (s *session) Inspect(ctx context.Context) (secretstore.Snapshot, error) {
 	return result, nil
 }
 
+func (s *session) Verify(ctx context.Context) error {
+	if err := s.usable(ctx, false); err != nil {
+		return err
+	}
+	if err := s.refreshMetadata(ctx); err != nil {
+		return err
+	}
+	_, err := obsoleteArtifacts(ctx, s.area, s.selector, s.index)
+	return err
+}
+
 func (s *session) Read(ctx context.Context, versionID string) (secrets.Material, error) {
 	if err := s.usable(ctx, false); err != nil {
 		return secrets.Material{}, err

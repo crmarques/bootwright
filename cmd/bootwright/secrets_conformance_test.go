@@ -161,6 +161,8 @@ func (s *memorySession) publish(ctx context.Context) error {
 	return nil
 }
 
+func (s *memorySession) Verify(context.Context) error { return nil }
+
 func (s *memorySession) Inspect(ctx context.Context) (secretstore.Snapshot, error) {
 	result := secretstore.Snapshot{Versions: []secretstore.Version{}, Current: []secretstore.Current{}, Bindings: []secretstore.Binding{}, ActiveKey: s.state.key, Keys: []secretstore.Key{{ID: s.state.key, State: "active"}}}
 	for _, version := range s.state.versions {

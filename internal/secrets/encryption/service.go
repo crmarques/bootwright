@@ -74,6 +74,9 @@ func (s Service) Status(ctx context.Context, request EncryptionStatusRequest) (*
 		if err != nil {
 			return err
 		}
+		if err := session.Verify(ctx); err != nil {
+			return err
+		}
 		result.Initialized = true
 		result.Implementation = &ImplementationStatus{Type: selection.Type, Store: componentStatus(selection.Store), KeyCustody: componentStatus(selection.KeyCustody), State: "ready"}
 		active := snapshot.ActiveKey

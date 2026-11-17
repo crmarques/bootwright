@@ -66,7 +66,10 @@ type serviceSession struct {
 	inspections int
 	rotations   int
 	snapshot    *secretstore.Snapshot
+	verified    error
 }
+
+func (s *serviceSession) Verify(context.Context) error { return s.verified }
 
 func (s *serviceSession) Inspect(context.Context) (secretstore.Snapshot, error) {
 	s.inspections++
@@ -185,6 +188,16 @@ func TestStatusCountsProducedParts(t *testing.T) {
 	status, err := service.Status(context.Background(), EncryptionStatusRequest{ContextName: "fixture"})
 	if err != nil || status.Items.MaterialParts != 2 || status.Items.CurrentVersions != 1 || status.Items.BoundVersions != 0 || status.Context != access.selected {
 		t.Fatalf("status = %+v, %v", status, err)
+	}
+}
+
+// Encryption status verifies everything the store retains, so a corrupt
+// identity reservation the cheap open does not read refuses here.
+func TestStatusRefusesWhatTheStoreCannotVerify(t *testing.T) {
+	service, access := serviceFixture()
+	access.session.verified = secretstore.Failure("store.corrupt", "secret identity reservation is invalid")
+	if _, err := service.Status(context.Background(), EncryptionStatusRequest{ContextName: "fixture"}); err == nil || err.Error() != access.session.verified.Error() {
+		t.Fatalf("status of a store that cannot be verified = %v", err)
 	}
 }
 

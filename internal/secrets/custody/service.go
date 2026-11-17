@@ -323,6 +323,9 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*CheckResult,
 			if err != nil {
 				return err
 			}
+			if err := session.Verify(ctx); err != nil {
+				return err
+			}
 		}
 		for _, d := range declarations {
 			if err := ctx.Err(); err != nil {

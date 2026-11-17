@@ -73,6 +73,7 @@ type SecretStoreImplementation interface {
 // writes; mutation methods atomically publish one complete semantic transition.
 type StoreSession interface {
 	Inspect(context.Context) (Snapshot, error)
+	Verify(context.Context) error
 	Read(context.Context, string) (secrets.Material, error)
 	PutBatch(context.Context, []Put) ([]Version, error)
 	Delete(context.Context, string) (bool, error)

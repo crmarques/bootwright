@@ -77,7 +77,10 @@ type serviceSession struct {
 	// bound lists every input a Bind received; reopened is what Reopen serves.
 	bound    []secretstore.BoundInput
 	reopened []secretstore.BoundMaterial
+	verified error
 }
+
+func (s *serviceSession) Verify(context.Context) error { return s.verified }
 
 func (s *serviceSession) Bind(_ context.Context, inputs []secretstore.BoundInput) (secretstore.Binding, error) {
 	s.writes++
@@ -413,6 +416,16 @@ func TestStoredDeclarationSummaryRetainsStalenessIdentity(t *testing.T) {
 
 // Bind, check and show read only keyring versions for every source: the one
 // acquisition that opens an operator path is secret set's.
+// Secret check verifies everything the store retains, so a corrupt identity
+// reservation the cheap open does not read refuses here.
+func TestCheckRefusesWhatTheStoreCannotVerify(t *testing.T) {
+	s, a, _, _ := serviceFixture(t, declarationYAML("stored", ""))
+	a.session.verified = secretstore.Failure("store.corrupt", "secret identity reservation is invalid")
+	if _, err := s.Check(context.Background(), CheckRequest{}); err == nil || err.Error() != a.session.verified.Error() {
+		t.Fatalf("check of a store that cannot be verified = %v", err)
+	}
+}
+
 func TestBindCheckAndShowReadOnlyKeyringVersions(t *testing.T) {
 	s, a, m, _ := serviceFixture(t, declarationYAML("stored", "")+declarationYAML("generated", "  source: {generated: {}}\n"))
 	ctx := context.Background()
