@@ -407,7 +407,7 @@ func validateProxyEndpoints(connection api.Value) []api.Issue {
 	issues := []api.Issue{}
 	for _, name := range []string{"httpProxy", "httpsProxy"} {
 		value := connection.Get(name)
-		if !value.Present() || value.Type() != api.String || !api.ValidLexical("http-url", value.Text()) || api.ValidLexical("proxy-endpoint", value.Text()) {
+		if !value.Present() || value.Type() != api.String || !api.ValidLexical(api.LexicalHTTPURL, value.Text()) || api.ValidLexical(api.LexicalProxyEndpoint, value.Text()) {
 			continue
 		}
 		issues = append(issues, api.Issue{
@@ -470,7 +470,7 @@ func validateImagePins(value api.Value, mode string, partial bool) []api.Issue {
 	}
 	for _, field := range []string{"local", "public"} {
 		pin := image.Get(field)
-		if pin.Type() == api.String && api.ValidLexical("image", pin.Text()) && !strings.Contains(pin.Text(), "@") {
+		if pin.Type() == api.String && api.ValidLexical(api.LexicalImage, pin.Text()) && !strings.Contains(pin.Text(), "@") {
 			issues = api.AppendIssues(issues, issue("$.spec.image."+field, "a managed service image is pinned by content digest, because planning cannot resolve a tag",
 				"write spec.image."+field+" as <repository>@sha256:<64 hex digits>"))
 		}

@@ -14,10 +14,10 @@ func init() {
 
 func addonSchema() *Shape {
 	s := record(
-		field("provides", set(lexical("token"))),
-		field("requires", set(lexical("token"))),
+		field("provides", set(lexical(LexicalToken))),
+		field("requires", set(lexical(LexicalToken))),
 		field("olm", addonOLMSchema()),
-		field("manifestSet", record(required("manifests", nonemptyArray(array(record(required("path", lexical("relative-path")))))))),
+		field("manifestSet", record(required("manifests", nonemptyArray(array(record(required("path", lexical(LexicalRelativePath)))))))),
 		field("readiness", record(defaulted("timeout", duration(), StringValue("30m")), field("checks", array(addonReadinessSchema())))),
 		field("steps", named(addonStepSchema())),
 	)
@@ -57,12 +57,12 @@ func addonStepSchema() *Shape {
 	)
 	target.Arms = []string{"boundCluster", "static"}
 	s := record(
-		required("name", lexical("token")), field("gates", enumeration("apply")), field("follows", enumeration("operatorReady", "ready")),
+		required("name", lexical(LexicalToken)), field("gates", enumeration("apply")), field("follows", enumeration("operatorReady", "ready")),
 		field("requires", array(addonReadinessSchema())), field("source", playbookSourceSchema()),
-		field("playbook", lexical("relative-path")), field("rolesPath", lexical("relative-path")), field("collectionsPath", lexical("relative-path")),
+		field("playbook", lexical(LexicalRelativePath)), field("rolesPath", lexical(LexicalRelativePath)), field("collectionsPath", lexical(LexicalRelativePath)),
 		field("target", target), field("extraVars", native()), field("secretRefs", set(ref(Secret))), field("timeout", duration()),
-		field("outputs", named(record(required("name", lexical("token")), required("file", lexical("relative-path")), field("secret", boolean()), field("format", enumeration("text", "json", "sha256"))))),
-		field("manifests", array(record(required("path", lexical("relative-path")), field("reclaimRendered", boolean())))),
+		field("outputs", named(record(required("name", lexical(LexicalToken)), required("file", lexical(LexicalRelativePath)), field("secret", boolean()), field("format", enumeration("text", "json", "sha256"))))),
+		field("manifests", array(record(required("path", lexical(LexicalRelativePath)), field("reclaimRendered", boolean())))),
 	)
 	s.Arms = []string{"gates", "follows"}
 	return s

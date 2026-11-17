@@ -179,7 +179,7 @@ func DecodeRequest(data []byte) (Request, error) {
 	if !wholePart(request) {
 		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request names a part of the stage it does not hold", "destroy it with the build that applied it")
 	}
-	if trust := request.MirrorTrust; trust != nil && (trust.Host == "" || !api.ValidLexical("name", trust.TrustBundleRef) || !slices.ContainsFunc(request.Tools, func(tool ToolRequest) bool { return mirrorHost(tool.Mirror) == trust.Host })) {
+	if trust := request.MirrorTrust; trust != nil && (trust.Host == "" || !api.ValidLexical(api.LexicalName, trust.TrustBundleRef) || !slices.ContainsFunc(request.Tools, func(tool ToolRequest) bool { return mirrorHost(tool.Mirror) == trust.Host })) {
 		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request names a mirror trust anchor no client it reads from that mirror uses", "destroy it with the build that applied it")
 	}
 	return request, nil

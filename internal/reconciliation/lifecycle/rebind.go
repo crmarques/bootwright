@@ -23,7 +23,7 @@ func splitRebinds(contextName string, verb reconciliation.Verb, authorizations [
 			tokens = append(tokens, token)
 			continue
 		}
-		if !api.ValidLexical("name", secret) || slices.Contains(rebinds, secret) {
+		if !api.ValidLexical(api.LexicalName, secret) || slices.Contains(rebinds, secret) {
 			return nil, nil, failure("lifecycle.authorization",
 				"--authorize "+token+" must name one Secret once",
 				"repeat "+contextCommand(contextName, string(verb))+" naming each rotated access credential once as --authorize rebind=<secret>")

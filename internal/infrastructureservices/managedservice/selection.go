@@ -32,7 +32,7 @@ func UnitName(contextName, slug, service string) string {
 // ValidContextName repeats the workspace name grammar at this boundary, because
 // the context name reaches a unit name and an owned path.
 func ValidContextName(contextName string) bool {
-	return api.ValidLexical("name", contextName)
+	return api.ValidLexical(api.LexicalName, contextName)
 }
 
 // ImageFor selects the service image. Planning is pure, so it cannot resolve a

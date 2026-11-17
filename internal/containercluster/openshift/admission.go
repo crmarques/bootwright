@@ -133,7 +133,7 @@ func nodesWithFQDN(o api.Object, c api.Catalog, nodes []api.Value) []api.Value {
 
 func derivedNameIssues(o api.Object, c api.Catalog) []api.Issue {
 	domain := environment.ContainerClusterDomain(c)
-	if domain == "" || !api.ValidLexical("name", o.Name()) {
+	if domain == "" || !api.ValidLexical(api.LexicalName, o.Name()) {
 		return nil
 	}
 	suffix := "." + o.Name() + "." + domain
@@ -357,7 +357,7 @@ func validateRelease(s api.Value, partial bool) []api.Issue {
 	if !partial && !release.Has("version") && !release.Has("image") {
 		issues = api.AppendIssues(issues, invariantRemediation("$.spec.distribution.release", "release requires version or a pinned image", "set spec.distribution.release.version or a pinned spec.distribution.release.image"))
 	}
-	if release.Has("version") && !api.ValidLexical("cluster-release", release.Get("version").Text()) {
+	if release.Has("version") && !api.ValidLexical(api.LexicalClusterRelease, release.Get("version").Text()) {
 		issues = api.AppendIssues(issues, invariantRemediation("$.spec.distribution.release.version", "release version requires an exact major.minor.patch publisher release", "set spec.distribution.release.version to an exact publisher release, such as 4.22.0-rc.1"))
 	}
 	if kind == "okd" && release.Has("channel") {
@@ -394,12 +394,12 @@ func validateNodes(s api.Value, nodes []api.Value, partial bool) []api.Issue {
 		roles[node.Get("role").Text()] = true
 		path := fmt.Sprintf("$.spec.nodes[%d]", i)
 		for _, label := range node.Get("labels").Fields() {
-			if !api.ValidLexical("kubernetes-label-key", label.Name) || !api.ValidLexical("kubernetes-label-value", label.Value.Text()) {
+			if !api.ValidLexical(api.LexicalKubernetesLabelKey, label.Name) || !api.ValidLexical(api.LexicalKubernetesLabelValue, label.Value.Text()) {
 				issues = api.AppendIssues(issues, invariantRemediation(path+".labels", "node labels require Kubernetes label keys and values", "correct the Kubernetes label keys and values in "+path+".labels"))
 			}
 		}
 		for j, taint := range node.Get("taints").Items() {
-			if (!partial || taint.Has("key")) && !api.ValidLexical("kubernetes-label-key", taint.Get("key").Text()) || taint.Has("value") && !api.ValidLexical("kubernetes-label-value", taint.Get("value").Text()) {
+			if (!partial || taint.Has("key")) && !api.ValidLexical(api.LexicalKubernetesLabelKey, taint.Get("key").Text()) || taint.Has("value") && !api.ValidLexical(api.LexicalKubernetesLabelValue, taint.Get("value").Text()) {
 				issues = api.AppendIssues(issues, invariantRemediation(fmt.Sprintf("%s.taints[%d]", path, j), "node taints require Kubernetes label keys and values", fmt.Sprintf("correct the Kubernetes key and value in %s.taints[%d]", path, j)))
 			}
 		}

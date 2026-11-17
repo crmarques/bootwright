@@ -104,7 +104,7 @@ func validateContent(spec api.Value, prefix string, c api.Catalog, allowGit, par
 			continue
 		}
 		segment := map[string]string{"playbook": "playbooks", "rolesPath": "roles", "collectionsPath": "collections"}[field]
-		if !api.ValidLexical("relative-path", value.Text()) || !partial && !external && !slices.Contains(strings.Split(value.Text(), "/"), segment) {
+		if !api.ValidLexical(api.LexicalRelativePath, value.Text()) || !partial && !external && !slices.Contains(strings.Split(value.Text(), "/"), segment) {
 			issues = append(issues, issue("api.value", prefix+"."+field, "Content paths must be clean, contained and use their co-located payload segment."))
 		}
 		if field == "playbook" && !yamlSuffix(value.Text()) {
@@ -114,7 +114,7 @@ func validateContent(spec api.Value, prefix string, c api.Catalog, allowGit, par
 			issues = append(issues, issue("api.value", prefix+"."+field, "Roles and collections directories cannot use excluded dependency-root names."))
 		}
 	}
-	if source := spec.Get("source", "path"); source.Present() && !api.ValidLexical("absolute-path", source.Text()) {
+	if source := spec.Get("source", "path"); source.Present() && !api.ValidLexical(api.LexicalAbsolutePath, source.Text()) {
 		issues = append(issues, issue("api.value", prefix+".source.path", "An external content root must be a clean absolute path."))
 	}
 	if git := spec.Get("source", "git"); git.Present() {
@@ -175,7 +175,7 @@ func validateGit(git api.Value, prefix string, c api.Catalog) []api.Issue {
 	if git.Has("ref") && !validGitRef(git.Get("ref").Text()) {
 		issues = append(issues, issue("api.value", prefix+".ref", "Git source ref must be a valid branch, tag or commit reference."))
 	}
-	if git.Has("subdir") && !api.ValidLexical("relative-path", git.Get("subdir").Text()) {
+	if git.Has("subdir") && !api.ValidLexical(api.LexicalRelativePath, git.Get("subdir").Text()) {
 		issues = append(issues, issue("api.value", prefix+".subdir", "Git source subdirectory must remain below its content root."))
 	}
 	if git.Has("secretRef") && valid {
@@ -192,7 +192,7 @@ func validateGit(git api.Value, prefix string, c api.Catalog) []api.Issue {
 }
 
 func gitLocation(value string) (string, string, bool) {
-	if api.ValidLexical("absolute-path", value) {
+	if api.ValidLexical(api.LexicalAbsolutePath, value) {
 		return "local", value, true
 	}
 	if strings.TrimSpace(value) != value || strings.ContainsAny(value, "\x00\r\n\t ") {
@@ -202,7 +202,7 @@ func gitLocation(value string) (string, string, bool) {
 	if err == nil && u.Opaque == "" && u.RawQuery == "" && u.Fragment == "" {
 		switch u.Scheme {
 		case "https":
-			return "https", "", api.ValidLexical("https-url", value) && u.Path != ""
+			return "https", "", api.ValidLexical(api.LexicalHTTPSURL, value) && u.Path != ""
 		case "ssh":
 			password := false
 			if u.User != nil {
@@ -212,9 +212,9 @@ func gitLocation(value string) (string, string, bool) {
 			if port, parseErr := strconv.Atoi(u.Port()); parseErr == nil {
 				portValid = port > 0 && port <= 65535
 			}
-			return "ssh", "", !password && api.ValidLexical("host", u.Hostname()) && portValid && u.Path != ""
+			return "ssh", "", !password && api.ValidLexical(api.LexicalHost, u.Hostname()) && portValid && u.Path != ""
 		case "file":
-			return "local", u.Path, u.User == nil && u.Host == "" && api.ValidLexical("absolute-path", u.Path)
+			return "local", u.Path, u.User == nil && u.Host == "" && api.ValidLexical(api.LexicalAbsolutePath, u.Path)
 		}
 	}
 	if !strings.Contains(value, "://") {
@@ -222,7 +222,7 @@ func gitLocation(value string) (string, string, bool) {
 		if _, after, hasUser := strings.Cut(host, "@"); hasUser {
 			host = after
 		}
-		if found && api.ValidLexical("host", host) && repository != "" && !strings.HasPrefix(repository, "-") {
+		if found && api.ValidLexical(api.LexicalHost, host) && repository != "" && !strings.HasPrefix(repository, "-") {
 			return "ssh", "", true
 		}
 	}

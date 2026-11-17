@@ -274,7 +274,7 @@ func validFirewallRequest(request FirewallRequest) error {
 	invalid := func(message string) error {
 		return refusal("lifecycle.state", "the host firewall request of Machine/"+request.Identity.Object+" "+message, "")
 	}
-	if request.Version != FirewallImplementation || request.Identity.Block != firewallRequestBlockID(request) || !api.ValidLexical("name", request.Identity.Context) {
+	if request.Version != FirewallImplementation || request.Identity.Block != firewallRequestBlockID(request) || !api.ValidLexical(api.LexicalName, request.Identity.Context) {
 		return invalid("names another block or version")
 	}
 	if request.Budgets != (FirewallBudgets{Session: seconds(firewallSession)}) {
@@ -294,7 +294,7 @@ func validFirewallRequest(request FirewallRequest) error {
 				return invalid("has unexpected local access fields")
 			}
 		case machineref.ConnectionSSH:
-			if placement.User != "root" || !api.ValidLexical("host", placement.Address) || placement.Port < 1 || placement.Port > 65535 || !api.ValidLexical("name", placement.PrivateKeyRef) || !api.ValidLexical("name", placement.KnownHostsRef) {
+			if placement.User != "root" || !api.ValidLexical(api.LexicalHost, placement.Address) || placement.Port < 1 || placement.Port > 65535 || !api.ValidLexical(api.LexicalName, placement.PrivateKeyRef) || !api.ValidLexical(api.LexicalName, placement.KnownHostsRef) {
 				return invalid("has no pinned root SSH placement")
 			}
 		default:
@@ -332,7 +332,7 @@ func validService(service FirewallService) error {
 		return refusal("lifecycle.state", "a firewall service mixes exact addresses and interface networks", "")
 	}
 	for _, address := range service.Addresses {
-		if !api.ValidLexical("host", address) {
+		if !api.ValidLexical(api.LexicalHost, address) {
 			return refusal("lifecycle.state", "a firewall service names an invalid listener address", "")
 		}
 	}

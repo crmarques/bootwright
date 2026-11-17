@@ -121,9 +121,9 @@ func admissible(paths []ProjectedPath, discovers []api.Kind, applied api.Catalog
 		return failure("lifecycle.state", "its projection names a kind its implementation does not observe: "+string(projection.Kind), "")
 	case projection.Name == "":
 		return failure("lifecycle.state", "its projection of "+string(projection.Kind)+" names no object", "")
-	case !api.ValidLexical("name", projection.Name):
+	case !api.ValidLexical(api.LexicalName, projection.Name):
 		return failure("lifecycle.state", "its projection of "+string(projection.Kind)+" names an object by an invalid name: "+strconv.Quote(projection.Name), "")
-	case holder != nil && !api.ValidLexical("name", holder.Name):
+	case holder != nil && !api.ValidLexical(api.LexicalName, holder.Name):
 		return failure("lifecycle.state", "its projection of "+identity+" names a holder by an invalid name: "+strconv.Quote(holder.Name), "")
 	case !declared && !slices.Contains(discovers, projection.Kind):
 		return failure("lifecycle.state", "its projection names an object the applied revision does not declare: "+identity, "")

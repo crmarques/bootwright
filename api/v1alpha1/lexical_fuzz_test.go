@@ -1,12 +1,8 @@
 package v1alpha1
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -15,7 +11,7 @@ import (
 // lexicalSeeds is each lexical rule with one value it admits. The fuzz target
 // takes a rule by its place in this table, and the test below holds the table
 // to the rules ValidLexical names.
-var lexicalSeeds = map[string]string{
+var lexicalSeeds = map[LexicalRule]string{
 	"kubernetes-label-key":   "example.test/app-name",
 	"kubernetes-label-value": "value_1",
 	"name":                   "lab-one",
@@ -60,7 +56,7 @@ var lexicalSeeds = map[string]string{
 
 // lexicalBounds is each rule's longest admitted value in bytes, where its
 // grammar bounds one. A rule not listed here has none.
-var lexicalBounds = map[string]int{
+var lexicalBounds = map[LexicalRule]int{
 	"kubernetes-label-key": 253 + 1 + 63,
 	"name":                 63,
 	"dns":                  253,
@@ -83,7 +79,7 @@ var lexicalBounds = map[string]int{
 	"package-version":      96,
 }
 
-func lexicalRuleNames() []string {
+func lexicalRuleNames() []LexicalRule {
 	return slices.Sorted(maps.Keys(lexicalSeeds))
 }
 
@@ -123,7 +119,7 @@ func FuzzValidLexical(f *testing.F) {
 		if rule == "native-version" && !utf8.ValidString(value) {
 			t.Fatalf("%s admitted invalid UTF-8 %q", rule, value)
 		}
-		if !strings.HasSuffix(rule, "-path") && rule != "native-version" && rule != "checksum" && rule != "duration" && rule != "mac" {
+		if !strings.HasSuffix(string(rule), "-path") && rule != "native-version" && rule != "checksum" && rule != "duration" && rule != "mac" {
 			for index := range len(value) {
 				if value[index] < 0x21 || value[index] > 0x7e {
 					t.Fatalf("%s admitted %q holding a byte outside printable ASCII", rule, value)
@@ -134,47 +130,17 @@ func FuzzValidLexical(f *testing.F) {
 }
 
 func TestLexicalFuzzTableHoldsEveryRuleValidLexicalNames(t *testing.T) {
-	syntax, err := parser.ParseFile(token.NewFileSet(), "lexical.go", nil, 0)
-	if err != nil {
-		t.Fatal(err)
+	if len(lexicalRules) == 0 {
+		t.Fatal("found no rule in the lexical registry")
 	}
-	named := map[string]bool{}
-	for _, declaration := range syntax.Decls {
-		function, ok := declaration.(*ast.FuncDecl)
-		if !ok || function.Name.Name != "ValidLexical" {
-			continue
-		}
-		ast.Inspect(function.Body, func(node ast.Node) bool {
-			switch node := node.(type) {
-			case *ast.CaseClause:
-				for _, expression := range node.List {
-					if literal, ok := expression.(*ast.BasicLit); ok {
-						name, _ := strconv.Unquote(literal.Value)
-						named[name] = true
-					}
-				}
-			case *ast.BinaryExpr:
-				if literal, ok := node.Y.(*ast.BasicLit); ok && node.Op == token.EQL {
-					if identifier, ok := node.X.(*ast.Ident); ok && identifier.Name == "rule" {
-						name, _ := strconv.Unquote(literal.Value)
-						named[name] = true
-					}
-				}
-			}
-			return true
-		})
-	}
-	if len(named) == 0 {
-		t.Fatal("found no rule in ValidLexical")
-	}
-	for rule := range named {
+	for rule := range lexicalRules {
 		if _, seeded := lexicalSeeds[rule]; !seeded {
-			t.Errorf("ValidLexical names the rule %q that lexicalSeeds lacks", rule)
+			t.Errorf("the lexical registry names the rule %q that lexicalSeeds lacks", rule)
 		}
 	}
 	for rule, seed := range lexicalSeeds {
-		if !named[rule] {
-			t.Errorf("lexicalSeeds holds %q, which ValidLexical does not name", rule)
+		if _, registered := lexicalRules[rule]; !registered {
+			t.Errorf("lexicalSeeds holds %q, which the lexical registry does not name", rule)
 		}
 		if !ValidLexical(rule, seed) {
 			t.Errorf("%s refuses its seed %q", rule, seed)

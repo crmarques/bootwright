@@ -97,12 +97,12 @@ func Select(catalog api.Catalog) (Selection, error) {
 			"declare exactly one Environment in the context input")
 	}
 	environment := environments[0]
-	if !api.ValidLexical("name", environment.Name()) {
+	if !api.ValidLexical(api.LexicalName, environment.Name()) {
 		return Selection{}, refuseSelection(api.Object{}, "api.value", "$.metadata.name", "effective Environment requires a valid name",
 			"set metadata.name of the Environment to a lowercase DNS label")
 	}
 	ref := environment.Spec().Get("controller", "machineRef")
-	if ref.Type() != api.String || !api.ValidLexical("name", ref.Text()) {
+	if ref.Type() != api.String || !api.ValidLexical(api.LexicalName, ref.Text()) {
 		return Selection{}, refuseSelection(environment, "api.reference", "$.spec.controller.machineRef", "controller requires an explicit scalar Machine name",
 			"set spec.controller.machineRef on "+environment.Identity()+" to the name of the controller Machine")
 	}
@@ -213,7 +213,7 @@ func selectRoute(machine api.Object, catalog api.Catalog) (Route, error) {
 		return Route{direct: true}, nil
 	}
 	ref := choice.Get("proxyRef")
-	if ref.Type() != api.String || !api.ValidLexical("name", ref.Text()) {
+	if ref.Type() != api.String || !api.ValidLexical(api.LexicalName, ref.Text()) {
 		return Route{}, refuseSelection(machine, "api.reference", "$.spec.proxy.proxyRef", "proxy reference requires an explicit scalar Proxy name",
 			"set spec.proxy.proxyRef on "+machine.Identity()+" to the name of a Proxy")
 	}
@@ -232,7 +232,7 @@ func selectRoute(machine api.Object, catalog api.Catalog) (Route, error) {
 		if !value.Present() {
 			continue
 		}
-		if value.Type() != api.String || !api.ValidLexical("http-url", value.Text()) || !api.ValidLexical("proxy-endpoint", value.Text()) {
+		if value.Type() != api.String || !api.ValidLexical(api.LexicalHTTPURL, value.Text()) || !api.ValidLexical(api.LexicalProxyEndpoint, value.Text()) {
 			return Route{}, refuseSelection(proxy, "api.value", "$.spec.connection."+entry.field,
 				"the controller route requires spec.connection."+entry.field+" to be a bare HTTP or HTTPS proxy endpoint",
 				"set spec.connection."+entry.field+" on "+proxy.Identity()+" to "+api.ProxyEndpointForm)
@@ -255,7 +255,7 @@ func selectRoute(machine api.Object, catalog api.Catalog) (Route, error) {
 				return Route{}, refuseSelection(machine, "api.value", field, "proxy bypass entries must be distinct nonempty strings",
 					"remove the empty or repeated "+strings.TrimPrefix(field, "$.")+" from "+machine.Identity())
 			}
-			if !api.ValidLexical("proxy-bypass", value.Text()) {
+			if !api.ValidLexical(api.LexicalProxyBypass, value.Text()) {
 				return Route{}, refuseSelection(machine, "api.value", field, "the controller route requires each spec.proxy.noProxy entry to be a proxy bypass entry",
 					"write "+strings.TrimPrefix(field, "$.")+" on "+machine.Identity()+" as "+api.ProxyBypassForms)
 			}

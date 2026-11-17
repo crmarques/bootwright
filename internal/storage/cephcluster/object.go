@@ -148,7 +148,7 @@ func (a *admission) gatewayEndpoint(endpoint api.Value) {
 		a.issue("api.invariant", field, "an endpoint needs an FQDN and no Environment domain derives one", "set spec.endpoint.fqdn")
 		return
 	}
-	if !api.ValidLexical("dns", fqdn) {
+	if !api.ValidLexical(api.LexicalDNS, fqdn) {
 		a.issue("api.invariant", field, "the derived endpoint FQDN is not a valid DNS name", "set spec.endpoint.fqdn to a valid DNS name or shorten the gateway, cluster or domain name")
 		return
 	}

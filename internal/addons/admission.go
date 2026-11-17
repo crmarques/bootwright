@@ -122,7 +122,7 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 		}
 	}
 	for _, label := range olm.Get("namespace", "labels").Fields() {
-		if !api.ValidLexical("kubernetes-label-key", label.Name) || !api.ValidLexical("kubernetes-label-value", label.Value.Text()) {
+		if !api.ValidLexical(api.LexicalKubernetesLabelKey, label.Name) || !api.ValidLexical(api.LexicalKubernetesLabelValue, label.Value.Text()) {
 			issues = append(issues, addonIssue("api.value", "spec.olm.namespace.labels", "Namespace labels must have valid Kubernetes keys and values.", "use valid Kubernetes label keys and values in olm.namespace.labels"))
 			break
 		}
@@ -200,7 +200,7 @@ func validateManifests(manifests api.Value, field string, partial bool) []api.Is
 		}
 		value := manifest.Get("path").Text()
 		ext := strings.ToLower(path.Ext(value))
-		if !api.ValidLexical("relative-path", value) || !slices.Contains(strings.Split(value, "/"), "manifests") || ext != ".yaml" && ext != ".yml" {
+		if !api.ValidLexical(api.LexicalRelativePath, value) || !slices.Contains(strings.Split(value, "/"), "manifests") || ext != ".yaml" && ext != ".yml" {
 			issues = append(issues, addonIssue("api.value", indexed(field, i)+".path", "Manifest paths must be contained YAML paths with a manifests segment.", "use a relative .yaml or .yml path with a manifests directory in it"))
 		}
 	}

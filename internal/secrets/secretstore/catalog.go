@@ -25,7 +25,7 @@ func NewCatalog(implementations ...SecretStoreImplementation) *ImplementationCat
 		}
 		selection := implementation.Selection()
 		backend := implementation.Backend()
-		if !validSelection(selection) || !api.ValidLexical("name", backend) || seen["type:"+selection.Type] || seen["backend:"+backend] {
+		if !validSelection(selection) || !api.ValidLexical(api.LexicalName, backend) || seen["type:"+selection.Type] || seen["backend:"+backend] {
 			c.invalid = true
 		}
 		seen["type:"+selection.Type], seen["backend:"+backend] = true, true
@@ -48,7 +48,7 @@ func (c *ImplementationCatalog) Types() []string {
 }
 
 func (c *ImplementationCatalog) Select(kind string) (SecretStoreImplementation, error) {
-	if c == nil || c.invalid || !api.ValidLexical("name", kind) {
+	if c == nil || c.invalid || !api.ValidLexical(api.LexicalName, kind) {
 		return nil, Failure("store.implementation", "secret store implementation catalog is invalid")
 	}
 	for i, selection := range c.selections {
@@ -63,7 +63,7 @@ func (c *ImplementationCatalog) Select(kind string) (SecretStoreImplementation, 
 }
 
 func (c *ImplementationCatalog) Reopen(backend string) (SecretStoreImplementation, error) {
-	if c == nil || c.invalid || !api.ValidLexical("name", backend) {
+	if c == nil || c.invalid || !api.ValidLexical(api.LexicalName, backend) {
 		return nil, Failure("store.implementation", "secret store implementation catalog is invalid")
 	}
 	for i, id := range c.backends {
@@ -81,11 +81,11 @@ func (c *ImplementationCatalog) Reopen(backend string) (SecretStoreImplementatio
 }
 
 func validSelection(s Selection) bool {
-	if !api.ValidLexical("name", s.Type) {
+	if !api.ValidLexical(api.LexicalName, s.Type) {
 		return false
 	}
 	for _, ref := range []ComponentRef{s.Store, s.KeyCustody} {
-		if !api.ValidLexical("name", ref.ID) || ref.InterfaceVersion < 1 || ref.StateVersion < 1 || ref.ConfigVersion < 1 {
+		if !api.ValidLexical(api.LexicalName, ref.ID) || ref.InterfaceVersion < 1 || ref.StateVersion < 1 || ref.ConfigVersion < 1 {
 			return false
 		}
 	}

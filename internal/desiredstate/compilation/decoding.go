@@ -111,7 +111,7 @@ func documentObject(root *desiredstate.Node) *diagnostics.ObjectIdentity {
 	apiVersion := stringScalar(mappingNode(root, "apiVersion"))
 	kind := stringScalar(mappingNode(root, "kind"))
 	name := stringScalar(mappingNode(mappingNode(root, "metadata"), "name"))
-	if apiVersion != api.APIVersion || api.KindIndex(api.Kind(kind)) < 0 || !api.ValidLexical("name", name) {
+	if apiVersion != api.APIVersion || api.KindIndex(api.Kind(kind)) < 0 || !api.ValidLexical(api.LexicalName, name) {
 		return nil
 	}
 	return &diagnostics.ObjectIdentity{APIVersion: apiVersion, Kind: kind, Name: name}

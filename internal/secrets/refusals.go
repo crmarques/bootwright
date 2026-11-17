@@ -148,7 +148,7 @@ func refusal(code, message, contextName, name, remedy string) diagnostics.Diagno
 }
 
 func secretObject(name string) *diagnostics.ObjectIdentity {
-	if !api.ValidLexical("name", name) {
+	if !api.ValidLexical(api.LexicalName, name) {
 		return nil
 	}
 	return &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Secret), Name: name}

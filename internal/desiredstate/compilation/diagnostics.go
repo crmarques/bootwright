@@ -139,7 +139,7 @@ func (d *diagnosticSink) issue(record *objectRecord, issue api.Issue) bool {
 		item.Severity = "warning"
 	}
 	if record != nil {
-		if api.ValidLexical("name", record.object.Name()) {
+		if api.ValidLexical(api.LexicalName, record.object.Name()) {
 			item.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(record.object.Kind()), Name: record.object.Name()}
 		}
 		if location, ok := record.location(issue.Field); ok {

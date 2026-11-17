@@ -140,7 +140,7 @@ func (c *ToolCatalog) Resolve(ctx context.Context, requests []evidence.ToolReque
 
 // stagedMirror is the mirror a stage fetches beneath. It is admission's own
 // rule, so validate refuses every mirror Resolve would refuse.
-func stagedMirror(mirror string) bool { return api.ValidLexical("mirror-url", mirror) }
+func stagedMirror(mirror string) bool { return api.ValidLexical(api.LexicalMirrorURL, mirror) }
 
 func toolRequests(requests []evidence.ToolRequest) ([]evidence.ToolRequest, error) {
 	if len(requests) > 128 {
@@ -166,7 +166,7 @@ func toolRequests(requests []evidence.ToolRequest) ([]evidence.ToolRequest, erro
 				return nil, bundleFailure("generic tool request has unqualified compatibility metadata")
 			}
 		case "openshift-clients", "openshift-install", "openshift-install-fips":
-			if !api.ValidLexical("cluster-release", request.Version) || request.Compatibility != "openshift" && request.Compatibility != "okd" || request.Kind == "openshift-install-fips" && request.Compatibility != "openshift" {
+			if !api.ValidLexical(api.LexicalClusterRelease, request.Version) || request.Compatibility != "openshift" && request.Compatibility != "okd" || request.Kind == "openshift-install-fips" && request.Compatibility != "openshift" {
 				return nil, bundleFailure("installer and client tools require the exact target distribution release")
 			}
 		case "virtctl":

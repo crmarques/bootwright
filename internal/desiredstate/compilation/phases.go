@@ -267,7 +267,7 @@ func (r *run) validateEffective(catalog api.Catalog) bool {
 		if r.ds.stopped() {
 			break
 		}
-		if !api.ValidLexical("name", record.object.Name()) {
+		if !api.ValidLexical(api.LexicalName, record.object.Name()) {
 			r.ds.issue(record, api.Issue{
 				Code: "api.value", Field: "$.metadata.name",
 				Message:     string(record.object.Kind()) + " metadata.name must be a lowercase DNS label",

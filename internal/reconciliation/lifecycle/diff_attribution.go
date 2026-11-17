@@ -150,7 +150,7 @@ func (r diffRead) copyName(kind api.Kind, origin, holder string, names claimedNa
 		if n > 1 {
 			candidate += "-" + strconv.Itoa(n)
 		}
-		if !api.ValidLexical("name", candidate) {
+		if !api.ValidLexical(api.LexicalName, candidate) {
 			return ""
 		}
 		identity := string(kind) + "/" + candidate

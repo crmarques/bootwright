@@ -223,7 +223,6 @@ func TestComplexityGuardRefusesAPlantedViolation(t *testing.T) {
 // grew past the limit instead of being split by meaning.
 func goFunctionsAwaitingSplit() []string {
 	return []string{
-		"api/v1alpha1/lexical.go.ValidLexical",
 		"internal/addons/admission_olm.go.validateCustomResource",
 		"internal/addons/clusterobjects/evidence_validation.go.ValidateEvidence",
 		"internal/addons/instance/requests.go.Request.validate",

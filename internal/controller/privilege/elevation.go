@@ -208,7 +208,7 @@ func inputLoggedRefusal(logged *InputLogged) Outcome {
 	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "secret.input",
 		Message:     "this host's sudo policy sets " + logged.Option + ", so sudo's I/O log would record the value of " + inputSubject(logged.Secret) + " read from standard input; nothing was read",
 		Remediation: fileRemedy(logged.Secret) + "; " + rootSessionRemedy}
-	if api.ValidLexical("name", logged.Secret) {
+	if api.ValidLexical(api.LexicalName, logged.Secret) {
 		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Secret), Name: logged.Secret}
 	}
 	return Outcome{ExitCode: 1, Diagnostic: &diagnostic}
@@ -226,7 +226,7 @@ func inputUnprovenRefusal(unproven *InputUnproven) Outcome {
 	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "secret.input",
 		Message:     "sudo did not list its policy, so whether its I/O log would record the value of " + inputSubject(unproven.Secret) + " read from standard input is unknown; nothing was read",
 		Remediation: remediation}
-	if api.ValidLexical("name", unproven.Secret) {
+	if api.ValidLexical(api.LexicalName, unproven.Secret) {
 		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Secret), Name: unproven.Secret}
 	}
 	return Outcome{ExitCode: 1, Diagnostic: &diagnostic}

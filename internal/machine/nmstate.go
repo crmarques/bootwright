@@ -265,7 +265,7 @@ func validateNativeInterface(iface api.Value, field string, partial bool, seen m
 		}
 	}
 	if name := iface.Get("name").Text(); name != "" {
-		if !api.ValidLexical("ifname", name) {
+		if !api.ValidLexical(api.LexicalIfname, name) {
 			issues = api.AppendIssues(issues, valueIssue(field+".name", interfaceNameRule, "correct "+strings.TrimPrefix(field, "$.")+".name to a name such as enp1s0"))
 		}
 		if seen[name] {
@@ -337,12 +337,12 @@ func validateNativeRoute(route api.Value, field string) []api.Issue {
 	if route.Has("destination") && destinationErr != nil {
 		issues = api.AppendIssues(issues, invariant(field+".destination", "native route destination must be a CIDR", "write the route destination as a CIDR"))
 	}
-	if name := route.Get("next-hop-interface"); name.Type() == api.String && name.Text() != "" && !api.ValidLexical("ifname", name.Text()) {
+	if name := route.Get("next-hop-interface"); name.Type() == api.String && name.Text() != "" && !api.ValidLexical(api.LexicalIfname, name.Text()) {
 		issues = api.AppendIssues(issues, valueIssue(field+".next-hop-interface", interfaceNameRule, "correct "+strings.TrimPrefix(field, "$.")+".next-hop-interface to a name such as enp1s0"))
 	}
 	if hop := route.Get("next-hop-address"); hop.Present() {
 		address, err := netip.ParseAddr(hop.Text())
-		if hop.Type() != api.String || !api.ValidLexical("ip", hop.Text()) || err != nil || destinationErr == nil && address.Is4() != destination.Addr().Is4() {
+		if hop.Type() != api.String || !api.ValidLexical(api.LexicalIP, hop.Text()) || err != nil || destinationErr == nil && address.Is4() != destination.Addr().Is4() {
 			issues = api.AppendIssues(issues, valueIssue(field+".next-hop-address", "a route next hop is an IP literal without a zone, of its destination's family",
 				"correct "+strings.TrimPrefix(field, "$.")+".next-hop-address to an address such as 192.0.2.1 for an IPv4 destination"))
 		}

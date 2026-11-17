@@ -7,7 +7,7 @@ type ControllerTool struct{ Kind, Version, Compatibility string }
 func ControllerTools(cluster api.Object) ([]ControllerTool, *api.Issue) {
 	distribution := cluster.Spec().Get("distribution")
 	kind, version := distribution.Get("type").Text(), distribution.Get("release", "version").Text()
-	if (kind != "openshift" && kind != "okd") || !api.ValidLexical("cluster-release", version) {
+	if (kind != "openshift" && kind != "okd") || !api.ValidLexical(api.LexicalClusterRelease, version) {
 		return nil, &api.Issue{Code: "controller.unsupported", Field: "$.spec.distribution.release", Message: "target tools require an exact supported release version; declare release.version for a cluster pinned to a release image"}
 	}
 	installer := "openshift-install"

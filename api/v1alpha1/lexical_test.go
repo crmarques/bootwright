@@ -97,7 +97,7 @@ func TestDevicePathAdmitsStableDeviceNames(t *testing.T) {
 
 // lexicalRows checks that rule admits every admitted value and refuses every
 // refused one.
-func lexicalRows(t *testing.T, rule string, admitted, refused []string) {
+func lexicalRows(t *testing.T, rule LexicalRule, admitted, refused []string) {
 	t.Helper()
 	for _, value := range admitted {
 		if !ValidLexical(rule, value) {
@@ -240,7 +240,7 @@ const lexicalDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef01
 func TestImageAndRegistryPathsFollowTheOCIGrammar(t *testing.T) {
 	refusedComponents := []string{"Bad", "a+b", "a!b", "-a", "a..b", "a_-b", "a___b", "a.", "_a"}
 	admittedComponents := []string{"a.b", "a_b", "a__b", "a--b", "ocp-v4.0-art-dev", "ubi9"}
-	for _, rule := range []string{"registry", "registry-base"} {
+	for _, rule := range []LexicalRule{LexicalRegistry, LexicalRegistryBase} {
 		admitted, refused := []string{"registry.example.test:5000", "registry.example.test"}, []string{}
 		for _, component := range admittedComponents {
 			admitted = append(admitted, "registry.example.test/team/"+component)

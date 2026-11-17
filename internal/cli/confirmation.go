@@ -140,7 +140,7 @@ func confirmationIn(action, object, contextName string) confirmation {
 			noun = "deletion"
 		}
 		var identity *diagnostics.ObjectIdentity
-		if api.ValidLexical("name", object) {
+		if api.ValidLexical(api.LexicalName, object) {
 			identity = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Secret), Name: object}
 		}
 		return confirmation{code: "secret.store.conflict", label: "secret " + noun, object: identity,

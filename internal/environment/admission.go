@@ -53,7 +53,7 @@ func fleetKeyIssues(fleetKey api.Value, catalog api.Catalog) []api.Issue {
 	issues := []api.Issue{}
 	installing, names := 0, []string{}
 	for _, machine := range catalog.OfKind(api.Machine) {
-		named, subject := api.ValidLexical("name", machine.Name()), "a Machine"
+		named, subject := api.ValidLexical(api.LexicalName, machine.Name()), "a Machine"
 		if named {
 			subject = machine.Identity()
 		}
@@ -91,7 +91,7 @@ func fleetKeyIssues(fleetKey api.Value, catalog api.Catalog) []api.Issue {
 func validateController(environment api.Object, catalog api.Catalog, members func(api.Object) (Membership, bool)) []api.Issue {
 	name := environment.Spec().Get("controller", "machineRef").Text()
 	controller, found := catalog.Find(api.Machine, name)
-	if !found || !api.ValidLexical("name", name) {
+	if !found || !api.ValidLexical(api.LexicalName, name) {
 		return nil // Required-field and typed-reference checks own absence.
 	}
 	issues := []api.Issue{}
@@ -107,13 +107,13 @@ func validateController(environment api.Object, catalog api.Catalog, members fun
 		add("controller must reference the local Machine with access.local: true and no SSH access", "give "+controller.Identity()+" access.local: true and no spec.access.ssh")
 	}
 	for _, machine := range catalog.OfKind(api.Machine) {
-		if machine.Name() != name && api.ValidLexical("name", machine.Name()) && machine.Spec().Get("access", "local").Bool() {
+		if machine.Name() != name && api.ValidLexical(api.LexicalName, machine.Name()) && machine.Spec().Get("access", "local").Bool() {
 			add("only the controller Machine may declare local access; Machine/"+machine.Name()+" also declares access.local: true", "remove spec.access.local from "+machine.Identity())
 		}
 	}
 	for _, cluster := range catalog.Objects() {
 		membership, bound := members(cluster)
-		if !bound || !api.ValidLexical("name", cluster.Name()) {
+		if !bound || !api.ValidLexical(api.LexicalName, cluster.Name()) {
 			continue
 		}
 		for _, node := range membership.Nodes {

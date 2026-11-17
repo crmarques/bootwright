@@ -50,7 +50,7 @@ func machineSubstrateSchema() *Shape {
 		return required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}}))
 	}
 	segment := Scope{Noun: "segment", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Entries: []string{"segments"}}
-	macs := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(nicRef(), required("macAddress", lexical("mac")), field("segmentRef", nestedIn(segment)))}
+	macs := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(nicRef(), required("macAddress", lexical(LexicalMAC)), field("segmentRef", nestedIn(segment)))}
 	segment.Joined = &ScopeJoin{Kind: Network, Field: []string{"libvirt", "providerRef"}}
 	vnics := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(nicRef(), required("segmentRef", nestedIn(segment)))}
 	baremetal := record(field("bmc", machineBMCSchema()), field("nics", macs), field("rootDevice", record(field("discover", machineDiskDiscoverySchema()), field("bootVolume", record()), field("volumeRef", atomic(external(record(required("storageId", nonempty()), required("volumeId", nonempty()))))), field("wwn", nonempty()), field("hctl", nonempty()), field("serialNumber", nonempty()), field("sizeBytes", integer("4096", "70368744177664")))), field("firmware", machineFirmwareSchema()))
@@ -64,19 +64,19 @@ func machineSubstrateSchema() *Shape {
 }
 
 func machineSchema() *Shape {
-	ssh := record(field("addressRef", nestedIn(Scope{Noun: "address", Entries: []string{"network", "addresses"}})), field("port", port()), field("user", lexical("posix-user")), required("auth", atomic(choice(field("operatorIdentity", record()), field("privateKeyRef", secret("sshKeyPair")), field("passwordRef", secret("usernamePassword"))))), field("sudoPasswordRef", secret("usernamePassword")), field("knownHostsRef", secret("opaque")))
+	ssh := record(field("addressRef", nestedIn(Scope{Noun: "address", Entries: []string{"network", "addresses"}})), field("port", port()), field("user", lexical(LexicalPOSIXUser)), required("auth", atomic(choice(field("operatorIdentity", record()), field("privateKeyRef", secret("sshKeyPair")), field("passwordRef", secret("usernamePassword"))))), field("sudoPasswordRef", secret("usernamePassword")), field("knownHostsRef", secret("opaque")))
 	access := choice(field("local", boolean()), field("ssh", ssh))
 	access.AllowEmpty = true
 	access.Fields = append(access.Fields, field("rootLogin", enumeration("keep", "revoke")))
 	network := choice(field("configRef", ref(NetworkConfig)), field("inline", machineNetworkSchema()))
 	network.AllowEmpty = true
 	network.Fields = append(network.Fields,
-		field("installAddressRef", nestedIn(Scope{Noun: "address", Entries: []string{"network", "addresses"}})), field("addresses", named(record(required("name", nonempty()), required("address", lexical("host")), field("interface", lexical("ifname"))))),
-		field("interfaceMatches", &Shape{Type: Sequence, Atomic: true, NameKey: "interface", Element: record(required("interface", lexical("ifname")), required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})))}), field("overrides", native()))
+		field("installAddressRef", nestedIn(Scope{Noun: "address", Entries: []string{"network", "addresses"}})), field("addresses", named(record(required("name", nonempty()), required("address", lexical(LexicalHost)), field("interface", lexical(LexicalIfname))))),
+		field("interfaceMatches", &Shape{Type: Sequence, Atomic: true, NameKey: "interface", Element: record(required("interface", lexical(LexicalIfname)), required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})))}), field("overrides", native()))
 	return record(
 		field("placement", record(field("site", name()))),
 		field("substrate", machineSubstrateSchema()),
-		field("hardware", record(field("clearOnInstall", machineClearSchema()), field("eraseOnRemoval", machineEraseSchema()), field("nics", named(record(required("name", nonempty())))), field("rootDevice", record(field("deviceName", lexical("device-path")), field("model", nonempty()), field("vendor", nonempty()), field("minSizeGigabytes", integer("0", "")), field("rotational", boolean()))))),
+		field("hardware", record(field("clearOnInstall", machineClearSchema()), field("eraseOnRemoval", machineEraseSchema()), field("nics", named(record(required("name", nonempty())))), field("rootDevice", record(field("deviceName", lexical(LexicalDevicePath)), field("model", nonempty()), field("vendor", nonempty()), field("minSizeGigabytes", integer("0", "")), field("rotational", boolean()))))),
 		required("os", record(required("provided", boolean()), field("installProfileRef", ref(MachineInstallProfile)), field("install", record(field("hostKeyRef", secret("sshKeyPair")), field("ntp", serverSelections(NTPServer)))))),
 		field("proxy", proxySelection()),
 		field("firewall", record(field("management", enumeration("managed", "external")))),
@@ -111,12 +111,12 @@ func machineProfileSchema(variant string) *Shape {
 func machineProviderSchema() *Shape {
 	baremetal := record(field("defaults", record(field("bmc", record(field("credentialsRef", secret("usernamePassword")), field("tls", machineBMCTLSSchema()), field("virtualMedia", machineVirtualMediaSchema()))))))
 	libvirt := record(required("machineRef", ref(Machine)), defaulted("uri", enumeration("qemu:///system"), StringValue("qemu:///system")), field("capacityReserve", record(required("cpu", integer("0", "9223372036854775807")), required("memoryMiB", integer("0", "8796093022207")), required("diskGiB", integer("0", "8589934591")))), required("bmcEmulation", record(required("bindAddress", ip()), required("certificateRef", secret("tlsCertificate")), defaulted("port", port(), IntegerValue("8000")), required("auth", record(required("credentialsRef", secret("usernamePassword")))))), defaulted("machineProfiles", machineProfileSchema("libvirt"), ListValue()))
-	vcenters := nonemptyArray(&Shape{Type: Sequence, Atomic: true, NameKey: "server", Element: record(required("server", lexical("host")), field("port", integer("0", "65535")), required("datacenters", nonemptyArray(set(nonempty()))), required("credentialsRef", secret("usernamePassword")), defaulted("disableCertificateVerification", boolean(), BoolValue(false)))})
+	vcenters := nonemptyArray(&Shape{Type: Sequence, Atomic: true, NameKey: "server", Element: record(required("server", lexical(LexicalHost)), field("port", integer("0", "65535")), required("datacenters", nonemptyArray(set(nonempty()))), required("credentialsRef", secret("usernamePassword")), defaulted("disableCertificateVerification", boolean(), BoolValue(false)))})
 	topology := record(required("datacenter", nonempty()), required("computeCluster", nonempty()), required("datastore", nonempty()), required("networks", nonemptyArray(set(nonempty()))), field("folder", nonempty()), field("resourcePool", nonempty()))
 	vsphere := record(required("vcenters", vcenters), required("failureDomains", nonemptyArray(named(record(required("name", nonempty()), required("region", nonempty()), required("zone", nonempty()), required("server", nonempty()), required("topology", topology))))), field("isoStaging", record(field("datastore", nonempty()), field("folder", nonempty()))), defaulted("machineProfiles", machineProfileSchema("vsphere"), ListValue()))
 	kubevirt := choice(field("hostClusterRef", clusters(ContainerClusterCategory)), field("kubeconfigRef", secret("opaque")))
 	kubevirt.Fields = append(kubevirt.Fields, required("namespace", name()), field("storageClassRef", externalRef()), defaulted("machineProfiles", machineProfileSchema("kubevirt"), ListValue()))
-	segment := choice(field("baremetal", record()), field("libvirt", record(required("bridge", lexical("bridge")))), field("vsphere", record(required("portgroup", nonempty()), field("distributedSwitch", nonempty()))), field("kubevirt", record(required("networkRef", external(record(field("apiGroup", text()), field("kind", nonempty()), required("name", nonempty()), field("namespace", name())))))))
+	segment := choice(field("baremetal", record()), field("libvirt", record(required("bridge", lexical(LexicalBridge)))), field("vsphere", record(required("portgroup", nonempty()), field("distributedSwitch", nonempty()))), field("kubevirt", record(required("networkRef", external(record(field("apiGroup", text()), field("kind", nonempty()), required("name", nonempty()), field("namespace", name())))))))
 	segment.Fields = append([]Field{required("name", name()), field("untaggedNetworkRef", ref(Network)), field("taggedNetworkRefs", set(ref(Network))), defaulted("mtu", integer("576", "65536"), IntegerValue("1500"))}, segment.Fields...)
 	provider := choice(field("baremetal", baremetal), field("libvirt", libvirt), field("vsphere", vsphere), field("kubevirt", kubevirt))
 	provider.Fields = append(provider.Fields, field("segments", named(segment)))

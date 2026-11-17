@@ -38,5 +38,5 @@ func DecodeRecord(data []byte, contextName string) (Record, error) {
 }
 
 func validSelector(selector Selector, contextName string) bool {
-	return selector.SelectorVersion == RecordVersion && selector.Context == contextName && api.ValidLexical("name", contextName) && api.ValidLexical("name", selector.Backend) && api.ValidLexical("name", selector.Generation)
+	return selector.SelectorVersion == RecordVersion && selector.Context == contextName && api.ValidLexical(api.LexicalName, contextName) && api.ValidLexical(api.LexicalName, selector.Backend) && api.ValidLexical(api.LexicalName, selector.Generation)
 }

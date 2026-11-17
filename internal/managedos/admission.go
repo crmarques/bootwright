@@ -110,21 +110,22 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 // kickstartGrammar is the grammar of one class of authored value the Kickstart
 // carries, the message that states it and a value it admits.
 type kickstartGrammar struct {
-	rule, message, example string
+	rule             api.LexicalRule
+	message, example string
 }
 
 var (
-	localeGrammar = kickstartGrammar{"kickstart-token",
+	localeGrammar = kickstartGrammar{api.LexicalKickstartToken,
 		"a localization value is one Kickstart token: printable ASCII with no whitespace, quote, backslash, '#' or comma, not starting with '%'", "en_US.UTF-8"}
-	packageGrammar = kickstartGrammar{"package-spec",
+	packageGrammar = kickstartGrammar{api.LexicalPackageSpec,
 		"a package entry is a package name, glob or @group: letters, digits and _.+*?@:~^/[]-, not starting with '%' or '-'", "chrony"}
-	serviceGrammar = kickstartGrammar{"systemd-unit",
+	serviceGrammar = kickstartGrammar{api.LexicalSystemdUnit,
 		"a service is a systemd unit name: letters, digits and :_.@-, starting with a letter or digit, at most 255 bytes", "chronyd"}
 	repositoryGrammar = kickstartGrammar{"",
 		"a repository ID is what dnf accepts in one: 1 to 239 ASCII letters, digits, '-', '_', '.' or ':', and neither '.' nor '..'", "extras"}
 )
 
-const subscriptionRepositoryRule = "kickstart-token"
+const subscriptionRepositoryRule = api.LexicalKickstartToken
 
 var repositoryIDPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,239}$`)
 

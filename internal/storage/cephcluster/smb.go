@@ -227,7 +227,7 @@ func (a *admission) smbClusterValues(native api.Value) {
 	if mode == "active-directory" && native.Has("user_group_settings") {
 		a.issue("api.invariant", "$.spec.native.user_group_settings", "an active-directory SMB cluster takes no user_group_settings", "remove user_group_settings, or set auth_mode: user")
 	}
-	if realm := native.Get("domain_settings", "realm"); realm.Type() == api.String && !api.ValidLexical("dns", strings.ToLower(realm.Text())) {
+	if realm := native.Get("domain_settings", "realm"); realm.Type() == api.String && !api.ValidLexical(api.LexicalDNS, strings.ToLower(realm.Text())) {
 		a.issue("api.value", "$.spec.native.domain_settings.realm", "an SMB realm is a DNS domain name", "write the Active Directory realm as its DNS domain name")
 	}
 	for i, source := range native.Get("domain_settings", "join_sources").Items() {

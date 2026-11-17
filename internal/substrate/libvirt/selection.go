@@ -41,7 +41,7 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 // HostRequests derives one frozen request per libvirt provider host, in
 // canonical object order. It reads no host, endpoint or Secret material.
 func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([]HostRequest, error) {
-	if !api.ValidLexical("name", contextName) {
+	if !api.ValidLexical(api.LexicalName, contextName) {
 		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	var requests []HostRequest
@@ -154,7 +154,7 @@ func networksFor(catalog api.Catalog, provider api.Object, contextName string) (
 // object order across providers. The emulated BMC port comes from the
 // provider's base port and the Machine's position in that provider's own order.
 func MachineRequests(catalog api.Catalog, controllerMachine, contextName string) ([]MachineRequest, error) {
-	if !api.ValidLexical("name", contextName) {
+	if !api.ValidLexical(api.LexicalName, contextName) {
 		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	var requests []MachineRequest

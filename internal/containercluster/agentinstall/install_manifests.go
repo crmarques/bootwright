@@ -23,7 +23,7 @@ func installManifests(catalog api.Catalog, cluster api.Object, timeSources []str
 		return result, nil
 	}
 	for _, source := range timeSources {
-		if !api.ValidLexical("host", source) {
+		if !api.ValidLexical(api.LexicalHost, source) {
 			return nil, refusalAt("api.value", "$.spec.install.ntp", "the selected time server address "+strconv.Quote(source)+" is not a host name or IP address",
 				"correct the address of the NTPServer selected by "+cluster.Identity())
 		}
@@ -100,7 +100,7 @@ func chronyServers(content map[string]any) ([]string, bool) {
 	for _, line := range strings.Split(strings.TrimSuffix(lines, "\n"), "\n") {
 		server, found := strings.CutPrefix(line, "server ")
 		server, iburst := strings.CutSuffix(server, " iburst")
-		if !found || !iburst || !api.ValidLexical("host", server) {
+		if !found || !iburst || !api.ValidLexical(api.LexicalHost, server) {
 			return nil, false
 		}
 		servers = append(servers, server)

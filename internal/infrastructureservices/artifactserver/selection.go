@@ -31,7 +31,7 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 // Requests derives one frozen request per managed artifact server, in
 // canonical object order. It reads no host, endpoint or Secret material.
 func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, error) {
-	if !api.ValidLexical("name", contextName) {
+	if !api.ValidLexical(api.LexicalName, contextName) {
 		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	servers := catalog.OfKind(api.ArtifactServer)

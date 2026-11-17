@@ -161,7 +161,7 @@ func validateLeg(o api.Object) []api.Issue {
 			Message:     "the trunk " + bridge + " of tagged managed " + o.Identity() + " is a bridge Bootwright creates, and a dot in a bridge name reads as the VLAN device of another link",
 			Remediation: "name the trunk without a dot in spec.libvirt.bridge of " + o.Identity() + ", such as " + strings.ReplaceAll(bridge, ".", "-")})
 	}
-	if device := LegDevice(bridge, vlan); api.ValidLexical("bridge", bridge) && len(device) > MaxInterfaceName {
+	if device := LegDevice(bridge, vlan); api.ValidLexical(api.LexicalBridge, bridge) && len(device) > MaxInterfaceName {
 		issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
 			Message:     fmt.Sprintf("the leg of tagged managed %s is the host VLAN device %s, %d bytes, and a Linux interface name holds at most %d", o.Identity(), device, len(device), MaxInterfaceName),
 			Remediation: fmt.Sprintf("shorten spec.libvirt.bridge of %s to at most %d bytes", o.Identity(), MaxInterfaceName-1-len(FormatPort(vlan)))})
@@ -301,13 +301,13 @@ func segmentsOnHost(c api.Catalog, host string) (managed, external []hostSegment
 			continue
 		}
 		for index, segment := range provider.Spec().Get("segments").Items() {
-			if bridge := segment.Get(ArmLibvirt, "bridge").Text(); api.ValidLexical("bridge", bridge) {
+			if bridge := segment.Get(ArmLibvirt, "bridge").Text(); api.ValidLexical(api.LexicalBridge, bridge) {
 				external = append(external, hostSegment{owner: provider, provider: provider, index: index, bridge: bridge})
 			}
 		}
 		for _, o := range ManagedNetworksOf(c, provider) {
 			segment := hostSegment{owner: o, provider: provider}
-			if bridge := o.Spec().Get(ArmLibvirt, "bridge").Text(); api.ValidLexical("bridge", bridge) {
+			if bridge := o.Spec().Get(ArmLibvirt, "bridge").Text(); api.ValidLexical(api.LexicalBridge, bridge) {
 				segment.bridge = bridge
 			}
 			if vlan, leg := TaggedManagedNetwork(o); leg {
@@ -330,7 +330,7 @@ func segmentsOnHost(c api.Catalog, host string) (managed, external []hostSegment
 func validateSharedHostNetworks(o api.Object, c api.Catalog) []api.Issue {
 	provider, found := c.Find(api.InfraProvider, ManagedNetworkProvider(o))
 	host := HostMachine(provider)
-	if !found || !IsManagedNetwork(o) || Variant(provider) != ArmLibvirt || !api.ValidLexical("name", host) {
+	if !found || !IsManagedNetwork(o) || Variant(provider) != ArmLibvirt || !api.ValidLexical(api.LexicalName, host) {
 		return nil
 	}
 	managed, external := segmentsOnHost(c, host)

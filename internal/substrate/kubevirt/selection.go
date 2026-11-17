@@ -105,7 +105,7 @@ func unrealizedSegments(catalog api.Catalog, provider, machine api.Object) []str
 // HostRequests derives one frozen proof request per KubeVirt provider, in
 // canonical object order. It reads no host, endpoint or Secret material.
 func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([]HostRequest, error) {
-	if !api.ValidLexical("name", contextName) {
+	if !api.ValidLexical(api.LexicalName, contextName) {
 		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	placement, err := placementFor(catalog, controllerMachine)
@@ -169,7 +169,7 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 // MachineRequests derives one frozen request per Machine a KubeVirt provider
 // realizes, in canonical object order.
 func MachineRequests(catalog api.Catalog, controllerMachine, contextName string) ([]MachineRequest, error) {
-	if !api.ValidLexical("name", contextName) {
+	if !api.ValidLexical(api.LexicalName, contextName) {
 		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	var requests []MachineRequest

@@ -40,10 +40,10 @@ func validateString(record *objectRecord, value api.Value, shape *api.Shape, pat
 		sink.issue(record, api.Issue{Code: "api.value", Field: path, Message: "value is not one of the permitted choices: " + boundedList(shape.Enums, ", "), Remediation: remediation})
 	}
 	if shape.Rule != "" && !api.ValidLexical(shape.Rule, value.Text()) {
-		sink.issue(record, api.Issue{Code: "api.value", Field: path, Message: "value does not match the required " + shape.Rule + " grammar", Remediation: "write a value in the " + shape.Rule + " grammar its field documents"})
+		sink.issue(record, api.Issue{Code: "api.value", Field: path, Message: "value does not match the required " + string(shape.Rule) + " grammar", Remediation: "write a value in the " + string(shape.Rule) + " grammar its field documents"})
 	}
 	if len(shape.Reference) > 0 && value.Text() != "" {
-		if !api.ValidLexical("name", value.Text()) {
+		if !api.ValidLexical(api.LexicalName, value.Text()) {
 			sink.issue(record, api.Issue{Code: "api.value", Field: path, Message: "reference must be an object name (a lowercase DNS label)", Remediation: "use the referenced object's metadata.name"})
 		} else if references {
 			validateReference(record, value.Text(), shape, path, catalog, sink)
@@ -117,7 +117,7 @@ func nestedName(name string) bool {
 		return false
 	}
 	for _, segment := range strings.Split(name, ".") {
-		if !api.ValidLexical("name", segment) {
+		if !api.ValidLexical(api.LexicalName, segment) {
 			return false
 		}
 	}
@@ -291,7 +291,7 @@ func validateSequence(record *objectRecord, value api.Value, shape *api.Shape, p
 		if key != "" {
 			if seen[key] {
 				message := "entry repeats an earlier entry"
-				if shape.NameKey != "" && api.ValidLexical("name", key) {
+				if shape.NameKey != "" && api.ValidLexical(api.LexicalName, key) {
 					message += " named " + key
 				}
 				sink.issue(record, api.Issue{Code: "api.duplicate", Field: childPath, Message: message, Remediation: "remove or rename the repeated entry"})

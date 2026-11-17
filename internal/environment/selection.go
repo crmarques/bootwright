@@ -289,7 +289,7 @@ func familyKinds(family api.Family) string {
 
 func unresolvedCluster(family api.Family, field, name, remediation string) api.Issue {
 	message := "cluster selection entry is not a cluster name"
-	if api.ValidLexical("name", name) {
+	if api.ValidLexical(api.LexicalName, name) {
 		message = "no " + familyKinds(family) + " named " + name + " is declared"
 	}
 	return api.Issue{Code: "api.reference", Field: field, Message: message, Remediation: remediation}
@@ -298,7 +298,7 @@ func unresolvedCluster(family api.Family, field, name, remediation string) api.I
 func clusterChoices(family api.Family, objects []api.Object) string {
 	declared := make([]string, 0, len(objects))
 	for _, object := range objects {
-		if api.ValidLexical("name", object.Name()) {
+		if api.ValidLexical(api.LexicalName, object.Name()) {
 			declared = append(declared, object.Name())
 		}
 	}

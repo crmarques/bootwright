@@ -79,7 +79,7 @@ func fingerprint(d secrets.Declaration) string {
 	return hex.EncodeToString(digest[:])
 }
 
-func validName(name string) bool { return api.ValidLexical("name", name) }
+func validName(name string) bool { return api.ValidLexical(api.LexicalName, name) }
 
 func lookupDeclaration(declarations []secrets.Declaration, name string) (secrets.Declaration, bool) {
 	if validName(name) {

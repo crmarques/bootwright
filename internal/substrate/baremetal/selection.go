@@ -13,7 +13,7 @@ import (
 // Requests derives one frozen request per physical Machine, in canonical
 // object order. It reads no host, endpoint or Secret material.
 func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, error) {
-	if !api.ValidLexical("name", contextName) {
+	if !api.ValidLexical(api.LexicalName, contextName) {
 		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	var requests []Request

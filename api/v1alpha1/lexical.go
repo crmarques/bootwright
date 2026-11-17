@@ -54,104 +54,162 @@ const (
 	kickstartSeparators = "\"'\\#,"
 )
 
-func ValidLexical(rule, value string) bool {
-	if rule == "kubernetes-label-value" && value == "" {
-		return true
-	}
-	if rule == "checksum" {
-		return digestPattern.MatchString(strings.TrimSpace(value))
-	}
-	if value == "" || strings.TrimSpace(value) != value {
-		return false
-	}
-	switch rule {
-	case "kubernetes-label-key":
+type LexicalRule string
+
+const (
+	LexicalKubernetesLabelKey   LexicalRule = "kubernetes-label-key"
+	LexicalKubernetesLabelValue LexicalRule = "kubernetes-label-value"
+	LexicalName                 LexicalRule = "name"
+	LexicalDNS                  LexicalRule = "dns"
+	LexicalHost                 LexicalRule = "host"
+	LexicalIP                   LexicalRule = "ip"
+	LexicalCIDR                 LexicalRule = "cidr"
+	LexicalHTTPURL              LexicalRule = "http-url"
+	LexicalHTTPSURL             LexicalRule = "https-url"
+	LexicalRepositoryURL        LexicalRule = "repository-url"
+	LexicalMirrorURL            LexicalRule = "mirror-url"
+	LexicalArtifactMirrorURL    LexicalRule = "artifact-mirror-url"
+	LexicalProxyEndpoint        LexicalRule = "proxy-endpoint"
+	LexicalProxyBypass          LexicalRule = "proxy-bypass"
+	LexicalProxyDestination     LexicalRule = "proxy-destination"
+	LexicalSystemdUnit          LexicalRule = "systemd-unit"
+	LexicalPackageSpec          LexicalRule = "package-spec"
+	LexicalKickstartToken       LexicalRule = "kickstart-token"
+	LexicalIfname               LexicalRule = "ifname"
+	LexicalCephHostLabel        LexicalRule = "ceph-host-label"
+	LexicalBridge               LexicalRule = "bridge"
+	LexicalRegistry             LexicalRule = "registry"
+	LexicalRegistryBase         LexicalRule = "registry-base"
+	LexicalImage                LexicalRule = "image"
+	LexicalPackageRepository    LexicalRule = "package-repository"
+	LexicalPackageRepositoryKey LexicalRule = "package-repository-key"
+	LexicalNativeVersion        LexicalRule = "native-version"
+	LexicalImageVersion         LexicalRule = "image-version"
+	LexicalClusterRelease       LexicalRule = "cluster-release"
+	LexicalOSRelease            LexicalRule = "os-release"
+	LexicalCLIVersion           LexicalRule = "cli-version"
+	LexicalPackageVersion       LexicalRule = "package-version"
+	LexicalDuration             LexicalRule = "duration"
+	LexicalMAC                  LexicalRule = "mac"
+	LexicalAbsolutePath         LexicalRule = "absolute-path"
+	LexicalDevicePath           LexicalRule = "device-path"
+	LexicalRelativePath         LexicalRule = "relative-path"
+	LexicalToken                LexicalRule = "token"
+	LexicalPOSIXUser            LexicalRule = "posix-user"
+	LexicalChecksum             LexicalRule = "checksum"
+)
+
+var lexicalRules = map[LexicalRule]func(string) bool{
+	LexicalKubernetesLabelKey: func(value string) bool {
 		prefix, name, qualified := strings.Cut(value, "/")
 		if qualified {
 			return validDNS(prefix) && kubernetesLabelPattern.MatchString(name)
 		}
 		return kubernetesLabelPattern.MatchString(value)
-	case "kubernetes-label-value":
-		return kubernetesLabelPattern.MatchString(value)
-	case "name":
-		return labelPattern.MatchString(value)
-	case "dns":
-		return validDNS(value)
-	case "host":
-		return validHost(value)
-	case "ip":
+	},
+	LexicalKubernetesLabelValue: kubernetesLabelPattern.MatchString,
+	LexicalName:                 labelPattern.MatchString,
+	LexicalDNS:                  validDNS,
+	LexicalHost:                 validHost,
+	LexicalIP: func(value string) bool {
 		_, err := netip.ParseAddr(value)
 		return err == nil && !strings.Contains(value, "%")
-	case "cidr":
+	},
+	LexicalCIDR: func(value string) bool {
 		_, err := netip.ParsePrefix(value)
 		return err == nil
-	case "http-url", "https-url":
-		return validHTTPURL(value, rule == "https-url")
-	case "repository-url":
+	},
+	LexicalHTTPURL:  func(value string) bool { return validHTTPURL(value, false) },
+	LexicalHTTPSURL: func(value string) bool { return validHTTPURL(value, true) },
+	LexicalRepositoryURL: func(value string) bool {
 		return validHTTPURL(value, false) && !strings.ContainsAny(value, "#'")
-	case "mirror-url":
-		return validMirrorURL(value)
-	case "artifact-mirror-url":
+	},
+	LexicalMirrorURL: validMirrorURL,
+	LexicalArtifactMirrorURL: func(value string) bool {
 		return len(value) <= maxMirrorURLBytes-maxArtifactMirrorSuffix && validMirrorURL(value)
-	case "proxy-endpoint":
-		return validProxyEndpoint(value)
-	case "proxy-bypass":
-		return validProxyBypass(value)
-	case "proxy-destination":
+	},
+	LexicalProxyEndpoint: validProxyEndpoint,
+	LexicalProxyBypass:   validProxyBypass,
+	LexicalProxyDestination: func(value string) bool {
 		_, _, ok := ProxyDestination(value)
 		return ok
-	case "systemd-unit":
-		return systemdUnitPattern.MatchString(value)
-	case "package-spec":
-		return packageSpecPattern.MatchString(value)
-	case "kickstart-token":
+	},
+	LexicalSystemdUnit: systemdUnitPattern.MatchString,
+	LexicalPackageSpec: packageSpecPattern.MatchString,
+	LexicalKickstartToken: func(value string) bool {
 		return !strings.HasPrefix(value, "%") && printableExcept(value, kickstartSeparators)
-	case "ifname":
+	},
+	LexicalIfname: func(value string) bool {
 		return interfacePattern.MatchString(value) && value != "." && value != ".."
-	case "ceph-host-label":
-		return cephHostLabelPattern.MatchString(value)
-	case "bridge":
+	},
+	LexicalCephHostLabel: cephHostLabelPattern.MatchString,
+	LexicalBridge: func(value string) bool {
 		return bridgePattern.MatchString(value) && value != "." && value != ".."
-	case "registry", "registry-base":
-		return validRegistry(value)
-	case "image":
-		return validImage(value)
-	case "package-repository":
+	},
+	LexicalRegistry:     validRegistry,
+	LexicalRegistryBase: validRegistry,
+	LexicalImage:        validImage,
+	LexicalPackageRepository: func(value string) bool {
 		u, err := neturl.Parse(value)
 		return len(value) <= 2048 && len(strings.TrimRight(value, "/")) <= packageRepositoryBase && validHTTPURL(value, true) && err == nil && u.Fragment == "" && u.RawQuery == "" && plainURLPath(u.Path)
-	case "package-repository-key":
+	},
+	LexicalPackageRepositoryKey: func(value string) bool {
 		u, err := neturl.Parse(value)
 		return len(value) <= 2048 && validHTTPURL(value, true) && err == nil && u.Fragment == "" && u.RawQuery == "" && plainURLPath(u.Path)
-	case "native-version":
+	},
+	LexicalNativeVersion: func(value string) bool {
 		return len(value) > 0 && len(value) <= 1024 && utf8.ValidString(value) && strings.IndexFunc(value, func(r rune) bool { return unicode.IsControl(r) || r == 0x2028 || r == 0x2029 }) < 0
-	case "image-version":
+	},
+	LexicalImageVersion: func(value string) bool {
 		return value != "latest" && (imageTagPattern.MatchString(value) || strings.HasPrefix(strings.ToLower(value), "sha256:") && digestPattern.MatchString(value))
-	case "cluster-release":
+	},
+	LexicalClusterRelease: func(value string) bool {
 		return len(value) <= 96 && clusterReleasePattern.MatchString(value)
-	case "os-release":
+	},
+	LexicalOSRelease: func(value string) bool {
 		return len(value) <= 64 && osReleasePattern.MatchString(value)
-	case "cli-version":
+	},
+	LexicalCLIVersion: func(value string) bool {
 		return len(strings.TrimPrefix(value, "v")) <= 95 && cliVersionPattern.MatchString(value)
-	case "package-version":
-		return packageVersionPattern.MatchString(value)
-	case "duration":
+	},
+	LexicalPackageVersion: packageVersionPattern.MatchString,
+	LexicalDuration: func(value string) bool {
 		duration, err := time.ParseDuration(value)
 		return err == nil && duration > 0
-	case "mac":
+	},
+	LexicalMAC: func(value string) bool {
 		mac, err := net.ParseMAC(value)
 		return err == nil && len(mac) == 6
-	case "absolute-path":
+	},
+	LexicalAbsolutePath: func(value string) bool {
 		return strings.HasPrefix(value, "/") && path.Clean(value) == value && !strings.ContainsRune(value, 0)
-	case "device-path":
+	},
+	LexicalDevicePath: func(value string) bool {
 		return devicePathPattern.MatchString(value) && path.Clean(value) == value
-	case "relative-path":
+	},
+	LexicalRelativePath: func(value string) bool {
 		return !strings.HasPrefix(value, "/") && value != "." && path.Clean(value) == value && value != ".." && !strings.HasPrefix(value, "../") && !strings.ContainsRune(value, 0)
-	case "token":
-		return tokenPattern.MatchString(value)
-	case "posix-user":
-		return userPattern.MatchString(value)
+	},
+	LexicalToken:     tokenPattern.MatchString,
+	LexicalPOSIXUser: userPattern.MatchString,
+	LexicalChecksum: func(value string) bool {
+		return digestPattern.MatchString(strings.TrimSpace(value))
+	},
+}
+
+func ValidLexical(rule LexicalRule, value string) bool {
+	valid, ok := lexicalRules[rule]
+	switch {
+	case !ok:
+		return false
+	case rule == LexicalChecksum:
+		return valid(value)
+	case rule == LexicalKubernetesLabelValue && value == "":
+		return true
+	case value == "" || strings.TrimSpace(value) != value:
+		return false
 	}
-	return false
+	return valid(value)
 }
 
 func plainURLPath(decoded string) bool {

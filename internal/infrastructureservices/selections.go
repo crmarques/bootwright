@@ -56,7 +56,7 @@ func ValidateProxyChoice(selection api.Value, field string) []api.Issue {
 	}
 	var issues []api.Issue
 	for index, entry := range selection.Get("noProxy").Items() {
-		if entry.Type() != api.String || entry.Text() == "" || api.ValidLexical("proxy-bypass", entry.Text()) {
+		if entry.Type() != api.String || entry.Text() == "" || api.ValidLexical(api.LexicalProxyBypass, entry.Text()) {
 			continue
 		}
 		path := fmt.Sprintf("%s.noProxy[%d]", field, index)

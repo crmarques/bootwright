@@ -66,7 +66,7 @@ func NewProxySelector(httpProxy, httpsProxy string, bypass []string) (ProxySelec
 // parseProxyEndpoint admits exactly the proxy-endpoint grammar admission and
 // selection check, so a route never refuses an endpoint either admitted.
 func parseProxyEndpoint(value string) (*url.URL, error) {
-	if !api.ValidLexical("proxy-endpoint", value) {
+	if !api.ValidLexical(api.LexicalProxyEndpoint, value) {
 		return nil, ErrProxyEndpoint
 	}
 	endpoint, err := url.Parse(value)
@@ -233,7 +233,7 @@ type bypassRule struct {
 // admission and selection check; it refuses whatever that grammar refuses and
 // nothing else.
 func parseBypass(value string) (bypassRule, bool) {
-	if !api.ValidLexical("proxy-bypass", value) {
+	if !api.ValidLexical(api.LexicalProxyBypass, value) {
 		return bypassRule{}, false
 	}
 	if value == "*" {

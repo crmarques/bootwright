@@ -211,7 +211,7 @@ func validateSecondaryNetworks(o api.Object) []api.Issue {
 		}
 		bridge := n.Get("bridgeMapping", "bridge").Text()
 		iface := n.Get("bridgeMapping", "interface").Text()
-		if !api.ValidLexical("ifname", bridge) || bridge != "br-ex" && reservedOVNInterface(bridge) {
+		if !api.ValidLexical(api.LexicalIfname, bridge) || bridge != "br-ex" && reservedOVNInterface(bridge) {
 			issues = append(issues, invariantRemediation(base+".bridgeMapping.bridge", "secondary network "+name+" has an invalid or reserved bridge name", "use br-ex or a non-reserved Linux interface name of at most 15 characters"))
 		}
 		if bridge == "br-ex" && iface != "" || bridge != "br-ex" && iface == "" {
@@ -236,7 +236,7 @@ func validateSecondaryNetworks(o api.Object) []api.Issue {
 		}
 		placements[bridge] = placement
 		for _, label := range n.Get("namespaceSelector", "matchLabels").Fields() {
-			if !api.ValidLexical("kubernetes-label-key", label.Name) || !api.ValidLexical("kubernetes-label-value", label.Value.Text()) {
+			if !api.ValidLexical(api.LexicalKubernetesLabelKey, label.Name) || !api.ValidLexical(api.LexicalKubernetesLabelValue, label.Value.Text()) {
 				issues = append(issues, invariantRemediation(base+".namespaceSelector.matchLabels", "namespace selector has an invalid label key or value", "use valid Kubernetes label keys and values"))
 			}
 		}

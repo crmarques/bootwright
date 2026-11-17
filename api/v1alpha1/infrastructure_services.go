@@ -27,7 +27,7 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 	}
 	switch kind {
 	case Proxy:
-		fields = append(fields, field("connection", record(field("httpProxy", url()), field("httpsProxy", url()), field("auth", record(required("proxyAuthRef", secret("usernamePassword")))), field("trustBundleRef", secret("caBundle", "trustBundle")), field("tlsVerification", tlsVerification()))), field("allowedDestinations", nonemptyArray(set(lexical("proxy-destination")))))
+		fields = append(fields, field("connection", record(field("httpProxy", url()), field("httpsProxy", url()), field("auth", record(required("proxyAuthRef", secret("usernamePassword")))), field("trustBundleRef", secret("caBundle", "trustBundle")), field("tlsVerification", tlsVerification()))), field("allowedDestinations", nonemptyArray(set(lexical(LexicalProxyDestination)))))
 		external = append(external, "connection")
 		managed = append(managed, "allowedDestinations")
 	case DNSServer:
@@ -35,7 +35,7 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 		external = append(external, "address")
 		managed = append(managed, "forwarders", "forwardZones")
 	case NTPServer:
-		fields = append(fields, field("address", lexical("host")), field("upstreamSources", set(lexical("host"))))
+		fields = append(fields, field("address", lexical(LexicalHost)), field("upstreamSources", set(lexical(LexicalHost))))
 		external = append(external, "address")
 		managed = append(managed, "upstreamSources")
 	case ArtifactServer:
@@ -45,7 +45,7 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 		managed = append(managed, "retention", "tls", "listeners")
 	case Registry:
 		fields = append(fields, field("tls", record(required("secretRef", secret("tlsCertificate")), field("minVersion", enumeration("TLSv1.2", "TLSv1.3")))))
-		fields = append(fields, field("url", lexical("registry")), field("credentialsRef", secret("usernamePassword", "dockerConfigJson")), field("trustBundleRef", secret("caBundle", "trustBundle")), field("tlsVerification", tlsVerification()))
+		fields = append(fields, field("url", lexical(LexicalRegistry)), field("credentialsRef", secret("usernamePassword", "dockerConfigJson")), field("trustBundleRef", secret("caBundle", "trustBundle")), field("tlsVerification", tlsVerification()))
 		managed = append(managed, "tls")
 		external = append(external, "url")
 	case LoadBalancer:
@@ -91,5 +91,5 @@ func serverSelections(kind Kind) *Shape {
 
 func registrySelections() *Shape {
 	mirror := atomic(record(required("registryRef", ref(Registry)), field("endpointRef", endpointOf("registryRef", Registry))))
-	return record(field("mirror", mirror), field("imageDigestSources", array(record(required("source", lexical("registry")), required("mirrors", nonemptyArray(array(lexical("registry")))), field("sourcePolicy", enumeration("NeverContactSource", "AllowContactingSource"))))))
+	return record(field("mirror", mirror), field("imageDigestSources", array(record(required("source", lexical(LexicalRegistry)), required("mirrors", nonemptyArray(array(lexical(LexicalRegistry)))), field("sourcePolicy", enumeration("NeverContactSource", "AllowContactingSource"))))))
 }

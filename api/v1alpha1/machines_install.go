@@ -1,14 +1,14 @@
 package v1alpha1
 
 func machineImageSchema() *Shape {
-	return record(required("bootMedia", nonempty()), field("checksum", lexical("checksum")))
+	return record(required("bootMedia", nonempty()), field("checksum", lexical(LexicalChecksum)))
 }
 
 func machineInstallSchema() *Shape {
 	packageSource := choice(field("hostedTree", record(required("fromMedia", nonempty()), required("artifactServerEndpoint", artifactEndpoint()))))
 	anaconda := record(required("imageRef", ref(MachineImage)), field("redfishVirtualMedia", record(field("artifactServerEndpoint", artifactEndpoint()))), field("packageSource", packageSource), field("partitioning", record(defaulted("home", enumeration("automatic", "none"), StringValue("automatic")))))
 	clone := record(required("seed", choice(field("cloudInit", record(defaulted("growRootFilesystem", boolean(), BoolValue(true)))))))
-	configure := &Shape{Type: Sequence, Atomic: true, NameKey: "id", Element: record(required("id", nonempty()), required("baseURL", lexical("repository-url")), field("displayName", nonempty()), defaulted("enabled", boolean(), BoolValue(true)), defaulted("gpgCheck", boolean(), BoolValue(true)), field("gpgKeyURL", nonempty()))}
+	configure := &Shape{Type: Sequence, Atomic: true, NameKey: "id", Element: record(required("id", nonempty()), required("baseURL", lexical(LexicalRepositoryURL)), field("displayName", nonempty()), defaulted("enabled", boolean(), BoolValue(true)), defaulted("gpgCheck", boolean(), BoolValue(true)), field("gpgKeyURL", nonempty()))}
 	customizations := record(
 		field("localization", record(defaulted("language", nonempty(), StringValue("en_US.UTF-8")), field("formats", nonempty()), defaulted("keyboard", nonempty(), StringValue("us")), defaulted("timezone", nonempty(), StringValue("UTC")), field("additionalLocales", set(nonempty())))),
 		field("packages", record(field("install", set(nonempty())), defaulted("excludeDocs", boolean(), BoolValue(false)), field("installWeakDeps", boolean()))),
@@ -16,5 +16,5 @@ func machineInstallSchema() *Shape {
 		field("services", record(field("enabled", set(nonempty())), field("disabled", set(nonempty())))),
 		field("security", record(field("selinux", record(field("mode", enumeration("enforcing", "permissive", "disabled")))), field("firewall", record(field("enabled", boolean()))), field("fips", record(defaulted("enabled", boolean(), BoolValue(false)))), field("diskEncryption", record(required("unlock", choice(field("tpm2", record(field("pcrIds", set(integer("0", "23"))), field("pcrBank", enumeration("sha1", "sha256", "sha384", "sha512")))))), required("recoveryPassphraseRef", secret("opaque", "token")))))),
 	)
-	return record(required("os", record(required("family", nonempty()), required("version", lexical("os-release")), required("architecture", enumeration("x86_64")))), required("installer", choice(field("anaconda", anaconda), field("templateClone", clone))), field("subscription", record(required("entitlementRef", ref(Entitlement)))), field("customizations", customizations), field("proxy", proxySelection()), field("ntp", serverSelections(NTPServer)), field("updates", record(field("policy", enumeration("withinRelease", "none")))))
+	return record(required("os", record(required("family", nonempty()), required("version", lexical(LexicalOSRelease)), required("architecture", enumeration("x86_64")))), required("installer", choice(field("anaconda", anaconda), field("templateClone", clone))), field("subscription", record(required("entitlementRef", ref(Entitlement)))), field("customizations", customizations), field("proxy", proxySelection()), field("ntp", serverSelections(NTPServer)), field("updates", record(field("policy", enumeration("withinRelease", "none")))))
 }

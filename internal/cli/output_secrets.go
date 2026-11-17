@@ -149,7 +149,7 @@ func validComponentStatus(value encryption.ComponentStatus) bool {
 }
 
 func validSelection(value secretstore.Selection) bool {
-	return api.ValidLexical("name", value.Type) && validComponentRef(value.Store) && validComponentRef(value.KeyCustody)
+	return api.ValidLexical(api.LexicalName, value.Type) && validComponentRef(value.Store) && validComponentRef(value.KeyCustody)
 }
 
 func validEncryptionMutation(result *encryption.MutationResult) bool {
@@ -170,7 +170,7 @@ func validEncryptionStatus(result *encryption.StatusResult) bool {
 	if result.Implementation == nil || result.Implementation.State == "" || result.ActiveKey == nil || *result.ActiveKey == "" {
 		return false
 	}
-	if !api.ValidLexical("name", result.Implementation.Type) || !validComponentStatus(result.Implementation.Store) || !validComponentStatus(result.Implementation.KeyCustody) {
+	if !api.ValidLexical(api.LexicalName, result.Implementation.Type) || !validComponentStatus(result.Implementation.Store) || !validComponentStatus(result.Implementation.KeyCustody) {
 		return false
 	}
 	seen := make(map[string]bool, len(result.Keys))

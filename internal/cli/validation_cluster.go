@@ -8,7 +8,7 @@ import (
 )
 
 func validateClusterAdminName(command *cobra.Command) string {
-	if !api.ValidLexical("name", stringValue(command.Flags(), "name")) {
+	if !api.ValidLexical(api.LexicalName, stringValue(command.Flags(), "name")) {
 		return "--name must name exactly one cluster"
 	}
 	return ""
@@ -37,7 +37,7 @@ func validateClusterNames(command *cobra.Command, info bool) string {
 	sensitive := ""
 	if info {
 		switch user := stringValue(flags, "object-user"); {
-		case flags.Changed("object-user") && !api.ValidLexical("name", user):
+		case flags.Changed("object-user") && !api.ValidLexical(api.LexicalName, user):
 			return "--object-user must name one CephObjectUser"
 		case user != "" && boolValue(flags, "secrets"):
 			return "--secrets and --object-user each reveal one credential; use one of them"

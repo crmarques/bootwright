@@ -32,7 +32,7 @@ func (a *admission) packageProxy(spec api.Value) {
 }
 
 func validPackageProxyEndpoint(endpoint string) bool {
-	if !api.ValidLexical("proxy-endpoint", endpoint) || strings.ContainsAny(endpoint, "%\\") {
+	if !api.ValidLexical(api.LexicalProxyEndpoint, endpoint) || strings.ContainsAny(endpoint, "%\\") {
 		return false
 	}
 	parsed, err := url.Parse(endpoint)

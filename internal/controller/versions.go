@@ -47,7 +47,7 @@ func selectDependencyVersions(environment api.Object) (DependencyVersions, error
 	}
 	for _, field := range configured.Fields() {
 		var target *string
-		grammar := "cli-version"
+		grammar := api.LexicalCLIVersion
 		switch field.Name {
 		case "helm":
 			target = &versions.Helm
@@ -56,7 +56,7 @@ func selectDependencyVersions(environment api.Object) (DependencyVersions, error
 		case "virtctl":
 			target = &versions.Virtctl
 		case "libvirt":
-			target, grammar = &versions.Libvirt, "package-version"
+			target, grammar = &versions.Libvirt, api.LexicalPackageVersion
 		default:
 			return DependencyVersions{}, selectionFailure(environment, "api.value", "$.spec.dependencyVersions."+field.Name, "dependency version names must identify a supported dependency")
 		}
@@ -64,7 +64,7 @@ func selectDependencyVersions(environment api.Object) (DependencyVersions, error
 			return DependencyVersions{}, selectionFailure(environment, "api.value", "$.spec.dependencyVersions."+field.Name, "dependency version must be an exact publisher release tag, or latest for libvirt")
 		}
 		*target = field.Value.Text()
-		if grammar == "cli-version" {
+		if grammar == api.LexicalCLIVersion {
 			*target = strings.TrimPrefix(*target, "v")
 		}
 	}

@@ -383,7 +383,7 @@ func declaredInterfaces(machine api.Object) ([]Interface, error) {
 // address is what a destructive operation is aimed at, so it may not be
 // ambiguous.
 func NormalizeControllerEndpoint(address string) (string, bool) {
-	if !api.ValidLexical("http-url", address) || !strings.HasPrefix(address, "http://") && !strings.HasPrefix(address, "https://") {
+	if !api.ValidLexical(api.LexicalHTTPURL, address) || !strings.HasPrefix(address, "http://") && !strings.HasPrefix(address, "https://") {
 		return "", false
 	}
 	for index := range len(address) {

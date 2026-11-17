@@ -19,7 +19,7 @@ func storageServiceBindings() *Shape {
 }
 
 func storageNativeDeviceSelector() *Shape {
-	device := &Shape{Alternatives: []*Shape{lexical("device-path"), record(required("path", lexical("device-path")), field("crush_device_class", nonempty()))}}
+	device := &Shape{Alternatives: []*Shape{lexical(LexicalDevicePath), record(required("path", lexical(LexicalDevicePath)), field("crush_device_class", nonempty()))}}
 	return record(field("paths", set(device)), field("all", boolean()), field("model", nonempty()), field("vendor", nonempty()), field("rotational", integer("0", "1")), field("size", nonempty()), field("limit", integer("0", "")))
 }
 

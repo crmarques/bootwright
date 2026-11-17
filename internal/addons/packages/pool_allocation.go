@@ -42,7 +42,7 @@ func admitSelectors(pool, field, list string, selectors []api.MetalLBSelector, a
 		}
 		slices.Sort(keys)
 		for _, key := range keys {
-			if !api.ValidLexical("kubernetes-label-key", key) || !api.ValidLexical("kubernetes-label-value", selector.MatchLabels[key]) {
+			if !api.ValidLexical(api.LexicalKubernetesLabelKey, key) || !api.ValidLexical(api.LexicalKubernetesLabelValue, selector.MatchLabels[key]) {
 				add("api.value", path, fmt.Sprintf("%s[%d] of pool %s has an invalid label key or value", list, i, pool), "use valid Kubernetes label keys and values")
 				break
 			}

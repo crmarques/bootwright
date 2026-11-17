@@ -63,7 +63,7 @@ func ValidateEvidence(evidence Evidence) error {
 func bounded(value string) bool    { return value == BoundedObservation(value) }
 func nativeName(value string) bool { return value == "" || bounded(value) && validName(value) }
 func nativeImage(value string) bool {
-	return value == "" || value == "invalid" || bounded(value) && api.ValidLexical("image", value)
+	return value == "" || value == "invalid" || bounded(value) && api.ValidLexical(api.LexicalImage, value)
 }
 func validChain(chain []ChainLink) bool {
 	if len(chain) > 16 {

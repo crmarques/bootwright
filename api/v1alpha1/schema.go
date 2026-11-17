@@ -21,7 +21,7 @@ type Shape struct {
 	KindDefaults  bool
 	MembersSelect bool
 	Atomic        bool
-	Rule          string
+	Rule          LexicalRule
 	Enums         []string
 	Minimum       string
 	Maximum       string
@@ -112,17 +112,17 @@ func choice(arms ...Field) *Shape {
 	}
 	return s
 }
-func atomic(s *Shape) *Shape        { s.Atomic = true; return s }
-func nonemptyArray(s *Shape) *Shape { s.MinLength = 1; return s }
-func lexical(rule string) *Shape    { return &Shape{Type: String, Rule: rule, MinLength: 1} }
-func dns() *Shape                   { return lexical("dns") }
-func name() *Shape                  { return lexical("name") }
-func ip() *Shape                    { return lexical("ip") }
-func cidr() *Shape                  { return lexical("cidr") }
-func url() *Shape                   { return lexical("http-url") }
-func duration() *Shape              { return lexical("duration") }
-func port() *Shape                  { return integer("1", "65535") }
-func image() *Shape                 { return lexical("image") }
+func atomic(s *Shape) *Shape          { s.Atomic = true; return s }
+func nonemptyArray(s *Shape) *Shape   { s.MinLength = 1; return s }
+func lexical(rule LexicalRule) *Shape { return &Shape{Type: String, Rule: rule, MinLength: 1} }
+func dns() *Shape                     { return lexical(LexicalDNS) }
+func name() *Shape                    { return lexical(LexicalName) }
+func ip() *Shape                      { return lexical(LexicalIP) }
+func cidr() *Shape                    { return lexical(LexicalCIDR) }
+func url() *Shape                     { return lexical(LexicalHTTPURL) }
+func duration() *Shape                { return lexical(LexicalDuration) }
+func port() *Shape                    { return integer("1", "65535") }
+func image() *Shape                   { return lexical(LexicalImage) }
 
 var schemas = map[Kind]func() *Shape{
 	Environment: environmentSchema,

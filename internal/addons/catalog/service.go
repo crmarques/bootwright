@@ -156,7 +156,7 @@ func typeName(shape *api.Shape) string {
 	case shape.Rule == "http-url":
 		return "HTTP URL"
 	case shape.Rule != "":
-		return shape.Rule
+		return string(shape.Rule)
 	}
 	switch shape.Type {
 	case api.Boolean:

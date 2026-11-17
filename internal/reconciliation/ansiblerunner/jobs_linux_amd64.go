@@ -69,7 +69,7 @@ func recordFor(request lifecycle.RunRequest) jobRecord {
 // could not attribute: one naming no context, or one a sweep could not read
 // back.
 func checkIdentity(request lifecycle.RunRequest) error {
-	if !api.ValidLexical("name", request.Context) {
+	if !api.ValidLexical(api.LexicalName, request.Context) {
 		return failure("lifecycle.state", "the adapter run names no context", "")
 	}
 	record := recordFor(request)
@@ -82,7 +82,7 @@ func checkIdentity(request lifecycle.RunRequest) error {
 // recordable reports whether a record attributes its job: a valid context and
 // printable text a refusal can name.
 func recordable(record jobRecord) bool {
-	if !api.ValidLexical("name", record.Context) {
+	if !api.ValidLexical(api.LexicalName, record.Context) {
 		return false
 	}
 	for _, field := range []string{record.Block, record.Description, record.Implementation, record.Operation, record.Machine, record.RequestDigest} {

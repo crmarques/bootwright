@@ -19,13 +19,13 @@ func environmentSchema() *Shape {
 // context-independent setup, which reads no Environment.
 func dependencyVersions() *Shape {
 	return record(
-		field("libvirt", lexical("package-version")),
-		field("helm", lexical("cli-version")), field("govc", lexical("cli-version")), field("virtctl", lexical("cli-version")),
+		field("libvirt", lexical(LexicalPackageVersion)),
+		field("helm", lexical(LexicalCLIVersion)), field("govc", lexical(LexicalCLIVersion)), field("virtctl", lexical(LexicalCLIVersion)),
 	)
 }
 
 func artifactMirror() *Shape {
-	mirror := atomic(choice(field("url", lexical("artifact-mirror-url")), field("serverRef", ref(ArtifactServer))))
+	mirror := atomic(choice(field("url", lexical(LexicalArtifactMirrorURL)), field("serverRef", ref(ArtifactServer))))
 	mirror.Fields = append(mirror.Fields, field("endpointRef", endpointOf("serverRef", ArtifactServer)), field("trustBundleRef", secret("caBundle", "trustBundle")), field("tlsVerification", tlsVerification()))
 	return mirror
 }

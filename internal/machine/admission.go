@@ -105,7 +105,7 @@ func derivedContact(o api.Object, c api.Catalog, addresses []api.Value) (contact
 		}
 	}
 	envs := c.OfKind(api.Environment)
-	if len(envs) != 1 || !api.ValidLexical("name", o.Name()) {
+	if len(envs) != 1 || !api.ValidLexical(api.LexicalName, o.Name()) {
 		return contact{}, false
 	}
 	domain := envs[0].Spec().Get("domains", "machines").Text()
@@ -116,7 +116,7 @@ func derivedContact(o api.Object, c api.Catalog, addresses []api.Value) (contact
 		return contact{}, false
 	}
 	name := o.Name() + "." + domain
-	return contact{name: name, overlong: api.ValidLexical("dns", domain) && !api.ValidLexical("dns", name)}, true
+	return contact{name: name, overlong: api.ValidLexical(api.LexicalDNS, domain) && !api.ValidLexical(api.LexicalDNS, name)}, true
 }
 
 func validateDerivedContact(o api.Object, c api.Catalog) []api.Issue {
@@ -143,7 +143,7 @@ func normalizedAccess(o api.Object, c api.Catalog, s, network api.Value) api.Val
 		// falls back to none rather than repeat the name's refusal.
 		reference := sshAddressRef(o, network)
 		derived, _ := derivedContact(o, c, network.Get("addresses").Items())
-		if _, declared := namedValue(network.Get("addresses"), reference); !ssh.Has("addressRef") && (declared || api.ValidLexical("name", o.Name()) && !derived.overlong) {
+		if _, declared := namedValue(network.Get("addresses"), reference); !ssh.Has("addressRef") && (declared || api.ValidLexical(api.LexicalName, o.Name()) && !derived.overlong) {
 			ssh = ssh.With("addressRef", api.StringValue(reference))
 		}
 		if derived.overlong && ssh.Get("addressRef").Text() == "fqdn" {
@@ -403,7 +403,7 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 			issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path + ".interface", Message: "interface assignment requires a non-provided Machine with configured network", Remediation: remediation})
 		}
 		if address.Get("name").Text() == "fqdn" {
-			if address.Has("interface") || !api.ValidLexical("dns", address.Get("address").Text()) {
+			if address.Has("interface") || !api.ValidLexical(api.LexicalDNS, address.Get("address").Text()) {
 				issues = api.AppendIssues(issues, api.Issue{Code: "api.invariant", Field: path, Message: "fqdn must be an unassigned DNS contact",
 					Remediation: "correct " + path[2:] + " on " + o.Identity() + " to a lowercase DNS name with no interface"})
 			}
@@ -842,7 +842,7 @@ func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant string) 
 	path := "$.spec.substrate." + variant + ".nics"
 	issues := []api.Issue{}
 	for i, nic := range nics {
-		if !api.ValidLexical("ifname", nic) {
+		if !api.ValidLexical(api.LexicalIfname, nic) {
 			field := fmt.Sprintf("$.spec.hardware.nics[%d].name", i)
 			issues = api.AppendIssues(issues, invariant(field, "NIC "+nic+" of "+o.Identity()+" is a "+variant+" vNIC the installer pins under its NIC name unless an interface matches it, and "+interfaceNameRule,
 				"rename NIC "+nic+" in spec.hardware.nics on "+o.Identity()+" to an interface name the guest may use, such as enp"+strconv.Itoa(i+1)+"s0, and update every nicRef that names it"))

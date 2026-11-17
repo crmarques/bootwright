@@ -228,7 +228,7 @@ func discoveredPool(block, cluster, name string, pool PoolEvidence) lifecycle.Pr
 	notes := []string{prefix + ": spec.role is not read"}
 	if name != pool.Name {
 		leaves = append(leaves, leaf{path: []string{"nativeName"}, value: api.StringValue(pool.Name)})
-		if !api.ValidLexical("name", pool.Name) {
+		if !api.ValidLexical(api.LexicalName, pool.Name) {
 			notes = append(notes, fitted(prefix+": its native name is not a DNS label, which spec.nativeName requires", prefix+": its native name is not a DNS label"))
 		}
 	}
@@ -264,7 +264,7 @@ func discoveredPoolName(native, cluster string, several bool, taken map[string]b
 	if several {
 		candidate = cluster + "-" + native
 	}
-	if api.ValidLexical("name", candidate) && !taken[candidate] {
+	if api.ValidLexical(api.LexicalName, candidate) && !taken[candidate] {
 		return candidate
 	}
 	sum := sha256.Sum256([]byte(cluster + "\x00" + native))

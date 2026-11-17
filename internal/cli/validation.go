@@ -199,7 +199,7 @@ func validateRenderDirectories(flags *pflag.FlagSet) string {
 }
 
 func dnsLabel(value string) bool {
-	return api.ValidLexical("name", value)
+	return api.ValidLexical(api.LexicalName, value)
 }
 
 func contains(values []string, target string) bool {

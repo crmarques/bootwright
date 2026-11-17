@@ -178,7 +178,7 @@ func intentRequests(catalog api.Catalog, controllerMachine, contextName string) 
 }
 
 func requestsFor(catalog api.Catalog, controllerMachine, contextName string, proofs map[string]diskselection.Proof, complete bool) ([]Request, []Requirements, error) {
-	if !api.ValidLexical("name", contextName) {
+	if !api.ValidLexical(api.LexicalName, contextName) {
 		return nil, nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	var requests []Request

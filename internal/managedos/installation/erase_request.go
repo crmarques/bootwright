@@ -107,7 +107,7 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 			return request, refusal("api.value", "physical erase target names its disk by deviceName with its wwn, or by serialNumber and sizeBytes alone", "correct spec.hardware.eraseOnRemoval.targets")
 		}
 		bySerial := !value.Has("deviceName")
-		if !bySerial && !api.ValidLexical("device-path", target.DeviceName) || !diskselection.ValidSize(size) {
+		if !bySerial && !api.ValidLexical(api.LexicalDevicePath, target.DeviceName) || !diskselection.ValidSize(size) {
 			return request, refusal("api.value", "physical erase target needs a whole device path and a 4096-byte aligned exact capacity up to 64 TiB", "correct spec.hardware.eraseOnRemoval.targets")
 		}
 		if target.Method == EraseLogicalOverwrite && size > machineref.MaxLogicalOverwriteBytes {

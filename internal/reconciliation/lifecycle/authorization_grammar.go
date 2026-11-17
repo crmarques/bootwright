@@ -30,7 +30,7 @@ func ValidAuthorizations(tokens []string) bool {
 			name = token
 		}
 		dataLoss := name == reconciliation.AuthorizationDataLoss && (!bound || validAuthorizationDigest(digest))
-		if !dataLoss && (!rebind || !api.ValidLexical("name", secret)) || seen[name] {
+		if !dataLoss && (!rebind || !api.ValidLexical(api.LexicalName, secret)) || seen[name] {
 			return false
 		}
 		seen[name] = true
