@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -17,9 +17,9 @@ func anotherHost(t *testing.T, h *harness) {
 	h.service.host = testHost{identity: anotherHostIdentity(t)}
 }
 
-func anotherHostIdentity(t *testing.T) controller.InstalledHostIdentity {
+func anotherHostIdentity(t *testing.T) evidence.InstalledHostIdentity {
 	t.Helper()
-	host, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1,
+	host, err := evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1,
 		"fedcba9876543210fedcba9876543210", "87654321-4321-8765-cba9-876543210fed", "01234567-89ab-cdef-0123-456789abcdef")
 	if err != nil {
 		t.Fatal(err)

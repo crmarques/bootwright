@@ -13,7 +13,7 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -443,7 +443,7 @@ func TestAnObservedDiffRefusesAnUnreopenableBinding(t *testing.T) {
 
 func TestAnObservedDiffRefusesAnotherHostOrAnUnboundContext(t *testing.T) {
 	t.Parallel()
-	other, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1,
+	other, err := evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1,
 		"fedcba9876543210fedcba9876543210", "87654321-4321-8765-cba9-210fedcba987", "01234567-89ab-cdef-0123-456789abcdef")
 	if err != nil {
 		t.Fatal(err)

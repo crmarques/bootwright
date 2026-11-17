@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -18,7 +18,7 @@ import (
 // NewJourneyWorkspace is the journey double workspacecontract.Verify holds:
 // its one ready context, with empty operation and run areas, on host, whose
 // completed setup binds no context and retains no tool source.
-func NewJourneyWorkspace(host controller.InstalledHostIdentity) (Workspace, string, error) {
+func NewJourneyWorkspace(host evidence.InstalledHostIdentity) (Workspace, string, error) {
 	pristine, err := reconciliation.PristineEvidence().Bytes()
 	if err != nil {
 		return nil, "", err

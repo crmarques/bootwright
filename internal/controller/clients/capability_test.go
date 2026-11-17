@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -100,7 +100,7 @@ type fakeTools struct {
 	offered []prerequisites.DependencySource
 }
 
-func (f *fakeTools) Select(_ []controller.ToolRequest, retained []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, bool, error) {
+func (f *fakeTools) Select(_ []evidence.ToolRequest, retained []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, bool, error) {
 	f.selects++
 	f.offered = slices.Clone(retained)
 	if f.selectErr != nil {
@@ -109,7 +109,7 @@ func (f *fakeTools) Select(_ []controller.ToolRequest, retained []prerequisites.
 	return slices.Clone(f.selected), f.complete, nil
 }
 
-func (f *fakeTools) Resolve(context.Context, []controller.ToolRequest, prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
+func (f *fakeTools) Resolve(context.Context, []evidence.ToolRequest, prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
 	f.resolves++
 	if f.resolveErr != nil {
 		return nil, f.resolveErr
@@ -968,7 +968,7 @@ func TestLocateToolAnswersOnlyFromTheClosureTheStageProved(t *testing.T) {
 	}
 	closure := []prerequisites.ToolDefinition{release("openshift-clients", "4.19.3", "c", "oc", "kubectl"), release("openshift-install", "4.19.3", "e", "openshift-install")}
 	newer := release("openshift-install", "4.22.3", "0", "openshift-install")
-	installer := controller.InstalledTool{Kind: "openshift-install", Compatibility: "openshift", Version: "4.19.3", Executable: "openshift-install"}
+	installer := evidence.InstalledTool{Kind: "openshift-install", Compatibility: "openshift", Version: "4.19.3", Executable: "openshift-install"}
 	block := planBlock(t, unwired(), stateOf(environment(), machine(), cluster()), reconciliation.Apply)
 	proof := func(edit func(*Evidence)) lifecycle.BlockEvidence {
 		evidence := newEvidence(block.RequestDigest, prerequisites.ToolsDigest(closure), false, closure, nil)

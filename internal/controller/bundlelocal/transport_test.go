@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
@@ -77,7 +77,7 @@ func TestUnreachablePublisherNamesItsHostAndCorrectableCondition(t *testing.T) {
 // A tool catalog failure is reached only through a context's controller
 // stage, which setup cannot settle because it installs no target tool.
 func TestToolCatalogFailuresNameTheStageThatReachedThem(t *testing.T) {
-	request := controller.ToolRequest{Kind: "helm", Version: "v4.2.10"}
+	request := evidence.ToolRequest{Kind: "helm", Version: "v4.2.10"}
 	endpoint, _, err := sourceURL(request, request.Version)
 	if err != nil {
 		t.Fatal(err)
@@ -85,7 +85,7 @@ func TestToolCatalogFailuresNameTheStageThatReachedThem(t *testing.T) {
 	source := prerequisites.DependencySource{ID: toolSourcePrefix(request) + request.Version, URL: endpoint, SHA256: strings.Repeat("a", 64), Bytes: 1024}
 	conflict := source
 	conflict.SHA256 = strings.Repeat("b", 64)
-	_, _, err = (&ToolCatalog{}).Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{source, conflict})
+	_, _, err = (&ToolCatalog{}).Select([]evidence.ToolRequest{request}, []prerequisites.DependencySource{source, conflict})
 	stage := singleDiagnostic(t, prerequisites.InStage(err, "lab"))
 	if stage.Code != "controller.install" || stage.Message != "retained tool release has conflicting publisher identities" ||
 		stage.Remediation != "Restore approved dependency sources or the retained tool areas, then run bootwright apply --stage controller --context lab." {

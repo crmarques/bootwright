@@ -11,6 +11,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 )
 
 func TestTargetToolLimitCountsDistinctRequirements(t *testing.T) {
@@ -38,7 +39,7 @@ func TestTargetToolLimitCountsDistinctRequirements(t *testing.T) {
 				}
 				return
 			}
-			want := []controller.ToolRequest{defaultTool(t, "helm"), {Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"}, {Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"}}
+			want := []evidence.ToolRequest{defaultTool(t, "helm"), {Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"}, {Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"}}
 			if err != nil || !reflect.DeepEqual(tools, want) {
 				t.Fatal("repeated consumers changed the required tool closure", tools, err)
 			}
@@ -105,7 +106,7 @@ func TestReferencedVSphereRequestsOnlyItsGenericClient(t *testing.T) {
 		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("virtualization"), "substrate", "providerRef")),
 	)
 	tools, err := controller.SelectTools(api.NewCatalog(objects))
-	if err != nil || !reflect.DeepEqual(tools, []controller.ToolRequest{defaultTool(t, "govc")}) {
+	if err != nil || !reflect.DeepEqual(tools, []evidence.ToolRequest{defaultTool(t, "govc")}) {
 		t.Fatal(tools, err)
 	}
 }
@@ -121,7 +122,7 @@ func TestVirtualizationProfileRequestsTheDefaultUpstreamClientIndependentlyOfCSV
 	if err != nil {
 		t.Fatal(err)
 	}
-	index := slices.IndexFunc(tools, func(tool controller.ToolRequest) bool { return tool.Kind == "virtctl" })
+	index := slices.IndexFunc(tools, func(tool evidence.ToolRequest) bool { return tool.Kind == "virtctl" })
 	if index < 0 || tools[index] != defaultTool(t, "virtctl") {
 		t.Fatal("virtualization did not request the default upstream client", tools)
 	}
@@ -134,7 +135,7 @@ func TestKubeVirtRequirementNeedsNoVendorCSVOrClusterObservation(t *testing.T) {
 			api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("virtualization"), "substrate", "providerRef")),
 		)
 		tools, err := controller.SelectTools(api.NewCatalog(objects))
-		if err != nil || !reflect.DeepEqual(tools, []controller.ToolRequest{defaultTool(t, "virtctl")}) {
+		if err != nil || !reflect.DeepEqual(tools, []evidence.ToolRequest{defaultTool(t, "virtctl")}) {
 			t.Fatal(access, tools, err)
 		}
 	}
@@ -264,7 +265,7 @@ func TestTargetToolsReadPackageCapabilityFromInstanceSelection(t *testing.T) {
 	objects := selectionObjects()
 	objects = append(objects, api.NewObject(api.ClusterAddonBinding, "binding", api.Value{}, api.MapValue().With("clusterRef", api.StringValue("cluster")).WithPath(api.MapValue(), "packages", "fixture")))
 	tools, err := controller.SelectToolsWithRegistry(api.NewCatalog(objects), registry)
-	if err != nil || !slices.ContainsFunc(tools, func(tool controller.ToolRequest) bool {
+	if err != nil || !slices.ContainsFunc(tools, func(tool evidence.ToolRequest) bool {
 		return tool.Kind == "virtctl" && tool.Compatibility == "kubevirt"
 	}) {
 		t.Fatalf("package tools: %+v %v", tools, err)
@@ -282,7 +283,7 @@ func TestFIPSAndOrdinaryClustersKeepDistinctInstallerTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, kind := range []string{"openshift-install", "openshift-install-fips"} {
-		if !slices.ContainsFunc(tools, func(r controller.ToolRequest) bool {
+		if !slices.ContainsFunc(tools, func(r evidence.ToolRequest) bool {
 			return r.Kind == kind && r.Version == "4.21.10" && r.Compatibility == "openshift"
 		}) {
 			t.Fatalf("missing %s in %v", kind, tools)
@@ -314,13 +315,13 @@ func TestAnAuthoredKubeVirtProviderRequestsVirtctlOnce(t *testing.T) {
 	}
 }
 
-func defaultTool(t *testing.T, kind string) controller.ToolRequest {
+func defaultTool(t *testing.T, kind string) evidence.ToolRequest {
 	t.Helper()
 	pin, found, err := controller.PinOf(kind)
 	if err != nil || !found {
 		t.Fatalf("the build pins no %s: %v", kind, err)
 	}
-	request := controller.ToolRequest{Kind: kind, Version: "v" + pin.Default.Version, SHA256: pin.Default.SHA256, Bytes: pin.Default.Bytes}
+	request := evidence.ToolRequest{Kind: kind, Version: "v" + pin.Default.Version, SHA256: pin.Default.SHA256, Bytes: pin.Default.Bytes}
 	if kind == "virtctl" {
 		request.Compatibility = "kubevirt"
 	}

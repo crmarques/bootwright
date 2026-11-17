@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
 	"github.com/crmarques/bootwright/internal/controller/clients"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -81,7 +82,7 @@ type mirroredClient struct {
 	bytes                          int64
 }
 
-func mirroredClients(tools []controller.ToolRequest) ([]mirroredClient, error) {
+func mirroredClients(tools []evidence.ToolRequest) ([]mirroredClient, error) {
 	var clients []mirroredClient
 	for _, tool := range tools {
 		if !controller.PublicOrigin(tool) || tool.Mirror == "" || tool.SHA256 == "" {

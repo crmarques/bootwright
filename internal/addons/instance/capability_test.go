@@ -12,7 +12,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -104,7 +104,7 @@ func fixtureExecution(t *testing.T, request Request) lifecycle.Execution {
 			t.Fatal(ref)
 		}
 		return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("private-kubeconfig")}), nil
-	}, LocateTool: func(_ context.Context, tool controller.InstalledTool) (string, error) {
+	}, LocateTool: func(_ context.Context, tool evidence.InstalledTool) (string, error) {
 		if tool.Executable != "oc" || tool.Version != "4.21.1" {
 			t.Fatal(tool)
 		}

@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -503,7 +503,7 @@ func (s Service) invoke(ctx context.Context, run invocation, block reconciliatio
 			Operation: operation.ID, Context: tx.Identity().Name, Incarnation: tx.Identity().Incarnation, Continuation: continuation, Attempt: attempt, Resolution: resolution, Block: block,
 			ApplyOperation: owner, ApplyProved: records.applyProved, ApplyPreparations: clonedPreparations(records.preparations), Prepare: prepare, Released: s.released(ctx, block),
 			Launch: launch, Material: run.material, Proved: records.proved,
-			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
+			LocateTool: func(inner context.Context, tool evidence.InstalledTool) (string, error) {
 				return s.locateTool(inner, store, view, tx.Identity().Name, operation, plan, tool)
 			},
 			Stage: stage,
@@ -564,7 +564,7 @@ func stageReading(err error, block reconciliation.Block, verb reconciliation.Ver
 // effects this operation runs over, because the stage's removal proves no
 // closure, and recovering it from the host's shared sources would move a
 // latest client to a release another context retained.
-func (s Service) locateTool(ctx context.Context, store recordReader, view prerequisites.StorageView, contextName string, operation operationstore.Operation, plan reconciliation.Plan, tool controller.InstalledTool) (string, error) {
+func (s Service) locateTool(ctx context.Context, store recordReader, view prerequisites.StorageView, contextName string, operation operationstore.Operation, plan reconciliation.Plan, tool evidence.InstalledTool) (string, error) {
 	stages := controllerStages(plan)
 	if len(stages) == 0 {
 		held, err := predecessorLineage(ctx, store, operation)
@@ -593,7 +593,7 @@ func (s Service) locateTool(ctx context.Context, store recordReader, view prereq
 	return "", refused
 }
 
-func (s Service) locateIn(ctx context.Context, store recordReader, view prerequisites.StorageView, operation operationstore.Operation, stage reconciliation.Block, tool controller.InstalledTool) (string, error) {
+func (s Service) locateIn(ctx context.Context, store recordReader, view prerequisites.StorageView, operation operationstore.Operation, stage reconciliation.Block, tool evidence.InstalledTool) (string, error) {
 	capability, ok := s.capabilities.Resolve(stage.Kind, stage.Implementation)
 	locator, locates := capability.(ToolLocator)
 	if !ok || !locates {

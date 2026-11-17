@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
 	"github.com/crmarques/bootwright/internal/controller/clients"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
@@ -228,7 +229,7 @@ func mirrorReleases(catalog api.Catalog) ([]mirrorfill.Release, error) {
 			continue
 		}
 		version := cluster.Spec().Get("distribution", "release", "version").Text()
-		index := slices.IndexFunc(tools, func(tool controller.ToolRequest) bool {
+		index := slices.IndexFunc(tools, func(tool evidence.ToolRequest) bool {
 			return tool.Kind == "openshift-clients" && tool.Compatibility == "openshift" && tool.Version == version
 		})
 		location := ""

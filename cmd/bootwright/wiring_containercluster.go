@@ -9,7 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -37,7 +37,7 @@ func (r producedReader) ReadProduced(ctx context.Context, contextName, block, na
 
 type clusterClientReader interface {
 	evidenceReader
-	AccessTool(context.Context, string, controller.InstalledTool) (string, error)
+	AccessTool(context.Context, string, evidence.InstalledTool) (string, error)
 }
 
 type producedAvailability interface {
@@ -75,7 +75,7 @@ func (m clusterClientMetadata) Client(ctx context.Context, contextName, cluster,
 		if !present {
 			break
 		}
-		tool := controller.InstalledTool{Kind: "openshift-clients", Compatibility: request.Release.Distribution, Version: request.Release.Version, Executable: executable}
+		tool := evidence.InstalledTool{Kind: "openshift-clients", Compatibility: request.Release.Distribution, Version: request.Release.Version, Executable: executable}
 		path, err := m.reconciler.AccessTool(ctx, contextName, tool)
 		if err != nil {
 			return containeraccess.Client{}, err

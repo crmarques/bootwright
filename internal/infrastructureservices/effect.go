@@ -19,3 +19,12 @@ func UnclaimedRemedy(object api.Object) string {
 func Placement(object api.Object) string {
 	return object.Spec().Get("machineRef").Text()
 }
+
+func HostsManagedService(c api.Catalog, machine string) bool {
+	for _, object := range c.Objects() {
+		if IsService(object.Kind()) && object.Spec().Get("management").Text() == "managed" && Placement(object) == machine {
+			return true
+		}
+	}
+	return false
+}

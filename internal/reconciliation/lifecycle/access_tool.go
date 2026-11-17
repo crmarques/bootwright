@@ -3,10 +3,10 @@ package lifecycle
 import (
 	"context"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 )
 
-func (s Service) AccessTool(ctx context.Context, contextName string, tool controller.InstalledTool) (string, error) {
+func (s Service) AccessTool(ctx context.Context, contextName string, tool evidence.InstalledTool) (string, error) {
 	if err := s.available(ctx); err != nil {
 		return "", err
 	}

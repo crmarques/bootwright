@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	controllerscope "github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/material"
@@ -35,7 +35,7 @@ func TestFIPSProjectionAndBoundEd25519RefuseBeforeNativeExecution(t *testing.T) 
 	matchesGolden(t, "media-request-fips", canonical, false)
 	execution, _ := mediaExecution(t, testDigest)
 	execution.Block.Request = canonical
-	execution.LocateTool = func(_ context.Context, tool controllerscope.InstalledTool) (string, error) {
+	execution.LocateTool = func(_ context.Context, tool evidence.InstalledTool) (string, error) {
 		if tool.Kind == "openshift-clients" && tool.Executable == "oc" {
 			return "/synthetic/oc", nil
 		}
@@ -70,7 +70,7 @@ func TestFIPSInstallWaitsResolveTheFIPSExecutable(t *testing.T) {
 	request.Tool.Kind = "openshift-install-fips"
 	execution, _ := mediaExecution(t, testDigest)
 	executables := []string{}
-	execution.LocateTool = func(_ context.Context, tool controllerscope.InstalledTool) (string, error) {
+	execution.LocateTool = func(_ context.Context, tool evidence.InstalledTool) (string, error) {
 		executables = append(executables, tool.Executable)
 		return "/synthetic/" + tool.Executable, nil
 	}

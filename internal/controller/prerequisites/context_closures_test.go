@@ -7,12 +7,13 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 )
 
 type presentTools struct{ TargetToolCatalog }
 
-func (presentTools) Select(requests []controller.ToolRequest, _ []DependencySource) ([]ToolDefinition, bool, error) {
+func (presentTools) Select(requests []evidence.ToolRequest, _ []DependencySource) ([]ToolDefinition, bool, error) {
 	return []ToolDefinition{{Kind: requests[0].Kind, Version: requests[0].Version}}, true, nil
 }
 

@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -62,7 +62,7 @@ func TestSetupSequenceExhaustionKeepsReceiptWithoutAStoredRun(t *testing.T) {
 	if err := os.Rename(filepath.Join(root, "install-000001.output"), filepath.Join(root, "install-999999.output")); err != nil {
 		t.Fatal(err)
 	}
-	identity, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, strings.Repeat("1", 32), "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666")
+	identity, err := evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1, strings.Repeat("1", 32), "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666")
 	if err != nil {
 		t.Fatal(err)
 	}

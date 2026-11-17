@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 )
 
 // ToolsDigest names the shared host area that holds one exact target tool
@@ -56,7 +56,7 @@ func UnreleasedClient(tool ToolDefinition) error {
 // authority: the caller recovers the closure its own context's controller
 // stage selects, so a consumer runs the exact file that stage installed for
 // the release its own graph selected, and never one another closure holds.
-func LocateInstalledTool(ctx context.Context, view StorageView, tools []ToolDefinition, tool controller.InstalledTool) (string, error) {
+func LocateInstalledTool(ctx context.Context, view StorageView, tools []ToolDefinition, tool evidence.InstalledTool) (string, error) {
 	unavailable, missing := "run bootwright controller install, then apply --stage controller", "run bootwright apply --stage controller"
 	if view.Context.Name != "" {
 		unavailable, missing = "run bootwright controller install, then "+stageInvocation(view.Context.Name), stageCommand(view.Context.Name)
@@ -97,7 +97,7 @@ func LocateInstalledTool(ctx context.Context, view StorageView, tools []ToolDefi
 // publishedMember is the file one retained closure publishes for exactly this
 // client kind, compatibility and version. A closure publishes several
 // executables, so the member is named.
-func publishedMember(tools []ToolDefinition, tool controller.InstalledTool) (string, bool) {
+func publishedMember(tools []ToolDefinition, tool evidence.InstalledTool) (string, bool) {
 	for _, definition := range tools {
 		if definition.Kind != tool.Kind || definition.Compatibility != tool.Compatibility || definition.Version != tool.Version {
 			continue
@@ -111,6 +111,6 @@ func publishedMember(tools []ToolDefinition, tool controller.InstalledTool) (str
 	return "", false
 }
 
-func SelectContextTools(_ context.Context, catalog TargetToolCatalog, view StorageView, requests []controller.ToolRequest) ([]ToolDefinition, bool, error) {
+func SelectContextTools(_ context.Context, catalog TargetToolCatalog, view StorageView, requests []evidence.ToolRequest) ([]ToolDefinition, bool, error) {
 	return catalog.Select(requests, view.State.ToolSources)
 }

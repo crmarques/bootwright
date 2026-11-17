@@ -12,7 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -22,14 +22,14 @@ import (
 type accessMetadataFixture struct {
 	records []lifecycle.BlockEvidence
 	present bool
-	located []controller.InstalledTool
+	located []evidence.InstalledTool
 	refusal error
 }
 
 func (f *accessMetadataFixture) Evidence(context.Context, string, string, string) ([]lifecycle.BlockEvidence, error) {
 	return f.records, nil
 }
-func (f *accessMetadataFixture) AccessTool(_ context.Context, _ string, tool controller.InstalledTool) (string, error) {
+func (f *accessMetadataFixture) AccessTool(_ context.Context, _ string, tool evidence.InstalledTool) (string, error) {
 	f.located = append(f.located, tool)
 	return "/installed/" + tool.Executable, f.refusal
 }

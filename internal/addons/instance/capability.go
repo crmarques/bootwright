@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/addons"
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
 	"github.com/crmarques/bootwright/internal/addons/clusterobjects/driver"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -199,7 +199,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 			placements = append(placements, step.Place.SecretPlacement)
 		}
 	}
-	result, err := driver.Run(ctx, c.runner, execution, operation, driver.Config{Placements: placements, Implementation: Implementation, Variable: "bootwright_addon_instance", EvidenceVersion: evidenceVersion, Placement: request.Placement, Tool: controller.InstalledTool{Kind: request.Tool.Kind, Compatibility: request.Tool.Compatibility, Version: request.Tool.Version, Executable: "oc"}, BudgetSeconds: request.BudgetSeconds, ProducedInput: request.ProducedInputs[0]})
+	result, err := driver.Run(ctx, c.runner, execution, operation, driver.Config{Placements: placements, Implementation: Implementation, Variable: "bootwright_addon_instance", EvidenceVersion: evidenceVersion, Placement: request.Placement, Tool: evidence.InstalledTool{Kind: request.Tool.Kind, Compatibility: request.Tool.Compatibility, Version: request.Tool.Version, Executable: "oc"}, BudgetSeconds: request.BudgetSeconds, ProducedInput: request.ProducedInputs[0]})
 	return result, request, err
 }
 func (c Capability) ReadsMaterialOnlyInApply(block reconciliation.Block) bool {

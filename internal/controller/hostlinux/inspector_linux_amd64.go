@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"golang.org/x/sys/unix"
@@ -133,10 +133,10 @@ func (i Inspector) Release(ctx context.Context) (prerequisites.HostRelease, erro
 
 // Identity acquires the canonical installed-host tuple and independently checks
 // observable execution boundaries. Identical full clones remain indistinguishable.
-func (i Inspector) Identity(ctx context.Context) (controller.InstalledHostIdentity, error) {
+func (i Inspector) Identity(ctx context.Context) (evidence.InstalledHostIdentity, error) {
 	fs, err := i.view.open(ctx)
 	if err != nil {
-		return controller.InstalledHostIdentity{}, identityFailure(ctx)
+		return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 	}
 	defer fs.close()
 	for _, marker := range []string{"/.dockerenv", "/run/.containerenv", "/run/systemd/container"} {
@@ -145,53 +145,53 @@ func (i Inspector) Identity(ctx context.Context) (controller.InstalledHostIdenti
 			file.Close()
 		}
 		if err == nil || !errors.Is(err, os.ErrNotExist) {
-			return controller.InstalledHostIdentity{}, identityFailure(ctx)
+			return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 		}
 	}
 	proc, err := fs.kernelRoot(ctx, "/proc", unix.PROC_SUPER_MAGIC)
 	if err != nil {
-		return controller.InstalledHostIdentity{}, identityFailure(ctx)
+		return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 	}
 	defer proc.Close()
 	if err := fs.sameMountNamespace(ctx, proc); err != nil {
-		return controller.InstalledHostIdentity{}, identityFailure(ctx)
+		return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 	}
 	status, err := fs.readKernel(ctx, proc, "self/status", maxMetadataBytes)
 	if err != nil || nestedPIDNamespace(status) {
-		return controller.InstalledHostIdentity{}, identityFailure(ctx)
+		return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 	}
 	cgroups, err := fs.readKernel(ctx, proc, "1/cgroup", maxMetadataBytes)
 	if err != nil || containerCgroup(cgroups) {
-		return controller.InstalledHostIdentity{}, identityFailure(ctx)
+		return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 	}
 	mountinfo, err := fs.readKernel(ctx, proc, "self/mountinfo", maxMetadataBytes)
 	if err != nil {
-		return controller.InstalledHostIdentity{}, identityFailure(ctx)
+		return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 	}
 	mount, err := rootMount(mountinfo)
 	if err != nil {
-		return controller.InstalledHostIdentity{}, identityFailure(ctx)
+		return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 	}
 	filesystemUUID, err := fs.filesystemUUID(ctx, mount)
 	if err != nil {
-		return controller.InstalledHostIdentity{}, identityFailure(ctx)
+		return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 	}
 	machineID, err := fs.read(ctx, "/etc/machine-id", 128)
 	if err != nil {
-		return controller.InstalledHostIdentity{}, identityFailure(ctx)
+		return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 	}
 	sys, err := fs.kernelRoot(ctx, "/sys", unix.SYSFS_MAGIC)
 	if err != nil {
-		return controller.InstalledHostIdentity{}, identityFailure(ctx)
+		return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 	}
 	sys.Close()
 	product, err := fs.read(ctx, "/sys/class/dmi/id/product_uuid", 128)
 	if err != nil {
-		return controller.InstalledHostIdentity{}, identityFailure(ctx)
+		return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 	}
-	identity, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, trimTerminator(machineID), strings.ToLower(trimTerminator(product)), filesystemUUID)
+	identity, err := evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1, trimTerminator(machineID), strings.ToLower(trimTerminator(product)), filesystemUUID)
 	if err != nil || ctx.Err() != nil {
-		return controller.InstalledHostIdentity{}, identityFailure(ctx)
+		return evidence.InstalledHostIdentity{}, identityFailure(ctx)
 	}
 	return identity, nil
 }

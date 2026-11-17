@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/nativefs"
 	"golang.org/x/sys/unix"
 )
@@ -188,7 +188,7 @@ func (f *heldFilesystem) filesystemUUID(ctx context.Context, mount mountedRoot) 
 }
 
 func canonicalUUID(value string) bool {
-	_, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, "1234567890abcdef1234567890abcdef", "12345678-90ab-cdef-1234-567890abcdef", value)
+	_, err := evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1, "1234567890abcdef1234567890abcdef", "12345678-90ab-cdef-1234-567890abcdef", value)
 	return err == nil
 }
 

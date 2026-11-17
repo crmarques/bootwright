@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -520,7 +520,7 @@ func (t *lifecycleTransaction) ReproveReservations(ctx context.Context, check fu
 // host's identity when no context bound one yet; every later one revalidates
 // the exact same relationship. A different Machine or host never replaces an
 // existing binding, so relocation stays an explicit operator decision.
-func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host controller.InstalledHostIdentity) error {
+func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host evidence.InstalledHostIdentity) error {
 	if err := t.base.available(ctx); err != nil {
 		return err
 	}
@@ -537,7 +537,7 @@ func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host co
 	}
 	if !t.stored.value.Host.Equal(host) {
 		return controllerFailure("controller.identity", "this host is not the host this controller state belongs to",
-			controller.HostMismatchRemedy(t.identity.Name))
+			evidence.HostMismatchRemedy(t.identity.Name))
 	}
 	digest, err := host.PrivateDigest()
 	if err != nil {
@@ -563,7 +563,7 @@ func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host co
 
 // initializeController creates the controller record holding only this host's
 // identity, so the first binding has one to join.
-func (t *lifecycleTransaction) initializeController(ctx context.Context, host controller.InstalledHostIdentity) error {
+func (t *lifecycleTransaction) initializeController(ctx context.Context, host evidence.InstalledHostIdentity) error {
 	stored, err := t.base.initializeController(ctx, host, applyRetry(t.identity.Name))
 	if err != nil {
 		return err

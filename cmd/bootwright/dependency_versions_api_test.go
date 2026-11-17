@@ -5,6 +5,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 )
 
 // An Environment declares versions only for the prerequisites its own
@@ -116,13 +117,13 @@ func TestEnvironmentDependencyVersionsAdmitAnyPublisherReleaseTag(t *testing.T) 
 	}
 }
 
-func defaultToolRequest(t *testing.T, kind string) controller.ToolRequest {
+func defaultToolRequest(t *testing.T, kind string) evidence.ToolRequest {
 	t.Helper()
 	pin, found, err := controller.PinOf(kind)
 	if err != nil || !found {
 		t.Fatalf("the build pins no %s: %v", kind, err)
 	}
-	request := controller.ToolRequest{Kind: kind, Version: "v" + pin.Default.Version, SHA256: pin.Default.SHA256, Bytes: pin.Default.Bytes}
+	request := evidence.ToolRequest{Kind: kind, Version: "v" + pin.Default.Version, SHA256: pin.Default.SHA256, Bytes: pin.Default.Bytes}
 	if kind == "virtctl" {
 		request.Compatibility = "kubevirt"
 	}

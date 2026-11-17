@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -13,7 +14,7 @@ import (
 // answers, and every call that reaches dnf as root, the network or the store
 // counts as an effect.
 type setupPorts struct {
-	identity controller.InstalledHostIdentity
+	identity evidence.InstalledHostIdentity
 	reads    int
 	effects  int
 }
@@ -28,10 +29,10 @@ func (p *setupPorts) Release(context.Context) (prerequisites.HostRelease, error)
 	return prerequisites.HostRelease{ID: "fedora", VersionID: "44", Architecture: "amd64"}, nil
 }
 
-func (p *setupPorts) Identity(context.Context) (controller.InstalledHostIdentity, error) {
+func (p *setupPorts) Identity(context.Context) (evidence.InstalledHostIdentity, error) {
 	if !p.identity.Valid() {
 		p.effects++
-		return controller.InstalledHostIdentity{}, errors.New("unexpected identity inspection")
+		return evidence.InstalledHostIdentity{}, errors.New("unexpected identity inspection")
 	}
 	return p.identity, nil
 }

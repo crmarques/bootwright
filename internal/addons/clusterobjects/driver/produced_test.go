@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
@@ -17,7 +17,7 @@ func TestProducedPlacementLentOnlyForApplyAndNeverSerialized(t *testing.T) {
 		for _, missing := range []bool{false, true} {
 			runner := &capture{}
 			calls := []lifecycle.ProducedInput{}
-			execution := lifecycle.Execution{ApplyOperation: "operation", ApplyRegistered: "2026-01-01T00:00:00Z", LocateTool: func(context.Context, controller.InstalledTool) (string, error) { return "/oc", nil }, LendProduced: func(_ context.Context, ref lifecycle.ProducedInput) (secrets.Material, error) {
+			execution := lifecycle.Execution{ApplyOperation: "operation", ApplyRegistered: "2026-01-01T00:00:00Z", LocateTool: func(context.Context, evidence.InstalledTool) (string, error) { return "/oc", nil }, LendProduced: func(_ context.Context, ref lifecycle.ProducedInput) (secrets.Material, error) {
 				calls = append(calls, ref)
 				if missing && ref.Kind == "CephConsumer" {
 					return secrets.Material{}, errors.New("export block ceph-consumer-export is unproved")

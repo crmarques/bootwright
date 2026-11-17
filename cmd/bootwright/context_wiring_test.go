@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/cli"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/nativeartifacts/comparisonlocal"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -66,8 +66,8 @@ func testServices(t *testing.T, repository *contextfs.Store, root string) cli.Se
 // without a controller, a container runtime or a second host.
 type testLifecycleHost struct{}
 
-func (testLifecycleHost) Identity(ctx context.Context) (controller.InstalledHostIdentity, error) {
-	return controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1,
+func (testLifecycleHost) Identity(ctx context.Context) (evidence.InstalledHostIdentity, error) {
+	return evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1,
 		"0123456789abcdef0123456789abcdef", "12345678-1234-5678-9abc-def012345678", "fedcba98-7654-3210-fedc-ba9876543210")
 }
 

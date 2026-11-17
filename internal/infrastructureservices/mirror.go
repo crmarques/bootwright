@@ -103,6 +103,83 @@ func MirrorHost(c api.Catalog) string {
 	return mirror.Server.Spec().Get("machineRef").Text()
 }
 
+type MirrorRefusal struct {
+	Reason      string
+	Remediation string
+}
+
+type ManagedMirror struct {
+	Service   api.Object
+	Field     string
+	Host      string
+	Addresses []string
+	Conflict  *MirrorRefusal
+	Unlocated *MirrorRefusal
+}
+
+func ManagedMirrors(c api.Catalog) []ManagedMirror {
+	environments := c.OfKind(api.Environment)
+	if len(environments) != 1 {
+		return nil
+	}
+	var mirrors []ManagedMirror
+	artifacts, declared := ArtifactMirrorOf(c)
+	artifactsManaged := declared && artifacts.Managed
+	if image, declared := ImageMirrorOf(c); declared && image.Managed {
+		mirrors = append(mirrors, imageMirrorPlacement(c, image, artifacts, artifactsManaged))
+	}
+	if artifactsManaged {
+		mirrors = append(mirrors, artifactMirrorPlacement(c, environments[0], artifacts))
+	}
+	return mirrors
+}
+
+func imageMirrorPlacement(c api.Catalog, image ImageMirror, artifacts ArtifactMirror, artifactsManaged bool) ManagedMirror {
+	registry := image.Registry.Identity()
+	mirror := managedMirror(c, image.Registry, "$.spec.mirror.registry.registryRef")
+	if other := Placement(artifacts.Server); artifactsManaged && other != mirror.Host {
+		mirror.Conflict = &MirrorRefusal{
+			Reason:      "the image and artifact mirrors share one mirror host, and " + registry + " is on Machine/" + mirror.Host + " while " + artifacts.Server.Identity() + " is on Machine/" + other,
+			Remediation: "place " + registry + " and " + artifacts.Server.Identity() + " on one Machine"}
+	}
+	if image.Location == "" {
+		mirror.Unlocated = &MirrorRefusal{
+			Reason:      "the image mirror is read at " + registry + "'s selected endpoint, and that endpoint names no address on Machine/" + mirror.Host,
+			Remediation: "select an endpoint of " + registry + " with an address of Machine/" + mirror.Host + " in spec.mirror.registry.endpointRef"}
+	}
+	return mirror
+}
+
+func artifactMirrorPlacement(c api.Catalog, environment api.Object, artifacts ArtifactMirror) ManagedMirror {
+	server := artifacts.Server.Identity()
+	mirror := managedMirror(c, artifacts.Server, "$.spec.mirror.artifacts.serverRef")
+	switch {
+	case api.ValidLexical("artifact-mirror-url", artifacts.URL):
+	case strings.HasPrefix(artifacts.URL, "https://"):
+		mirror.Unlocated = &MirrorRefusal{
+			Reason:      "the artifact mirror's URL " + artifacts.URL + " exceeds the bound a client path fits beneath",
+			Remediation: "shorten the name of " + environment.Identity() + ", which the mirror's URL ends with, or select a shorter endpoint address of " + server}
+	default:
+		mirror.Unlocated = &MirrorRefusal{
+			Reason:      "the artifact mirror is read over HTTPS beneath " + server + "'s selected endpoint, and that endpoint names no HTTPS URL a client path fits beneath",
+			Remediation: "select an https endpoint of " + server + " in spec.mirror.artifacts.endpointRef of " + environment.Identity()}
+	}
+	return mirror
+}
+
+func managedMirror(c api.Catalog, service api.Object, field string) ManagedMirror {
+	mirror := ManagedMirror{Service: service, Field: field, Host: Placement(service), Addresses: []string{service.Spec().Get("bindAddress").Text()}}
+	machine, _ := c.Find(api.Machine, mirror.Host)
+	for _, endpoint := range service.Spec().Get("endpoints").Items() {
+		for _, entry := range machine.Spec().Get("network", "addresses").Items() {
+			if entry.Get("name").Equal(endpoint.Get("addressRef")) {
+				mirror.Addresses = append(mirror.Addresses, entry.Get("address").Text())
+			}
+		}
+	}
+	return mirror
+}
+
 func IssuingAuthority(c api.Catalog, certificate string) string {
 	secret, found := c.Find(api.Secret, certificate)
 	if certificate == "" || !found {

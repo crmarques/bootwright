@@ -12,16 +12,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-func rebindHost(t *testing.T, machine string) controller.InstalledHostIdentity {
+func rebindHost(t *testing.T, machine string) evidence.InstalledHostIdentity {
 	t.Helper()
-	host, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, strings.Repeat(machine, 32), "99999999-2222-4333-8444-555555555555", "99999999-3333-4444-8555-666666666666")
+	host, err := evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1, strings.Repeat(machine, 32), "99999999-2222-4333-8444-555555555555", "99999999-3333-4444-8555-666666666666")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestARebindKeepsEveryBindingAndReservation(t *testing.T) {
 		}) {
 		t.Fatalf("the rebind left %+v, from %+v", after, before)
 	}
-	bind := func(host controller.InstalledHostIdentity) error {
+	bind := func(host evidence.InstalledHostIdentity) error {
 		return store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error { return tx.Bind(ctx, "controller", host) })
 	}
 	if err := bind(next); err != nil {

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -23,7 +23,7 @@ type toolLocator struct {
 	answers *sync.Map
 }
 
-func (toolLocator) LocateTool(_ context.Context, view prerequisites.StorageView, block reconciliation.Block, proved BlockEvidence, tool controller.InstalledTool) (string, error) {
+func (toolLocator) LocateTool(_ context.Context, view prerequisites.StorageView, block reconciliation.Block, proved BlockEvidence, tool evidence.InstalledTool) (string, error) {
 	return "/located/" + block.ID + "/" + strconv.FormatBool(view.Prepared) + "/" + string(proved.State) + "/" + string(proved.Evidence) + "/" + tool.Executable, nil
 }
 
@@ -62,7 +62,7 @@ func (l toolLocator) answer(t *testing.T, key string) string {
 	return located.(string)
 }
 
-var installer = controller.InstalledTool{Kind: "openshift-install", Compatibility: "openshift", Version: "4.21.15", Executable: "openshift-install"}
+var installer = evidence.InstalledTool{Kind: "openshift-install", Compatibility: "openshift", Version: "4.21.15", Executable: "openshift-install"}
 
 // stageProof is what the harness's controller stage proves when it is applied,
 // so an answer shows which record the lookup was handed.

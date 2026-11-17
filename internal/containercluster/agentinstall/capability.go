@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	controllerscope "github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -370,7 +370,7 @@ func ToolPath(ctx context.Context, execution lifecycle.Execution, tool Tool, exe
 		return "", refusal("controller.state", "the retained controller areas are unavailable",
 			"run bootwright controller install, then bootwright apply --context "+execution.Context+" --stage controller")
 	}
-	return execution.LocateTool(ctx, controllerscope.InstalledTool{
+	return execution.LocateTool(ctx, evidence.InstalledTool{
 		Kind: tool.Kind, Compatibility: tool.Compatibility, Version: tool.Version, Executable: executable,
 	})
 }

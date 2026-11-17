@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/clients"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -453,11 +454,11 @@ func TestLabRHELRequestsCarryTheirDerivedIntent(t *testing.T) {
 
 type labToolCatalog struct{ ports *setupPorts }
 
-func (c labToolCatalog) Select(requests []controller.ToolRequest, _ []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, bool, error) {
+func (c labToolCatalog) Select(requests []evidence.ToolRequest, _ []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, bool, error) {
 	return []prerequisites.ToolDefinition{}, len(requests) == 0, nil
 }
 
-func (c labToolCatalog) Resolve(context.Context, []controller.ToolRequest, prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
+func (c labToolCatalog) Resolve(context.Context, []evidence.ToolRequest, prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
 	c.ports.effects++
 	return nil, errors.New("unexpected publisher metadata resolution")
 }
@@ -477,7 +478,7 @@ func labContextServices(t *testing.T) (cli.Services, string, *setupPorts) {
 	repository := testRepository(root)
 	ports := &setupPorts{}
 	var err error
-	ports.identity, err = controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, strings.Repeat("1", 32), "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666")
+	ports.identity, err = evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1, strings.Repeat("1", 32), "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666")
 	if err != nil {
 		t.Fatal(err)
 	}

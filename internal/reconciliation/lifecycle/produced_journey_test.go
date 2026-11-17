@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -121,7 +121,7 @@ func installEvidenceOf(evidence agentinstall.InstallEvidence) json.RawMessage {
 type retainedInstaller struct{ agentinstall.InstallCapability }
 
 func located(execution lifecycle.Execution) lifecycle.Execution {
-	execution.LocateTool = func(_ context.Context, tool controller.InstalledTool) (string, error) {
+	execution.LocateTool = func(_ context.Context, tool evidence.InstalledTool) (string, error) {
 		return "/var/lib/bootwright/controller/record/tools/" + tool.Kind + "/" + tool.Version + "/" + tool.Executable, nil
 	}
 	return execution

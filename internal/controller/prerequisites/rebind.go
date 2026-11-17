@@ -3,7 +3,7 @@ package prerequisites
 import (
 	"context"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 )
 
 type RebindRequest struct {
@@ -44,7 +44,7 @@ func (s Service) Rebind(ctx context.Context, request RebindRequest) (*RebindResu
 		return nil, failure("controller.identity", "--yes rebinds only to the host identity it names, and the named identity must be this host's",
 			"run "+rebindCommand+" interactively to review both identities, or name this host's --machine-id, --product-uuid and --root-uuid with --yes")
 	}
-	var recorded controller.InstalledHostIdentity
+	var recorded evidence.InstalledHostIdentity
 	err = s.storage.ReadController(ctx, "", func(view StorageView) error {
 		if !view.Exists || !view.Initialized {
 			return failure("controller.identity", "this store holds no controller record to rebind",
@@ -74,6 +74,6 @@ func (s Service) Rebind(ctx context.Context, request RebindRequest) (*RebindResu
 	return &result, nil
 }
 
-func identityText(identity controller.InstalledHostIdentity) string {
+func identityText(identity evidence.InstalledHostIdentity) string {
 	return "machine-id " + identity.MachineID() + ", DMI product UUID " + identity.ProductUUID() + ", root filesystem UUID " + identity.FilesystemUUID()
 }

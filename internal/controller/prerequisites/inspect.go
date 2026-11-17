@@ -10,6 +10,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
@@ -20,7 +21,7 @@ type inspection struct {
 	selection controller.Selection
 	release   HostRelease
 	platform  Platform
-	host      controller.InstalledHostIdentity
+	host      evidence.InstalledHostIdentity
 	dryRun    bool
 
 	ansibleCore  string
@@ -33,7 +34,7 @@ type inspection struct {
 	wheels       []RuntimeWheel
 	missing      []string
 
-	toolRequests []controller.ToolRequest
+	toolRequests []evidence.ToolRequest
 	tools        []ToolDefinition
 	toolsPresent bool
 	native       StageNative
@@ -309,7 +310,7 @@ func (s Service) settleHost(ctx context.Context, current *inspection, settle fun
 	}
 	if stored := current.stored.State.Host; stored.Valid() && !stored.Equal(current.host) {
 		settle(unverified("installed-host", "verified local identity", HostScope))
-		return failure("controller.identity", "stored controller state belongs to a different installed host", controller.HostMismatchRemedy(""))
+		return failure("controller.identity", "stored controller state belongs to a different installed host", evidence.HostMismatchRemedy(""))
 	}
 	settle(readiness("installed-host", "verified local identity", true, HostScope))
 	inspector, reports := s.host.(FIPSInspector)

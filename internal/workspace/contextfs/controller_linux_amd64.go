@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -294,7 +294,7 @@ func (s *Store) inspectControllerBundles(root *directory, registry contexts.Regi
 // initializeController attributes the controller directory and publishes the
 // record holding only host's identity. Each step is durable before the next,
 // and an unattributed directory is never adopted.
-func (t *transaction) initializeController(ctx context.Context, host controller.InstalledHostIdentity, retry string) (controllerStored, error) {
+func (t *transaction) initializeController(ctx context.Context, host evidence.InstalledHostIdentity, retry string) (controllerStored, error) {
 	if !host.Valid() {
 		return controllerStored{}, state("controller host evidence is invalid")
 	}

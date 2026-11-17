@@ -3,7 +3,7 @@ package clients
 import (
 	"context"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -11,8 +11,8 @@ import (
 // selects. Select is pure: it recovers exact retained identities without
 // reading publisher metadata, so a prepared host proves its clients offline.
 type ToolCatalog interface {
-	Select([]controller.ToolRequest, []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, bool, error)
-	Resolve(context.Context, []controller.ToolRequest, prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error)
+	Select([]evidence.ToolRequest, []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, bool, error)
+	Resolve(context.Context, []evidence.ToolRequest, prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error)
 	Present(context.Context, prerequisites.BundleArea, []prerequisites.ToolDefinition) (bool, error)
 }
 

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -72,7 +72,7 @@ type Transaction interface {
 	PublishEvidence(context.Context, []byte) error
 	// Bind records this context's controller relationship on the prepared host.
 	// A first apply establishes it; every later one revalidates exactly it.
-	Bind(context.Context, string, controller.InstalledHostIdentity) error
+	Bind(context.Context, string, evidence.InstalledHostIdentity) error
 	Reserve(context.Context, []infrastructureservices.HostReservation) error
 	Claim(context.Context, infrastructureservices.HostReservation) error
 	ReleaseReservations(context.Context) error
@@ -150,7 +150,7 @@ type ProducedIdentifier interface {
 }
 
 type HostIdentity interface {
-	Identity(context.Context) (controller.InstalledHostIdentity, error)
+	Identity(context.Context) (evidence.InstalledHostIdentity, error)
 }
 
 type ControllerHostKeys interface {
@@ -433,7 +433,7 @@ type UnresolvedReporter interface {
 // context's closure through the stage block the plan froze and through
 // nothing else.
 type ToolLocator interface {
-	LocateTool(context.Context, prerequisites.StorageView, reconciliation.Block, BlockEvidence, controller.InstalledTool) (string, error)
+	LocateTool(context.Context, prerequisites.StorageView, reconciliation.Block, BlockEvidence, evidence.InstalledTool) (string, error)
 }
 
 type ProvedClientReader interface {
@@ -652,7 +652,7 @@ type Execution struct {
 	// own graph selected. The engine asks the plan's controller stage block,
 	// through its ToolLocator, with what that block proved in the apply this
 	// operation runs over, and nothing else.
-	LocateTool func(context.Context, controller.InstalledTool) (string, error)
+	LocateTool func(context.Context, evidence.InstalledTool) (string, error)
 	// Stage is the controller stage's own publication boundary and is present
 	// only on the block that extends this host's prerequisites. Every other
 	// capability receives nil and cannot reach it.

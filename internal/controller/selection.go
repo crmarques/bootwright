@@ -9,9 +9,11 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -47,7 +49,7 @@ func (s Selection) Versions() DependencyVersions { return s.versions }
 // stage: only that stage installs a target client, the container runtime, the
 // libvirt client, the hypervisor closure or the installer-media tooling, and a
 // context selecting none of them has nothing for it to run.
-func HasStage(selection Selection, tools []ToolRequest) bool {
+func HasStage(selection Selection, tools []evidence.ToolRequest) bool {
 	return len(tools) != 0 || selection.ContainerRuntime() || selection.LibvirtClient() || selection.Hypervisor() || selection.InstallerMedia() || selection.NMState() || selection.IPUtils() || selection.ImageMirror()
 }
 
@@ -143,16 +145,7 @@ func Select(catalog api.Catalog) (Selection, error) {
 // managed service placed here, or the emulated BMC a libvirt provider hosted
 // here runs beside its guests. Nothing else on the controller needs podman.
 func requiresContainerRuntime(catalog api.Catalog, controllerMachine api.Object) bool {
-	if requiresHypervisor(catalog, controllerMachine) {
-		return true
-	}
-	for _, object := range catalog.Objects() {
-		if infrastructureservices.IsService(object.Kind()) && object.Spec().Get("management").Text() == "managed" &&
-			infrastructureservices.Placement(object) == controllerMachine.Name() {
-			return true
-		}
-	}
-	return false
+	return requiresHypervisor(catalog, controllerMachine) || infrastructureservices.HostsManagedService(catalog, controllerMachine.Name())
 }
 
 // requiresHypervisor reports whether a libvirt provider runs its guests on this
@@ -171,22 +164,7 @@ func requiresHypervisor(catalog api.Catalog, controllerMachine api.Object) bool 
 // image on this Machine. The tooling runs where the selected artifact server is
 // placed, because that is where the installation publishes what it builds.
 func requiresInstallerMedia(catalog api.Catalog, controllerMachine api.Object) bool {
-	for _, machine := range catalog.OfKind(api.Machine) {
-		provided := machine.Spec().Get("os", "provided")
-		if provided.Type() != api.Boolean || provided.Bool() {
-			continue
-		}
-		profile, found := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
-		if !found || !profile.Spec().Has("installer", "anaconda") {
-			continue
-		}
-		endpoint := profile.Spec().Get("installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint")
-		server, found := catalog.Find(api.ArtifactServer, endpoint.Get("serverRef").Text())
-		if found && server.Spec().Get("machineRef").Text() == controllerMachine.Name() {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(managedos.InstallerMediaHosts(catalog), controllerMachine.Name())
 }
 
 func requiresImageMirror(catalog api.Catalog, controllerMachine api.Object) bool {
@@ -448,11 +426,13 @@ func releasesBelowMinimum(environment api.Object, catalog api.Catalog) []Unsuppo
 }
 
 func mirrorShapes(environment api.Object, catalog api.Catalog) []UnsupportedShape {
-	shapes := managedImageMirrorShapes(environment, catalog)
+	shapes := []UnsupportedShape{}
+	for _, mirror := range infrastructureservices.ManagedMirrors(catalog) {
+		shapes = append(shapes, managedMirrorShapes(environment, catalog, mirror)...)
+	}
 	if !environment.Spec().Get("mirror", "artifacts").Present() {
 		return shapes
 	}
-	shapes = append(shapes, managedMirrorShapes(environment, catalog)...)
 	tools, err := SelectTools(catalog)
 	if err != nil {
 		return shapes
@@ -477,87 +457,69 @@ func mirrorShapes(environment api.Object, catalog api.Catalog) []UnsupportedShap
 	return shapes
 }
 
-func managedMirrorShapes(environment api.Object, catalog api.Catalog) []UnsupportedShape {
-	mirror, declared := infrastructureservices.ArtifactMirrorOf(catalog)
-	if !declared || !mirror.Managed {
-		return nil
+type mirrorWords struct {
+	noun, fill, sources, waitsOn string
+	providerRemedy               func(service, environment string) string
+}
+
+func mirrorWordsOf(kind api.Kind) mirrorWords {
+	if kind == api.Registry {
+		return mirrorWords{noun: "image mirror", fill: "the services that pull from it", sources: "origins", waitsOn: "the emulated BMCs that pull from it",
+			providerRemedy: func(service, environment string) string {
+				return "place " + service + " on a Machine no InfraProvider hosts or bridges, or select an external Registry in spec.mirror.registry.registryRef of " + environment
+			}}
 	}
-	const field = "$.spec.mirror.artifacts.serverRef"
-	server, host := mirror.Server, mirror.Server.Spec().Get("machineRef").Text()
+	return mirrorWords{noun: "artifact mirror", fill: "any managed service runs", sources: "publishers", waitsOn: "the controller stage",
+		providerRemedy: func(service, environment string) string {
+			return "place " + service + " on a Machine that hosts no InfraProvider and whose address no provider bridges, or select an artifact mirror the operator fills in spec.mirror.artifacts.url of " + environment
+		}}
+}
+
+func managedMirrorShapes(environment api.Object, catalog api.Catalog, mirror infrastructureservices.ManagedMirror) []UnsupportedShape {
+	refused := func(refusal infrastructureservices.MirrorRefusal) []UnsupportedShape {
+		return []UnsupportedShape{{Object: environment, Field: mirror.Field, Reason: refusal.Reason, Remediation: refusal.Remediation}}
+	}
+	if mirror.Conflict != nil {
+		return refused(*mirror.Conflict)
+	}
+	words, service, host := mirrorWordsOf(mirror.Service.Kind()), mirror.Service.Identity(), mirror.Host
 	controllerName := environment.Spec().Get("controller", "machineRef").Text()
 	machine, found := catalog.Find(api.Machine, host)
 	if host != controllerName && found && onControllerHost(catalog, machine, controllerName) {
-		return []UnsupportedShape{{Object: environment, Field: field,
-			Reason:      "this executable places a managed artifact mirror on the controller host only through its controller Machine, and " + server.Identity() + " is placed on Machine/" + host + ", another name for that host",
-			Remediation: "place " + server.Identity() + " on Machine/" + controllerName + " or on another Machine reached over SSH"}}
+		return refused(infrastructureservices.MirrorRefusal{
+			Reason:      "this executable places a managed " + words.noun + " on the controller host only through its controller Machine, and " + service + " is placed on Machine/" + host + ", another name for that host",
+			Remediation: "place " + service + " on Machine/" + controllerName + " or on another Machine reached over SSH"})
 	}
-	if !api.ValidLexical("artifact-mirror-url", mirror.URL) {
-		reason := "the artifact mirror is read over HTTPS beneath " + server.Identity() + "'s selected endpoint, and that endpoint names no HTTPS URL a client path fits beneath"
-		remedy := "select an https endpoint of " + server.Identity() + " in spec.mirror.artifacts.endpointRef of " + environment.Identity()
-		if strings.HasPrefix(mirror.URL, "https://") {
-			reason = "the artifact mirror's URL " + mirror.URL + " exceeds the bound a client path fits beneath"
-			remedy = "shorten the name of " + environment.Identity() + ", which the mirror's URL ends with, or select a shorter endpoint address of " + server.Identity()
-		}
-		return []UnsupportedShape{{Object: environment, Field: field, Reason: reason, Remediation: remedy}}
+	if mirror.Unlocated != nil {
+		return refused(*mirror.Unlocated)
 	}
 	if !found {
 		return nil
 	}
 	if proxy, found := catalog.Find(api.Proxy, machine.Spec().Get("proxy", "proxyRef").Text()); found && proxy.Spec().Get("management").Text() == "managed" {
 		return []UnsupportedShape{{Object: machine, Field: "$.spec.proxy.proxyRef",
-			Reason:      "the artifact mirror on " + machine.Identity() + " is filled before any managed service runs, and " + machine.Identity() + " reaches the publishers through the managed " + proxy.Identity(),
+			Reason:      "the " + words.noun + " on " + machine.Identity() + " is filled before " + words.fill + ", and " + machine.Identity() + " reaches the " + words.sources + " through the managed " + proxy.Identity(),
 			Remediation: "select direct: {} or an external Proxy in spec.proxy on " + machine.Identity()}}
 	}
-	if providers := mirrorProviders(catalog, server, host, host == controllerName); len(providers) != 0 {
-		return []UnsupportedShape{{Object: environment, Field: field,
-			Reason: "the artifact mirror is filled before the controller stage, and " + server.Identity() + " on " + machine.Identity() +
+	if providers := mirrorProviders(catalog, mirror, host == controllerName); len(providers) != 0 {
+		return refused(infrastructureservices.MirrorRefusal{
+			Reason: "the " + words.noun + " is filled before " + words.waitsOn + ", and " + service + " on " + machine.Identity() +
 				" waits for InfraProvider/" + providers[0] + ", which that Machine hosts or whose bridge carries its address",
-			Remediation: "place " + server.Identity() + " on a Machine that hosts no InfraProvider and whose address no provider bridges, or select an artifact mirror the operator fills in spec.mirror.artifacts.url of " + environment.Identity()}}
+			Remediation: words.providerRemedy(service, environment.Identity())})
 	}
 	return nil
 }
 
-func managedImageMirrorShapes(environment api.Object, catalog api.Catalog) []UnsupportedShape {
-	mirror, declared := infrastructureservices.ImageMirrorOf(catalog)
-	if !declared || !mirror.Managed {
-		return nil
+func mirrorProviders(catalog api.Catalog, mirror infrastructureservices.ManagedMirror, local bool) []string {
+	var providers []string
+	if !local {
+		providers = substrate.ProvidersHostedOn(catalog, mirror.Host)
 	}
-	const field = "$.spec.mirror.registry.registryRef"
-	registry, host := mirror.Registry, mirror.Registry.Spec().Get("machineRef").Text()
-	if artifacts, declared := infrastructureservices.ArtifactMirrorOf(catalog); declared && artifacts.Managed {
-		if other := artifacts.Server.Spec().Get("machineRef").Text(); other != host {
-			return []UnsupportedShape{{Object: environment, Field: field,
-				Reason:      "the image and artifact mirrors share one mirror host, and " + registry.Identity() + " is on Machine/" + host + " while " + artifacts.Server.Identity() + " is on Machine/" + other,
-				Remediation: "place " + registry.Identity() + " and " + artifacts.Server.Identity() + " on one Machine"}}
-		}
+	for _, address := range mirror.Addresses {
+		providers = append(providers, substrate.BridgeProviders(catalog, mirror.Host, address)...)
 	}
-	controllerName := environment.Spec().Get("controller", "machineRef").Text()
-	machine, found := catalog.Find(api.Machine, host)
-	if host != controllerName && found && onControllerHost(catalog, machine, controllerName) {
-		return []UnsupportedShape{{Object: environment, Field: field,
-			Reason:      "this executable places a managed image mirror on the controller host only through its controller Machine, and " + registry.Identity() + " is placed on Machine/" + host + ", another name for that host",
-			Remediation: "place " + registry.Identity() + " on Machine/" + controllerName + " or on another Machine reached over SSH"}}
-	}
-	if mirror.Location == "" {
-		return []UnsupportedShape{{Object: environment, Field: field,
-			Reason:      "the image mirror is read at " + registry.Identity() + "'s selected endpoint, and that endpoint names no address on Machine/" + host,
-			Remediation: "select an endpoint of " + registry.Identity() + " with an address of Machine/" + host + " in spec.mirror.registry.endpointRef"}}
-	}
-	if !found {
-		return nil
-	}
-	if proxy, found := catalog.Find(api.Proxy, machine.Spec().Get("proxy", "proxyRef").Text()); found && proxy.Spec().Get("management").Text() == "managed" {
-		return []UnsupportedShape{{Object: machine, Field: "$.spec.proxy.proxyRef",
-			Reason:      "the image mirror on " + machine.Identity() + " is filled before the services that pull from it, and " + machine.Identity() + " reaches the origins through the managed " + proxy.Identity(),
-			Remediation: "select direct: {} or an external Proxy in spec.proxy on " + machine.Identity()}}
-	}
-	if providers := mirrorProviders(catalog, registry, host, host == controllerName); len(providers) != 0 {
-		return []UnsupportedShape{{Object: environment, Field: field,
-			Reason: "the image mirror is filled before the emulated BMCs that pull from it, and " + registry.Identity() + " on " + machine.Identity() +
-				" waits for InfraProvider/" + providers[0] + ", which that Machine hosts or whose bridge carries its address",
-			Remediation: "place " + registry.Identity() + " on a Machine no InfraProvider hosts or bridges, or select an external Registry in spec.mirror.registry.registryRef of " + environment.Identity()}}
-	}
-	return nil
+	slices.Sort(providers)
+	return slices.Compact(providers)
 }
 
 func onControllerHost(catalog api.Catalog, machine api.Object, controllerName string) bool {
@@ -581,25 +543,4 @@ func onControllerHost(catalog api.Catalog, machine api.Object, controllerName st
 		port = int(value)
 	}
 	return address != "" && machineref.ReachesController(own, address, port)
-}
-
-func mirrorProviders(catalog api.Catalog, server api.Object, host string, local bool) []string {
-	var providers []string
-	if !local {
-		providers = substrate.ProvidersHostedOn(catalog, host)
-	}
-	machine, _ := catalog.Find(api.Machine, host)
-	addresses := []string{server.Spec().Get("bindAddress").Text()}
-	for _, endpoint := range server.Spec().Get("endpoints").Items() {
-		for _, entry := range machine.Spec().Get("network", "addresses").Items() {
-			if entry.Get("name").Equal(endpoint.Get("addressRef")) {
-				addresses = append(addresses, entry.Get("address").Text())
-			}
-		}
-	}
-	for _, address := range addresses {
-		providers = append(providers, substrate.BridgeProviders(catalog, host, address)...)
-	}
-	slices.Sort(providers)
-	return slices.Compact(providers)
 }

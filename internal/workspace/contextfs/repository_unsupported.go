@@ -5,7 +5,7 @@ package contextfs
 import (
 	"context"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -27,7 +27,7 @@ func (*Store) ReadController(ctx context.Context, _ string, _ func(prerequisites
 	return unsupported(ctx)
 }
 
-func (*Store) RebindController(ctx context.Context, _, _ controller.InstalledHostIdentity) (prerequisites.RebindResult, error) {
+func (*Store) RebindController(ctx context.Context, _, _ evidence.InstalledHostIdentity) (prerequisites.RebindResult, error) {
 	return prerequisites.RebindResult{}, unsupported(ctx)
 }
 

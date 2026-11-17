@@ -31,8 +31,8 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
-	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/clients"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -693,7 +693,7 @@ func contractEffects(t *testing.T, row contractRow, example contractExample, cap
 			},
 			Launch:   prerequisites.PythonLaunch{Program: "/runtime/bin/python", Shim: "/runtime/bootwright-python"},
 			Material: material,
-			LocateTool: func(_ context.Context, tool controller.InstalledTool) (string, error) {
+			LocateTool: func(_ context.Context, tool evidence.InstalledTool) (string, error) {
 				return "/var/lib/bootwright/tools/" + tool.Kind + "/" + tool.Version + "/" + tool.Executable, nil
 			},
 		}

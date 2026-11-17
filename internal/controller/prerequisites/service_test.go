@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -44,7 +44,7 @@ type setupFixture struct {
 func newSetupFixture(t *testing.T) *setupFixture {
 	t.Helper()
 	f := &setupFixture{t: t}
-	identity, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, strings.Repeat("1", 32), "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666")
+	identity, err := evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1, strings.Repeat("1", 32), "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func (f *setupFixture) PresentControllerPlan(_ context.Context, report Report) e
 
 type releaseHost struct {
 	owner    *setupFixture
-	identity controller.InstalledHostIdentity
+	identity evidence.InstalledHostIdentity
 	release  HostRelease
 	preload  bool
 }
@@ -104,7 +104,7 @@ func (h *releaseHost) Platform(context.Context) (Platform, error) {
 	return Platform{OS: h.release.ID, Release: h.release.VersionID, Architecture: h.release.Architecture}, nil
 }
 
-func (h *releaseHost) Identity(context.Context) (controller.InstalledHostIdentity, error) {
+func (h *releaseHost) Identity(context.Context) (evidence.InstalledHostIdentity, error) {
 	h.owner.record("identity")
 	return h.identity, nil
 }

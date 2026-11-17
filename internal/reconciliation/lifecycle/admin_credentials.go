@@ -9,7 +9,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/canonicaljson"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -322,7 +322,7 @@ func (s Service) adminCredentialExecution(ctx context.Context, tx Transaction, b
 	execution := Execution{Context: tx.Identity().Name, Incarnation: tx.Identity().Incarnation, Block: basis.block,
 		ApplyOperation: owner.ID, ApplyRegistered: owner.Created, PreviousEvidence: own.Evidence, Proved: proved, ApplyProved: proved,
 		Material: maps.Clone(material), Launch: launch,
-		LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
+		LocateTool: func(inner context.Context, tool evidence.InstalledTool) (string, error) {
 			return s.locateTool(inner, store, tx.Controller(), tx.Identity().Name, basis.operation, basis.plan, tool)
 		},
 	}

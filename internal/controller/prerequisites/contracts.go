@@ -4,7 +4,7 @@ import (
 	"context"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 )
@@ -19,7 +19,7 @@ type Confirmer interface {
 
 type HostInspector interface {
 	Platform(context.Context) (Platform, error)
-	Identity(context.Context) (controller.InstalledHostIdentity, error)
+	Identity(context.Context) (evidence.InstalledHostIdentity, error)
 }
 
 type ReleaseInspector interface {
@@ -100,10 +100,10 @@ type StagedAutomation struct {
 type TargetToolCatalog interface {
 	// Select is pure: recover exact retained identities without metadata reads.
 	// Complete is false when setup must resolve a previously unseen requirement.
-	Select([]controller.ToolRequest, []DependencySource) ([]ToolDefinition, bool, error)
+	Select([]evidence.ToolRequest, []DependencySource) ([]ToolDefinition, bool, error)
 	// Resolve reads bounded publisher metadata through the explicit route. It
 	// does not acquire payloads, create files, run tools, or mutate host state.
-	Resolve(context.Context, []controller.ToolRequest, SetupEgress) ([]ToolDefinition, error)
+	Resolve(context.Context, []evidence.ToolRequest, SetupEgress) ([]ToolDefinition, error)
 	// Present reports whether every resolved tool's retained source and
 	// published files exist in the area. It reads no file content and contacts
 	// no publisher, so a prepared host proves its tools without acquisition.
@@ -115,7 +115,7 @@ type TargetToolCatalog interface {
 // scope; no method consults current-context selection. The callback holds the
 // root lock and must consume input before returning.
 type ControllerRebinder interface {
-	RebindController(ctx context.Context, recorded, next controller.InstalledHostIdentity) (RebindResult, error)
+	RebindController(ctx context.Context, recorded, next evidence.InstalledHostIdentity) (RebindResult, error)
 }
 
 type Storage interface {

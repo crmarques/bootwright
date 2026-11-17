@@ -12,6 +12,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -20,7 +21,7 @@ func TestEveryAdmittedCLIVersionPassesTheToolScreen(t *testing.T) {
 		if !api.ValidLexical("cli-version", value) {
 			continue
 		}
-		requests := []controller.ToolRequest{{Kind: "helm", Version: "v" + strings.TrimPrefix(value, "v")}}
+		requests := []evidence.ToolRequest{{Kind: "helm", Version: "v" + strings.TrimPrefix(value, "v")}}
 		if _, err := toolRequests(requests); err != nil {
 			t.Errorf("admitted %d-byte tag %q is refused by setup: %v", len(value), value, err)
 		}
@@ -28,7 +29,7 @@ func TestEveryAdmittedCLIVersionPassesTheToolScreen(t *testing.T) {
 }
 
 func TestADeclaredHelmReleaseResolvesItsPublisherChecksumAndRetainsItWithoutNetwork(t *testing.T) {
-	request := controller.ToolRequest{Kind: "helm", Version: "v4.2.3", Mirror: "https://mirror.example.test/tools"}
+	request := evidence.ToolRequest{Kind: "helm", Version: "v4.2.3", Mirror: "https://mirror.example.test/tools"}
 	digest := strings.Repeat("a", 64)
 	requests := []string{}
 	resolver := &ToolCatalog{metadata: func(_ context.Context, method, endpoint string, _ int64, egress prerequisites.SetupEgress) (toolMetadata, error) {
@@ -51,7 +52,7 @@ func TestADeclaredHelmReleaseResolvesItsPublisherChecksumAndRetainsItWithoutNetw
 			return toolMetadata{}, errors.New("unexpected request")
 		}
 	}}
-	tools, err := resolver.Resolve(context.Background(), []controller.ToolRequest{request}, prerequisites.SetupEgress{HTTPSProxy: "https://proxy.example.test:3128"})
+	tools, err := resolver.Resolve(context.Background(), []evidence.ToolRequest{request}, prerequisites.SetupEgress{HTTPSProxy: "https://proxy.example.test:3128"})
 	if err != nil || len(tools) != 1 || len(requests) != 3 {
 		t.Fatal(tools, err, requests)
 	}
@@ -59,42 +60,42 @@ func TestADeclaredHelmReleaseResolvesItsPublisherChecksumAndRetainsItWithoutNetw
 	if tool.Source.URL != "https://mirror.example.test/tools/helm-v4.2.3-linux-amd64.tar.gz" || tool.Source.SHA256 != digest || tool.Source.Bytes != 12345 || tool.Files[0].Member != "linux-amd64/helm" {
 		t.Fatal(tool)
 	}
-	selected, complete, err := (&ToolCatalog{}).Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{tool.Source})
+	selected, complete, err := (&ToolCatalog{}).Select([]evidence.ToolRequest{request}, []prerequisites.DependencySource{tool.Source})
 	if err != nil || !complete || !reflect.DeepEqual(selected, tools) {
 		t.Fatal(selected, complete, err)
 	}
 	selected[0].Files[0].Path = "mutated"
-	again, _, _ := (&ToolCatalog{}).Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{tool.Source})
+	again, _, _ := (&ToolCatalog{}).Select([]evidence.ToolRequest{request}, []prerequisites.DependencySource{tool.Source})
 	if again[0].Files[0].Path == "mutated" {
 		t.Fatal("frozen tool shares mutable results")
 	}
 }
 
 func TestToolMetadataRefusesUnsupportedCompatibilityBeforeNetwork(t *testing.T) {
-	for _, request := range []controller.ToolRequest{{Kind: "virtctl", Version: "4.21.0", Compatibility: "openshift-virtualization"}, {Kind: "helm", Version: "v4.2.3", Mirror: "https://user:secret@example.test"}, {Kind: "helm", Version: "latest"}, {Kind: "openshift-install", Version: "latest", Compatibility: "openshift"}, {Kind: "helm", Version: "v4.2.3", SHA256: "abc", Bytes: 10}, {Kind: "helm", Version: "v4.2.3", SHA256: strings.Repeat("a", 64)}} {
+	for _, request := range []evidence.ToolRequest{{Kind: "virtctl", Version: "4.21.0", Compatibility: "openshift-virtualization"}, {Kind: "helm", Version: "v4.2.3", Mirror: "https://user:secret@example.test"}, {Kind: "helm", Version: "latest"}, {Kind: "openshift-install", Version: "latest", Compatibility: "openshift"}, {Kind: "helm", Version: "v4.2.3", SHA256: "abc", Bytes: 10}, {Kind: "helm", Version: "v4.2.3", SHA256: strings.Repeat("a", 64)}} {
 		calls := 0
 		resolver := &ToolCatalog{metadata: func(context.Context, string, string, int64, prerequisites.SetupEgress) (toolMetadata, error) {
 			calls++
 			return toolMetadata{}, nil
 		}}
-		if _, err := resolver.Resolve(context.Background(), []controller.ToolRequest{request}, prerequisites.SetupEgress{}); err == nil || calls != 0 {
+		if _, err := resolver.Resolve(context.Background(), []evidence.ToolRequest{request}, prerequisites.SetupEgress{}); err == nil || calls != 0 {
 			t.Fatal(request, err, calls)
 		}
 	}
 }
 
 func TestFrozenToolRejectsVersionRouteAndChecksumSubstitution(t *testing.T) {
-	request := controller.ToolRequest{Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"}
+	request := evidence.ToolRequest{Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"}
 	endpoint, _, _ := sourceURL(request, request.Version)
 	source := prerequisites.DependencySource{ID: toolSourcePrefix(request) + request.Version, URL: endpoint, SHA256: strings.Repeat("b", 64), Bytes: 1024}
 	for _, edit := range []func(*prerequisites.DependencySource){func(s *prerequisites.DependencySource) { s.URL = "https://other.example.test/oc.tar.gz" }, func(s *prerequisites.DependencySource) { s.SHA256 = strings.Repeat("B", 64) }, func(s *prerequisites.DependencySource) { s.Bytes = maxToolSourceBytes + 1 }, func(s *prerequisites.DependencySource) { s.ID = toolSourcePrefix(request) + "4.21.16" }} {
 		changed := source
 		edit(&changed)
-		if _, _, err := (&ToolCatalog{}).Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{changed}); err == nil {
+		if _, _, err := (&ToolCatalog{}).Select([]evidence.ToolRequest{request}, []prerequisites.DependencySource{changed}); err == nil {
 			t.Fatal("changed retained source accepted", changed)
 		}
 	}
-	selected, complete, err := (&ToolCatalog{}).Select([]controller.ToolRequest{request}, nil)
+	selected, complete, err := (&ToolCatalog{}).Select([]evidence.ToolRequest{request}, nil)
 	if err != nil || complete || len(selected) != 0 {
 		t.Fatal("missing lock became ready", selected, complete, err)
 	}
@@ -119,13 +120,13 @@ func TestPublisherChecksumAndOriginBoundaries(t *testing.T) {
 		t.Fatal("canceled resolution read metadata")
 		return toolMetadata{}, nil
 	}}
-	if _, err := resolver.Resolve(ctx, []controller.ToolRequest{{Kind: "helm", Version: "v4.2.3"}}, prerequisites.SetupEgress{}); !errors.Is(err, context.Canceled) {
+	if _, err := resolver.Resolve(ctx, []evidence.ToolRequest{{Kind: "helm", Version: "v4.2.3"}}, prerequisites.SetupEgress{}); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 }
 
 func TestARetainedReleaseNeedsNoMetadataAndAConflictingIdentityRefuses(t *testing.T) {
-	request := controller.ToolRequest{Kind: "helm", Version: "v4.2.10"}
+	request := evidence.ToolRequest{Kind: "helm", Version: "v4.2.10"}
 	endpoint, _, err := sourceURL(request, request.Version)
 	if err != nil {
 		t.Fatal(err)
@@ -135,18 +136,18 @@ func TestARetainedReleaseNeedsNoMetadataAndAConflictingIdentityRefuses(t *testin
 		t.Fatal("a retained release read publisher metadata")
 		return toolMetadata{}, nil
 	}}
-	selected, complete, err := resolver.Select([]controller.ToolRequest{request}, retained)
+	selected, complete, err := resolver.Select([]evidence.ToolRequest{request}, retained)
 	if err != nil || !complete || len(selected) != 1 || selected[0].Version != "v4.2.10" {
 		t.Fatal(selected, complete, err)
 	}
 	conflict := retained[0]
 	conflict.SHA256 = strings.Repeat("b", 64)
-	if _, _, err := resolver.Select([]controller.ToolRequest{request}, append(retained, conflict)); err == nil {
+	if _, _, err := resolver.Select([]evidence.ToolRequest{request}, append(retained, conflict)); err == nil {
 		t.Fatal("a conflicting publisher identity was accepted")
 	}
 	other := retained[0]
 	other.ID = toolSourcePrefix(request) + "4.2.10"
-	if _, _, err := resolver.Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{other}); err == nil {
+	if _, _, err := resolver.Select([]evidence.ToolRequest{request}, []prerequisites.DependencySource{other}); err == nil {
 		t.Fatal("a retained release of another spelling satisfied an exact request")
 	}
 }
@@ -156,12 +157,12 @@ func TestAPinnedToolComesFromItsMirrorWithNoPublisherMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := controller.ToolRequest{Kind: "helm", Version: "v" + pin.Default.Version, Mirror: "https://mirror.example.test/tools", SHA256: pin.Default.SHA256, Bytes: pin.Default.Bytes}
+	request := evidence.ToolRequest{Kind: "helm", Version: "v" + pin.Default.Version, Mirror: "https://mirror.example.test/tools", SHA256: pin.Default.SHA256, Bytes: pin.Default.Bytes}
 	resolver := &ToolCatalog{metadata: func(_ context.Context, method, endpoint string, _ int64, _ prerequisites.SetupEgress) (toolMetadata, error) {
 		t.Fatal("a pinned tool read publisher metadata", method, endpoint)
 		return toolMetadata{}, nil
 	}}
-	resolved, err := resolver.Resolve(t.Context(), []controller.ToolRequest{request}, prerequisites.SetupEgress{})
+	resolved, err := resolver.Resolve(t.Context(), []evidence.ToolRequest{request}, prerequisites.SetupEgress{})
 	if err != nil || len(resolved) != 1 {
 		t.Fatal(resolved, err)
 	}
@@ -169,7 +170,7 @@ func TestAPinnedToolComesFromItsMirrorWithNoPublisherMetadata(t *testing.T) {
 	if source.URL != "https://mirror.example.test/tools/helm-v"+pin.Default.Version+"-linux-amd64.tar.gz" || source.SHA256 != pin.Default.SHA256 || source.Bytes != pin.Default.Bytes {
 		t.Fatal("the pinned source lost its mirror, size or digest", source)
 	}
-	selected, complete, err := resolver.Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{source})
+	selected, complete, err := resolver.Select([]evidence.ToolRequest{request}, []prerequisites.DependencySource{source})
 	if err != nil || !complete || !reflect.DeepEqual(selected, resolved) {
 		t.Fatal("the pinned source was not retained", selected, complete, err)
 	}
@@ -179,7 +180,7 @@ func TestAPinnedToolComesFromItsMirrorWithNoPublisherMetadata(t *testing.T) {
 	} {
 		changed := source
 		edit(&changed)
-		if _, _, err := resolver.Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{changed}); err == nil {
+		if _, _, err := resolver.Select([]evidence.ToolRequest{request}, []prerequisites.DependencySource{changed}); err == nil {
 			t.Fatal("a retained source that differs from the pin was accepted", changed)
 		}
 	}
@@ -188,7 +189,7 @@ func TestAPinnedToolComesFromItsMirrorWithNoPublisherMetadata(t *testing.T) {
 func TestOKDSelectsExactPublishedSCOSTagAndRetainsItsRepository(t *testing.T) {
 	for _, mirror := range []string{"", "https://mirror.example.test/tools"} {
 		t.Run(mirror, func(t *testing.T) {
-			request := controller.ToolRequest{Kind: "openshift-clients", Version: "4.18.0-okd-scos.8", Compatibility: "okd", Mirror: mirror}
+			request := evidence.ToolRequest{Kind: "openshift-clients", Version: "4.18.0-okd-scos.8", Compatibility: "okd", Mirror: mirror}
 			publisher := "https://github.com/okd-project/okd-scos/releases/download/4.18.0-okd-scos.8/openshift-client-linux-4.18.0-okd-scos.8.tar.gz"
 			digest := strings.Repeat("d", 64)
 			calls := []string{}
@@ -207,7 +208,7 @@ func TestOKDSelectsExactPublishedSCOSTagAndRetainsItsRepository(t *testing.T) {
 					return toolMetadata{}, nil
 				}
 			}}
-			resolved, err := resolver.Resolve(context.Background(), []controller.ToolRequest{request}, prerequisites.SetupEgress{})
+			resolved, err := resolver.Resolve(context.Background(), []evidence.ToolRequest{request}, prerequisites.SetupEgress{})
 			if err != nil || len(resolved) != 1 || len(calls) != 2 {
 				t.Fatal(resolved, err, calls)
 			}
@@ -218,7 +219,7 @@ func TestOKDSelectsExactPublishedSCOSTagAndRetainsItsRepository(t *testing.T) {
 			if resolved[0].Source.URL != wanted || resolved[0].Source.SHA256 != digest {
 				t.Fatal("publisher identity or explicit mirror lost", resolved)
 			}
-			selected, complete, err := (&ToolCatalog{}).Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{resolved[0].Source})
+			selected, complete, err := (&ToolCatalog{}).Select([]evidence.ToolRequest{request}, []prerequisites.DependencySource{resolved[0].Source})
 			if err != nil || !complete || !reflect.DeepEqual(selected, resolved) {
 				t.Fatal("SCOS publisher lock was not retained", selected, complete, err)
 			}
@@ -233,7 +234,7 @@ func TestOKDRepositoryFallbackRequiresDefinitiveNotFound(t *testing.T) {
 		calls++
 		return toolMetadata{}, want
 	}}
-	_, err := resolver.Resolve(context.Background(), []controller.ToolRequest{{Kind: "openshift-install", Version: "4.18.0-okd-scos.8", Compatibility: "okd"}}, prerequisites.SetupEgress{})
+	_, err := resolver.Resolve(context.Background(), []evidence.ToolRequest{{Kind: "openshift-install", Version: "4.18.0-okd-scos.8", Compatibility: "okd"}}, prerequisites.SetupEgress{})
 	if !errors.Is(err, want) || calls != 1 {
 		t.Fatal("indeterminate publisher failure selected another repository", err, calls)
 	}
@@ -241,8 +242,8 @@ func TestOKDRepositoryFallbackRequiresDefinitiveNotFound(t *testing.T) {
 
 func TestAnExactVirtctlOverrideFreezesTheUpstreamPublisherIdentity(t *testing.T) {
 	for _, version := range []string{"v1.8.2"} {
-		request := controller.ToolRequest{Kind: "virtctl", Version: version, Compatibility: "kubevirt", Mirror: "https://mirror.example.test/tools"}
-		selected, complete, err := (&ToolCatalog{}).Select([]controller.ToolRequest{request}, nil)
+		request := evidence.ToolRequest{Kind: "virtctl", Version: version, Compatibility: "kubevirt", Mirror: "https://mirror.example.test/tools"}
+		selected, complete, err := (&ToolCatalog{}).Select([]evidence.ToolRequest{request}, nil)
 		if err != nil || complete || len(selected) != 0 {
 			t.Fatal("unresolved virtctl could not be planned", selected, complete, err)
 		}
@@ -255,11 +256,11 @@ func TestAnExactVirtctlOverrideFreezesTheUpstreamPublisherIdentity(t *testing.T)
 			}
 			return toolMetadata{data: []byte(fmt.Sprintf(`{"tag_name":"v1.8.2","draft":false,"prerelease":false,"assets":[{"name":"virtctl-v1.8.2-linux-amd64","browser_download_url":"https://github.com/kubevirt/kubevirt/releases/download/v1.8.2/virtctl-v1.8.2-linux-amd64","size":12345,"digest":"sha256:%s"}]}`, strings.Repeat("e", 64)))}, nil
 		}}
-		resolved, err := resolver.Resolve(t.Context(), []controller.ToolRequest{request}, prerequisites.SetupEgress{})
+		resolved, err := resolver.Resolve(t.Context(), []evidence.ToolRequest{request}, prerequisites.SetupEgress{})
 		if err != nil || len(resolved) != 1 || calls != 1 || resolved[0].Version != "v1.8.2" || resolved[0].Archive != "binary" || resolved[0].Source.URL != "https://mirror.example.test/tools/v1.8.2/virtctl-v1.8.2-linux-amd64" {
 			t.Fatal(resolved, err, calls)
 		}
-		selected, complete, err = (&ToolCatalog{}).Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{resolved[0].Source})
+		selected, complete, err = (&ToolCatalog{}).Select([]evidence.ToolRequest{request}, []prerequisites.DependencySource{resolved[0].Source})
 		if err != nil || !complete || !reflect.DeepEqual(resolved, selected) || calls != 1 {
 			t.Fatal("frozen virtctl retried mutable publisher metadata", selected, complete, err)
 		}
@@ -269,17 +270,17 @@ func TestAnExactVirtctlOverrideFreezesTheUpstreamPublisherIdentity(t *testing.T)
 func TestExactPinsResolveThePublishersPrereleaseTags(t *testing.T) {
 	digest := strings.Repeat("c", 64)
 	for _, test := range []struct {
-		request controller.ToolRequest
+		request evidence.ToolRequest
 		url     string
 		answers map[string]string
 	}{
-		{controller.ToolRequest{Kind: "openshift-install", Version: "4.22.0-rc.1", Compatibility: "openshift"}, "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.22.0-rc.1/openshift-install-linux-4.22.0-rc.1.tar.gz", map[string]string{
+		{evidence.ToolRequest{Kind: "openshift-install", Version: "4.22.0-rc.1", Compatibility: "openshift"}, "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.22.0-rc.1/openshift-install-linux-4.22.0-rc.1.tar.gz", map[string]string{
 			"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.22.0-rc.1/sha256sum.txt": digest + "  openshift-install-linux-4.22.0-rc.1.tar.gz\n",
 		}},
-		{controller.ToolRequest{Kind: "virtctl", Version: "v1.9.0-rc.0", Compatibility: "kubevirt"}, "https://github.com/kubevirt/kubevirt/releases/download/v1.9.0-rc.0/virtctl-v1.9.0-rc.0-linux-amd64", map[string]string{
+		{evidence.ToolRequest{Kind: "virtctl", Version: "v1.9.0-rc.0", Compatibility: "kubevirt"}, "https://github.com/kubevirt/kubevirt/releases/download/v1.9.0-rc.0/virtctl-v1.9.0-rc.0-linux-amd64", map[string]string{
 			"https://api.github.com/repos/kubevirt/kubevirt/releases/tags/v1.9.0-rc.0": `{"tag_name":"v1.9.0-rc.0","draft":false,"prerelease":true,"assets":[{"name":"virtctl-v1.9.0-rc.0-linux-amd64","browser_download_url":"https://github.com/kubevirt/kubevirt/releases/download/v1.9.0-rc.0/virtctl-v1.9.0-rc.0-linux-amd64","size":12345,"digest":"sha256:` + digest + `"}]}`,
 		}},
-		{controller.ToolRequest{Kind: "helm", Version: "4.1.0-rc.1"}, "https://get.helm.sh/helm-v4.1.0-rc.1-linux-amd64.tar.gz", map[string]string{
+		{evidence.ToolRequest{Kind: "helm", Version: "4.1.0-rc.1"}, "https://get.helm.sh/helm-v4.1.0-rc.1-linux-amd64.tar.gz", map[string]string{
 			"https://api.github.com/repos/helm/helm/releases/tags/v4.1.0-rc.1":  `{"tag_name":"v4.1.0-rc.1","draft":false,"prerelease":true,"assets":[]}`,
 			"https://get.helm.sh/helm-v4.1.0-rc.1-linux-amd64.tar.gz.sha256sum": digest + "  helm-v4.1.0-rc.1-linux-amd64.tar.gz\n",
 		}},
@@ -295,11 +296,11 @@ func TestExactPinsResolveThePublishersPrereleaseTags(t *testing.T) {
 				}
 				return toolMetadata{data: []byte(answer)}, nil
 			}}
-			resolved, err := resolver.Resolve(t.Context(), []controller.ToolRequest{test.request}, prerequisites.SetupEgress{})
+			resolved, err := resolver.Resolve(t.Context(), []evidence.ToolRequest{test.request}, prerequisites.SetupEgress{})
 			if err != nil || len(resolved) != 1 || resolved[0].Version != test.request.Version || resolved[0].Source.URL != test.url || resolved[0].Source.SHA256 != digest {
 				t.Fatal("exact publisher tag was not resolved", resolved, err)
 			}
-			selected, complete, err := (&ToolCatalog{}).Select([]controller.ToolRequest{test.request}, []prerequisites.DependencySource{resolved[0].Source})
+			selected, complete, err := (&ToolCatalog{}).Select([]evidence.ToolRequest{test.request}, []prerequisites.DependencySource{resolved[0].Source})
 			if err != nil || !complete || !reflect.DeepEqual(selected, resolved) {
 				t.Fatal("exact publisher tag was not retained", selected, complete, err)
 			}
@@ -325,7 +326,7 @@ func TestAnExactVirtctlRefusesAnUnprovenPublisherAsset(t *testing.T) {
 				}
 				return toolMetadata{data: []byte(payload)}, nil
 			}}
-			if _, err := resolver.Resolve(t.Context(), []controller.ToolRequest{{Kind: "virtctl", Version: "v1.8.2", Compatibility: "kubevirt"}}, prerequisites.SetupEgress{}); err == nil {
+			if _, err := resolver.Resolve(t.Context(), []evidence.ToolRequest{{Kind: "virtctl", Version: "v1.8.2", Compatibility: "kubevirt"}}, prerequisites.SetupEgress{}); err == nil {
 				t.Fatal("an unproven release was accepted")
 			}
 		})
@@ -334,7 +335,7 @@ func TestAnExactVirtctlRefusesAnUnprovenPublisherAsset(t *testing.T) {
 
 func TestOpenShiftToolRequestsRequireTheSharedExactReleaseGrammar(t *testing.T) {
 	for _, version := range []string{"4.21", "4.22.0-rc.1"} {
-		_, err := toolRequests([]controller.ToolRequest{{Kind: "openshift-install", Compatibility: "openshift", Version: version}})
+		_, err := toolRequests([]evidence.ToolRequest{{Kind: "openshift-install", Compatibility: "openshift", Version: version}})
 		if (err == nil) != (version == "4.22.0-rc.1") {
 			t.Fatalf("release %s: %v", version, err)
 		}
@@ -343,7 +344,7 @@ func TestOpenShiftToolRequestsRequireTheSharedExactReleaseGrammar(t *testing.T) 
 
 func TestFIPSInstallerUsesVerifiedExactReleaseArchiveAndRetainedIdentity(t *testing.T) {
 	for _, mirror := range []string{"", "https://mirror.example.test/tools"} {
-		request := controller.ToolRequest{Kind: "openshift-install-fips", Version: "4.21.10", Compatibility: "openshift", Mirror: mirror}
+		request := evidence.ToolRequest{Kind: "openshift-install-fips", Version: "4.21.10", Compatibility: "openshift", Mirror: mirror}
 		base := "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.10/"
 		if mirror != "" {
 			base = mirror + "/4.21.10/"
@@ -359,27 +360,27 @@ func TestFIPSInstallerUsesVerifiedExactReleaseArchiveAndRetainedIdentity(t *test
 			t.Fatalf("unexpected request %s %s", method, endpoint)
 			return toolMetadata{}, nil
 		}}
-		resolved, err := resolver.Resolve(t.Context(), []controller.ToolRequest{request}, prerequisites.SetupEgress{})
+		resolved, err := resolver.Resolve(t.Context(), []evidence.ToolRequest{request}, prerequisites.SetupEgress{})
 		if err != nil || len(resolved) != 1 {
 			t.Fatal(resolved, err)
 		}
 		if resolved[0].Source.URL != base+"openshift-install-rhel9-amd64.tar.gz" || resolved[0].Source.SHA256 != digest || len(resolved[0].Files) != 1 || resolved[0].Files[0].Member != "openshift-install-fips" {
 			t.Fatal(resolved)
 		}
-		kept, complete, err := (&ToolCatalog{}).Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{resolved[0].Source})
+		kept, complete, err := (&ToolCatalog{}).Select([]evidence.ToolRequest{request}, []prerequisites.DependencySource{resolved[0].Source})
 		if err != nil || !complete || !reflect.DeepEqual(kept, resolved) {
 			t.Fatal(kept, complete, err)
 		}
 	}
-	for _, request := range []controller.ToolRequest{{Kind: "openshift-install-fips", Version: "latest", Compatibility: "openshift"}, {Kind: "openshift-install-fips", Version: "4.21.10", Compatibility: "okd"}} {
-		if _, err := toolRequests([]controller.ToolRequest{request}); err == nil {
+	for _, request := range []evidence.ToolRequest{{Kind: "openshift-install-fips", Version: "latest", Compatibility: "openshift"}, {Kind: "openshift-install-fips", Version: "4.21.10", Compatibility: "okd"}} {
+		if _, err := toolRequests([]evidence.ToolRequest{request}); err == nil {
 			t.Fatal("unqualified FIPS acquisition admitted", request)
 		}
 	}
 }
 
 func TestContactsNameEveryHostAClientsAcquisitionReaches(t *testing.T) {
-	hosts := func(request controller.ToolRequest) map[string]string {
+	hosts := func(request evidence.ToolRequest) map[string]string {
 		t.Helper()
 		contacts, err := Contacts(request)
 		if err != nil {
@@ -391,21 +392,21 @@ func TestContactsNameEveryHostAClientsAcquisitionReaches(t *testing.T) {
 		}
 		return found
 	}
-	pinned := hosts(controller.ToolRequest{Kind: "virtctl", Version: "v1.9.1", Compatibility: "kubevirt", SHA256: strings.Repeat("a", 64), Bytes: 10})
+	pinned := hosts(evidence.ToolRequest{Kind: "virtctl", Version: "v1.9.1", Compatibility: "kubevirt", SHA256: strings.Repeat("a", 64), Bytes: 10})
 	if len(pinned) != 3 || pinned["github.com download"] == "" || pinned["release-assets.githubusercontent.com download redirect"] == "" || pinned["objects.githubusercontent.com download redirect"] == "" {
 		t.Fatalf("a pinned virtctl reaches %v", pinned)
 	}
-	mirrored := hosts(controller.ToolRequest{Kind: "helm", Version: "v4.2.0", Mirror: "https://mirror.example.test/tools"})
+	mirrored := hosts(evidence.ToolRequest{Kind: "helm", Version: "v4.2.0", Mirror: "https://mirror.example.test/tools"})
 	for _, want := range []string{"mirror.example.test download", "get.helm.sh release metadata", "api.github.com release metadata"} {
 		if mirrored[want] == "" {
 			t.Errorf("a mirrored helm of another release does not name %s: %v", want, mirrored)
 		}
 	}
-	installer := hosts(controller.ToolRequest{Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"})
+	installer := hosts(evidence.ToolRequest{Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"})
 	if installer["mirror.openshift.com download"] == "" || installer["mirror.openshift.com release metadata"] == "" || installer["api.github.com release metadata"] != "" {
 		t.Fatalf("the installer reaches %v", installer)
 	}
-	kubectl := hosts(controller.ToolRequest{Kind: "kubectl", Version: "v1.37.2", SHA256: strings.Repeat("a", 64), Bytes: 10})
+	kubectl := hosts(evidence.ToolRequest{Kind: "kubectl", Version: "v1.37.2", SHA256: strings.Repeat("a", 64), Bytes: 10})
 	if kubectl["cdn.dl.k8s.io download redirect"] == "" {
 		t.Fatalf("kubectl reaches %v", kubectl)
 	}

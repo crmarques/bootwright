@@ -14,6 +14,7 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	controllerscope "github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -98,8 +99,8 @@ func mediaExecution(t *testing.T, digest string) (lifecycle.Execution, MediaRequ
 // controller evidence and the closure its controller stage selects, so a
 // capability test exercises the production lookup rather than a substitute for
 // it.
-func locatorOver(view prerequisites.StorageView, tools []prerequisites.ToolDefinition) func(context.Context, controllerscope.InstalledTool) (string, error) {
-	return func(ctx context.Context, tool controllerscope.InstalledTool) (string, error) {
+func locatorOver(view prerequisites.StorageView, tools []prerequisites.ToolDefinition) func(context.Context, evidence.InstalledTool) (string, error) {
+	return func(ctx context.Context, tool evidence.InstalledTool) (string, error) {
 		return prerequisites.LocateInstalledTool(ctx, view, tools, tool)
 	}
 }
@@ -538,7 +539,7 @@ func TestTheSelectedClientsMatchTheDeclaredRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tool selection: %v", err)
 	}
-	if !slices.ContainsFunc(tools, func(request controllerscope.ToolRequest) bool {
+	if !slices.ContainsFunc(tools, func(request evidence.ToolRequest) bool {
 		return request.Kind == "openshift-install" && request.Version == "4.21.15" && request.Compatibility == "openshift"
 	}) {
 		t.Fatalf("tools = %+v", tools)

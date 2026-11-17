@@ -15,6 +15,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -35,7 +36,7 @@ func NewToolCatalog() *ToolCatalog { return &ToolCatalog{metadata: fetchToolMeta
 
 var _ prerequisites.TargetToolCatalog = (*ToolCatalog)(nil)
 
-func (c *ToolCatalog) Select(requests []controller.ToolRequest, retained []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, bool, error) {
+func (c *ToolCatalog) Select(requests []evidence.ToolRequest, retained []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, bool, error) {
 	requests, err := toolRequests(requests)
 	if err != nil {
 		return nil, false, err
@@ -110,7 +111,7 @@ func (c *ToolCatalog) Present(ctx context.Context, area prerequisites.BundleArea
 	return true, nil
 }
 
-func (c *ToolCatalog) Resolve(ctx context.Context, requests []controller.ToolRequest, egress prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
+func (c *ToolCatalog) Resolve(ctx context.Context, requests []evidence.ToolRequest, egress prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
 	requests, err := toolRequests(requests)
 	if err != nil {
 		return nil, err
@@ -141,7 +142,7 @@ func (c *ToolCatalog) Resolve(ctx context.Context, requests []controller.ToolReq
 // rule, so validate refuses every mirror Resolve would refuse.
 func stagedMirror(mirror string) bool { return api.ValidLexical("mirror-url", mirror) }
 
-func toolRequests(requests []controller.ToolRequest) ([]controller.ToolRequest, error) {
+func toolRequests(requests []evidence.ToolRequest) ([]evidence.ToolRequest, error) {
 	if len(requests) > 128 {
 		return nil, bundleFailure("target tool requests exceed the supported closure bound")
 	}
@@ -176,7 +177,7 @@ func toolRequests(requests []controller.ToolRequest) ([]controller.ToolRequest, 
 			return nil, bundleFailure("target native tool is outside the supported dependency vocabulary")
 		}
 	}
-	slices.SortFunc(requests, controller.CompareToolRequests)
+	slices.SortFunc(requests, evidence.CompareToolRequests)
 	return slices.Compact(requests), nil
 }
 
@@ -192,13 +193,13 @@ func toolVersion(version string) bool {
 	return version[0] >= '0' && version[0] <= '9' || version[0] == 'v'
 }
 
-func toolSourcePrefix(request controller.ToolRequest) string {
+func toolSourcePrefix(request evidence.ToolRequest) string {
 	data, _ := json.Marshal(request)
 	digest := sha256.Sum256(data)
 	return "tool-" + request.Kind + "-" + hex.EncodeToString(digest[:16]) + "-"
 }
 
-func sourceURL(request controller.ToolRequest, version string) (string, string, error) {
+func sourceURL(request evidence.ToolRequest, version string) (string, string, error) {
 	base, filename := "", ""
 	switch request.Kind {
 	case "helm":
@@ -246,7 +247,7 @@ func okdSourceURL(endpoint, repository string) string {
 	return strings.Replace(endpoint, "https://github.com/"+okdPrimaryRepository+"/", "https://github.com/"+repository+"/", 1)
 }
 
-func toolDefinition(request controller.ToolRequest, version string, source prerequisites.DependencySource) (prerequisites.ToolDefinition, error) {
+func toolDefinition(request evidence.ToolRequest, version string, source prerequisites.DependencySource) (prerequisites.ToolDefinition, error) {
 	if !toolVersion(version) || version != request.Version {
 		return prerequisites.ToolDefinition{}, bundleFailure("retained tool version does not satisfy its original request")
 	}
@@ -306,7 +307,7 @@ func (c *ToolCatalog) release(ctx context.Context, repository, version string, e
 	return release, nil
 }
 
-func (c *ToolCatalog) resolve(ctx context.Context, request controller.ToolRequest, egress prerequisites.SetupEgress) (prerequisites.ToolDefinition, error) {
+func (c *ToolCatalog) resolve(ctx context.Context, request evidence.ToolRequest, egress prerequisites.SetupEgress) (prerequisites.ToolDefinition, error) {
 	if request.SHA256 != "" {
 		source := prerequisites.DependencySource{ID: toolSourcePrefix(request) + request.Version, SHA256: request.SHA256, Bytes: request.Bytes}
 		var err error
@@ -364,7 +365,7 @@ func (c *ToolCatalog) resolve(ctx context.Context, request controller.ToolReques
 	return toolDefinition(request, version, source)
 }
 
-func (c *ToolCatalog) resolveVersion(ctx context.Context, request controller.ToolRequest, egress prerequisites.SetupEgress) (string, githubToolRelease, string, error) {
+func (c *ToolCatalog) resolveVersion(ctx context.Context, request evidence.ToolRequest, egress prerequisites.SetupEgress) (string, githubToolRelease, string, error) {
 	version := request.Version
 	var release githubToolRelease
 	var err error
@@ -448,7 +449,7 @@ func toolChecksum(data []byte, filename string) (string, error) {
 func sourcePath(source prerequisites.DependencySource) string { return path.Join("sources", source.ID) }
 
 func PublisherURL(pin controller.ToolPin) (string, error) {
-	request := controller.ToolRequest{Kind: pin.Kind, Version: withV(pin.Default.Version)}
+	request := evidence.ToolRequest{Kind: pin.Kind, Version: withV(pin.Default.Version)}
 	if pin.Kind == "virtctl" {
 		request.Compatibility = "kubevirt"
 	}
@@ -456,14 +457,14 @@ func PublisherURL(pin controller.ToolPin) (string, error) {
 	return url, err
 }
 
-func SourceURL(request controller.ToolRequest) (string, error) {
+func SourceURL(request evidence.ToolRequest) (string, error) {
 	url, _, err := sourceURL(request, request.Version)
 	return url, err
 }
 
 type Contact struct{ Host, Purpose string }
 
-func Contacts(request controller.ToolRequest) ([]Contact, error) {
+func Contacts(request evidence.ToolRequest) ([]Contact, error) {
 	source, _, err := sourceURL(request, request.Version)
 	if err != nil {
 		return nil, err

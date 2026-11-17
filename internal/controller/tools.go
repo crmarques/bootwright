@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"cmp"
 	"slices"
 	"strings"
 
@@ -9,38 +8,18 @@ import (
 	"github.com/crmarques/bootwright/internal/addons"
 	addonpackages "github.com/crmarques/bootwright/internal/addons/packages"
 	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-// ToolRequest is one exact client release; a release the build's tool table
-// pins carries that table's size and SHA-256.
-type ToolRequest struct {
-	Kind          string `json:"kind"`
-	Version       string `json:"version"`
-	Compatibility string `json:"compatibility"`
-	Mirror        string `json:"mirror"`
-	SHA256        string `json:"sha256,omitempty"`
-	Bytes         int64  `json:"bytes,omitempty"`
-}
-
-// InstalledTool names one executable the controller stage published. A
-// consumer asks for it by this identity so it runs the exact file that stage
-// installed rather than whatever a search path offers.
-type InstalledTool struct {
-	Kind          string
-	Compatibility string
-	Version       string
-	Executable    string
-}
-
 // SelectTools consumes only the selected effective graph. The artifact mirror
 // changes acquisition, never target version or compatibility requirements.
-func SelectTools(catalog api.Catalog) ([]ToolRequest, error) {
+func SelectTools(catalog api.Catalog) ([]evidence.ToolRequest, error) {
 	return SelectToolsWithRegistry(catalog, addonpackages.Builtin())
 }
 
-func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]ToolRequest, error) {
+func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]evidence.ToolRequest, error) {
 	environments := catalog.OfKind(api.Environment)
 	if len(environments) != 1 {
 		return nil, selectionFailure(api.Object{}, "api.invariant", "", "tool selection requires exactly one effective Environment")
@@ -50,7 +29,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 		return nil, err
 	}
 	virtctl := virtctlRequest(versions)
-	result := []ToolRequest{}
+	result := []evidence.ToolRequest{}
 	for _, cluster := range catalog.OfCategory(api.ContainerClusterCategory) {
 		facts, _ := containercluster.FactsOf(cluster.Kind())
 		tools, refused := facts.ControllerTools(cluster)
@@ -62,7 +41,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 			if version == "" {
 				version = versions[tool.Kind]
 			}
-			result = append(result, ToolRequest{Kind: tool.Kind, Version: version, Compatibility: tool.Compatibility})
+			result = append(result, evidence.ToolRequest{Kind: tool.Kind, Version: version, Compatibility: tool.Compatibility})
 		}
 	}
 	for _, binding := range catalog.OfKind(api.ClusterAddonBinding) {
@@ -100,7 +79,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 			if tool == virtctl.Kind {
 				result = append(result, virtctl)
 			} else {
-				result = append(result, ToolRequest{Kind: tool, Version: versions[tool]})
+				result = append(result, evidence.ToolRequest{Kind: tool, Version: versions[tool]})
 			}
 		}
 	}
@@ -110,7 +89,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 			return nil, selectionFailure(environments[0], "controller.state", "", err.Error())
 		}
 	}
-	slices.SortFunc(result, CompareToolRequests)
+	slices.SortFunc(result, evidence.CompareToolRequests)
 	result = slices.Compact(result)
 	if len(result) > 128 {
 		return nil, selectionFailure(environments[0], "controller.unsupported", "", "target tool selection exceeds its bounded closure")
@@ -118,34 +97,34 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 	return result, nil
 }
 
-func virtctlRequest(versions map[string]string) ToolRequest {
-	return ToolRequest{Kind: "virtctl", Version: versions["virtctl"], Compatibility: "kubevirt"}
+func virtctlRequest(versions map[string]string) evidence.ToolRequest {
+	return evidence.ToolRequest{Kind: "virtctl", Version: versions["virtctl"], Compatibility: "kubevirt"}
 }
 
 // ProviderTool is the client of one kind the selected Environment's
 // controller stage installs for a provider's arm, which that arm's port runs.
-func ProviderTool(catalog api.Catalog, kind string) (ToolRequest, error) {
+func ProviderTool(catalog api.Catalog, kind string) (evidence.ToolRequest, error) {
 	environments := catalog.OfKind(api.Environment)
 	if len(environments) != 1 {
-		return ToolRequest{}, selectionFailure(api.Object{}, "api.invariant", "", "tool selection requires exactly one effective Environment")
+		return evidence.ToolRequest{}, selectionFailure(api.Object{}, "api.invariant", "", "tool selection requires exactly one effective Environment")
 	}
 	versions, err := targetToolVersions(environments[0])
 	if err != nil {
-		return ToolRequest{}, err
+		return evidence.ToolRequest{}, err
 	}
-	request := ToolRequest{Kind: kind, Version: versions[kind]}
+	request := evidence.ToolRequest{Kind: kind, Version: versions[kind]}
 	if kind == "virtctl" {
 		request = virtctlRequest(versions)
 	}
 	if request, err = pinned(mirrored(catalog, request)); err != nil {
-		return ToolRequest{}, selectionFailure(environments[0], "controller.state", "", err.Error())
+		return evidence.ToolRequest{}, selectionFailure(environments[0], "controller.state", "", err.Error())
 	}
 	return request, nil
 }
 
 // PublicOrigin says whether a client is served from a host any account
 // publishes on, which a declared artifact mirror replaces.
-func PublicOrigin(request ToolRequest) bool {
+func PublicOrigin(request evidence.ToolRequest) bool {
 	switch request.Kind {
 	case "helm", "govc", "kubectl", "virtctl":
 		return true
@@ -158,7 +137,7 @@ func ArtifactMirror(catalog api.Catalog) (string, string) {
 	return mirror.URL, mirror.TrustBundleRef
 }
 
-func mirrored(catalog api.Catalog, request ToolRequest) ToolRequest {
+func mirrored(catalog api.Catalog, request evidence.ToolRequest) evidence.ToolRequest {
 	location, _ := ArtifactMirror(catalog)
 	base := strings.TrimRight(location, "/")
 	if base == "" || !PublicOrigin(request) {
@@ -190,10 +169,10 @@ func targetToolVersions(environment api.Object) (map[string]string, error) {
 	return versions, nil
 }
 
-func pinned(request ToolRequest) (ToolRequest, error) {
+func pinned(request evidence.ToolRequest) (evidence.ToolRequest, error) {
 	pin, found, err := PinOf(request.Kind)
 	if err != nil {
-		return ToolRequest{}, err
+		return evidence.ToolRequest{}, err
 	}
 	compatibility := ""
 	if request.Kind == "virtctl" {
@@ -203,13 +182,4 @@ func pinned(request ToolRequest) (ToolRequest, error) {
 		request.SHA256, request.Bytes = pin.Default.SHA256, pin.Default.Bytes
 	}
 	return request, nil
-}
-
-func CompareToolRequests(a, b ToolRequest) int {
-	for _, pair := range [][2]string{{a.Kind, b.Kind}, {a.Version, b.Version}, {a.Compatibility, b.Compatibility}, {a.Mirror, b.Mirror}, {a.SHA256, b.SHA256}} {
-		if order := cmp.Compare(pair[0], pair[1]); order != 0 {
-			return order
-		}
-	}
-	return cmp.Compare(a.Bytes, b.Bytes)
 }

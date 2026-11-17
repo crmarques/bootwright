@@ -5,7 +5,7 @@ package contextfs
 import (
 	"context"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
@@ -13,7 +13,7 @@ var _ prerequisites.ControllerRebinder = (*Store)(nil)
 
 const rebindRetry = "repeat bootwright controller rebind, which reads the record again"
 
-func (s *Store) RebindController(ctx context.Context, recorded, next controller.InstalledHostIdentity) (prerequisites.RebindResult, error) {
+func (s *Store) RebindController(ctx context.Context, recorded, next evidence.InstalledHostIdentity) (prerequisites.RebindResult, error) {
 	if !recorded.Valid() {
 		return prerequisites.RebindResult{}, state("the recorded controller host identity is invalid")
 	}

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	controllerscope "github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -758,7 +758,7 @@ func TestMissingInstallationToolsAlwaysNameTheInstallerFirst(t *testing.T) {
 	execution, request := installExecution(t, singleNodeCatalog(), testDigest)
 	for range 100 {
 		called := []string{}
-		execution.LocateTool = func(_ context.Context, tool controllerscope.InstalledTool) (string, error) {
+		execution.LocateTool = func(_ context.Context, tool evidence.InstalledTool) (string, error) {
 			called = append(called, tool.Executable)
 			return "", errors.New("missing " + tool.Executable)
 		}

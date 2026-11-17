@@ -10,7 +10,7 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -361,7 +361,7 @@ type countingHost struct {
 	asked int
 }
 
-func (h *countingHost) Identity(ctx context.Context) (controller.InstalledHostIdentity, error) {
+func (h *countingHost) Identity(ctx context.Context) (evidence.InstalledHostIdentity, error) {
 	h.asked++
 	return h.HostIdentity.Identity(ctx)
 }

@@ -1,15 +1,15 @@
-package controller_test
+package evidence_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 )
 
 func TestInstalledIdentityCanonicalTuple(t *testing.T) {
-	makeIdentity := func(machine string) (controller.InstalledHostIdentity, error) {
-		return controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, machine, "12345678-90ab-cdef-1234-567890abcdef", "98765432-10ab-cdef-1234-567890abcdef")
+	makeIdentity := func(machine string) (evidence.InstalledHostIdentity, error) {
+		return evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1, machine, "12345678-90ab-cdef-1234-567890abcdef", "98765432-10ab-cdef-1234-567890abcdef")
 	}
 	first, err := makeIdentity("1234567890abcdef1234567890abcdef")
 	firstDigest, digestErr := first.PrivateDigest()
@@ -31,7 +31,7 @@ func TestInstalledIdentityCanonicalTuple(t *testing.T) {
 // A host mismatch names its exits in order: the original host or its identity
 // values first, the abandoning deletion last.
 func TestTheHostMismatchRemedyNamesItsExitsInOrder(t *testing.T) {
-	remedy := controller.HostMismatchRemedy("lab")
+	remedy := evidence.HostMismatchRemedy("lab")
 	order := []string{"run on the host this controller state belongs to", "machine-id, DMI product UUID and root filesystem UUID", "bootwright controller rebind",
 		"otherwise bootwright context delete --name lab --purge --allow-orphans", "abandons"}
 	at := -1
@@ -42,7 +42,7 @@ func TestTheHostMismatchRemedyNamesItsExitsInOrder(t *testing.T) {
 		}
 		at = index
 	}
-	if !strings.Contains(controller.HostMismatchRemedy(""), "--name <name>") {
-		t.Fatalf("a remedy for every bound context names no placeholder: %q", controller.HostMismatchRemedy(""))
+	if !strings.Contains(evidence.HostMismatchRemedy(""), "--name <name>") {
+		t.Fatalf("a remedy for every bound context names no placeholder: %q", evidence.HostMismatchRemedy(""))
 	}
 }

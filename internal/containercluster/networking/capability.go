@@ -7,7 +7,7 @@ import (
 
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
 	"github.com/crmarques/bootwright/internal/addons/clusterobjects/driver"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -17,7 +17,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	if err != nil {
 		return lifecycle.RunResult{}, request, err
 	}
-	config := driver.Config{Implementation: Implementation, Variable: "bootwright_cluster_network", EvidenceVersion: evidenceVersion, Placement: request.Placement, Tool: controller.InstalledTool{Kind: request.Tool.Kind, Compatibility: request.Tool.Compatibility, Version: request.Tool.Version, Executable: "oc"}, BudgetSeconds: request.BudgetSeconds, ProducedInput: request.ProducedInputs[0]}
+	config := driver.Config{Implementation: Implementation, Variable: "bootwright_cluster_network", EvidenceVersion: evidenceVersion, Placement: request.Placement, Tool: evidence.InstalledTool{Kind: request.Tool.Kind, Compatibility: request.Tool.Compatibility, Version: request.Tool.Version, Executable: "oc"}, BudgetSeconds: request.BudgetSeconds, ProducedInput: request.ProducedInputs[0]}
 	result, err := driver.Run(ctx, c.runner, execution, operation, config)
 	return result, request, err
 }

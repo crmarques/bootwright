@@ -19,6 +19,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	effectiveencoding "github.com/crmarques/bootwright/internal/desiredstate/encoding"
@@ -460,7 +461,7 @@ func TestActualExampleSelectsTargetToolsFromItsClusters(t *testing.T) {
 	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno"))
 	tools, err := controller.SelectTools(state.Effective())
-	want := []controller.ToolRequest{
+	want := []evidence.ToolRequest{
 		defaultToolRequest(t, "helm"),
 		{Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"},
 		{Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"},
@@ -575,7 +576,7 @@ func TestActualAdmissibleProjectionSelectsKubeVirtTools(t *testing.T) {
 	t.Parallel()
 	state, _ := compileAcceptance(t, admissibleExampleSources(t, false))
 	tools, err := controller.SelectTools(state.Effective())
-	want := []controller.ToolRequest{
+	want := []evidence.ToolRequest{
 		defaultToolRequest(t, "helm"),
 		{Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"},
 		{Kind: "openshift-install-fips", Version: "4.21.15", Compatibility: "openshift"},

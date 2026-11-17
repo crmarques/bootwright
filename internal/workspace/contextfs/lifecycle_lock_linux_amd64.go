@@ -10,7 +10,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
@@ -95,7 +95,7 @@ func sameLifecycleController(before, after controllerStored, name string) bool {
 	return true
 }
 
-func (l *leasedLifecycle) Bind(ctx context.Context, machine string, host controller.InstalledHostIdentity) error {
+func (l *leasedLifecycle) Bind(ctx context.Context, machine string, host evidence.InstalledHostIdentity) error {
 	return l.shared(ctx, func(ctx context.Context) error { return l.lifecycleTransaction.Bind(ctx, machine, host) })
 }
 func (l *leasedLifecycle) Reserve(ctx context.Context, reservations []infrastructureservices.HostReservation) error {

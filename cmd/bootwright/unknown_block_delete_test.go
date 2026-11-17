@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -26,7 +26,7 @@ import (
 func publishCompletedSetup(t *testing.T, repository *contextfs.Store, names ...string) {
 	t.Helper()
 	ctx := context.Background()
-	host, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, "0123456789abcdef0123456789abcdef", "12345678-1234-5678-9abc-def012345678", "fedcba98-7654-3210-fedc-ba9876543210")
+	host, err := evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1, "0123456789abcdef0123456789abcdef", "12345678-1234-5678-9abc-def012345678", "fedcba98-7654-3210-fedc-ba9876543210")
 	if err != nil {
 		t.Fatal(err)
 	}

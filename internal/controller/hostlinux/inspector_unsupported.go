@@ -5,7 +5,7 @@ package hostlinux
 import (
 	"context"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/trust"
@@ -23,8 +23,8 @@ func (Inspector) Release(ctx context.Context) (prerequisites.HostRelease, error)
 	return prerequisites.HostRelease{}, unsupported(ctx)
 }
 
-func (Inspector) Identity(ctx context.Context) (controller.InstalledHostIdentity, error) {
-	return controller.InstalledHostIdentity{}, unsupported(ctx)
+func (Inspector) Identity(ctx context.Context) (evidence.InstalledHostIdentity, error) {
+	return evidence.InstalledHostIdentity{}, unsupported(ctx)
 }
 
 func (Inspector) FIPSMode(ctx context.Context) (bool, error) {

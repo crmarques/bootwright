@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -82,10 +82,10 @@ func TestASplitControllerStageWaitingForWorkThatNeedsItsClientsRefuses(t *testin
 type splitLocator struct {
 	toolLocator
 	holder map[string]string
-	asked  []controller.InstalledTool
+	asked  []evidence.InstalledTool
 }
 
-func (l splitLocator) LocateTool(ctx context.Context, view prerequisites.StorageView, block reconciliation.Block, proved BlockEvidence, tool controller.InstalledTool) (string, error) {
+func (l splitLocator) LocateTool(ctx context.Context, view prerequisites.StorageView, block reconciliation.Block, proved BlockEvidence, tool evidence.InstalledTool) (string, error) {
 	if l.holder[tool.Executable] != block.ID {
 		return "", failure("controller.state", "the "+tool.Executable+" of release "+tool.Version+" is not installed on this controller", "run bootwright apply --stage controller")
 	}
@@ -110,8 +110,8 @@ func (l splitLocator) Apply(ctx context.Context, execution Execution) (Result, e
 // refusal.
 func TestALookupFindsAToolInEitherControllerBlock(t *testing.T) {
 	t.Parallel()
-	kubectl := controller.InstalledTool{Kind: "kubectl", Compatibility: "kubernetes", Version: "1.37.2", Executable: "kubectl"}
-	absent := controller.InstalledTool{Kind: "helm", Compatibility: "kubernetes", Version: "4.3.1", Executable: "helm"}
+	kubectl := evidence.InstalledTool{Kind: "kubectl", Compatibility: "kubernetes", Version: "1.37.2", Executable: "kubectl"}
+	absent := evidence.InstalledTool{Kind: "helm", Compatibility: "kubernetes", Version: "4.3.1", Executable: "helm"}
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		stagedDefinition("controller-prerequisites", reconciliation.StageController),
 		stagedDefinition("controller-mirrored-clients", reconciliation.StageController),
@@ -119,7 +119,7 @@ func TestALookupFindsAToolInEitherControllerBlock(t *testing.T) {
 	})
 	locator := splitLocator{toolLocator: toolLocator{testCapability: h.capability, answers: &sync.Map{}},
 		holder: map[string]string{installer.Executable: "controller-mirrored-clients", kubectl.Executable: "controller-prerequisites"},
-		asked:  []controller.InstalledTool{installer, kubectl, absent}}
+		asked:  []evidence.InstalledTool{installer, kubectl, absent}}
 	h.service.capabilities = testResolver{capability: locator}
 	h.capability.outcomeFor = map[string]Result{
 		"controller-prerequisites":    {Outcome: reconciliation.OutcomeChanged, Evidence: json.RawMessage(`{"area":"packages"}`)},

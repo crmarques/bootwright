@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type rebindStore struct {
-	recorded controller.InstalledHostIdentity
+	recorded evidence.InstalledHostIdentity
 	rebound  int
 }
 
@@ -18,7 +18,7 @@ func (s *rebindStore) ReadController(_ context.Context, _ string, read func(Stor
 	return read(StorageView{Exists: true, Initialized: true, State: HostState{Host: s.recorded}})
 }
 
-func (s *rebindStore) RebindController(_ context.Context, recorded, next controller.InstalledHostIdentity) (RebindResult, error) {
+func (s *rebindStore) RebindController(_ context.Context, recorded, next evidence.InstalledHostIdentity) (RebindResult, error) {
 	if !recorded.Equal(s.recorded) {
 		return RebindResult{}, failure("controller.identity", "changed", "")
 	}
@@ -27,12 +27,12 @@ func (s *rebindStore) RebindController(_ context.Context, recorded, next control
 }
 
 type identityHost struct {
-	identity controller.InstalledHostIdentity
+	identity evidence.InstalledHostIdentity
 }
 
 func (h identityHost) Platform(context.Context) (Platform, error) { return Platform{}, nil }
 
-func (h identityHost) Identity(context.Context) (controller.InstalledHostIdentity, error) {
+func (h identityHost) Identity(context.Context) (evidence.InstalledHostIdentity, error) {
 	return h.identity, nil
 }
 
@@ -46,9 +46,9 @@ func (a *askedRebind) Confirm(_ context.Context, action, name string) error {
 	return a.refuse
 }
 
-func installedHost(t *testing.T, machine string) controller.InstalledHostIdentity {
+func installedHost(t *testing.T, machine string) evidence.InstalledHostIdentity {
 	t.Helper()
-	host, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, strings.Repeat(machine, 32), "12345678-1234-5678-9abc-def012345678", "fedcba98-7654-3210-fedc-ba9876543210")
+	host, err := evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1, strings.Repeat(machine, 32), "12345678-1234-5678-9abc-def012345678", "fedcba98-7654-3210-fedc-ba9876543210")
 	if err != nil {
 		t.Fatal(err)
 	}

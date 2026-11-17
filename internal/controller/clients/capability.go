@@ -6,6 +6,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -368,7 +369,7 @@ func (c Capability) apply(ctx context.Context, execution lifecycle.Execution) (l
 			return failed, err
 		}
 	} else {
-		missing := []controller.ToolRequest{}
+		missing := []evidence.ToolRequest{}
 		for _, wanted := range request.ToolRequests() {
 			if !slices.ContainsFunc(tools, func(tool prerequisites.ToolDefinition) bool {
 				return tool.Kind == wanted.Kind && tool.Compatibility == wanted.Compatibility && tool.Version == wanted.Version
@@ -717,7 +718,7 @@ func (c Capability) retained(ctx context.Context, execution lifecycle.Execution,
 // runs over, so a consumer runs the file its own context's stage installed.
 // The closure is recovered from retained identities, but only from those the
 // proof names, because the host's sources are shared.
-func (c Capability) LocateTool(ctx context.Context, view prerequisites.StorageView, block reconciliation.Block, proved lifecycle.BlockEvidence, tool controller.InstalledTool) (string, error) {
+func (c Capability) LocateTool(ctx context.Context, view prerequisites.StorageView, block reconciliation.Block, proved lifecycle.BlockEvidence, tool evidence.InstalledTool) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

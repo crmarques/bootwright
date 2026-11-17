@@ -18,7 +18,7 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -637,7 +637,7 @@ func (v *testView) PublishEvidence(_ context.Context, data []byte) error {
 // establishes it, a later one revalidates exactly it, and a different Machine
 // or host refuses instead of replacing it. It names a Machine, and binds only
 // the host the controller record identifies.
-func (v *testView) Bind(_ context.Context, machine string, host controller.InstalledHostIdentity) error {
+func (v *testView) Bind(_ context.Context, machine string, host evidence.InstalledHostIdentity) error {
 	if machine == "" {
 		return errors.New("a controller binding requires the selected Machine name")
 	}
@@ -1646,10 +1646,10 @@ func (b *testBinder) Release(ctx context.Context, request custody.BindingRequest
 }
 
 type testHost struct {
-	identity controller.InstalledHostIdentity
+	identity evidence.InstalledHostIdentity
 }
 
-func (h testHost) Identity(context.Context) (controller.InstalledHostIdentity, error) {
+func (h testHost) Identity(context.Context) (evidence.InstalledHostIdentity, error) {
 	return h.identity, nil
 }
 
@@ -1802,7 +1802,7 @@ func newHarness(t *testing.T, blocks ...string) *harness {
 
 func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinition) *harness {
 	t.Helper()
-	host, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1,
+	host, err := evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1,
 		"0123456789abcdef0123456789abcdef", "12345678-1234-5678-9abc-def012345678", "fedcba98-7654-3210-fedc-ba9876543210")
 	if err != nil {
 		t.Fatal(err)

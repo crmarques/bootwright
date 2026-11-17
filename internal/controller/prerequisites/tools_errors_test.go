@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 )
 
 type failingToolArea struct {
@@ -34,7 +34,7 @@ func TestInstalledToolLookupPreservesStoreFailures(t *testing.T) {
 				}
 				return failingToolArea{failure: failure, at: at}, nil
 			}}
-			_, err := LocateInstalledTool(context.Background(), view, []ToolDefinition{{Kind: "helm", Version: "v4.2.3", Files: []ToolFile{{Path: "tools/helm/helm"}}}}, controller.InstalledTool{Kind: "helm", Version: "v4.2.3", Executable: "helm"})
+			_, err := LocateInstalledTool(context.Background(), view, []ToolDefinition{{Kind: "helm", Version: "v4.2.3", Files: []ToolFile{{Path: "tools/helm/helm"}}}}, evidence.InstalledTool{Kind: "helm", Version: "v4.2.3", Executable: "helm"})
 			if !errors.Is(err, failure) {
 				t.Fatalf("store failure replaced: %v", err)
 			}

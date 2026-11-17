@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -99,14 +99,14 @@ func (p *healingPython) WithPython(context.Context, prerequisites.Runtime, func(
 }
 
 type healingHost struct {
-	identity controller.InstalledHostIdentity
+	identity evidence.InstalledHostIdentity
 }
 
 func (h healingHost) Platform(context.Context) (prerequisites.Platform, error) {
 	return prerequisites.Platform{OS: "fedora", Release: "44", Architecture: "amd64"}, nil
 }
 
-func (h healingHost) Identity(context.Context) (controller.InstalledHostIdentity, error) {
+func (h healingHost) Identity(context.Context) (evidence.InstalledHostIdentity, error) {
 	return h.identity, nil
 }
 
@@ -164,7 +164,7 @@ func (p *healingPlans) PresentControllerPlan(_ context.Context, report prerequis
 func TestHealingASubtreeOverAHealthyRuntimeLeavesItLaunchable(t *testing.T) {
 	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
-	identity, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, strings.Repeat("1", 32), "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666")
+	identity, err := evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1, strings.Repeat("1", 32), "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666")
 	if err != nil {
 		t.Fatal(err)
 	}

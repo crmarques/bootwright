@@ -6,6 +6,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -92,8 +93,8 @@ func (r Request) Split() (Request, Request) {
 	return packages, clients
 }
 
-func (t ToolRequest) catalogRequest() controller.ToolRequest {
-	return controller.ToolRequest{Kind: t.Kind, Version: t.Version, Compatibility: t.Compatibility, Mirror: t.Mirror, SHA256: t.SHA256, Bytes: t.Bytes}
+func (t ToolRequest) catalogRequest() evidence.ToolRequest {
+	return evidence.ToolRequest{Kind: t.Kind, Version: t.Version, Compatibility: t.Compatibility, Mirror: t.Mirror, SHA256: t.SHA256, Bytes: t.Bytes}
 }
 
 func mirrorHost(mirror string) string {
@@ -104,7 +105,7 @@ func mirrorHost(mirror string) string {
 	return parsed.Hostname()
 }
 
-func NewRequest(selection controller.Selection, requests []controller.ToolRequest) Request {
+func NewRequest(selection controller.Selection, requests []evidence.ToolRequest) Request {
 	route := selection.Route()
 	bypass := route.NoProxy()
 	if bypass == nil {
@@ -143,12 +144,12 @@ func (r Request) native() prerequisites.StageNative {
 }
 
 // ToolRequests restores the catalog's own request shape from the frozen block.
-func (r Request) ToolRequests() []controller.ToolRequest {
-	requests := make([]controller.ToolRequest, 0, len(r.Tools))
+func (r Request) ToolRequests() []evidence.ToolRequest {
+	requests := make([]evidence.ToolRequest, 0, len(r.Tools))
 	for _, tool := range r.Tools {
-		requests = append(requests, controller.ToolRequest{Kind: tool.Kind, Version: tool.Version, Compatibility: tool.Compatibility, Mirror: tool.Mirror, SHA256: tool.SHA256, Bytes: tool.Bytes})
+		requests = append(requests, evidence.ToolRequest{Kind: tool.Kind, Version: tool.Version, Compatibility: tool.Compatibility, Mirror: tool.Mirror, SHA256: tool.SHA256, Bytes: tool.Bytes})
 	}
-	slices.SortFunc(requests, controller.CompareToolRequests)
+	slices.SortFunc(requests, evidence.CompareToolRequests)
 	return requests
 }
 

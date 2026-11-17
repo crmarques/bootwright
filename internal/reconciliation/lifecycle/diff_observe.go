@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/fanout"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -193,7 +193,7 @@ func (s Service) inspection(ctx context.Context, view RunView, store recordReade
 	execution := Execution{
 		Context: view.Identity().Name, Incarnation: view.Identity().Incarnation, ApplyOperation: owner.ID, ApplyProved: proved, Block: block,
 		Launch: launch, Material: material, ApplyRegistered: owner.Created, Shared: shared,
-		LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
+		LocateTool: func(inner context.Context, tool evidence.InstalledTool) (string, error) {
 			return s.locateTool(inner, store, setup, read.context.Name, read.owning, read.owningPlan, tool)
 		},
 	}

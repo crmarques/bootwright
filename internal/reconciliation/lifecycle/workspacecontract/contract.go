@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	controllerevidence "github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -29,7 +29,7 @@ import (
 type Subject struct {
 	Workspace lifecycle.Workspace
 	Context   string
-	Host      controller.InstalledHostIdentity
+	Host      controllerevidence.InstalledHostIdentity
 	KeptRuns  int
 }
 
@@ -233,7 +233,7 @@ func aCapabilityEndsWithItsCallback(t *testing.T, s Subject) {
 
 func aBindingIsEstablishedOnceAndRevalidatedExactly(t *testing.T, s Subject) {
 	ctx := context.Background()
-	foreign, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1,
+	foreign, err := controllerevidence.NewInstalledHostIdentity(controllerevidence.LinuxInstalledIdentityV1,
 		"fedcba9876543210fedcba9876543210", "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff")
 	if err != nil {
 		t.Fatal(err)

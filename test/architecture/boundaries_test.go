@@ -85,6 +85,7 @@ func packageRoles() map[string]packageRole {
 		"internal/containercluster":                domainRole,
 		"internal/containercluster/openshift":      domainRole,
 		"internal/controller":                      domainRole,
+		"internal/controller/evidence":             domainRole,
 		"internal/desiredstate":                    domainRole,
 		"internal/environment":                     domainRole,
 		"internal/machine":                         domainRole,

@@ -3,7 +3,7 @@ package prerequisites
 import (
 	"context"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
@@ -67,7 +67,7 @@ const (
 // evidence. ToolSources are the acquisition identities the controller stage
 // recovers a published tool closure from.
 type HostState struct {
-	Host         controller.InstalledHostIdentity
+	Host         evidence.InstalledHostIdentity
 	Bindings     []ControllerBinding
 	ToolSources  []DependencySource
 	Reservations []infrastructureservices.HostReservation

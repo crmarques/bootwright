@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -225,7 +225,7 @@ func (s Service) closureRefusal(ctx context.Context, view View, operation operat
 // runs on and that its setup completed, before any local effect. unbound is
 // the remedy when the controller state records no binding for the context,
 // and admitUnbound admits that context instead, once the host is proved.
-func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity, host controller.InstalledHostIdentity, unbound string, admitUnbound bool) error {
+func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity, host evidence.InstalledHostIdentity, unbound string, admitUnbound bool) error {
 	if !view.Exists || !view.Prepared {
 		return failure("controller.identity", "this host has no completed controller setup", "run bootwright controller install")
 	}
@@ -240,14 +240,14 @@ func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity,
 		return err
 	}
 	if !view.State.Host.Equal(host) {
-		return failure("controller.identity", "this host is not the host the context is bound to", controller.HostMismatchRemedy(identity.Name))
+		return failure("controller.identity", "this host is not the host the context is bound to", evidence.HostMismatchRemedy(identity.Name))
 	}
 	for _, binding := range view.State.Bindings {
 		if binding.Context != identity.Name {
 			continue
 		}
 		if binding.HostDigest != digest {
-			return failure("controller.identity", "the recorded controller binding does not match this host", controller.HostMismatchRemedy(identity.Name))
+			return failure("controller.identity", "the recorded controller binding does not match this host", evidence.HostMismatchRemedy(identity.Name))
 		}
 		return nil
 	}

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -45,7 +45,7 @@ func TestControllerRefusalsNameTheirOwnRemedies(t *testing.T) {
 		}
 	}
 	sealedBundleFixture(t, store, record)
-	other, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, strings.Repeat("9", 32), "99999999-2222-4333-8444-555555555555", "99999999-3333-4444-8555-666666666666")
+	other, err := evidence.NewInstalledHostIdentity(evidence.LinuxInstalledIdentityV1, strings.Repeat("9", 32), "99999999-2222-4333-8444-555555555555", "99999999-3333-4444-8555-666666666666")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestControllerRefusalsNameTheirOwnRemedies(t *testing.T) {
 	}
 	for _, test := range []struct {
 		name, machine, remedy string
-		host                  controller.InstalledHostIdentity
+		host                  evidence.InstalledHostIdentity
 	}{
 		{"another host", "controller", "run on the host this controller state belongs to, or restore that host's machine-id, DMI product UUID and root filesystem UUID on this one; if this host keeps the same state store under the changed values, rebind its record with bootwright controller rebind; otherwise bootwright context delete --name example --purge --allow-orphans, which abandons every object the context realized", other},
 		{"another Machine", "replacement", "restore the bound controller Machine input, or create a context on this host", host},

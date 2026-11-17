@@ -7,7 +7,7 @@ import (
 	"time"
 
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
@@ -23,7 +23,7 @@ func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 		runner := &capture{}
 		execution := lifecycle.Execution{ApplyOperation: "operation", ApplyRegistered: "2026-01-01T00:00:00Z", LendProduced: func(context.Context, lifecycle.ProducedInput) (secrets.Material, error) {
 			return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("private")}), nil
-		}, LocateTool: func(context.Context, controller.InstalledTool) (string, error) { return "/qualified/oc", nil }}
+		}, LocateTool: func(context.Context, evidence.InstalledTool) (string, error) { return "/qualified/oc", nil }}
 		_, err := Run(context.Background(), runner, execution, "apply", Config{BudgetSeconds: budget})
 		if err != nil {
 			t.Fatal(err)
@@ -42,7 +42,7 @@ func TestOnlyAnApplyIsLentSecretPlacementMaterial(t *testing.T) {
 		runner := &capture{}
 		execution := lifecycle.Execution{ApplyOperation: "operation", ApplyRegistered: "2026-01-01T00:00:00Z",
 			Material:   map[string]secrets.Material{"credentials": secrets.NewMaterial(map[secrets.Part][]byte{secrets.PasswordPart: []byte("password")})},
-			LocateTool: func(context.Context, controller.InstalledTool) (string, error) { return "/oc", nil },
+			LocateTool: func(context.Context, evidence.InstalledTool) (string, error) { return "/oc", nil },
 			LendProduced: func(context.Context, lifecycle.ProducedInput) (secrets.Material, error) {
 				return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("kubeconfig")}), nil
 			}}

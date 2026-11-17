@@ -6,7 +6,7 @@ import (
 	"time"
 
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -17,7 +17,7 @@ type Config struct {
 	Placements                                []co.SecretPlacement
 	Implementation, Variable, EvidenceVersion string
 	Placement                                 machine.Placement
-	Tool                                      controller.InstalledTool
+	Tool                                      evidence.InstalledTool
 	BudgetSeconds                             int64
 	ProducedInput                             lifecycle.ProducedInput
 }

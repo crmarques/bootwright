@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/addons"
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
 	"github.com/crmarques/bootwright/internal/addons/clusterobjects/driver"
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -35,7 +35,7 @@ func TestNetworkPartialReceiptsSurviveButUnsafeEvidenceDoesNot(t *testing.T) {
 	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: BlockID(request.Cluster), Request: data}, RequestDigest: strings.Repeat("a", 64)}
 	execution := lifecycle.Execution{Block: block, ApplyOperation: "operation", ApplyRegistered: "2026-01-01T00:00:00Z", LendProduced: func(context.Context, lifecycle.ProducedInput) (secrets.Material, error) {
 		return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("private")}), nil
-	}, LocateTool: func(context.Context, controller.InstalledTool) (string, error) { return "/qualified/oc", nil }}
+	}, LocateTool: func(context.Context, evidence.InstalledTool) (string, error) { return "/qualified/oc", nil }}
 	var owned *co.ObjectEntry
 	for _, step := range program.Steps {
 		if step.Create != nil {

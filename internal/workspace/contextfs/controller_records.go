@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -98,7 +98,7 @@ func decodeControllerRecord(data []byte) (prerequisites.HostState, []controllerB
 			"controller evidence version "+strconv.Itoa(record.Version)+" is unsupported: this build reads version "+strconv.Itoa(ControllerRecordVersion)+" only and converts none",
 			controllerVersionRemedy)
 	}
-	host, err := controller.NewInstalledHostIdentity(record.Host.Provider, record.Host.MachineID, record.Host.ProductUUID, record.Host.FilesystemUUID)
+	host, err := evidence.NewInstalledHostIdentity(record.Host.Provider, record.Host.MachineID, record.Host.ProductUUID, record.Host.FilesystemUUID)
 	if err != nil {
 		return prerequisites.HostState{}, nil, state("controller host evidence is malformed")
 	}

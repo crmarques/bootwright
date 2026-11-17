@@ -16,9 +16,9 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
-	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
 	"github.com/crmarques/bootwright/internal/controller/clients"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -33,7 +33,7 @@ type retainedCatalog struct {
 	closure []prerequisites.ToolDefinition
 }
 
-func (c retainedCatalog) Select(_ []controller.ToolRequest, retained []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, bool, error) {
+func (c retainedCatalog) Select(_ []evidence.ToolRequest, retained []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, bool, error) {
 	selected := []prerequisites.ToolDefinition{}
 	for _, tool := range c.closure {
 		if slices.Contains(retained, tool.Source) {
@@ -43,7 +43,7 @@ func (c retainedCatalog) Select(_ []controller.ToolRequest, retained []prerequis
 	return selected, len(selected) == len(c.closure), nil
 }
 
-func (c retainedCatalog) Resolve(context.Context, []controller.ToolRequest, prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
+func (c retainedCatalog) Resolve(context.Context, []evidence.ToolRequest, prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
 	return slices.Clone(c.closure), nil
 }
 
@@ -65,7 +65,7 @@ func (c retainedCatalog) Present(ctx context.Context, area prerequisites.BundleA
 // publishedSource is the source a publisher serves for one release of a
 // request, under the identity and URL internal/controller/bundlelocal/tools.go
 // derives for it, so the catalog's own Select accepts it.
-func publishedSource(t *testing.T, request controller.ToolRequest, version, digit string) prerequisites.DependencySource {
+func publishedSource(t *testing.T, request evidence.ToolRequest, version, digit string) prerequisites.DependencySource {
 	t.Helper()
 	data, err := json.Marshal(request)
 	if err != nil {
@@ -94,7 +94,7 @@ type publisherCatalog struct {
 	published []prerequisites.DependencySource
 }
 
-func (c publisherCatalog) Resolve(_ context.Context, requests []controller.ToolRequest, _ prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
+func (c publisherCatalog) Resolve(_ context.Context, requests []evidence.ToolRequest, _ prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
 	tools, complete, err := c.Select(requests, c.published)
 	if err == nil && !complete {
 		err = errors.New("the publisher serves no release of a requested client")
@@ -220,7 +220,7 @@ func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
 		if selected, complete, err := catalog.Select(requests, view.State.ToolSources); err != nil || !complete || prerequisites.ToolsDigest(selected) != area {
 			t.Fatalf("the releases another context retained changed what this context's exact requests select (%v)", err)
 		}
-		execution := lifecycle.Execution{LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
+		execution := lifecycle.Execution{LocateTool: func(inner context.Context, tool evidence.InstalledTool) (string, error) {
 			return stage.LocateTool(inner, view, block, proved, tool)
 		}}
 		for executable, kind := range map[string]string{"openshift-install": "openshift-install", "oc": "openshift-clients"} {
