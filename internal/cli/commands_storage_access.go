@@ -28,7 +28,7 @@ func keyringValue(result *inspection.KeyringResult) ([]byte, bool) {
 func writeKeyring(out, errOut io.Writer, result *inspection.KeyringResult) error {
 	value, ok := keyringValue(result)
 	if !ok {
-		return &resultFailure{"runtime.internal", "application service returned an unsupported result", 1}
+		return unsupportedResult()
 	}
 	defer clear(value)
 	if err := writeHumanDiagnostics(errOut, displayDiagnostics(keyringWarnings(result))); err != nil {

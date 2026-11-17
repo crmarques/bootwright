@@ -276,11 +276,22 @@ func writeSecretListText(out io.Writer, result *custody.ListResult) error {
 	return text.writeTo(out)
 }
 
-func writeSecretReveal(out io.Writer, result *custody.RevealResult, requested secrets.Part) error {
+func revealedPart(result *custody.RevealResult, requested secrets.Part) ([]byte, bool) {
+	if result == nil || result.Part != requested || !validSecretPart(requested) {
+		return nil, false
+	}
 	value, present := result.Material.Part(requested)
 	if !present || len(value) > secrets.MaxPartBytes || result.Material.Size() > secrets.MaxVersionBytes {
 		clear(value)
-		return &resultFailure{"runtime.internal", "application service returned an unsupported result", 1}
+		return nil, false
+	}
+	return value, true
+}
+
+func writeSecretReveal(out io.Writer, result *custody.RevealResult, requested secrets.Part) error {
+	value, ok := revealedPart(result, requested)
+	if !ok {
+		return unsupportedResult()
 	}
 	defer clear(value)
 	n, err := out.Write(value)

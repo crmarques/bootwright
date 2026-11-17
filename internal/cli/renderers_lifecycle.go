@@ -1,11 +1,5 @@
 package cli
 
-import (
-	"slices"
-
-	"github.com/crmarques/bootwright/internal/secrets"
-)
-
 func renderValidate() commandRenderer {
 	return commandRenderer{human: func(r *Runner, c renderCall) (bool, error) {
 		if c.result.validation == nil {
@@ -300,17 +294,13 @@ func renderAdminCredentials() commandRenderer {
 
 func renderKubeconfig() commandRenderer {
 	return commandRenderer{
-		structured: structuredShown(func(result commandResult) (jsonResult, []diagnostic, bool) {
-			config := result.kubeconfig
-			if config == nil {
+		structured: structuredReveal(func(result commandResult) bool { return result.kubeconfig != nil }, func(c renderCall) (jsonResult, []diagnostic, bool) {
+			value, ok := kubeconfigValue(c.result.kubeconfig)
+			if !ok {
 				return nil, nil, false
 			}
-			value, present := config.Material.Part(secrets.ValuePart)
 			defer clear(value)
-			if !present || len(value) == 0 || len(value) > secrets.MaxPartBytes || !slices.Equal(config.Material.Parts(), []secrets.Part{secrets.ValuePart}) {
-				return nil, nil, false
-			}
-			return exportedResult("application/yaml", value), kubeconfigWarnings(config), true
+			return exportedResult("application/yaml", value), kubeconfigWarnings(c.result.kubeconfig), true
 		}),
 		human: func(r *Runner, c renderCall) (bool, error) {
 			if c.result.kubeconfig == nil {
@@ -323,16 +313,13 @@ func renderKubeconfig() commandRenderer {
 
 func renderKeyring() commandRenderer {
 	return commandRenderer{
-		structured: structuredShown(func(result commandResult) (jsonResult, []diagnostic, bool) {
-			if result.keyring == nil {
-				return nil, nil, false
-			}
-			value, ok := keyringValue(result.keyring)
+		structured: structuredReveal(func(result commandResult) bool { return result.keyring != nil }, func(c renderCall) (jsonResult, []diagnostic, bool) {
+			value, ok := keyringValue(c.result.keyring)
 			if !ok {
 				return nil, nil, false
 			}
 			defer clear(value)
-			return exportedResult("text/plain", value), keyringWarnings(result.keyring), true
+			return exportedResult("text/plain", value), keyringWarnings(c.result.keyring), true
 		}),
 		human: func(r *Runner, c renderCall) (bool, error) {
 			if c.result.keyring == nil {

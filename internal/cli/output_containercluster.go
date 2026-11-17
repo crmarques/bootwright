@@ -8,13 +8,21 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-// writeKubeconfig writes the custodied bytes alone to out. A copy whose access
-// was never proved is still exported, after one warning on errOut that says so.
-func writeKubeconfig(out, errOut io.Writer, result *containeraccess.KubeconfigResult) error {
+func kubeconfigValue(result *containeraccess.KubeconfigResult) ([]byte, bool) {
 	value, present := result.Material.Part(secrets.ValuePart)
 	if !present || len(value) == 0 || len(value) > secrets.MaxPartBytes || !slices.Equal(result.Material.Parts(), []secrets.Part{secrets.ValuePart}) {
 		clear(value)
-		return &resultFailure{"runtime.internal", "application service returned an unsupported result", 1}
+		return nil, false
+	}
+	return value, true
+}
+
+// writeKubeconfig writes the custodied bytes alone to out. A copy whose access
+// was never proved is still exported, after one warning on errOut that says so.
+func writeKubeconfig(out, errOut io.Writer, result *containeraccess.KubeconfigResult) error {
+	value, ok := kubeconfigValue(result)
+	if !ok {
+		return unsupportedResult()
 	}
 	defer clear(value)
 	if err := writeHumanDiagnostics(errOut, displayDiagnostics(kubeconfigWarnings(result))); err != nil {

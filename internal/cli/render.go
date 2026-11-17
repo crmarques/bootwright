@@ -34,6 +34,23 @@ func structuredShown(build shownResult) resultWriter {
 	}
 }
 
+func unsupportedResult() error {
+	return &resultFailure{"runtime.internal", "application service returned an unsupported result", 1}
+}
+
+func structuredReveal(carried func(commandResult) bool, build func(renderCall) (jsonResult, []diagnostic, bool)) resultWriter {
+	return func(r *Runner, c renderCall) (bool, error) {
+		if !carried(c.result) {
+			return false, nil
+		}
+		shown, reported, ok := build(c)
+		if !ok {
+			return true, unsupportedResult()
+		}
+		return true, writeStructuredResult(r.config.Out, c.path, shown, reported, nil, 0)
+	}
+}
+
 func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path string, result commandResult) (bool, error) {
 	render := specFor(path).render
 	call := renderCall{ctx: ctx, command: command, path: path, result: result}

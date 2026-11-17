@@ -191,24 +191,19 @@ func renderSecretList() commandRenderer {
 
 func renderSecretShow() commandRenderer {
 	return commandRenderer{
-		structured: structuredShown(func(result commandResult) (jsonResult, []diagnostic, bool) {
-			reveal := result.secretReveal
-			if reveal == nil || !validSecretPart(reveal.Part) {
+		structured: structuredReveal(func(result commandResult) bool { return result.secretReveal != nil }, func(c renderCall) (jsonResult, []diagnostic, bool) {
+			value, ok := revealedPart(c.result.secretReveal, secrets.Part(stringValue(c.command.Flags(), "part")))
+			if !ok {
 				return nil, nil, false
 			}
-			value, present := reveal.Material.Part(reveal.Part)
 			defer clear(value)
-			if !present || len(value) > secrets.MaxPartBytes || reveal.Material.Size() > secrets.MaxVersionBytes {
-				return nil, nil, false
-			}
 			return exportedResult("application/octet-stream", value), nil, true
 		}),
 		human: func(r *Runner, c renderCall) (bool, error) {
-			part := secrets.Part(stringValue(c.command.Flags(), "part"))
-			if c.result.secretReveal != nil && c.result.secretReveal.Part == part && validSecretPart(part) {
-				return true, writeSecretReveal(r.config.Out, c.result.secretReveal, part)
+			if c.result.secretReveal == nil {
+				return false, nil
 			}
-			return false, nil
+			return true, writeSecretReveal(r.config.Out, c.result.secretReveal, secrets.Part(stringValue(c.command.Flags(), "part")))
 		},
 	}
 }
