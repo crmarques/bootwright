@@ -125,50 +125,40 @@
                      | combine({containercluster_install_agent_node.machine: containercluster_install_agent_token.url}) }}
               no_log: true
 
-            - name: Prove the insert image through the verified serving listener
-              ansible.builtin.uri:
-                url: '{{ containercluster_install_agent_token.url }}'
-                method: GET
-                headers:
-                  Range: bytes=0-0
-                ca_path: '{{ bootwright_cluster_install_material.artifactCertificate }}'
-                validate_certs: true
-                use_proxy: false
-                follow_redirects: none
-                status_code:
-                  - 200
-                  - 206
-                timeout: 30
-              register: containercluster_install_agent_token_probe
-              failed_when: false
-              changed_when: false
-              no_log: true
+            # The shared listener proof refuses outside no_log with the cause
+            # alone; a link it did not prove is retired and kept as this
+            # node's typed refusal before that refusal ends the node's boot.
+            # The boot phase's budget holds a single attempt.
+            - name: Prove the insert image and retire a link it refuses
+              block:
+                - name: Prove the insert image through the verified serving listener
+                  ansible.builtin.include_role:
+                    name: bootwright.core.infrastructureservices_artifact_listener
+                    tasks_from: proof
+                  vars:
+                    infrastructureservices_artifact_listener_url: '{{ containercluster_install_agent_token.url }}'
+                    infrastructureservices_artifact_listener_ca: '{{ bootwright_cluster_install_material.artifactCertificate }}'
+                    infrastructureservices_artifact_listener_token: '{{ containercluster_install_agent_token.url | dirname | basename }}'
+                    infrastructureservices_artifact_listener_secret: '{{ bootwright_cluster_install_request.tlsCertificateRef | default("") }}'
+                    infrastructureservices_artifact_listener_subject: the private insert image
+                    infrastructureservices_artifact_listener_consequence: so the node was given no media
+                    infrastructureservices_artifact_listener_retries: 0
+              rescue:
+                - name: Retire a link the serving listener did not prove
+                  bootwright.core.containercluster_media_token:
+                    request: '{{ bootwright_cluster_install_request }}'
+                    source: '{{ containercluster_install_agent_url }}'
+                    image: '{{ containercluster_install_agent_token.url }}'
+                    operation: remove
+                  no_log: true
 
-            - name: Retire a link the serving listener did not prove
-              bootwright.core.containercluster_media_token:
-                request: '{{ bootwright_cluster_install_request }}'
-                source: '{{ containercluster_install_agent_url }}'
-                image: '{{ containercluster_install_agent_token.url }}'
-                operation: remove
-              when: containercluster_install_agent_token_probe.status | default(-1) | int not in [200, 206]
-              no_log: true
+                - name: Retain an unproved private listener as a typed node refusal
+                  ansible.builtin.set_fact:
+                    containercluster_install_agent_lifecycle_refusal: private-delivery
 
-            - name: Retain an unproved private listener as a typed node refusal
-              ansible.builtin.set_fact:
-                containercluster_install_agent_lifecycle_refusal: private-delivery
-              when: containercluster_install_agent_token_probe.status | default(-1) | int not in [200, 206]
-
-            - name: Refuse an insert whose private image cannot be fetched
-              ansible.builtin.assert:
-                that: containercluster_install_agent_token_probe.status | default(-1) | int in [200, 206]
-                fail_msg: >-
-                  the private insert image could not be fetched through the artifact listener:
-                  {{ 'serving certificate verification against Secret ' ~ bootwright_cluster_install_request.tlsCertificateRef ~ ' failed'
-                     if (containercluster_install_agent_token_probe.msg | default('')) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
-                     else ('listener status ' ~ (containercluster_install_agent_token_probe.status | default(-1) | string))
-                     if containercluster_install_agent_token_probe.status | default(-1) | int != -1
-                     else 'the connection failed before a status line was received' }}
-                quiet: true
+                - name: Refuse an insert whose private image cannot be fetched
+                  ansible.builtin.fail:
+                    msg: "{{ ansible_failed_result.msg | default('the private insert image was not proved through its artifact server listener') }}"
 
             - name: Keep this node's private insert URL in invocation scratch
               ansible.builtin.copy:

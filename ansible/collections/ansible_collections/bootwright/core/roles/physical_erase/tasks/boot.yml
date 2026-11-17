@@ -45,26 +45,18 @@
   changed_when: true
   no_log: true
 
+# The image's URL carries the token, so the shared proof fetches it hidden and
+# refuses outside no_log with the cause alone.
 - name: Prove the private image is served over its verified listener
-  ansible.builtin.uri:
-    url: '{{ physical_erase_prepared.url }}'
-    method: GET
-    headers:
-      Range: bytes=0-0
-    status_code:
-      - 200
-      - 206
-    validate_certs: true
-    ca_path: '{{ bootwright_physical_erase_material.artifactCertificate }}'
-    return_content: false
-    timeout: 30
-  register: physical_erase_listener_fetch
-  until: >-
-    (physical_erase_listener_fetch.status | default(-1) | int) != -1
-    or (physical_erase_listener_fetch.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
-  retries: '{{ physical_erase_listener_retries | int }}'
-  delay: '{{ physical_erase_listener_pause | int }}'
-  no_log: true
+  ansible.builtin.include_role:
+    name: bootwright.core.infrastructureservices_artifact_listener
+    tasks_from: proof
+  vars:
+    infrastructureservices_artifact_listener_url: '{{ physical_erase_prepared.url }}'
+    infrastructureservices_artifact_listener_ca: '{{ bootwright_physical_erase_material.artifactCertificate }}'
+    infrastructureservices_artifact_listener_token: '{{ physical_erase_prepared.url | dirname | basename }}'
+    infrastructureservices_artifact_listener_subject: the private erase image
+    infrastructureservices_artifact_listener_consequence: so the machine was not booted to erase
 
 - name: Reprove the stopped target and boot only its private erase worker
   bootwright.core.physical_erase:

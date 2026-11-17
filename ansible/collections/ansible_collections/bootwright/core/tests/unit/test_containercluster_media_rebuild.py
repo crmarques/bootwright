@@ -41,7 +41,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import containercl
 from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect
 from ansible_collections.bootwright.core.plugins.modules import containercluster_media_inspect as inspect
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
-from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit import listener_proof, role_tasks
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 MEDIA = ROLES / "containercluster_media_agent"
@@ -55,8 +55,6 @@ TOKEN = "0123456789abcdef" * 4
 
 BUILD = "not (containercluster_media_agent_published | bool)"
 REPLAY = "containercluster_media_agent_published | bool"
-# The probe's guard is conditioned on what the probe answered, never on a build.
-PROBED = "containercluster_media_agent_probe.status | default(-1) | int not in [200, 206]"
 INCLUDES = ("ansible.builtin.include_tasks", "ansible.builtin.import_tasks")
 
 
@@ -350,18 +348,17 @@ def argv(task):
 
 
 def serves(task):
-    """The four steps that make the published image readable and prove it."""
+    """The three steps that make the published image readable and prove it."""
     path = str((task.get("ansible.builtin.file") or {}).get("path", ""))
-    return (path.endswith("/agent.iso") or argv(task)[:1] == ["/usr/bin/chcon"]
-            or "ansible.builtin.uri" in task or "ansible.builtin.fail" in task)
+    return path.endswith("/agent.iso") or argv(task)[:1] == ["/usr/bin/chcon"] or listener_proof.includes(task)
 
 
 def test_a_replay_builds_nothing_and_still_serves_and_proves_the_image():
     build = tasks(MEDIA, "publish.yml")
     served = [task for task in build if serves(task)]
-    assert len(served) == 4
+    assert len(served) == 3
     for task in served:
-        assert task.get("when") in (None, PROBED), task["name"]
+        assert task.get("when") is None, task["name"]
     replay = one([task for task in build if task.get("when") == REPLAY], "run only on a replay")
     assert {action for task in replay["block"] for action in task if action.startswith("ansible.")} == {
         "ansible.builtin.find", "ansible.builtin.assert", "ansible.builtin.set_fact"}
@@ -426,10 +423,11 @@ def test_a_replay_proves_the_image_the_inspection_found_at_the_address_a_node_bo
     assert replay_tokens(tmp_path, capsys) == {token}
     scope = media_scope(tmp_path, dict(PUBLISHED), containercluster_media_agent_token={"stdout": token})
     rendering = Templar(loader=LOADER, variables=scope)
-    probe = one([task for task in tasks(MEDIA, "publish.yml") if "ansible.builtin.uri" in task],
+    probe = one([task for task in tasks(MEDIA, "publish.yml") if listener_proof.includes(task)],
                 "fetch through the listener")
     assert rendering.template(serving_mode()["ansible.builtin.file"]["path"]) == found
-    assert rendering.template(probe["ansible.builtin.uri"]["url"]) == containercluster_install_inspect.published(
+    scope["bootwright_cluster_media_material"] = {"artifactCertificate": "/run/material/artifact-ca"}
+    assert listener_proof.run(probe, scope, {"status": 206}).fetched["url"] == containercluster_install_inspect.published(
         str(private), URL)
 
 

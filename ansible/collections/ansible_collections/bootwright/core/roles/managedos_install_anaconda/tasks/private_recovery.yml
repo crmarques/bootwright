@@ -37,48 +37,13 @@
   no_log: true
 
 - name: Fetch the first byte of the recovery passphrase through its listener
-  ansible.builtin.uri:
-    url: '{{ managedos_install_anaconda_private_url }}/recovery'
-    method: GET
-    headers:
-      Range: bytes=0-0
-    ca_path: '{{ bootwright_os_install_material.artifactCertificate }}'
-    validate_certs: true
-    use_proxy: false
-    follow_redirects: none
-    status_code:
-      - 200
-      - 206
-    timeout: 30
-  register: managedos_install_anaconda_recovery_fetch
-  until: >-
-    (managedos_install_anaconda_recovery_fetch.status | default(-1) | int) != -1
-    or (managedos_install_anaconda_recovery_fetch.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
-  retries: '{{ managedos_install_anaconda_listener_retries | int }}'
-  delay: '{{ managedos_install_anaconda_listener_pause | int }}'
-  failed_when: false
-  changed_when: false
-  no_log: true
-
-- name: Refuse a recovery passphrase the listener does not serve
-  ansible.builtin.fail:
-    msg: >-
-      the private recovery could not be fetched through its artifact server
-      listener, so no machine was given media:
-      {{ 'the listener answered 403, so the worker it serves as cannot read it'
-         if managedos_install_anaconda_recovery_status == 403 else
-         'the listener answered 404, so the worker it serves as finds nothing at the path this attempt published'
-         if managedos_install_anaconda_recovery_status == 404 else
-         ('its certificate did not verify against the serving certificate Secret '
-          ~ bootwright_os_install_request.tlsCertificateRef ~ ' holds: ' ~ managedos_install_anaconda_recovery_cause)
-         if managedos_install_anaconda_recovery_cause is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed') else
-         ('the request failed before any status line: ' ~ managedos_install_anaconda_recovery_cause)
-         if managedos_install_anaconda_recovery_status == -1 else
-         ('the listener answered ' ~ managedos_install_anaconda_recovery_status ~ ' where 200 or 206 was expected') }}
+  ansible.builtin.include_role:
+    name: bootwright.core.infrastructureservices_artifact_listener
+    tasks_from: proof
   vars:
-    managedos_install_anaconda_recovery_status: '{{ managedos_install_anaconda_recovery_fetch.status | default(-1) | int }}'
-    managedos_install_anaconda_recovery_cause: >-
-      {{ ((managedos_install_anaconda_recovery_fetch.msg | default('the request recorded no result') | string)
-          | replace(managedos_install_anaconda_token.stdout | trim, '<token>')
-          | bootwright.core.printable)[:512] }}
-  when: managedos_install_anaconda_recovery_fetch.status | default(-1) | int not in [200, 206]
+    infrastructureservices_artifact_listener_url: '{{ managedos_install_anaconda_private_url }}/recovery'
+    infrastructureservices_artifact_listener_ca: '{{ bootwright_os_install_material.artifactCertificate }}'
+    infrastructureservices_artifact_listener_token: '{{ managedos_install_anaconda_token.stdout | trim }}'
+    infrastructureservices_artifact_listener_secret: '{{ bootwright_os_install_request.tlsCertificateRef | default("") }}'
+    infrastructureservices_artifact_listener_subject: the private recovery
+    infrastructureservices_artifact_listener_consequence: so no machine was given media

@@ -26,12 +26,11 @@ import subprocess
 import pytest
 
 from ansible.template import Templar, trust_as_template
-from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit import listener_proof, role_tasks
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
-URI = "ansible.builtin.uri"
 COPY = "ansible.builtin.copy"
 FILE = "ansible.builtin.file"
 FAIL = "ansible.builtin.fail"
@@ -184,16 +183,27 @@ def published_leaves(shape):
     return leaves
 
 
+PRIVATE_FETCH = "Fetch the first byte of each private file through its listener"
+RECOVERY_FETCH = "Fetch the first byte of the recovery passphrase through its listener"
+
+
+def fetched(shape, task, **variables):
+    """The URL the shared proof one include starts fetches."""
+    return listener_proof.run(task, scope(shape, **variables), {"status": 206}).fetched["url"]
+
+
 def fetched_leaves(shape):
     """The files an apply of one shape fetches through the listener before the insert."""
     applied = flattened("apply.yml")
-    task = applied[only(applied, lambda task: URI in task and "private_url" in task[URI]["url"], "fetch the private files")]
-    leaves = list(render(task["loop"], shape)) if holds(task["when"], shape) else []
+    task = applied[only(applied, named(PRIVATE_FETCH), "fetch the private files")]
+    loop_var = task["loop_control"]["loop_var"]
+    leaves = ([fetched(shape, task, **{loop_var: leaf}).rsplit("/", 1)[1] for leaf in render(task["loop"], shape)]
+              if holds(task["when"], shape) else [])
     boot = flattened("boot.yml")
     if holds(boot[only(boot, included("private_recovery.yml"), "publish recovery")]["when"], shape):
         for task in flattened("private_recovery.yml"):
-            if URI in task:
-                leaves.append(render(task[URI]["url"], shape).rsplit("/", 1)[1])
+            if listener_proof.includes(task):
+                leaves.append(fetched(shape, task).rsplit("/", 1)[1])
     return leaves
 
 
@@ -203,23 +213,14 @@ def test_first_byte_fetch_covers_every_private_file(shape):
     if shape == "encrypting":
         assert "recovery" in fetched_leaves(shape)
     recovery = flattened("private_recovery.yml")
-    fetch = recovery[only(recovery, lambda task: URI in task, "fetch the recovery passphrase")]
-    applied = flattened("apply.yml")
-    listener = applied[only(applied, lambda task: URI in task and "private_url" in task[URI]["url"], "fetch the private files")][URI]
-    assert {key: value for key, value in fetch[URI].items() if key != "url"} == {
-        key: value for key, value in listener.items() if key != "url"}
-    assert render(fetch[URI]["url"]) == ADDRESS
-    assert render(fetch[URI]["ca_path"]) == "/run/material/artifact-ca"
-    assert fetch[URI]["validate_certs"] is True and fetch[URI]["use_proxy"] is False and fetch[URI]["follow_redirects"] == "none"
-    assert fetch[URI]["headers"] == {"Range": "bytes=0-0"} and fetch[URI]["status_code"] == [200, 206] and fetch[URI]["timeout"] == 30
-    assert fetch["failed_when"] is False and fetch["changed_when"] is False
-    guard = recovery[only(recovery, named("Refuse a recovery passphrase the listener does not serve"), "refuse recovery")]
-    register = fetch["register"]
-    assert not holds(guard["when"], **{register: {"status": 206}}) and not holds(guard["when"], **{register: {"status": 200}})
+    fetch = recovery[only(recovery, named(RECOVERY_FETCH), "fetch the recovery passphrase")]
+    assert listener_proof.includes(fetch)
+    proved = listener_proof.run(fetch, scope(), {"status": 206})
+    assert proved.fetched["url"] == ADDRESS and proved.fetched["ca_path"] == "/run/material/artifact-ca"
+    assert proved.refusal is None
+    assert listener_proof.run(fetch, scope(), {"status": 200}).refusal is None
     for result, diagnosis in OUTCOMES:
-        variables = dict(guard["vars"], **{register: result})
-        assert holds(guard["when"], **variables)
-        message = render(guard[FAIL]["msg"], **variables)
+        message = listener_proof.run(fetch, scope(), result).refusal
         assert TOKEN not in message, message
         assert message.startswith("the private recovery could not be") and message.endswith(": " + diagnosis), message
 
@@ -242,13 +243,14 @@ def test_recovery_material_tasks_are_no_log():
     guarded = 0
     for task in flattened("private_recovery.yml"):
         text = repr(task)
-        if not any(name in text for name in ("recoveryPassphrase", "private_dir", "private_url")):
+        if listener_proof.includes(task) or not any(name in text for name in ("recoveryPassphrase", "private_dir", "private_url")):
             continue
         guarded += 1
         assert task.get("no_log") is True, task.get("name")
-    assert guarded == 4
-    guard = flattened("private_recovery.yml")[-1]
-    assert FAIL in guard and "no_log" not in guard
+    assert guarded == 3
+    # The shared proof hides its fetch and judges outside no_log (test_artifact_listener_proof.py).
+    proof = flattened("private_recovery.yml")[-1]
+    assert listener_proof.includes(proof) and "no_log" not in proof
 
 
 def test_root_encryption_read_runs_through_guest_yml_after_network():

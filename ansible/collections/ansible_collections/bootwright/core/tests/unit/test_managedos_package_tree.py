@@ -24,7 +24,7 @@ from ansible.template import Templar
 from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
 from ansible_collections.bootwright.core.plugins.module_utils.package_tree import observe
 from ansible_collections.bootwright.core.plugins.action import managedos_tree_protocol as protocol
-from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit import listener_proof, role_tasks
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER, Interpreter, TaskFailed
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_package_tree"
@@ -81,9 +81,9 @@ class Host:
         Interpreter(ROLE, self.values, self.model, omit=self.leaves_out).run(name)
 
     def leaves_out(self, task):
-        """The tasks this model does not run: a download, and a task of no module."""
+        """The tasks this model does not run: a download, the listener proof, and a task of no module."""
         key = self.module(task)
-        return not key or key.endswith("uri")
+        return not key or key.endswith("uri") or listener_proof.includes(task)
 
     def module(self, task):
         return next((key for key in task if key.startswith(("ansible.builtin.", "bootwright.core."))), None)

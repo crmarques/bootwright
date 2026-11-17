@@ -12,6 +12,7 @@ from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.module_utils import containercluster_publication as publication
 from ansible_collections.bootwright.core.plugins.modules import containercluster_media_token as token
+from ansible_collections.bootwright.core.tests.unit import listener_proof, role_tasks
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / 'roles' / 'containercluster_install_agent'
@@ -72,44 +73,84 @@ def link_block():
     return only(outer, lambda t: t.get('block') == boot_sequence()), outer
 
 
-def test_boot_publishes_then_proves_the_listener_then_inserts():
+INSERT_TOKEN = 'insert-' + '0123456789abcdef' * 4
+INSERT_URL = 'https://192.0.2.1:8443/private/clusters/sno/' + INSERT_TOKEN + '/agent.iso'
+SERVING_SECRET = 'artifact-server-tls'
+
+
+def proof_block():
+    """The block that proves this insert's link, and rescues a refusal by retiring it."""
     steps = boot_sequence()
+    return only(steps, lambda t: any(listener_proof.includes(task) for task in t.get('block') or [])), steps
+
+
+def insert_scope():
+    return {'containercluster_install_agent_token': {'url': INSERT_URL},
+            'containercluster_install_agent_url': 'https://192.0.2.1:8443/private/clusters/sno',
+            'bootwright_cluster_install_request': {'tlsCertificateRef': SERVING_SECRET},
+            'bootwright_cluster_install_material': {'artifactCertificate': '/run/material/artifact-ca'}}
+
+
+def test_boot_publishes_then_proves_the_listener_then_inserts():
+    block, steps = proof_block()
     publish = only(steps, lambda t: t.get(MODULE, {}).get('operation') == 'publish')
-    probe = only(steps, lambda t: 'ansible.builtin.uri' in t)
-    gate = only(steps, lambda t: 'ansible.builtin.assert' in t and 'token_probe' in str(t['ansible.builtin.assert']['that']))
     linked, outer = link_block()
     insert = only(outer, lambda t: t.get('vars', {}).get('containercluster_install_agent_port_operation') == 'media_insert')
     assert publish['register'] == 'containercluster_install_agent_token'
     assert publish[MODULE]['source'] == '{{ containercluster_install_agent_url }}'
-    assert index(steps, publish) < index(steps, probe) < index(steps, gate)
+    assert index(steps, publish) < index(steps, block)
     assert index(outer, linked) < index(outer, insert)
     # A pushed node is handed the file, so it publishes, proves and retires no link.
     for kind, links in [('fetch', True), ('push', False)]:
         assert holds(linked['when'], {'bootwright_cluster_install_request': {'deliveryKind': kind}}) is links
-    probing = probe['ansible.builtin.uri']
-    assert probing['url'] == TOKEN_URL
-    assert probing['ca_path'] == '{{ bootwright_cluster_install_material.artifactCertificate }}'
-    assert probing['validate_certs'] is True
-    assert probing['use_proxy'] is False
-    assert probing['follow_redirects'] == 'none'
-    assert probe['register'] == 'containercluster_install_agent_token_probe'
+    probe = only(block['block'], listener_proof.includes)
+    assert probe['vars']['infrastructureservices_artifact_listener_url'] == TOKEN_URL
     for status, passes in [(200, True), (206, True), (404, False), (302, False), (-1, False)]:
-        scope = {'containercluster_install_agent_token_probe': {'status': status}}
-        assert holds(gate['ansible.builtin.assert']['that'], scope) is passes
-    assert holds(gate['ansible.builtin.assert']['that'], {'containercluster_install_agent_token_probe': {'msg': 'refused'}}) is False
+        outcome = listener_proof.run(probe, insert_scope(), {'status': status, 'msg': 'refused ' + INSERT_URL})
+        assert outcome.fetched['url'] == INSERT_URL and outcome.fetched['ca_path'] == '/run/material/artifact-ca'
+        assert (outcome.refusal is None) is passes
+        if not passes:
+            assert INSERT_TOKEN not in outcome.refusal and outcome.refusal.startswith('the private insert image could not be')
+    assert 'its certificate did not verify against the serving certificate Secret %s holds' % SERVING_SECRET in listener_proof.run(
+        probe, insert_scope(), {'status': -1, 'msg': 'Request failed: certificate verify failed'}).refusal
+
+
+def boot_through_the_proof(answer):
+    """Run the proof block over one fetch answer: the trace, what it retired, and the refusal it ended with."""
+    block, _steps = proof_block()
+    retired = []
+
+    def execute(task, templar):
+        if listener_proof.includes(task):
+            outcome = listener_proof.run(task, interpreter.variables, answer)
+            return {'changed': False} if outcome.refusal is None else {'failed': True, 'msg': outcome.refusal}
+        if MODULE in task:
+            retired.append(templar.template(task[MODULE]))
+            return {'changed': True}
+        return None
+
+    interpreter = role_tasks.Interpreter(ROLE, dict(insert_scope(), containercluster_install_agent_lifecycle_refusal=''), execute)
+    try:
+        interpreter.run_tasks([block])
+    except role_tasks.TaskFailed as failure:
+        return interpreter, retired, failure.result['msg']
+    return interpreter, retired, None
 
 
 def test_an_unproved_link_is_retired_before_the_gate_and_never_inserted():
-    steps = boot_sequence()
-    probe = only(steps, lambda t: 'ansible.builtin.uri' in t)
-    retire = only(steps, lambda t: t.get(MODULE, {}).get('operation') == 'remove')
-    gate = only(steps, lambda t: 'ansible.builtin.assert' in t and 'token_probe' in str(t['ansible.builtin.assert']['that']))
-    assert index(steps, probe) < index(steps, retire) < index(steps, gate)
+    block, _steps = proof_block()
+    retire = only(block['rescue'], lambda t: t.get(MODULE, {}).get('operation') == 'remove')
     assert retire[MODULE]['image'] == TOKEN_URL
     assert retire[MODULE]['source'] == '{{ containercluster_install_agent_url }}'
-    when = retire['when']
-    for status, retires in [(200, False), (206, False), (404, True), (-1, True)]:
-        assert holds(when, {'containercluster_install_agent_token_probe': {'status': status}}) is retires
+    assert retire['no_log'] is True and 'no_log' not in block['rescue'][-1]
+    for status in (200, 206):
+        interpreter, retired, refusal = boot_through_the_proof({'status': status})
+        assert refusal is None and retired == [] and interpreter.variables['containercluster_install_agent_lifecycle_refusal'] == ''
+    for status in (404, 403, 500, -1):
+        interpreter, retired, refusal = boot_through_the_proof({'status': status, 'msg': 'refused ' + INSERT_URL})
+        assert [entry['image'] for entry in retired] == [INSERT_URL]
+        assert interpreter.variables['containercluster_install_agent_lifecycle_refusal'] == 'private-delivery'
+        assert refusal.startswith('the private insert image could not be') and INSERT_TOKEN not in refusal, refusal
 
 
 def test_the_insert_serves_the_per_insert_token_never_the_cluster_wide_publication():

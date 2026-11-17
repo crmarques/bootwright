@@ -434,7 +434,7 @@ def test_every_boot_effect_sits_under_the_skip():
     assert "ansible.builtin.assert" in boot[3]
     inside = list(beneath(skip["block"]))
     roles = [task['ansible.builtin.include_role']['tasks_from'] for task in inside if 'ansible.builtin.include_role' in task]
-    assert roles == ['pre_boot', 'boot_media']
+    assert roles == ['pre_boot', 'proof', 'boot_media']
     inserts = [task for task in inside if task.get('vars', {}).get('containercluster_install_agent_port_operation') == 'media_insert']
     assert len(inserts) == 1 and inserts[0]['ansible.builtin.include_tasks'] == 'port.yml'
 

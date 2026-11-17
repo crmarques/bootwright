@@ -1,0 +1,54 @@
+---
+# The one proof that a file is served through its artifact server listener, as
+# the consumer handed its URL fetches it: one byte, never through a proxy,
+# never following a redirect, and verifying an https listener against the
+# serving certificate the caller bound to this operation. The URL may carry a
+# token, so the fetch is hidden and a separate step outside no_log refuses with
+# the classified cause, which never carries the token or the URL's private
+# part. It has no argument specification, whose validation prints what it
+# refuses: the inputs are asserted here.
+- name: Refuse a listener proof missing what it fetches
+  ansible.builtin.assert:
+    that:
+      - infrastructureservices_artifact_listener_url is string
+      - infrastructureservices_artifact_listener_url is match('https?://')
+      - infrastructureservices_artifact_listener_subject is string
+      - infrastructureservices_artifact_listener_subject | length > 0
+    fail_msg: a listener proof needs an http or https URL and the subject it names
+    quiet: true
+
+- name: Fetch the first byte through the artifact server listener
+  ansible.builtin.uri:
+    url: '{{ infrastructureservices_artifact_listener_url }}'
+    method: GET
+    headers:
+      Range: bytes=0-0
+    ca_path: >-
+      {{ infrastructureservices_artifact_listener_ca
+         if infrastructureservices_artifact_listener_ca | length > 0 else omit }}
+    validate_certs: true
+    use_proxy: false
+    follow_redirects: none
+    status_code:
+      - 200
+      - 206
+    timeout: 30
+  register: infrastructureservices_artifact_listener_fetch
+  until: >-
+    (infrastructureservices_artifact_listener_fetch.status | default(-1) | int) != -1
+    or (infrastructureservices_artifact_listener_fetch.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
+  retries: '{{ infrastructureservices_artifact_listener_retries | int }}'
+  delay: '{{ infrastructureservices_artifact_listener_pause | int }}'
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Refuse a file the artifact server listener does not serve
+  ansible.builtin.fail:
+    msg: >-
+      {{ infrastructureservices_artifact_listener_fetch | bootwright.core.listener_refusal(
+         infrastructureservices_artifact_listener_token | string,
+         infrastructureservices_artifact_listener_secret | string,
+         infrastructureservices_artifact_listener_subject,
+         infrastructureservices_artifact_listener_consequence | string) }}
+  when: infrastructureservices_artifact_listener_fetch.status | default(-1) | int not in [200, 206]

@@ -292,152 +292,54 @@
       no_log: '{{ managedos_install_anaconda_delivers_private | bool }}'
 
     # Before any machine is given the image, the block fetches its first byte, and
-    # the first byte of the tree's marker, through the listener a consumer uses:
-    # never through a proxy, never following a redirect, and verifying an https
-    # listener against the serving certificate bound to this operation. A public
-    # image's URL carries no token.
+    # the first byte of the tree's marker, through the listener a consumer uses,
+    # with the shared listener proof. A public image's URL carries no token.
     - name: Fetch the first byte of the installer image through its listener
-      ansible.builtin.uri:
-        url: '{{ bootwright_os_install_request.image.url }}'
-        method: GET
-        headers:
-          Range: bytes=0-0
-        ca_path: >-
+      ansible.builtin.include_role:
+        name: bootwright.core.infrastructureservices_artifact_listener
+        tasks_from: proof
+      vars:
+        infrastructureservices_artifact_listener_url: '{{ bootwright_os_install_request.image.url }}'
+        infrastructureservices_artifact_listener_ca: >-
           {{ bootwright_os_install_material.imageCertificate
-             if bootwright_os_install_request.image.url is match('https://') else omit }}
-        validate_certs: true
-        use_proxy: false
-        follow_redirects: none
-        status_code:
-          - 200
-          - 206
-        timeout: 30
-      register: managedos_install_anaconda_image_fetch
-      until: >-
-        (managedos_install_anaconda_image_fetch.status | default(-1) | int) != -1
-        or (managedos_install_anaconda_image_fetch.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
-      retries: '{{ managedos_install_anaconda_listener_retries | int }}'
-      delay: '{{ managedos_install_anaconda_listener_pause | int }}'
+             if bootwright_os_install_request.image.url is match('https://') else '' }}
+        infrastructureservices_artifact_listener_subject: '{{ bootwright_os_install_request.image.url }}'
+        infrastructureservices_artifact_listener_consequence: so no machine was given media
       when: not (managedos_install_anaconda_delivers_private | bool)
-      failed_when: false
-      changed_when: false
-
-    - name: Refuse an installer image its listener does not serve
-      ansible.builtin.fail:
-        msg: >-
-          {{ bootwright_os_install_request.image.url }} could not be fetched through
-          its artifact server listener, which answered
-          {{ managedos_install_anaconda_image_fetch.status | default(-1) | int }}
-          {{ ((managedos_install_anaconda_image_fetch.msg | default('') | string).splitlines() | first | default('')
-              | bootwright.core.printable)[:512] }},
-          so no machine was given media
-      when:
-        - not (managedos_install_anaconda_delivers_private | bool)
-        - managedos_install_anaconda_image_fetch.status | default(-1) | int not in [200, 206]
 
     # A private Machine's controller is given the image and a delivered-key
     # installer fetches the key pair, all at URLs carrying the token, so each is
     # proved the same way before any media is inserted: a key the installer could
     # not fetch would otherwise fail %post after the disk was cleared. The
-    # recovery passphrase is proved the same way when the boot publishes it. Each
-    # result carries the token, so it is judged in a separate step that names
-    # only the file and the cause.
+    # recovery passphrase is proved the same way when the boot publishes it.
     - name: Fetch the first byte of each private file through its listener
-      ansible.builtin.uri:
-        url: '{{ managedos_install_anaconda_private_url }}/{{ item }}'
-        method: GET
-        headers:
-          Range: bytes=0-0
-        ca_path: '{{ bootwright_os_install_material.artifactCertificate }}'
-        validate_certs: true
-        use_proxy: false
-        follow_redirects: none
-        status_code:
-          - 200
-          - 206
-        timeout: 30
-      loop: '{{ managedos_install_anaconda_private_files }}'
-      register: managedos_install_anaconda_private_fetch
-      until: >-
-        (managedos_install_anaconda_private_fetch.status | default(-1) | int) != -1
-        or (managedos_install_anaconda_private_fetch.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
-      retries: '{{ managedos_install_anaconda_listener_retries | int }}'
-      delay: '{{ managedos_install_anaconda_listener_pause | int }}'
-      when: managedos_install_anaconda_delivers_private | bool
-      failed_when: false
-      changed_when: false
-      no_log: true
-
-    - name: Refuse a private file the listener does not serve
-      ansible.builtin.fail:
-        msg: >-
-          the private {{ managedos_install_anaconda_private_file }} could not be
-          fetched through its artifact server listener, so no machine was given
-          media:
-          {{ 'the listener answered 403, so the worker it serves as cannot read it'
-             if managedos_install_anaconda_private_status == 403 else
-             'the listener answered 404, so the worker it serves as finds nothing at the path this attempt published'
-             if managedos_install_anaconda_private_status == 404 else
-             ('its certificate did not verify against the serving certificate Secret '
-              ~ bootwright_os_install_request.tlsCertificateRef ~ ' holds: ' ~ managedos_install_anaconda_private_cause)
-             if managedos_install_anaconda_private_cause is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed') else
-             ('the request failed before any status line: ' ~ managedos_install_anaconda_private_cause)
-             if managedos_install_anaconda_private_status == -1 else
-             ('the listener answered ' ~ managedos_install_anaconda_private_status ~ ' where 200 or 206 was expected') }}
+      ansible.builtin.include_role:
+        name: bootwright.core.infrastructureservices_artifact_listener
+        tasks_from: proof
       vars:
-        managedos_install_anaconda_private_file: '{{ managedos_install_anaconda_private_files[managedos_install_anaconda_private_index] }}'
-        managedos_install_anaconda_private_result: >-
-          {{ managedos_install_anaconda_private_fetch.results[managedos_install_anaconda_private_index] }}
-        managedos_install_anaconda_private_status: '{{ managedos_install_anaconda_private_result.status | default(-1) | int }}'
-        managedos_install_anaconda_private_cause: >-
-          {{ ((managedos_install_anaconda_private_result.msg | default('the request recorded no result') | string)
-              | replace(managedos_install_anaconda_token.stdout | trim, '<token>')
-              | bootwright.core.printable)[:512] }}
-      loop: '{{ range(managedos_install_anaconda_private_files | length) | list }}'
+        infrastructureservices_artifact_listener_url: '{{ managedos_install_anaconda_private_url }}/{{ managedos_install_anaconda_private_file }}'
+        infrastructureservices_artifact_listener_ca: '{{ bootwright_os_install_material.artifactCertificate }}'
+        infrastructureservices_artifact_listener_token: '{{ managedos_install_anaconda_token.stdout | trim }}'
+        infrastructureservices_artifact_listener_secret: '{{ bootwright_os_install_request.tlsCertificateRef | default("") }}'
+        infrastructureservices_artifact_listener_subject: the private {{ managedos_install_anaconda_private_file }}
+        infrastructureservices_artifact_listener_consequence: so no machine was given media
+      loop: '{{ managedos_install_anaconda_private_files }}'
       loop_control:
-        loop_var: managedos_install_anaconda_private_index
-      when:
-        - managedos_install_anaconda_delivers_private | bool
-        - managedos_install_anaconda_private_fetch.results[managedos_install_anaconda_private_index].status | default(-1) | int not in [200, 206]
+        loop_var: managedos_install_anaconda_private_file
+      when: managedos_install_anaconda_delivers_private | bool
 
     - name: Fetch the first byte of the package tree marker through its listener
-      ansible.builtin.uri:
-        url: "{{ bootwright_os_install_request.tree.url ~ '/.treeinfo' }}"
-        method: GET
-        headers:
-          Range: bytes=0-0
-        ca_path: >-
+      ansible.builtin.include_role:
+        name: bootwright.core.infrastructureservices_artifact_listener
+        tasks_from: proof
+      vars:
+        infrastructureservices_artifact_listener_url: "{{ bootwright_os_install_request.tree.url ~ '/.treeinfo' }}"
+        infrastructureservices_artifact_listener_ca: >-
           {{ bootwright_os_install_material.treeCertificate
-             if bootwright_os_install_request.tree.url is match('https://') else omit }}
-        validate_certs: true
-        use_proxy: false
-        follow_redirects: none
-        status_code:
-          - 200
-          - 206
-        timeout: 30
-      register: managedos_install_anaconda_tree_fetch
-      until: >-
-        (managedos_install_anaconda_tree_fetch.status | default(-1) | int) != -1
-        or (managedos_install_anaconda_tree_fetch.msg | default('') | string) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
-      retries: '{{ managedos_install_anaconda_listener_retries | int }}'
-      delay: '{{ managedos_install_anaconda_listener_pause | int }}'
+             if bootwright_os_install_request.tree.url is match('https://') else '' }}
+        infrastructureservices_artifact_listener_subject: "{{ bootwright_os_install_request.tree.url ~ '/.treeinfo' }}"
+        infrastructureservices_artifact_listener_consequence: so no machine was given media
       when: bootwright_os_install_request.tree is defined
-      failed_when: false
-      changed_when: false
-
-    - name: Refuse a package tree its listener does not serve
-      ansible.builtin.fail:
-        msg: >-
-          {{ bootwright_os_install_request.tree.url }}/.treeinfo could not be fetched
-          through its artifact server listener, which answered
-          {{ managedos_install_anaconda_tree_fetch.status | default(-1) | int }}
-          {{ ((managedos_install_anaconda_tree_fetch.msg | default('') | string).splitlines() | first | default('')
-              | bootwright.core.printable)[:512] }},
-          so no machine was given media
-      when:
-        - bootwright_os_install_request.tree is defined
-        - managedos_install_anaconda_tree_fetch.status | default(-1) | int not in [200, 206]
 
     - name: Report installer image completion
       bootwright.core.managedos_install_protocol:

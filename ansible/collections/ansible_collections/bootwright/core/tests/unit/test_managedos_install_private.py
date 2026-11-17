@@ -26,15 +26,13 @@ from ansible.template import Templar, trust_as_template
 
 from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as protocol
 from ansible_collections.bootwright.core.plugins.modules.managedos_install_inspect import observe
-from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit import listener_proof, role_tasks
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
-URI = "ansible.builtin.uri"
 COMMAND = "ansible.builtin.command"
 FILE = "ansible.builtin.file"
 COPY = "ansible.builtin.copy"
-FAIL = "ansible.builtin.fail"
 INSPECT = "bootwright.core.managedos_install_inspect"
 PROTOCOL = "bootwright.core.managedos_install_protocol"
 # What `openssl rand -hex 32` mints: 64 hexadecimal digits.
@@ -190,6 +188,9 @@ def test_every_task_naming_the_private_url_or_token_is_hidden_and_stays_private(
     seen = []
     for name in ("apply.yml", "private.yml", "boot.yml", "private_recovery.yml"):
         for task in flattened(name):
+            # The shared proof hides its own fetch (test_artifact_listener_proof.py).
+            if listener_proof.includes(task):
+                continue
             text = repr(task).replace(REDACTION, "")
             if not any(secret in text for secret in SECRET_NAMES):
                 continue
@@ -203,7 +204,7 @@ def test_every_task_naming_the_private_url_or_token_is_hidden_and_stays_private(
                     continue
                 assert written.startswith(work + "/") or written == PRIVATE["path"] or written.startswith(PRIVATE["path"] + "/"), (
                     "%s: %r writes %s" % (name, task.get("name"), written))
-    for expected in ("Publish the installer image by atomic rename", "Fetch the first byte of each private file through its listener",
+    for expected in ("Publish the installer image by atomic rename",
                      "Keep the private media URL in the invocation's protected scratch", "Publish the host key pair this installation delivers",
                      "Publish the recovery passphrase only this machine may read"):
         assert expected in seen, "the walk no longer sees %r" % expected
@@ -254,35 +255,22 @@ OUTCOMES = [
 
 def test_the_private_image_and_key_are_fetched_before_the_insert():
     tasks = flattened("apply.yml")
-    fetched = index_of(tasks, lambda task: URI in task and "private_url" in task[URI]["url"], "fetch the private files")
-    refused = index_of(tasks, named("Refuse a private file the listener does not serve"), "refuse a private file")
+    fetched = index_of(tasks, named("Fetch the first byte of each private file through its listener"), "fetch the private files")
     after = max(index_of(tasks, renamed, "publish the image"),
                 index_of(tasks, lambda task: task.get("ansible.builtin.include_tasks") == "private.yml", "publish the key"))
     boot = index_of(tasks, lambda task: task.get("ansible.builtin.include_tasks") == "boot.yml", "boot")
-    assert after < fetched < refused < boot
+    assert after < fetched < boot
     task = tasks[fetched]
-    fetch = task[URI]
+    assert listener_proof.includes(task) and holds(task["when"]) and not holds(task["when"], private=False)
     leaves = render(task["loop"])
     assert leaves == ["install.iso", "identity", "identity.pub"]
-    assert [render(fetch["url"], item=item) for item in leaves] == [
-        PRIVATE["url"] + "/" + TOKEN + "/" + item for item in leaves]
-    assert render(fetch["ca_path"]) == "/run/material/artifact-ca"
-    assert fetch["validate_certs"] is True and fetch["use_proxy"] is False and fetch["follow_redirects"] == "none"
-    assert fetch["headers"] == {"Range": "bytes=0-0"} and fetch["status_code"] == [200, 206]
-    assert task["no_log"] is True and task["failed_when"] is False and holds(task["when"]) and not holds(task["when"], private=False)
-    guard = tasks[refused]
-    assert "no_log" not in guard
-    loop_var = guard["loop_control"]["loop_var"]
-    register = task["register"]
-    for result, diagnosis in OUTCOMES:
-        for position, leaf in enumerate(leaves):
-            results = [dict(FETCHED) for _leaf in leaves]
-            results[position] = result
-            variables = dict(guard.get("vars", {}), **{register: {"results": results}})
-            assert render(guard["loop"]) == list(range(len(leaves)))
-            for other in range(len(leaves)):
-                assert holds(guard["when"], **dict(variables, **{loop_var: other})) == (other == position)
-            message = render(guard[FAIL]["msg"], **dict(variables, **{loop_var: position}))
+    loop_var = task["loop_control"]["loop_var"]
+    for leaf in leaves:
+        outcome = listener_proof.run(task, scope(**{loop_var: leaf}), FETCHED)
+        assert outcome.fetched["url"] == PRIVATE["url"] + "/" + TOKEN + "/" + leaf and outcome.refusal is None
+        assert outcome.fetched["ca_path"] == "/run/material/artifact-ca"
+        for result, diagnosis in OUTCOMES:
+            message = listener_proof.run(task, scope(**{loop_var: leaf}), result).refusal
             assert TOKEN not in message, message
             assert message.startswith("the private %s could not be" % leaf) and message.endswith(": " + diagnosis), message
 
@@ -370,39 +358,3 @@ def test_the_inspection_reports_a_private_installer_image(tmp_path):
     public.parent.mkdir()
     public.write_bytes(b"\0")
     assert observe({"image": {"path": str(public)}}, "", "")["image"] is True
-
-
-LISTENER_FETCHES = [
-    ("apply.yml", "Fetch the first byte of the installer image through its listener"),
-    ("apply.yml", "Fetch the first byte of each private file through its listener"),
-    ("apply.yml", "Fetch the first byte of the package tree marker through its listener"),
-    ("private_recovery.yml", "Fetch the first byte of the recovery passphrase through its listener"),
-]
-# What ansible.builtin.uri registers for one attempt, and whether that attempt
-# ends the fetch: a transport failure spends an attempt, a status or a
-# certificate failure is the answer the refusal judges at once.
-ATTEMPTS = [
-    ({"status": 206}, True),
-    ({"status": 200}, True),
-    ({"status": 404, "msg": "Status code was 404 and not [200, 206]: HTTP Error 404: Not Found"}, True),
-    ({"status": 403, "msg": "Status code was 403 and not [200, 206]: HTTP Error 403: Forbidden"}, True),
-    ({"status": 500, "msg": "Status code was 500 and not [200, 206]: HTTP Error 500: Internal Server Error"}, True),
-    ({"status": -1, "msg": "Request failed: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed>"},
-     True),
-    ({"status": -1, "msg": "Request failed: <urlopen error timed out>"}, False),
-    ({"status": -1, "msg": "Request failed: <urlopen error [Errno 111] Connection refused>"}, False),
-    ({"status": -1, "msg": "Request failed: <urlopen error [Errno 104] Connection reset by peer>"}, False),
-    ({"status": -1, "msg": "Request failed: <urlopen error [Errno 113] No route to host>"}, False),
-    ({"msg": "the module recorded no status"}, False),
-    ({}, False),
-]
-
-
-@pytest.mark.parametrize("name, title", LISTENER_FETCHES, ids=[title for _name, title in LISTENER_FETCHES])
-def test_a_listener_fetch_lost_before_its_status_line_is_tried_again_a_bounded_number_of_times(name, title):
-    task = flattened(name)[index_of(flattened(name), named(title), title)]
-    register = task["register"]
-    assert task["failed_when"] is False
-    assert int(render(task["retries"])) == 2 and int(render(task["delay"])) == 5
-    for result, ends in ATTEMPTS:
-        assert holds(task["until"], **{register: result}) is ends, result

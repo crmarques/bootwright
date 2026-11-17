@@ -1,0 +1,16 @@
+---
+# What a caller hands the proof beside the URL it is required to: the file of
+# the serving certificate a verifying fetcher is anchored in (empty for an http
+# listener), the token its URL carries, the Secret that certificate is bound
+# from, and what the refusal leaves undone. Each empty text means none.
+infrastructureservices_artifact_listener_ca: ''
+infrastructureservices_artifact_listener_token: ''
+infrastructureservices_artifact_listener_secret: ''
+infrastructureservices_artifact_listener_consequence: ''
+# A self-fetch that failed before any status line, a timeout, a refused, reset
+# or unreachable connection, is tried again this many times this many seconds
+# apart, so one short network drop on the controller does not refuse it. A
+# status, or a certificate that did not verify, refuses at once. A caller whose
+# phase budget holds no further attempt passes 0.
+infrastructureservices_artifact_listener_retries: 2
+infrastructureservices_artifact_listener_pause: 5

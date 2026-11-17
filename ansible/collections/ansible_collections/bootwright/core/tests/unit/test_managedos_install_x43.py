@@ -21,7 +21,7 @@ import re
 import pytest
 
 from ansible.template import Templar, trust_as_template
-from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit import listener_proof, role_tasks
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 
@@ -170,7 +170,6 @@ SSH_OPTIONS = (
     "ControlMaster=no", "ControlPath=none", "BatchMode=yes", "ConnectTimeout=10",
     "ServerAliveInterval=15", "ServerAliveCountMax=3",
 )
-URI = "ansible.builtin.uri"
 OUTCOME = ("{{ 'unchanged' if (managedos_install_anaconda_was_installed | bool)"
            " and not (managedos_install_anaconda_network_result.changed | default(true) | bool)"
            " and not (managedos_install_anaconda_registration_result.registration.changed | default(false) | bool)"
@@ -302,39 +301,30 @@ def test_the_work_area_lives_under_a_root_only_parent():
         assert listed[ancestor]["bootwright.core.hosted_area"]["state"] == ("present" if operation == "apply" else "proved")
 
 
+PUBLIC_FETCHES = ("Fetch the first byte of the installer image through its listener",
+                  "Fetch the first byte of the package tree marker through its listener")
+
+
 def test_the_image_and_tree_are_fetched_through_the_listener_before_the_insert():
     tasks = applied()
     published = index_of(tasks, lambda task: task.get("name") == "Publish the installer image by atomic rename", "publish the image")
     boot = index_of(tasks, lambda task: task.get("name") == "Boot the machine from its own installer image", "boot block")
-    # The private files are fetched by their own task, which
+    # The private files are fetched by their own include, which
     # test_managedos_install_private.py holds to its rules.
-    fetches = [index for index, task in enumerate(tasks) if URI in task and "private_url" not in task[URI]["url"]]
-    urls = [tasks[index][URI]["url"] for index in fetches]
-    assert urls == ["{{ bootwright_os_install_request.image.url }}", "{{ bootwright_os_install_request.tree.url ~ '/.treeinfo' }}"]
+    fetches = [index for index, task in enumerate(tasks)
+               if listener_proof.includes(task) and "private_file" not in repr(task.get("vars"))]
+    assert [tasks[index]["name"] for index in fetches] == list(PUBLIC_FETCHES)
     for index, certificate, url in zip(fetches, ("imageCertificate", "treeCertificate"), ("image", "tree")):
-        fetch = tasks[index][URI]
         assert published < index < boot
-        assert fetch["method"] == "GET" and fetch["headers"] == {"Range": "bytes=0-0"}
-        assert fetch["use_proxy"] is False and fetch["follow_redirects"] == "none" and fetch["validate_certs"] is True
-        assert fetch["status_code"] == [200, 206] and fetch["timeout"] == 30
-        assert tasks[index]["failed_when"] is False
-        refusal = tasks[index + 1]
-        assert "ansible.builtin.fail" in refusal and "no machine was given media" in refusal["ansible.builtin.fail"]["msg"]
-        register = tasks[index]["register"]
-        for scheme, expected in (("https", "/run/" + certificate), ("http", "OMIT")):
+        for scheme in ("https", "http"):
             request = {"image": {"url": scheme + "://192.0.2.1/os/rhel-01/install.iso"},
                        "tree": {"url": scheme + "://192.0.2.1/os/rhel-9-8/tree"}}
-            templar = Templar(loader=LOADER, variables=variables(
-                bootwright_os_install_request=request, omit="OMIT",
-                bootwright_os_install_material={certificate: "/run/" + certificate}))
-            assert templar.template(fetch["ca_path"]).strip() == expected, (url, scheme)
-            failed = Templar(loader=LOADER, variables=variables(
-                bootwright_os_install_request=request, **{register: {"status": -1, "msg": "Connection refused\nsecond"}}))
-            assert all(failed.evaluate_conditional(trust_as_template(condition))
-                       for condition in (refusal["when"] if isinstance(refusal["when"], list) else [refusal["when"]]))
-            message = failed.template(refusal["ansible.builtin.fail"]["msg"])
-            assert "-1" in message and "Connection refused" in message and "second" not in message
-            served = Templar(loader=LOADER, variables=variables(
-                bootwright_os_install_request=request, **{register: {"status": 206}}))
-            assert not all(served.evaluate_conditional(trust_as_template(condition))
-                           for condition in (refusal["when"] if isinstance(refusal["when"], list) else [refusal["when"]]))
+            scope = variables(bootwright_os_install_request=request,
+                              bootwright_os_install_material={certificate: "/run/" + certificate})
+            served = listener_proof.run(tasks[index], scope, {"status": 206})
+            address = request["image"]["url"] if url == "image" else request["tree"]["url"] + "/.treeinfo"
+            assert served.fetched["url"] == address and served.refusal is None
+            assert served.fetched.get("ca_path") == ("/run/" + certificate if scheme == "https" else None), (url, scheme)
+            message = listener_proof.run(tasks[index], scope, {"status": -1, "msg": "Connection refused\nsecond"}).refusal
+            assert message == (address + " could not be fetched through its artifact server listener, so no machine was "
+                               "given media: the request failed before any status line: Connection refusedsecond"), message

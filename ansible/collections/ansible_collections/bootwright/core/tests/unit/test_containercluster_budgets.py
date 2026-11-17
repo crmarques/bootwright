@@ -830,7 +830,7 @@ def test_every_boot_step_runs_under_what_the_boot_phase_has_left():
                if (task.get("ansible.builtin.include_tasks") == "port.yml"
                    and task.get("vars", {}).get("containercluster_install_agent_port_operation") == "media_insert")
                or "ansible.builtin.include_role" in task]
-    assert steps == effects and len(steps) == 3
+    assert steps == effects and len(steps) == 4
     assert bounded() in skip()["block"]
     # ansible-core reads a timeout of 0 as none at all (_alarm_timeout.py:
     # `if not timeout: return`), so a step reached at or past the deadline

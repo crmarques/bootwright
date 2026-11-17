@@ -36,7 +36,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect
-from ansible_collections.bootwright.core.tests.unit import role_tasks
+from ansible_collections.bootwright.core.tests.unit import listener_proof, role_tasks
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
@@ -246,9 +246,7 @@ def test_the_published_image_is_fetched_through_the_listener_before_its_receipt(
         position(tasks, "set the published image's mode",
                  lambda task: str((task.get("ansible.builtin.file") or {}).get("path", "")).endswith("/agent.iso")),
         position(tasks, "label the published subtree", lambda task: argv(task)[:1] == ["/usr/bin/chcon"]),
-        position(tasks, "fetch through the listener", lambda task: "ansible.builtin.uri" in task),
-        position(tasks, "refuse a failed fetch", lambda task: "ansible.builtin.fail" in task
-                 and "containercluster_media_agent_probe" in repr(task.get("when"))),
+        position(tasks, "prove the image through the listener", listener_proof.includes),
         position(tasks, "record the receipt",
                  lambda task: "receipt" in str((task.get("ansible.builtin.copy") or {}).get("dest", ""))),
     ]
@@ -257,17 +255,14 @@ def test_the_published_image_is_fetched_through_the_listener_before_its_receipt(
 
 def test_the_fetch_verifies_the_served_certificate_directly_and_refuses_anything_but_success():
     tasks = build_tasks()
-    probe = tasks[position(tasks, "fetch through the listener", lambda task: "ansible.builtin.uri" in task)]
-    guard = tasks[position(
-        tasks, "refuse a failed fetch", lambda task: "ansible.builtin.fail" in task
-        and "containercluster_media_agent_probe" in repr(task.get("when")))]
-    uri = probe["ansible.builtin.uri"]
+    probe = tasks[position(tasks, "prove the image through the listener", listener_proof.includes)]
+    assert "no_log" not in probe and "when" not in probe
+    uri = listener_proof.run(probe, media_scope(IMAGE, "/run/material/artifact-ca"), {"status": 206}).fetched
     assert uri.get("validate_certs", True) is True and uri.get("use_proxy") is False
     assert uri.get("follow_redirects") == "none" and uri["headers"] == {"Range": "bytes=0-0"}
     assert sorted(uri["status_code"]) == [200, 206]
-    assert probe.get("no_log") is True and probe.get("failed_when") is False
-    assert guard["when"] == "%s.status | default(-1) | int not in [200, 206]" % probe["register"]
-    assert "no_log" not in guard and "failed_when" not in guard
+    for status in (403, 404, 500, -1):
+        assert listener_proof.run(probe, media_scope(IMAGE, "/run/material/artifact-ca"), {"status": status}).refusal
 
 
 # The probe and its guard are judged by what ansible-core renders from them,
@@ -291,6 +286,15 @@ def trusted_build_task(description, predicate):
     return tasks[position(tasks, description, predicate)]
 
 
+def probe_task():
+    return trusted_build_task("prove the image through the listener", listener_proof.includes)
+
+
+def proved(image, material, answer):
+    """What the shared proof the media role includes fetched, and the refusal it ended with."""
+    return listener_proof.run(probe_task(), media_scope(image, material), answer)
+
+
 def media_scope(image, material="", **variables):
     """What the media role renders the probe from: the frozen request, the file
     the runner wrote the bound certificate to, and the minted token."""
@@ -307,7 +311,6 @@ def installed_certificate(content_root):
 
 
 def test_the_fetch_reads_the_address_a_machine_boots_from_verified_by_the_bound_certificate(tmp_path):
-    uri = trusted_build_task("fetch through the listener", lambda task: "ansible.builtin.uri" in task)["ansible.builtin.uri"]
     text = TEMPLATE.read_text()
     server = templar(SERVER, {"bootwright_artifact_server_request": {"contentRoot": CONTENT_ROOT}})
     # The image the requests carry lies beneath the root the template serves,
@@ -316,8 +319,8 @@ def test_the_fetch_reads_the_address_a_machine_boots_from_verified_by_the_bound_
     # The one authority is the file the runner wrote the bound certificate to,
     # never the copy the server installed beneath that root.
     bound = str(tmp_path / "artifact-ca")
-    media = templar(MEDIA, media_scope(IMAGE, bound))
-    assert media.template(uri["ca_path"]) == bound != installed_certificate(CONTENT_ROOT)
+    uri = proved(IMAGE, bound, {"status": 206}).fetched
+    assert uri["ca_path"] == bound != installed_certificate(CONTENT_ROOT)
     # The address is the one the install block reads back from what the
     # rename published, and hands to the machine that boots it.
     rename = trusted_build_task("publish the image by rename",
@@ -327,7 +330,7 @@ def test_the_fetch_reads_the_address_a_machine_boots_from_verified_by_the_bound_
     published.parent.mkdir()
     published.write_bytes(b"")
     expected = containercluster_install_inspect.published(str(tmp_path), IMAGE["url"])
-    assert expected and media.template(uri["url"]) == expected
+    assert expected and uri["url"] == expected
 
 
 # What the probe registers, in the forms ansible-core 2.21.4 gives them:
@@ -346,9 +349,9 @@ UNREACHED = "Request failed: %s" % urllib.error.URLError(ConnectionRefusedError(
 UNREAD = "HTTP Error while fetching %s: %s" % (ADDRESS, http.client.IncompleteRead(b"", 1))
 OUTCOMES = [
     ({"status": 403, "msg": REFUSED % 403 + str(urllib.error.HTTPError(ADDRESS, 403, "Forbidden", None, None))},
-     "the listener answered 403, so the worker it serves as cannot read the image"),
+     "the listener answered 403, so the worker it serves as cannot read it"),
     ({"status": 404, "msg": REFUSED % 404 + str(urllib.error.HTTPError(ADDRESS, 404, "Not Found", None, None))},
-     "the listener answered 404, so the worker it serves as finds no image at the path this attempt published"),
+     "the listener answered 404, so the worker it serves as finds nothing at the path this attempt published"),
     ({"status": -1, "msg": REFUSED % -1 + UNVERIFIED},
      "its certificate did not verify against the serving certificate Secret %s holds: " % SERVING_SECRET
      + REFUSED % -1 + UNVERIFIED),
@@ -362,19 +365,15 @@ OUTCOMES = [
 
 
 def test_a_refused_fetch_fails_with_its_diagnosed_cause_and_never_the_token():
-    probe = trusted_build_task("fetch through the listener", lambda task: "ansible.builtin.uri" in task)
-    guard = trusted_build_task(
-        "refuse a failed fetch", lambda task: "ansible.builtin.fail" in task
-        and "containercluster_media_agent_probe" in repr(task.get("when")))
     assert TOKEN in UNREAD, "no outcome carries the token, so its redaction is unproved"
     for result, diagnosis in OUTCOMES:
-        rendering = templar(MEDIA, media_scope(IMAGE, **guard.get("vars", {}), **{probe["register"]: result}))
-        assert rendering.evaluate_conditional(guard["when"]), result
-        message = rendering.template(guard["ansible.builtin.fail"]["msg"])
+        message = proved(IMAGE, "", result).refusal
         assert TOKEN not in message, message
+        assert message.startswith("the published agent image could not be fetched through its artifact server listener, "
+                                  "so no node could boot from it: "), message
         assert message.endswith(": " + diagnosis), message
     for status in (200, 206):
-        assert not templar(MEDIA, media_scope(IMAGE, **{probe["register"]: {"status": status}})).evaluate_conditional(guard["when"])
+        assert proved(IMAGE, "", {"status": status}).refusal is None
 
 
 def serving_certificate():
@@ -467,18 +466,13 @@ def test_the_probe_verifies_the_listener_against_the_bound_certificate_alone(pre
     bound.write_text(certificates["bound"][1])
     port = listening(request, tmp_path, *certificates[presented])
     image = {"path": str(root / "public/private/clusters/sno"), "url": "https://127.0.0.1:%d/private/clusters/sno" % port}
-    probe = trusted_build_task("fetch through the listener", lambda task: "ansible.builtin.uri" in task)
-    guard = trusted_build_task(
-        "refuse a failed fetch", lambda task: "ansible.builtin.fail" in task
-        and "containercluster_media_agent_probe" in repr(task.get("when")))
-    result = probed(templar(MEDIA, media_scope(image, str(bound))).template(probe["ansible.builtin.uri"]), tmp_path, capsys)
-    rendering = templar(MEDIA, media_scope(image, str(bound), **guard.get("vars", {}), **{probe["register"]: result}))
+    arguments = proved(image, str(bound), {"status": 206}).fetched
+    result = probed(arguments, tmp_path, capsys)
     if presented == "bound":
         assert result["status"] == 206, result
-        assert not rendering.evaluate_conditional(guard["when"])
+        assert proved(image, str(bound), result).refusal is None
         return
     assert result["status"] == -1 and "CERTIFICATE_VERIFY_FAILED" in result["msg"], result
-    assert rendering.evaluate_conditional(guard["when"])
-    message = rendering.template(guard["ansible.builtin.fail"]["msg"])
+    message = proved(image, str(bound), result).refusal
     assert "its certificate did not verify against the serving certificate Secret %s holds: " % SERVING_SECRET in message, message
     assert TOKEN not in message, message
