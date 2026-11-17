@@ -46,6 +46,7 @@ func preparingRun(t *testing.T, prepare func(context.Context, json.RawMessage) e
 }
 
 func TestLifecyclePreparationIsRecordedBeforeItIsAcknowledged(t *testing.T) {
+	t.Parallel()
 	var published []json.RawMessage
 	output, err := preparingRun(t, func(_ context.Context, preparation json.RawMessage) error {
 		published = append(published, preparation)

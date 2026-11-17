@@ -22,7 +22,9 @@ import (
 // an installation whose budgets alone outlast it, and a six-hour ceiling one
 // whose nodes need more rounds (B926).
 func TestARunIsBoundedByItsRequestsDeadline(t *testing.T) {
+	t.Parallel()
 	t.Run("a shorter deadline ends the run", func(t *testing.T) {
+		t.Parallel()
 		runner := Runner{
 			stager: newDirStager(t),
 			drain:  200 * time.Millisecond,
@@ -52,6 +54,7 @@ func TestARunIsBoundedByItsRequestsDeadline(t *testing.T) {
 		{"an eight-hour deadline holds", 8 * time.Hour, 8 * time.Hour},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			// The adapter reports one group and then waits on its authorization
 			// channel, so the run is going when its deadline is read and ends
 			// only when the test cancels it.

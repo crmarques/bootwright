@@ -216,6 +216,7 @@ func TestAProtocolRefusalEndsTheAdapterPromptly(t *testing.T) {
 // malformed record and a record out of order. The drain's close is the
 // runner's own, so the failed exit stays the failure.
 func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
+	t.Parallel()
 	child := func(mode string) func() *exec.Cmd {
 		return func() *exec.Cmd {
 			return exec.Command(os.Args[0], "-test.run=^TestLifecycleAdapterChild$", "--", "lifecycle-child-"+mode)
@@ -240,6 +241,7 @@ func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
 			"",
 		} {
 			t.Run(fmt.Sprintf("%s/%d", failed.name, index), func(t *testing.T) {
+				t.Parallel()
 				runner := sweepingRunner(t, failed.adapter)
 				var output bytes.Buffer
 				request := adapterRequest(t, &output)
@@ -267,6 +269,7 @@ func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
 // before the handoff, or a malformed record breaks the protocol instead, and
 // the attempt's outcome is unknown in either order too.
 func TestANamedRefusalFailsTheRunWithItsCallersDiagnostic(t *testing.T) {
+	t.Parallel()
 	named := diagnostics.NewFailureWithRemediation("lifecycle.state", "the machine answers as another system", "", "correct its address")
 	const handoff = `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `
 	// readFirst holds the adapter past its record so the runner reads the
@@ -297,6 +300,7 @@ func TestANamedRefusalFailsTheRunWithItsCallersDiagnostic(t *testing.T) {
 		{name: "a malformed record after the exit", script: handoff + readAfter("not a record"), message: "the adapter structured result was incomplete"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			runner := sweepingRunner(t, func() *exec.Cmd { return exec.Command("/bin/sh", "-c", test.script) })
 			// A record written after the exit reaches the runner before the
 			// drain closes the channel, on a loaded machine too.
@@ -334,6 +338,7 @@ func TestANamedRefusalFailsTheRunWithItsCallersDiagnostic(t *testing.T) {
 // reaped, so the rest wait beside the failed exit and a drain that passes at
 // once, and each case runs rounds enough that the drain is taken first.
 func TestARecordWaitingAtTheDrainIsJudgedAsIfReadFirst(t *testing.T) {
+	t.Parallel()
 	named := diagnostics.NewFailureWithRemediation("lifecycle.state", "the machine answers as another system", "", "correct its address")
 	const group = `{"group":"boot","phase":"group","status":"running"}\n`
 	for _, test := range []struct{ name, record, message string }{
@@ -342,6 +347,7 @@ func TestARecordWaitingAtTheDrainIsJudgedAsIfReadFirst(t *testing.T) {
 		{"a malformed record", "not a record", "the adapter structured result was incomplete"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			for round := range 6 {
 				gate := filepath.Join(t.TempDir(), "progress-entered")
 				script := `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; printf '` + group + `' >&3; ` +
@@ -401,6 +407,7 @@ func TestARecordWaitingAtTheDrainIsJudgedAsIfReadFirst(t *testing.T) {
 // adapter is reaped, or once the drain passes for an adapter that ignored the
 // signal. Nothing the adapter started runs on.
 func TestStoppingAnAdapterEndsItsTreeBeyondItsGroup(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name, mode string
 		cancel     bool
@@ -410,6 +417,7 @@ func TestStoppingAnAdapterEndsItsTreeBeyondItsGroup(t *testing.T) {
 		{"ignoring termination", "stubborn", true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			runner := Runner{
 				stager: newDirStager(t),
 				drain:  500 * time.Millisecond,
@@ -847,6 +855,7 @@ func endHolder(t *testing.T, path string) {
 // handler is armed before it reports, so the check never rests on how a shell
 // delivers a trap during its wait.
 func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
+	t.Parallel()
 	shell := func(script string) func() *exec.Cmd {
 		return func() *exec.Cmd { return exec.Command("/bin/sh", "-c", script) }
 	}
@@ -861,6 +870,7 @@ func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
 		}},
 	} {
 		t.Run(check.name, func(t *testing.T) {
+			t.Parallel()
 			runner := sweepingRunner(t, check.adapter)
 			runner.drain = 2 * time.Second
 			var output bytes.Buffer
@@ -886,6 +896,7 @@ func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
 // after the adapter exits is cut at the drain: the run returns at its bound,
 // and the completed record it read is no result.
 func TestARunReturnsAtItsDrainWhenADescendantHoldsItsOutput(t *testing.T) {
+	t.Parallel()
 	holder := filepath.Join(t.TempDir(), "holder")
 	t.Cleanup(func() { endHolder(t, holder) })
 	runner := sweepingRunner(t, func() *exec.Cmd {
