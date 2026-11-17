@@ -16649,3 +16649,23 @@ material its guard refuses now fails instead of reaching the human reveal
 writer, and both forms share one guard, the union of the two, so JSON and YAML
 `secret show` no longer export a part other than the one `--part` names.
 
+## X533 — One listener proof
+
+### B1503
+
+Split from B1466 under [D274](backlog.md#d274) (part of audit 005 W5.1). The
+eight places in six roles that prove an artifact listener by fetching its first
+byte include one proof (`infrastructureservices_artifact_listener`, tasks
+`proof`): one hidden fetch that never uses a proxy, never follows a redirect
+and verifies the certificate, then a judging step outside `no_log` that fails
+with the classified cause. The erase image fetch, which honoured an ambient
+proxy and redirects and failed inside `no_log`, gains both. One
+`listener_refusal` filter classifies a failed fetch, keeps its lines apart,
+hides the token, cleans and bounds the text, in place of eleven drifted
+copies; the operator wording now follows one form. The insert proof keeps its
+single attempt, and a proof the boot budget stopped is still reported as the
+spent budget. Disk discovery's phase and failure descriptions sit beside the
+codes in the runtime, with a test that every emitted code has one. An
+independent review found no leak; its two fixes are applied. An operator run of
+an erase and an install is owed.
+
