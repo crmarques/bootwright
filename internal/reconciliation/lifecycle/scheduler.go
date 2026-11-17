@@ -48,7 +48,8 @@ type scheduler struct {
 	// a fault, nothing further is admitted.
 	logging *logBoundary
 
-	states map[string]reconciliation.BlockState
+	states    map[string]reconciliation.BlockState
+	readiness readiness
 	// running are the blocks this invocation has in flight, unlike the durable running
 	// state: an executor that died mid-attempt, an unproved effect rather than work in progress.
 	running map[string]bool
@@ -134,7 +135,7 @@ func (s Service) newScheduler(tx Transaction, store OperationStore, approved app
 	return &scheduler{
 		service: s, tx: tx, store: store, approved: approved, operation: operation,
 		plan: plan, material: material, selection: selection, bound: s.Concurrency(), logging: logging,
-		states: states, running: map[string]bool{}, observed: map[string]bool{}, worked: map[string]bool{},
+		states: states, readiness: newReadiness(plan, states), running: map[string]bool{}, observed: map[string]bool{}, worked: map[string]bool{},
 		unstarted: map[string]bool{}, announced: map[string]int{},
 		held: map[string]string{}, throttled: map[string]int{}, throttle: s.Throttle(), causes: map[string]error{},
 		results: make(chan step, len(plan.Blocks)),
@@ -197,7 +198,7 @@ func (c *scheduler) admit(ctx context.Context) {
 // advance the longest selected unfinished chain, with frozen order breaking ties.
 // A worked pending block never starts twice: its earlier start was refused.
 func (c *scheduler) next() (reconciliation.Block, int, bool) {
-	kind, admitted := firstAdmission(c.plan, c.states, c.selection, c.observed, c.worked, c.running)
+	kind, admitted := admissionOver(c.plan, c.states, c.selection, c.observed, c.worked, c.running, c.startable)
 	switch {
 	case kind == StepResolve:
 		for _, index := range admitted {
@@ -249,6 +250,10 @@ func (c *scheduler) nextPreStop() (reconciliation.Block, int, bool) {
 // the stage preview all derive from it, so the preview marks exactly what the
 // next apply admits.
 func firstAdmission(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection, observed, worked, running map[string]bool) (string, []int) {
+	return admissionOver(plan, states, selection, observed, worked, running, startableIn(plan, states, selection))
+}
+
+func admissionOver(plan reconciliation.Plan, states map[string]reconciliation.BlockState, selection reconciliation.Selection, observed, worked, running map[string]bool, startable func(int, reconciliation.Block) bool) (string, []int) {
 	admitted := []int{}
 	if slices.ContainsFunc(plan.Blocks, func(block reconciliation.Block) bool { return unproved(states[block.ID]) }) {
 		for index, block := range plan.Blocks {
@@ -275,9 +280,8 @@ func firstAdmission(plan reconciliation.Plan, states map[string]reconciliation.B
 			return kind, admitted
 		}
 	}
-	startable := reconciliation.Startable(plan, states, selection)
 	for index, block := range plan.Blocks {
-		if slices.ContainsFunc(startable, func(ready reconciliation.Block) bool { return ready.ID == block.ID }) {
+		if startable(index, block) {
 			admitted = append(admitted, index)
 		}
 	}
@@ -392,6 +396,7 @@ func (c *scheduler) settle(finished step) {
 			delete(c.held, key)
 		}
 	}
+	c.readiness.moved(finished.block, c.states[finished.block], finished.state)
 	c.states[finished.block] = finished.state
 	c.warn(finished)
 	if finished.unstarted {
