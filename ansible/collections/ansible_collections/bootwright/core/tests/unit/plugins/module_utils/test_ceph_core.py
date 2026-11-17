@@ -1136,8 +1136,7 @@ def osd_service(request):
     lambda r: r.update(config={"global": {"osd_pool_default_size": "3", "osd_pool_default_min_size": "1"}}),
     lambda r: r["services"][0]["placement"].update(count_per_host=2),
     lambda r: osd_service(r)["spec"].update(tpm2=True),
-    lambda r: r.update(singleHostDefaults=True),
-], ids=["memory-floor", "autotune", "pool-defaults", "count-per-host", "tpm2-unencrypted", "single-host-defaults"])
+], ids=["memory-floor", "autotune", "pool-defaults", "count-per-host", "tpm2-unencrypted"])
 def test_the_validator_leaves_go_admission_rules_to_go(core_request, change):
     change(core_request)
     assert ceph_native.validate(core_request) is core_request
@@ -2706,6 +2705,14 @@ def test_single_host_options_are_persisted_and_reproved(core_request):
     with pytest.raises(ceph_native.Refusal, match="^config-drift$"):
         native.config_database()
     assert [argv[-2:] for argv in calls] == [["config", "dump"], ["config", "dump"]]
+
+
+def test_single_host_option_refuses_more_than_one_host(core_request):
+    request = copy.deepcopy(core_request)
+    request["singleHostDefaults"] = True
+    assert len(request["hosts"]) > 1
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(request)
 
 
 @pytest.mark.parametrize("invalid", [False, 1, "true", None])

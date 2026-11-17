@@ -50,7 +50,7 @@ def validate(request, hosts):
     require(isinstance(frozen, dict) and set(frozen) == MEMBERS)
     budgets = frozen["budgets"]
     require(isinstance(budgets, dict) and set(budgets) == BUDGETS and all(type(value) is int and 0 < value for value in budgets.values()))
-    require(budgets["apply"] <= MAX_BUDGET, "nvmeof-budget")
+    require(all(value <= MAX_BUDGET for value in budgets.values()), "nvmeof-budget")
     require(all(named(frozen[key]) for key in ("name", "service", "group", "pool")))
     require(frozen["mtls"] in ("enable_auth", "enable_mtls"))
     require(isinstance(frozen["nqn"], str) and 11 <= len(frozen["nqn"]) <= 223 and NQN.fullmatch(frozen["nqn"]) is not None)

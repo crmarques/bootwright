@@ -756,8 +756,10 @@ def scope_checks(request):
     require(bool(request["publicNetworks"]))
     validate_config(request)
     hosts, seen = validate_hosts(request)
-    # One non-stretch host with two selected OSD disks is Go's admission (internal/storage/cephcluster/topology.go).
-    require("singleHostDefaults" not in request or request["singleHostDefaults"] is True)
+    # Go admits the profile (internal/storage/cephcluster/topology.go); its one non-stretch host stays checked here
+    # because this worker applies osd_crush_chooseleaf_type=0, which on more hosts puts every replica on one host.
+    if "singleHostDefaults" in request:
+        require(request["singleHostDefaults"] is True and len(hosts) == 1 and "stretch" not in request, "request")
     package = request.get("packages")
     if package is not None:
         require(isinstance(package, dict) and {"version", "licenseAccepted", "sources"} <= set(package)
