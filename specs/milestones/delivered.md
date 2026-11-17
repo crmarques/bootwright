@@ -16864,3 +16864,20 @@ One `installer_config` filter composes the install configuration from the
 frozen document and the bound files. Every pinned message, verdict and
 install-config is byte-identical. An operator cluster install is owed.
 
+## X548 — Strings to shipped files
+
+### B1517
+
+Split from B1466 under [D274](backlog.md#d274) (audit 005 W5.3). The physical
+erase runtime and the Ceph host's image, label and device probes are real
+modules shipped by their source, with tests of their own (the erase
+acknowledgement refuses a wrong digest or a missing receipt). The disk
+discovery boot init and drivers stay strings in their module, since a module
+ships only its imported Python, and gain a syntax check and mocked-root runs.
+The adapter bootstrap refuses a non-venv interpreter without an `assert`, so
+`-O` no longer skips the check; the embedded Python under `internal/` is held
+to the floor interpreter in the sanity lane. The emitted shell defines the WWN
+and serial lookups once beside the identity helper. The release checks run as
+one Go command in one recipe line, and the Makefile now refuses a `GO`,
+`SHELL` or `.SHELLFLAGS` override that could skip them.
+
