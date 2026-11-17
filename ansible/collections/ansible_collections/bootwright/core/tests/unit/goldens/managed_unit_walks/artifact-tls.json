@@ -1,0 +1,2629 @@
+{
+  "apply": {
+    "foreign listener": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "refused",
+                "reason": "foreign-listener-8080"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": "something other than this service already listens where it binds; nothing was pulled, published or started: tcp 192.0.2.1:8080"
+    },
+    "fresh": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "auth": "",
+            "egress": {
+              "noProxy": [
+                "192.0.2.0/24",
+                "lab.example.test"
+              ]
+            },
+            "host": "",
+            "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "password": "",
+            "trust": "",
+            "username": ""
+          },
+          "module": "bootwright.core.image_acquire"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "present"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/config",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/public",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0700",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "content": "lent certificate\n",
+            "mode": "0644",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls/server.crt"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "content": "lent privateKey\n",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls/server.key"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "dest": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/config/nginx.conf",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "82973d796a360b9404649d5edad50743bae58143821ae39c22c4ce285f91907b"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "dest": "/etc/containers/systemd/bootwright-lab-rhel-artifact-server-media.container",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "a744c5ad04a52ec16f573ad015b2e23cb8bd893dc43049b66294a3f272a583b5"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "start",
+              "bootwright-lab-rhel-artifact-server-media.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": false,
+                  "container": "registry.example.test/x@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "contentRoot": true,
+                  "listeners": [
+                    {
+                      "address": "192.0.2.1",
+                      "fingerprint": "",
+                      "name": "http",
+                      "port": 8080,
+                      "protocol": "http",
+                      "status": "HTTP/1.1 200 OK"
+                    },
+                    {
+                      "address": "192.0.2.1",
+                      "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                      "name": "https",
+                      "port": 8443,
+                      "protocol": "https",
+                      "status": "HTTP/1.1 200 OK"
+                    }
+                  ],
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": true,
+                  "unit": "active"
+                },
+                "outcome": "changed",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "no podman": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "refused",
+                "reason": "container-runtime-8080"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": "the placement host has no working /usr/bin/podman; install the podman package there; nothing was pulled, published or started"
+    },
+    "replay": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "auth": "",
+            "egress": {
+              "noProxy": [
+                "192.0.2.0/24",
+                "lab.example.test"
+              ]
+            },
+            "host": "",
+            "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "password": "",
+            "trust": "",
+            "username": ""
+          },
+          "module": "bootwright.core.image_acquire"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "present"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/config",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/public",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0700",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "content": "lent certificate\n",
+            "mode": "0644",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls/server.crt"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "content": "lent privateKey\n",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls/server.key"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "dest": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/config/nginx.conf",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "82973d796a360b9404649d5edad50743bae58143821ae39c22c4ce285f91907b"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "dest": "/etc/containers/systemd/bootwright-lab-rhel-artifact-server-media.container",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "a744c5ad04a52ec16f573ad015b2e23cb8bd893dc43049b66294a3f272a583b5"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/etc/containers/systemd/bootwright-lab-rhel-artifact-server-media.container"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/config/nginx.conf"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls/server.crt"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls/server.key"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "inspect",
+              "--type",
+              "container",
+              "--format",
+              "{{.State.StartedAt.UnixNano}}",
+              "bootwright-lab-rhel-artifact-server-media"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": false,
+                  "container": "registry.example.test/x@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "contentRoot": true,
+                  "listeners": [
+                    {
+                      "address": "192.0.2.1",
+                      "fingerprint": "",
+                      "name": "http",
+                      "port": 8080,
+                      "protocol": "http",
+                      "status": "HTTP/1.1 200 OK"
+                    },
+                    {
+                      "address": "192.0.2.1",
+                      "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                      "name": "https",
+                      "port": 8443,
+                      "protocol": "https",
+                      "status": "HTTP/1.1 200 OK"
+                    }
+                  ],
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": true,
+                  "unit": "active"
+                },
+                "outcome": "unchanged",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "unassigned address": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "refused",
+                "reason": "unassigned-bind-address-8080"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": "the placement host has no usable local address 192.0.2.1; nothing was pulled, published or started"
+    },
+    "unpinned image": {
+      "calls": [],
+      "failure": "Assertion failed"
+    },
+    "unready": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "auth": "",
+            "egress": {
+              "noProxy": [
+                "192.0.2.0/24",
+                "lab.example.test"
+              ]
+            },
+            "host": "",
+            "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "password": "",
+            "trust": "",
+            "username": ""
+          },
+          "module": "bootwright.core.image_acquire"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "present"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/config",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/public",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0700",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "content": "lent certificate\n",
+            "mode": "0644",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls/server.crt"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "content": "lent privateKey\n",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/tls/server.key"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "dest": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media/config/nginx.conf",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "82973d796a360b9404649d5edad50743bae58143821ae39c22c4ce285f91907b"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "dest": "/etc/containers/systemd/bootwright-lab-rhel-artifact-server-media.container",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "a744c5ad04a52ec16f573ad015b2e23cb8bd893dc43049b66294a3f272a583b5"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "start",
+              "bootwright-lab-rhel-artifact-server-media.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "refused",
+                "reason": "listener-failed-8080"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": "a declared artifact-server listener did not answer within its readiness window: 192.0.2.1:8080 (ConnectionRefusedError(111): Connection refused)"
+    }
+  },
+  "destroy": {
+    "absent": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "stop-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "stop-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "remove-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "path": "/etc/containers/systemd/bootwright-lab-rhel-artifact-server-media.container",
+            "state": "absent"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "show",
+              "--property=ActiveState",
+              "--value",
+              "bootwright-lab-rhel-artifact-server-media.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+            "state": "absent"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "absent"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "remove-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-absence",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-absence",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": true,
+                  "container": "",
+                  "contentRoot": false,
+                  "listeners": [],
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": false,
+                  "unit": ""
+                },
+                "outcome": "changed",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "present": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "stop-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "stop",
+              "bootwright-lab-rhel-artifact-server-media.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "stop-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "remove-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "path": "/etc/containers/systemd/bootwright-lab-rhel-artifact-server-media.container",
+            "state": "absent"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "show",
+              "--property=ActiveState",
+              "--value",
+              "bootwright-lab-rhel-artifact-server-media.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "reset-failed",
+              "bootwright-lab-rhel-artifact-server-media.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "rm",
+              "--force",
+              "--ignore",
+              "bootwright-lab-rhel-artifact-server-media"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+            "state": "absent"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "artifact-server"
+            ],
+            "state": "absent"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "remove-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-absence",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-absence",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": true,
+                  "container": "",
+                  "contentRoot": false,
+                  "listeners": [],
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": false,
+                  "unit": ""
+                },
+                "outcome": "changed",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "shallow content root": {
+      "calls": [],
+      "failure": "Assertion failed"
+    }
+  },
+  "observe": {
+    "absent": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "attempts": 1,
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": true,
+                  "container": "",
+                  "contentRoot": false,
+                  "listeners": [],
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": false,
+                  "unit": ""
+                },
+                "outcome": "unchanged",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "running": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "attempts": 1,
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/artifact-server/media",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "http://192.0.2.1:8080",
+                  "name": "http"
+                },
+                {
+                  "address": "https://192.0.2.1:8443",
+                  "name": "https"
+                }
+              ],
+              "identity": {
+                "block": "service-media",
+                "context": "lab-rhel",
+                "service": "media"
+              },
+              "image": "registry.example.test/nginx-124@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "listeners": [
+                {
+                  "name": "http",
+                  "port": 8080,
+                  "protocol": "http"
+                },
+                {
+                  "name": "https",
+                  "port": 8443,
+                  "protocol": "https"
+                }
+              ],
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "tls": {
+                "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "minVersion": "TLSv1.2",
+                "secret": "media-serving"
+              },
+              "unit": "bootwright-lab-rhel-artifact-server-media",
+              "version": "artifact-server-nginx-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": false,
+                  "container": "registry.example.test/x@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "contentRoot": true,
+                  "listeners": [
+                    {
+                      "address": "192.0.2.1",
+                      "fingerprint": "",
+                      "name": "http",
+                      "port": 8080,
+                      "protocol": "http",
+                      "status": "HTTP/1.1 200 OK"
+                    },
+                    {
+                      "address": "192.0.2.1",
+                      "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                      "name": "https",
+                      "port": 8443,
+                      "protocol": "https",
+                      "status": "HTTP/1.1 200 OK"
+                    }
+                  ],
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": true,
+                  "unit": "active"
+                },
+                "outcome": "unchanged",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    }
+  }
+}

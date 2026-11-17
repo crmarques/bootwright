@@ -1,0 +1,2681 @@
+{
+  "apply": {
+    "foreign listener": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "refused",
+                "reason": "foreign-listener-5000"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": "something other than this service already listens where it binds; nothing was pulled, published or started: tcp 192.0.2.1:5000"
+    },
+    "fresh": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "auth": "",
+            "egress": {
+              "noProxy": [
+                "192.0.2.0/24",
+                "lab.example.test"
+              ]
+            },
+            "host": "",
+            "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "password": "",
+            "trust": "",
+            "username": ""
+          },
+          "module": "bootwright.core.image_acquire"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "present"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0700",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0700",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/auth",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0700",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/data",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/sys/fs/selinux/enforce"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/find",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/data",
+              "!",
+              "-context",
+              "*:container_file_t:s0:c130,c165",
+              "-print",
+              "-quit"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "content": "lent certificate\n",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.crt"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "content": "lent privateKey\n",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.key"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "attempts": 1,
+            "authorization": "bGVudCBjbGllbnRVc2VybmFtZQo6bGVudCBjbGllbnRQYXNzd29yZAo=",
+            "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "content": "lent passwordFile\n",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/auth/htpasswd"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "dest": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config/config.yml",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "a4fb80b9f4d8bd4154336b961f61225c670f6690aaed419416248f77ae35f3d2"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "dest": "/etc/containers/systemd/bootwright-lab-rhel-registry-mirror.container",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "065a2e65040d7ee72ff32ad225cec41678f640d41386fe7ec0d9ca5c8b41f20b"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "start",
+              "bootwright-lab-rhel-registry-mirror.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "authorization": "bGVudCBjbGllbnRVc2VybmFtZQo6bGVudCBjbGllbnRQYXNzd29yZAo=",
+            "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            },
+            "runs_from": [
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config/config.yml",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.crt",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.key",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/auth/htpasswd"
+            ]
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": false,
+                  "answers": [
+                    {
+                      "address": "192.0.2.1",
+                      "answer": "answered",
+                      "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                      "port": 5000
+                    }
+                  ],
+                  "container": "registry.example.test/x@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "contentRoot": true,
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": true,
+                  "unit": "active"
+                },
+                "outcome": "changed",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "no podman": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "refused",
+                "reason": "container-runtime-5000"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": "the placement host has no working /usr/bin/podman; install the podman package there; nothing was pulled, published or started"
+    },
+    "replay": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "auth": "",
+            "egress": {
+              "noProxy": [
+                "192.0.2.0/24",
+                "lab.example.test"
+              ]
+            },
+            "host": "",
+            "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "password": "",
+            "trust": "",
+            "username": ""
+          },
+          "module": "bootwright.core.image_acquire"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "present"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0700",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0700",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/auth",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0700",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/data",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/sys/fs/selinux/enforce"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/find",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/data",
+              "!",
+              "-context",
+              "*:container_file_t:s0:c130,c165",
+              "-print",
+              "-quit"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "content": "lent certificate\n",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.crt"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "content": "lent privateKey\n",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.key"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "attempts": 1,
+            "authorization": "bGVudCBjbGllbnRVc2VybmFtZQo6bGVudCBjbGllbnRQYXNzd29yZAo=",
+            "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "dest": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config/config.yml",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "a4fb80b9f4d8bd4154336b961f61225c670f6690aaed419416248f77ae35f3d2"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "dest": "/etc/containers/systemd/bootwright-lab-rhel-registry-mirror.container",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "065a2e65040d7ee72ff32ad225cec41678f640d41386fe7ec0d9ca5c8b41f20b"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/etc/containers/systemd/bootwright-lab-rhel-registry-mirror.container"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/auth/htpasswd"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config/config.yml"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.crt"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.key"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "inspect",
+              "--type",
+              "container",
+              "--format",
+              "{{.State.StartedAt.UnixNano}}",
+              "bootwright-lab-rhel-registry-mirror"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "authorization": "bGVudCBjbGllbnRVc2VybmFtZQo6bGVudCBjbGllbnRQYXNzd29yZAo=",
+            "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            },
+            "runs_from": [
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config/config.yml",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.crt",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.key",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/auth/htpasswd"
+            ]
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": false,
+                  "answers": [
+                    {
+                      "address": "192.0.2.1",
+                      "answer": "answered",
+                      "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                      "port": 5000
+                    }
+                  ],
+                  "container": "registry.example.test/x@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "contentRoot": true,
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": true,
+                  "unit": "active"
+                },
+                "outcome": "unchanged",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "unassigned address": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "refused",
+                "reason": "unassigned-bind-address-5000"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": "the placement host has no usable local address 192.0.2.1; nothing was pulled, published or started"
+    },
+    "unpinned image": {
+      "calls": [],
+      "failure": "Assertion failed"
+    },
+    "unready": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "auth": "",
+            "egress": {
+              "noProxy": [
+                "192.0.2.0/24",
+                "lab.example.test"
+              ]
+            },
+            "host": "",
+            "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "password": "",
+            "trust": "",
+            "username": ""
+          },
+          "module": "bootwright.core.image_acquire"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "present"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0700",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0700",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/auth",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0700",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/data",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/sys/fs/selinux/enforce"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/find",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/data",
+              "!",
+              "-context",
+              "*:container_file_t:s0:c130,c165",
+              "-print",
+              "-quit"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "content": "lent certificate\n",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.crt"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "content": "lent privateKey\n",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.key"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "attempts": 1,
+            "authorization": "bGVudCBjbGllbnRVc2VybmFtZQo6bGVudCBjbGllbnRQYXNzd29yZAo=",
+            "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "content": "lent passwordFile\n",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/auth/htpasswd"
+          },
+          "module": "bootwright.core.private_file"
+        },
+        {
+          "arguments": {
+            "dest": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config/config.yml",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "a4fb80b9f4d8bd4154336b961f61225c670f6690aaed419416248f77ae35f3d2"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "dest": "/etc/containers/systemd/bootwright-lab-rhel-registry-mirror.container",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "065a2e65040d7ee72ff32ad225cec41678f640d41386fe7ec0d9ca5c8b41f20b"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "start",
+              "bootwright-lab-rhel-registry-mirror.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "authorization": "bGVudCBjbGllbnRVc2VybmFtZQo6bGVudCBjbGllbnRQYXNzd29yZAo=",
+            "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            },
+            "runs_from": [
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config/config.yml",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.crt",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.key",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/auth/htpasswd"
+            ]
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "refused",
+                "reason": "listener-failed-5000"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": "a declared managed service address did not answer within its readiness window: 192.0.2.1:5000 (ConnectionRefusedError(111): Connection refused)"
+    }
+  },
+  "destroy": {
+    "absent": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "stop-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "stop-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "remove-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "path": "/etc/containers/systemd/bootwright-lab-rhel-registry-mirror.container",
+            "state": "absent"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "show",
+              "--property=ActiveState",
+              "--value",
+              "bootwright-lab-rhel-registry-mirror.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+            "state": "absent"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "absent"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "remove-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-absence",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-absence",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": true,
+                  "answers": [],
+                  "container": "",
+                  "contentRoot": false,
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": false,
+                  "unit": ""
+                },
+                "outcome": "changed",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "present": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "stop-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "stop",
+              "bootwright-lab-rhel-registry-mirror.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "stop-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "remove-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "path": "/etc/containers/systemd/bootwright-lab-rhel-registry-mirror.container",
+            "state": "absent"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "show",
+              "--property=ActiveState",
+              "--value",
+              "bootwright-lab-rhel-registry-mirror.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "reset-failed",
+              "bootwright-lab-rhel-registry-mirror.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "rm",
+              "--force",
+              "--ignore",
+              "bootwright-lab-rhel-registry-mirror"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+            "state": "absent"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "registry"
+            ],
+            "state": "absent"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "remove-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-absence",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-absence",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": true,
+                  "answers": [],
+                  "container": "",
+                  "contentRoot": false,
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": false,
+                  "unit": ""
+                },
+                "outcome": "changed",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "shallow content root": {
+      "calls": [],
+      "failure": "Assertion failed"
+    }
+  },
+  "observe": {
+    "absent": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "attempts": 1,
+            "authorization": "bGVudCBjbGllbnRVc2VybmFtZQo6bGVudCBjbGllbnRQYXNzd29yZAo=",
+            "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            },
+            "runs_from": [
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config/config.yml",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.crt",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.key",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/auth/htpasswd"
+            ]
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": true,
+                  "answers": [],
+                  "container": "",
+                  "contentRoot": false,
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": false,
+                  "unit": ""
+                },
+                "outcome": "unchanged",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "running": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "attempts": 1,
+            "authorization": "bGVudCBjbGllbnRVc2VybmFtZQo6bGVudCBjbGllbnRQYXNzd29yZAo=",
+            "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror",
+              "credentialsRef": "mirror-push",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:5000",
+                  "name": "mirror"
+                }
+              ],
+              "identity": {
+                "block": "service-mirror",
+                "context": "lab-rhel",
+                "service": "mirror"
+              },
+              "image": "registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "registry-distribution-v1",
+              "kind": "Registry",
+              "labelLevel": "s0:c130,c165",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 5000,
+              "tls": {
+                "minVersion": "TLSv1.3",
+                "secret": "mirror-serving"
+              },
+              "unit": "bootwright-lab-rhel-registry-mirror",
+              "version": "managed-service-v1"
+            },
+            "runs_from": [
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config/config.yml",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.crt",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls/tls.key",
+              "/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/auth/htpasswd"
+            ]
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": false,
+                  "answers": [
+                    {
+                      "address": "192.0.2.1",
+                      "answer": "answered",
+                      "fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                      "port": 5000
+                    }
+                  ],
+                  "container": "registry.example.test/x@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "contentRoot": true,
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": true,
+                  "unit": "active"
+                },
+                "outcome": "unchanged",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    }
+  }
+}

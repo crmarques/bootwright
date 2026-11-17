@@ -1,0 +1,2285 @@
+{
+  "apply": {
+    "foreign listener": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "refused",
+                "reason": "foreign-listener-123"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": "something other than this service already listens where it binds; nothing was pulled, published or started: tcp 192.0.2.1:123"
+    },
+    "fresh": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "auth": "",
+            "egress": {
+              "noProxy": [
+                "192.0.2.0/24",
+                "lab.example.test"
+              ]
+            },
+            "host": "",
+            "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "password": "",
+            "trust": "",
+            "username": ""
+          },
+          "module": "bootwright.core.image_acquire"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "present"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time/config",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "dest": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time/config/chrony.conf",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "3ef24432c067fe579253476bd1eb3d43ce0d03106f647d743edc34a7125cf898"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "dest": "/etc/containers/systemd/bootwright-lab-rhel-ntp-server-chrony-time.container",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "0d6b4ef362fe7db7943b22fa8e98f7e2b6f0faa095bda89965a5ac54fcc88172"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "start",
+              "bootwright-lab-rhel-ntp-server-chrony-time.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            },
+            "runs_from": [
+              "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time/config/chrony.conf"
+            ]
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": false,
+                  "answers": [
+                    {
+                      "address": "192.0.2.1",
+                      "answer": "answered",
+                      "port": 123
+                    }
+                  ],
+                  "container": "registry.example.test/x@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "contentRoot": true,
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": true,
+                  "unit": "active"
+                },
+                "outcome": "changed",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "no podman": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "refused",
+                "reason": "container-runtime-123"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": "the placement host has no working /usr/bin/podman; install the podman package there; nothing was pulled, published or started"
+    },
+    "replay": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "auth": "",
+            "egress": {
+              "noProxy": [
+                "192.0.2.0/24",
+                "lab.example.test"
+              ]
+            },
+            "host": "",
+            "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "password": "",
+            "trust": "",
+            "username": ""
+          },
+          "module": "bootwright.core.image_acquire"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "present"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time/config",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "dest": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time/config/chrony.conf",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "3ef24432c067fe579253476bd1eb3d43ce0d03106f647d743edc34a7125cf898"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "dest": "/etc/containers/systemd/bootwright-lab-rhel-ntp-server-chrony-time.container",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "0d6b4ef362fe7db7943b22fa8e98f7e2b6f0faa095bda89965a5ac54fcc88172"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/etc/containers/systemd/bootwright-lab-rhel-ntp-server-chrony-time.container"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "get_checksum": false,
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time/config/chrony.conf"
+          },
+          "module": "ansible.builtin.stat"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "inspect",
+              "--type",
+              "container",
+              "--format",
+              "{{.State.StartedAt.UnixNano}}",
+              "bootwright-lab-rhel-ntp-server-chrony-time"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            },
+            "runs_from": [
+              "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time/config/chrony.conf"
+            ]
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": false,
+                  "answers": [
+                    {
+                      "address": "192.0.2.1",
+                      "answer": "answered",
+                      "port": 123
+                    }
+                  ],
+                  "container": "registry.example.test/x@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "contentRoot": true,
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": true,
+                  "unit": "active"
+                },
+                "outcome": "unchanged",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "unassigned address": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "refused",
+                "reason": "unassigned-bind-address-123"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": "the placement host has no usable local address 192.0.2.1; nothing was pulled, published or started"
+    },
+    "unpinned image": {
+      "calls": [],
+      "failure": "Assertion failed"
+    },
+    "unready": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "--version"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "bind_address": true,
+            "foreign": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "auth": "",
+            "egress": {
+              "noProxy": [
+                "192.0.2.0/24",
+                "lab.example.test"
+              ]
+            },
+            "host": "",
+            "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "password": "",
+            "trust": "",
+            "username": ""
+          },
+          "module": "bootwright.core.image_acquire"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "pull-image",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "present"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "group": "root",
+            "mode": "0755",
+            "owner": "root",
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time/config",
+            "state": "directory"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "dest": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time/config/chrony.conf",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "3ef24432c067fe579253476bd1eb3d43ce0d03106f647d743edc34a7125cf898"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "dest": "/etc/containers/systemd/bootwright-lab-rhel-ntp-server-chrony-time.container",
+            "group": "root",
+            "mode": "0644",
+            "owner": "root",
+            "sha256": "0d6b4ef362fe7db7943b22fa8e98f7e2b6f0faa095bda89965a5ac54fcc88172"
+          },
+          "module": "ansible.builtin.template"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "publish-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "start",
+              "bootwright-lab-rhel-ntp-server-chrony-time.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "start-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-readiness",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            },
+            "runs_from": [
+              "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time/config/chrony.conf"
+            ]
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "refused",
+                "reason": "listener-failed-123"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": "a declared managed service address did not answer within its readiness window: 192.0.2.1:123 (ConnectionRefusedError(111): Connection refused)"
+    }
+  },
+  "destroy": {
+    "absent": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "stop-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "stop-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "remove-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "path": "/etc/containers/systemd/bootwright-lab-rhel-ntp-server-chrony-time.container",
+            "state": "absent"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "show",
+              "--property=ActiveState",
+              "--value",
+              "bootwright-lab-rhel-ntp-server-chrony-time.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+            "state": "absent"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "absent"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "remove-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-absence",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-absence",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": true,
+                  "answers": [],
+                  "container": "",
+                  "contentRoot": false,
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": false,
+                  "unit": ""
+                },
+                "outcome": "changed",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "present": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "proved"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "stop-service",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "stop",
+              "bootwright-lab-rhel-ntp-server-chrony-time.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "stop-service",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "remove-configuration",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "path": "/etc/containers/systemd/bootwright-lab-rhel-ntp-server-chrony-time.container",
+            "state": "absent"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "daemon-reload"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "show",
+              "--property=ActiveState",
+              "--value",
+              "bootwright-lab-rhel-ntp-server-chrony-time.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/systemctl",
+              "reset-failed",
+              "bootwright-lab-rhel-ntp-server-chrony-time.service"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "argv": [
+              "/usr/bin/podman",
+              "rm",
+              "--force",
+              "--ignore",
+              "bootwright-lab-rhel-ntp-server-chrony-time"
+            ]
+          },
+          "module": "ansible.builtin.command"
+        },
+        {
+          "arguments": {
+            "path": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+            "state": "absent"
+          },
+          "module": "ansible.builtin.file"
+        },
+        {
+          "arguments": {
+            "context": "lab-rhel",
+            "path": [
+              "services",
+              "ntp-server-chrony"
+            ],
+            "state": "absent"
+          },
+          "module": "bootwright.core.hosted_area"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "remove-configuration",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-absence",
+                "phase": "group",
+                "status": "running"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            }
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "group": "verify-absence",
+                "phase": "group",
+                "status": "ok"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": true,
+                  "answers": [],
+                  "container": "",
+                  "contentRoot": false,
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": false,
+                  "unit": ""
+                },
+                "outcome": "changed",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "shallow content root": {
+      "calls": [],
+      "failure": "Assertion failed"
+    }
+  },
+  "observe": {
+    "absent": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "attempts": 1,
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            },
+            "runs_from": [
+              "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time/config/chrony.conf"
+            ]
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": true,
+                  "answers": [],
+                  "container": "",
+                  "contentRoot": false,
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": false,
+                  "unit": ""
+                },
+                "outcome": "unchanged",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    },
+    "running": {
+      "calls": [
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "phase": "loaded"
+              },
+              true
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        },
+        {
+          "arguments": {
+            "attempts": 1,
+            "readiness": true,
+            "request": {
+              "bindAddress": "192.0.2.1",
+              "clients": [
+                "192.0.2.0/24"
+              ],
+              "contentRoot": "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time",
+              "egress": {
+                "noProxy": [
+                  "192.0.2.0/24",
+                  "lab.example.test"
+                ]
+              },
+              "endpoints": [
+                {
+                  "address": "192.0.2.1:123",
+                  "name": "time"
+                }
+              ],
+              "identity": {
+                "block": "service-time",
+                "context": "lab-rhel",
+                "service": "time"
+              },
+              "image": "registry.example.test/ntp-server-chrony@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "implementation": "ntp-server-chrony-v1",
+              "kind": "NTPServer",
+              "placement": {
+                "connection": "local",
+                "machine": "controller"
+              },
+              "port": 123,
+              "sources": [
+                "198.51.100.123"
+              ],
+              "unit": "bootwright-lab-rhel-ntp-server-chrony-time",
+              "version": "managed-service-v1"
+            },
+            "runs_from": [
+              "/var/lib/bootwright-hosted/lab-rhel/services/ntp-server-chrony/time/config/chrony.conf"
+            ]
+          },
+          "module": "inspect"
+        },
+        {
+          "module": "protocol",
+          "records": [
+            [
+              {
+                "evidence": {
+                  "absent": false,
+                  "answers": [
+                    {
+                      "address": "192.0.2.1",
+                      "answer": "answered",
+                      "port": 123
+                    }
+                  ],
+                  "container": "registry.example.test/x@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "contentRoot": true,
+                  "postcondition": true,
+                  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                  "startedAfterFiles": true,
+                  "unit": "active"
+                },
+                "outcome": "unchanged",
+                "phase": "completed"
+              },
+              false
+            ]
+          ],
+          "result": {
+            "changed": false
+          }
+        }
+      ],
+      "failure": null
+    }
+  }
+}
