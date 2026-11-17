@@ -15,7 +15,7 @@ import pytest
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.testing import patch_module_args
 
-from ansible_collections.bootwright.core.plugins.module_utils import artifact_server, bounded_process, host_sockets, infra_service
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, host_sockets, infra_service
 from ansible_collections.bootwright.core.plugins.modules import artifact_server_inspect as inspect
 
 UNIT = "bootwright-lab-artifacts"
