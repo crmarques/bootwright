@@ -152,13 +152,33 @@
                     operation: remove
                   no_log: true
 
+                # A proof the boot phase's deadline stopped is the budget's
+                # refusal, which the rescue below names; the re-raise carries
+                # no timedout of its own, so it is kept in a fact.
+                - name: Keep whether the boot budget stopped the proof
+                  ansible.builtin.set_fact:
+                    containercluster_install_agent_proof_timedout: >-
+                      {{ ansible_failed_result.timedout is defined and ansible_failed_result.timedout is truthy }}
+
                 - name: Retain an unproved private listener as a typed node refusal
                   ansible.builtin.set_fact:
                     containercluster_install_agent_lifecycle_refusal: private-delivery
+                  when: not (containercluster_install_agent_proof_timedout | bool)
 
+                # Only the proof's own refusals are printed: its judging step
+                # names the cause without the token, and its input check a
+                # fixed text. Any other failed result, the hidden fetch's
+                # included, may carry the private URL.
                 - name: Refuse an insert whose private image cannot be fetched
                   ansible.builtin.fail:
-                    msg: "{{ ansible_failed_result.msg | default('the private insert image was not proved through its artifact server listener') }}"
+                    msg: >-
+                      {{ ansible_failed_result.msg
+                         if (ansible_failed_task.name | default('')) in containercluster_install_agent_proof_refusals
+                         else 'the private insert image was not proved through its artifact server listener' }}
+                  vars:
+                    containercluster_install_agent_proof_refusals:
+                      - Refuse a file the artifact server listener does not serve
+                      - Refuse a listener proof missing what it fetches
 
             - name: Keep this node's private insert URL in invocation scratch
               ansible.builtin.copy:
@@ -240,7 +260,7 @@
             msg: >-
               {{ containercluster_install_agent_boot_spent_hint }} Machine
               {{ containercluster_install_agent_node.machine }} was being booted when it was spent.
-          when: ansible_failed_result.timedout is defined
+          when: ansible_failed_result.timedout is defined or (containercluster_install_agent_proof_timedout | default(false) | bool)
 
         # A failed insert may still have left its link attached, so the
         # controller is read, changing nothing, and the link this attempt just

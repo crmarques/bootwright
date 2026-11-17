@@ -120,7 +120,7 @@ def failed_insert_tasks():
 
 def test_a_failed_insert_reads_its_controller_and_retires_its_link_when_not_presented():
     rescue, read = failed_insert_tasks()
-    assert position(rescue, lambda t: (t.get('when') or '') == 'ansible_failed_result.timedout is defined') < read
+    assert position(rescue, lambda t: (t.get('when') or '').startswith('ansible_failed_result.timedout is defined')) < read
     assert rescue[read]['ansible.builtin.include_tasks']['file'] == 'port.yml'
     remove = next(task for task in rescue[read:] if task.get(MODULE, {}).get('operation') == 'remove')
     assert remove[MODULE]['operation'] == 'remove'

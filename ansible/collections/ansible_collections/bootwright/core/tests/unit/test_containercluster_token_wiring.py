@@ -115,15 +115,16 @@ def test_boot_publishes_then_proves_the_listener_then_inserts():
         probe, insert_scope(), {'status': -1, 'msg': 'Request failed: certificate verify failed'}).refusal
 
 
-def boot_through_the_proof(answer):
-    """Run the proof block over one fetch answer: the trace, what it retired, and the refusal it ended with."""
+def boot_through_the_proof(answer, raised=None):
+    """Run the proof block over one fetch answer, or a fetch that failed with `raised` past its failed_when:
+    the interpreter, what it retired, and the refusal it ended with."""
     block, _steps = proof_block()
     retired = []
 
     def execute(task, templar):
         if listener_proof.includes(task):
-            outcome = listener_proof.run(task, interpreter.variables, answer)
-            return {'changed': False} if outcome.refusal is None else {'failed': True, 'msg': outcome.refusal}
+            listener_proof.perform(task, interpreter.variables, answer, raised)
+            return {'changed': False}
         if MODULE in task:
             retired.append(templar.template(task[MODULE]))
             return {'changed': True}
@@ -151,6 +152,65 @@ def test_an_unproved_link_is_retired_before_the_gate_and_never_inserted():
         assert [entry['image'] for entry in retired] == [INSERT_URL]
         assert interpreter.variables['containercluster_install_agent_lifecycle_refusal'] == 'private-delivery'
         assert refusal.startswith('the private insert image could not be') and INSERT_TOKEN not in refusal, refusal
+        # The judging step's own message, the one refusal printed as it is.
+        assert refusal == listener_proof.run(only(block['block'], listener_proof.includes), insert_scope(),
+                                             {'status': status, 'msg': 'refused ' + INSERT_URL}).refusal
+
+
+FIXED = 'the private insert image was not proved through its artifact server listener'
+
+
+def budget_report():
+    """The boot block's first rescue step, which names a spent boot budget."""
+    bounded = next(task for task in flat(tasks('boot.yml')) if 'rescue' in task and 'timeout' in task)
+    report = bounded['rescue'][0]
+    assert 'containercluster_install_agent_boot_spent_hint' in report['ansible.builtin.fail']['msg']
+    return report
+
+
+def test_a_proof_the_boot_budget_stopped_stays_a_budget_refusal_and_still_retires_its_link():
+    stopped = {'failed': True, 'timedout': {'frame': 'SECRET', 'period': 1}, 'msg': 'The task timed out ' + INSERT_URL}
+    interpreter, retired, refusal = boot_through_the_proof({'status': 206}, raised=stopped)
+    assert [entry['image'] for entry in retired] == [INSERT_URL]
+    assert interpreter.variables['containercluster_install_agent_lifecycle_refusal'] == ''
+    assert refusal == FIXED
+    # The re-raise carries no timedout of its own; the boot block's rescue still names the budget.
+    report = budget_report()
+    scope = dict(interpreter.variables, ansible_failed_result={'failed': True, 'msg': refusal})
+    assert holds(report['when'], scope) is True
+    assert holds(report['when'], {'ansible_failed_result': {'failed': True, 'timedout': {'period': 1}}}) is True
+    assert holds(report['when'], {'ansible_failed_result': {'failed': True, 'msg': 'refused'}}) is False
+
+
+def test_a_proof_whose_fetch_failed_by_exception_prints_only_the_fixed_refusal():
+    raised = {'failed': True, 'msg': 'An unhandled exception occurred fetching ' + INSERT_URL, 'exception': INSERT_URL}
+    interpreter, retired, refusal = boot_through_the_proof({'status': 206}, raised=raised)
+    assert [entry['image'] for entry in retired] == [INSERT_URL]
+    assert interpreter.variables['containercluster_install_agent_lifecycle_refusal'] == 'private-delivery'
+    assert interpreter.variables['containercluster_install_agent_proof_timedout'] is False
+    assert refusal == FIXED
+
+
+def test_a_proof_refused_for_its_input_prints_its_fixed_check():
+    scope = insert_scope()
+    scope['containercluster_install_agent_token'] = {'url': 'file:///' + INSERT_TOKEN + '/agent.iso'}
+    block, _steps = proof_block()
+    retired = []
+
+    def execute(task, templar):
+        if listener_proof.includes(task):
+            listener_proof.perform(task, interpreter.variables, {'status': 206})
+            return {'changed': False}
+        if MODULE in task:
+            retired.append(templar.template(task[MODULE]))
+            return {'changed': True}
+        return None
+
+    interpreter = role_tasks.Interpreter(ROLE, dict(scope, containercluster_install_agent_lifecycle_refusal=''), execute)
+    with pytest.raises(role_tasks.TaskFailed) as failed:
+        interpreter.run_tasks([block])
+    assert failed.value.result['msg'] == 'a listener proof needs an http or https URL and the subject it names'
+    assert len(retired) == 1 and interpreter.variables['containercluster_install_agent_lifecycle_refusal'] == 'private-delivery'
 
 
 def test_the_insert_serves_the_per_insert_token_never_the_cluster_wide_publication():

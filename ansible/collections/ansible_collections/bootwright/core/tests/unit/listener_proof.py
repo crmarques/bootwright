@@ -44,17 +44,24 @@ def opens(task: dict) -> list[dict] | None:
     return proof_tasks() if includes(task) else None
 
 
-def run(include: dict, variables: dict, answer: dict) -> Outcome:
-    """Run the proof one include starts, with the fetch answering `answer`."""
+def perform(include: dict, variables: dict, answer: dict, raised: dict | None = None,
+            fetched: dict | None = None) -> role_tasks.Interpreter:
+    """Run the proof one include starts, letting a failed task fail its caller as ansible-core does.
+
+    The fetch answers `answer`, or, given `raised`, fails with that result past
+    its failed_when, as a task the timeout keyword stopped or whose module
+    raised does."""
     assert includes(include), "%r does not include the shared listener proof" % include.get("name")
     scope = dict(role_tasks.trusted(role_tasks.role_defaults(ROLE)))
     scope.update(variables)
     scope.update(role_tasks.trusted(include.get("vars") or {}))
-    fetched: dict = {}
+    seen = {} if fetched is None else fetched
 
     def execute(task, templar):
         if URI in task:
-            fetched.update(templar.template(task[URI]))
+            seen.update(templar.template(task[URI]))
+            if raised is not None:
+                raise role_tasks.TaskFailed(task, dict(raised))
             return dict(answer)
         return None
 
@@ -62,5 +69,16 @@ def run(include: dict, variables: dict, answer: dict) -> Outcome:
     try:
         interpreter.run(ENTRY + ".yml")
     except role_tasks.TaskFailed as failure:
-        return Outcome(fetched, str(failure.result.get("msg")), interpreter.trace)
-    return Outcome(fetched, None, interpreter.trace)
+        failure.trace = interpreter.trace
+        raise
+    return interpreter
+
+
+def run(include: dict, variables: dict, answer: dict) -> Outcome:
+    """Run the proof one include starts, with the fetch answering `answer`."""
+    fetched: dict = {}
+    try:
+        trace = perform(include, variables, answer, fetched=fetched).trace
+    except role_tasks.TaskFailed as failure:
+        return Outcome(fetched, str(failure.result.get("msg")), failure.trace)
+    return Outcome(fetched, None, trace)
