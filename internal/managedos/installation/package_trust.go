@@ -6,10 +6,6 @@ const packageTrustDirectory = "/tmp/bootwright-package-tree"
 const packageTrustPath = packageTrustDirectory + "/ca.pem"
 const PackageCertificateToken = "@@BOOTWRIGHT_PACKAGE_TREE_CERTIFICATE@@"
 
-// packageTrustLines stages only the tree listener's bound public certificate
-// chain in the installer RAM filesystem. Anaconda runs all pre scripts before
-// parsing the source command or starting payload setup. The dedicated CA file
-// scopes trust to this source; it never changes the machine's trust store.
 func packageTrustLines(input Installation) []string {
 	if !input.PackageTLS {
 		return nil
