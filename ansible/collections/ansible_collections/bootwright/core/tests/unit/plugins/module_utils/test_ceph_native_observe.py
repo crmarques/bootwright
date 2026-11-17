@@ -539,7 +539,7 @@ def test_fixed_root_named_ancestry_is_reproved_after_native_snapshot(fixture, mo
     monkeypatch.setattr(observe, "root_directory", REAL_ROOT_DIRECTORY)
     # Loan the synthetic test tree's ancestor policy while exercising the
     # actual nofollow parent/name/inode bindings, not the borrowed-root seam.
-    monkeypatch.setattr(observe, "safe_directory", lambda info, owners: observe.require(stat.S_ISDIR(info.st_mode)))
+    monkeypatch.setattr(observe.held_directory, "admit", lambda info, owners: observe.require(stat.S_ISDIR(info.st_mode)))
     original = fixture[-1]
 
     def command(argv, **options):
@@ -564,7 +564,7 @@ def test_proved_absent_final_root_needs_no_uid_and_does_not_create_it(fixture, m
     absent = fixture[0].with_name("absent")
     monkeypatch.setattr(observe, "DATA_ROOT", str(absent))
     monkeypatch.setattr(observe, "root_directory", REAL_ROOT_DIRECTORY)
-    monkeypatch.setattr(observe, "safe_directory", lambda info, owners: observe.require(stat.S_ISDIR(info.st_mode)))
+    monkeypatch.setattr(observe.held_directory, "admit", lambda info, owners: observe.require(stat.S_ISDIR(info.st_mode)))
     assert observe.daemons(fixture[2], None, lambda *args, **kwargs: pytest.fail("native command"), owned=False) == []
     assert not absent.exists()
 

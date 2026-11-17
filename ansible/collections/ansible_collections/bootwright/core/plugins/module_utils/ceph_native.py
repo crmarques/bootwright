@@ -33,7 +33,7 @@ import tempfile
 import time
 import uuid
 
-from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, private_files, registry_auth
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, held_directory, private_files, registry_auth
 from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 MAX_INPUT = 2 * 1024 * 1024
@@ -369,30 +369,24 @@ def registry_metadata_record(value, pending=False):
 
 
 @contextlib.contextmanager
-def registry_directory(create=False):
-    """Hold the fixed root-owned native directory without following any link."""
-    directory = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+def held(path, reason, owners=(0,), **rules):
+    """The held_directory walk to path, its refusal this module's reason."""
     try:
-        for index, component in enumerate(REGISTRY_DIRECTORY.strip("/").split("/")):
-            info = os.fstat(directory)
-            require(info.st_uid == 0 and info.st_mode & 0o022 == 0, "registry-ownership")
-            try:
-                following = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
-            except FileNotFoundError:
-                require(index == 1, "registry-ownership")
-                if not create:
-                    yield None
-                    return
-                os.mkdir(component, 0o755, dir_fd=directory)
-                os.fsync(directory)
-                following = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
-            os.close(directory)
-            directory = following
-        info = os.fstat(directory)
-        require(info.st_uid == 0 and info.st_mode & 0o022 == 0, "registry-ownership")
+        # The wrapped context closes its descriptors on any exit; the proof after the yield is deliberately success-only.
+        # pylint: disable-next=contextmanager-generator-missing-cleanup
+        with held_directory.hold(path, owners, **rules) as directory:
+            yield directory
+    except held_directory.Refused:
+        raise Refusal(reason) from None
+
+
+@contextlib.contextmanager
+def registry_directory(create=False):
+    """Hold the fixed root-owned native directory without following any link; only it may be created."""
+    # The wrapped context closes its descriptors on any exit.
+    # pylint: disable-next=contextmanager-generator-missing-cleanup
+    with held(REGISTRY_DIRECTORY, "registry-ownership", create=0o755 if create else None, absent=not create) as directory:
         yield directory
-    finally:
-        os.close(directory)
 
 
 def registry_exists(directory, name):
@@ -1306,25 +1300,9 @@ class Markers:
         return record is not None
 
     def create(self):
-        # Every directory component is opened without following a link. Existing
-        # ancestor permissions must exclude group/other writes.
-        current = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
-        try:
-            for component in self.path.strip("/").split("/"):
-                try:
-                    os.mkdir(component, 0o700, dir_fd=current)
-                    os.fsync(current)
-                except FileExistsError:
-                    pass
-                following = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=current)
-                info = os.fstat(following)
-                require(info.st_uid == os.geteuid() and info.st_mode & 0o022 == 0, "ownership")
-                os.close(current)
-                current = following
+        with held(self.path, "ownership", owners=(0, os.geteuid()), create=0o700):
             if not self.owned():
                 self.write("owner.json", marker_identity(self.request))
-        finally:
-            os.close(current)
 
     def write(self, name, value):
         existing = self.read(name)
@@ -1373,19 +1351,10 @@ class Custody:
     def directory(self):
         """Hold only the fixed root-owned private FSID area, without symlinks."""
         require(self.markers.path == os.path.join(ROOT, self.worker.request["fsid"]), self.reason)
-        directory = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
-        try:
-            for component in self.markers.path.strip("/").split("/"):
-                info = os.fstat(directory)
-                require(info.st_uid == 0 and info.st_mode & 0o022 == 0, self.reason)
-                following = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
-                os.close(directory)
-                directory = following
-            info = os.fstat(directory)
-            require(info.st_uid == info.st_gid == 0 and stat.S_IMODE(info.st_mode) == 0o700, self.reason)
+        # The wrapped context closes its descriptors on any exit.
+        # pylint: disable-next=contextmanager-generator-missing-cleanup
+        with held(self.markers.path, self.reason, final=lambda info: info.st_uid == info.st_gid == 0 and stat.S_IMODE(info.st_mode) == 0o700) as directory:
             yield directory
-        finally:
-            os.close(directory)
 
     @staticmethod
     def metadata(info, complete=False):
@@ -3381,23 +3350,13 @@ class Worker:
         while True:
             components = path.strip("/").split("/")
             require(os.path.isabs(path) and all(c not in ("", ".", "..") for c in components), "file")
-            directory = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+            parent = "/" + "/".join(components[:-1])
             try:
-                for index, component in enumerate(components):
-                    entry = os.stat(component, dir_fd=directory, follow_symlinks=False)
+                with held(parent, "file", owners, follow=lambda entry: shared and entry.st_uid == ROOT_UID) as directory:
+                    entry = os.stat(components[-1], dir_fd=directory, follow_symlinks=False)
                     if stat.S_ISLNK(entry.st_mode):
-                        require(shared and entry.st_uid == ROOT_UID and followed < SOURCE_LINKS, "file")
-                        target = os.readlink(component, dir_fd=directory)
-                        path = os.path.normpath(os.path.join("/" + "/".join(components[:index]), target))
-                        followed += 1
-                        break
-                    if index < len(components) - 1:
-                        following = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
-                        os.close(directory)
-                        directory = following
-                        info = os.fstat(directory)
-                        require(info.st_uid in owners and info.st_mode & 0o022 == 0, "file")
-                else:
+                        require(shared and entry.st_uid == ROOT_UID, "file")
+                        raise held_directory.Linked(os.path.normpath(os.path.join(parent, os.readlink(components[-1], dir_fd=directory))))
                     fd = os.open(components[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=directory)
                     with os.fdopen(fd, "rb") as handle:
                         info = os.fstat(handle.fileno())
@@ -3405,8 +3364,10 @@ class Worker:
                                 and info.st_mode & (0o077 if private else 0o022) == 0 and 0 < info.st_size <= maximum, "file")
                         yield handle
                     return
-            finally:
-                os.close(directory)
+            except held_directory.Linked as link:
+                require(followed < SOURCE_LINKS, "file")
+                path = link.path
+                followed += 1
 
     def native_file(self, path, maximum=MAX_INPUT, private=True, root_only=False):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_tunnel_custody as custody

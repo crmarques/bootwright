@@ -106,7 +106,7 @@ def test_remote_command_never_signals_the_supervisors_shared_group(monkeypatch):
 def test_actual_shipped_command_works_inside_supervised_remote_group(tmp_path):
     effect = tmp_path / "effect"
     invocation = [sys.executable, "-I", "-c", DESCENDANT, str(effect)]
-    sources = {"native_diagnostics": inspect.getsource(native_diagnostics), "ceph_pull_broker": '"""Fixed fixture."""\n', "registry_auth": '"""Fixed fixture."""\n', "private_files": '"""Fixed fixture."""\n',
+    sources = {"native_diagnostics": inspect.getsource(native_diagnostics), "ceph_pull_broker": '"""Fixed fixture."""\n', "held_directory": '"""Fixed fixture."""\n', "registry_auth": '"""Fixed fixture."""\n', "private_files": '"""Fixed fixture."""\n',
                "ceph_monitoring_template": '"""Fixed fixture."""\n',
                "canonical_json": inspect.getsource(canonical_json), "tls_trust": '"""Fixed fixture."""\n',
                "bounded_process": inspect.getsource(bounded_process),

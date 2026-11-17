@@ -20,6 +20,8 @@ import stat
 import time
 import uuid
 
+from ansible_collections.bootwright.core.plugins.module_utils import held_directory
+
 DATA_ROOT = "/var/lib/ceph"
 UNIT_ROOT = "/etc/systemd/system"
 ROOT_UID = 0
@@ -93,36 +95,17 @@ def safe_directory(info, owners):
 
 @contextlib.contextmanager
 def fixed_directory(path, uid=None):
-    """Open every fixed ancestor without following links or trusting mode alone."""
-    descriptors = [os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)]
-    chain = []
+    """Open every fixed ancestor without following links or trusting mode alone; a moved one is native convergence."""
+    last = (ROOT_UID, uid) if type(uid) is int and uid > 0 else (ROOT_UID,)
     try:
-        safe_directory(os.fstat(descriptors[0]), (ROOT_UID,))
-        parts = path.strip("/").split("/")
-        for index, part in enumerate(parts):
-            require(part not in ("", ".", ".."))
-            try:
-                following = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=descriptors[-1])
-            except FileNotFoundError:
-                require(index == len(parts) - 1)
-                yield None
-                try:
-                    os.stat(part, dir_fd=descriptors[-1], follow_symlinks=False)
-                except FileNotFoundError:
-                    require(all(identity(current(name, parent)) == before for parent, name, before in chain), changed=True)
-                    return
-                # Absent at the open and present now: created during the snapshot.
-                require(False, changed=True)
-            before = os.fstat(following)
-            chain.append((descriptors[-1], part, identity(before)))
-            descriptors.append(following)
-            owners = (ROOT_UID, uid) if index == len(parts) - 1 and type(uid) is int and uid > 0 else (ROOT_UID,)
-            safe_directory(before, owners)
-        yield descriptors[-1]
-        require(all(identity(current(name, parent)) == before for parent, name, before in chain), changed=True)
-    finally:
-        for descriptor in reversed(descriptors):
-            os.close(descriptor)
+        # The wrapped context closes its descriptors on any exit; the proof after the yield is deliberately success-only.
+        # pylint: disable-next=contextmanager-generator-missing-cleanup
+        with held_directory.hold(path, (ROOT_UID,), last=last, absent=True, prove=True) as directory:
+            yield directory
+    except held_directory.Moved:
+        raise ObservationChangedRefusal("native-observation-changed") from None
+    except held_directory.Refused:
+        raise ObservationRefusal("native-observation-unproved") from None
 
 
 @contextlib.contextmanager

@@ -19,6 +19,7 @@ import os
 import stat
 import uuid
 
+from ansible_collections.bootwright.core.plugins.module_utils import held_directory
 from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 ROOT = "/var/lib/bootwright/ceph"
@@ -61,20 +62,13 @@ def valid_metadata(value, uid=ROOT_UID, reserved=False):
 @contextlib.contextmanager
 def directory(path):
     require(os.path.dirname(path) == ROOT and str(uuid.UUID(os.path.basename(path))) == os.path.basename(path))
-    current = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
     try:
-        for component in path.strip("/").split("/"):
-            require(component not in ("", ".", ".."))
-            info = os.fstat(current)
-            require(info.st_uid == ROOT_UID and info.st_mode & 0o022 == 0)
-            following = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=current)
-            os.close(current)
-            current = following
-        info = os.fstat(current)
-        require(info.st_uid == ROOT_UID and stat.S_IMODE(info.st_mode) == 0o700)
-        yield current
-    finally:
-        os.close(current)
+        # The wrapped context closes its descriptors on any exit.
+        # pylint: disable-next=contextmanager-generator-missing-cleanup
+        with held_directory.hold(path, (ROOT_UID,), final=lambda info: info.st_uid == ROOT_UID and stat.S_IMODE(info.st_mode) == 0o700) as current:
+            yield current
+    except held_directory.Refused:
+        raise CustodyRefusal("native-tunnel-custody-unproved") from None
 
 
 def listed(descriptor):

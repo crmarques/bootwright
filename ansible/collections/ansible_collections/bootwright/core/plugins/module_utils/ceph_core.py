@@ -19,7 +19,7 @@ import threading
 import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    adapter_protocol, bounded_process, canonical_json, private_files, registry_auth, tls_trust,
+    adapter_protocol, bounded_process, canonical_json, held_directory, private_files, registry_auth, tls_trust,
     ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_nvmeof,
     ceph_monitoring_template, ceph_native_observability, ceph_native_stretch, ceph_admin_credentials_native,
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
@@ -585,7 +585,7 @@ class Transport:
     @staticmethod
     def native_sources():
         modules = (native_diagnostics, native_specializations, canonical_json, ceph_monitoring_template, bounded_process, tls_trust,
-                   private_files, registry_auth, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
+                   private_files, registry_auth, held_directory, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
                    ceph_native_resources, ceph_native_stretch, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability,
                    ceph_native_units, ceph_native_object, ceph_smb_native,
                    ceph_replication_native, ceph_export_dns, ceph_export_native,
@@ -731,7 +731,7 @@ class Transport:
                 raise ceph_native.Refusal("material") from None
             private["packageRepositoryCA"] = self.trust_bundle(bundle)
         modules = (native_diagnostics, canonical_json, bounded_process, tls_trust, ceph_native_worker,
-                   private_files, registry_auth, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
+                   private_files, registry_auth, held_directory, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
                    ceph_native_stretch, native_resolution, native_signatures, native_apply, transport_faults, ceph_package_sources,
                    ceph_crypto_policy, ceph_packages)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
