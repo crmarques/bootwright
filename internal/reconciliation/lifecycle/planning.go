@@ -275,7 +275,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 func (s Service) planInput(view View, state *compilation.State, controller string) PlanInput {
 	return PlanInput{AppliedEvidence: func(ctx context.Context, kind, object string) ([]BlockEvidence, error) {
 		return s.objectEvidenceAt(ctx, view, kind, object, appliedOwners)
-	}, Verb: reconciliation.Apply, Context: view.Identity(), State: state, Controller: controller, Preparation: s.preparation}
+	}, Verb: reconciliation.Apply, Context: view.Identity(), State: state, Controller: controller, Preparation: s.preparation, Derived: NewDerivations()}
 }
 
 // refuseOwnSocketConflicts compares the sockets this context's own blocks claim

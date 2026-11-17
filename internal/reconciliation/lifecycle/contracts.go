@@ -571,6 +571,7 @@ type PlanInput struct {
 	Context         ContextIdentity
 	State           *compilation.State
 	Controller      string
+	Derived         *Derivations
 }
 
 // CapabilityPlan is what one capability contributes to an operation: its
