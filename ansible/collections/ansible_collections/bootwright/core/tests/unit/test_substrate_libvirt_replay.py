@@ -526,3 +526,25 @@ def test_a_controller_not_proved_to_run_its_files_is_restarted(material, attempt
 
 def test_a_controller_that_is_not_running_is_started_rather_than_restarted(material):
     assert controller_attempt(material, newer=("htpasswd",), unit="inactive") == (False, "changed")
+
+
+def package_task():
+    return only(load("substrate_libvirt_host", "apply.yml"), lambda task: task.get("register") == "substrate_libvirt_host_packages",
+                "installs the hypervisor closure")
+
+
+def test_the_hypervisor_closure_is_one_dnf_transaction_over_every_requested_package():
+    task = package_task()
+    packages = ["libvirt-daemon-driver-qemu", "qemu-kvm", "libvirt-client"]
+    variables = {"bootwright_substrate_host_request": {"packages": packages, "provisioned": True}}
+    rendered = Templar(loader=LOADER, variables=variables).template(task["ansible.builtin.command"]["argv"])
+    assert "loop" not in task
+    assert rendered == ["/usr/bin/dnf", "--assumeyes", "--setopt=install_weak_deps=False", "install"] + packages
+
+
+@pytest.mark.parametrize("stdout, changed", [("Nothing to do.\nComplete!\n", False), ("Installing:\n qemu-kvm\nComplete!\n", True), ("", True)])
+def test_the_closure_reports_a_change_only_when_dnf_changed_something(stdout, changed):
+    task = package_task()
+    variables = {"substrate_libvirt_host_packages": {"stdout": stdout, "rc": 0}}
+    assert Templar(loader=LOADER, variables=variables).evaluate_conditional(trust_as_template(str(task["changed_when"]))) is changed
+    assert task["environment"] == {"LC_ALL": "C"}

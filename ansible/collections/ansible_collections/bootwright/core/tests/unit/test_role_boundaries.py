@@ -14,6 +14,7 @@ step that never fires, or only after another step acted on what was refused.
 
 from __future__ import annotations
 
+import ast
 import pathlib
 import re
 
@@ -375,9 +376,18 @@ def test_every_printed_completion_names_a_completion_outside_no_log():
     assert printed == PRINTED_COMPLETIONS
 
 
+SPLICED_ARGV = re.compile(r"\{\{ (\[[^\]]*\]) \+ [A-Za-z_][A-Za-z0-9_.]* \}\}")
+
+
 def command_argv(task):
-    """The argument vector of a command task, or None when it has none."""
+    """The argument vector of a command task, or None when it has none.
+
+    A literal list is the vector. A template that appends one variable to a literal list names the same executable
+    first, so its literal head is the vector the walk reads; any other template names none."""
     argv = arguments(task).get("argv")
+    if isinstance(argv, str):
+        spliced = SPLICED_ARGV.fullmatch(" ".join(argv.split()))
+        argv = ast.literal_eval(spliced[1]) if spliced else None
     return [str(value) for value in argv] if isinstance(argv, list) and argv else None
 
 

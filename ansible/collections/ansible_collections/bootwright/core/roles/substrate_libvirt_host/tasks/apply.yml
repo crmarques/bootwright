@@ -41,18 +41,17 @@
 
 - name: Install the hypervisor closure this provider runs
   ansible.builtin.command:
-    argv:
-      - /usr/bin/dnf
-      - --assumeyes
-      - --setopt=install_weak_deps=False
-      - install
-      - '{{ item }}'
-  loop: '{{ bootwright_substrate_host_request.packages }}'
+    argv: >-
+      {{ ['/usr/bin/dnf', '--assumeyes', '--setopt=install_weak_deps=False', 'install']
+         + bootwright_substrate_host_request.packages }}
+  environment:
+    LC_ALL: C
   register: substrate_libvirt_host_packages
   when:
     - bootwright_substrate_host_request.provisioned
+    - bootwright_substrate_host_request.packages | length > 0
     - not substrate_libvirt_host_before.observation.hypervisor
-  changed_when: not substrate_libvirt_host_before.observation.hypervisor
+  changed_when: "'Nothing to do.' not in substrate_libvirt_host_packages.stdout"
 
 # On the controller the closure is a context prerequisite the controller stage
 # installs, so this block proves it and installs nothing. Failing here names the
