@@ -118,6 +118,16 @@ def directory(path, create, mode=0o700):
         raise worker.Refusal(str(refused)) from None
 
 
+def machine_port(request):
+    """The frozen machine port, which names the controller's account and trust material."""
+    port = request["install"]["target"].get("machinePort")
+    if (not isinstance(port, dict)
+            or not all(isinstance(port.get(key), str) and port[key] for key in ("userVariable", "passwordVariable"))
+            or not isinstance(port.get("caVariable", ""), str)):
+        raise worker.Refusal("request")
+    return port
+
+
 class Controller:
     def __init__(self, request, digest, material, create=False):
         self.request, self.digest, self.material = request, digest, material
@@ -568,10 +578,11 @@ class Controller:
 
     def control(self, phase):
         state = self.load()
-        config = self.request["install"]["target"]["controller"]
-        user = read(Path(self.material["controllerUser"])).decode()
-        password = read(Path(self.material["controllerPassword"])).decode()
-        ca = read(Path(self.material["controllerCA"])).decode() if self.material.get("controllerCA") else ""
+        config, port = self.request["install"]["target"]["controller"], machine_port(self.request)
+        user = read(Path(self.material[port["userVariable"]])).decode()
+        password = read(Path(self.material[port["passwordVariable"]])).decode()
+        ca_variable = port.get("caVariable", "")
+        ca = read(Path(self.material[ca_variable])).decode() if ca_variable and self.material.get(ca_variable) else ""
         certificate = read(Path(self.material["artifactCertificate"])).decode()
 
         def factory(seconds):

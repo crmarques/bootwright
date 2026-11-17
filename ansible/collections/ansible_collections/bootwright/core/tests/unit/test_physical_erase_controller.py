@@ -547,3 +547,39 @@ class WithdrawalTests(unittest.TestCase):
                 instance.withdraw()
         self.assertTrue((self.publication / token / "erase.iso").exists())
         self.assertTrue((root / "host-key").exists())
+
+
+class MachinePortMaterial(unittest.TestCase):
+    """The controller's account and trust are read from the material the frozen
+    machine port names, never from a name this module spells itself."""
+
+    def started(self, port):
+        instance = object.__new__(controller.Controller)
+        config = {"endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerification": "full",
+                  "virtualMedia": {"trust": "lent", "enableVerification": True}}
+        instance.request = {"install": {"target": {"controller": config, "machinePort": port},
+                                        "private": {"url": "https://artifacts.example.test/private"}}}
+        instance.material = {"portUser": "/lent/user", "portPassword": "/lent/password", "portCA": "/lent/ca", "artifactCertificate": "/lent/artifact"}
+        instance.worker_request = {}
+        contents = {"/lent/user": b"synthetic user", "/lent/password": b"synthetic password", "/lent/ca": b"synthetic ca",
+                    "/lent/artifact": b"synthetic artifact"}
+        started = []
+        with patch.object(controller.Controller, "load", return_value={"token": "t" * 64}), \
+                patch.object(controller, "read", side_effect=lambda path: contents[str(path)]), \
+                patch.object(controller.redfish, "start", side_effect=lambda factory, *arguments, **keywords: started.append(factory)), \
+                patch.object(controller.redfish, "Client", side_effect=lambda *arguments, **keywords: arguments[:4]):
+            instance.control("start")
+            return started[0](60)
+
+    def test_the_controller_client_reads_the_material_the_machine_port_names(self):
+        port = {"userVariable": "portUser", "passwordVariable": "portPassword", "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "verify": True}
+        for ca_variable, ca in (("portCA", "synthetic ca"), ("", "")):
+            with self.subTest(ca_variable=ca_variable):
+                named = dict(port, caVariable=ca_variable) if ca_variable else port
+                self.assertEqual(self.started(named), ("https://bmc.example.test/redfish/v1/Systems/1", "synthetic user", "synthetic password", ca))
+
+    def test_a_request_whose_machine_port_names_no_account_is_refused(self):
+        for port in (None, {}, {"userVariable": "portUser"}, {"userVariable": "", "passwordVariable": "portPassword"},
+                     {"userVariable": "portUser", "passwordVariable": "portPassword", "caVariable": 1}, []):
+            with self.subTest(port=port), self.assertRaisesRegex(controller.worker.Refusal, "request"):
+                self.started(port)

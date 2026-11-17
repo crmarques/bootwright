@@ -362,14 +362,18 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, requ
 	if values["applyOperation"] == "" {
 		return lifecycle.RunResult{}, refusal("lifecycle.state", "physical erase has no original apply operation", "")
 	}
+	port := install.Target.MachinePort
+	if port.UserVariable == "" || port.PasswordVariable == "" {
+		return lifecycle.RunResult{}, refusal("lifecycle.state", "the frozen machine port names no controller account material", "")
+	}
 	materials := []lifecycle.MaterialFile{
 		{Name: "fleet-id", Part: secrets.PrivateKeyPart, Secret: install.FleetKeyRef, Variable: "fleetIdentity"},
-		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: install.Target.Controller.CredentialsRef, Variable: "controllerUser"},
-		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: install.Target.Controller.CredentialsRef, Variable: "controllerPassword"},
+		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: install.Target.Controller.CredentialsRef, Variable: port.UserVariable},
+		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: install.Target.Controller.CredentialsRef, Variable: port.PasswordVariable},
 		{Name: "artifact-ca", Part: secrets.CertificatePart, Secret: install.TLSCertificateRef, Variable: "artifactCertificate"},
 	}
-	if install.Target.Controller.TrustBundleRef != "" {
-		materials = append(materials, lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: install.Target.Controller.TrustBundleRef, Variable: "controllerCA"})
+	if port.CAVariable != "" {
+		materials = append(materials, lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: install.Target.Controller.TrustBundleRef, Variable: port.CAVariable})
 	}
 	canonical, err := request.Canonical()
 	if err != nil {

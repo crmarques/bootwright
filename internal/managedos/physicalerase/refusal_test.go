@@ -111,3 +111,36 @@ func TestAnUnansweredEraseWorkerNoteIsWordedFromItsClosedDetailOnly(t *testing.T
 		t.Fatalf("ids = %v", got)
 	}
 }
+
+// The controller's material is written under the names the frozen machine
+// port gives it, the ones the erase controller reads, and a port that names no
+// account material refuses before any run.
+func TestEraseMaterialsTakeTheirNamesFromTheMachinePort(t *testing.T) {
+	request, execution := eraseDestroyExecution(t)
+	request.Install.Target.Controller.TrustBundleRef = "lab-bmc-ca"
+	request.Install.Target.MachinePort.UserVariable, request.Install.Target.MachinePort.PasswordVariable, request.Install.Target.MachinePort.CAVariable = "portUser", "portPassword", "portCA"
+	canonical, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution.Block.Request = canonical
+	runner := &eraseRefusingRunner{reason: eraseMachineRunning}
+	capability := New(runner).WithIdentities(&pinReader{pinned: true, identity: machineref.HardwareIdentity{UUID: "example-system"}})
+	if _, err := capability.Destroy(context.Background(), execution); len(runner.requests) != 1 {
+		t.Fatalf("the erase made %d runs: %v", len(runner.requests), diagnostics.Of(err))
+	}
+	named := map[string]string{}
+	for _, file := range runner.requests[0].Materials {
+		named[file.Name] = file.Variable
+	}
+	if named["bmc-user"] != "portUser" || named["bmc-password"] != "portPassword" || named["bmc-ca"] != "portCA" {
+		t.Fatalf("the controller material is named %v", named)
+	}
+	request.Install.Target.MachinePort.PasswordVariable = ""
+	if execution.Block.Request, err = request.Canonical(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := capability.Destroy(context.Background(), execution); len(runner.requests) != 1 || len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+		t.Fatalf("a port naming no password material was not refused before a run: %v", diagnostics.Of(err))
+	}
+}
