@@ -84,9 +84,7 @@
       {{ (bootwright_cluster_install_request.nodes | selectattr('address', 'equalto', bootwright_cluster_install_request.rendezvous)
           | map(attribute='name') | sort | first) | default('') }}
     containercluster_install_agent_unread: >-
-      {{ [containercluster_install_agent_cluster, containercluster_install_agent_release,
-          containercluster_install_agent_completion, containercluster_install_agent_nodes]
-         | map(attribute='rc', default=1) | reject('equalto', 0) | list | length > 0
+      {{ containercluster_install_agent_cluster_read.answered | default(false) is not sameas true
          or containercluster_install_agent_state.cluster != containercluster_install_agent_before.observation.identity }}
   when: >-
     containercluster_install_agent_state.completed is not sameas true

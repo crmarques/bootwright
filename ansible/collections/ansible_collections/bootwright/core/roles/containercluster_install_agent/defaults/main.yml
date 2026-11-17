@@ -61,10 +61,6 @@ containercluster_install_agent_budget_spent_codes:
   - 124
   - 137
   - -9
-# Every request oc makes to the cluster API gives up after this long, rather
-# than waiting on an API that accepted the connection and never answers.
-containercluster_install_agent_request_timeout: 30s
-
 containercluster_install_agent_host_error_hint: >-
   the assisted service moved a declared host into error and stopped installing
   this cluster, so waiting again would watch a state that cannot change. A

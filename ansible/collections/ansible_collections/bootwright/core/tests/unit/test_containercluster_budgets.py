@@ -50,6 +50,7 @@ import time
 import pytest
 from ansible.template import Templar
 
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_cluster_read as cluster_read
 from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect as inspection
 from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import (
     AGENT_CONFIG, AUTH_CONFIG, KEPT, RESTORED, STATE, UNTOUCHED, registration, restore)
@@ -778,18 +779,25 @@ def test_a_build_the_budget_stopped_fails_as_the_budget_spent_and_any_other_as_t
         "the installer was still building the boot image of cluster sno when its build budget of 1709 seconds was spent")
 
 
-def test_every_cluster_read_gives_up_on_a_request_after_a_bounded_time():
-    reads = [task for task in role_tasks.flatten(trusted(INSTALL / "tasks" / "cluster_state.yml")) if argv(task)[:1] == [CLIENT]]
-    assert len(reads) >= 4, "the walk stopped seeing the cluster reads"
-    for task in reads:
-        bounds = [value for value in argv(task) if value.startswith("--request-timeout")]
-        assert len(bounds) == 1, task["name"]
-        rendered = scope(INSTALL).template(bounds[0])
-        assert rendered.startswith("--request-timeout=") and rendered.endswith("s"), rendered
-        assert 0 < int(rendered[len("--request-timeout="):-1]) <= 60, rendered
+def test_every_cluster_read_gives_up_on_a_request_after_a_bounded_time(monkeypatch):
+    # The role runs no oc of its own: its cluster read is the inspection's,
+    # whose every oc run passes --request-timeout and is itself bounded.
     for path in sorted((INSTALL / "tasks").glob("*.yml")):
-        if path.name != "cluster_state.yml":
-            assert not [task for task in role_tasks.flatten(trusted(path)) if argv(task)[:1] == [CLIENT]], path.name
+        assert not [task for task in role_tasks.flatten(trusted(path)) if argv(task)[:1] == [CLIENT]], path.name
+    read = found(INSTALL, "cluster_state.yml", lambda task: (task.get(INSPECT) or {}).get("cluster") is True)
+    assert read[INSPECT]["client"] == CLIENT
+    runs = []
+
+    def run(command, data, timeout, limit, environment):
+        runs.append((command, timeout))
+        return 1, b"", b""
+
+    monkeypatch.setattr(cluster_read.native.bounded_process, "run", run)
+    cluster_read.read("/oc", "/work/kubeconfig", {"release": {"version": "4.21.0"}, "nodes": []}, "")
+    assert len(runs) == 2
+    for command, timeout in runs:
+        bounds = [value for value in command if value.startswith("--request-timeout")]
+        assert bounds == ["--request-timeout=30s"] and 0 < timeout <= 30, command
 
 
 def skip():

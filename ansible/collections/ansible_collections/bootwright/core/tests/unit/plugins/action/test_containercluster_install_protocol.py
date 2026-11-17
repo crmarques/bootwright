@@ -1,9 +1,8 @@
 """An installation is complete only when the cluster itself says so.
 
 The role reads ClusterVersion through the build's kubeconfig and resolves
-`completed` from three fields, printed one per line by its JSONPath read: the
-status of the `Available` condition, then `status.history[0].state` and
-`status.history[0].version`. Their values are upstream's
+`completed` from three fields of it: the status of the `Available` condition,
+then `status.history[0].state` and `status.history[0].version`. Their values are upstream's
 (https://raw.githubusercontent.com/openshift/api/master/config/v1/): the
 condition status is `ConditionTrue` = "True" (types_cluster_operator.go), the
 condition type `OperatorAvailable` = "Available" (types_cluster_operator.go),
@@ -18,10 +17,12 @@ release-4.21).
 
 from __future__ import annotations
 
+import json
 import pathlib
 import tempfile
 from unittest import mock
 
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_cluster_read as reading
 from ansible_collections.bootwright.core.plugins.module_utils import containercluster_publication
 from ansible_collections.bootwright.core.plugins.modules import containercluster_media_token
 from types import SimpleNamespace
@@ -193,7 +194,7 @@ def one(name, predicate):
 
 
 def completion_read():
-    return one("cluster_state.yml", lambda task: task.get("register") == "containercluster_install_agent_completion")
+    return one("cluster_state.yml", lambda task: task.get("register") == "containercluster_install_agent_cluster_read")
 
 
 def resolve():
@@ -202,64 +203,54 @@ def resolve():
 
 
 def test_the_completion_is_read_from_clusterversion_through_the_builds_kubeconfig():
+    # The inspection's read of ClusterVersion goes through the kept copy it
+    # names the identity from, as JSON (test_containercluster_cluster_read.py).
     read = completion_read()
-    argv = [str(value) for value in read["ansible.builtin.command"]["argv"]]
-    assert argv[1:3] == ["--kubeconfig", "{{ containercluster_install_agent_kubeconfig }}"]
-    assert argv[3:8] == ["get", "clusterversion", "version", "--output",
-                         'jsonpath={.status.conditions[?(@.type=="Available")].status}{"\\n"}'
-                         '{.status.history[0].state}{"\\n"}{.status.history[0].version}']
-    assert not [value for value in argv if "insecure" in value or "certificate-authority" in value]
-    # The JSONPath carries no template delimiter, so it reaches oc as written.
-    template = read["ansible.builtin.command"]["argv"][7]
-    assert Templar(loader=LOADER, variables={}).template(template) == template
+    assert read["bootwright.core.containercluster_install_inspect"]["cluster"] is True
     assert read["changed_when"] is False
-    assert read["failed_when"] is False
+    assert "failed_when" not in read
 
 
-def resolved_completion(rc, stdout):
-    """The `completed` the state read resolves from one completion read.
+def resolved_completion(rc, status):
+    """The `completed` the state read resolves from a ClusterVersion read whose JSON holds this status."""
+    output = json.dumps({"apiVersion": "config.openshift.io/v1", "kind": "ClusterVersion", "status": status})
+    return reading.version_state(rc, output, "", IDENTITY, RELEASE)[0]["completed"]
 
-    stdout is what the command module returns: oc's JSONPath output with its
-    trailing empty lines stripped.
-    """
-    task = resolve()
-    scope = dict(task.get("vars") or {})
-    scope["bootwright_cluster_install_request"] = {"release": {"version": RELEASE}}
-    scope["containercluster_install_agent_completion"] = {"rc": rc, "stdout": stdout, "stderr": ""}
-    return Templar(loader=LOADER, variables=scope).template(
-        task["ansible.builtin.set_fact"]["containercluster_install_agent_state"]["completed"])
+
+def available(value):
+    return [{"type": "Progressing", "status": "False"}, {"type": "Available", "status": value}]
+
+
+def newest(state, version=RELEASE):
+    return [{"state": state, "version": version}, {"state": "Completed", "version": "4.21.14"}]
 
 
 def test_available_and_a_completed_history_at_the_declared_release_is_completed():
-    assert resolved_completion(0, "True\nCompleted\n" + RELEASE) is True
+    assert resolved_completion(0, {"conditions": available("True"), "history": newest("Completed")}) is True
 
 
-@pytest.mark.parametrize("rc, stdout", [
+@pytest.mark.parametrize("rc, status", [
     # Installing: the first history entry is Partial and Available defaults to
     # False until the release is applied.
-    (0, "False\nPartial\n" + RELEASE),
-    (0, "True\nPartial\n" + RELEASE),
-    (0, "False\nCompleted\n" + RELEASE),
+    (0, {"conditions": available("False"), "history": newest("Partial")}),
+    (0, {"conditions": available("True"), "history": newest("Partial")}),
+    (0, {"conditions": available("False"), "history": newest("Completed")}),
     # Completed at another release than the one this operation declared.
-    (0, "True\nCompleted\n4.21.14"),
-    # A history entry whose version the payload did not define is empty, and
-    # the command module strips the empty last line.
-    (0, "True\nCompleted"),
+    (0, {"conditions": available("True"), "history": newest("Completed", "4.21.14")}),
+    # A history entry whose version the payload did not define.
+    (0, {"conditions": available("True"), "history": [{"state": "Completed"}]}),
     # No Available condition yet.
-    (0, "\nCompleted\n" + RELEASE),
-    (0, "Unknown\nCompleted\n" + RELEASE),
-    # No history yet: oc's JSONPath prints nothing for an absent key.
-    (0, "False"),
-    # oc's JSONPath refuses history[0] of an empty history as out of bounds
-    # and prints nothing (client-go util/jsonpath, evalArray and Execute), and
-    # a cluster that does not answer prints nothing either.
-    (1, ""),
-    # Whatever a failed read printed, it proved nothing.
-    (1, "True\nCompleted\n" + RELEASE),
+    (0, {"conditions": [], "history": newest("Completed")}),
+    (0, {"conditions": available("Unknown"), "history": newest("Completed")}),
+    # No history yet, or an empty one.
+    (0, {"conditions": available("False")}),
+    (0, {"conditions": available("True"), "history": []}),
+    # A cluster that does not answer, whatever a failed read printed, proved nothing.
+    (1, {"conditions": available("True"), "history": newest("Completed")}),
 ], ids=["installing", "partial", "unavailable", "another release", "no version", "no condition",
-        "unknown", "no history", "empty history or nothing answered", "failed read"])
-def test_anything_short_of_that_is_not_completed(rc, stdout):
-    assert resolved_completion(rc, stdout) is False
+        "unknown", "no history", "empty history", "failed read"])
+def test_anything_short_of_that_is_not_completed(rc, status):
+    assert resolved_completion(rc, status) is False
 
 
 def settled(completed):
@@ -469,8 +460,7 @@ def test_every_other_node_is_booted(powered, own, media):
 # removal`, and the state read then reads none of the cluster the removal
 # leaves running. Each node's controller is still read: a node that cannot be
 # read fails the read, which leaves the removal's resolution unknown.
-CLUSTER_READS = ("containercluster_install_agent_cluster", "containercluster_install_agent_release",
-                 "containercluster_install_agent_completion", "containercluster_install_agent_nodes")
+CLUSTER_READS = ("containercluster_install_agent_cluster_read",)
 
 
 def defaults():

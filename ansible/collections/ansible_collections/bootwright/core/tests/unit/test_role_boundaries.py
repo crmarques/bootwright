@@ -98,7 +98,6 @@ EXECUTABLES = frozenset({
     "/usr/bin/timeout",
     "/usr/bin/virsh",
     "/usr/bin/xorriso",
-    "{{ containercluster_install_agent_client }}",
     "{{ containercluster_media_agent_installer }}",
     "{{ infrastructureservices_mirror_release_client }}",
 })

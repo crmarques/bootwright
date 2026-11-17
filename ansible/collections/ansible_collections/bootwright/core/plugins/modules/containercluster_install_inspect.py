@@ -75,6 +75,19 @@ options:
       - Exclusive with O(keep) and O(restore).
     type: bool
     default: false
+  cluster:
+    description:
+      - Read the cluster back through the kept copy with O(client), in one
+        read of its ClusterVersion and one of its nodes, each bounded in time
+        and size, and report what it answered, naming O(identity) when it
+        answered.
+      - Exclusive with O(keep), O(restore) and O(registered).
+    type: bool
+    default: false
+  client:
+    description: The absolute path of the located oc executable, for O(cluster).
+    type: path
+    default: ""
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -93,6 +106,13 @@ EXAMPLES = r"""
   bootwright.core.containercluster_install_inspect:
     request: '{{ bootwright_cluster_install_request }}'
     restore: true
+    identity: '{{ containercluster_install_agent_before.observation.identity }}'
+
+- name: Read the cluster back through this build's own trust anchor
+  bootwright.core.containercluster_install_inspect:
+    request: '{{ bootwright_cluster_install_request }}'
+    cluster: true
+    client: '{{ containercluster_install_agent_client }}'
     identity: '{{ containercluster_install_agent_before.observation.identity }}'
 
 - name: Read which declared nodes never registered after a stall
@@ -125,6 +145,20 @@ registration:
       identifiers. A read that failed lists none.
   returned: when O(registered) is true
   type: dict
+state:
+  description:
+    - With O(cluster), C(cluster) is O(identity) when the cluster answered
+      through the kept copy, C(foreign) when it answered with no O(identity) or
+      its API rejected the kept copy's certificates, and empty when nothing
+      answered; C(release) the release it reports; C(completed) whether
+      ClusterVersion reports the request's release installed; and C(missing)
+      the declared nodes it does not hold, sorted.
+  returned: when O(cluster) is true
+  type: dict
+answered:
+  description: With O(cluster), whether the cluster answered both reads.
+  returned: when O(cluster) is true
+  type: bool
 """
 
 import base64
@@ -142,6 +176,7 @@ import tempfile
 import time
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_cluster_read
 from ansible_collections.bootwright.core.plugins.module_utils.containercluster_work_area import (
     MARKER,
     inserted,
@@ -661,6 +696,8 @@ def main():
             "restore": {"type": "bool", "default": False},
             "identity": {"type": "str", "default": ""},
             "registered": {"type": "bool", "default": False},
+            "cluster": {"type": "bool", "default": False},
+            "client": {"type": "path", "default": ""},
         },
         supports_check_mode=True,
     )
@@ -669,8 +706,16 @@ def main():
         module.fail_json(msg="keep and restore are exclusive")
     if module.params["registered"] and (module.params["keep"] or module.params["restore"]):
         module.fail_json(msg="registered only reads, so it is exclusive with keep and restore")
+    if module.params["cluster"] and (module.params["keep"] or module.params["restore"] or module.params["registered"]):
+        module.fail_json(msg="cluster only reads the cluster, so it is exclusive with keep, restore and registered")
     if module.params["registered"]:
         result["registration"] = registration(request)
+    if module.params["cluster"]:
+        try:
+            result["state"], result["answered"] = containercluster_cluster_read.read(
+                module.params["client"], os.path.join(request["workRoot"], KEPT), request, module.params["identity"])
+        except (KeyError, TypeError, ValueError):
+            module.fail_json(msg="the cluster read request is malformed")
     if module.params["keep"]:
         try:
             changed = keep(request, module.check_mode)

@@ -143,7 +143,9 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("containercluster_install_agent", "observe.yml", observeCollection+"containercluster_install_placement", "reads the declared node labels and taints without patching a node", func(params, _ map[string]any) bool {
 		return params["operation"] == "observe"
 	})
-	add("containercluster_install_agent", "cluster_state.yml", "ansible.builtin.command", "runs oc get against the cluster with a request timeout", read)
+	add("containercluster_install_agent", "cluster_state.yml", observeCollection+"containercluster_install_inspect", "reads the cluster's version and nodes through oc with a request timeout", func(params, _ map[string]any) bool {
+		return params["cluster"] == true && params["keep"] == nil && params["restore"] == nil
+	})
 	add("containercluster_install_agent", "cluster_state.yml", "ansible.builtin.set_fact", "resolves the cluster answers in memory", read)
 	add("containercluster_install_agent", "state.yml", observeCollection+"containercluster_media_token", "compares image device and inode without changing publication", observeRegistrationInspect)
 	add("containercluster_install_agent", "state.yml", "ansible.builtin.fail", "names a controller that did not answer", read)

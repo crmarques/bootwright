@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import os
 import pathlib
+from unittest import mock
 
 from ansible_collections.bootwright.core.tests.unit.install_phase_tasks import apply_tasks as phased_tasks
 
@@ -19,6 +21,7 @@ import pytest
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import containercluster_install_protocol as protocol
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_cluster_read as reading
 from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import KEPT, KUBECONFIG, keep, observe
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
@@ -92,15 +95,16 @@ def state_task(predicate):
 
 
 def test_the_cluster_is_read_through_the_kubeconfig_the_identity_is_taken_from():
-    read = state_task(lambda task: task.get("register") == "containercluster_install_agent_cluster")
-    resolve = state_task(lambda task: "ansible.builtin.set_fact" in task and "vars" in task)
-    assert "containercluster_install_agent_cluster.rc" in resolve["ansible.builtin.set_fact"][
-        "containercluster_install_agent_state"]["cluster"]
-    argv = [str(value) for value in read["ansible.builtin.command"]["argv"]]
-    assert argv[1:3] == ["--kubeconfig", "{{ containercluster_install_agent_kubeconfig }}"]
-    assert argv[3:6] == ["get", "clusterversion", "version"]
-    assert not [value for value in argv if "insecure" in value or "certificate-authority" in value]
-    assert read["failed_when"] is False
+    # The inspection reads through the kept copy it names the identity from
+    # (test_containercluster_cluster_read.py), and the role's own reads, the
+    # placement's among them, go through the same file.
+    read = state_task(lambda task: task.get("register") == "containercluster_install_agent_cluster_read")
+    resolve = state_task(lambda task: "ansible.builtin.set_fact" in task)
+    assert "containercluster_install_agent_cluster_read.state" in resolve["ansible.builtin.set_fact"][
+        "containercluster_install_agent_state"]
+    assert read[INSPECT]["cluster"] is True
+    assert not [value for value in map(str, read[INSPECT].values()) if "insecure" in value or "certificate-authority" in value]
+    assert "failed_when" not in read
     defaults = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
     defaults["bootwright_cluster_install_request"] = {"workRoot": "/var/lib/bootwright-hosted/lab/clusters/sno"}
     rendered = Templar(loader=LOADER, variables=defaults).template(defaults["containercluster_install_agent_kubeconfig"])
@@ -133,19 +137,28 @@ TIMEOUT = "Unable to connect to the server: dial tcp 192.0.2.10:6443: i/o timeou
 IDENTITY = anchor()
 
 
+def cluster_read(request, identity, version, nodes):
+    """What the state file resolves from the inspection's two reads, each (rc, stdout, stderr) as oc answers it."""
+    def run(oc, kubeconfig, argv, deadline, body=None):
+        return version if argv[1] == "clusterversion" else nodes
+    with mock.patch.object(reading.native, "run", run):
+        found, read = reading.read("/usr/bin/oc", "/work/" + KEPT, request, identity)
+    registered = {"containercluster_install_agent_cluster_read": {"changed": False, "state": found, "answered": read}}
+    task = state_task(lambda task: "ansible.builtin.set_fact" in task)
+    state = Templar(loader=LOADER, variables=dict(registered, bootwright_cluster_install_request=request)).template(
+        task["ansible.builtin.set_fact"]["containercluster_install_agent_state"])
+    return state, registered
+
+
 def answered(identity, rc, stderr=""):
     """The cluster the state file resolves from one read of ClusterVersion."""
-    task = state_task(lambda task: "ansible.builtin.set_fact" in task and "vars" in task)
-    scope = dict(task["vars"])
-    scope["containercluster_install_agent_before"] = {"observation": {"identity": identity}}
-    scope["containercluster_install_agent_cluster"] = {"rc": rc, "stdout": "", "stderr": stderr}
-    cluster = task["ansible.builtin.set_fact"]["containercluster_install_agent_state"]["cluster"]
-    return Templar(loader=LOADER, variables=scope).template(cluster)
+    request = {"release": {"version": "4.21.0"}, "nodes": []}
+    version = (rc, '{"status": {}}' if rc == 0 else "", stderr)
+    return cluster_read(request, identity, version, (0, "", ""))[0]["cluster"]
 
 
 def foreign():
-    return state_task(lambda task: "ansible.builtin.set_fact" in task and "vars" in task)["vars"][
-        "containercluster_install_agent_foreign"]
+    return reading.FOREIGN
 
 
 def test_a_cluster_that_accepts_the_anchor_answers_with_this_builds_identity():
@@ -236,26 +249,16 @@ def inspected(root, config):
 def resolved(observation):
     """The state the state file resolves for a whole cluster reporting its installation completed.
 
-    Each register is what the command module returns for one of the role's
-    reads, and the controller read is what a media read of redfish_system_read
-    returns (plugins/modules/redfish_system_read.py, RETURN) for a node running
-    with its media released.
+    The cluster read is what oc answers the inspection's two reads with, and
+    the media and power are what a media read of redfish_system_read returns
+    (plugins/modules/redfish_system_read.py, RETURN) for a node running with its
+    media released.
     """
-    task = state_task(lambda task: "ansible.builtin.set_fact" in task and "vars" in task)
-    scope = dict(task["vars"])
-    scope.update({
-        "bootwright_cluster_install_request": {"release": {"version": RELEASE},
-                                               "nodes": [{"name": "master-0", "machine": "sno-01"}]},
-        "containercluster_install_agent_before": {"observation": observation},
-        "containercluster_install_agent_cluster": {"rc": 0, "stdout": "", "stderr": ""},
-        "containercluster_install_agent_release": {"rc": 0, "stdout": RELEASE, "stderr": ""},
-        "containercluster_install_agent_completion": {"rc": 0, "stdout": "True\nCompleted\n" + RELEASE, "stderr": ""},
-        "containercluster_install_agent_nodes": {"rc": 0, "stdout": "master-0", "stderr": ""},
-        "containercluster_install_agent_controllers": {"results": [
-            {"changed": False, "item": {"machine": "sno-01"}, "media": "", "power": "On"}]},
-    })
-    result = Templar(loader=LOADER, variables=scope).template(
-        task["ansible.builtin.set_fact"]["containercluster_install_agent_state"])
+    request = {"release": {"version": RELEASE}, "nodes": [{"name": "master-0", "machine": "sno-01"}]}
+    version = json.dumps({"status": {"conditions": [{"type": "Available", "status": "True"}],
+                                     "desired": {"version": RELEASE},
+                                     "history": [{"state": "Completed", "version": RELEASE}]}})
+    result = cluster_read(request, observation["identity"], (0, version, ""), (0, "master-0", ""))[0]
     return dict(result, media=[], ownMedia=[], powered=["sno-01"])
 
 
@@ -419,30 +422,22 @@ COMPACT = {
         {"name": "master-1", "address": "192.0.2.11", "machine": "machine-01"}],
     "vips": [{"slot": "api", "address": "192.0.2.5", "bridge": "virbr-lab"},
              {"slot": "ingress", "address": "192.0.2.7", "bridge": "virbr-lab"}]}
-COMPLETED = "True\nCompleted\n" + RELEASE
-
-
-def reads(nodes="master-0 master-1", nodes_rc=0, cluster_rc=0, completion=COMPLETED):
-    """What the four reads of cluster_state.yml register, as oc answers them."""
-    return {
-        "containercluster_install_agent_before": {"observation": {"identity": IDENTITY}},
-        "containercluster_install_agent_cluster": {
-            "rc": cluster_rc, "stdout": "clusterversion.config.openshift.io/version" if cluster_rc == 0 else "",
-            "stderr": "" if cluster_rc == 0 else TIMEOUT},
-        "containercluster_install_agent_release": {"rc": 0, "stdout": RELEASE, "stderr": ""},
-        "containercluster_install_agent_completion": {"rc": 0, "stdout": completion, "stderr": ""},
-        "containercluster_install_agent_nodes": {
-            "rc": nodes_rc, "stdout": nodes if nodes_rc == 0 else "", "stderr": "" if nodes_rc == 0 else TIMEOUT},
-    }
+def reads(nodes="master-0 master-1", nodes_rc=0, cluster_rc=0, history_state="Completed"):
+    """What cluster_state.yml registers and resolves from the inspection's two reads, as oc answers them."""
+    version = json.dumps({"status": {"conditions": [{"type": "Available", "status": "True"}],
+                                     "desired": {"version": RELEASE},
+                                     "history": [{"state": history_state, "version": RELEASE}]}})
+    registered = cluster_read(
+        COMPACT, IDENTITY, (0, version, "") if cluster_rc == 0 else (cluster_rc, "", TIMEOUT),
+        (0, nodes, "") if nodes_rc == 0 else (nodes_rc, "", TIMEOUT))[1]
+    return dict(registered, containercluster_install_agent_before={"observation": {"identity": IDENTITY}})
 
 
 def resolved_state(registered):
     """The state cluster_state.yml resolves from those reads."""
-    task = state_task(lambda task: "ansible.builtin.set_fact" in task and "vars" in task)
-    scope = dict(task["vars"], bootwright_cluster_install_request=COMPACT, **registered)
-    templar = Templar(loader=LOADER, variables=scope)
-    return {key: templar.template(value)
-            for key, value in task["ansible.builtin.set_fact"]["containercluster_install_agent_state"].items()}
+    task = state_task(lambda task: "ansible.builtin.set_fact" in task)
+    return Templar(loader=LOADER, variables=dict(registered, bootwright_cluster_install_request=COMPACT)).template(
+        task["ansible.builtin.set_fact"]["containercluster_install_agent_state"])
 
 
 def release_gate(registered, state):
@@ -471,7 +466,7 @@ def test_media_release_is_gated_by_a_fresh_read_after_the_installation_wait():
     (reads(), False, False),
     (reads(nodes="master-0"), True, False),
     (reads(nodes="master-1"), True, True),
-    (reads(completion="True\nPartial\n" + RELEASE), True, False),
+    (reads(history_state="Partial"), True, False),
 ])
 def test_media_release_names_the_stranded_rendezvous_only_from_a_read_that_lacks_it(registered, refuses, stranded):
     fires, message = release_gate(registered, resolved_state(registered))
@@ -531,8 +526,7 @@ def test_a_failed_read_after_the_wait_releases_nothing_and_offers_no_destroy(reg
 
 
 def test_a_failed_node_read_cannot_prove_presence_from_partial_stdout():
-    task = state_task(lambda task: "ansible.builtin.set_fact" in task)
-    missing = task["ansible.builtin.set_fact"]["containercluster_install_agent_state"]["missing"]
-    scope = {"bootwright_cluster_install_request": {"nodes": [{"name": "master-0"}]},
-             "containercluster_install_agent_nodes": {"rc": 1, "stdout": "master-0"}}
-    assert Templar(loader=LOADER, variables=scope).template(missing) == ["master-0"]
+    request = {"release": {"version": RELEASE}, "nodes": [{"name": "master-0"}]}
+    state, registered = cluster_read(request, IDENTITY, (0, '{"status": {}}', ""), (1, "master-0", TIMEOUT))
+    assert state["missing"] == ["master-0"]
+    assert registered["containercluster_install_agent_cluster_read"]["answered"] is False
