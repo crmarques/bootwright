@@ -128,6 +128,15 @@
     },
     "domain": "bootwright-lab-rhel-01",
     "hostKeyType": "ed25519",
+    "machinePort": {
+      "caVariable": "controllerCA",
+      "endpoint": "https://192.0.2.1:8000/redfish/v1/Systems/7b9ec716-85d4-8e28-84d3-f0d571d55f15",
+      "passwordVariable": "controllerPassword",
+      "pinnedSerialVariable": "pinnedSerialBase64",
+      "pinnedUUIDVariable": "pinnedUUIDBase64",
+      "userVariable": "controllerUser",
+      "verify": true
+    },
     "physical": false,
     "substrate": "libvirt",
     "uri": "qemu:///system"

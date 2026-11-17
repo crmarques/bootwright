@@ -7,7 +7,6 @@
   "targets": [
     {
       "arm": "baremetal",
-      "caVariable": "controllerCA0",
       "controller": {
         "credentialsRef": "metal-bmc",
         "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
@@ -15,22 +14,32 @@
         "tlsVerify": true,
         "trustBundleRef": "metal-bmc-ca"
       },
-      "object": "metal",
-      "passwordVariable": "controllerPassword0",
-      "userVariable": "controllerUser0"
+      "machinePort": {
+        "caVariable": "controllerCA0",
+        "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
+        "passwordVariable": "controllerPassword0",
+        "userVariable": "controllerUser0",
+        "verification": "certificate",
+        "verify": true
+      },
+      "object": "metal"
     },
     {
       "arm": "baremetal",
-      "caVariable": "controllerCA1",
       "controller": {
         "credentialsRef": "rack-bmc",
         "endpoint": "https://rack.example.test/redfish/v1/Systems/7",
         "tlsVerify": true,
         "trustBundleRef": "rack-bmc-ca"
       },
-      "object": "rack",
-      "passwordVariable": "controllerPassword1",
-      "userVariable": "controllerUser1"
+      "machinePort": {
+        "caVariable": "controllerCA1",
+        "endpoint": "https://rack.example.test/redfish/v1/Systems/7",
+        "passwordVariable": "controllerPassword1",
+        "userVariable": "controllerUser1",
+        "verify": true
+      },
+      "object": "rack"
     },
     {
       "arm": "baremetal",
@@ -39,9 +48,13 @@
         "endpoint": "https://zero.example.test/redfish/v1/Systems/7",
         "tlsVerify": true
       },
-      "object": "zero",
-      "passwordVariable": "controllerPassword2",
-      "userVariable": "controllerUser2"
+      "machinePort": {
+        "endpoint": "https://zero.example.test/redfish/v1/Systems/7",
+        "passwordVariable": "controllerPassword2",
+        "userVariable": "controllerUser2",
+        "verify": true
+      },
+      "object": "zero"
     }
   ],
   "version": "machine-power-read-v1"

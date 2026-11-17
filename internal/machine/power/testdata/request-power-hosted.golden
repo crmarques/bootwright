@@ -11,6 +11,14 @@
     "context": "lab",
     "object": "node-0"
   },
+  "machinePort": {
+    "endpoint": "kubevirt:nested/node-0-094f15ed",
+    "mediaVolume": "node-0-094f15ed-media",
+    "pinnedSerialVariable": "pinnedSerialBase64",
+    "pinnedUUIDVariable": "pinnedUUIDBase64",
+    "userVariable": "controllerUser",
+    "verify": true
+  },
   "placement": {
     "connection": "local",
     "machine": "controller"

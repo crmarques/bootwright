@@ -91,6 +91,12 @@ def rendering(tmp_path, current, index=1, material=None):
     play = next(play for play in playbook if play["name"] == "Boot node rounds")
     variables.update(play["vars"])
     variables["bootwright_node_index"] = index
+    port = {"endpoint": current["controller"]["endpoint"], "verify": current["controller"]["tlsVerify"],
+            "userVariable": "controllerUserNode%d" % index, "passwordVariable": "controllerPasswordNode%d" % index,
+            "pinnedUUIDVariable": "pinnedUUIDBase64Node%d" % index, "pinnedSerialVariable": "pinnedSerialBase64Node%d" % index}
+    if "controllerCANode%d" % index in handed:
+        port["caVariable"] = "controllerCANode%d" % index
+    current = dict(current, machinePort=port)
     variables.update({"containercluster_install_agent_node": current, "containercluster_install_agent_index": index})
     return Templar(loader=LOADER, variables=variables)
 

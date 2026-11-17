@@ -45,7 +45,13 @@ states.
 Which arm realizes a Machine is settled once from its provider and frozen in
 the realized target. No consumer derives those facts again. Consumers hand
 the frozen arm to the machine port dispatcher, which fails closed on an
-unknown arm before publication, media insertion or boot. A new arm follows
+unknown arm before publication, media insertion or boot. Each request that
+reaches a machine port also freezes one `machinePort` object per target from
+the realized target: the controller's endpoint and transport verification, the
+volume a pushed image is written to, and the names of the material variables
+that hold the controller's account, trust bundle and pinned identity, never
+their values. The collection's `machine_port_access` filter resolves it, so a
+consumer adds only its operation's arguments. A new arm follows
 the [implementation touch set](architecture.md#adding-an-implementation-of-an-existing-capability).
 
 ### Realized target fields
@@ -60,7 +66,7 @@ to [`substrate.Target`](../internal/substrate/target.go).
 | `Substrate` | The Machine's authored substrate arm. |
 | `Port` | The arm whose machine port reaches it. |
 | `Physical` | Whether operator-owned hardware exists before and outlives this context. |
-| `Controller` | The exact management endpoint, its credential and transport trust, including an arm's management API. |
+| `Controller` | The exact management endpoint, its credential and transport trust, including an arm's management API and the volume a pushed image is written to. |
 | `Identity` | The channel and handles that prove the Machine's contents. |
 | `Interfaces` | Presented interface names and reported hardware addresses, in declared order. |
 | `RootDeviceHints` | The Machine's whole-root-disk selectors. |

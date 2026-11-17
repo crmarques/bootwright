@@ -219,11 +219,19 @@ def composed():
     return found
 
 
+def machine_port(arm, suffix):
+    """The machine port Go freezes for a Machine on one arm: its controller's
+    endpoint and verification and the names of the material it reads."""
+    return {"endpoint": ENDPOINTS[arm], "verify": True, "userVariable": "controllerUser" + suffix,
+            "passwordVariable": "controllerPassword" + suffix, "pinnedUUIDVariable": "pinnedUUIDBase64" + suffix,
+            "pinnedSerialVariable": "pinnedSerialBase64" + suffix}
+
+
 def managed_os(arm):
     """What a managed-OS installation of a Machine on one arm reads: the role's
     defaults and the request and material the runner writes."""
     target = {"controller": {"credentialsRef": "lab-bmc-credentials", "endpoint": ENDPOINTS[arm], "tlsVerify": True},
-              "physical": arm == "baremetal", "substrate": arm}
+              "machinePort": machine_port(arm, ""), "physical": arm == "baremetal", "substrate": arm}
     material = {"controllerUser": MATERIAL + "bmc-user", "controllerPassword": MATERIAL + "bmc-password",
                 "fleetIdentity": MATERIAL + "fleet-id", "marker": "{}"}
     if arm == "libvirt":
@@ -249,7 +257,7 @@ def cluster(arm, name):
     and the node it is on."""
     node = {"address": "198.51.100.21", "machine": "sno-01", "name": "master-0",
             "controller": {"credentialsRef": "lab-bmc-credentials", "endpoint": ENDPOINTS[arm], "tlsVerify": True},
-            "physical": arm == "baremetal", "substrate": arm}
+            "machinePort": machine_port(arm, "Node0"), "physical": arm == "baremetal", "substrate": arm}
     material = {"controllerUserNode0": MATERIAL + "bmc-user-node0", "controllerPasswordNode0": MATERIAL + "bmc-password-node0"}
     if arm == "baremetal":
         node.update({"address": "198.51.100.41", "machine": "metal-01", "hardware": {"interfaces": INTERFACES}})
@@ -257,10 +265,7 @@ def cluster(arm, name):
     variables = defaults(CLUSTER)
     variables.update({"bootwright_cluster_install_material": material,
                       "bootwright_cluster_install_request": {"nodes": [node]}})
-    variables.update({"containercluster_install_agent_node": node, "containercluster_install_agent_index": 0,
-                      "containercluster_install_agent_user": material["controllerUserNode0"],
-                      "containercluster_install_agent_password": material["controllerPasswordNode0"],
-                      "containercluster_install_agent_ca": ""})
+    variables.update({"containercluster_install_agent_node": node, "containercluster_install_agent_index": 0})
     return variables
 
 

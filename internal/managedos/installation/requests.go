@@ -121,7 +121,8 @@ type Target struct {
 	// HostKeyType is the generated keyType of the Secret HostKeyRef names, or
 	// the key a guest-agent installation generates: ed25519, or ecdsaP256
 	// when the profile enables FIPS.
-	HostKeyType string `json:"hostKeyType,omitempty"`
+	HostKeyType string                `json:"hostKeyType,omitempty"`
+	MachinePort substrate.MachinePort `json:"machinePort"`
 	// Physical is operator-owned hardware: what it already held is what this
 	// installation erases, and its removal retains it.
 	Physical  bool   `json:"physical"`

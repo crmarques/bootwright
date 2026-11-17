@@ -76,6 +76,7 @@ type Controller struct {
 	TrustBundleRef  string
 	TLSVerification string
 	VirtualMedia    VirtualMedia
+	MediaVolume     string
 }
 
 // VirtualMedia is the BMC-to-artifact-server leg: how the controller is made
@@ -291,6 +292,7 @@ func kubevirtTarget(catalog api.Catalog, provider, machine api.Object, contextNa
 	target.Controller = Controller{
 		Endpoint:       KubeVirtEndpoint(arm.Get("namespace").Text(), KubeVirtName(contextName, machine.Name())),
 		CredentialsRef: credentials, HostCluster: cluster, TLSVerify: true,
+		MediaVolume: KubeVirtMediaVolume(KubeVirtName(contextName, machine.Name())),
 	}
 	target.Identity = Identity{Channel: ChannelNone}
 	interfaces, err := VirtualInterfaces(contextName, machine)

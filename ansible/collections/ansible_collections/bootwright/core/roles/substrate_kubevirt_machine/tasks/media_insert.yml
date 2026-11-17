@@ -21,6 +21,7 @@
 - name: Run media_insert through the host cluster's API
   bootwright.core.substrate_kubevirt_api:
     operation: media_insert
+    media_volume: '{{ bootwright_machine_port.media_volume }}'
     kubeconfig: '{{ bootwright_machine_port.user }}'
     scratch: '{{ bootwright_run_scratch }}'
     endpoint: '{{ bootwright_machine_port.endpoint }}'

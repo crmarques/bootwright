@@ -13,7 +13,7 @@
   },
   "cluster-install-agent-v1": {
     "contentDigest": "78bb10d8aecbb6c788fcc283270ab82273abf798d5e6f12d71c6e13e5a0e20f5",
-    "fingerprint": "2c0244d88b670b790cda88bbd36983747bccc3a5d536281559d22ca27008875b"
+    "fingerprint": "8f37097b5ffca649e8d25e72caaa7e75c8e17605f49c5b0c35de3d5a7323bcfa"
   },
   "cluster-media-agent-v1": {
     "contentDigest": "9cc635edd8410397e96582c7a68d34c40c6323d63ddba65101a192b6e60d7c04",
@@ -73,7 +73,7 @@
   },
   "os-install-anaconda-v1": {
     "contentDigest": "1bb65ca142b94a27f5118520140a23df15a4a38508ed5cf33b4682bbf7d14f99",
-    "fingerprint": "acd8f48b85ee441814c442a81940a9ce7eb51d38320fdd500b8729b0f61179b3"
+    "fingerprint": "06c623b8f14ee1385e5c02d3ac05f0f25f42c7d1b691c3202497a8018252c38c"
   },
   "os-package-tree-v1": {
     "contentDigest": "62218223d7cca3604594c231a1265d351e6c12e0e9d6d8b31f2f51086a839445",
@@ -81,7 +81,7 @@
   },
   "physical-erase-v1": {
     "contentDigest": "6c1c49685138b533ada39706c004909f33a27c52b3694793cb4e121e09f6643e",
-    "fingerprint": "38b3dbd64fd37ea41cee633562cae29a7b92f39425e625fb17c1ef20c0640db4"
+    "fingerprint": "5536c968f2198c2e9019a73bfdccd9f6fd12b17dc9328135f9fce932da43eb60"
   },
   "proxy-squid-v1": {
     "contentDigest": "f6f3786ce9c60b6b307aa8169bc8e87ab296769ab62d47fcfc5e536479147c16",

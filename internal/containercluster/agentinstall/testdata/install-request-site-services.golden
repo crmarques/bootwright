@@ -47,6 +47,15 @@
       },
       "controllerKind": "emulated",
       "machine": "sno-01",
+      "machinePort": {
+        "caVariable": "controllerCANode0",
+        "endpoint": "https://192.0.2.1:8000/redfish/v1/Systems/99fb0e65-44db-88dc-80ee-660148714293",
+        "passwordVariable": "controllerPasswordNode0",
+        "pinnedSerialVariable": "pinnedSerialBase64Node0",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node0",
+        "userVariable": "controllerUserNode0",
+        "verify": true
+      },
       "name": "master-0",
       "physical": false,
       "stateReadSeconds": 120,

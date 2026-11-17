@@ -187,6 +187,8 @@ func TestAPhysicalLiteralRequestReadsBackFromItsGolden(t *testing.T) {
 		User:              installUser,
 		Version:           requestVersion,
 	}
+	request.Target.MachinePort = substrate.NewMachinePort(substrate.ArmBaremetal, substrate.Controller{
+		Endpoint: request.Target.Controller.Endpoint, TLSVerify: true, TrustBundleRef: "lab-bmc-ca", TLSVerification: "certificate"}, "")
 	canonical, err := request.Canonical()
 	if err != nil {
 		t.Fatalf("freezing: %v", diagnostics.Of(err))

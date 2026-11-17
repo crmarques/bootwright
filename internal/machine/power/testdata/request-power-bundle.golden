@@ -12,6 +12,16 @@
     "context": "lab",
     "object": "metal"
   },
+  "machinePort": {
+    "caVariable": "controllerCA",
+    "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
+    "passwordVariable": "controllerPassword",
+    "pinnedSerialVariable": "pinnedSerialBase64",
+    "pinnedUUIDVariable": "pinnedUUIDBase64",
+    "userVariable": "controllerUser",
+    "verification": "certificate",
+    "verify": true
+  },
   "placement": {
     "connection": "local",
     "machine": "controller"

@@ -102,6 +102,8 @@ def scope(tmp_path, observation=None, pin_uuid=None, pin_serial=None, physical=T
             "controller": {"credentialsRef": "metal-bmc", "endpoint": ENDPOINT, "tlsVerify": True},
             "force": False,
             "identity": {"context": "lab", "object": "metal"},
+            "machinePort": {"endpoint": ENDPOINT, "verify": True, "userVariable": "controllerUser", "passwordVariable": "controllerPassword",
+                            "pinnedUUIDVariable": "pinnedUUIDBase64", "pinnedSerialVariable": "pinnedSerialBase64"},
             "placement": {"machine": "controller"},
             "verb": "stop",
             "version": "machine-power-v1",

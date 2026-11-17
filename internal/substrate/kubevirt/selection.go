@@ -214,7 +214,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 		HostCluster:   substrate.HostCluster(provider),
 		Identity:      Identity{Block: MachineBlockID(name), Context: contextName, Object: name},
 		KubeconfigRef: arm.Get("kubeconfigRef").Text(),
-		MediaVolume:   vm + "-media",
+		MediaVolume:   substrate.KubeVirtMediaVolume(vm),
 		Name:          vm,
 		Namespace:     arm.Get("namespace").Text(),
 		Placement:     placement,

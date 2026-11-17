@@ -6,9 +6,10 @@
     quiet: true
     fail_msg: The node's operation is no substrate machine port entry point; plan again with this release.
 
-# A pinned port is handed the identity its Machine's own block recorded at
-# every entry point, and a pushed image's file, the controller's client that
-# transfers it and the media identity it is recognized by in place of a link.
+# Every entry point is handed the node's frozen machine port, which carries the
+# identity its Machine's own block recorded, and a pushed image's file, the
+# controller's client that transfers it and the media identity it is
+# recognized by in place of a link.
 - name: Invoke the selected substrate machine port
   ansible.builtin.include_role:
     name: bootwright.core.substrate_machine
@@ -16,17 +17,8 @@
   vars:
     bootwright_machine_arm: '{{ containercluster_install_agent_node.substrate }}'
     bootwright_machine_port: >-
-      {{ containercluster_install_agent_port_access
-         | combine(containercluster_install_agent_node_pin if containercluster_install_agent_node.portPinned | default(false) else {})
+      {{ containercluster_install_agent_node.machinePort | bootwright.core.machine_port_access(bootwright_cluster_install_material)
          | combine(containercluster_install_agent_port_arguments[containercluster_install_agent_port_operation]) }}
-    containercluster_install_agent_port_access: >-
-      {{ {'endpoint': (containercluster_install_agent_node.controller.endpoint),
-          'user': (containercluster_install_agent_user),
-          'password': (containercluster_install_agent_password),
-          'ca': (containercluster_install_agent_ca),
-          'verify': (containercluster_install_agent_node.controller.tlsVerify)}
-         | combine({'verification': containercluster_install_agent_node.controller.tlsVerification | default('')}
-                   if (containercluster_install_agent_node.controller.tlsVerification | default('')) | length > 0 else {}) }}
     containercluster_install_agent_port_arguments:
       state_read: >-
         {{ {'media': true, 'media_identity': bootwright_cluster_install_request.imageIdentity}
@@ -43,10 +35,6 @@
 
       power:
         power: 'off'
-
-    containercluster_install_agent_node_pin:
-      pinned_uuid_base64: "{{ bootwright_cluster_install_material['pinnedUUIDBase64Node' ~ containercluster_install_agent_index] | default('') }}"
-      pinned_serial_base64: "{{ bootwright_cluster_install_material['pinnedSerialBase64Node' ~ containercluster_install_agent_index] | default('') }}"
 
     containercluster_install_agent_fetched_insert:
       image_url_file: '{{ bootwright_run_scratch }}/cluster-insert-{{ containercluster_install_agent_index }}'

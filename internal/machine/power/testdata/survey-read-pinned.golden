@@ -12,10 +12,15 @@
         "endpoint": "kubevirt:guests/vm-0-3f605b2b",
         "tlsVerify": true
       },
-      "object": "vm-0",
-      "pinnedSerialVariable": "pinnedSerialBase640",
-      "pinnedUUIDVariable": "pinnedUUIDBase640",
-      "userVariable": "controllerUser0"
+      "machinePort": {
+        "endpoint": "kubevirt:guests/vm-0-3f605b2b",
+        "mediaVolume": "vm-0-3f605b2b-media",
+        "pinnedSerialVariable": "pinnedSerialBase640",
+        "pinnedUUIDVariable": "pinnedUUIDBase640",
+        "userVariable": "controllerUser0",
+        "verify": true
+      },
+      "object": "vm-0"
     }
   ],
   "version": "machine-power-read-v1"

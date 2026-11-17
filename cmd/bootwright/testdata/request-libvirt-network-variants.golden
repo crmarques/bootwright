@@ -430,6 +430,15 @@
         },
         "domain": "bootwright-lab-nv-bond",
         "hostKeyType": "ed25519",
+        "machinePort": {
+          "caVariable": "controllerCA",
+          "endpoint": "https://127.0.0.1:8000/redfish/v1/Systems/aba29103-d1de-8981-82e0-9cff228257f9",
+          "passwordVariable": "controllerPassword",
+          "pinnedSerialVariable": "pinnedSerialBase64",
+          "pinnedUUIDVariable": "pinnedUUIDBase64",
+          "userVariable": "controllerUser",
+          "verify": true
+        },
         "physical": false,
         "substrate": "libvirt",
         "uri": "qemu:///system"
@@ -638,6 +647,15 @@
         },
         "domain": "bootwright-lab-nv-vlan",
         "hostKeyType": "ed25519",
+        "machinePort": {
+          "caVariable": "controllerCA",
+          "endpoint": "https://127.0.0.1:8001/redfish/v1/Systems/99955efc-42ad-8162-a1fb-9cdabe3b8e57",
+          "passwordVariable": "controllerPassword",
+          "pinnedSerialVariable": "pinnedSerialBase64",
+          "pinnedUUIDVariable": "pinnedUUIDBase64",
+          "userVariable": "controllerUser",
+          "verify": true
+        },
         "physical": false,
         "substrate": "libvirt",
         "uri": "qemu:///system"
@@ -889,6 +907,15 @@
         },
         "domain": "bootwright-lab-nv-vlan-bond",
         "hostKeyType": "ed25519",
+        "machinePort": {
+          "caVariable": "controllerCA",
+          "endpoint": "https://127.0.0.1:8002/redfish/v1/Systems/f84ec133-de31-8b74-9989-e15275b6bca9",
+          "passwordVariable": "controllerPassword",
+          "pinnedSerialVariable": "pinnedSerialBase64",
+          "pinnedUUIDVariable": "pinnedUUIDBase64",
+          "userVariable": "controllerUser",
+          "verify": true
+        },
         "physical": false,
         "substrate": "libvirt",
         "uri": "qemu:///system"

@@ -96,6 +96,9 @@ argument_specs:
         type: dict
         required: true
         options:
+          media_volume:
+            type: str
+            required: false
           endpoint:
             type: str
             required: true
@@ -134,6 +137,9 @@ argument_specs:
         type: dict
         required: true
         options:
+          media_volume:
+            type: str
+            required: false
           endpoint:
             type: str
             required: true
@@ -164,6 +170,9 @@ argument_specs:
         type: dict
         required: true
         options:
+          media_volume:
+            type: str
+            required: false
           endpoint:
             type: str
             required: true
@@ -200,6 +209,9 @@ argument_specs:
         type: dict
         required: true
         options:
+          media_volume:
+            type: str
+            required: false
           endpoint:
             type: str
             required: true
@@ -244,6 +256,9 @@ argument_specs:
         type: dict
         required: true
         options:
+          media_volume:
+            type: str
+            required: false
           endpoint:
             type: str
             required: true
@@ -285,6 +300,9 @@ argument_specs:
         type: dict
         required: true
         options:
+          media_volume:
+            type: str
+            required: false
           endpoint:
             type: str
             required: true
@@ -320,6 +338,9 @@ argument_specs:
         type: dict
         required: true
         options:
+          media_volume:
+            type: str
+            required: false
           endpoint:
             type: str
             required: true

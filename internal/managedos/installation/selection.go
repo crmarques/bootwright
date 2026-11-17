@@ -592,12 +592,13 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 				Trust:               derived.Controller.VirtualMedia.Trust,
 			},
 		},
-		Domain:     derived.Identity.Domain,
-		Firmware:   requestFirmware(derived.Firmware),
-		HostKeyRef: derived.Identity.HostKeyRef,
-		Physical:   derived.Physical,
-		Substrate:  derived.Substrate,
-		URI:        derived.Identity.URI,
+		Domain:      derived.Identity.Domain,
+		Firmware:    requestFirmware(derived.Firmware),
+		HostKeyRef:  derived.Identity.HostKeyRef,
+		MachinePort: derived.MachinePort(""),
+		Physical:    derived.Physical,
+		Substrate:   derived.Substrate,
+		URI:         derived.Identity.URI,
 	}
 	// Only a physical machine proves itself by hardware address. A machine its
 	// substrate created is addressed by the interface name that realization

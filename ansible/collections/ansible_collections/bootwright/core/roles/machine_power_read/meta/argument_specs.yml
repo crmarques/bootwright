@@ -24,9 +24,6 @@ argument_specs:
                   - baremetal
                   - kubevirt
                   - libvirt
-              caVariable:
-                type: str
-                required: false
               controller:
                 type: dict
                 required: true
@@ -53,19 +50,42 @@ argument_specs:
                   trustBundleRef:
                     type: str
                     required: false
-              object:
-                type: str
+              machinePort:
+                type: dict
                 required: true
-              passwordVariable:
-                type: str
-                required: false
-              pinnedSerialVariable:
-                type: str
-                required: false
-              pinnedUUIDVariable:
-                type: str
-                required: false
-              userVariable:
+                options:
+                  caVariable:
+                    type: str
+                    required: false
+                  endpoint:
+                    type: str
+                    required: true
+                  mediaVolume:
+                    type: str
+                    required: false
+                  passwordVariable:
+                    type: str
+                    required: false
+                  pinnedSerialVariable:
+                    type: str
+                    required: false
+                  pinnedUUIDVariable:
+                    type: str
+                    required: false
+                  userVariable:
+                    type: str
+                    required: true
+                  verification:
+                    type: str
+                    required: false
+                    choices:
+                      - full
+                      - certificate
+                      - none
+                  verify:
+                    type: bool
+                    required: true
+              object:
                 type: str
                 required: true
           version:

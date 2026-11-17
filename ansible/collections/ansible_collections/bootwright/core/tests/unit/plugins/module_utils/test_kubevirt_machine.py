@@ -370,24 +370,24 @@ def test_media_is_uploaded_into_a_stopped_machine_and_ejected_by_uid():
     api = FakeAPI()
     arm.apply(host(api), request(), context())
     machine = pinned(api)
-    reuse, ignored_value = arm.upload_volume(machine, VM, "digest-1", 3 * arm.GIB + 1)
+    reuse, ignored_value = arm.upload_volume(machine, VM, VM + "-media", "digest-1", 3 * arm.GIB + 1)
     volume = api.objects["/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes/" + VM + "-media"]
     assert not reuse and volume["spec"]["storage"]["resources"]["requests"]["storage"] == "5Gi"
     assert volume["metadata"]["annotations"][arm.MEDIA] == "digest-1" and arm.derives(volume, VM)
     volume["status"]["phase"] = "Succeeded"
-    arm.attach(machine, VM)
+    arm.attach(machine, VM, VM + "-media")
     template = api.objects[VM_PATH]["spec"]["template"]["spec"]
     assert {"name": "media", "bootOrder": 2, "cdrom": {"bus": "sata"}} in template["domain"]["devices"]["disks"]
     assert arm.state_read(machine, VM, "digest-1")["media_state"] == "own"
     assert arm.state_read(machine, VM, "digest-2")["media_state"] == "foreign"
-    assert arm.upload_volume(machine, VM, "digest-1", 1)[0]
+    assert arm.upload_volume(machine, VM, VM + "-media", "digest-1", 1)[0]
     assert arm.frozen_difference(request(), context(), api.objects[VM_PATH]) == ""
-    arm.eject(machine, VM)
+    arm.eject(machine, VM, VM + "-media")
     assert "/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes/" + VM + "-media" not in api.objects
     assert arm.state_read(machine, VM)["media_state"] == "none"
     arm.change_power(machine, VM, "on")
     with pytest.raises(arm.PortRefused):
-        arm.upload_volume(machine, VM, "digest-3", 1)
+        arm.upload_volume(machine, VM, VM + "-media", "digest-3", 1)
 
 
 def proof_request(**extra):
@@ -481,7 +481,7 @@ def test_one_kubeconfig_form_is_accepted_and_every_other_refused():
 def test_a_claim_outliving_its_deleted_data_volume_keeps_the_removal_unproved():
     api = FakeAPI()
     ignored_changed, applied = arm.apply(host(api), request(), context())
-    arm.upload_volume(pinned(api), VM, "digest-1", 1)
+    arm.upload_volume(pinned(api), VM, VM + "-media", "digest-1", 1)
     media_uid = api.objects["/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes/" + VM + "-media"]["metadata"]["uid"]
     collect = api.collect
     api.collect = lambda uid: None if uid == media_uid else collect(uid)
@@ -494,18 +494,18 @@ PORTS = [
     ("state_read", lambda machine: arm.state_read(machine, VM, "digest-1")),
     ("power on", lambda machine: arm.change_power(machine, VM, "on")),
     ("power off", lambda machine: arm.change_power(machine, VM, "off", force=True)),
-    ("eject", lambda machine: arm.eject(machine, VM)),
-    ("insert", lambda machine: arm.upload_volume(machine, VM, "digest-2", 1)),
-    ("attach", lambda machine: arm.attach(machine, VM)),
+    ("eject", lambda machine: arm.eject(machine, VM, VM + "-media")),
+    ("insert", lambda machine: arm.upload_volume(machine, VM, VM + "-media", "digest-2", 1)),
+    ("attach", lambda machine: arm.attach(machine, VM, VM + "-media")),
 ]
 
 
 def presented_machine():
     api = FakeAPI()
     arm.apply(host(api), request(), context())
-    arm.upload_volume(pinned(api), VM, "digest-1", 1)
+    arm.upload_volume(pinned(api), VM, VM + "-media", "digest-1", 1)
     api.objects["/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes/" + VM + "-media"]["status"]["phase"] = "Succeeded"
-    arm.attach(pinned(api), VM)
+    arm.attach(pinned(api), VM, VM + "-media")
     return api
 
 
@@ -532,7 +532,7 @@ def test_the_media_volume_is_owned_only_through_the_pinned_virtual_machine():
     assert volume["metadata"]["ownerReferences"][0]["uid"] == api.objects[VM_PATH]["metadata"]["uid"]
     volume["metadata"]["ownerReferences"] = [{"uid": "someone-else"}]
     with pytest.raises(kapi.Refused, match="not this context's"):
-        arm.eject(pinned(api), VM)
+        arm.eject(pinned(api), VM, VM + "-media")
     assert arm.state_read(pinned(api), VM, "digest-1")["media_state"] == "foreign"
 
 
@@ -542,7 +542,7 @@ def test_the_pinned_path_still_boots_and_ejects():
     assert arm.state_read(machine, VM, "digest-1")["media_state"] == "own"
     assert arm.change_power(machine, VM, "on")["power"] == "On"
     assert arm.change_power(machine, VM, "off")["power"] == "Off"
-    arm.eject(machine, VM)
+    arm.eject(machine, VM, VM + "-media")
     assert arm.state_read(machine, VM)["media_state"] == "none"
 
 
@@ -605,11 +605,11 @@ def test_a_live_eject_completes_while_the_node_runs_and_its_claim_waits_for_the_
     api = FakeAPI()
     receipts = arm.apply(host(api), request(), context())[1]["receipts"]
     machine = pinned(api)
-    arm.upload_volume(machine, VM, "digest-1", 1)
+    arm.upload_volume(machine, VM, VM + "-media", "digest-1", 1)
     api.objects[MEDIA_PATH]["status"]["phase"] = "Succeeded"
-    arm.attach(machine, VM)
+    arm.attach(machine, VM, VM + "-media")
     assert arm.change_power(machine, VM, "on")["power"] == "On"
-    arm.eject(machine, VM)
+    arm.eject(machine, VM, VM + "-media")
     assert MEDIA_PATH not in api.objects and api.objects[CLAIMS + VM + "-media"]["metadata"]["deletionTimestamp"]
     assert arm.state_read(machine, VM, "digest-1") == {"power": "On", "power_state": "on", "media": "", "media_state": "none"}
     observed = arm.observe(host(api), request(), context(receipts))
@@ -623,11 +623,11 @@ def test_removal_counts_the_claim_a_live_eject_left_until_it_is_gone():
     api = FakeAPI()
     receipts = arm.apply(host(api), request(), context())[1]["receipts"]
     machine = pinned(api)
-    arm.upload_volume(machine, VM, "digest-1", 1)
+    arm.upload_volume(machine, VM, VM + "-media", "digest-1", 1)
     api.objects[MEDIA_PATH]["status"]["phase"] = "Succeeded"
-    arm.attach(machine, VM)
+    arm.attach(machine, VM, VM + "-media")
     arm.change_power(machine, VM, "on")
-    arm.eject(machine, VM)
+    arm.eject(machine, VM, VM + "-media")
     claim = CLAIMS + VM + "-media"
     api.objects[VMI_PATH]["status"]["phase"] = "Succeeded"
     api.mounted = lambda held: held["metadata"]["name"] == VM + "-media"
@@ -665,7 +665,7 @@ def test_an_instance_in_a_final_phase_is_a_stopped_machine(phase):
     assert arm.state_read(pinned(api), VM)["power"] == "Off"
     assert arm.change_power(pinned(api), VM, "off")["power"] == "Off" and puts(api) == []
     assert arm.pre_boot(pinned(api), VM)["power"] == "Off"
-    assert arm.upload_volume(pinned(api), VM, "digest-1", 1)[0] is False and MEDIA_PATH in api.objects
+    assert arm.upload_volume(pinned(api), VM, VM + "-media", "digest-1", 1)[0] is False and MEDIA_PATH in api.objects
     assert arm.change_power(pinned(api), VM, "on")["power"] == "On"
     assert puts(api) == ["start"] and api.objects[VMI_PATH]["status"]["phase"] == "Running"
     api, ignored_receipts = final_machine(phase)
@@ -691,13 +691,13 @@ def test_a_start_a_final_instance_does_not_take_is_retried_once_after_a_stop(ans
 def test_the_upload_volume_is_placed_on_the_root_class_of_a_host_with_no_default_class():
     api = FakeAPI()
     arm.apply(host(api), request(), context())
-    reuse, ignored_live = arm.upload_volume(pinned(api), VM, "digest-1", 1)
+    reuse, ignored_live = arm.upload_volume(pinned(api), VM, VM + "-media", "digest-1", 1)
     assert not reuse and api.objects[MEDIA_PATH]["spec"]["storage"]["storageClassName"] == "guest-block"
     bare = FakeAPI()
     arm.apply(host(bare), request(), context())
     del bare.objects[VM_PATH]["spec"]["dataVolumeTemplates"][0]["spec"]["storage"]["storageClassName"]
     with pytest.raises(kapi.Refused, match="names no storage class"):
-        arm.upload_volume(pinned(bare), VM, "digest-1", 1)
+        arm.upload_volume(pinned(bare), VM, VM + "-media", "digest-1", 1)
     assert not [p for m, p in bare.requests if m == "POST" and p.endswith("/datavolumes")]
 
 
@@ -728,5 +728,5 @@ def test_an_upload_waits_for_the_claim_an_earlier_upload_left():
     api.put(CLAIMS + VM + "-media", api.meta(VM + "-media"))
     api.requests.clear()
     with pytest.raises(kapi.Refused, match="PersistentVolumeClaim guests/" + VM + "-media of an earlier upload still exists"):
-        arm.upload_volume(pinned(api), VM, "digest-1", 1)
+        arm.upload_volume(pinned(api), VM, VM + "-media", "digest-1", 1)
     assert not [p for m, p in api.requests if m != "GET"]

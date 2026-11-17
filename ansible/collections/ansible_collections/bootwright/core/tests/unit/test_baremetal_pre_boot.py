@@ -101,6 +101,12 @@ def written(tmp_path, variables):
     return LOADER.load_from_file(str(path), cache="none", trusted_as_template=True)
 
 
+def machine_port(suffix):
+    """The machine port Go freezes for a physical Machine whose material is under suffix."""
+    return {"endpoint": ENDPOINT, "verify": True, "userVariable": "controllerUser" + suffix, "passwordVariable": "controllerPassword" + suffix,
+            "pinnedUUIDVariable": "pinnedUUIDBase64" + suffix, "pinnedSerialVariable": "pinnedSerialBase64" + suffix}
+
+
 def managed_os(tmp_path, pins, hardware):
     """The managed-OS installation of one physical Machine."""
     material = {"controllerUser": str(tmp_path / "bmc-user"), "controllerPassword": str(tmp_path / "bmc-password")}
@@ -110,7 +116,7 @@ def managed_os(tmp_path, pins, hardware):
         "bootwright_os_install_material": material,
         "bootwright_os_install_request": {"identity": {"object": "metal"}, "target": {
             "controller": {"endpoint": ENDPOINT, "tlsVerify": True}, "hardware": hardware,
-            "physical": True, "substrate": "baremetal"}},
+            "machinePort": machine_port(""), "physical": True, "substrate": "baremetal"}},
     }))
     variables.update(include(MANAGED_OS)["vars"])
     return variables
@@ -126,13 +132,10 @@ def cluster(tmp_path, pins, hardware):
     }
     material.update({key + "Node1": value for key, value in pins.items()})
     node = {"controller": {"endpoint": ENDPOINT, "tlsVerify": True}, "hardware": hardware, "machine": "metal",
-            "name": "master-1", "physical": True, "substrate": "baremetal"}
+            "machinePort": machine_port("Node1"), "name": "master-1", "physical": True, "substrate": "baremetal"}
     variables = dict(LOADER.load_from_file(str(CLUSTER / "defaults" / "main.yml"), trusted_as_template=True))
     variables.update(written(tmp_path, {"bootwright_cluster_install_material": material}))
-    variables.update({"containercluster_install_agent_node": node, "containercluster_install_agent_index": 1,
-                      "containercluster_install_agent_user": material["controllerUserNode1"],
-                      "containercluster_install_agent_password": material["controllerPasswordNode1"],
-                      "containercluster_install_agent_ca": ""})
+    variables.update({"containercluster_install_agent_node": node, "containercluster_install_agent_index": 1})
     variables.update(include(CLUSTER)["vars"])
     return variables
 

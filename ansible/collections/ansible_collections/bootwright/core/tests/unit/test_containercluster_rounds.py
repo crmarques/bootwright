@@ -91,14 +91,18 @@ def test_each_install_port_request_matches_the_selected_arm_entrypoint():
         for operation in ('state_read', 'media_insert', 'media_eject', 'power'):
             scope = dict(port['vars'], containercluster_install_agent_port_operation=operation,
                          containercluster_install_agent_node={
-                             'physical': arm == 'baremetal', 'controller': {
+                             'physical': arm == 'baremetal', 'machinePort': {
+                                 'endpoint': 'https://bmc.example.test', 'verify': True, 'userVariable': 'controllerUserNode0',
+                                 'passwordVariable': 'controllerPasswordNode0', 'caVariable': 'controllerCANode0',
+                                 'pinnedUUIDVariable': 'pinnedUUIDBase64Node0', 'pinnedSerialVariable': 'pinnedSerialBase64Node0'},
+                             'controller': {
                                  'endpoint': 'https://bmc.example.test', 'tlsVerify': True,
                                  'virtualMedia': {'trust': 'importCertificate', 'enableVerification': arm == 'baremetal',
                                                   'restoreVerification': False, 'removeCertificate': True}}},
                          bootwright_cluster_install_request={'deliveryKind': 'fetch'},
-                         containercluster_install_agent_user='/material/user', containercluster_install_agent_password='/material/password',
-                         containercluster_install_agent_ca='/material/ca', containercluster_install_agent_index=0,
-                         bootwright_run_scratch='/scratch', bootwright_cluster_install_material={'artifactCertificate': '/material/certificate'})
+                         containercluster_install_agent_index=0, bootwright_run_scratch='/scratch',
+                         bootwright_cluster_install_material={'artifactCertificate': '/material/certificate', 'controllerUserNode0': '/material/user',
+                                                              'controllerPasswordNode0': '/material/password', 'controllerCANode0': '/material/ca'})
             request = Templar(loader=loader, variables=scope).template(port['vars']['bootwright_machine_port'])
             if operation == 'media_insert':
                 assert request['private'] is True

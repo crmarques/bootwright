@@ -47,6 +47,14 @@
       },
       "controllerKind": "api",
       "machine": "kubevirt-01",
+      "machinePort": {
+        "endpoint": "kubevirt:bootwright-guests/kubevirt-01-ba334887",
+        "mediaVolume": "kubevirt-01-ba334887-media",
+        "pinnedSerialVariable": "pinnedSerialBase64Node0",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node0",
+        "userVariable": "controllerUserNode0",
+        "verify": true
+      },
       "name": "master-0",
       "physical": false,
       "portPinned": true,
@@ -68,6 +76,14 @@
       },
       "controllerKind": "api",
       "machine": "kubevirt-02",
+      "machinePort": {
+        "endpoint": "kubevirt:bootwright-guests/kubevirt-02-6fcb7dda",
+        "mediaVolume": "kubevirt-02-6fcb7dda-media",
+        "pinnedSerialVariable": "pinnedSerialBase64Node1",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node1",
+        "userVariable": "controllerUserNode1",
+        "verify": true
+      },
       "name": "master-1",
       "physical": false,
       "portPinned": true,
@@ -89,6 +105,14 @@
       },
       "controllerKind": "api",
       "machine": "kubevirt-03",
+      "machinePort": {
+        "endpoint": "kubevirt:bootwright-guests/kubevirt-03-de2dd99d",
+        "mediaVolume": "kubevirt-03-de2dd99d-media",
+        "pinnedSerialVariable": "pinnedSerialBase64Node2",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node2",
+        "userVariable": "controllerUserNode2",
+        "verify": true
+      },
       "name": "master-2",
       "physical": false,
       "portPinned": true,

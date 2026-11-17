@@ -13,10 +13,15 @@
         "hostCluster": "host",
         "tlsVerify": true
       },
-      "object": "node-0",
-      "pinnedSerialVariable": "pinnedSerialBase640",
-      "pinnedUUIDVariable": "pinnedUUIDBase640",
-      "userVariable": "controllerUser0"
+      "machinePort": {
+        "endpoint": "kubevirt:nested/node-0-094f15ed",
+        "mediaVolume": "node-0-094f15ed-media",
+        "pinnedSerialVariable": "pinnedSerialBase640",
+        "pinnedUUIDVariable": "pinnedUUIDBase640",
+        "userVariable": "controllerUser0",
+        "verify": true
+      },
+      "object": "node-0"
     },
     {
       "arm": "kubevirt",
@@ -26,10 +31,15 @@
         "hostCluster": "host",
         "tlsVerify": true
       },
-      "object": "node-1",
-      "pinnedSerialVariable": "pinnedSerialBase641",
-      "pinnedUUIDVariable": "pinnedUUIDBase641",
-      "userVariable": "controllerUser1"
+      "machinePort": {
+        "endpoint": "kubevirt:nested/node-1-302063a4",
+        "mediaVolume": "node-1-302063a4-media",
+        "pinnedSerialVariable": "pinnedSerialBase641",
+        "pinnedUUIDVariable": "pinnedUUIDBase641",
+        "userVariable": "controllerUser1",
+        "verify": true
+      },
+      "object": "node-1"
     }
   ],
   "version": "machine-power-read-v1"

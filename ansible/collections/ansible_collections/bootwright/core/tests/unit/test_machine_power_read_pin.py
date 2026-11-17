@@ -39,12 +39,14 @@ def port(target, material):
 
 
 def target(index, pinned=True):
-    found = {"arm": "kubevirt", "object": "node-%d" % index, "userVariable": "controllerUser%d" % index,
-             "controller": {"credentialsRef": "", "endpoint": "kubevirt:nested/node-%d-0000000%d" % (index, index),
-                            "hostCluster": "host", "tlsVerify": True}}
+    endpoint = "kubevirt:nested/node-%d-0000000%d" % (index, index)
+    found = {"arm": "kubevirt", "object": "node-%d" % index,
+             "controller": {"credentialsRef": "", "endpoint": endpoint, "hostCluster": "host", "tlsVerify": True},
+             "machinePort": {"endpoint": endpoint, "verify": True, "userVariable": "controllerUser%d" % index,
+                             "mediaVolume": "node-%d-0000000%d-media" % (index, index)}}
     if pinned:
-        found["pinnedUUIDVariable"] = "pinnedUUIDBase64%d" % index
-        found["pinnedSerialVariable"] = "pinnedSerialBase64%d" % index
+        found["machinePort"]["pinnedUUIDVariable"] = "pinnedUUIDBase64%d" % index
+        found["machinePort"]["pinnedSerialVariable"] = "pinnedSerialBase64%d" % index
     return found
 
 

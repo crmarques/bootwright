@@ -440,7 +440,7 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 		return lifecycle.RunResult{}, err
 	}
 	defer release()
-	for index, node := range request.Nodes {
+	for _, node := range request.Nodes {
 		user, password := substrate.ControllerCredential(node.Substrate)
 		credential := node.Controller.CredentialsRef
 		if node.Controller.HostCluster != "" {
@@ -448,18 +448,18 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 		}
 		materials = append(materials, lifecycle.MaterialFile{
 			Name: "bmc-user-" + node.Machine, Part: user,
-			Secret: credential, Variable: "controllerUser" + nodeVariable(index),
+			Secret: credential, Variable: node.MachinePort.UserVariable,
 		})
 		if password != "" {
 			materials = append(materials, lifecycle.MaterialFile{
 				Name: "bmc-password-" + node.Machine, Part: password,
-				Secret: node.Controller.CredentialsRef, Variable: "controllerPassword" + nodeVariable(index),
+				Secret: node.Controller.CredentialsRef, Variable: node.MachinePort.PasswordVariable,
 			})
 		}
-		if node.Controller.TrustBundleRef != "" {
+		if node.MachinePort.CAVariable != "" {
 			materials = append(materials, lifecycle.MaterialFile{
 				Name: "bmc-ca-" + node.Machine, Part: secrets.CertificatePart,
-				Secret: node.Controller.TrustBundleRef, Variable: "controllerCA" + nodeVariable(index),
+				Secret: node.Controller.TrustBundleRef, Variable: node.MachinePort.CAVariable,
 			})
 		}
 	}

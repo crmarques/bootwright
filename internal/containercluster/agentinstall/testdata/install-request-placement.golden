@@ -47,6 +47,15 @@
       },
       "controllerKind": "emulated",
       "machine": "ocp-01",
+      "machinePort": {
+        "caVariable": "controllerCANode0",
+        "endpoint": "https://192.0.2.1:8000/redfish/v1/Systems/566b9a1d-0751-86e3-ae9d-87255c81379e",
+        "passwordVariable": "controllerPasswordNode0",
+        "pinnedSerialVariable": "pinnedSerialBase64Node0",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node0",
+        "userVariable": "controllerUserNode0",
+        "verify": true
+      },
       "name": "master-0",
       "physical": false,
       "stateReadSeconds": 120,
@@ -68,6 +77,15 @@
       },
       "controllerKind": "emulated",
       "machine": "ocp-02",
+      "machinePort": {
+        "caVariable": "controllerCANode1",
+        "endpoint": "https://192.0.2.1:8001/redfish/v1/Systems/ae08d076-33d5-8cb7-9edd-060818340b06",
+        "passwordVariable": "controllerPasswordNode1",
+        "pinnedSerialVariable": "pinnedSerialBase64Node1",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node1",
+        "userVariable": "controllerUserNode1",
+        "verify": true
+      },
       "name": "master-1",
       "physical": false,
       "stateReadSeconds": 120,
@@ -89,6 +107,15 @@
       },
       "controllerKind": "emulated",
       "machine": "ocp-03",
+      "machinePort": {
+        "caVariable": "controllerCANode2",
+        "endpoint": "https://192.0.2.1:8002/redfish/v1/Systems/9b149228-70e9-86ab-b2fa-998239057cb5",
+        "passwordVariable": "controllerPasswordNode2",
+        "pinnedSerialVariable": "pinnedSerialBase64Node2",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node2",
+        "userVariable": "controllerUserNode2",
+        "verify": true
+      },
       "name": "master-2",
       "physical": false,
       "stateReadSeconds": 120,
@@ -114,6 +141,15 @@
         "example.test/row": ""
       },
       "machine": "ocp-04",
+      "machinePort": {
+        "caVariable": "controllerCANode3",
+        "endpoint": "https://192.0.2.1:8003/redfish/v1/Systems/083b34a3-c07d-8764-8d78-9ac41c376c80",
+        "passwordVariable": "controllerPasswordNode3",
+        "pinnedSerialVariable": "pinnedSerialBase64Node3",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node3",
+        "userVariable": "controllerUserNode3",
+        "verify": true
+      },
       "name": "master-3",
       "physical": false,
       "stateReadSeconds": 120,
@@ -138,6 +174,15 @@
         "node-role.kubernetes.io/infra": ""
       },
       "machine": "ocp-05",
+      "machinePort": {
+        "caVariable": "controllerCANode4",
+        "endpoint": "https://192.0.2.1:8004/redfish/v1/Systems/8262c409-23e1-86b4-b1c1-ee64dde06d2b",
+        "passwordVariable": "controllerPasswordNode4",
+        "pinnedSerialVariable": "pinnedSerialBase64Node4",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node4",
+        "userVariable": "controllerUserNode4",
+        "verify": true
+      },
       "name": "master-4",
       "physical": false,
       "stateReadSeconds": 120,
@@ -173,6 +218,15 @@
         "node-role.kubernetes.io/infra": ""
       },
       "machine": "ocp-06",
+      "machinePort": {
+        "caVariable": "controllerCANode5",
+        "endpoint": "https://192.0.2.1:8005/redfish/v1/Systems/0e42e819-625a-8c49-8e40-06a51901f2a8",
+        "passwordVariable": "controllerPasswordNode5",
+        "pinnedSerialVariable": "pinnedSerialBase64Node5",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node5",
+        "userVariable": "controllerUserNode5",
+        "verify": true
+      },
       "name": "master-5",
       "physical": false,
       "stateReadSeconds": 120,

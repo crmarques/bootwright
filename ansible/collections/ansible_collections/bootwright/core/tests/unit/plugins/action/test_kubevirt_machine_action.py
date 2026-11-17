@@ -29,7 +29,7 @@ def test_media_insert_uploads_once_through_the_verified_proxy_then_presents_the_
         api.objects["/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes/" + volume]["status"]["phase"] = "Succeeded"
 
     recorded = base64.b64encode(api.objects["/apis/kubevirt.io/v1/namespaces/guests/virtualmachines/" + VM]["metadata"]["uid"].encode()).decode()
-    arguments = {"endpoint": "kubevirt:guests/" + VM, "image_path": str(image), "virtctl": "/usr/bin/virtctl",
+    arguments = {"endpoint": "kubevirt:guests/" + VM, "media_volume": VM + "-media", "image_path": str(image), "virtctl": "/usr/bin/virtctl",
                  "pinned_uuid_base64": base64.b64encode(b"cluster-1").decode(), "pinned_serial_base64": recorded, "media_identity": "digest-1", "seconds": 1800}
     assert action.port("media_insert", client(api), arguments, upload) == {}
     assert uploads == [("guests", VM + "-media", str(image), "https://cdi-uploadproxy.apps.host.example.test", True)]

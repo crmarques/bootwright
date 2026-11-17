@@ -54,14 +54,6 @@
         loop_var: containercluster_install_agent_node
         label: '{{ containercluster_install_agent_node.machine }}'
         index_var: containercluster_install_agent_index
-      vars:
-        containercluster_install_agent_user: >-
-          {{ bootwright_cluster_install_material['controllerUserNode' ~ containercluster_install_agent_index] }}
-        containercluster_install_agent_password: >-
-          {{ '' if containercluster_install_agent_node.portPinned | default(false)
-             else bootwright_cluster_install_material['controllerPasswordNode' ~ containercluster_install_agent_index] }}
-        containercluster_install_agent_ca: >-
-          {{ bootwright_cluster_install_material['controllerCANode' ~ containercluster_install_agent_index] | default('') }}
 
     # ansible-core keeps nothing of a failure under no_log but that it failed, so
     # each controller's own refusal is reported here, where no credential is.

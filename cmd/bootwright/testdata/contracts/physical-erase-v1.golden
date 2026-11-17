@@ -157,6 +157,16 @@ request-schema:
   install.target.hardware.wwn string omitempty
   install.target.hostKeyRef string omitempty
   install.target.hostKeyType string omitempty
+  install.target.machinePort struct substrate.MachinePort
+  install.target.machinePort.caVariable string omitempty
+  install.target.machinePort.endpoint string
+  install.target.machinePort.mediaVolume string omitempty
+  install.target.machinePort.passwordVariable string omitempty
+  install.target.machinePort.pinnedSerialVariable string omitempty
+  install.target.machinePort.pinnedUUIDVariable string omitempty
+  install.target.machinePort.userVariable string
+  install.target.machinePort.verification string omitempty
+  install.target.machinePort.verify bool
   install.target.physical bool
   install.target.substrate string
   install.target.uri string omitempty

@@ -45,6 +45,41 @@ argument_specs:
           identity:
             type: dict
             required: true
+          machinePort:
+            type: dict
+            required: true
+            options:
+              caVariable:
+                type: str
+                required: false
+              endpoint:
+                type: str
+                required: true
+              mediaVolume:
+                type: str
+                required: false
+              passwordVariable:
+                type: str
+                required: false
+              pinnedSerialVariable:
+                type: str
+                required: false
+              pinnedUUIDVariable:
+                type: str
+                required: false
+              userVariable:
+                type: str
+                required: true
+              verification:
+                type: str
+                required: false
+                choices:
+                  - full
+                  - certificate
+                  - none
+              verify:
+                type: bool
+                required: true
           placement:
             type: dict
             required: true

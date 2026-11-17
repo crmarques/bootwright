@@ -243,7 +243,7 @@ func TestTheLiveReadReportsPinnedKubeVirtMachinesAndAnUnlentHostUnknown(t *testi
 			t.Fatal(err)
 		}
 		for index, target := range survey.Targets {
-			if target.PinnedUUIDVariable == "" || run.MaterialValues[target.PinnedUUIDVariable] == "" || run.MaterialValues[target.PinnedSerialVariable] == "" {
+			if target.MachinePort.PinnedUUIDVariable == "" || run.MaterialValues[target.MachinePort.PinnedUUIDVariable] == "" || run.MaterialValues[target.MachinePort.PinnedSerialVariable] == "" {
 				t.Fatalf("target %d of %s carries no pin: %+v", index, run.Canonical, run.MaterialValues)
 			}
 		}
@@ -280,7 +280,7 @@ func TestASurveyCarriesEachPinnedTargetsOwnIdentity(t *testing.T) {
 		t.Fatalf("surveys = %+v (%v)", surveys, err)
 	}
 	hosted := surveys[1]
-	if hosted.Targets[0].PinnedUUIDVariable != "pinnedUUIDBase640" || hosted.Targets[1].PinnedUUIDVariable != "" ||
+	if hosted.Targets[0].MachinePort.PinnedUUIDVariable != "pinnedUUIDBase640" || hosted.Targets[1].MachinePort.PinnedUUIDVariable != "" ||
 		readValues(hosted)["pinnedSerialBase640"] == "" || len(readValues(hosted)) != 2 {
 		t.Fatalf("hosted survey = %+v, values %v", hosted, readValues(hosted))
 	}

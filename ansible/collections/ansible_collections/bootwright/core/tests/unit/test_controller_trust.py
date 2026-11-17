@@ -133,13 +133,15 @@ def test_each_read_target_reads_its_own_bundle(lookups, tmp_path):
     material = {"controllerCA0": str(first), "controllerCA2": str(second), "controllerUser": "/run/user"}
     for target, expected in (({"caVariable": "controllerCA0"}, str(first)), ({"caVariable": "controllerCA2"}, str(second)),
                              ({}, "")):
-        target = dict(target, userVariable="controllerUser", controller={"endpoint": "https://bmc.example.test", "tlsVerify": True})
+        target = {"machinePort": dict(target, userVariable="controllerUser", endpoint="https://bmc.example.test", verify=True),
+                  "controller": {"endpoint": "https://bmc.example.test", "tlsVerify": True}}
         variables = {"bootwright_machine_power_read_material": material, "machine_power_read_target": target}
         assert Templar(loader=LOADER, variables=variables).template(port)["ca"] == expected
 
 
 # Every include of the bare-metal port hands it the path of the controller's
-# bundle material, because the entry point reads a path and never a default.
+# bundle material through the frozen machine port, which always names it,
+# because the entry point reads a path and never a default.
 def test_every_bare_metal_include_passes_its_bundle():
     seen = []
     for path in sorted(ROLES.glob("*/tasks/*.yml")):
@@ -150,7 +152,7 @@ def test_every_bare_metal_include_passes_its_bundle():
                     entry = arguments.get("tasks_from")
                     if entry in PORT_BUNDLE:
                         seen.append((path.relative_to(ROLES).as_posix(), entry))
-                        assert "ca" in task["vars"]["bootwright_machine_port"], (path.name, entry)
+                        assert "port_access" in task["vars"]["bootwright_machine_port"], (path.name, entry)
     assert sorted(seen) == sorted([
         ("containercluster_install_agent/tasks/boot.yml", "boot_media"),
         ("containercluster_install_agent/tasks/boot.yml", "pre_boot"),
@@ -175,7 +177,7 @@ def test_the_argument_specs_admit_the_frozen_bundle():
     controllers["machine_power_read"] = targets["options"]["controller"]
     for role, controller in controllers.items():
         assert controller["options"]["trustBundleRef"] == {"type": "str", "required": False}, role
-    assert targets["options"]["caVariable"] == {"type": "str", "required": False}
+    assert targets["options"]["machinePort"]["options"]["caVariable"] == {"type": "str", "required": False}
     for entry, option in PORT_BUNDLE.items():
         assert spec("substrate_baremetal_machine")[entry]["options"][option] == {"type": "str", "required": True}
 
@@ -210,7 +212,9 @@ def test_the_managed_os_installation_sets_and_settles_the_frozen_trust(lookups, 
         variables = dict(defaults("managedos_install_anaconda"), **{
             "bootwright_run_scratch": "/run/private",
             "bootwright_os_install_material": {"controllerUser": "/run/user", "controllerPassword": "/run/password", **material},
-            "bootwright_os_install_request": {"target": {"physical": True, "controller": {
+            "bootwright_os_install_request": {"target": {"physical": True, "machinePort": {
+                "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "verify": True, "userVariable": "controllerUser",
+                "passwordVariable": "controllerPassword"}, "controller": {
                 "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerify": True, "virtualMedia": {
                     "trust": trust, "enableVerification": enable, "restoreVerification": restore, "removeCertificate": remove}}}},
         })
@@ -238,13 +242,14 @@ def test_cluster_media_calls_carry_each_nodes_frozen_trust(physical, enable):
     tasks = loaded(ROLES / "containercluster_install_agent/tasks/port.yml")
     invocation = next(task for task in tasks if "ansible.builtin.include_role" in task)
     variables = {**invocation["vars"], "bootwright_cluster_install_request": {"deliveryKind": "fetch"},
-                 "containercluster_install_agent_node": {"physical": physical, "controller": {
+                 "containercluster_install_agent_node": {"physical": physical, "machinePort": {
+                     "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "verify": True, "userVariable": "controllerUserNode2",
+                     "passwordVariable": "controllerPasswordNode2", "caVariable": "controllerCANode2"}, "controller": {
                      "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerify": True,
                      "virtualMedia": {"trust": "importCertificate", "enableVerification": enable, "restoreVerification": False, "removeCertificate": True}}},
-                 "containercluster_install_agent_user": "/run/user", "containercluster_install_agent_password": "/run/password",
-                 "containercluster_install_agent_ca": "/run/ca", "bootwright_run_scratch": "/run/private",
-                 "containercluster_install_agent_index": 2,
-                 "bootwright_cluster_install_material": {"artifactCertificate": "/run/certificate"}}
+                 "bootwright_run_scratch": "/run/private", "containercluster_install_agent_index": 2,
+                 "bootwright_cluster_install_material": {"artifactCertificate": "/run/certificate", "controllerUserNode2": "/run/user",
+                                                         "controllerPasswordNode2": "/run/password", "controllerCANode2": "/run/ca"}}
     for operation in ("state_read", "media_insert", "media_eject"):
         rendering = Templar(loader=LOADER, variables={**variables, "containercluster_install_agent_port_operation": operation})
         port = rendering.template(invocation["vars"]["bootwright_machine_port"])

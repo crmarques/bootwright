@@ -74,6 +74,14 @@
         "rootSelector": "wwn"
       },
       "machine": "metal-01",
+      "machinePort": {
+        "endpoint": "https://metal-01-bmc.lab.example.test/redfish/v1/Systems/1",
+        "passwordVariable": "controllerPasswordNode0",
+        "pinnedSerialVariable": "pinnedSerialBase64Node0",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node0",
+        "userVariable": "controllerUserNode0",
+        "verify": true
+      },
       "name": "master-0",
       "physical": true,
       "stateReadSeconds": 600,
@@ -103,6 +111,14 @@
         "rootSelector": "wwn"
       },
       "machine": "metal-02",
+      "machinePort": {
+        "endpoint": "https://metal-02-bmc.lab.example.test/redfish/v1/Systems/1",
+        "passwordVariable": "controllerPasswordNode1",
+        "pinnedSerialVariable": "pinnedSerialBase64Node1",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node1",
+        "userVariable": "controllerUserNode1",
+        "verify": true
+      },
       "name": "master-1",
       "physical": true,
       "stateReadSeconds": 600,
@@ -132,6 +148,14 @@
         "rootSelector": "wwn"
       },
       "machine": "metal-03",
+      "machinePort": {
+        "endpoint": "https://metal-03-bmc.lab.example.test/redfish/v1/Systems/1",
+        "passwordVariable": "controllerPasswordNode2",
+        "pinnedSerialVariable": "pinnedSerialBase64Node2",
+        "pinnedUUIDVariable": "pinnedUUIDBase64Node2",
+        "userVariable": "controllerUserNode2",
+        "verify": true
+      },
       "name": "master-2",
       "physical": true,
       "stateReadSeconds": 600,

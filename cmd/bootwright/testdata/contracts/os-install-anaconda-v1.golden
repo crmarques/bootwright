@@ -174,6 +174,16 @@ request-schema:
   target.hardware.wwn string omitempty
   target.hostKeyRef string omitempty
   target.hostKeyType string omitempty
+  target.machinePort struct substrate.MachinePort
+  target.machinePort.caVariable string omitempty
+  target.machinePort.endpoint string
+  target.machinePort.mediaVolume string omitempty
+  target.machinePort.passwordVariable string omitempty
+  target.machinePort.pinnedSerialVariable string omitempty
+  target.machinePort.pinnedUUIDVariable string omitempty
+  target.machinePort.userVariable string
+  target.machinePort.verification string omitempty
+  target.machinePort.verify bool
   target.physical bool
   target.substrate string
   target.uri string omitempty

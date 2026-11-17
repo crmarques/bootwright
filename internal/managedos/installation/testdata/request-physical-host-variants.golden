@@ -153,6 +153,14 @@
     },
     "hostKeyRef": "metal-01-host-key",
     "hostKeyType": "ecdsaP256",
+    "machinePort": {
+      "endpoint": "https://bmc-01.lab.example.test/redfish/v1/Systems/1",
+      "passwordVariable": "controllerPassword",
+      "pinnedSerialVariable": "pinnedSerialBase64",
+      "pinnedUUIDVariable": "pinnedUUIDBase64",
+      "userVariable": "controllerUser",
+      "verify": true
+    },
     "physical": true,
     "substrate": "baremetal"
   },

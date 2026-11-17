@@ -10,7 +10,7 @@ frozen media identity in place of a link. These cases render what each include
 hands the port for such a node, from install-request-kubevirt-none.golden in
 internal/containercluster/agentinstall/testdata, and validate it against the
 KubeVirt arm's own argument specs with the validator ansible-core's prepended
-task uses; a fetching node is still handed no pin and no pushed input.
+task uses; a fetching node is handed empty pins and no pushed input.
 """
 
 from __future__ import annotations
@@ -54,7 +54,10 @@ def scope(pushed=True, pinned=True):
             "controller": {"credentialsRef": "host-kubeconfig", "endpoint": "kubevirt:bootwright-guests/kubevirt-02-6fcb7dda",
                            "tlsVerify": True, "virtualMedia": {"enableVerification": False, "removeCertificate": False,
                                                                "restoreVerification": False, "trust": ""}},
-            "controllerKind": "api", "portPinned": True, "stateReadSeconds": 120, "substrate": "kubevirt"}
+            "controllerKind": "api", "portPinned": True, "stateReadSeconds": 120, "substrate": "kubevirt",
+            "machinePort": {"endpoint": "kubevirt:bootwright-guests/kubevirt-02-6fcb7dda", "mediaVolume": "kubevirt-02-6fcb7dda-media",
+                            "pinnedSerialVariable": "pinnedSerialBase64Node1", "pinnedUUIDVariable": "pinnedUUIDBase64Node1",
+                            "userVariable": "controllerUserNode1", "verify": True}}
     material = {"controllerUserNode1": MATERIAL + "bmc-user-kubevirt-02", "virtctl": VIRTCTL,
                 "pinnedUUIDBase64Node1": encoded(CLUSTER_UID), "pinnedSerialBase64Node1": encoded(VM_UID)}
     request = {"deliveryKind": "push", "image": {"path": IMAGE, "url": ""}, "imageIdentity": IDENTITY, "nodes": [node, node]}
@@ -62,7 +65,10 @@ def scope(pushed=True, pinned=True):
         node = dict(node, controller=dict(node["controller"], endpoint="http://192.0.2.1:8000/redfish/v1/Systems/1",
                                           virtualMedia={"enableVerification": False, "removeCertificate": False,
                                                         "restoreVerification": False, "trust": "importCertificate"}),
-                    controllerKind="emulated", stateReadSeconds=60, substrate="libvirt")
+                    controllerKind="emulated", stateReadSeconds=60, substrate="libvirt",
+                    machinePort={"endpoint": "http://192.0.2.1:8000/redfish/v1/Systems/1", "passwordVariable": "controllerPasswordNode1",
+                                 "pinnedSerialVariable": "pinnedSerialBase64Node1", "pinnedUUIDVariable": "pinnedUUIDBase64Node1",
+                                 "userVariable": "controllerUserNode1", "verify": True})
         node.pop("portPinned")
         material = {"controllerUserNode1": MATERIAL + "bmc-user", "controllerPasswordNode1": MATERIAL + "bmc-password",
                     "artifactCertificate": MATERIAL + "artifact-certificate"}
@@ -105,7 +111,7 @@ def valid(entry, port_input, role="substrate_kubevirt_machine"):
 
 PIN = {"pinned_uuid_base64": encoded(CLUSTER_UID), "pinned_serial_base64": encoded(VM_UID)}
 ACCESS = {"endpoint": "kubevirt:bootwright-guests/kubevirt-02-6fcb7dda", "user": MATERIAL + "bmc-user-kubevirt-02",
-          "password": "", "ca": "", "verify": True}
+          "password": "", "ca": "", "verify": True, "media_volume": "kubevirt-02-6fcb7dda-media"}
 
 
 @pytest.mark.parametrize("operation, arguments", [
@@ -136,18 +142,20 @@ def test_an_unpinned_node_is_handed_empty_pins_rather_than_another_nodes():
     assert (handed["pinned_uuid_base64"], handed["pinned_serial_base64"]) == ("", "")
 
 
-def test_a_fetching_node_is_handed_no_pin_and_no_pushed_input():
+def test_a_fetching_node_is_handed_empty_pins_and_no_pushed_input():
     variables = scope(pushed=False)
     insert = port("media_insert", variables)
-    assert "image_path" not in insert and "virtctl" not in insert and "pinned_uuid_base64" not in insert
+    assert "image_path" not in insert and "virtctl" not in insert and "media_volume" not in insert
+    assert (insert["pinned_uuid_base64"], insert["pinned_serial_base64"]) == ("", "")
     assert insert["image_url_file"] == "/var/tmp/bootwright-scratch-1-1/cluster-insert-1"
     valid("media_insert", insert, "substrate_libvirt_machine")
     assert port("state_read", variables) == {
         "endpoint": "http://192.0.2.1:8000/redfish/v1/Systems/1", "user": MATERIAL + "bmc-user",
-        "password": MATERIAL + "bmc-password", "ca": "", "verify": True, "media": True}
+        "password": MATERIAL + "bmc-password", "ca": "", "verify": True, "media": True,
+        "pinned_uuid_base64": "", "pinned_serial_base64": ""}
     for file, entry in (("boot.yml", "boot_media"), ("release.yml", "boot_disk")):
         handed = rendered(dispatched(file, entry), variables)
-        assert "pinned_uuid_base64" not in handed and "pinned_serial_base64" not in handed
+        assert (handed["pinned_uuid_base64"], handed["pinned_serial_base64"]) == ("", "")
 
 
 def test_a_pushed_node_presents_its_own_image_only_by_the_ports_answer():

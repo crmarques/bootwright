@@ -137,6 +137,14 @@
       },
       "hostKeyRef": "metal-01-host-key",
       "hostKeyType": "ed25519",
+      "machinePort": {
+        "endpoint": "https://bmc-01.lab.example.test/redfish/v1/Systems/1",
+        "passwordVariable": "controllerPassword",
+        "pinnedSerialVariable": "pinnedSerialBase64",
+        "pinnedUUIDVariable": "pinnedUUIDBase64",
+        "userVariable": "controllerUser",
+        "verify": true
+      },
       "physical": true,
       "substrate": "baremetal"
     },
@@ -153,7 +161,7 @@
     "user": "bootwright",
     "version": "os-install-anaconda-v1"
   },
-  "installDigest": "3a967e0d2e5eb9ff5b59467f7b4dba011dacb319c700fa585901f900f3a52cd4",
+  "installDigest": "d83456afdc62679dc904b18dfe1e229cbc02edbc761b103c0b0446c0240cfa5d",
   "network": "network --bootproto=static --device=enp1s0 --ip=198.51.100.41 --netmask=255.255.255.0 --hostname=metal-01.lab.example.test --onboot=on --activate --gateway=198.51.100.1 --nameserver=192.0.2.1\n",
   "targets": [
     {

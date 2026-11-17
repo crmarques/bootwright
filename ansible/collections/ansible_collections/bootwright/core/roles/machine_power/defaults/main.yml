@@ -48,12 +48,5 @@ machine_power_is_controller_host: '{{ machine_power_verdict.controllerHost }}'
 machine_power_reports_declared: '{{ machine_power_verdict.declared }}'
 
 machine_power_access: >-
-  {{ {'endpoint': (bootwright_machine_power_request.controller.endpoint),
-      'user': (bootwright_machine_power_material.controllerUser),
-      'password': (bootwright_machine_power_material.controllerPassword | default('')),
-      'ca': (bootwright_machine_power_material.controllerCA | default('')),
-      'verify': (bootwright_machine_power_request.controller.tlsVerify),
-      'pinned_uuid_base64': (bootwright_machine_power_material.pinnedUUIDBase64 | default('')),
-      'pinned_serial_base64': (bootwright_machine_power_material.pinnedSerialBase64 | default(''))}
-     | combine({'verification': bootwright_machine_power_request.controller.tlsVerification | default('')}
-               if (bootwright_machine_power_request.controller.tlsVerification | default('')) | length > 0 else {}) }}
+  {{ bootwright_machine_power_request.machinePort
+     | bootwright.core.machine_port_access(bootwright_machine_power_material) }}

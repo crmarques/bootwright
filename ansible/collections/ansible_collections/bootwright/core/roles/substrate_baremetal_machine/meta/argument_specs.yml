@@ -163,6 +163,12 @@ argument_specs:
       bootwright_machine_port:
         type: dict
         options:
+          pinned_uuid_base64:
+            type: str
+            required: false
+          pinned_serial_base64:
+            type: str
+            required: false
           endpoint:
             type: str
             required: true
@@ -208,6 +214,12 @@ argument_specs:
       bootwright_machine_port:
         type: dict
         options:
+          pinned_uuid_base64:
+            type: str
+            required: false
+          pinned_serial_base64:
+            type: str
+            required: false
           endpoint:
             type: str
             required: true
@@ -331,6 +343,12 @@ argument_specs:
         type: dict
         required: true
         options:
+          pinned_uuid_base64:
+            type: str
+            required: false
+          pinned_serial_base64:
+            type: str
+            required: false
           endpoint:
             type: str
             required: true
@@ -378,6 +396,12 @@ argument_specs:
         type: dict
         required: true
         options:
+          pinned_uuid_base64:
+            type: str
+            required: false
+          pinned_serial_base64:
+            type: str
+            required: false
           endpoint:
             type: str
             required: true

@@ -77,9 +77,10 @@ type Node struct {
 	Hardware *Hardware `json:"hardware,omitempty"`
 	// Labels and Taints are the placement the node carries once installed,
 	// the infra role label included; taints are one per key and effect.
-	Labels  map[string]string `json:"labels,omitempty"`
-	Machine string            `json:"machine"`
-	Name    string            `json:"name"`
+	Labels      map[string]string     `json:"labels,omitempty"`
+	Machine     string                `json:"machine"`
+	MachinePort substrate.MachinePort `json:"machinePort"`
+	Name        string                `json:"name"`
 	// Physical is operator-owned hardware: the installation erases what it
 	// already held, so the block consumes that authorization on apply.
 	Physical bool `json:"physical"`

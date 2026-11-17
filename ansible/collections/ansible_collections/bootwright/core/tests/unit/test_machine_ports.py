@@ -126,3 +126,35 @@ def test_generic_boot_port_validates_native_aliases_before_effects(arm, entry, e
     supplied = {"bootwright_machine_port": request}
     supplied.update({name: scope.template(defaults[name]) for name in spec if name in defaults})
     assert not ArgumentSpecValidator(spec).validate(supplied).error_messages
+
+
+ACCESS_KEYS = ("'endpoint'", "'user'", "'password'", "'ca'", "'verify'", "'verification'", "'pinned_uuid_base64'",
+               "'pinned_serial_base64'", "tlsVerification", "controllerUser", "controllerPassword", "controllerCA")
+RESOLVED = ("bootwright.core.machine_port_access(", "managedos_install_anaconda_port_access", "machine_power_access")
+
+
+def port_assignments(value, found):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key == "bootwright_machine_port" or str(key).endswith("_port_access") or key == "machine_power_access":
+                found.append(str(item))
+            port_assignments(item, found)
+    elif isinstance(value, list):
+        for item in value:
+            port_assignments(item, found)
+    return found
+
+
+# Go freezes one machinePort object per target and the machine_port_access
+# filter is the one place it is resolved: a consumer adds only its operation's
+# arguments and never builds the access dictionary itself.
+def test_no_role_or_playbook_builds_a_machine_port_access_dictionary():
+    files = sorted(ROOT.glob("roles/*/tasks/*.yml")) + sorted(ROOT.glob("roles/*/defaults/*.yml")) + sorted(ROOT.glob("playbooks/**/*.yml"))
+    seen = 0
+    for path in files:
+        for assigned in port_assignments(yaml.safe_load(path.read_text()), []):
+            seen += 1
+            where = path.relative_to(ROOT).as_posix()
+            assert any(resolved in assigned for resolved in RESOLVED), (where, assigned)
+            assert not any(key in assigned for key in ACCESS_KEYS), (where, assigned)
+    assert seen >= 20

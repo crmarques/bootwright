@@ -14,13 +14,13 @@ and lends to the consuming run.
 from __future__ import annotations
 
 import base64
-import datetime
 import json
 import re
 import time
 from urllib.parse import quote
 
 from ansible_collections.bootwright.core.plugins.module_utils import private_files
+from ansible_collections.bootwright.core.plugins.module_utils.cluster_objects_model import timestamp
 from ansible_collections.bootwright.core.plugins.module_utils.kubevirt_api import Answered, Refused, Unanswered, path
 
 VERSION = "substrate-access-kubevirt-v1"
@@ -122,8 +122,8 @@ def bound(client, request, seconds, secret, secret_uid):
 
 def instant(value):
     try:
-        return datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
-    except (TypeError, ValueError):
+        return timestamp(value)
+    except (AttributeError, TypeError, ValueError):
         return None
 
 
@@ -154,7 +154,7 @@ def sweep(client, namespace, own, now, clock=time.monotonic):
         created = instant(metadata.get("creationTimestamp"))
         if not isinstance(lifetime, str) or not lifetime.isdigit() or created is None or not isinstance(metadata.get("uid"), str):
             continue
-        if created + datetime.timedelta(seconds=int(lifetime)) >= current:
+        if created + int(lifetime) >= current:
             continue
         if clock() - started >= SWEEP_SECONDS:
             break

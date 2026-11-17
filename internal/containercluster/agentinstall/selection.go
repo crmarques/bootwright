@@ -505,7 +505,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 // for a physical node the NICs its pre-boot proof requires.
 func frozenNodes(nodes []nodeProjection) []Node {
 	frozen := make([]Node, 0, len(nodes))
-	for _, node := range nodes {
+	for index, node := range nodes {
 		frozen = append(frozen, Node{
 			Address: node.address, ControllerKind: controllerKind(node.target.Substrate), Firmware: nodeFirmware(node.target.Firmware),
 			Controller: Controller{
@@ -523,7 +523,7 @@ func frozenNodes(nodes []nodeProjection) []Node {
 				},
 			},
 			Hardware: frozenHardware(node.target), RequireTPM: node.requireTPM,
-			Labels: node.labels, Machine: node.machine.Name(), Name: node.name, Taints: node.taints,
+			Labels: node.labels, Machine: node.machine.Name(), MachinePort: node.target.MachinePort(nodeVariable(index)), Name: node.name, Taints: node.taints,
 			StateReadSeconds: stateReadSeconds(node.target.Substrate), Physical: node.target.Physical, Substrate: node.target.Substrate,
 			PortPinned: substrate.PortPinned(node.target.Substrate),
 		})

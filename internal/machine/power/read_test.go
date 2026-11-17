@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // surveyor answers each run with the state the fixture assigns every Machine
@@ -157,8 +158,8 @@ func TestAReadingFollowsTheMachineBlockNotTheInstallation(t *testing.T) {
 // answered with the account another target's controller was authored for.
 func TestEveryTargetInOneSurveyNamesItsOwnMaterial(t *testing.T) {
 	survey := ReadSurvey{Targets: []ReadTarget{
-		{Controller: Access{CredentialsRef: "bmc"}, Object: "first", UserVariable: "controllerUser0", PasswordVariable: "controllerPassword0"},
-		{Controller: Access{CredentialsRef: "bmc"}, Object: "second", UserVariable: "controllerUser1", PasswordVariable: "controllerPassword1"},
+		{Controller: Access{CredentialsRef: "bmc"}, Object: "first", MachinePort: substrate.MachinePort{UserVariable: "controllerUser0", PasswordVariable: "controllerPassword0"}},
+		{Controller: Access{CredentialsRef: "bmc"}, Object: "second", MachinePort: substrate.MachinePort{UserVariable: "controllerUser1", PasswordVariable: "controllerPassword1"}},
 	}}
 	names, variables := []string{}, []string{}
 	for _, file := range readMaterials(survey) {
@@ -206,15 +207,15 @@ func TestEachReadTargetReadsItsOwnBundle(t *testing.T) {
 	for index, target := range survey.Targets {
 		bundle := want[target.Object]
 		if bundle == "" {
-			if target.CAVariable != "" || target.Controller.TrustBundleRef != "" {
+			if target.MachinePort.CAVariable != "" || target.Controller.TrustBundleRef != "" {
 				t.Fatalf("%s declares no bundle and carries %+v", target.Object, target)
 			}
 			continue
 		}
-		file, ok := bundles[target.CAVariable]
-		if !ok || target.CAVariable != "controllerCA"+strconv.Itoa(index) || file.Secret != bundle ||
+		file, ok := bundles[target.MachinePort.CAVariable]
+		if !ok || target.MachinePort.CAVariable != "controllerCA"+strconv.Itoa(index) || file.Secret != bundle ||
 			file.Name != "bmc-ca-"+strconv.Itoa(index) || target.Controller.TrustBundleRef != bundle {
-			t.Fatalf("%s reads %+v through %q", target.Object, file, target.CAVariable)
+			t.Fatalf("%s reads %+v through %q", target.Object, file, target.MachinePort.CAVariable)
 		}
 		if !slices.Contains(runtime.requested, bundle) {
 			t.Fatalf("%s's bundle was not bound: %v", target.Object, runtime.requested)

@@ -58,20 +58,21 @@ def port(operation, client, arguments, upload, clock=time.time, sleep=time.sleep
         return arm.change_power(host, vm, "on")
     if operation == "boot_disk":
         return {}
+    volume = arm.media_volume(arguments.get("media_volume"), vm)
     if operation == "media_eject":
-        return arm.eject(host, vm)
+        return arm.eject(host, vm, volume)
     image, virtctl = arguments.get("image_path") or "", arguments.get("virtctl") or ""
     if not image or not virtctl:
         raise Refused("a KubeVirt machine is pushed its image: media_insert takes image_path and the controller's virtctl")
-    reuse, ignored_value = arm.upload_volume(host, vm, arguments.get("media_identity") or "", os.path.getsize(image))
+    reuse, ignored_value = arm.upload_volume(host, vm, volume, arguments.get("media_identity") or "", os.path.getsize(image))
     if not reuse:
         proxy, authority = arm.upload_trust(host)
-        upload(namespace, vm + "-media", image, proxy, authority, max(1, min(UPLOAD_SECONDS, int(host.remaining()))))
-        done = host.wait(lambda: client.get(host.dv(vm + "-media")),
+        upload(namespace, volume, image, proxy, authority, max(1, min(UPLOAD_SECONDS, int(host.remaining()))))
+        done = host.wait(lambda: client.get(host.dv(volume)),
                          lambda value: value is not None and (value.get("status") or {}).get("phase") == "Succeeded", arm.VOLUME_SECONDS)
         if done is None or (done.get("status") or {}).get("phase") != "Succeeded":
-            raise Refused("the upload to DataVolume %s/%s-media did not succeed" % (namespace, vm))
-    return arm.attach(host, vm)
+            raise Refused("the upload to DataVolume %s/%s did not succeed" % (namespace, volume))
+    return arm.attach(host, vm, volume)
 
 
 def pinned(arguments):

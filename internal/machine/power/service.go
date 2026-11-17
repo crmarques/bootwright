@@ -489,13 +489,14 @@ func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []by
 func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string, pin machine.HardwareIdentity,
 	progress func(context.Context, string, string)) lifecycle.RunRequest {
 	user, password := substrate.ControllerCredential(frozen.Arm)
-	materials := []lifecycle.MaterialFile{{Name: "bmc-user", Part: user, Secret: credentialSecret(frozen.Controller), Variable: "controllerUser"}}
+	port := frozen.MachinePort
+	materials := []lifecycle.MaterialFile{{Name: "bmc-user", Part: user, Secret: credentialSecret(frozen.Controller), Variable: port.UserVariable}}
 	if password != "" {
-		materials = append(materials, lifecycle.MaterialFile{Name: "bmc-password", Part: password, Secret: frozen.Controller.CredentialsRef, Variable: "controllerPassword"})
+		materials = append(materials, lifecycle.MaterialFile{Name: "bmc-password", Part: password, Secret: frozen.Controller.CredentialsRef, Variable: port.PasswordVariable})
 	}
-	if frozen.Controller.TrustBundleRef != "" {
+	if port.CAVariable != "" {
 		materials = append(materials,
-			lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: frozen.Controller.TrustBundleRef, Variable: "controllerCA"})
+			lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: frozen.Controller.TrustBundleRef, Variable: port.CAVariable})
 	}
 	request := lifecycle.RunRequest{
 		Context:           runtime.Context.Name,

@@ -84,6 +84,16 @@ request-schema:
   nodes[].hardware.rootVolumeRef.volumeId string omitempty
   nodes[].labels map[string]string omitempty
   nodes[].machine string
+  nodes[].machinePort struct substrate.MachinePort
+  nodes[].machinePort.caVariable string omitempty
+  nodes[].machinePort.endpoint string
+  nodes[].machinePort.mediaVolume string omitempty
+  nodes[].machinePort.passwordVariable string omitempty
+  nodes[].machinePort.pinnedSerialVariable string omitempty
+  nodes[].machinePort.pinnedUUIDVariable string omitempty
+  nodes[].machinePort.userVariable string
+  nodes[].machinePort.verification string omitempty
+  nodes[].machinePort.verify bool
   nodes[].name string
   nodes[].physical bool
   nodes[].portPinned bool omitempty

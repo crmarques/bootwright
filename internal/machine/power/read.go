@@ -22,17 +22,13 @@ const maxReadingBytes = 64 << 10
 // ReadTarget names one Machine, the controller its reading comes from, and the
 // operation-scoped files that controller's account and trust bundle are written
 // to. Each target carries its own variable names because one run reads many
-// controllers and no two may resolve to the same material. CAVariable and the
-// pinned variables are set only when there is a bundle or a recorded pin.
+// controllers and no two may resolve to the same material. The port names a CA
+// variable only when there is a bundle; a pin variable unpinned reads empty.
 type ReadTarget struct {
-	Arm                  string `json:"arm"`
-	CAVariable           string `json:"caVariable,omitempty"`
-	Controller           Access `json:"controller"`
-	Object               string `json:"object"`
-	PasswordVariable     string `json:"passwordVariable,omitempty"`
-	PinnedSerialVariable string `json:"pinnedSerialVariable,omitempty"`
-	PinnedUUIDVariable   string `json:"pinnedUUIDVariable,omitempty"`
-	UserVariable         string `json:"userVariable"`
+	Arm         string                `json:"arm"`
+	Controller  Access                `json:"controller"`
+	MachinePort substrate.MachinePort `json:"machinePort"`
+	Object      string                `json:"object"`
 
 	pin machine.HardwareIdentity
 }
@@ -104,23 +100,17 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, rea
 		survey := grouped[key]
 		survey.Context, survey.Placement, survey.Version = contextName, placement, ReadRequestVersion
 		index := strconv.Itoa(len(survey.Targets))
-		target := ReadTarget{Arm: managed.Port, Controller: controller, Object: object.Name(), UserVariable: "controllerUser" + index}
+		target := ReadTarget{Arm: managed.Port, Controller: controller, MachinePort: managed.MachinePort(index), Object: object.Name()}
 		if substrate.PortPinned(managed.Port) && pinned != nil {
 			if target.pin, err = pinned(object.Name()); err != nil {
 				return nil, err
 			}
-			if target.pin.UUID != "" {
-				target.PinnedUUIDVariable = "pinnedUUIDBase64" + index
-			}
-			if target.pin.Serial != "" {
-				target.PinnedSerialVariable = "pinnedSerialBase64" + index
-			}
 		}
-		if _, password := substrate.ControllerCredential(managed.Port); password != "" {
-			target.PasswordVariable = "controllerPassword" + index
+		if target.pin.UUID == "" {
+			target.MachinePort.PinnedUUIDVariable = ""
 		}
-		if controller.TrustBundleRef != "" {
-			target.CAVariable = "controllerCA" + index
+		if target.pin.Serial == "" {
+			target.MachinePort.PinnedSerialVariable = ""
 		}
 		survey.Targets = append(survey.Targets, target)
 		grouped[key] = survey
@@ -146,13 +136,14 @@ func readMaterials(survey ReadSurvey) []lifecycle.MaterialFile {
 	for index, target := range survey.Targets {
 		position := strconv.Itoa(index)
 		user, password := substrate.ControllerCredential(target.Arm)
-		files = append(files, lifecycle.MaterialFile{Name: "bmc-user-" + position, Part: user, Secret: credentialSecret(target.Controller), Variable: target.UserVariable})
+		port := target.MachinePort
+		files = append(files, lifecycle.MaterialFile{Name: "bmc-user-" + position, Part: user, Secret: credentialSecret(target.Controller), Variable: port.UserVariable})
 		if password != "" {
-			files = append(files, lifecycle.MaterialFile{Name: "bmc-password-" + position, Part: password, Secret: target.Controller.CredentialsRef, Variable: target.PasswordVariable})
+			files = append(files, lifecycle.MaterialFile{Name: "bmc-password-" + position, Part: password, Secret: target.Controller.CredentialsRef, Variable: port.PasswordVariable})
 		}
-		if target.CAVariable != "" {
+		if port.CAVariable != "" {
 			files = append(files,
-				lifecycle.MaterialFile{Name: "bmc-ca-" + position, Part: secrets.CertificatePart, Secret: target.Controller.TrustBundleRef, Variable: target.CAVariable})
+				lifecycle.MaterialFile{Name: "bmc-ca-" + position, Part: secrets.CertificatePart, Secret: target.Controller.TrustBundleRef, Variable: port.CAVariable})
 		}
 	}
 	return files

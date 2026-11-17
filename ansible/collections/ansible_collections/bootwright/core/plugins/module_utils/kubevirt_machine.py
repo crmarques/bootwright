@@ -14,8 +14,8 @@ import hashlib
 import json
 import re
 import time
-from datetime import datetime
 
+from ansible_collections.bootwright.core.plugins.module_utils.cluster_objects_model import timestamp
 from ansible_collections.bootwright.core.plugins.module_utils.kubevirt_api import TRANSIENT_STATUSES, Answered, Refused, Unanswered, path
 
 OWNER = "bootwright.io/owner"
@@ -67,13 +67,6 @@ def derives(live, vm):
     return name(held[CONTEXT], held[MACHINE]) == vm
 
 
-def timestamp(value):
-    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    if parsed.tzinfo is None:
-        raise ValueError("timestamp has no timezone")
-    return parsed.timestamp()
-
-
 def uid(live):
     return ((live or {}).get("metadata") or {}).get("uid") or ""
 
@@ -90,7 +83,7 @@ def ownership(kind, live, receipts, context):
     if (metadata.get("annotations") or {}).get(OWNER) != expected or not metadata.get("uid"):
         return "foreign"
     try:
-        recent = timestamp(metadata["creationTimestamp"]) >= timestamp(context["registered"]) - SKEW_SECONDS
+        recent = timestamp(str(metadata["creationTimestamp"])) >= timestamp(str(context["registered"])) - SKEW_SECONDS
     except (KeyError, TypeError, ValueError):
         return "foreign"
     return "own" if recent else "foreign"
@@ -735,6 +728,13 @@ def endpoint(value):
     return namespace, vm
 
 
+def media_volume(value, vm):
+    """The media volume the frozen machine port names for the VirtualMachine it addresses."""
+    if not isinstance(value, str) or len(value) > 63 or not re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", value):
+        raise Refused("the machine port names no media volume of VirtualMachine %s" % vm)
+    return value
+
+
 def port_vm(host, vm):
     """The pinned VirtualMachine, re-proved before any effect: the host must be
     the cluster and the object the VirtualMachine its machine block recorded."""
@@ -902,10 +902,9 @@ def patch_vm(host, live, operations):
         raise Answered(status, answer)
 
 
-def eject(host, vm):
+def eject(host, vm, volume):
     """Remove the media volume from the stopped VirtualMachine and delete the upload DataVolume by its UID."""
     live = port_vm(host, vm)
-    volume = vm + "-media"
     held = media_of(host, live, volume)
     template = ((live.get("spec") or {}).get("template") or {}).get("spec") or {}
     operations = []
@@ -926,7 +925,7 @@ def eject(host, vm):
     return {}
 
 
-def upload_volume(host, vm, media_identity, size_bytes):
+def upload_volume(host, vm, volume, media_identity, size_bytes):
     """Create, or reuse, the upload DataVolume once the machine is off; (reuse, the DataVolume)."""
     live = port_vm(host, vm)
     if running(instance_phase(host, vm)):
@@ -934,13 +933,12 @@ def upload_volume(host, vm, media_identity, size_bytes):
     root = ((((live.get("spec") or {}).get("dataVolumeTemplates") or [{}])[0].get("spec") or {}).get("storage") or {}).get("storageClassName")
     if not isinstance(root, str) or not root:
         raise Refused("VirtualMachine %s/%s names no storage class in its root template, so no upload DataVolume was created" % (host.namespace, vm))
-    volume = vm + "-media"
     held = media_of(host, live, volume)
     if held is not None:
         identity = ((held.get("metadata") or {}).get("annotations") or {}).get(MEDIA, "")
         if identity == media_identity and (held.get("status") or {}).get("phase") == "Succeeded":
             return True, live
-        eject(host, vm)
+        eject(host, vm, volume)
         live = port_vm(host, vm)
     if host.wait(lambda: host.client.get(host.pvc(volume)), lambda value: value is None, VOLUME_SECONDS) is not None:
         raise Refused("PersistentVolumeClaim %s/%s of an earlier upload still exists %d seconds on, so no upload DataVolume was created"
@@ -974,10 +972,9 @@ def upload_trust(host):
     return (proxy if "://" in proxy else "https://" + proxy), authority
 
 
-def attach(host, vm):
+def attach(host, vm, volume):
     """Present the uploaded volume to the stopped VirtualMachine as a SATA cdrom second in its boot order."""
     live = port_vm(host, vm)
-    volume = vm + "-media"
     held = media_of(host, live, volume)
     if held is None or (held.get("status") or {}).get("phase") != "Succeeded":
         raise Refused("DataVolume %s/%s did not complete its upload" % (host.namespace, volume))
