@@ -14,6 +14,35 @@ func verdictClient(access string) *api.Object {
 	return &object
 }
 
+func verdictObject(labels api.Value, fields ...api.FieldValue) *api.Object {
+	object := api.NewObject(api.CephClient, "rbd-reader", labels, api.MapValue(fields...))
+	return &object
+}
+
+func TestJudgeMatchesTheEncodedDocumentComparison(t *testing.T) {
+	pool := api.FieldValue{Name: "poolRef", Value: api.StringValue("rbd-data")}
+	access := api.FieldValue{Name: "access", Value: api.StringValue("readWrite")}
+	cases := []struct {
+		name          string
+		desired, real *api.Object
+		want          Difference
+	}{
+		{"the same fields in another order", verdictObject(api.Value{}, pool, access), verdictObject(api.Value{}, access, pool), DifferenceNone},
+		{"absent labels against empty labels", verdictObject(api.Value{}, pool), verdictObject(api.MapValue(), pool), DifferenceChanged},
+		{"an integer against a number of the same text", verdictObject(api.Value{}, api.FieldValue{Name: "size", Value: api.IntegerValue("1")}), verdictObject(api.Value{}, api.FieldValue{Name: "size", Value: api.NumberValue("1")}), DifferenceChanged},
+		{"a nested difference", verdictObject(api.Value{}, api.FieldValue{Name: "caps", Value: api.MapValue(access)}), verdictObject(api.Value{}, api.FieldValue{Name: "caps", Value: api.MapValue(pool)}), DifferenceChanged},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			result := &DiffResult{Objects: []ObjectDiff{{Desired: test.desired, Real: RealSide{State: "present", Object: test.real}}}}
+			Judge(result)
+			if got := result.Objects[0].Difference; got != test.want {
+				t.Fatalf("difference = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestDiffDecidesDifferenceFromEncodedBytes(t *testing.T) {
 	client := verdictClient("readWrite")
 	same := verdictClient("readWrite")
