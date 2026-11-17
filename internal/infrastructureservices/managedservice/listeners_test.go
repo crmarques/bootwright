@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 // A host reservation knows only the contexts this host coordinates, so the
@@ -79,7 +80,7 @@ func TestUnassignedBindRefusalNamesTheServiceAndFrozenInputRecovery(t *testing.T
 			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Object == nil || reported[0].Object.Kind != kind || reported[0].Object.Name != "svc" {
 				t.Fatalf("%s: refusal = %#v, want lifecycle.state on %s/svc", bind, reported, kind)
 			}
-			if !strings.Contains(reported[0].Message, HostPort(bind, 8080)) || !strings.Contains(reported[0].Message, "no usable local bind address") || !strings.Contains(reported[0].Remediation, "destroy this context with its original build") || !strings.Contains(reported[0].Remediation, "TLS certificate names") {
+			if !strings.Contains(reported[0].Message, infrastructureservices.HostPort(bind, 8080)) || !strings.Contains(reported[0].Message, "no usable local bind address") || !strings.Contains(reported[0].Remediation, "destroy this context with its original build") || !strings.Contains(reported[0].Remediation, "TLS certificate names") {
 				t.Fatalf("%s: refusal = %#v, want socket, absence and exact-continuation recovery", bind, reported[0])
 			}
 		}

@@ -7,7 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	environmentdomain "github.com/crmarques/bootwright/internal/environment"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 // InstallProxy freezes endpoints with an explicit authentication placeholder.
@@ -31,11 +31,11 @@ func installationProxy(catalog api.Catalog, cluster api.Object) (*InstallProxy, 
 	result := &InstallProxy{}
 	managed := ""
 	if proxy.Spec().Get("management").Text() == "managed" {
-		address, required, err := managedservice.ServiceEndpoint(catalog, api.Proxy, choice.With("serverRef", choice.Get("proxyRef")), cluster.Identity())
+		address, required, err := infrastructureservices.ServiceEndpoint(catalog, api.Proxy, choice.With("serverRef", choice.Get("proxyRef")), cluster.Identity())
 		if err != nil {
 			return nil, "", err
 		}
-		result.HTTPProxy = "http://" + managedservice.HostPort(address, 3128)
+		result.HTTPProxy = "http://" + infrastructureservices.HostPort(address, 3128)
 		result.HTTPSProxy, managed = result.HTTPProxy, required
 	} else {
 		connection := proxy.Spec().Get("connection")

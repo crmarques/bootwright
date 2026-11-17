@@ -9,6 +9,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -60,8 +61,8 @@ func TestIPv6ListenerImpactsAreBracketed(t *testing.T) {
 // networking package.
 func TestHostPortBracketsAsJoinHostPortDoes(t *testing.T) {
 	for _, host := range []string{"192.0.2.1", "fd00::1", "::ffff:192.0.2.1", "fe80::1%eth0", "artifacts.example.test"} {
-		if got, want := HostPort(host, 8443), net.JoinHostPort(host, "8443"); got != want {
-			t.Fatalf("HostPort(%q) = %q, want %q", host, got, want)
+		if got, want := infrastructureservices.HostPort(host, 8443), net.JoinHostPort(host, "8443"); got != want {
+			t.Fatalf("infrastructureservices.HostPort(%q) = %q, want %q", host, got, want)
 		}
 	}
 }

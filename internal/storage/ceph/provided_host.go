@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -43,11 +44,11 @@ func bindProvidedHost(r *Request, c api.Catalog, m api.Object, node api.Value, t
 	if len(r.Hosts) > 0 && fleet != r.Hosts[0].SSHKeyRef {
 		return failure("lifecycle.unsupported", "core Ceph currently requires one fleet SSH key for its guests", "declare a shared fleet identity distinct from the native cluster identity")
 	}
-	if address, declared := machine.Address(m, "fqdn"); declared && address != name {
+	if address, declared := infrastructureservices.AddressOf(m, "fqdn"); declared && address != name {
 		return failure("api.invariant", "native Ceph hostname differs from the provided Machine hostname", "set topology.nodes[].fqdn to the Machine's declared fqdn")
 	}
 	if addressRef != "" {
-		address, err := machine.ResolveAddress(m, addressRef)
+		address, err := infrastructureservices.ResolveAddress(m, addressRef)
 		if err != nil {
 			return err
 		}

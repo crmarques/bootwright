@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 func Normalize(object api.Object, catalog api.Catalog) (api.Object, []api.Issue) {
@@ -82,7 +82,7 @@ func normalizeCluster(object api.Object, catalog api.Catalog) api.Value {
 	for i, node := range nodes {
 		host, placed := catalog.Find(api.Machine, textOf(node, "machineRef"))
 		if placed && !node.Has("fqdn") {
-			if fqdn, declared := machine.Address(host, "fqdn"); declared && fqdn != "" {
+			if fqdn, declared := infrastructureservices.AddressOf(host, "fqdn"); declared && fqdn != "" {
 				node = node.With("fqdn", api.StringValue(fqdn))
 			}
 		}

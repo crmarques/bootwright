@@ -7,6 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -147,7 +148,7 @@ func endpointsFor(spec api.Value, machine api.Object, listeners []Listener, iden
 		if !slices.ContainsFunc(listeners, func(candidate Listener) bool { return candidate.Name == listener }) {
 			return nil, refusal("api.reference", "an artifact endpoint names an unknown listener", "correct spec.endpoints on "+identity)
 		}
-		address, err := machineref.ResolveAddress(machine, item.Get("addressRef").Text())
+		address, err := infrastructureservices.ResolveAddress(machine, item.Get("addressRef").Text())
 		if err != nil {
 			return nil, err
 		}

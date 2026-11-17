@@ -2,7 +2,7 @@ package cephcluster
 
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 func (a *admission) enrollmentAddresses(spec api.Value) {
@@ -18,8 +18,8 @@ func (a *admission) enrollmentAddresses(spec api.Value) {
 		if reference == "" {
 			continue
 		}
-		address, err := machine.ResolveAddress(host, reference)
-		ssh, sshErr := machine.ResolveAddress(host, host.Spec().Get("access", "ssh", "addressRef").Text())
+		address, err := infrastructureservices.ResolveAddress(host, reference)
+		ssh, sshErr := infrastructureservices.ResolveAddress(host, host.Spec().Get("access", "ssh", "addressRef").Text())
 		if err == nil && sshErr == nil && address != ssh {
 			a.invalid(field, "Machine "+host.Name()+" enrollment address differs from its fleet SSH address", "select an addressRef resolving to the Machine access.ssh.addressRef address; separate enrollment addresses are not implemented")
 		}

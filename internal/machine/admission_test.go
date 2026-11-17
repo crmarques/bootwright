@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 func object(kind api.Kind, name string, spec api.Value) api.Object {
@@ -226,7 +227,7 @@ func TestAnInstalledMachineDialsItsInstallAddress(t *testing.T) {
 	if effective.Get("network", "installAddressRef").Text() != "ip" || !effective.Has("network", "addresses") {
 		t.Fatalf("network = %v", effective.Get("network"))
 	}
-	if _, found := Address(installed.WithSpec(effective), "fqdn"); !found {
+	if _, found := infrastructureservices.AddressOf(installed.WithSpec(effective), "fqdn"); !found {
 		t.Fatal("the installed Machine has no FQDN to fall back from")
 	}
 	if got := effective.Get("access", "ssh"); got.Get("addressRef").Text() != "ip" || got.Get("user").Text() != "bootwright" ||

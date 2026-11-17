@@ -179,3 +179,15 @@ func TestSelectionRejectsUnknownClusterBeforeResolution(t *testing.T) {
 		t.Fatalf("%+v %v", report, err)
 	}
 }
+
+func TestClusterDNSNamesTheEndpointAServerWithOneEndpointResolves(t *testing.T) {
+	node := object(api.Machine, "node", m("network", m("inline", m("dns", api.ListValue(m("serverRef", "dns"))))))
+	host := object(api.Machine, "dns-host", m("network", m("addresses", api.ListValue(m("name", "ip", "address", "192.0.2.53")))))
+	server := object(api.DNSServer, "dns", m("management", "managed", "bindAddress", "0.0.0.0", "machineRef", "dns-host", "endpoints", api.ListValue(m("name", "ip", "addressRef", "ip"))))
+	cluster := object(api.OpenShiftCluster, "sno", m("nodes", api.ListValue(m("machineRef", "node"))))
+	catalog := api.NewCatalog([]api.Object{object(api.Environment, "env", m("domains", m("containerClusters", "example.test"))), node, host, server, cluster})
+	got, pending := clusterDNS(catalog, cluster, nil, nil)
+	if got != "dns at 192.0.2.53 for sno.example.test" || !pending {
+		t.Fatalf("clusterDNS = %q, %v", got, pending)
+	}
+}

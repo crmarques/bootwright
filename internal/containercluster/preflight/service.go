@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
@@ -170,15 +171,9 @@ func clusterDNS(catalog api.Catalog, cluster api.Object, blocks map[string]strin
 			if !found || server.Spec().Get("management").Text() != "managed" {
 				continue
 			}
-			address := ""
-			for _, endpoint := range server.Spec().Get("endpoints").Items() {
-				if endpoint.Get("name").Text() == selection.Get("endpointRef").Text() {
-					address = endpoint.Get("address").Text()
-					if address == "" {
-						placement, _ := catalog.Find(api.Machine, server.Spec().Get("machineRef").Text())
-						address, _ = machine.Address(placement, endpoint.Get("addressRef").Text())
-					}
-				}
+			address, _, err := infrastructureservices.ServiceEndpoint(catalog, api.DNSServer, selection, "")
+			if err != nil {
+				address = ""
 			}
 			if address == "" {
 				address = server.Spec().Get("bindAddress").Text()

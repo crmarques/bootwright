@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -103,7 +104,7 @@ func packageEndpoint(c api.Catalog, server api.Object, selection api.Value, iden
 		if endpoint.Get("addressRef").Text() != addressRef || addressRef == "" {
 			continue
 		}
-		url, err := artifactserver.EndpointURL(c, server, endpoint.Get("name").Text(), identity)
+		url, err := infrastructureservices.ResolveEndpointURL(c, server, endpoint.Get("name").Text(), identity)
 		if err != nil {
 			return "", err
 		}

@@ -158,7 +158,7 @@ func applicationDependencies() map[string][]string {
 		"internal/storage/ceph": {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle", "internal/infrastructureservices/artifactserver", "internal/controller/prerequisites"},
 		// Installation publishes through ArtifactServer's selection and path rules,
 		// and projects the bytes its publications write into the capacity budget.
-		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice", "internal/substrate/capacity"),
+		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/substrate/capacity"),
 		"internal/containercluster/agentinstall":         append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
 		"internal/infrastructureservices/artifactserver": append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
 		"internal/infrastructureservices/managedservice": {"internal/controller/prerequisites", "internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},

@@ -8,6 +8,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -109,7 +110,7 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 	}
 	impacts := []string{unit + " " + request.Unit, root + " " + request.ContentRoot}
 	for _, target := range request.ProbeTargets() {
-		impacts = append(impacts, listener+" "+managedservice.HostPort(target.Address, target.Port))
+		impacts = append(impacts, listener+" "+infrastructureservices.HostPort(target.Address, target.Port))
 	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)

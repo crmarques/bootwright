@@ -10,6 +10,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
@@ -23,7 +24,7 @@ func TestExampleCephNodesRegisterUnderTheirMachineFQDN(t *testing.T) {
 	}
 	for _, node := range nodes {
 		host := requireObject(t, effective, api.Machine, node.Get("machineRef").Text())
-		fqdn, declared := machine.Address(host, "fqdn")
+		fqdn, declared := infrastructureservices.AddressOf(host, "fqdn")
 		if !declared || !machine.Installed(host) || node.Get("fqdn").Text() != fqdn {
 			t.Fatalf("node %s registers as %q over installed Machine %s with fqdn %q", node.Get("name").Text(), node.Get("fqdn").Text(), host.Name(), fqdn)
 		}

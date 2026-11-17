@@ -1,7 +1,6 @@
 package infrastructureservices
 
 import (
-	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -76,17 +75,14 @@ func ImageMirrorOf(c api.Catalog) (ImageMirror, bool) {
 	if mirror.TrustBundleRef == "" {
 		mirror.TrustBundleRef = IssuingAuthority(c, spec.Get("tls", "secretRef").Text())
 	}
-	endpoint, selected := namedEntry(spec.Get("endpoints"), selection.Get("endpointRef").Text())
+	endpoint, selected := NamedEntry(spec.Get("endpoints"), selection.Get("endpointRef").Text())
 	machine, placed := c.Find(api.Machine, spec.Get("machineRef").Text())
 	port, numbered := spec.Get("port").Int64()
 	if !selected || !placed || !numbered || port < 1 || port > 65535 {
 		return mirror, true
 	}
 	if address := machineAddress(machine, endpoint.Get("addressRef").Text()); address != "" {
-		if strings.Contains(address, ":") {
-			address = "[" + address + "]"
-		}
-		mirror.Location = address + ":" + strconv.FormatInt(port, 10)
+		mirror.Location = HostPort(address, int(port))
 	}
 	return mirror, true
 }
@@ -117,44 +113,4 @@ func IssuingAuthority(c api.Catalog, certificate string) string {
 		return ""
 	}
 	return issuer
-}
-
-func EndpointURL(c api.Catalog, server api.Object, endpointRef string) string {
-	spec := server.Spec()
-	endpoint, ok := namedEntry(spec.Get("endpoints"), endpointRef)
-	if !ok {
-		return ""
-	}
-	listener, ok := namedEntry(spec.Get("listeners"), endpoint.Get("listenerRef").Text())
-	if !ok {
-		return ""
-	}
-	machine, ok := c.Find(api.Machine, spec.Get("machineRef").Text())
-	if !ok {
-		return ""
-	}
-	address := machineAddress(machine, endpoint.Get("addressRef").Text())
-	port, ok := listener.Get("port").Int64()
-	if address == "" || !ok || port < 1 {
-		return ""
-	}
-	if strings.Contains(address, ":") {
-		address = "[" + address + "]"
-	}
-	return listener.Get("protocol").Text() + "://" + address + ":" + strconv.FormatInt(port, 10)
-}
-
-func namedEntry(values api.Value, name string) (api.Value, bool) {
-	if name == "" {
-		if values.Len() != 1 {
-			return api.Value{}, false
-		}
-		return values.Items()[0], true
-	}
-	for _, item := range values.Items() {
-		if item.Get("name").Text() == name {
-			return item, true
-		}
-	}
-	return api.Value{}, false
 }

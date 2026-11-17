@@ -13,7 +13,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -485,7 +485,7 @@ func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
 		!strings.Contains(runtime[0].Message, "Machine/"+request.Placement.Machine) || !strings.Contains(runtime[0].Remediation, "podman package") {
 		t.Fatalf("the container runtime refusal = %#v, want one naming the Machine and the package", runtime)
 	}
-	socket := managedservice.HostPort(request.BindAddress, 8443)
+	socket := infrastructureservices.HostPort(request.BindAddress, 8443)
 	for _, refused := range []string{"foreign-listener-8443", "unassigned-bind-address-8443"} {
 		runner := &fakeRunner{err: refusals[refused]}
 		result, err := New(runner, fixedClock{}).Apply(context.Background(), call)

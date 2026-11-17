@@ -323,18 +323,6 @@ func placementOf(value api.Value) string {
 	return "the placement Machine"
 }
 
-// machineAddress resolves a Machine-local address reference as machine.Address
-// does, to the first entry of that name; this package cannot import
-// internal/machine, which imports it.
-func machineAddress(machine api.Object, reference string) string {
-	for _, address := range machine.Spec().Get("network", "addresses").Items() {
-		if address.Get("name").Text() == reference {
-			return address.Get("address").Text()
-		}
-	}
-	return ""
-}
-
 func validateIntrinsic(o api.Object, partial bool) []api.Issue {
 	if !IsService(o.Kind()) {
 		return nil

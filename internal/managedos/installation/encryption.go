@@ -11,6 +11,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -71,7 +72,7 @@ func imageEndpointIsIPLiteral(catalog api.Catalog, profile api.Object) bool {
 	if err != nil {
 		return true
 	}
-	base, err := artifactserver.EndpointURL(catalog, server, selection.Get("endpointRef").Text(), profile.Identity())
+	base, err := infrastructureservices.ResolveEndpointURL(catalog, server, selection.Get("endpointRef").Text(), profile.Identity())
 	if err != nil {
 		return true
 	}

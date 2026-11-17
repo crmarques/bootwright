@@ -12,6 +12,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -827,20 +828,20 @@ func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reason := "foreign-listener-" + FormatPort(request.Port)
+	reason := "foreign-listener-" + infrastructureservices.FormatPort(request.Port)
 	recorder := &scriptedRunner{err: errors.New("unused")}
 	if _, err := NewCapability(testDefinition(), recorder).Apply(context.Background(), call); err == nil {
 		t.Fatal("a failed run was accepted")
 	}
-	if len(recorder.requests) != 1 || len(recorder.requests[0].Refusals) != 5 || recorder.requests[0].Refusals[reason] == nil || recorder.requests[0].Refusals["unassigned-bind-address-"+FormatPort(request.Port)] == nil {
+	if len(recorder.requests) != 1 || len(recorder.requests[0].Refusals) != 5 || recorder.requests[0].Refusals[reason] == nil || recorder.requests[0].Refusals["unassigned-bind-address-"+infrastructureservices.FormatPort(request.Port)] == nil {
 		t.Fatalf("the runner was handed refusals %v, want foreign and unassigned socket refusals", recorder.requests[0].Refusals)
 	}
-	runtime := diagnostics.Of(recorder.requests[0].Refusals["container-runtime-"+FormatPort(request.Port)])
+	runtime := diagnostics.Of(recorder.requests[0].Refusals["container-runtime-"+infrastructureservices.FormatPort(request.Port)])
 	if len(runtime) != 1 || runtime[0].Object == nil || runtime[0].Object.Name != request.Identity.Service ||
 		!strings.Contains(runtime[0].Message, "Machine/"+request.Placement.Machine) || !strings.Contains(runtime[0].Remediation, "podman package") {
 		t.Fatalf("the container runtime refusal = %#v, want one naming the Machine and the package", runtime)
 	}
-	timeout := recorder.requests[0].Refusals["readiness-timeout-"+FormatPort(request.Port)]
+	timeout := recorder.requests[0].Refusals["readiness-timeout-"+infrastructureservices.FormatPort(request.Port)]
 	if timeout == nil {
 		t.Fatal("unanswered listener has no typed refusal")
 	}
@@ -848,8 +849,8 @@ func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
 	if timeoutErr == nil || timed.Outcome != reconciliation.OutcomeUnknown {
 		t.Fatalf("timeout: %+v %v", timed, timeoutErr)
 	}
-	socket := HostPort(request.BindAddress, request.Port)
-	for _, refused := range []string{reason, "unassigned-bind-address-" + FormatPort(request.Port)} {
+	socket := infrastructureservices.HostPort(request.BindAddress, request.Port)
+	for _, refused := range []string{reason, "unassigned-bind-address-" + infrastructureservices.FormatPort(request.Port)} {
 		runner := &scriptedRunner{err: recorder.requests[0].Refusals[refused]}
 		result, err := NewCapability(testDefinition(), runner).Apply(context.Background(), call)
 		if result.Outcome != reconciliation.OutcomeFailed {

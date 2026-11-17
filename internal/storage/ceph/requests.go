@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -536,7 +537,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 			r.MonIP = ssh.Address
 			if addressRef != "" {
 				var err error
-				r.MonIP, err = machine.ResolveAddress(m, addressRef)
+				r.MonIP, err = infrastructureservices.ResolveAddress(m, addressRef)
 				if err != nil {
 					return err
 				}
@@ -545,7 +546,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 				}
 			}
 		} else if addressRef != "" {
-			address, err := machine.ResolveAddress(m, addressRef)
+			address, err := infrastructureservices.ResolveAddress(m, addressRef)
 			if err != nil {
 				return err
 			}

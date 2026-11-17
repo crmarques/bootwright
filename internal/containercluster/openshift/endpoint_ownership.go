@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -69,12 +70,8 @@ func addressClaims(catalog api.Catalog) []addressClaim {
 			host, found := catalog.Find(api.Machine, spec.Get("machineRef").Text())
 			for i, entry := range spec.Get("endpoints").Items() {
 				claim(holder, fmt.Sprintf("spec.endpoints[%d].address", i), entry.Get("address").Text())
-				if found {
-					for _, address := range host.Spec().Get("network", "addresses").Items() {
-						if address.Get("name").Text() == entry.Get("addressRef").Text() {
-							claim(holder, fmt.Sprintf("spec.endpoints[%d].addressRef", i), address.Get("address").Text())
-						}
-					}
+				if address, declared := infrastructureservices.AddressOf(host, entry.Get("addressRef").Text()); found && declared {
+					claim(holder, fmt.Sprintf("spec.endpoints[%d].addressRef", i), address)
 				}
 			}
 		}

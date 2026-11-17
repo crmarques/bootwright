@@ -2,7 +2,7 @@ package openshift
 
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 func AccessCatalog(catalog api.Catalog) api.Catalog {
@@ -28,7 +28,7 @@ func AccessCatalog(catalog api.Catalog) api.Catalog {
 			continue
 		}
 		reference := spec.Get("network", "installAddressRef").Text()
-		if _, ok := machine.Address(object, reference); !ok || reference == "" {
+		if _, ok := infrastructureservices.AddressOf(object, reference); !ok || reference == "" {
 			continue
 		}
 		access := api.MapValue().WithPath(api.StringValue("core"), "ssh", "user").

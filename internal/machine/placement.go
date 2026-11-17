@@ -80,7 +80,7 @@ func PlacementFor(machine api.Object, controllerMachine string) (Placement, erro
 	if len(privilegeFields(ssh)) != 0 {
 		return Placement{}, placementFailure("lifecycle.state", "a lifecycle placement host connects as root and never escalates", "set access.ssh.user to root or omit it, and remove access.ssh.sudoPasswordRef, on "+machine.Identity())
 	}
-	address, err := ResolveAddress(machine, ssh.Get("addressRef").Text())
+	address, err := infrastructureservices.ResolveAddress(machine, ssh.Get("addressRef").Text())
 	if err != nil {
 		return Placement{}, err
 	}
@@ -103,7 +103,7 @@ func ServicePlacementFor(machine api.Object, controllerMachine string) (Placemen
 		return PlacementFor(machine, controllerMachine)
 	}
 	ssh, found := SSH(machine)
-	install, declared := Address(machine, machine.Spec().Get("network", "installAddressRef").Text())
+	install, declared := infrastructureservices.AddressOf(machine, machine.Spec().Get("network", "installAddressRef").Text())
 	if !found || !declared || ssh.Address != install || ssh.Port != 22 || ssh.PrivateKeyRef == "" || ssh.User == "" {
 		return Placement{}, placementFailure("lifecycle.state", "a service on a Machine Bootwright installs is reached at its install address on port 22 with the fleet key, as its installation configured it",
 			"remove spec.access.ssh from "+machine.Identity()+" so its access is the installation's own")
@@ -169,21 +169,6 @@ func placementHost(o api.Object, c api.Catalog) bool {
 
 func providerHost(o api.Object, c api.Catalog) bool {
 	return slices.ContainsFunc(c.OfKind(api.InfraProvider), func(provider api.Object) bool { return substrate.HostMachine(provider) == o.Name() })
-}
-
-// ResolveAddress answers the address one reference names on its Machine.
-func ResolveAddress(machine api.Object, reference string) (string, error) {
-	if reference == "" {
-		return "", placementFailure("api.required", "the address reference is empty", "name an address on "+machine.Identity())
-	}
-	address, declared := Address(machine, reference)
-	if !declared {
-		return "", placementFailure("api.reference", "the address reference does not resolve on its Machine", "name an address declared on "+machine.Identity())
-	}
-	if address == "" {
-		return "", placementFailure("api.value", "the referenced Machine address is empty", "correct the address on "+machine.Identity())
-	}
-	return address, nil
 }
 
 func placementFailure(code, message, remediation string) error {

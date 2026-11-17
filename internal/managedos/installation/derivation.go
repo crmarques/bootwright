@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -183,7 +183,7 @@ func resolverAddresses(catalog api.Catalog, machine api.Object, needs *Requireme
 	}
 	var addresses []string
 	for _, selection := range spec.Get("dns").Items() {
-		address, name, err := managedservice.ServiceEndpoint(catalog, api.DNSServer, selection, machine.Identity())
+		address, name, err := infrastructureservices.ServiceEndpoint(catalog, api.DNSServer, selection, machine.Identity())
 		if err != nil {
 			return nil, err
 		}
@@ -206,7 +206,7 @@ func timeAddresses(catalog api.Catalog, machine, profile api.Object, needs *Requ
 	}
 	var addresses []string
 	for _, selection := range selections.Items() {
-		address, name, err := managedservice.ServiceEndpoint(catalog, api.NTPServer, selection, machine.Identity())
+		address, name, err := infrastructureservices.ServiceEndpoint(catalog, api.NTPServer, selection, machine.Identity())
 		if err != nil {
 			return nil, err
 		}

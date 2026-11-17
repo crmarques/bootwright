@@ -6,6 +6,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 // ForeignListenerReason names the refusal an adapter reports when something
@@ -23,17 +24,17 @@ func ForeignListenerRefusals(kind, service, bindAddress string, ports []int) map
 	refusals := map[string]error{}
 	for _, port := range ports {
 		wildcard := bindAddress == "0.0.0.0" || bindAddress == "::"
-		message := "something other than " + identity + " already listens at " + HostPort(bindAddress, port) + ", so its unit was not started"
+		message := "something other than " + identity + " already listens at " + infrastructureservices.HostPort(bindAddress, port) + ", so its unit was not started"
 		remedy := "stop what listens there, or choose another bindAddress on " + identity
 		if kind != string(api.DNSServer) && kind != string(api.NTPServer) {
 			remedy = "stop what listens there, or choose another bindAddress or port on " + identity
 		}
 		if wildcard {
 			remedy += "; the retained run output lists every socket found"
-			message = "something other than " + identity + " already listens on port " + FormatPort(port) +
+			message = "something other than " + identity + " already listens on port " + infrastructureservices.FormatPort(port) +
 				" at an address its wildcard bind " + bindAddress + " covers, so its unit was not started"
 		}
-		refusals[ForeignListenerReason+"-"+FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+		refusals[ForeignListenerReason+"-"+infrastructureservices.FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
 			Severity: "error", Code: "lifecycle.state", Message: message,
 			Remediation: remedy,
 			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service},
@@ -48,7 +49,7 @@ func ContainerRuntimeRefusals(kind, service, machine string, ports []int) map[st
 	identity := kind + "/" + service
 	refusals := map[string]error{}
 	for _, port := range ports {
-		refusals[ContainerRuntimeReason+"-"+FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+		refusals[ContainerRuntimeReason+"-"+infrastructureservices.FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
 			Severity:    "error",
 			Code:        "lifecycle.state",
 			Message:     "Machine/" + machine + " has no working /usr/bin/podman, so " + identity + " cannot run its container; this attempt pulled, published or started nothing",
@@ -65,9 +66,9 @@ func ListenerRefusals(kind, service, bindAddress string, ports []int) map[string
 		return refusals
 	}
 	for _, port := range ports {
-		refusals["unassigned-bind-address-"+FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+		refusals["unassigned-bind-address-"+infrastructureservices.FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
 			Severity: "error", Code: "lifecycle.state",
-			Message:     "the placement host has no usable local bind address for " + HostPort(bindAddress, port) + "; this attempt pulled, published or started nothing",
+			Message:     "the placement host has no usable local bind address for " + infrastructureservices.HostPort(bindAddress, port) + "; this attempt pulled, published or started nothing",
 			Remediation: "restore the declared address on the placement host, or destroy this context with its original build before importing an assigned bindAddress and matching endpoints and TLS certificate names on " + kind + "/" + service,
 			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service},
 		}}}
@@ -80,7 +81,7 @@ func ListenerRefusals(kind, service, bindAddress string, ports []int) map[string
 // opens conflicts with each of them. A key covers the port on every transport,
 // so a UDP and a TCP listener on one port are the same exclusive claim.
 func SocketKeys(bindAddress string, port int, endpoints []Endpoint) []string {
-	formatted := FormatPort(port)
+	formatted := infrastructureservices.FormatPort(port)
 	keys := []string{"socket:" + bindAddress + ":" + formatted}
 	if bindAddress == "0.0.0.0" || bindAddress == "::" {
 		for _, endpoint := range endpoints {
@@ -121,7 +122,7 @@ func ReadinessRefusals(kind, service, machine, bindAddress string, ports []int) 
 			if reason == "certificate-mismatch" {
 				message = "the listener presented a different certificate than the operation bound"
 			}
-			refusals[reason+"-"+FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: code, Message: message + " on " + HostPort(bindAddress, port), Remediation: "restore the declared service listener and retry the operation", Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service}}}}
+			refusals[reason+"-"+infrastructureservices.FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: code, Message: message + " on " + infrastructureservices.HostPort(bindAddress, port), Remediation: "restore the declared service listener and retry the operation", Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service}}}}
 		}
 	}
 	return refusals

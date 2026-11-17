@@ -2,7 +2,7 @@ package artifactserver
 
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 )
 
@@ -42,7 +42,7 @@ func Selected(catalog api.Catalog, selection api.Value, identity string) (api.Ob
 // PublicPath is the subtree `<consumer>/<object>/` one consumer owns beneath
 // the served root, and the file it publishes there.
 func PublicPath(catalog api.Catalog, server api.Object, selection api.Value, contextName, consumer, object, leaf, identity string) (Publication, error) {
-	base, err := EndpointURL(catalog, server, selection.Get("endpointRef").Text(), identity)
+	base, err := infrastructureservices.ResolveEndpointURL(catalog, server, selection.Get("endpointRef").Text(), identity)
 	if err != nil {
 		return Publication{}, err
 	}
@@ -60,7 +60,7 @@ func PublicPath(catalog api.Catalog, server api.Object, selection api.Value, con
 // that hands this URL to a remote fetcher sends it only over a verified
 // channel.
 func PrivatePath(catalog api.Catalog, server api.Object, selection api.Value, contextName, consumer, object, identity string) (Publication, string, error) {
-	base, err := EndpointURL(catalog, server, selection.Get("endpointRef").Text(), identity)
+	base, err := infrastructureservices.ResolveEndpointURL(catalog, server, selection.Get("endpointRef").Text(), identity)
 	if err != nil {
 		return Publication{}, "", err
 	}
@@ -90,34 +90,6 @@ func ServedRoot(contextName, server string) string {
 	return ContentRoot(contextName, server) + "/" + servedRoot
 }
 
-// EndpointURL is the base URL one selected endpoint serves at.
-func EndpointURL(catalog api.Catalog, server api.Object, endpointRef, identity string) (string, error) {
-	endpoint, ok := named(server.Spec().Get("endpoints"), endpointRef)
-	if !ok {
-		return "", refusal("api.reference", "the selected artifact server endpoint does not resolve",
-			"correct artifactServerEndpoint.endpointRef on "+identity)
-	}
-	listener, ok := named(server.Spec().Get("listeners"), endpoint.Get("listenerRef").Text())
-	if !ok {
-		return "", refusal("api.reference", "the selected endpoint names no listener on its server",
-			"correct the endpoint on "+server.Identity())
-	}
-	machine, ok := catalog.Find(api.Machine, server.Spec().Get("machineRef").Text())
-	if !ok {
-		return "", refusal("api.reference", "the artifact server's placement Machine is not in the selected graph",
-			"declare it or correct machineRef on "+server.Identity())
-	}
-	address, err := machineref.ResolveAddress(machine, endpoint.Get("addressRef").Text())
-	if err != nil {
-		return "", err
-	}
-	port, ok := listener.Get("port").Int64()
-	if !ok || port < 1 {
-		return "", refusal("api.value", "the selected listener declares no port", "correct the listener on "+server.Identity())
-	}
-	return listener.Get("protocol").Text() + "://" + managedservice.HostPort(address, int(port)), nil
-}
-
 // PlacementFor is the arm a consumer's publication runs through: the Machine
 // this server is placed on, reached the way managed services reach it.
 func PlacementFor(catalog api.Catalog, server api.Object, controllerMachine string) (machineref.Placement, error) {
@@ -138,16 +110,6 @@ func ServicePlacementFor(catalog api.Catalog, server api.Object, controllerMachi
 			"declare it or correct machineRef on "+server.Identity())
 	}
 	return machineref.ServicePlacementFor(machine, controllerMachine)
-}
-
-func named(values api.Value, name string) (api.Value, bool) {
-	if name == "" {
-		if values.Len() != 1 {
-			return api.Value{}, false
-		}
-		return values.Items()[0], true
-	}
-	return values.Named("name", name)
 }
 
 func hasPrefix(value, prefix string) bool {

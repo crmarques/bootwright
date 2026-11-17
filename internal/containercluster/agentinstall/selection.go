@@ -9,6 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -638,7 +639,7 @@ func resolverAddresses(catalog api.Catalog, node api.Object, needs *Requirements
 	}
 	var addresses []string
 	for _, selection := range spec.Get("dns").Items() {
-		address, name, err := managedservice.ServiceEndpoint(catalog, api.DNSServer, selection, node.Identity())
+		address, name, err := infrastructureservices.ServiceEndpoint(catalog, api.DNSServer, selection, node.Identity())
 		if err != nil {
 			return nil, err
 		}
@@ -667,7 +668,7 @@ func nodeInputs(catalog api.Catalog, cluster api.Object, nodes []nodeProjection,
 func timeAddresses(catalog api.Catalog, cluster api.Object, needs *Requirements) ([]string, error) {
 	var addresses []string
 	for _, selection := range cluster.Spec().Get("install", "ntp").Items() {
-		address, name, err := managedservice.ServiceEndpoint(catalog, api.NTPServer, selection, cluster.Identity())
+		address, name, err := infrastructureservices.ServiceEndpoint(catalog, api.NTPServer, selection, cluster.Identity())
 		if err != nil {
 			return nil, err
 		}

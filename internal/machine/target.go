@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/trust"
 )
 
@@ -18,24 +19,6 @@ type SSHTarget struct {
 	PasswordRef      string
 	KnownHostsRef    string
 	OperatorIdentity bool
-}
-
-// Address resolves a Machine-local address reference to the value a consumer
-// receives: the host IP or the DNS name. The second result
-// reports that the reference named a declared address, which is a different
-// fact from the value being usable, so a caller can tell an unresolved
-// reference from an empty one.
-func Address(o api.Object, reference string) (string, bool) {
-	if reference == "" {
-		return "", false
-	}
-	for _, address := range o.Spec().Get("network", "addresses").Items() {
-		if address.Get("name").Text() != reference {
-			continue
-		}
-		return address.Get("address").Text(), true
-	}
-	return "", false
 }
 
 // IPAddresses lists every IP a Machine declares, in declaration order and
@@ -66,7 +49,7 @@ func SSH(o api.Object) (SSHTarget, bool) {
 	if !ssh.Present() {
 		return SSHTarget{}, false
 	}
-	address, ok := Address(o, ssh.Get("addressRef").Text())
+	address, ok := infrastructureservices.AddressOf(o, ssh.Get("addressRef").Text())
 	if !ok || address == "" {
 		return SSHTarget{}, false
 	}

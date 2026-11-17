@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 // A consumer reaches a published file at <protocol>://<host>:<port>, and an
@@ -29,7 +30,7 @@ func TestEndpointURLsBracketIPv6(t *testing.T) {
 		"alias-https": {"https://artifacts.example.test:8443", "artifacts.example.test"},
 	} {
 		t.Run(endpoint, func(t *testing.T) {
-			base, err := EndpointURL(catalog, server, endpoint, "MachineInstallProfile/rhel")
+			base, err := infrastructureservices.ResolveEndpointURL(catalog, server, endpoint, "MachineInstallProfile/rhel")
 			if err != nil || base != want.url {
 				t.Fatalf("endpoint URL = %q (%v), want %q", base, err, want.url)
 			}
