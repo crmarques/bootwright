@@ -21,7 +21,8 @@ description:
   - Classifies the result ansible.builtin.uri registered for a failed listener
     fetch as 403, 404, a certificate that did not verify, a request that ended
     before any status line, or another status.
-  - The native cause is cleaned by C(bootwright.core.printable), bounded to
+  - Each run of line breaks in the native cause becomes one space; the cause
+    is then cleaned by C(bootwright.core.printable), bounded to
     512 characters, and every occurrence of the token is replaced by
     C(<token>), in the cause and the subject alike.
 options:
@@ -64,10 +65,14 @@ _value:
   type: str
 """
 
+import re
+
 from ansible.errors import AnsibleFilterError
 from ansible_collections.bootwright.core.plugins.filter.printable import printable
 
 BOUND = 512
+# A run of line breaks in the native cause reads as one space, so its lines stay apart.
+LINES = re.compile(r"[\r\n]+")
 UNVERIFIED = ("CERTIFICATE_VERIFY_FAILED", "certificate verify failed")
 
 
@@ -88,7 +93,7 @@ def hidden(text, token):
 
 def cause_of(result, token):
     native = result.get("msg", "the request recorded no result")
-    return printable(hidden(str(native), token))[:BOUND]
+    return printable(LINES.sub(" ", hidden(str(native), token)))[:BOUND]
 
 
 def classified(status, cause, secret):

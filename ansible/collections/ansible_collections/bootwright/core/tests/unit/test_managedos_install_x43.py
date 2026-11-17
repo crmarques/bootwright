@@ -327,4 +327,4 @@ def test_the_image_and_tree_are_fetched_through_the_listener_before_the_insert()
             assert served.fetched.get("ca_path") == ("/run/" + certificate if scheme == "https" else None), (url, scheme)
             message = listener_proof.run(tasks[index], scope, {"status": -1, "msg": "Connection refused\nsecond"}).refusal
             assert message == (address + " could not be fetched through its artifact server listener, so no machine was "
-                               "given media: the request failed before any status line: Connection refusedsecond"), message
+                               "given media: the request failed before any status line: Connection refused second"), message

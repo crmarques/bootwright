@@ -72,6 +72,13 @@ def test_the_native_cause_is_printable_and_bounded():
     assert all(character.isprintable() for character in message)
 
 
+@pytest.mark.parametrize("breaks", ["\n", "\r\n", "\n\n\r", "\r"])
+def test_the_lines_of_a_native_cause_stay_apart(breaks):
+    native = "Connection refused" + breaks + "second" + breaks + TOKEN
+    message = listener_refusal({"status": -1, "msg": native}, TOKEN, SECRET, SUBJECT, CONSEQUENCE)
+    assert message == LEAD + "the request failed before any status line: Connection refused second <token>"
+
+
 def test_a_certificate_failure_with_no_bound_secret_names_the_bound_certificate():
     assert listener_refusal({"status": -1, "msg": UNVERIFIED}, TOKEN, "", SUBJECT, CONSEQUENCE) == (
         LEAD + "its certificate did not verify against the serving certificate bound to this operation: "
