@@ -212,11 +212,11 @@ func TestActionDispatchIsPinned(t *testing.T) {
 }
 
 func TestEveryAdmittedActionHasACompleteRow(t *testing.T) {
-	const path = "collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py"
+	const path = "collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_evidence.py"
 	_, tuple, found := strings.Cut(string(ansible.Assets()[path]), "\n    actions = (")
 	tuple, _, closed := strings.Cut(tuple, ")\n")
 	if !found || !closed {
-		t.Fatal("ceph_core.py's evidence schema declares no actions tuple")
+		t.Fatal("ceph_evidence.py's evidence schema declares no actions tuple")
 	}
 	admitted := []string{}
 	for _, match := range regexp.MustCompile(`"([a-z-]+)"`).FindAllStringSubmatch(tuple, -1) {

@@ -26,7 +26,8 @@ import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import private_files
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_runtime, ceph_native, ceph_native_observability as observability, ceph_native_observe as observe, ceph_native_units,
+    ceph_core, ceph_evidence, ceph_transport, ceph_host_runtime, ceph_native, ceph_native_observability as observability, ceph_native_observe as observe,
+    ceph_native_units,
 )
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_monitoring as monitoring
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_service_units as units
@@ -190,9 +191,9 @@ def test_gateway_without_binding_reports_cephadm_issuer(tmp_path, monkeypatch):
     assert probes.authorities == [CERT, CERT]
     assert probes.targets == [("192.0.2.11", PORT, "node-1", None), ("192.0.2.2", PORT, "node-2", None)]
     value = dict(evidence, request="d" * 64, ready=True, exists=True, hosts=["node-1"])
-    assert ceph_core.evidence(copy.deepcopy(value), "d" * 64, request)["endpoint"] == endpoint
+    assert ceph_evidence.evidence(copy.deepcopy(value), "d" * 64, request)["endpoint"] == endpoint
     # The result publisher validates without the request and must admit a reachable management gateway (B1026).
-    assert ceph_core.evidence(copy.deepcopy(value), "d" * 64)["endpoint"] == endpoint
+    assert ceph_evidence.evidence(copy.deepcopy(value), "d" * 64)["endpoint"] == endpoint
     others = [dict(row, service="crash", name="crash." + row["host"]) for row in value["daemons"]]
     for bad, against in ((dict(value, endpoint={"certificateSHA256": "", "reachable": True}), request),
                          (dict(value, endpoint={"certificateSHA256": endpoint["certificateSHA256"], "reachable": False}), request),
@@ -201,7 +202,7 @@ def test_gateway_without_binding_reports_cephadm_issuer(tmp_path, monkeypatch):
                          (dict(value, daemons=others), None), (dict(value, daemons=[]), None),
                          (dict(value, daemons=[]), units.unit_request("direct"))):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(copy.deepcopy(bad), "d" * 64, against)
+            ceph_evidence.evidence(copy.deepcopy(bad), "d" * 64, against)
     probes.answers["192.0.2.2"] = (second, False)
     ready, blocking, evidence = observing(monitor, markers)
     assert ready is False and blocking == ["http@mgmt-gateway"] and evidence["endpoint"] == {"certificateSHA256": "", "reachable": False}
@@ -324,7 +325,7 @@ def test_transport_reads_each_phase_material(tmp_path):
     request = gateway_request()
     material = {"sshKey": write("identity", "key"), "knownHosts": write("known", "192.0.2.1 ssh-ed25519 PUBLIC"),
                 "mgmtGatewayCertificate": write("certificate", CERT), "mgmtGatewayKey": write("private", KEY)}
-    transport = ceph_core.Transport(request, material, run=lambda argv, data=b"", timeout=None: (0, b'{"ok": true, "result": {}}'))
+    transport = ceph_transport.Transport(request, material, run=lambda argv, data=b"", timeout=None: (0, b'{"ok": true, "result": {}}'))
     assert transport.unit_material("unit") == MATERIAL and transport.unit_material("observe") == SEEN and transport.unit_material() == MATERIAL
     assert transport.unit_material("prerequisites") == {}
 

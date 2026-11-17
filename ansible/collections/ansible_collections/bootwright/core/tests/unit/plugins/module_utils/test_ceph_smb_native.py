@@ -25,7 +25,7 @@ import os
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_native, ceph_native_nfs, ceph_native_observe, ceph_native_worker, ceph_smb_native, ceph_tunnel_staging,
+    ceph_core, ceph_transport, ceph_native, ceph_native_nfs, ceph_native_observe, ceph_native_worker, ceph_smb_native, ceph_tunnel_staging,
 )
 from ansible_collections.bootwright.core.plugins.modules import ceph_smb
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
@@ -817,7 +817,7 @@ def test_smb_worker_ships_after_its_imports():
     assert modules[at - 1] == "ceph_native_object"
     assert all(modules.index(name) < at for name in ("ceph_native", "ceph_native_resources", "ceph_native_nfs"))
     assert modules.index("native_specializations") == modules.index("native_diagnostics") + 1
-    assert tuple(ceph_core.Transport.native_sources()) == modules
+    assert tuple(ceph_transport.Transport.native_sources()) == modules
 
 
 def test_core_keeps_the_smb_names_as_aliases():
@@ -896,7 +896,7 @@ def test_smb_transport_puts_secrets_only_on_stdin(tmp_path):
     value = request("ceph.smb.join.auth")
     calls = []
     material = material_files(tmp_path, {"smbSecret0": JOIN_SECRET})
-    transport = ceph_core.Transport(value["scope"], material, run=answering(calls), scope=True, smb_secrets=1)
+    transport = ceph_transport.Transport(value["scope"], material, run=answering(calls), scope=True, smb_secrets=1)
     result = ceph_core.execute_smb(copy.deepcopy(value), "apply", DIGEST, transport)
     assert result["changed"] is True and result["evidence"]["ready"] is True and JOIN_SECRET not in repr(result)
     assert [json.loads(data)["payload"]["phase"] for unused, data, unused in calls] == ["smb_apply", "smb_observe"]
@@ -904,7 +904,7 @@ def test_smb_transport_puts_secrets_only_on_stdin(tmp_path):
         assert JOIN_SECRET not in " ".join(argv) and "PRIVATE-KEY-SENTINEL" not in " ".join(argv)
     assert json.loads(calls[0][1])["payload"]["private"] == {"smbSecret0": JOIN_SECRET}
     assert json.loads(calls[1][1])["payload"]["private"] == {} and JOIN_SECRET.encode() not in calls[1][1]
-    unbound = ceph_core.Transport(value["scope"], material, run=answering(calls), scope=True)
+    unbound = ceph_transport.Transport(value["scope"], material, run=answering(calls), scope=True)
     with pytest.raises(ceph_native.Refusal, match="^material$"):
         unbound.smb(value["scope"]["hosts"][0], "smb_observe", value)
     with pytest.raises(ceph_native.Refusal, match="^transport$"):
@@ -918,7 +918,7 @@ def test_smb_material_refuses_a_password_that_is_not_one_short_line(tmp_path, se
     material = material_files(tmp_path, {"smbSecret0": "placeholder"})
     with open(material["smbSecret0"], "wb") as handle:
         handle.write(secret.encode("utf-8"))
-    transport = ceph_core.Transport(value["scope"], material, run=answering([]), scope=True, smb_secrets=1)
+    transport = ceph_transport.Transport(value["scope"], material, run=answering([]), scope=True, smb_secrets=1)
     with pytest.raises(ceph_native.Refusal, match="^(material|file)$"):
         transport.smb_material()
 
@@ -1008,7 +1008,7 @@ def test_worker_payload_stays_under_max_input(tmp_path):
         directory.mkdir()
         material = material_files(directory, {"smbSecret" + str(index): "p" * 1024 for index in range(users)})
         calls = []
-        transport = ceph_core.Transport(value["scope"], material, run=answering(calls), scope=True, smb_secrets=users)
+        transport = ceph_transport.Transport(value["scope"], material, run=answering(calls), scope=True, smb_secrets=users)
         return value, transport, calls
 
     value, transport, calls = sized(64)

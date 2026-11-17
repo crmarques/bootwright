@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_transport, ceph_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_filesystems as fs
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_osd_variants as osd_variants
@@ -144,11 +144,11 @@ def test_a_refusal_the_real_transport_raises_keeps_its_code_site(tmp_path):
             if payload["host"] == "node-2":
                 return 255, b""
             return 0, json.dumps({"ok": True, "result": {"name": payload["host"], "owned": True, "exists": True}}).encode()
-        return ceph_core.Transport(request, {"sshKey": str(key), "knownHosts": str(known)}, run=run)
+        return ceph_transport.Transport(request, {"sshKey": str(key), "knownHosts": str(known)}, run=run)
 
     reading = ceph_core.execute(blocks[0][0], "observe", blocks[0][1], transport(blocks[0][0]), reading="hosts")["evidence"]
     refused = reading["hosts"][-1]["refused"]
-    assert refused["reason"] == "transport" and refused["detail"].startswith("transport@ceph_core._call:")
+    assert refused["reason"] == "transport" and refused["detail"].startswith("transport@ceph_transport._call:")
     for request, digest in blocks:
         with pytest.raises(ceph_native.Refusal) as own:
             ceph_core.execute(request, "observe", digest, transport(request))
@@ -448,7 +448,7 @@ def run_module(monkeypatch, capsys, request, material, transport):
     arguments = {"request": request, "operation": "observe", "digest": DIGEST, "material": material, "outputs": {}}
     monkeypatch.setattr(basic, "_ANSIBLE_ARGS", json.dumps({"ANSIBLE_MODULE_ARGS": arguments}).encode())
     monkeypatch.setattr(basic, "_ANSIBLE_PROFILE", "legacy")
-    monkeypatch.setattr(ceph_core, "Transport", lambda value, lent, **keywords: transport.bound(value))
+    monkeypatch.setattr(ceph_transport, "Transport", lambda value, lent, **keywords: transport.bound(value))
     with pytest.raises(SystemExit):
         ceph_cluster.main()
     return json.loads(capsys.readouterr().out.strip().splitlines()[-1])

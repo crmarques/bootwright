@@ -19,7 +19,7 @@ import json
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_resources
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_evidence, ceph_native, ceph_native_resources
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core_fixtures
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_filesystems as fs_fixtures
@@ -412,17 +412,17 @@ def test_subvolume_evidence_admits_only_the_exact_path(core_request, resource, a
     request = core_subvolume_request(core_request)
     value = dict(core_fixtures.observation(request), request="d" * 64, resource=resource)
     if admitted:
-        assert ceph_core.evidence(value, "d" * 64, request) is value
+        assert ceph_evidence.evidence(value, "d" * 64, request) is value
         return
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-        ceph_core.evidence(value, "d" * 64, request)
+        ceph_evidence.evidence(value, "d" * 64, request)
 
 
 def test_a_path_on_any_other_action_refuses(core_request):
     request = dict(core_request, action="rbd", rbd={"dataPool": "", "features": ["layering"], "name": "disk", "pool": "data", "sizeBytes": GIB})
     value = dict(core_fixtures.observation(request), request="d" * 64, resource={"id": "abc", "path": "/volumes/_nogroup/docs/" + UUIDS[0]})
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-        ceph_core.evidence(value, "d" * 64, request)
+        ceph_evidence.evidence(value, "d" * 64, request)
 
 
 def test_subvolume_apply_calls_the_subvolume_phase(core_request, monkeypatch):

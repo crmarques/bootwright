@@ -21,7 +21,7 @@ import json
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_resources
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_evidence, ceph_native, ceph_native_resources
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 FSID = "4c0a4300-aa43-458c-86d7-ac2256d1fc00"
@@ -782,10 +782,10 @@ def evidence_value(action, identifier):
 
 
 def test_policy_evidence_carries_rule_id():
-    assert ceph_core.evidence(evidence_value("policy", "3"), "d" * 64)["resource"] == {"id": "3", "path": ""}
+    assert ceph_evidence.evidence(evidence_value("policy", "3"), "d" * 64)["resource"] == {"id": "3", "path": ""}
     for refused in (evidence_value("client", "3"), evidence_value("policy", "03"), evidence_value("rule", "3")):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(refused, "d" * 64)
+            ceph_evidence.evidence(refused, "d" * 64)
 
 
 def test_policy_apply_calls_the_policy_phase(monkeypatch):

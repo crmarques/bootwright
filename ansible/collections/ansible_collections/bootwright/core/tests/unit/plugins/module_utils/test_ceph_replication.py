@@ -14,7 +14,7 @@ import stat
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_replication, ceph_replication_native as native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_transport, ceph_native, ceph_replication, ceph_replication_native as native
 from ansible_collections.bootwright.core.plugins.modules import ceph_replication as module
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_pools as pools
@@ -291,7 +291,7 @@ def test_replaced_native_image_identity_refuses_after_completion(field):
 
 
 def test_embedded_worker_source_closure_contains_replication():
-    sources = ceph_core.Transport.native_sources()
+    sources = ceph_transport.Transport.native_sources()
     assert "ceph_replication_native" in sources and SECRET not in str(sources)
 
 
@@ -337,7 +337,7 @@ def test_bootstrap_token_rejects_foreign_or_malformed_identity(field, replacemen
 
 def test_transport_confines_token_to_bounded_worker_stdin(monkeypatch):
     value = request()
-    transport = object.__new__(ceph_core.Transport)
+    transport = object.__new__(ceph_transport.Transport)
     captured = []
 
     def call(host, source, payload, timeout, **kwargs):

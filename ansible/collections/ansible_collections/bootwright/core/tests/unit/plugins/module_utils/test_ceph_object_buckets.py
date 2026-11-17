@@ -22,7 +22,7 @@ import threading
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_object, ceph_tunnel_staging
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_evidence, ceph_native, ceph_native_object, ceph_tunnel_staging
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_object_gateway as gateway
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_object_users as users
@@ -655,12 +655,12 @@ def test_apply_runs_one_bucket_phase_then_waits_lending_only_the_certificate(cor
 def test_object_bucket_evidence_admits_only_its_bucket_name(core_request):
     request = core_bucket_request(core_request)
     value = dict(core.observation(request, ready=True), request="d" * 64, resource={"id": "app-data", "path": ""})
-    assert ceph_core.evidence(value, "d" * 64, request) is value
-    assert ceph_core.evidence(dict(value, ready=False, partial=True, resource={"id": "", "path": ""}), "d" * 64, request)
+    assert ceph_evidence.evidence(value, "d" * 64, request) is value
+    assert ceph_evidence.evidence(dict(value, ready=False, partial=True, resource={"id": "", "path": ""}), "d" * 64, request)
     for refused in (dict(value, resource={"id": "other", "path": ""}), dict(value, resource={"id": "app-data", "path": "/"}),
                     dict(value, resource={"id": ACCESS, "path": ""}), dict(value, client="client.app-writer")):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(refused, "d" * 64, request)
+            ceph_evidence.evidence(refused, "d" * 64, request)
 
 
 core_request = core.core_request

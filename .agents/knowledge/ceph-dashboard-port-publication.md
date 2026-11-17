@@ -16,7 +16,7 @@ prove the port was included when deployment was prepared. Manager failover can
 also interrupt endpoint publication during a multi-manager redeploy.
 
 In
-[ceph_native.py](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py),
+[ceph_native_dashboard.py](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_dashboard.py),
 the dashboard phase waits for publication before scheduling and checks every
 intended manager's refreshed deployment ports before completing. A bounded
 repair retains the exact manager/container plan and an intent for each target.

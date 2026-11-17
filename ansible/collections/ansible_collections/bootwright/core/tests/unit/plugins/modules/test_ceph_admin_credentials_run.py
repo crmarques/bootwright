@@ -8,7 +8,7 @@ import stat
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_transport
 from ansible_collections.bootwright.core.plugins.modules import ceph_admin_credentials as module
 
 REQUEST = {"bootstrap": "ceph-0", "hosts": [{"name": "ceph-1"}, {"name": "ceph-0"}]}
@@ -30,7 +30,7 @@ def stubbed_transport(monkeypatch):
                 raise state["reply"]  # pylint: disable=raising-bad-type
             return state["reply"]
 
-    monkeypatch.setattr(ceph_core, "Transport", Transport)
+    monkeypatch.setattr(ceph_transport, "Transport", Transport)
     return state
 
 

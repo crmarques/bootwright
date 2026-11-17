@@ -79,7 +79,7 @@ import json
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics, private_files
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_export_native, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_transport, ceph_export_native, ceph_native
 
 
 def main():
@@ -102,7 +102,7 @@ def main():
         tls = gateway is not None and gateway["tls"]
         ceph_native.require(set(material) == ({"sshKey", "knownHosts", "gatewayCertificate"} if tls else {"sshKey", "knownHosts"}), "material")
         ceph_native.require(set(params["outputs"]) == {"externalDetails"}, "material")
-        transport = ceph_core.Transport(request["scope"], {key: material[key] for key in ("sshKey", "knownHosts")}, scope=True)
+        transport = ceph_transport.Transport(request["scope"], {key: material[key] for key in ("sshKey", "knownHosts")}, scope=True)
         private = {}
         if tls:
             private["certificate"] = ceph_native.read_regular(material["gatewayCertificate"], maximum=1 << 20).decode("ascii")

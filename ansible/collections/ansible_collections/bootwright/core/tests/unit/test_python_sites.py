@@ -197,7 +197,7 @@ SSH_CLIENT = "/usr/bin/ssh"
 # Each file that names the ssh client builds or checks an ssh argv; the reason says where its remote command, if any, is joined.
 SSH_SITES = {
     "plugins/module_utils/managedos_guest_ssh.py": "the guest session argv; it takes the remote command as an argv and joins it through remote_command",
-    "plugins/module_utils/ceph_ssh_policy.py": "the Ceph session argv; ceph_core appends a fixed worker remote_command joined",
+    "plugins/module_utils/ceph_ssh_policy.py": "the Ceph session argv; ceph_transport appends a fixed worker remote_command joined",
     "plugins/module_utils/ceph_tunnel.py": "a -W forward, which carries no remote command",
     "plugins/module_utils/ssh_key_policy.py": "ssh -G evaluates the policy and opens no session",
     "plugins/module_utils/ceph_host_route_probe.py": "checks the client argv cephadm runs and builds none",
@@ -205,7 +205,7 @@ SSH_SITES = {
 
 # Each file that hands an ssh session a remote command, which it joins through the quoting owner.
 REMOTE_COMMAND_SITES = {
-    "plugins/module_utils/ceph_core.py",
+    "plugins/module_utils/ceph_transport.py",
     "plugins/module_utils/managedos_guest_ssh.py",
 }
 

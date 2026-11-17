@@ -47,7 +47,7 @@ proved:
 import json
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, private_files
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_transport, private_files
 
 
 def main():
@@ -62,7 +62,7 @@ def main():
         material = dict(params["material"])
         update_path = material.pop("update", None)
         incarnation = material.pop("incarnation")
-        transport = ceph_core.Transport(params["request"], material)
+        transport = ceph_transport.Transport(params["request"], material)
         host = next(host for host in params["request"]["hosts"] if host["name"] == params["request"]["bootstrap"])
         if params["operation"] == "prepare":
             result = transport.call(host, "admin_prepare", {"incarnation": incarnation}, timeout=120)

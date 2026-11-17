@@ -91,7 +91,7 @@ request to reject undeclared topology. The isolated loader has no ambient
 collection path, so validation failed before journal creation or a package
 transaction.
 
-The [package transport](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py)
+The [package transport](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_transport.py)
 and [closed loader](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_package_worker.py)
 must carry the same complete source closure. Test the production envelope
 under isolated Python and invoke its real pure scope validation; stub helper

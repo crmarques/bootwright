@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_stretch as stretch, ceph_tunnel
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_evidence, ceph_native, ceph_native_stretch as stretch, ceph_tunnel
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_stretch
 
 FSID = test_ceph_stretch.FSID
@@ -390,7 +390,7 @@ def test_the_controller_reaches_only_the_tiebreaker_and_publishes_closed_evidenc
     result = ceph_core.execute(value, operation, DIGEST, transport, retirement="tiebreaker")
     phase = "tiebreaker_remove" if operation == "destroy" else "tiebreaker_observe"
     assert transport.calls == [("node-5", phase, None)]
-    assert result["evidence"] == {"version": ceph_core.TIEBREAKER_EVIDENCE, "request": DIGEST, "owner": value["owner"], "fsid": FSID, "host": "node-5",
+    assert result["evidence"] == {"version": ceph_evidence.TIEBREAKER_EVIDENCE, "request": DIGEST, "owner": value["owner"], "fsid": FSID, "host": "node-5",
                                   "removed": removed, "attempted": True}
 
 

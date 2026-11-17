@@ -9,7 +9,7 @@ from collections import Counter
 import pytest
 import yaml
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_tunnel_staging as staging
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_transport, ceph_native, ceph_tunnel_staging as staging
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core, test_ceph_bootstrap_recovery as recovery
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel
 
@@ -292,7 +292,7 @@ def test_license_has_no_effect_without_every_host_completion(native):
 
 
 def test_license_transport_keeps_its_own_native_budget(core_request, monkeypatch):
-    transport = ceph_core.Transport(core_request, {})
+    transport = ceph_transport.Transport(core_request, {})
     received = []
     monkeypatch.setattr(transport, "_call", lambda host, source, payload, timeout, **kwargs: received.append((payload, timeout, kwargs)) or {})
     transport.call(core_request["hosts"][0], "license")

@@ -110,7 +110,7 @@ detail:
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_transport, ceph_native
 
 
 def main():
@@ -135,7 +135,7 @@ def main():
         material = dict(params["material"])
         removal = material.pop("removal", "false")
         ceph_native.require(removal in ("true", "false") and (removal == "false" or params["operation"] == "observe"), "request")
-        transport = ceph_core.Transport(request["cluster"], material, scope=True)
+        transport = ceph_transport.Transport(request["cluster"], material, scope=True)
         if params["operation"] == "apply":
             result = ceph_core.host_step(request, params["step"], params["digest"], transport, plan_digest=params["plan_digest"],
                                          applied=params["applied"], pull=params["pull"], seconds=params["seconds"])

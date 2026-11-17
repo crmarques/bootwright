@@ -32,7 +32,7 @@ import threading
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_runtime, ceph_native, ceph_native_observability as observability, ceph_native_units,
+    ceph_core, ceph_evidence, ceph_host_runtime, ceph_native, ceph_native_observability as observability, ceph_native_units,
 )
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_mgmt_gateway as gateway
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_monitoring as monitoring
@@ -251,10 +251,10 @@ def test_sso_evidence_has_no_secret(tmp_path, monkeypatch):
     assert ready is True and blocking == [] and evidence["sso"] == "oauth2"
     assert not any(mark in json.dumps(evidence) for mark in SECRET_MARKS)
     value = dict(evidence, request="d" * 64, ready=True, exists=True)
-    assert ceph_core.evidence(copy.deepcopy(value), "d" * 64, request)["sso"] == "oauth2"
+    assert ceph_evidence.evidence(copy.deepcopy(value), "d" * 64, request)["sso"] == "oauth2"
     for bad, against in ((dict(value, sso="saml2"), request), (value, gateway.gateway_request())):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(copy.deepcopy(bad), "d" * 64, against)
+            ceph_evidence.evidence(copy.deepcopy(bad), "d" * 64, against)
     assert not any(command[-5:-1] == ["dashboard", "sso", "enable", "oauth2"] or "status" in command for command in monitor.log)
 
 

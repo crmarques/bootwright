@@ -402,8 +402,8 @@ def test_extended_launcher_is_fixed_to_one_phase_and_budget(nvme_request, monkey
     import json
     import subprocess
     import sys
-    from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native_worker
-    transport = ceph_core.Transport(nvme_request, {})
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker, ceph_transport
+    transport = ceph_transport.Transport(nvme_request, {})
     captured = []
     monkeypatch.setattr(transport, "_call", lambda *args, **kwargs: captured.append((args, kwargs)))
     transport.call(nvme_request["hosts"][0], phase, timeout=nvmeof.phase_budget(nvme_request, phase) + 20)
@@ -467,7 +467,7 @@ def nvme_unit_request(nvme_request):
 
 
 def test_service_gateway_reads_have_their_own_additional_budget(nvme_unit_request, monkeypatch):
-    from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native_units
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native_units, ceph_transport
     native = ceph_native_units.UnitWorker(nvme_unit_request, "node-1", markers=fixtures.Markers())
     calls = []
 
@@ -486,7 +486,7 @@ def test_service_gateway_reads_have_their_own_additional_budget(nvme_unit_reques
     assert native.nvmeof_unit_observe() == {"ready": True, "blocking": []}
     assert len(calls) == 2
     assert nvmeof.phase_budget(nvme_unit_request, "nvmeof_unit_observe") == 640 + len(calls) * 60 + 60
-    transport = ceph_core.Transport(nvme_unit_request, {})
+    transport = ceph_transport.Transport(nvme_unit_request, {})
     captured = []
     monkeypatch.setattr(transport, "_call", lambda *args, **kwargs: captured.append((args, kwargs)))
     transport.call(nvme_unit_request["hosts"][0], "nvmeof_unit_observe", timeout=840)

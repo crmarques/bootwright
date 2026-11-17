@@ -14,7 +14,8 @@ import sys
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_worker, ceph_package_worker, ceph_packages, ceph_pull_broker,
+    ceph_core, ceph_evidence, ceph_transport, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_worker, ceph_package_worker, ceph_packages,
+    ceph_pull_broker,
     ceph_registry_discovery, native_diagnostics,
 )
 from ansible_collections.bootwright.core.plugins.modules import ceph_host
@@ -176,12 +177,12 @@ def test_apply_refuses_an_unproved_or_other_package_plan(host_request, change):
 def test_host_evidence_is_closed_and_bound_to_the_frozen_request(host_request, change):
     value = dict(prepared_evidence(host_request, **change), request=DIGEST)
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-        ceph_core.host_evidence(value, DIGEST, host_request)
+        ceph_evidence.host_evidence(value, DIGEST, host_request)
 
 
 def test_the_shared_protocol_publishes_host_evidence(host_request):
     value = dict(prepared_evidence(host_request), request=DIGEST)
-    assert ceph_core.evidence(value, DIGEST) == value
+    assert ceph_evidence.evidence(value, DIGEST) == value
 
 
 @pytest.mark.parametrize("change", [lambda r: r.update(host="node-9"), lambda r: r.update(version="ceph-host-v0"), lambda r: r["cluster"].pop("packages"),
@@ -208,7 +209,7 @@ def test_the_long_call_carries_the_credential_only_on_protected_stdin(host_reque
         return 0, b'{"ok":true,"result":{"changed":true}}'
 
     material = {"sshKey": str(key), "knownHosts": str(known), "registryJSON": str(registry)}
-    transport = ceph_core.Transport(host_request["cluster"], material, run=run, scope=True)
+    transport = ceph_transport.Transport(host_request["cluster"], material, run=run, scope=True)
     host = host_request["cluster"]["hosts"][1]
     assert transport.host_images(host, ["haproxy"], 1200, IMAGES_SECONDS) == {"changed": True}
     argv, data, timeout = calls[0]
@@ -242,7 +243,7 @@ def test_every_other_host_phase_keeps_the_ordinary_ceiling(host_request, tmp_pat
         calls.append((argv, data, timeout))
         return 0, b'{"ok":true,"result":{"changed":false}}'
 
-    transport = ceph_core.Transport(host_request["cluster"], {"sshKey": str(key), "knownHosts": str(known)}, run=run, scope=True)
+    transport = ceph_transport.Transport(host_request["cluster"], {"sshKey": str(key), "knownHosts": str(known)}, run=run, scope=True)
     for phase in ("profile", "route", "device_identity", "host_observe", "host_devices"):
         transport.call(host_request["cluster"]["hosts"][1], phase, **({"names": ["haproxy"]} if phase == "profile" else {}))
     assert all(timeout == 660 and json.loads(data)["budget"] <= 640 for unused, data, timeout in calls)
@@ -294,7 +295,7 @@ def package_transport(host_request, tmp_path, output):
         path.write_text(value)
         path.chmod(0o600)
         material[name] = str(path)
-    return ceph_core.Transport(host_request["cluster"], material, run=lambda argv, data, timeout: (0, output), scope=True)
+    return ceph_transport.Transport(host_request["cluster"], material, run=lambda argv, data, timeout: (0, output), scope=True)
 
 
 def unaccepted_license():
@@ -499,7 +500,7 @@ def test_the_package_call_relays_the_bound_repository_bundle(host_request, tmp_p
         calls.append((argv, data))
         return 0, b'{"ok":true,"result":{"changed":false,"ready":true,"planDigest":"' + b"a" * 64 + b'"}}'
 
-    result = ceph_core.Transport(bound, material, run=run, scope=True).packages(bound["hosts"][1])
+    result = ceph_transport.Transport(bound, material, run=run, scope=True).packages(bound["hosts"][1])
     assert result["ready"] is True and len(calls) == 1
     argv, data = calls[0]
     assert json.loads(data)["payload"]["private"] == {"certificate": "PUBLIC-CERTIFICATE", "packageRepositoryCA": projection}
@@ -510,7 +511,7 @@ def test_the_package_call_relays_the_bound_repository_bundle(host_request, tmp_p
                (bound, dict(material, packageRepositoryCA=str(tmp_path / "notUTF8"))), (bound, dict(material, packageRepositoryCA=str(tmp_path / "empty")))]
     for request_value, private in refused:
         with pytest.raises(ceph_native.Refusal, match="^material$"):
-            ceph_core.Transport(request_value, private, run=run, scope=True).packages(request_value["hosts"][1])
+            ceph_transport.Transport(request_value, private, run=run, scope=True).packages(request_value["hosts"][1])
     assert len(calls) == 1
 
 
@@ -552,13 +553,13 @@ def test_a_provided_fips_host_is_observed_before_preparation_and_records_its_fip
 @pytest.mark.parametrize("change", [lambda e: e.pop("fips"), lambda e: e.update(fips={"kernel": "1", "policy": "FIPS:OSPP"})])
 def test_provided_host_evidence_carries_exactly_its_proved_fips_mode(tiebreaker_request, change):
     value = dict(prepared_evidence(tiebreaker_request, devices=[], fips={"kernel": "1", "policy": "FIPS"}), request=DIGEST)
-    assert ceph_core.host_evidence(copy.deepcopy(value), DIGEST, tiebreaker_request)["fips"] == {"kernel": "1", "policy": "FIPS"}
+    assert ceph_evidence.host_evidence(copy.deepcopy(value), DIGEST, tiebreaker_request)["fips"] == {"kernel": "1", "policy": "FIPS"}
     change(value)
     with pytest.raises(ceph_native.Refusal, match="evidence"):
-        ceph_core.host_evidence(value, DIGEST, tiebreaker_request)
+        ceph_evidence.host_evidence(value, DIGEST, tiebreaker_request)
     installed = dict(prepared_evidence(host_request_of(tiebreaker_request), fips={"kernel": "1", "policy": "FIPS"}), request=DIGEST)
     with pytest.raises(ceph_native.Refusal, match="evidence"):
-        ceph_core.host_evidence(installed, DIGEST, host_request_of(tiebreaker_request))
+        ceph_evidence.host_evidence(installed, DIGEST, host_request_of(tiebreaker_request))
 
 
 def host_request_of(tiebreaker_request):

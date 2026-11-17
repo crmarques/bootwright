@@ -17,7 +17,9 @@ import json
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_stretch as stretch, ceph_tunnel_staging as staging
+from ansible_collections.bootwright.core.plugins.module_utils import (
+    ceph_core, ceph_evidence, ceph_native, ceph_native_stretch as stretch, ceph_tunnel_staging as staging,
+)
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core
 
 core_request = core.core_request
@@ -427,13 +429,13 @@ def test_a_changed_stretch_intent_refuses_by_name_before_the_ownership_proof(cha
 def test_the_stretch_evidence_member_is_closed_and_present_only_on_a_stretch_cluster(core_request):
     value = request()
     observed = dict(core.observation(value, ready=True), request="d" * 64, stretch={"stage": "verified", "enabled": True})
-    ceph_core.evidence(observed, "d" * 64)
+    ceph_evidence.evidence(observed, "d" * 64)
     for member in ({"stage": "rule-present", "enabled": False}, {"stage": "tiebreaker-located", "enabled": True}, {"stage": "verified"}):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(dict(observed, stretch=member), "d" * 64)
+            ceph_evidence.evidence(dict(observed, stretch=member), "d" * 64)
     plain = dict(core.observation(core_request, ready=True), request="d" * 64, stretch={"stage": "verified", "enabled": True})
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-        ceph_core.evidence(plain, "d" * 64, core_request)
+        ceph_evidence.evidence(plain, "d" * 64, core_request)
 
 
 def test_a_crush_location_reads_only_the_rendered_key_value_form():

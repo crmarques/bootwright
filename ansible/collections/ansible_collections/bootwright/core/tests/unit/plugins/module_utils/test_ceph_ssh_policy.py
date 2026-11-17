@@ -16,7 +16,7 @@ import os
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    adapter_protocol, bounded_process, ceph_core, ceph_native, ceph_ssh_policy, ceph_tunnel, managedos_guest_ssh, ssh_key_policy,
+    adapter_protocol, bounded_process, ceph_core, ceph_transport, ceph_native, ceph_ssh_policy, ceph_tunnel, managedos_guest_ssh, ssh_key_policy,
 )
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core_fixtures
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_host_execution as host_fixtures
@@ -79,8 +79,8 @@ def transport(request, tmp_path, pins, listed=DEFAULT, run=None, **options):
     paths["knownHosts"].write_bytes(known(*pins))
     for path in paths.values():
         path.chmod(0o600)
-    return ceph_core.Transport(request, {name: str(path) for name, path in paths.items()}, run=run or (lambda argv, data, timeout: (0, OK)),
-                               policy=policy(listed), **options)
+    return ceph_transport.Transport(request, {name: str(path) for name, path in paths.items()}, run=run or (lambda argv, data, timeout: (0, OK)),
+                                    policy=policy(listed), **options)
 
 
 def options(argv):
@@ -103,7 +103,7 @@ def test_ceph_transport_uses_the_reduced_policy_config_not_dev_null(core_request
     assert len(seen) == 1 and seen[0][0] != "/dev/null" and os.path.basename(seen[0][0]) == "ssh_config"
     assert seen[0][1:] == (CONFIG.encode(), 0o600)
     with pytest.raises(ceph_native.Refusal, match="^transport$"):
-        ceph_core.ssh_argv(core_request["hosts"][0], "/k", "/h", "x", ssh_config="/dev/null", host_key_algorithms="ssh-ed25519")
+        ceph_transport.ssh_argv(core_request["hosts"][0], "/k", "/h", "x", ssh_config="/dev/null", host_key_algorithms="ssh-ed25519")
 
 
 @pytest.mark.parametrize("listed", [DEFAULT, FIPS, OPENSSH_DEFAULT], ids=["default", "fips", "no-directive"])
@@ -148,15 +148,15 @@ def test_ceph_transport_option_set_matches_the_managed_os_guest_session(core_req
     files = {"ssh_config": str(tmp_path / "config"), "known_hosts": str(tmp_path / "known"), "identity": str(tmp_path / "identity")}
     guest = managedos_guest_ssh.guest_argv(host_key_algorithms="rsa-sha2-512,rsa-sha2-256", policy_host_key_algorithms=DEFAULT,
                                            user="operator", address="192.0.2.1", remote_argv=["true"], **files)
-    argv = ceph_core.ssh_argv(core_request["hosts"][0], files["identity"], files["known_hosts"], "print('fixed')",
-                              ssh_config=files["ssh_config"], host_key_algorithms="rsa-sha2-512,rsa-sha2-256")
+    argv = ceph_transport.ssh_argv(core_request["hosts"][0], files["identity"], files["known_hosts"], "print('fixed')",
+                                   ssh_config=files["ssh_config"], host_key_algorithms="rsa-sha2-512,rsa-sha2-256")
     assert options(argv) == options(guest)
     assert argv[:8] == ["/usr/bin/ssh", "-T", "-F", files["ssh_config"], "-i", files["identity"], "-p", "22"]
     assert "ControlMaster=no" in options(argv) and "ControlPath=none" in options(argv)
 
 
 def test_ceph_transport_keeps_strict_pinned_known_hosts(core_request):
-    argv = ceph_core.ssh_argv(core_request["hosts"][0], "/k", "/private/known", "x", ssh_config="/private/config", host_key_algorithms="ssh-ed25519")
+    argv = ceph_transport.ssh_argv(core_request["hosts"][0], "/k", "/private/known", "x", ssh_config="/private/config", host_key_algorithms="ssh-ed25519")
     values = options(argv)
     for value in ("StrictHostKeyChecking=yes", "GlobalKnownHostsFile=none", "KnownHostsCommand=none", "UserKnownHostsFile=/private/known",
                   "HostKeyAlgorithms=ssh-ed25519", "UpdateHostKeys=no", "VerifyHostKeyDNS=no"):

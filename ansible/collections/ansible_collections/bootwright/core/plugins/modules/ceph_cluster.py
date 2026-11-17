@@ -80,7 +80,7 @@ detail:
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_transport
 
 # The closed, non-secret values material may carry beside its paths. AnsibleModule masks every leaf of a no_log option as a
 # substring of each result string, so a selector left masked would censor the refusal names and evidence versions that contain it.
@@ -108,7 +108,7 @@ def main():
         for selector in (retirement, reading):
             if selector in SELECTORS:
                 module.no_log_values.discard(selector)
-        transport = ceph_core.Transport(params["request"], material)
+        transport = ceph_transport.Transport(params["request"], material)
         result = ceph_core.execute(params["request"], params["operation"], params["digest"], transport, params["outputs"], retirement=retirement,
                                    reading=reading, shared=shared)
     except Exception as error:

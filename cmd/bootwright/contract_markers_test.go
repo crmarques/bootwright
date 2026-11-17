@@ -25,6 +25,10 @@ func cephMarkerSources() map[string][]string {
 		// Explicit credential updates are bounded commands; no lifecycle block consumes their journal.
 		"ceph_admin_credentials_native.py": nil,
 		"ceph_native.py":                   {core, export, smb, replication},
+		"ceph_native_bootstrap.py":         {core, export, smb, replication},
+		"ceph_native_dashboard.py":         {core, export, smb, replication},
+		"ceph_native_osd.py":               {core, export, smb, replication},
+		"ceph_native_registry.py":          {core, export, smb, replication},
 		"ceph_native_resources.py":         {core, export, smb, replication},
 		"ceph_native_nfs.py":               {core, smb},
 		"ceph_native_nvmeof.py":            {core},

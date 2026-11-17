@@ -19,7 +19,8 @@ import yaml
 
 from ansible_collections.bootwright.core.tests.unit.ceph_goldens import IMAGES_SECONDS
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_resources, ceph_native_worker, ceph_pull_broker, ceph_registry_discovery,
+    ceph_core, ceph_evidence, ceph_transport, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_resources, ceph_native_worker, ceph_pull_broker,
+    ceph_registry_discovery,
     ceph_tunnel_staging,
 )
 from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics, native_specializations
@@ -336,7 +337,7 @@ def specialized_transport(core_request, tmp_path, answers):
     key.chmod(0o600)
     known.chmod(0o600)
     pending = list(answers)
-    return ceph_core.Transport(core_request, {"sshKey": str(key), "knownHosts": str(known)}, run=lambda argv, data, timeout: (0, pending.pop(0)))
+    return ceph_transport.Transport(core_request, {"sshKey": str(key), "knownHosts": str(known)}, run=lambda argv, data, timeout: (0, pending.pop(0)))
 
 
 def test_transport_collects_applied_specializations_and_refuses_unknown_ids(core_request, tmp_path):
@@ -384,12 +385,12 @@ def host_block(core_request):
 def test_core_and_host_evidence_name_the_applied_specializations(core_request):
     ids = ("ceph-mgr-without-license-contract", "ceph-call-home-opt-in")
     named = ceph_core.execute(core_request, "observe", "d" * 64, AppliedTransport(core_request, ids), UNWRITTEN)["evidence"]
-    assert named["specializations"] == sorted(ids) and ceph_core.evidence(named, "d" * 64, core_request) is named
+    assert named["specializations"] == sorted(ids) and ceph_evidence.evidence(named, "d" * 64, core_request) is named
     plain = ceph_core.execute(core_request, "observe", "d" * 64, AppliedTransport(core_request, ()), UNWRITTEN)["evidence"]
     assert "specializations" not in plain and {key: value for key, value in named.items() if key != "specializations"} == plain
     request, record = host_block(core_request)
     named = ceph_core.execute_host(request, "observe", "d" * 64, AppliedTransport(core_request, ids, record))["evidence"]
-    assert named["specializations"] == sorted(ids) and ceph_core.evidence(named, "d" * 64, request) is named
+    assert named["specializations"] == sorted(ids) and ceph_evidence.evidence(named, "d" * 64, request) is named
     plain = ceph_core.execute_host(request, "observe", "d" * 64, AppliedTransport(core_request, (), record))["evidence"]
     assert "specializations" not in plain
     released = ceph_core.execute_host(request, "destroy", "d" * 64, AppliedTransport(core_request, ids, record))["evidence"]
@@ -406,7 +407,7 @@ def test_unit_and_gateway_evidence_name_the_applied_specializations(monkeypatch)
                 transport.applied = set(applied)
                 evidences.append(ceph_core.execute(request, operation, "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)["evidence"])
             named, plain = evidences
-            assert named["specializations"] == sorted(ids) and ceph_core.evidence(named, "d" * 64, request) is named
+            assert named["specializations"] == sorted(ids) and ceph_evidence.evidence(named, "d" * 64, request) is named
             assert "specializations" not in plain and {key: value for key, value in named.items() if key != "specializations"} == plain
 
 
@@ -414,12 +415,12 @@ def test_evidence_without_specializations_still_reads(core_request):
     core = dict(observation(core_request), request="d" * 64)
     request, record = host_block(core_request)
     host = dict(record, request="d" * 64)
-    assert ceph_core.evidence(core, "d" * 64, core_request) is core and ceph_core.evidence(host, "d" * 64, request) is host
+    assert ceph_evidence.evidence(core, "d" * 64, core_request) is core and ceph_evidence.evidence(host, "d" * 64, request) is host
     for value in ([], None, ["ceph-mgr-without-license-contract", "ceph-call-home-opt-in"], ["ceph-call-home-opt-in", "ceph-call-home-opt-in"],
                   ["ceph-unknown-specialization"], "ceph-call-home-opt-in"):
         for record, bound in ((core, core_request), (host, request)):
             with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-                ceph_core.evidence(dict(record, specializations=value), "d" * 64, bound)
+                ceph_evidence.evidence(dict(record, specializations=value), "d" * 64, bound)
 
 
 def test_observation_calls_only_read_phases_and_all_hosts(core_request):
@@ -458,14 +459,14 @@ def test_absence_requires_every_host_to_answer(core_request):
 def test_evidence_rejects_remote_secret_and_identity_substitution(core_request):
     value = observation(core_request)
     value["request"] = "d" * 64
-    assert ceph_core.evidence(value, "d" * 64, core_request) is value
+    assert ceph_evidence.evidence(value, "d" * 64, core_request) is value
     value["privateKey"] = "private"
     with pytest.raises(ceph_native.Refusal, match="evidence"):
-        ceph_core.evidence(value, "d" * 64, core_request)
+        ceph_evidence.evidence(value, "d" * 64, core_request)
     del value["privateKey"]
     value["owner"] = "another-operation"
     with pytest.raises(ceph_native.Refusal, match="evidence"):
-        ceph_core.evidence(value, "d" * 64, core_request)
+        ceph_evidence.evidence(value, "d" * 64, core_request)
 
 
 RBD_IMAGE = {"dataPool": "", "features": ["layering"], "name": "disk", "pool": "volumes", "sizeBytes": 1024 ** 3}
@@ -474,27 +475,27 @@ RBD_IMAGE = {"dataPool": "", "features": ["layering"], "name": "disk", "pool": "
 def test_rbd_evidence_admits_only_a_lowercase_hex_image_id(core_request):
     request = dict(core_request, action="rbd", rbd=RBD_IMAGE)
     value = dict(observation(request), request="d" * 64, resource={"id": "10226b8b4567", "path": ""})
-    assert ceph_core.evidence(value, "d" * 64, request) is value
+    assert ceph_evidence.evidence(value, "d" * 64, request) is value
     for refused in ("ABC", "10226B8B4567", "a" * 15, "12-34"):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(dict(value, resource={"id": refused, "path": ""}), "d" * 64, request)
+            ceph_evidence.evidence(dict(value, resource={"id": refused, "path": ""}), "d" * 64, request)
     pool = dict(observation(core_request), request="d" * 64, action="pool", resource={"id": "abc", "path": ""})
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-        ceph_core.evidence(pool, "d" * 64)
+        ceph_evidence.evidence(pool, "d" * 64)
 
 
 def test_nfs_export_evidence_admits_only_its_export_id_and_pseudo_path(core_request):
     request = dict(core_request, action="nfs-export", nfsExport={"native": {"pseudo": "/docs"}})
     value = dict(observation(request, ready=True), request="d" * 64, resource={"id": "7", "path": "/docs"})
-    assert ceph_core.evidence(value, "d" * 64, request) is value
-    assert ceph_core.evidence(dict(value, ready=False, partial=True, resource={"id": "", "path": ""}), "d" * 64, request)["resource"]["id"] == ""
+    assert ceph_evidence.evidence(value, "d" * 64, request) is value
+    assert ceph_evidence.evidence(dict(value, ready=False, partial=True, resource={"id": "", "path": ""}), "d" * 64, request)["resource"]["id"] == ""
     refused = [dict(value, resource={"id": "0", "path": "/docs"}), dict(value, resource={"id": "x", "path": "/docs"}),
                dict(value, resource={"id": "7", "path": "/other"}), dict(value, resource={"id": "7", "path": "/"}),
                dict(value, resource={"id": "7", "path": ""}), dict(value, client="client.docs"),
                dict(value, daemons=[{"host": "node-1", "name": "nfs.shares.0.0.node-1.abcdef", "service": "nfs.shares"}])]
     for case in refused:
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(case, "d" * 64, request)
+            ceph_evidence.evidence(case, "d" * 64, request)
 
 
 def test_rbd_apply_calls_the_rbd_phase(core_request, monkeypatch):
@@ -519,8 +520,8 @@ def test_rbd_apply_calls_the_rbd_phase(core_request, monkeypatch):
 
 
 def test_ssh_uses_only_pinned_trust_and_literal_fixed_worker(core_request):
-    argv = ceph_core.ssh_argv(core_request["hosts"][0], "/private/key", "/private/known", "print('fixed')",
-                              ssh_config="/private/ssh_config", host_key_algorithms="ssh-ed25519")
+    argv = ceph_transport.ssh_argv(core_request["hosts"][0], "/private/key", "/private/known", "print('fixed')",
+                                   ssh_config="/private/ssh_config", host_key_algorithms="ssh-ed25519")
     assert argv[0] == "/usr/bin/ssh"
     assert argv[argv.index("-F") + 1] == "/private/ssh_config"
     for value in ("StrictHostKeyChecking=yes", "UserKnownHostsFile=/private/known", "GlobalKnownHostsFile=none", "IdentityAgent=none", "ProxyCommand=none",
@@ -534,15 +535,15 @@ def test_worker_budget_stays_within_a_fixed_launcher_ceiling(core_request):
     host = core_request["hosts"][0]
     session = {"ssh_config": "/private/ssh_config", "host_key_algorithms": "ssh-ed25519"}
     images = IMAGES_SECONDS
-    assert ceph_core.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", images, worker_ceiling=images, frozen_ceiling=True,
-                              **session)[-1].endswith(" %d" % images)
+    assert ceph_transport.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", images, worker_ceiling=images, frozen_ceiling=True,
+                                   **session)[-1].endswith(" %d" % images)
     for budget, ceiling in ((641, 640), (images, 1920), (700, 700), (images, images)):
         with pytest.raises(ceph_native.Refusal, match="transport"):
-            ceph_core.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", budget, worker_ceiling=ceiling, **session)
-    for budget, ceiling in ((images + 1, images), (max(ceph_core.WORKER_CEILINGS) + 1,) * 2, (1, float(images))):
+            ceph_transport.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", budget, worker_ceiling=ceiling, **session)
+    for budget, ceiling in ((images + 1, images), (max(ceph_transport.WORKER_CEILINGS) + 1,) * 2, (1, float(images))):
         with pytest.raises(ceph_native.Refusal, match="transport"):
-            ceph_core.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", budget, worker_ceiling=ceiling, frozen_ceiling=True,
-                               **session)
+            ceph_transport.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", budget, worker_ceiling=ceiling, frozen_ceiling=True,
+                                    **session)
 
 
 def test_authorize_refuses_an_excluded_tunnel_pin_before_any_effect(core_request, tmp_path, monkeypatch):
@@ -634,11 +635,13 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
                                             "ceph_native_nfs", "ceph_native_nvmeof", "ceph_native_observability",
                                             "ceph_native_units", "ceph_native_object", "ceph_smb_native", "ceph_replication_native",
                                             "ceph_export_dns", "ceph_export_native",
+                                            "ceph_native_registry", "ceph_native_osd", "ceph_native_dashboard", "ceph_native_bootstrap",
+                                            "ceph_native_validate",
                                             "physical_machine_identity", "physical_erase_worker"}
         assert 0 < envelope["budget"] <= min(640, timeout - 1)
         return 0, b'{"ok":true,"result":{"changed":false}}'
 
-    transport = ceph_core.Transport(core_request, {"sshKey": str(key), "knownHosts": str(known)}, run=run)
+    transport = ceph_transport.Transport(core_request, {"sshKey": str(key), "knownHosts": str(known)}, run=run)
     assert transport.call(core_request["hosts"][0], "authorize", {"registryJSON": "REGISTRY-SECRET-SENTINEL"}) == {"changed": False}
     assert len(calls) == 1 and calls[0][2] == 660
     assert transport.call(core_request["hosts"][0], "authorize", {"registryJSON": "REGISTRY-SECRET-SENTINEL"}, timeout=7.5) == {"changed": False}
@@ -1410,7 +1413,7 @@ def test_absent_native_resource_retains_owned_cleanup_work(core_request, action,
     assert result["partial"] is owned and result["ready"] is False
     assert result["removed"] is False and result["resource"] == {"id": "", "path": ""} and result["client"] == ""
     result["request"] = "d" * 64
-    ceph_core.evidence(result, "d" * 64, core_request)
+    ceph_evidence.evidence(result, "d" * 64, core_request)
     with pytest.raises(ceph_native.Refusal, match="^client-quiescence-unqualified$"):
         native.destroy()
     assert marks.records == retained and marks.writes == []
@@ -1515,7 +1518,7 @@ def test_expected_manager_cache_lag_is_partial_read_only_evidence(core_request, 
     assert result["owned"] and result["exists"] and result["partial"] and not result["ready"]
     assert native.markers.writes == []
     result["request"] = "d" * 64
-    ceph_core.evidence(result, "d" * 64, core_request)
+    ceph_evidence.evidence(result, "d" * 64, core_request)
 
 
 def fqdn_core_request(request):
@@ -1537,7 +1540,7 @@ def test_native_short_daemon_ids_project_back_to_owned_fqdn_hosts(core_request):
     assert result["ready"] is True and result["monitors"] == names
     assert result["mgrActive"] == names[0] and result["mgrStandbys"] == [names[1]]
     result["request"] = "d" * 64
-    ceph_core.evidence(result, "d" * 64, core_request)
+    ceph_evidence.evidence(result, "d" * 64, core_request)
     assert native.markers.writes == []
 
 
@@ -2198,7 +2201,7 @@ def test_an_orchestrator_read_while_the_manager_restarts_is_unfinished_not_refus
     result = native.observe()
     assert result["owned"] and result["exists"] and result["partial"] and not result["ready"] and result["hosts"] == []
     result["request"] = "d" * 64
-    ceph_core.evidence(result, "d" * 64, core_request)
+    ceph_evidence.evidence(result, "d" * 64, core_request)
     native.run = run
     assert native.observe()["ready"] is True
 
@@ -2214,12 +2217,12 @@ def test_the_bootstrap_call_runs_alone_under_its_own_longer_budget(core_request,
         calls.append((argv, json.loads(data), timeout))
         return 0, b'{"ok":true,"result":{"changed":true}}'
 
-    transport = ceph_core.Transport(core_request, {"sshKey": str(key), "knownHosts": str(known)}, run=run)
+    transport = ceph_transport.Transport(core_request, {"sshKey": str(key), "knownHosts": str(known)}, run=run)
     assert transport.call(core_request["hosts"][0], "bootstrap", {"clusterPrivateKey": "private"}) == {"changed": True}
     argv, envelope, timeout = calls[0]
-    assert timeout == ceph_core.BOOTSTRAP_CALL and envelope["budget"] == ceph_core.BOOTSTRAP_BUDGET
-    assert argv[-1].endswith(" " + str(ceph_core.BOOTSTRAP_BUDGET)) and "REMOTE_LIMIT=" + str(ceph_core.BOOTSTRAP_CEILING) in argv[-1]
-    assert ceph_native.BOOTSTRAP_TIMEOUT + 120 <= ceph_core.BOOTSTRAP_BUDGET < ceph_core.BOOTSTRAP_CEILING <= max(ceph_core.WORKER_CEILINGS)
+    assert timeout == ceph_transport.BOOTSTRAP_CALL and envelope["budget"] == ceph_transport.BOOTSTRAP_BUDGET
+    assert argv[-1].endswith(" " + str(ceph_transport.BOOTSTRAP_BUDGET)) and "REMOTE_LIMIT=" + str(ceph_transport.BOOTSTRAP_CEILING) in argv[-1]
+    assert ceph_native.BOOTSTRAP_TIMEOUT + 120 <= ceph_transport.BOOTSTRAP_BUDGET < ceph_transport.BOOTSTRAP_CEILING <= max(ceph_transport.WORKER_CEILINGS)
     transport.call(core_request["hosts"][0], "tunnel_configure")
     assert calls[1][2] == 660 and calls[1][1]["budget"] <= 640 and "REMOTE_LIMIT=" not in calls[1][0][-1]
 
@@ -2230,9 +2233,9 @@ def test_the_bootstrap_launcher_admits_only_bootstrap_within_its_ceiling():
     sources["native_diagnostics"] = inspect.getsource(native_diagnostics)
     sources["native_diagnostics"] = "def valid(value): return False\n"
     sources["ceph_native"] = "class Refusal(ValueError): pass\ndef dispatch(value):\n    return {'phase': value['phase']}\n"
-    source = ceph_core.bootstrap_launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
+    source = ceph_transport.bootstrap_launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
     for phase, budget, expected in (("bootstrap", 3, {"ok": True, "result": {"phase": "bootstrap"}}), ("profile", 3, {"ok": False, "reason": "native-refusal"}),
-                                    ("bootstrap", ceph_core.BOOTSTRAP_CEILING + 1, {"ok": False, "reason": "native-unknown"})):
+                                    ("bootstrap", ceph_transport.BOOTSTRAP_CEILING + 1, {"ok": False, "reason": "native-unknown"})):
         payload = {"sources": sources, "payload": {"phase": phase}, "budget": budget}
         result = subprocess.run([sys.executable, "-I", "-c", source, str(budget)], input=json.dumps(payload).encode(), capture_output=True, timeout=10,
                                 check=False)
@@ -2311,9 +2314,9 @@ def test_core_observation_refuses_a_malformed_pending_list(core_request, pending
 
 def test_evidence_resource_member(core_request):
     value = dict(observation(core_request), request="d" * 64)
-    assert ceph_core.evidence(copy.deepcopy(value), "d" * 64, core_request)["resource"] == {"id": "", "path": ""}
+    assert ceph_evidence.evidence(copy.deepcopy(value), "d" * 64, core_request)["resource"] == {"id": "", "path": ""}
     pool = dict(value, action="pool", resource={"id": "8", "path": ""})
-    assert ceph_core.evidence(copy.deepcopy(pool), "d" * 64)["resource"] == {"id": "8", "path": ""}
+    assert ceph_evidence.evidence(copy.deepcopy(pool), "d" * 64)["resource"] == {"id": "8", "path": ""}
     unreported = {key: item for key, item in value.items() if key != "resource"}
     refused = [dict(unreported, poolID=-1), dict(value, poolID=-1), dict(value, resource={"id": "", "path": "", "zone": ""}), dict(value, resource={"id": ""}),
                dict(pool, resource={"id": 8, "path": ""}), dict(pool, resource={"id": "-1", "path": ""}), dict(pool, resource={"id": "01", "path": ""}),
@@ -2321,16 +2324,16 @@ def test_evidence_resource_member(core_request):
                dict(value, action="client", resource={"id": "8", "path": ""})]
     for bad in refused:
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(copy.deepcopy(bad), "d" * 64)
+            ceph_evidence.evidence(copy.deepcopy(bad), "d" * 64)
 
 
 def test_evidence_refuses_daemons_outside_a_service_unit(core_request):
     pool = dict(observation(core_request), request="d" * 64, action="pool", resource={"id": "8", "path": ""})
-    assert ceph_core.evidence(copy.deepcopy(pool), "d" * 64)["daemons"] == []
+    assert ceph_evidence.evidence(copy.deepcopy(pool), "d" * 64)["daemons"] == []
     daemon = {"host": "node-1", "name": "nfs.files.0.0.node-1.abcdef", "service": "nfs.files"}
     for bad in (dict(pool, daemons=[daemon]), {key: item for key, item in pool.items() if key != "daemons"}, dict(pool, daemons=None)):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(copy.deepcopy(bad), "d" * 64)
+            ceph_evidence.evidence(copy.deepcopy(bad), "d" * 64)
 
 
 def test_resource_phases_ship_in_their_own_module():
@@ -2343,7 +2346,7 @@ def test_resource_phases_ship_in_their_own_module():
     assert modules[modules.index("ceph_native_observability") + 1] == "ceph_native_units"
     assert modules[modules.index("ceph_native_units") + 1] == "ceph_native_object"
     assert modules[modules.index("ceph_native_object") + 1] == "ceph_smb_native"
-    assert tuple(ceph_core.Transport.native_sources()) == modules
+    assert tuple(ceph_transport.Transport.native_sources()) == modules
     phases = {"pool", "client", "client_read", "policy", "rbd", "filesystem", "filesystem_ranks", "filesystem_groups", "subvolume", "settings"}
     assert ceph_native_resources.PHASES == phases and not ceph_native_resources.PHASES & ceph_native.CORE_PHASES
     assert ceph_native_resources.READ_ONLY_PHASES == {"client_read", "filesystem_ranks"}
@@ -2402,7 +2405,8 @@ def test_host_images_relays_the_bound_bundle(core_request, tmp_path):
         calls.append((argv, data, timeout))
         return 0, b'{"ok":true,"result":{"changed":true}}'
 
-    assert ceph_core.Transport(bound, material, run=run, scope=True).host_images(bound["hosts"][0], [], IMAGES_SECONDS, IMAGES_SECONDS) == {"changed": True}
+    transport = ceph_transport.Transport(bound, material, run=run, scope=True)
+    assert transport.host_images(bound["hosts"][0], [], IMAGES_SECONDS, IMAGES_SECONDS) == {"changed": True}
     argv, data, unused_timeout = calls[0]
     assert json.loads(data)["payload"]["private"] == {"registryJSON": paths["registryJSON"], "registryCA": projection}
     assert projection.isascii() and "#" not in projection and ceph_pull_broker.bundle_context(projection).cert_store_stats()["x509_ca"] == 1
@@ -2410,7 +2414,7 @@ def test_host_images_relays_the_bound_bundle(core_request, tmp_path):
     unbound = {name: path for name, path in material.items() if name != "registryCA"}
     for request_value, private in ((scope, material), (bound, unbound)):
         with pytest.raises(ceph_native.Refusal, match="^material$"):
-            ceph_core.Transport(request_value, private, run=run, scope=True).host_images(request_value["hosts"][0], [], IMAGES_SECONDS, IMAGES_SECONDS)
+            ceph_transport.Transport(request_value, private, run=run, scope=True).host_images(request_value["hosts"][0], [], IMAGES_SECONDS, IMAGES_SECONDS)
     assert len(calls) == 1
 
 
@@ -2436,7 +2440,7 @@ def test_every_bundle_consumer_reaches_the_same_verdict(core_request, tmp_path, 
         calls.append(json.loads(data)["payload"]["private"]["registryCA"])
         return 0, b'{"ok":true,"result":{"changed":true}}'
 
-    transport = ceph_core.Transport(scope, {name: str(tmp_path / name) for name in paths}, run=run, scope=True)
+    transport = ceph_transport.Transport(scope, {name: str(tmp_path / name) for name in paths}, run=run, scope=True)
     if kind != "fixture":
         with pytest.raises(ceph_registry_discovery.DiscoveryRefusal, match="^material$"):
             with ceph_registry_discovery.bundle_proof(str(tmp_path / "registryCA")):
@@ -2468,7 +2472,7 @@ def test_host_images_refuses_an_oversized_bound_bundle_before_the_run(core_reque
     for name, text in paths.items():
         (tmp_path / name).write_text(text)
         (tmp_path / name).chmod(0o600)
-    transport = ceph_core.Transport(scope, {name: str(tmp_path / name) for name in paths}, run=lambda *args: pytest.fail("run"), scope=True)
+    transport = ceph_transport.Transport(scope, {name: str(tmp_path / name) for name in paths}, run=lambda *args: pytest.fail("run"), scope=True)
     with pytest.raises(ceph_native.Refusal, match="^material$"):
         transport.host_images(scope["hosts"][0], [], IMAGES_SECONDS, IMAGES_SECONDS)
 
@@ -2581,10 +2585,10 @@ def test_a_cluster_bootstrapped_again_under_the_same_fsid_presents_another_incar
         with pytest.raises(ceph_native.Refusal, match="^native-output$"):
             native.monmap_incarnation()
     value = dict(observation(core_request, ready=True), request="d" * 64)
-    assert ceph_core.evidence(copy.deepcopy(value), "d" * 64, core_request)["incarnation"] == "2026-01-01T00:00:00.000000Z"
+    assert ceph_evidence.evidence(copy.deepcopy(value), "d" * 64, core_request)["incarnation"] == "2026-01-01T00:00:00.000000Z"
     for bad in ("not a time", 7, None, "2026-01-01T00:00:00.000000+0000", "2026-01-01 00:00:00.000000"):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(dict(value, incarnation=bad), "d" * 64, core_request)
+            ceph_evidence.evidence(dict(value, incarnation=bad), "d" * 64, core_request)
 
 
 def serial_selected(core_request):
@@ -2676,10 +2680,10 @@ def test_host_evidence_admits_an_alias_only_beside_a_serial_selection(core_reque
               "fsid": core_request["fsid"], "image": core_request["image"], "ready": False, "removed": False, "imageID": "", "uid": 0, "gid": 0,
               "label": "", "policySHA256": "", "cephadmSHA256": "", "planDigest": "", "route": False,
               "devices": [{key: value for key, value in rows[0].items() if key != "host"}]}
-    assert ceph_core.host_evidence(copy.deepcopy(record), "d" * 64, request)["devices"][0]["alias"] == rows[0]["alias"]
+    assert ceph_evidence.host_evidence(copy.deepcopy(record), "d" * 64, request)["devices"][0]["alias"] == rows[0]["alias"]
     record["devices"][0].pop("alias")
     with pytest.raises(ceph_native.Refusal):
-        ceph_core.host_evidence(record, "d" * 64, request)
+        ceph_evidence.host_evidence(record, "d" * 64, request)
 
 
 def single_host_request(request):

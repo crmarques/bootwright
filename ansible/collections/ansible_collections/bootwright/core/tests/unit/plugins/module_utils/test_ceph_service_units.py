@@ -27,7 +27,7 @@ import os
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_runtime, ceph_native, ceph_native_nfs, ceph_native_units, ceph_tunnel_staging,
+    ceph_core, ceph_evidence, ceph_host_runtime, ceph_native, ceph_native_nfs, ceph_native_units, ceph_tunnel_staging,
 )
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_settings as settings
 
@@ -792,12 +792,12 @@ def test_core_evidence_admits_only_unit_daemons_on_their_document_hosts():
     request = unit_request("haproxy")
     row = {"host": "node-1", "name": "haproxy.nfs.files.node-1.abcdef", "service": "ingress.nfs.files"}
     value = dict(observation(request, True, [row]), request="d" * 64)
-    assert ceph_core.evidence(copy.deepcopy(value), "d" * 64, request)["daemons"] == [row]
+    assert ceph_evidence.evidence(copy.deepcopy(value), "d" * 64, request)["daemons"] == [row]
     for bad in (dict(row, host="node-3"), dict(row, service="nfs.other"), dict(row, name="Haproxy"), dict(row, secret=SECRET)):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(dict(value, daemons=[bad]), "d" * 64, request)
+            ceph_evidence.evidence(dict(value, daemons=[bad]), "d" * 64, request)
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-        ceph_core.evidence(dict(value, daemons=[row, row]), "d" * 64, request)
+        ceph_evidence.evidence(dict(value, daemons=[row, row]), "d" * 64, request)
 
 
 def restarting_on(monitor, command, stores):

@@ -9,7 +9,7 @@ import copy
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_evidence, ceph_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as fixtures
 
 core_request = fixtures.core_request
@@ -51,7 +51,7 @@ def test_the_pool_observation_returns_the_values_it_compares(core_request):
     assert native.observe_resource(evidence, True) is True
     assert evidence["pool"] == {"name": "volumes", "type": "replicated", "size": 2, "minSize": 2, "applications": ["rbd"], "autoscale": "on",
                                 "maxBytes": 0, "maxObjects": 0}
-    ceph_core.pool_evidence(evidence["pool"])
+    ceph_evidence.pool_evidence(evidence["pool"])
 
 
 def test_a_changed_size_reads_back_and_keeps_the_pool_unready(core_request):
@@ -77,7 +77,7 @@ def test_a_changed_size_reads_back_and_keeps_the_pool_unready(core_request):
 def test_a_pool_value_of_another_type_or_bound_reads_empty(entry, expected):
     reading = ceph_native.pool_reading(entry)
     assert {key: reading[key] for key in expected} == expected
-    ceph_core.pool_evidence(reading)
+    ceph_evidence.pool_evidence(reading)
 
 
 def test_the_cluster_observation_inventories_its_pools_bounded_and_sorted(core_request):
@@ -90,7 +90,7 @@ def test_the_cluster_observation_inventories_its_pools_bounded_and_sorted(core_r
     assert inventory["omitted"] == 3 and inventory["osds"] == [] and result["ready"] is True
     assert any(argv[-4:] == ["osd", "pool", "ls", "detail"] for argv in calls)
     result["request"] = "d" * 64
-    ceph_core.evidence(result, "d" * 64, core_request)
+    ceph_evidence.evidence(result, "d" * 64, core_request)
 
 
 def test_the_inventory_keeps_at_most_its_bound_of_pools(core_request):
@@ -121,7 +121,7 @@ def test_an_osd_added_on_one_host_is_reported_and_keeps_the_cluster_unready(core
     assert result["ready"] is False and result["partial"] is True
     assert native.blocking[0] == "unplaced@osd.3" and ceph_core.blocking_entry("unplaced@osd.3")
     result["request"] = "d" * 64
-    ceph_core.evidence(result, "d" * 64, core_request)
+    ceph_evidence.evidence(result, "d" * 64, core_request)
 
 
 def test_every_phase_but_the_unrecorded_observation_still_refuses_an_added_osd(core_request):
@@ -162,7 +162,7 @@ def test_an_osd_no_rule_places_reads_partial_with_what_is_known_while_unrecorded
     assert result["inventory"]["osds"] == [DAMAGED[damage]]
     assert result["ready"] is False and result["partial"] is True and native.blocking[0] == "unplaced@osd.3"
     result["request"] = "d" * 64
-    ceph_core.evidence(result, "d" * 64, core_request)
+    ceph_evidence.evidence(result, "d" * 64, core_request)
 
 
 @pytest.mark.parametrize("damage", sorted(DAMAGED))
@@ -180,7 +180,7 @@ def test_an_unplaced_osd_never_repeats_an_osd_fsid_the_observation_already_holds
     result = native.observe()
     assert result["inventory"]["osds"] == [{"host": "node-1", "id": 3, "path": "/dev/vdc", "uuid": ""}]
     result["request"] = "d" * 64
-    ceph_core.evidence(result, "d" * 64, core_request)
+    ceph_evidence.evidence(result, "d" * 64, core_request)
 
 
 def test_unplaced_osds_beyond_the_bound_refuse_foreign_osd(core_request):
@@ -214,10 +214,10 @@ def evidence_with(core_request, **members):
 def test_the_published_inventory_is_closed_and_bounded(core_request, change):
     inventory = {"pools": [ceph_native.pool_reading(listed("by-hand"))], "omitted": 0,
                  "osds": [{"host": "node-1", "id": 3, "path": "/dev/vdc", "uuid": ADDED}]}
-    ceph_core.evidence(evidence_with(core_request, inventory=copy.deepcopy(inventory)), "d" * 64, core_request)
+    ceph_evidence.evidence(evidence_with(core_request, inventory=copy.deepcopy(inventory)), "d" * 64, core_request)
     change(inventory)
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-        ceph_core.evidence(evidence_with(core_request, inventory=inventory), "d" * 64, core_request)
+        ceph_evidence.evidence(evidence_with(core_request, inventory=inventory), "d" * 64, core_request)
 
 
 @pytest.mark.parametrize("known", [
@@ -225,12 +225,12 @@ def test_the_published_inventory_is_closed_and_bounded(core_request, change):
 ])
 def test_the_published_inventory_admits_an_unplaced_osd_whose_host_device_or_fsid_is_unknown(core_request, known):
     inventory = {"pools": [], "omitted": 0, "osds": [dict({"id": 3}, **known)]}
-    ceph_core.evidence(evidence_with(core_request, inventory=inventory), "d" * 64, core_request)
+    ceph_evidence.evidence(evidence_with(core_request, inventory=inventory), "d" * 64, core_request)
 
 
 def test_a_pool_reading_belongs_to_the_pool_action_only(core_request):
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-        ceph_core.evidence(evidence_with(core_request, pool=ceph_native.pool_reading(listed("volumes"))), "d" * 64, core_request)
+        ceph_evidence.evidence(evidence_with(core_request, pool=ceph_native.pool_reading(listed("volumes"))), "d" * 64, core_request)
 
 
 class WorkerTransport:

@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_evidence, ceph_native, ceph_native_dashboard
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 CERTIFICATE_DER = b"synthetic-self-signed-dashboard-certificate"
@@ -271,7 +271,7 @@ def dashboard(tmp_path, monkeypatch):
             raise ImportError(name)
         return Crypt
 
-    monkeypatch.setattr(ceph_native.importlib, "import_module", import_module)
+    monkeypatch.setattr(ceph_native_dashboard.importlib, "import_module", import_module)
     original_password = ceph_native.dashboard_password
 
     def generate():
@@ -520,7 +520,7 @@ def test_a_missing_verifier_refuses_and_never_skips_the_check(dashboard):
 
 
 def test_a_verifier_without_bcrypt_refuses(dashboard, monkeypatch):
-    monkeypatch.setattr(ceph_native.importlib, "import_module", lambda name: SimpleNamespace(crypt=lambda password, salt: None))
+    monkeypatch.setattr(ceph_native_dashboard.importlib, "import_module", lambda name: SimpleNamespace(crypt=lambda password, salt: None))
     with pytest.raises(ceph_native.Refusal, match="^dashboard-verify$"):
         dashboard.native.dashboard()
     assert "dashboard-applied.json" not in dashboard.markers.records
@@ -640,13 +640,13 @@ def cluster_evidence(request, **dashboard):
                                          ("version", "ceph-core-evidence-v2")])
 def test_evidence_bounds_the_dashboard_and_monitor_projection(dashboard, field, value):
     good = cluster_evidence(dashboard.request)
-    assert ceph_core.evidence(copy.deepcopy(good), "d" * 64, dashboard.request)["dashboard"]["url"] == URL
+    assert ceph_evidence.evidence(copy.deepcopy(good), "d" * 64, dashboard.request)["dashboard"]["url"] == URL
     if field in ("monAddrs", "version"):
         good[field] = value
     else:
         good["dashboard"][field] = value
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-        ceph_core.evidence(good, "d" * 64, dashboard.request)
+        ceph_evidence.evidence(good, "d" * 64, dashboard.request)
 
 
 def test_reachability_requires_a_url_a_certificate_and_a_matching_tls_peer(dashboard):
@@ -656,9 +656,9 @@ def test_reachability_requires_a_url_a_certificate_and_a_matching_tls_peer(dashb
         connected.append((address, port))
         return CERTIFICATE_DER
 
-    assert ceph_core.evidence(cluster_evidence(dashboard.request, reachable=True), "d" * 64, dashboard.request)
+    assert ceph_evidence.evidence(cluster_evidence(dashboard.request, reachable=True), "d" * 64, dashboard.request)
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-        ceph_core.evidence(cluster_evidence(dashboard.request, url="", reachable=True), "d" * 64, dashboard.request)
+        ceph_evidence.evidence(cluster_evidence(dashboard.request, url="", reachable=True), "d" * 64, dashboard.request)
     assert ceph_core.dashboard_reachable(dashboard.request, cluster_evidence(dashboard.request), connect) is True
     assert connected == [("192.0.2.1", 8443)]
     assert ceph_core.dashboard_reachable(dashboard.request, cluster_evidence(dashboard.request, certificateSHA256="b" * 64), connect) is False

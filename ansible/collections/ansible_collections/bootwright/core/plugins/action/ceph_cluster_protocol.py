@@ -6,7 +6,7 @@ from __future__ import annotations
 # pylint: disable=unidiomatic-typecheck
 
 from ansible.plugins.action import ActionBase
-from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, ceph_core, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, ceph_core, ceph_evidence, ceph_native
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import emit
 
 
@@ -16,8 +16,8 @@ def completion(arguments):
     if type(observed) is not bool or type(removed) is not bool:
         raise ValueError("operation")
     value = arguments.get("evidence")
-    if isinstance(value, dict) and value.get("version") == ceph_core.TIEBREAKER_EVIDENCE:
-        result = ceph_core.tiebreaker_evidence(value, arguments.get("digest"))
+    if isinstance(value, dict) and value.get("version") == ceph_evidence.TIEBREAKER_EVIDENCE:
+        result = ceph_evidence.tiebreaker_evidence(value, arguments.get("digest"))
         if observed or removed and result["removed"]:
             return result, None
         return result, "the Ceph operation has not proved its postcondition"
@@ -26,7 +26,7 @@ def completion(arguments):
         if observed and not removed:
             return result, None
         return result, "the Ceph operation has not proved its postcondition"
-    result = ceph_core.evidence(value, arguments.get("digest"))
+    result = ceph_evidence.evidence(value, arguments.get("digest"))
     if observed or result["removed" if removed else "ready"]:
         return result, None
     return result, "the Ceph operation has not proved its postcondition"

@@ -19,7 +19,7 @@ import json
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_resources
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_evidence, ceph_native, ceph_native_resources
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 FSID = "4c0a4300-aa43-458c-86d7-ac2256d1fc00"
@@ -292,9 +292,9 @@ def test_core_execute_dispatches_the_settings_phase(monkeypatch):
     assert result["changed"] and result["evidence"]["ready"] and result["evidence"]["action"] == "settings"
     assert [call for call in calls if call[1] == "settings"] == [("node-1", "settings")]
     assert calls.index(("node-1", "settings")) > calls.index(("node-1", "observe"))
-    assert ceph_core.evidence(evidence_of(request, True), "d" * 64, request)["action"] == "settings"
+    assert ceph_evidence.evidence(evidence_of(request, True), "d" * 64, request)["action"] == "settings"
     with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-        ceph_core.evidence(evidence_of(request, True, {"id": "7", "path": ""}), "d" * 64, request)
+        ceph_evidence.evidence(evidence_of(request, True, {"id": "7", "path": ""}), "d" * 64, request)
 
 
 @pytest.mark.parametrize("label, admitted", [("_admin", True), ("ceph-mon", True), ("rgw.objects", True), ("_no_schedule", False),

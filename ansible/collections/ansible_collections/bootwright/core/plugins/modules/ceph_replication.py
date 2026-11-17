@@ -64,7 +64,9 @@ detail:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_replication, ceph_replication_native, native_diagnostics
+from ansible_collections.bootwright.core.plugins.module_utils import (
+    ceph_core, ceph_native, ceph_replication, ceph_replication_native, ceph_transport, native_diagnostics,
+)
 
 
 def admitted(params):
@@ -92,7 +94,7 @@ def main():
         transports = {}
         for side in ("primary", "secondary"):
             material = {"sshKey": params["material"][side + "SSHKey"], "knownHosts": params["material"]["knownHosts"]}
-            transports[side] = ceph_core.Transport(request[side]["scope"], material, scope=True)
+            transports[side] = ceph_transport.Transport(request[side]["scope"], material, scope=True)
         result = ceph_replication.execute(request, params["operation"], params["digest"], transports)
     except Exception as error:
         reason, detail = ceph_core.refusal(error, ceph_replication.REASONS)

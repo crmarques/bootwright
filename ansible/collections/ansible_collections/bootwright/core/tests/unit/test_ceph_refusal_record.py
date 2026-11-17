@@ -23,7 +23,7 @@ import yaml
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import ceph_cluster_protocol as protocol
-from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, ceph_core, ceph_native, ceph_ssh_policy
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, ceph_core, ceph_transport, ceph_evidence, ceph_native, ceph_ssh_policy
 from ansible_collections.bootwright.core.plugins.modules import ceph_cluster, ceph_cluster_protocol, ceph_host
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
@@ -59,7 +59,7 @@ def failed(module, execute, error, monkeypatch):
 
     monkeypatch.setattr(module, "AnsibleModule", FakeModule)
     monkeypatch.setattr(ceph_core, "host_request", lambda value: {"cluster": value})
-    monkeypatch.setattr(ceph_core, "Transport", lambda *arguments, **keywords: None)
+    monkeypatch.setattr(ceph_transport, "Transport", lambda *arguments, **keywords: None)
     monkeypatch.setattr(ceph_core, execute, raising)
     with pytest.raises(Finished):
         module.main()
@@ -235,7 +235,7 @@ def test_protocol_documentation_lists_every_refusal():
 
 def test_the_protocol_publishes_a_tiebreaker_removal_only_when_it_proves_absence():
     digest = "d" * 64
-    evidence = {"version": ceph_core.TIEBREAKER_EVIDENCE, "request": digest, "owner": "apply-123", "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
+    evidence = {"version": ceph_evidence.TIEBREAKER_EVIDENCE, "request": digest, "owner": "apply-123", "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
                 "host": "node-5", "removed": True, "attempted": True}
     assert protocol.completion({"evidence": evidence, "digest": digest, "observed": False, "removed": True}) == (evidence, None)
     partial = dict(evidence, removed=False)
@@ -252,7 +252,7 @@ def masked(monkeypatch, capsys, operation, execute):
                  "material": {"retirement": "tiebreaker", "knownHosts": "/run/bootwright/known-hosts"}, "outputs": {}}
     monkeypatch.setattr(basic, "_ANSIBLE_ARGS", json.dumps({"ANSIBLE_MODULE_ARGS": arguments}).encode())
     monkeypatch.setattr(basic, "_ANSIBLE_PROFILE", "legacy")
-    monkeypatch.setattr(ceph_core, "Transport", lambda *arguments, **keywords: None)
+    monkeypatch.setattr(ceph_transport, "Transport", lambda *arguments, **keywords: None)
     monkeypatch.setattr(ceph_core, "execute", execute)
     with pytest.raises(SystemExit):
         ceph_cluster.main()
@@ -274,7 +274,7 @@ def test_the_tiebreaker_selector_never_masks_a_tiebreaker_refusal(monkeypatch, c
 
 def test_the_tiebreaker_selector_never_masks_the_tiebreaker_evidence_version(monkeypatch, capsys):
     digest = "d" * 64
-    evidence = {"version": ceph_core.TIEBREAKER_EVIDENCE, "request": digest, "owner": "apply-123", "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
+    evidence = {"version": ceph_evidence.TIEBREAKER_EVIDENCE, "request": digest, "owner": "apply-123", "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00",
                 "host": "node-5", "removed": True, "attempted": True}
     result = masked(monkeypatch, capsys, "destroy", lambda *arguments, **keywords: {"changed": True, "evidence": dict(evidence)})
     assert result["evidence"] == evidence

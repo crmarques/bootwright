@@ -20,7 +20,7 @@ import json
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_native_resources
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_evidence, ceph_native, ceph_native_resources
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core_fixtures
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_native_services as services_fixtures
@@ -609,10 +609,10 @@ def core_filesystem_request(core_request, groups=()):
 def test_fs_evidence_admits_only_a_decimal_filesystem_id(core_request):
     request = core_filesystem_request(core_request)
     value = dict(core_fixtures.observation(request), request="d" * 64, resource={"id": "7", "path": ""})
-    assert ceph_core.evidence(value, "d" * 64, request) is value
+    assert ceph_evidence.evidence(value, "d" * 64, request) is value
     for refused in ("07", "0x7", "abc", "-1"):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(dict(value, resource={"id": refused, "path": ""}), "d" * 64, request)
+            ceph_evidence.evidence(dict(value, resource={"id": refused, "path": ""}), "d" * 64, request)
 
 
 @pytest.mark.parametrize("groups", [(), (group_value(),)])

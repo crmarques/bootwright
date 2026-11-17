@@ -28,7 +28,7 @@ import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import private_files
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_runtime, ceph_native, ceph_native_observability as observability, ceph_native_observe as observe, ceph_native_units,
+    ceph_core, ceph_transport, ceph_host_runtime, ceph_native, ceph_native_observability as observability, ceph_native_observe as observe, ceph_native_units,
 )
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_service_units as units
 
@@ -670,16 +670,16 @@ def test_transport_admits_the_unit_material(tmp_path):
         calls.append((argv, data))
         return 0, json.dumps({"ok": True, "result": {"changed": False}}).encode()
 
-    transport = ceph_core.Transport(request, material, run=run)
+    transport = ceph_transport.Transport(request, material, run=run)
     assert transport.unit_material() == {name: name for name in MATERIAL}
     assert transport.call(request["hosts"][0], "unit", transport.unit_material()) == {"changed": False}
     assert not any(name in " ".join(argv) for argv, unused in calls for name in MATERIAL)
     with pytest.raises(ceph_native.Refusal, match="^material$"):
-        ceph_core.Transport(request, dict(material, grafanaViewerPassword=write("viewer")), run=run).call(request["hosts"][0], "observe")
+        ceph_transport.Transport(request, dict(material, grafanaViewerPassword=write("viewer")), run=run).call(request["hosts"][0], "observe")
     with pytest.raises(ceph_native.Refusal, match="^material$"):
-        ceph_core.Transport(request, {key: value for key, value in material.items() if key != "snmpPrivPassword"}, run=run).unit_material()
+        ceph_transport.Transport(request, {key: value for key, value in material.items() if key != "snmpPrivPassword"}, run=run).unit_material()
     with pytest.raises(ceph_native.Refusal, match="^material$"):
-        ceph_core.Transport(request, dict(material, snmpPrivPassword=write("latin", b"\xff\xfe")), run=run).unit_material()
+        ceph_transport.Transport(request, dict(material, snmpPrivPassword=write("latin", b"\xff\xfe")), run=run).unit_material()
 
 
 def test_dispatch_lends_the_bound_material_to_the_unit_phase_only(monkeypatch):

@@ -28,7 +28,7 @@ import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import private_files
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_runtime, ceph_native, ceph_native_object, ceph_native_observability, ceph_tunnel_staging,
+    ceph_core, ceph_evidence, ceph_transport, ceph_host_runtime, ceph_native, ceph_native_object, ceph_native_observability, ceph_tunnel_staging,
 )
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_service_units as units
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_settings as settings
@@ -764,8 +764,8 @@ def test_core_evidence_admits_gateway_resource_and_daemons():
     row = {"host": "node-1", "name": "rgw.objects.node-1.abcdef", "service": "rgw.objects"}
     resource = {"id": str(uuid.uuid4()), "path": "objects.ceph.example.test"}
     value = dict(observation(request, True, [row], resource), request="d" * 64)
-    assert ceph_core.evidence(copy.deepcopy(value), "d" * 64, request)["resource"] == resource
-    assert ceph_core.evidence(dict(value, resource={"id": "", "path": ""}), "d" * 64, request)
+    assert ceph_evidence.evidence(copy.deepcopy(value), "d" * 64, request)["resource"] == resource
+    assert ceph_evidence.evidence(dict(value, resource={"id": "", "path": ""}), "d" * 64, request)
     other = gateway_request(endpoint="objects.ceph.example.test")
     other["gateway"]["documents"][0]["placement"]["hosts"] = ["node-1", "node-2"]
     other["delegated"] = [{"name": "rgw.objects", "hosts": ["node-1", "node-2"]}]
@@ -776,7 +776,7 @@ def test_core_evidence_admits_gateway_resource_and_daemons():
                          (dict(value, daemons=[dict(row, service="rgw.other")]), request),
                          (dict(value, daemons=[dict(row, secret=SECRET_KEY)]), request)):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(copy.deepcopy(bad), "d" * 64, against)
+            ceph_evidence.evidence(copy.deepcopy(bad), "d" * 64, against)
 
 
 def test_gateway_evidence_carries_the_endpoint_member(tmp_path, monkeypatch):
@@ -791,14 +791,14 @@ def test_gateway_evidence_carries_the_endpoint_member(tmp_path, monkeypatch):
 def test_core_evidence_admits_only_a_gateway_endpoint():
     request = gateway_request(endpoint="objects.ceph.example.test")
     plain = dict(observation(request, True), request="d" * 64)
-    assert ceph_core.evidence(copy.deepcopy(plain), "d" * 64, request)["endpoint"] == {"certificateSHA256": "", "reachable": True}
+    assert ceph_evidence.evidence(copy.deepcopy(plain), "d" * 64, request)["endpoint"] == {"certificateSHA256": "", "reachable": True}
     pool = dict(observation(request, True), request="d" * 64, action="pool", endpoint={"certificateSHA256": "", "reachable": False})
-    assert ceph_core.evidence(copy.deepcopy(pool), "d" * 64)["action"] == "pool"
+    assert ceph_evidence.evidence(copy.deepcopy(pool), "d" * 64)["action"] == "pool"
     tls = copy.deepcopy(request)
     tls["gateway"]["bindings"] = [{"path": "/spec/ssl_cert", "secretRef": "gateway-tls", "serviceRef": "rgw.objects"},
                                   {"path": "/spec/ssl_key", "secretRef": "gateway-tls", "serviceRef": "rgw.objects"}]
     served = dict(plain, endpoint={"certificateSHA256": "a" * 64, "reachable": True})
-    assert ceph_core.evidence(copy.deepcopy(served), "d" * 64, tls)["endpoint"]["certificateSHA256"] == "a" * 64
+    assert ceph_evidence.evidence(copy.deepcopy(served), "d" * 64, tls)["endpoint"]["certificateSHA256"] == "a" * 64
     for bad, against in ((dict(pool, endpoint={"certificateSHA256": "", "reachable": True}), None),
                          (dict(plain, endpoint={"certificateSHA256": "a" * 64, "reachable": True}), request),
                          (dict(plain, endpoint={"certificateSHA256": "", "reachable": True, "url": ""}), request),
@@ -806,7 +806,7 @@ def test_core_evidence_admits_only_a_gateway_endpoint():
                          (dict(plain, endpoint={"certificateSHA256": "", "reachable": "yes"}), request),
                          (dict(plain, endpoint={"certificateSHA256": "", "reachable": True}), tls)):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
-            ceph_core.evidence(copy.deepcopy(bad), "d" * 64, against)
+            ceph_evidence.evidence(copy.deepcopy(bad), "d" * 64, against)
 
 
 def pem(kind, payload):
@@ -1123,7 +1123,7 @@ def test_gateway_tls_material_never_reaches_a_refusal_detail(tmp_path):
         return 0, json.dumps({"ok": False, "reason": "native-refusal",
                               "nativeError": {"coordinate": "registry.example.test/ceph", "cause": "orch apply failed: " + flattened}}).encode()
 
-    transport = ceph_core.Transport(request, material, run=run)
+    transport = ceph_transport.Transport(request, material, run=run)
     with pytest.raises(ceph_native.RemoteRefusal) as caught:
         transport.call(request["hosts"][0], "gateway_service", transport.gateway_material(True))
     assert caught.value.native_error["cause"].startswith("orch apply failed:") and not leaked(caught.value.native_error["cause"])
@@ -1184,10 +1184,10 @@ def test_transport_admits_the_gateway_material(tmp_path):
         calls.append(argv)
         return 0, json.dumps({"ok": True, "result": {"changed": False}}).encode()
 
-    assert ceph_core.Transport(request, material, run=run).call(request["hosts"][0], "gateway_zone") == {"changed": False}
-    assert ceph_core.Transport(request, material, run=run).gateway_material(True) == {"gatewayCertificate": "certificate", "gatewayKey": "key"}
+    assert ceph_transport.Transport(request, material, run=run).call(request["hosts"][0], "gateway_zone") == {"changed": False}
+    assert ceph_transport.Transport(request, material, run=run).gateway_material(True) == {"gatewayCertificate": "certificate", "gatewayKey": "key"}
     with pytest.raises(ceph_native.Refusal, match="^material$"):
-        ceph_core.Transport(request, dict(material, gatewayChain=write("chain")), run=run).call(request["hosts"][0], "gateway_zone")
+        ceph_transport.Transport(request, dict(material, gatewayChain=write("chain")), run=run).call(request["hosts"][0], "gateway_zone")
     with pytest.raises(ceph_native.Refusal, match="^material$"):
-        ceph_core.Transport(request, {"sshKey": material["sshKey"], "knownHosts": material["knownHosts"]}, run=run).gateway_material(False)
+        ceph_transport.Transport(request, {"sshKey": material["sshKey"], "knownHosts": material["knownHosts"]}, run=run).gateway_material(False)
     assert len(calls) == 1

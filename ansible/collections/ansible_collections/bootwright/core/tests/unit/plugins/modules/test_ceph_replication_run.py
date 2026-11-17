@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_transport
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_replication as lifecycle
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_replication_native
 from ansible_collections.bootwright.core.plugins.modules import ceph_replication as module
@@ -35,7 +35,7 @@ def stubbed_lifecycle(monkeypatch):
             raise state["answer"]  # pylint: disable=raising-bad-type
         return state["answer"]
 
-    monkeypatch.setattr(ceph_core, "Transport", Transport)
+    monkeypatch.setattr(ceph_transport, "Transport", Transport)
     monkeypatch.setattr(ceph_replication_native, "validate", lambda request: request)
     monkeypatch.setattr(lifecycle, "execute", execute)
     return state

@@ -32,7 +32,7 @@ LICENSE_CALL_ID = "ceph-bootstrap-license-call-continues"
 CURRENT_VARIANTS = dict(GENERAL, **{"ceph.bootstrap.license-call-refusal": "continue-seed"})
 # The IBM bootstrap's own call as both signed 20.2.x zipapps list it (__main__.py:3445-3447 in 20.2.1-405, :3534-3535 in 20.2.2-349).
 LICENSE_CALL_SOURCE = "def bootstrap(ctx, cli):\n    if ctx.ibm_build:\n        cli(['orch', 'accept-license', '--image', ctx.image])\n"
-SEAM_CALLERS = frozenset(("ceph_native.py", "ceph_native_resources.py", "ceph_tunnel_staging.py", "ceph_monitoring_template.py"))
+SEAM_CALLERS = frozenset(("ceph_native.py", "ceph_native_bootstrap.py", "ceph_native_resources.py", "ceph_tunnel_staging.py", "ceph_monitoring_template.py"))
 SEAMLESS = ("ceph_tunnel.py", "ceph_tunnel_custody.py", "ceph_pull_broker.py", "ceph_host_route_probe.py", "ceph_crypto_policy.py",
             "native_signatures.py", "native_diagnostics.py")
 UNCONSULTED = frozenset()

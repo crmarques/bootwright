@@ -13,7 +13,7 @@ import stat
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_export_native, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_export_native, ceph_transport, ceph_native
 from ansible_collections.bootwright.core.plugins.modules import ceph_export as module
 
 DIGEST = "f" * 64
@@ -37,7 +37,7 @@ def stubbed_host(monkeypatch):
                 raise state["reply"]  # pylint: disable=raising-bad-type
             return state["reply"]
 
-    monkeypatch.setattr(ceph_core, "Transport", Transport)
+    monkeypatch.setattr(ceph_transport, "Transport", Transport)
     monkeypatch.setattr(ceph_export_native, "validate", lambda request: request)
     return state
 

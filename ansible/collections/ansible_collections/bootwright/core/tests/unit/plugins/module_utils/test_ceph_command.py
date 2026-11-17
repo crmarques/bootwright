@@ -123,6 +123,11 @@ def test_actual_shipped_command_works_inside_supervised_remote_group(tmp_path):
                "ceph_native_observability": '"""Fixed fixture."""\n', "ceph_native_units": '"""Fixed fixture."""\n',
                "ceph_native_object": '"""Fixed fixture."""\n', "ceph_smb_native": '"""Fixed fixture."""\n', "ceph_replication_native": '"""Fixed fixture."""\n',
                "ceph_export_dns": '"""Fixed fixture."""\n', "ceph_export_native": '"""Fixed fixture."""\n',
+               "ceph_native_registry": '"""Fixed fixture."""\n',
+               "ceph_native_osd": '"""Fixed fixture."""\n',
+               "ceph_native_dashboard": '"""Fixed fixture."""\n',
+               "ceph_native_bootstrap": '"""Fixed fixture."""\n',
+               "ceph_native_validate": '"""Fixed fixture."""\n',
                "ceph_native": inspect.getsource(ceph_native) +
                '\ndef dispatch(value):\n    code, output = bounded_command(' + repr(invocation) +
                ', timeout=5)\n    return {"code": code, "session": COMMAND_SESSION}\n'}

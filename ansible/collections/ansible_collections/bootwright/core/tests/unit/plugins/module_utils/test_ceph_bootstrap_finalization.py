@@ -11,7 +11,7 @@ import pathlib
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_tunnel_staging as staging
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_bootstrap, ceph_tunnel_staging as staging
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_bootstrap_recovery as recovery
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core_fixtures
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as fixtures
@@ -811,7 +811,7 @@ def test_unknown_license_call_facts_keep_the_failure(native, private, case):
 
 
 def test_only_the_staged_bootstrap_may_recover_a_native_failure():
-    tree = ast.parse(pathlib.Path(ceph_native.__file__).read_text(encoding="utf-8"))
+    trees = [ast.parse(pathlib.Path(module.__file__).read_text(encoding="utf-8")) for module in (ceph_native, ceph_native_bootstrap)]
     recovering, referenced = [], []
 
     def walk(node, function):
@@ -823,7 +823,8 @@ def test_only_the_staged_bootstrap_may_recover_a_native_failure():
                 referenced.append(function)
             walk(child, inner)
 
-    walk(tree, None)
+    for tree in trees:
+        walk(tree, None)
     assert recovering == [("tunnel_bootstrap", ast.dump(ast.parse("self.license_call_continues", mode="eval").body))]
     assert referenced == ["tunnel_bootstrap"]
 

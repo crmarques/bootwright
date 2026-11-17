@@ -211,14 +211,19 @@ func TestDeadlinesFitTheRunCeilingForThreeAndTheLargestAdmittedCluster(t *testin
 }
 
 // The cluster deadline counts the budgets the cluster worker holds its own
-// calls to, so each one is read from ceph_core.py rather than restated.
+// calls to, so each one is read from ceph_transport.py and ceph_core.py rather
+// than restated.
 func TestTheClusterDeadlineCountsTheWorkersOwnBudgets(t *testing.T) {
-	const path = "collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py"
-	source := string(ansible.Assets()[path])
-	for _, line := range []string{fmt.Sprintf("BOOTSTRAP_BUDGET = %d", bootstrapCall-60), "BOOTSTRAP_CALL = BOOTSTRAP_BUDGET + 60",
-		fmt.Sprintf("READINESS_TIMEOUT = %d", readinessWait)} {
-		if !strings.Contains(source, "\n"+line+"\n") {
-			t.Fatalf("%s does not declare %q", path, line)
+	const root = "collections/ansible_collections/bootwright/core/plugins/module_utils/"
+	for path, lines := range map[string][]string{
+		root + "ceph_transport.py": {fmt.Sprintf("BOOTSTRAP_BUDGET = %d", bootstrapCall-60), "BOOTSTRAP_CALL = BOOTSTRAP_BUDGET + 60"},
+		root + "ceph_core.py":      {fmt.Sprintf("READINESS_TIMEOUT = %d", readinessWait)},
+	} {
+		source := string(ansible.Assets()[path])
+		for _, line := range lines {
+			if !strings.Contains(source, "\n"+line+"\n") {
+				t.Fatalf("%s does not declare %q", path, line)
+			}
 		}
 	}
 }

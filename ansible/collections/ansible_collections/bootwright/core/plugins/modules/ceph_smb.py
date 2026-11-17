@@ -65,7 +65,7 @@ detail:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, native_diagnostics
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_transport, ceph_native, native_diagnostics
 
 
 def admitted(params):
@@ -94,7 +94,7 @@ def main():
     try:
         request = admitted(params)
         secrets = len(request["bindings"]) if params["operation"] == "apply" else 0
-        transport = ceph_core.Transport(request["scope"], params["material"], scope=True, smb_secrets=secrets)
+        transport = ceph_transport.Transport(request["scope"], params["material"], scope=True, smb_secrets=secrets)
         result = ceph_core.execute_smb(request, params["operation"], params["digest"], transport)
     except Exception as error:
         reason, detail = ceph_core.refusal(error, ceph_core.SMB_REASONS)

@@ -19,7 +19,7 @@ import pytest
 
 from ansible_collections.bootwright.core.tests.unit.ceph_goldens import IMAGES_SECONDS
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_worker, ceph_native, ceph_native_object, ceph_native_worker, native_diagnostics, native_specializations,
+    ceph_transport, ceph_host_worker, ceph_native, ceph_native_object, ceph_native_worker, native_diagnostics, native_specializations,
 )
 
 
@@ -35,6 +35,11 @@ def source_bundle():
             "ceph_native_units": '"""Fixed fixture."""\n',
             "ceph_native_object": '"""Fixed fixture."""\n', "ceph_smb_native": '"""Fixed fixture."""\n', "ceph_replication_native": '"""Fixed fixture."""\n',
             "ceph_export_dns": '"""Fixed fixture."""\n', "ceph_export_native": '"""Fixed fixture."""\n',
+            "ceph_native_registry": '"""Fixed fixture."""\n',
+            "ceph_native_osd": '"""Fixed fixture."""\n',
+            "ceph_native_dashboard": '"""Fixed fixture."""\n',
+            "ceph_native_bootstrap": '"""Fixed fixture."""\n',
+            "ceph_native_validate": '"""Fixed fixture."""\n',
             "ceph_host_route_probe": '"""Fixed fixture."""\n', "physical_machine_identity": '"""Fixed fixture."""\n',
             "physical_erase_worker": '"""Fixed fixture."""\n',
             "ceph_host_runtime": '"""Fixed fixture."""\n',
@@ -59,25 +64,25 @@ def test_specialization_registry_ships_in_the_closed_bundle_after_diagnostics():
     assert names.index("bounded_process") < names.index("physical_erase_worker")
     for shared in ("canonical_json", "bounded_process"):
         assert all(names.index(shared) < names.index(user) for user in ("ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native"))
-    sources = ceph_core.Transport.native_sources()
+    sources = ceph_transport.Transport.native_sources()
     assert tuple(sources) == names and sources["native_specializations"] == inspect.getsource(native_specializations)
 
 
 def test_native_sources_are_assembled_once_and_handed_out_as_copies():
-    ceph_core.shipped_native_sources.cache_clear()
-    first = ceph_core.Transport.native_sources()
-    hits = ceph_core.shipped_native_sources.cache_info().hits
+    ceph_transport.shipped_native_sources.cache_clear()
+    first = ceph_transport.Transport.native_sources()
+    hits = ceph_transport.shipped_native_sources.cache_info().hits
     first["ceph_native"] = "tampered"
-    second = ceph_core.Transport.native_sources()
-    assert ceph_core.shipped_native_sources.cache_info().hits == hits + 1
+    second = ceph_transport.Transport.native_sources()
+    assert ceph_transport.shipped_native_sources.cache_info().hits == hits + 1
     assert second is not first and second["ceph_native"] == inspect.getsource(ceph_native)
-    assert ceph_core.shipped_native_sources.cache_info().misses == 1
+    assert ceph_transport.shipped_native_sources.cache_info().misses == 1
 
 
 def test_the_shipped_bundle_keeps_headroom_under_the_worker_input_cap():
     ceiling = ceph_native.MAX_INPUT * 3 // 4
     assert ceph_native.MAX_INPUT == ceph_native_worker.MAX_INPUT
-    sources = ceph_core.Transport.native_sources()
+    sources = ceph_transport.Transport.native_sources()
     shipped = ceph_native.canonical({"sources": sources, "payload": {}, "budget": 1})
     assert len(shipped) <= ceiling, (
         "the native bundle is %d bytes against %d allowed (75%% of the %d-byte input cap); "
@@ -483,7 +488,7 @@ LAUNCH_BUDGET = 120
 
 
 def test_zip_inspected_native_bundle_preserves_source_and_reaches_pure_dispatch_refusal(tmp_path):
-    sources = ceph_core.Transport.native_sources()
+    sources = ceph_transport.Transport.native_sources()
     archive = tmp_path / "native.zip"
     with zipfile.ZipFile(archive, "w") as bundle:
         for name, source in sources.items():
@@ -518,7 +523,7 @@ def test_object_display_name_keeps_unicode_separator_exclusions(value, valid):
 
 @pytest.mark.parametrize("phase", ["host_observe", "images", "bootstrap"])
 def test_clean_supervisor_preserves_redacted_native_failure_through_each_launcher(phase):
-    sources = ceph_core.Transport.native_sources()
+    sources = ceph_transport.Transport.native_sources()
     sources["ceph_native"] += (
         "\ndef dispatch(value):\n"
         "    raise NativeFailure('image-pull', 'registry.example.test/ceph:authored', "
@@ -529,7 +534,7 @@ def test_clean_supervisor_preserves_redacted_native_failure_through_each_launche
     if phase == "images":
         source = ceph_host_worker.launcher(supervisor, host, IMAGES_SECONDS)
     elif phase == "bootstrap":
-        source = ceph_core.bootstrap_launcher(supervisor, host)
+        source = ceph_transport.bootstrap_launcher(supervisor, host)
     else:
         source = ceph_native_worker.launcher(supervisor) + "s['main']()"
     # Compiling the whole shipped bundle shares the wall-clock budget; a loaded host must not turn this into native-timeout.
@@ -547,14 +552,14 @@ def test_clean_supervisor_preserves_redacted_native_failure_through_each_launche
 
 @pytest.mark.parametrize("phase", ["host_observe", "images", "bootstrap"])
 def test_clean_supervisor_preserves_child_encoding_failure_through_each_launcher(phase):
-    sources = ceph_core.Transport.native_sources()
+    sources = ceph_transport.Transport.native_sources()
     sources["ceph_native"] += "\ndef dispatch(value):\n    return {'unserializable': {value['secret']}}\n"
     supervisor = inspect.getsource(ceph_native_worker)
     host = inspect.getsource(ceph_host_worker)
     if phase == "images":
         source = ceph_host_worker.launcher(supervisor, host, IMAGES_SECONDS)
     elif phase == "bootstrap":
-        source = ceph_core.bootstrap_launcher(supervisor, host)
+        source = ceph_transport.bootstrap_launcher(supervisor, host)
     else:
         source = ceph_native_worker.launcher(supervisor) + "s['main']()"
     payload = {"sources": sources, "payload": {"phase": phase, "secret": "synthetic-secret"}, "budget": LAUNCH_BUDGET}

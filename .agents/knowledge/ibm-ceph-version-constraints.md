@@ -97,7 +97,7 @@ Any other failure is still a failed native command; the next apply's
 continuation proves the same seed instead of restarting bootstrap or enrolling
 hosts before the tunnel mount.
 
-The [native worker](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py)
+The [native worker](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_bootstrap.py)
 initializes missing Call Home state under its original configuration intent
 before accepting that enabled intent. Its native `enable_call_home` method
 sets the warning/option and enables the module without host inventory or SSH.
