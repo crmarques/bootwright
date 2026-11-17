@@ -155,58 +155,6 @@ func e2eCaseNames(t *testing.T) []string {
 	return names
 }
 
-func e2eInputDirectories(t *testing.T, root string) []string {
-	t.Helper()
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var directories []string
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".yaml") {
-			return []string{root}
-		}
-		if entry.IsDir() {
-			directories = append(directories, filepath.Join(root, entry.Name()))
-		}
-	}
-	if len(directories) == 0 {
-		t.Fatalf("%s rendered no input", root)
-	}
-	return directories
-}
-
-func renderE2ECase(t *testing.T, script, name string, render e2eRender) []string {
-	t.Helper()
-	output := filepath.Join(t.TempDir(), "input")
-	arguments := []string{name, "--out-dir", output}
-	for _, set := range render.sets {
-		arguments = append(arguments, "--set", set)
-	}
-	command := exec.Command(script, arguments...)
-	command.Env = append(os.Environ(), "PATH="+e2ePath(t, e2eFixtureRouteTools(t)))
-	if combined, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("render.sh %s: %v\n%s", strings.Join(arguments, " "), err, combined)
-	}
-	return e2eInputDirectories(t, output)
-}
-
-func e2eFixtureRouteTools(t *testing.T) string {
-	t.Helper()
-	tools := t.TempDir()
-	script := `#!/bin/sh
-set -eu
-if [ "$#" -ne 4 ] || [ "$1" != -4 ] || [ "$2" != route ] || [ "$3" != get ] || [ "$4" != 192.0.2.1 ]; then
-    exit 2
-fi
-printf '%s\n' '192.0.2.1 dev fixture0 src 192.0.2.10'
-`
-	if err := os.WriteFile(filepath.Join(tools, "ip"), []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
-	return tools
-}
-
 func TestE2ECaseRenderingDoesNotReadTheHostsRoutes(t *testing.T) {
 	tools := t.TempDir()
 	marker := filepath.Join(tools, "route-read")
@@ -215,7 +163,7 @@ func TestE2ECaseRenderingDoesNotReadTheHostsRoutes(t *testing.T) {
 	}
 	t.Setenv("BOOTWRIGHT_E2E_ROUTE_PROBE", marker)
 	t.Setenv("PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"))
-	renderE2ECase(t, e2eRenderScript(t), "lab-rhel", e2eRender{name: "no host routes"})
+	renderE2ECaseUncached(t, e2eRenderScript(t), "lab-rhel", e2eRender{name: "no host routes"})
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("fixture rendering read the host's routes: %v", err)
 	}
@@ -307,7 +255,7 @@ func TestEveryE2ECaseRenderPlansWithoutRefusal(t *testing.T) {
 			t.Run(name+"/"+render.name, func(t *testing.T) {
 				refusing := 0
 				for _, directory := range renderE2ECase(t, script, name, render) {
-					refusal, _ := planE2EInput(t, directory)
+					refusal, _ := planE2EInputOnce(t, directory)
 					switch {
 					case refusal == "":
 					case render.refuses != "" && strings.Contains(refusal, render.refuses):
@@ -336,7 +284,7 @@ func TestEveryE2ECaseContextsClaimDisjointHostReservations(t *testing.T) {
 				var contexts [][]infrastructureservices.HostReservation
 				var names []string
 				for _, directory := range renderE2ECase(t, script, name, render) {
-					refusal, reservations := planE2EInput(t, directory)
+					refusal, reservations := planE2EInputOnce(t, directory)
 					if refusal != "" {
 						t.Skipf("%s: the plan refuses (%s); the planning test owns that", filepath.Base(directory), refusal)
 					}
