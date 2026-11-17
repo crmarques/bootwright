@@ -438,7 +438,8 @@ renderer named on that spec, and the binding
 in `wiring_<domain>.go`. `TestPublicCatalog` and
 `TestCommandModesComeFromTheCatalog` hold its flags and modes,
 `TestEveryCatalogCommandHasApplicationDispatch` fails until the spec has its
-invoker, and implementing a stub removes it from `stubCapabilities`.
+invoker, `TestNoCommandPathIsMatchedOutsideTheCatalog` fails on a command path
+matched anywhere else, and implementing a stub removes it from `stubCapabilities`.
 
 ## Extending capabilities
 
