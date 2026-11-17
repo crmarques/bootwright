@@ -314,9 +314,8 @@ func validateInstallerSources(o api.Object, c api.Catalog) []api.Issue {
 	for _, selection := range []struct {
 		value api.Value
 		path  string
-		http  bool
-	}{{anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint", false}, {anaconda.Get("packageSource", "hostedTree", "artifactServerEndpoint"), "$.spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint", true}} {
-		issues = api.AppendIssues(issues, infrastructureservices.ValidateArtifactEndpoint(selection.value, c, selection.path, selection.http)...)
+	}{{anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint"}, {anaconda.Get("packageSource", "hostedTree", "artifactServerEndpoint"), "$.spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint"}} {
+		issues = api.AppendIssues(issues, infrastructureservices.ValidateArtifactEndpoint(selection.value, c, selection.path, false)...)
 		if server, ok := infrastructureservices.ArtifactEndpoint(selection.value, c); ok && server.Spec().Get("management").Text() == "managed" {
 			for _, machine := range consumers(o, c) {
 				if bootwrightInstalled(machine) && server.Spec().Get("machineRef").Text() == machine.Name() {

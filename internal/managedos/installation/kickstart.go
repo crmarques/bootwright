@@ -110,6 +110,7 @@ type Installation struct {
 	Nameservers        []string
 	NTPServers         []string
 	Packages           []string
+	PackageTLS         bool
 	PackageSource      string
 	Prefix             int
 	Release            string
@@ -136,6 +137,9 @@ type Installation struct {
 // file so the installed system keeps none.
 func RenderKickstart(input Installation) (string, error) {
 	if err := guardKickstartValues(input); err != nil {
+		return "", err
+	}
+	if err := packageTrustRefusal(input); err != nil {
 		return "", err
 	}
 	// Only a disk its substrate created may be left for the installer to
@@ -199,6 +203,7 @@ func RenderKickstart(input Installation) (string, error) {
 		"",
 	)
 	lines = append(lines, targetProofLines(input)...)
+	lines = append(lines, packageTrustLines(input)...)
 	lines = append(lines, encryptionPreLines(input)...)
 	lines = append(lines, storageLines(input)...)
 	lines = append(lines, "")
@@ -337,6 +342,10 @@ func kickstartCarries(shape kickstartShape, value string) bool {
 	switch shape {
 	case kickstartPackageSource:
 		tree, found := strings.CutPrefix(value, "url --url=")
+		if strings.HasSuffix(tree, " --sslcacert="+packageTrustPath) {
+			tree = strings.TrimSuffix(tree, " --sslcacert="+packageTrustPath)
+			return found && strings.HasPrefix(tree, "https://") && oneKickstartToken(tree, false)
+		}
 		return value == "cdrom" || found && tree != "" && oneKickstartToken(tree, false)
 	case kickstartListElement:
 		return oneKickstartToken(value, true)

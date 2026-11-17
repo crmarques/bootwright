@@ -241,6 +241,7 @@ func TestTheFrozenRequestsMatchTheirGoldens(t *testing.T) {
 	for name, catalog := range map[string]api.Catalog{
 		"lab-rhel": labCatalog(), "lab-rhel-checksummed": labCatalog(checksummed),
 		"lab-rhel-ssh-placed": sshPlaced, "lab-rhel-site-services": siteServicesCatalog(),
+		"lab-rhel-https-tree":             labCatalog(httpsTreeProfile(installProfile())),
 		"lab-rhel-encrypted":              labCatalog(encryptingProfile()),
 		"lab-rhel-nohome":                 labCatalog(withHomePartition(installProfile(), "none")),
 		"lab-rhel-encrypted-nohome":       labCatalog(withHomePartition(encryptingProfile(), "none")),

@@ -245,8 +245,9 @@ An `artifactServerEndpoint` consumer has required scalar `serverRef` to an
 ArtifactServer followed by required scalar `endpointRef` to one of its
 endpoints. Neither is inferred from available services or endpoint count.
 No consumer accepts an external ArtifactServer, because each publishes into the
-server it selects; selecting one refuses at `serverRef`. Each consumer declares
-whether it requires HTTP package serving; every server retains its content
+server it selects; selecting one refuses at `serverRef`. A hosted package tree
+selects HTTP or verified HTTPS under the install profile's
+[bootstrap trust rule](../managed-os.md#https-package-sources); every server retains its content
 as `persistent`. It must satisfy
 those requirements after kind defaults have supplied any omitted fields.
 

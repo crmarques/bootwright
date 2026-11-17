@@ -127,6 +127,12 @@ managedos_install_anaconda_certificate: >-
   {{ lookup('ansible.builtin.file', bootwright_os_install_material.artifactCertificate, rstrip=false)
      if bootwright_os_install_material.artifactCertificate is defined else '' }}
 
+# The package source may use a different artifact server from the private image.
+# Stage only the public part of the tree's own frozen serving-certificate binding.
+managedos_install_anaconda_tree_certificate: >-
+  {{ lookup('ansible.builtin.file', bootwright_os_install_material.treeCertificate, rstrip=false)
+     if bootwright_os_install_material.treeCertificate is defined else '' }}
+
 # The installer's power-off, the identity answer and the fleet account's
 # reachability, the waits an apply performs while the machine installs and
 # starts, are budgets the request froze, never values of this role: the run's

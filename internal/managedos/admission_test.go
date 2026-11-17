@@ -667,3 +667,12 @@ func TestSatelliteContentSelectionUsesPairedLabels(t *testing.T) {
 		}
 	}
 }
+
+func TestHostedTreeAdmitsTheManagedHTTPSArtifactEndpoint(t *testing.T) {
+	profile, catalog := hostedTreeProfile("local-media:dvd.iso")
+	profile = profile.WithSpec(profile.Spec().WithPath(api.StringValue("media"),
+		"installer", "anaconda", "packageSource", "hostedTree", "artifactServerEndpoint", "endpointRef"))
+	if issues := Validate(profile, catalog); len(issues) != 0 {
+		t.Fatalf("HTTPS hosted tree was refused: %+v", issues)
+	}
+}

@@ -51,8 +51,8 @@ func TestProfileArtifactsRequireExplicitServerAndIndependentHost(t *testing.T) {
 		t.Fatal("missing artifact server admitted")
 	}
 	encryptedPackages := profile.WithSpec(profile.Spec().WithPath(api.StringValue("media"), "installer", "anaconda", "packageSource", "hostedTree", "artifactServerEndpoint", "endpointRef"))
-	if issues := Validate(encryptedPackages, catalog); len(issues) == 0 {
-		t.Fatal("HTTPS-only package hosting admitted")
+	if issues := Validate(encryptedPackages, catalog); len(issues) != 0 {
+		t.Fatal("verified HTTPS package hosting refused", issues)
 	}
 	selfHosted := server.WithSpec(server.Spec().With("machineRef", api.StringValue("node")))
 	issues := Validate(profile, api.NewCatalog([]api.Object{selfHosted, machine}))

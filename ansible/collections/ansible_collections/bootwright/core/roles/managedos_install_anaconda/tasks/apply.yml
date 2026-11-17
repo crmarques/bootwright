@@ -226,6 +226,7 @@
              | replace('@@BOOTWRIGHT_AUTHORIZED_KEY@@', bootwright_os_install_material.authorizedKey)
              | replace('@@BOOTWRIGHT_PRIVATE_URL@@', managedos_install_anaconda_private_url)
              | replace('@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@', managedos_install_anaconda_certificate)
+             | replace('@@BOOTWRIGHT_PACKAGE_TREE_CERTIFICATE@@', managedos_install_anaconda_tree_certificate)
              | replace('@@BOOTWRIGHT_VOLUME_WWN@@', bootwright_os_install_material.rootVolumeWWN | default(''))
              | replace('@@BOOTWRIGHT_VOLUME_SIZE@@', bootwright_os_install_material.rootVolumeSize | default('')) }}
         path: '{{ managedos_install_anaconda_work }}/ks.cfg'

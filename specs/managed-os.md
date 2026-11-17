@@ -158,6 +158,23 @@ install-time intent; changing an installed layout follows the ordinary
 destroy/reinstall journey. Native option semantics belong to the
 [RHEL Kickstart reference](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-commands-and-options-reference_rhel-installer).
 
+## HTTPS package sources
+
+A hosted package tree may select its managed ArtifactServer's HTTPS endpoint.
+It binds that server's public serving-certificate chain. The installer receives
+it in an exclusively created mode-0700 RAM directory with a mode-0600 PEM file,
+before Anaconda parses its source or fetches metadata. The source uses the
+scoped `--sslcacert` path for `.treeinfo` and every repository discovered there,
+with hostname and certificate verification enabled; no global trust store is
+changed and no HTTP fallback or verification opt-out is inferred. The shared
+listener proof rejects wrong, expired or foreign certificates and redirects
+before any machine receives the media. The public certificate remains only in
+installer RAM until power-off; no serving private key is lent to the installer.
+Frozen HTTP requests retain their original URL and Kickstart bytes. Sources:
+[Anaconda pre-script pass](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/kickstart.py),
+[URL source TLS configuration](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/modules/payloads/source/url/url.py),
+and [DNF tree and repository TLS propagation](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/payload/dnf/payload.py).
+
 ## Installation
 
 ### Selection
@@ -193,7 +210,8 @@ registration; tracked as [B905](milestones/m1.md#b905).
 
 The profile's `anaconda` arm, with `packageSource` absent
 so the boot media is a DVD installed from `cdrom`, or `hostedTree`, so a boot
-image installs from a package tree the artifact server publishes. `bootMedia`
+image installs from a package tree the artifact server publishes over HTTP or
+[verified HTTPS](#https-package-sources). `bootMedia`
 and `fromMedia` name entries of the media store as `local-media:<name>`, and
 validate refuses any other source, naming the import that fixes it. The
 profile an installed Machine selects names its `redfishVirtualMedia`

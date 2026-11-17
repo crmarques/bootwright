@@ -84,6 +84,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		NTPServers:       timeSources,
 		Packages:         SortedUnique(append(append(customizations.Get("packages", "install").Strings(), identityPackages(request.Target)...), append(langpacks, networkPackages()...)...)),
 		PackageSource:    source,
+		PackageTLS:       request.Tree != nil && strings.HasPrefix(request.Tree.URL, "https://"),
 		Prefix:           prefix,
 		Repositories:     repositories,
 		RootDevice:       substrate.RootDevicePath(machine),
@@ -141,6 +142,12 @@ func packageSource(request Request) (string, error) {
 	}
 	if request.Tree.URL == "" {
 		return "", refusal("lifecycle.state", "the hosted package tree has no published URL", "")
+	}
+	if strings.HasPrefix(request.Tree.URL, "https://") {
+		if request.Tree.CertificateRef == "" {
+			return "", refusal("lifecycle.state", "the HTTPS package tree has no bound serving certificate", "select a managed HTTPS artifact endpoint with a serving certificate")
+		}
+		return "url --url=" + request.Tree.URL + " --sslcacert=" + packageTrustPath, nil
 	}
 	return "url --url=" + request.Tree.URL, nil
 }
