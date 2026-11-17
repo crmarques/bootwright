@@ -66,6 +66,52 @@ func (instant) Observe(_ context.Context, target capacity.Target) (capacity.Fact
 	return capacity.Facts{Available: capacity.Quantities{CPU: 8, Memory: 1 << 30, Disk: 1000}, CPUKnown: !target.DiskOnly, MemoryKnown: !target.DiskOnly, DiskKnown: true, DiskIdentity: target.Host + target.Pool}, nil
 }
 
+type crowding struct {
+	mu            sync.Mutex
+	inFlight, top int
+	reached       chan struct{}
+	release       chan struct{}
+}
+
+func (c *crowding) Observe(ctx context.Context, target capacity.Target) (capacity.Facts, error) {
+	c.mu.Lock()
+	c.inFlight++
+	c.top = max(c.top, c.inFlight)
+	if c.inFlight == capacity.HostProbeConcurrency {
+		close(c.reached)
+	}
+	c.mu.Unlock()
+	select {
+	case <-c.release:
+	case <-time.After(5 * time.Second):
+	}
+	c.mu.Lock()
+	c.inFlight--
+	c.mu.Unlock()
+	return instant{}.Observe(ctx, target)
+}
+
+func TestOneHostIsProbedAtMostHostProbeConcurrencyAtOnce(t *testing.T) {
+	observer := &crowding{reached: make(chan struct{}), release: make(chan struct{})}
+	var allocations []capacity.Allocation
+	for index := range 2 * capacity.HostProbeConcurrency {
+		name := string(rune('a' + index))
+		allocations = append(allocations, capacity.Allocation{Machine: name, Host: "host", Pool: "/pool-" + name, Local: true, Quantities: capacity.Quantities{CPU: 1, Memory: 1, Disk: 1}})
+	}
+	go func() {
+		select {
+		case <-observer.reached:
+		case <-time.After(5 * time.Second):
+		}
+		time.Sleep(10 * time.Millisecond)
+		close(observer.release)
+	}()
+	mustCheck(t, capacity.Budget{Observer: observer}, allocations, nil)
+	if observer.top != capacity.HostProbeConcurrency {
+		t.Fatalf("one host was probed %d at once, want %d", observer.top, capacity.HostProbeConcurrency)
+	}
+}
+
 func TestIndependentHostsAndWritePathsAreProbedAtOnce(t *testing.T) {
 	budget := capacity.Budget{Observer: rendezvous{t: t, groups: newMeeting(), writes: newMeeting()}}
 	allocations := []capacity.Allocation{

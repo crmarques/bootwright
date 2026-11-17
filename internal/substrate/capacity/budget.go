@@ -65,7 +65,7 @@ func (b Budget) Check(ctx context.Context, allocations []Allocation, writes []Wr
 	if err != nil {
 		return nil, err
 	}
-	observed := fanout.Run(ctx, fanout.Options[*budgetGroup, observation]{Limit: ProbeConcurrency}, groups, func(ctx context.Context, group *budgetGroup) (observation, error) {
+	observed := fanout.Run(ctx, fanout.Options[*budgetGroup, observation]{Limit: ProbeConcurrency, Throttle: HostProbeConcurrency, Key: func(group *budgetGroup) string { return group.target.Host }}, groups, func(ctx context.Context, group *budgetGroup) (observation, error) {
 		return b.observeGroup(ctx, group, dryRun)
 	})
 	if err := fanout.FirstError(observed); err != nil {
@@ -104,7 +104,7 @@ func (b Budget) addWrites(ctx context.Context, disks map[string]observation, wri
 			targets[key] = Target{Host: write.Host, Pool: write.Path, Context: write.Context, Local: write.Local, DiskOnly: true}
 		}
 	}
-	probed := fanout.Run(ctx, fanout.Options[string, Facts]{Limit: ProbeConcurrency}, keys, func(ctx context.Context, key string) (Facts, error) {
+	probed := fanout.Run(ctx, fanout.Options[string, Facts]{Limit: ProbeConcurrency, Throttle: HostProbeConcurrency, Key: func(key string) string { return targets[key].Host }}, keys, func(ctx context.Context, key string) (Facts, error) {
 		return b.observeDisk(ctx, targets[key])
 	})
 	if err := fanout.FirstError(probed); err != nil {

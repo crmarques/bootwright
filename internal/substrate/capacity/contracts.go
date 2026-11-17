@@ -9,13 +9,14 @@ import (
 )
 
 const (
-	Passed             = "passed"
-	Failed             = "failed"
-	Unknown            = "unknown"
-	Pending            = "pending"
-	ProbeTimeout       = 10 * time.Second
-	RemoteProbeTimeout = 60 * time.Second
-	ProbeConcurrency   = 8
+	Passed               = "passed"
+	Failed               = "failed"
+	Unknown              = "unknown"
+	Pending              = "pending"
+	ProbeTimeout         = 10 * time.Second
+	RemoteProbeTimeout   = 60 * time.Second
+	ProbeConcurrency     = 8
+	HostProbeConcurrency = 4
 )
 
 type Quantities struct{ CPU, Memory, Disk int64 }
