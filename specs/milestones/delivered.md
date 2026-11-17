@@ -16311,3 +16311,18 @@ admits, and an earlier build's retirement with one cannot continue. An
 independent review found every digest byte-identical and no reachable change
 from the unique-match lookup.
 
+## X513 — End-to-end cases share a base
+
+### B1470
+
+Partly delivered under [D274](backlog.md#d274) (9) (audit 005 W9). What
+several end-to-end cases repeat lives once in `e2e/_base/<kit>/`, which a
+case names in `kits.txt` and `render.sh` copies in; every case's rendering is
+byte for byte unchanged, and examples stay self-contained. Every switch the
+case runbooks offer is rendered by the case tests, which use the pinned helm
+of the tool table and the Ansible check's pinned Python. The workloads that
+acceptance evidence trusts have unit tests, and the network case's embedded
+Python programs are one tested file. A test holds the SNO case's static
+`workloads/` profile to the case defaults; retiring it stays on B1470 for the
+owner's decision.
+
