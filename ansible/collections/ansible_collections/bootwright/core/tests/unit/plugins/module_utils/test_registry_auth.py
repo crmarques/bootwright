@@ -29,6 +29,12 @@ def test_an_invalid_credential_refuses(username, password):
         registry_auth.credential(username, password)
 
 
+@pytest.mark.parametrize("username", ["org+" + "robot" * 60, "robot$project+" + "name" * 80])
+def test_a_long_robot_account_name_the_secret_api_admits_is_a_credential(username):
+    assert len(username.encode()) > 256
+    assert registry_auth.decoded(registry_auth.credential(username, "secret")) == (username, "secret")
+
+
 def test_the_bounds_are_the_ones_every_reader_applies():
     longest = "u" * registry_auth.MAX_USERNAME
     assert registry_auth.decoded(registry_auth.credential(longest, "secret")) == (longest, "secret")

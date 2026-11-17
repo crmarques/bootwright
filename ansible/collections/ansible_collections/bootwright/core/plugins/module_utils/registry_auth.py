@@ -27,7 +27,8 @@ import urllib.parse
 
 from ansible_collections.bootwright.core.plugins.module_utils import canonical_json, private_files
 
-MAX_USERNAME = 256
+# A usernamePassword Secret admits a user name up to its part bound (specs/secrets.md, Bounds): 1 MiB.
+MAX_USERNAME = 1 << 20
 MAX_PASSWORD = 32768
 MAX_CHALLENGE = 4096
 MAX_TOKEN = 32768
