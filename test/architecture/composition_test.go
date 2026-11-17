@@ -33,7 +33,12 @@ func applicationValues() packageSymbols {
 		"internal/controller/prerequisites": {"ScopedFailure": true},
 		// The immutable request, service definition and image source other
 		// capabilities construct and read; they bind no replaceable service.
-		"internal/infrastructureservices/managedservice": {"Request": true, "Definition": true, "ImageSource": true},
+		// Service is the one managed service lifecycle a kind binds its port
+		// to, its runner injected, and Evidence one kind's evidence it reads.
+		"internal/infrastructureservices/managedservice": {"Request": true, "Definition": true, "ImageSource": true, "Service": true, "Evidence": true},
+		// The artifact server's own request and evidence, which it binds the
+		// shared managed service lifecycle to.
+		"internal/infrastructureservices/artifactserver": {"Request": true, "Evidence": true},
 		// The removal gate's values, what a capability is asked and what it
 		// answers; they bind no replaceable service.
 		"internal/reconciliation/lifecycle": {"Probe": true, "Quiescence": true},

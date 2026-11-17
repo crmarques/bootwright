@@ -64,11 +64,11 @@ const (
 // Canonical encodes the request exactly as the plan digest and the adapter
 // both consume it. It refuses anything a reader could interpret differently.
 func (r Request) Canonical() ([]byte, error) {
-	return reconciliation.Freeze(r, "artifact-server")
+	return reconciliation.Freeze(r, noun)
 }
 
 func DecodeRequest(data []byte) (Request, error) {
-	return reconciliation.ThawVersion[Request](data, "artifact-server", requestVersion)
+	return reconciliation.ThawVersion[Request](data, noun, requestVersion)
 }
 
 func (r Request) listener(name string) (Listener, bool) {

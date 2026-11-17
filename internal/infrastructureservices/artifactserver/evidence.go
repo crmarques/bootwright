@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 )
 
 // Evidence is the only result shape the adapter may return. Go validates it
@@ -21,8 +21,6 @@ type Evidence struct {
 	Request           string             `json:"request"`
 	Unit              string             `json:"unit"`
 }
-
-var certificateMismatch = errors.New("artifact-server certificate mismatch")
 
 type ListenerEvidence struct {
 	Address     string `json:"address"`
@@ -90,37 +88,21 @@ func probedAddresses(r Request) []string {
 	return addresses
 }
 
-func decodeEvidence(data []byte) (Evidence, error) {
-	return reconciliation.DecodeEvidence[Evidence](data, maxEvidenceBytes, "artifact-server")
+func (e Evidence) Observed() managedservice.Observed {
+	return managedservice.Observed{
+		Absent: e.Absent, Answered: len(e.Listeners) != 0, Container: e.Container, ContentRoot: e.ContentRoot,
+		Postcondition: e.Postcondition, Request: e.Request, StartedAfterFiles: e.StartedAfterFiles, Unit: e.Unit,
+	}
 }
 
-// ValidatePresence accepts evidence only when it proves the exact frozen
-// request is running and serving the bound certificate on every target.
-func ValidatePresence(data []byte, request Request, digest, fingerprint string) error {
-	evidence, err := decodeEvidence(data)
-	if err != nil {
-		return err
-	}
-	if evidence.Request != digest {
-		return refusal("lifecycle.state", "the artifact-server evidence names another request", "")
-	}
-	if !evidence.Postcondition || evidence.Absent || !evidence.StartedAfterFiles {
-		return refusal("lifecycle.state", "the artifact-server adapter did not prove its postcondition", "")
-	}
-	if evidence.Unit != "active" {
-		return refusal("lifecycle.state", "the artifact-server unit is not active", "")
-	}
-	if evidence.Container != request.Image {
-		return refusal("lifecycle.state", "the running artifact-server container is not the frozen image", "")
-	}
-	if !evidence.ContentRoot {
-		return refusal("lifecycle.state", "the artifact-server content root is missing", "")
-	}
+// Ready proves every frozen listener answered with an HTTP status line, and an
+// HTTPS one presenting the bound certificate.
+func (e Evidence) Ready(request Request, fingerprint string) error {
 	targets := request.ProbeTargets()
-	if len(evidence.Listeners) != len(targets) {
+	if len(e.Listeners) != len(targets) {
 		return refusal("lifecycle.state", "the artifact-server evidence does not cover every listener", "")
 	}
-	observed := slices.Clone(evidence.Listeners)
+	observed := slices.Clone(e.Listeners)
 	slices.SortFunc(observed, func(x, y ListenerEvidence) int {
 		if order := strings.Compare(x.Name, y.Name); order != 0 {
 			return order
@@ -139,7 +121,7 @@ func ValidatePresence(data []byte, request Request, digest, fingerprint string) 
 			return refusal("lifecycle.state", "an artifact-server listener supplied no usable certificate fingerprint", "")
 		}
 		if target.Protocol == "https" && listener.Fingerprint != fingerprint {
-			return errors.Join(certificateMismatch, refusal("lifecycle.state", "an artifact-server listener presented a different certificate than the operation bound", ""))
+			return errors.Join(managedservice.ErrCertificateMismatch, refusal("lifecycle.state", "an artifact-server listener presented a different certificate than the operation bound", ""))
 		}
 		if target.Protocol == "http" && listener.Fingerprint != "" {
 			return refusal("lifecycle.state", "an HTTP artifact-server listener reported a certificate", "")
@@ -148,111 +130,22 @@ func ValidatePresence(data []byte, request Request, digest, fingerprint string) 
 	return nil
 }
 
-// ValidateAbsence accepts evidence only when it positively proves that every
-// owned resource is gone, never merely that it was not observed.
+func ValidatePresence(data []byte, request Request, digest, fingerprint string) error {
+	return managedservice.Presence[Request, Evidence](noun, data, request, digest, fingerprint)
+}
+
 func ValidateAbsence(data []byte, digest string) error {
-	evidence, err := decodeEvidence(data)
-	if err != nil {
-		return err
-	}
-	if evidence.Request != digest {
-		return refusal("lifecycle.state", "the artifact-server evidence names another request", "")
-	}
-	if !evidence.Postcondition || !evidence.Absent {
-		return refusal("lifecycle.state", "the artifact-server adapter did not prove removal", "")
-	}
-	if evidence.Unit != "" || evidence.Container != "" || evidence.ContentRoot || len(evidence.Listeners) != 0 {
-		return refusal("lifecycle.state", "the artifact-server removal evidence still reports an owned resource", "")
-	}
-	return nil
+	return managedservice.Absence[Request, Evidence](noun, data, digest)
 }
 
-// ValidatePartial accepts evidence only when it positively proves this
-// context's own server is part way realized: the unit, container or content
-// root it names is present while the whole, its listeners' answers included,
-// is not. Each carries the context in its name and is claimed by its host
-// reservation, so their presence is never another context's work, a server all
-// present whose listener stays silent is this context's own server not yet
-// ready, and repeating the operation converges them.
 func ValidatePartial(data []byte, request Request, digest, fingerprint string) error {
-	evidence, err := decodeEvidence(data)
-	if err != nil {
-		return err
-	}
-	if evidence.Request != digest {
-		return refusal("lifecycle.state", "the artifact-server evidence names another request", "")
-	}
-	if evidence.Absent {
-		return refusal("lifecycle.state", "the artifact-server evidence proves a settled state, not a partial one", "")
-	}
-	if evidence.Postcondition && (evidence.Unit != "active" || !evidence.ContentRoot || !evidence.StartedAfterFiles) {
-		return refusal("lifecycle.state", "the artifact-server evidence claims a postcondition it does not report", "")
-	}
-	if evidence.Unit == "" && evidence.Container == "" && !evidence.ContentRoot {
-		return refusal("lifecycle.state", "the artifact-server evidence reports nothing this context owns", "")
-	}
-	if ValidatePresence(data, request, digest, fingerprint) == nil {
-		return refusal("lifecycle.state", "the artifact-server evidence proves it complete, not partial", "")
-	}
-	return nil
+	return managedservice.Partial[Request, Evidence](noun, data, request, digest, fingerprint)
 }
 
-// ValidateUnremoved accepts observed evidence only when it proves a removal of
-// the frozen request took nothing back: this request's presence form reporting
-// the unit active, the container of the frozen image and the content root.
-// The listeners, their status lines and presented certificates, and the
-// postcondition flag are the apply's proof of readiness, not anything a
-// removal takes back, so none of them plays any part.
 func ValidateUnremoved(data []byte, request Request, digest string) error {
-	evidence, err := removalEvidence(data, digest)
-	if err != nil {
-		return err
-	}
-	if !unremoved(evidence, request) {
-		return refusal("lifecycle.state", "the artifact server no longer holds everything its removal takes back", "")
-	}
-	return nil
+	return managedservice.Unremoved[Request, Evidence](noun, data, request, digest)
 }
 
-// ValidateRemovalUnfinished accepts observed evidence only when it proves a
-// removal of the frozen request took back part of what it owns and not the
-// rest: this request's presence form reporting a unit, a container or the
-// content root, without the whole that ValidateUnremoved reads. Each carries
-// the context in its name and is claimed by its host reservation, so what is
-// left is this context's own and the next attempt converges it. Readiness
-// plays no part here either.
 func ValidateRemovalUnfinished(data []byte, request Request, digest string) error {
-	evidence, err := removalEvidence(data, digest)
-	if err != nil {
-		return err
-	}
-	if evidence.Unit == "" && evidence.Container == "" && !evidence.ContentRoot {
-		return refusal("lifecycle.state", "the artifact-server evidence reports nothing its removal takes back", "")
-	}
-	if unremoved(evidence, request) {
-		return refusal("lifecycle.state", "the artifact server still holds everything its removal takes back", "")
-	}
-	return nil
+	return managedservice.RemovalUnfinished[Request, Evidence](noun, data, request, digest)
 }
-
-// removalEvidence decodes observed evidence for this request in its presence
-// form, the only form that reports what a removal has still to take back.
-func removalEvidence(data []byte, digest string) (Evidence, error) {
-	evidence, err := decodeEvidence(data)
-	if err != nil {
-		return Evidence{}, err
-	}
-	if evidence.Request != digest {
-		return Evidence{}, refusal("lifecycle.state", "the artifact-server evidence names another request", "")
-	}
-	if evidence.Absent {
-		return Evidence{}, refusal("lifecycle.state", "the artifact-server evidence is an absence form, which reports nothing left to take back", "")
-	}
-	return evidence, nil
-}
-
-func unremoved(evidence Evidence, request Request) bool {
-	return evidence.Unit == "active" && evidence.Container == request.Image && evidence.ContentRoot
-}
-
-const maxEvidenceBytes = 64 << 10

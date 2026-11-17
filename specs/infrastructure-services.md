@@ -518,7 +518,9 @@ listener does not answer, or presents another certificate, is therefore this
 context's own service not yet ready rather than an unproved effect, so a fresh
 `destroy` that resolves an incomplete apply's block through this observation
 goes on to remove it. Presence evidence claiming the postcondition without the
-unit active and the content root present contradicts itself and stays unknown.
+unit active, the content root present and its start after its files
+contradicts itself and stays unknown, and absence evidence reporting that start
+proves no absence.
 A removal's resolution reads the same observation for what the
 removal takes back: nothing present is its completion; the unit active, the
 container of the frozen image and the content root all present is positive no

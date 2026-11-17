@@ -26,7 +26,7 @@ func commentLineCeilings() map[string]int {
 		"internal/desiredstate/inputfs": 34, "internal/desiredstate/yamlstream": 1,
 		"internal/diagnostics": 2, "internal/vulnerabilityexceptions": 0, "internal/environment": 6, "internal/environment/access": 0, "internal/environment/clusterpreflight": 0,
 		"internal/environment/inspection": 0, "internal/environment/preflight": 0,
-		"internal/infrastructureservices": 98, "internal/infrastructureservices/artifactserver": 182,
+		"internal/infrastructureservices": 98, "internal/infrastructureservices/artifactserver": 108,
 		"internal/infrastructureservices/dnsserver": 4, "internal/infrastructureservices/managedservice": 192,
 		"internal/infrastructureservices/mirrorfill": 0, "internal/infrastructureservices/ntpserver": 3, "internal/infrastructureservices/proxy": 8,
 		"internal/infrastructureservices/registry": 6,

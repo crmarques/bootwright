@@ -4,12 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
-	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 const Implementation = "registry-distribution-v1"
@@ -38,7 +36,7 @@ func Definition(passwordFile PasswordFile) managedservice.Definition {
 		Subject:        "registry",
 		Image:          defaultImage,
 		Extend:         extend,
-		Certificate:    certificate,
+		Certificate:    artifactserver.ServingFingerprint,
 		PasswordFile:   passwordFile,
 	}
 }
@@ -71,16 +69,4 @@ func LabelLevel(unit string) string {
 		second++
 	}
 	return fmt.Sprintf("s0:c%d,c%d", min(first, second), max(first, second))
-}
-
-func certificate(material map[string]secrets.Material, secret, contextName string, addresses []string, now time.Time, registered bool) (string, error) {
-	bound, err := artifactserver.BoundServingMaterial(material, secret, contextName)
-	if err != nil {
-		return "", err
-	}
-	if !registered {
-		return "", artifactserver.ProveServingCertificate(bound, secret, contextName, addresses, now)
-	}
-	served, err := artifactserver.ValidateServingCertificate(bound, secret, contextName, addresses, now)
-	return served.Fingerprint, err
 }

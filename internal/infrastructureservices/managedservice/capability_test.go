@@ -430,13 +430,12 @@ func TestPartialRequiresSomethingThisContextOwns(t *testing.T) {
 	startUnreported.StartedAfterFiles = false
 	for name, evidence := range map[string]Evidence{
 		"present, started before its files": stale,
-		"present, start unreported":         startUnreported,
 		"unit without its root":             {Answers: []Answer{}, Request: digest, Unit: "active"},
 		"root without its unit":             {Answers: []Answer{}, ContentRoot: true, Request: digest},
 		"container left behind":             {Answers: []Answer{}, Container: "image", Request: digest},
 		"present with a silent listener":    silent,
 		"present, another image":            otherImage,
-		"unit and root, no container":       {Answers: []Answer{}, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active"},
+		"unit and root, no container":       {Answers: []Answer{}, ContentRoot: true, Postcondition: true, Request: digest, StartedAfterFiles: true, Unit: "active"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidatePartial(encode(t, evidence), request, digest, ""); err != nil {
@@ -450,6 +449,7 @@ func TestPartialRequiresSomethingThisContextOwns(t *testing.T) {
 		"already absent":             {Absent: true, Answers: []Answer{}, Request: digest},
 		"another request":            {Answers: []Answer{}, Request: strings.Repeat("e", 64), Unit: "active"},
 		"a postcondition unreported": {Answers: []Answer{}, Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, Unit: "inactive"},
+		"a postcondition unstarted":  startUnreported,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidatePartial(encode(t, evidence), request, digest, ""); err == nil {

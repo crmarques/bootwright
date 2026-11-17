@@ -287,7 +287,7 @@ func TestAServiceOnAnInstalledMachineRequiresItsInstallation(t *testing.T) {
 // planned is the one block the artifact server capability plans for catalog.
 func planned(t *testing.T, catalog api.Catalog) reconciliation.BlockDefinition {
 	t.Helper()
-	plan, err := (Capability{}).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
+	plan, err := New(nil, nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
 		Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext}})
 	if err != nil || len(plan.Definitions) != 1 || len(plan.SSHReservations) != 1 || !plan.SSHReservations[0].Installed {
 		t.Fatalf("plan = %+v (%v)", plan, err)

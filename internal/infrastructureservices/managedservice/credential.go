@@ -40,15 +40,15 @@ func ProveCredential(material map[string]secrets.Material, secret, contextName s
 
 const passwordFileMaterial = "bootwright:password-file"
 
-func (c Capability) passwordFile(execution lifecycle.Execution, request Request) (lifecycle.Execution, error) {
-	if c.definition.PasswordFile == nil {
+func (d Definition) passwordFile(execution lifecycle.Execution, request Request) (lifecycle.Execution, error) {
+	if d.PasswordFile == nil {
 		return execution, Refusal("lifecycle.state", "the managed service capability derives no password file", "")
 	}
 	bound := execution.Material[request.CredentialsRef]
 	username, _ := bound.Part(secrets.UsernamePart)
 	password, _ := bound.Part(secrets.PasswordPart)
 	defer clear(password)
-	file, err := c.definition.PasswordFile(username, password)
+	file, err := d.PasswordFile(username, password)
 	if err != nil {
 		return execution, Refusal("lifecycle.state", "the password file of "+request.Kind+"/"+request.Identity.Service+" could not be derived", "")
 	}

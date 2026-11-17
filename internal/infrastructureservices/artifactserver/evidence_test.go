@@ -84,7 +84,7 @@ func TestEvidenceMustBeBoundedAndClosed(t *testing.T) {
 		"trailing":      append(presenceEvidence(request, testDigest, testFingerprint), '{'),
 		"a closing }":   append(presenceEvidence(request, testDigest, testFingerprint), '}'),
 		"a closing ]":   append(presenceEvidence(request, testDigest, testFingerprint), ']'),
-		"oversized":     []byte(`{"container":"` + strings.Repeat("x", maxEvidenceBytes) + `"}`),
+		"oversized":     []byte(`{"container":"` + strings.Repeat("x", 64<<10) + `"}`),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidatePresence(data, request, testDigest, testFingerprint); err == nil {

@@ -1,8 +1,6 @@
 package managedservice
 
 import (
-	"context"
-	"errors"
 	"net/netip"
 	"slices"
 	"time"
@@ -55,104 +53,64 @@ func (d Definition) ContentDigest() string {
 	)
 }
 
-// Capability realizes one managed network service kind. It owns what
-// completion, readiness and absence mean for that kind and nothing else.
+func (d Definition) port() KindPort[Request] {
+	return KindPort[Request]{
+		Kind: string(d.Kind), Implementation: d.Implementation, Variable: d.Variable, Version: d.Version, Noun: noun,
+		Purpose: d.Purpose, Subject: d.Subject, Reservation: d.Slug, ContentDigest: d.ContentDigest(),
+		Requests: d.requests, Certificate: d.Certificate, Materials: d.materials,
+	}
+}
+
+func (d Definition) materials(execution lifecycle.Execution, request Request, operation string) (lifecycle.Execution, []lifecycle.MaterialFile, error) {
+	materials := request.Materials(operation)
+	if operation != "apply" || request.CredentialsRef == "" {
+		return execution, materials, nil
+	}
+	execution, err := d.passwordFile(execution, request)
+	if err != nil {
+		return execution, nil, err
+	}
+	return execution, append(materials, lifecycle.MaterialFile{Name: "htpasswd", Part: secrets.ValuePart, Secret: passwordFileMaterial, Variable: "passwordFile"}), nil
+}
+
+// Capability is the shared managed service lifecycle bound to one
+// definition's kind.
 type Capability struct {
+	Service[Request, Evidence]
 	definition Definition
-	runner     Runner
-	clock      lifecycle.Clock
-	hostKeys   lifecycle.InstalledHostKey
 }
 
 func NewCapability(definition Definition, runner Runner) Capability {
-	return Capability{definition: definition, runner: runner}
+	return Capability{Service: NewService[Request, Evidence](definition.port(), runner), definition: definition}
 }
 
 func (c Capability) WithClock(clock lifecycle.Clock) Capability {
-	c.clock = clock
+	c.Service = c.Service.WithClock(clock)
 	return c
 }
 
 func (c Capability) WithInstalledHostKeys(hostKeys lifecycle.InstalledHostKey) Capability {
-	c.hostKeys = hostKeys
+	c.Service = c.Service.WithInstalledHostKeys(hostKeys)
 	return c
-}
-
-func (c Capability) now() time.Time {
-	if c.clock == nil {
-		return time.Time{}
-	}
-	return c.clock.Now()
 }
 
 func (c Capability) Kind() string { return string(c.definition.Kind) }
 
-// Plan derives one block per managed service of this kind. It reads no host,
-// endpoint or Secret material and performs no effect.
-func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
-	if err := ctx.Err(); err != nil {
-		return lifecycle.CapabilityPlan{}, err
-	}
-	if input.State == nil {
-		return lifecycle.CapabilityPlan{}, Refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
-	}
-	catalog := input.State.Effective()
-	requests, err := c.Requests(catalog, input.Controller, input.Context.Name)
-	if err != nil {
-		return lifecycle.CapabilityPlan{}, err
-	}
-	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
-	digest := c.definition.ContentDigest()
-	for _, request := range requests {
-		canonical, err := request.Canonical()
-		if err != nil {
-			return lifecycle.CapabilityPlan{}, err
-		}
-		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
-			ID:             request.Identity.Block,
-			Description:    c.definition.describe(input.Verb, request),
-			Stage:          reconciliation.StageInfrastructureServices,
-			Requires:       append(PlacementRequirements(catalog, request.Placement, request.ProbeTargets()), MirrorRequirements(catalog, request.ImageSource)...),
-			Impacts:        impacts(input.Verb, request),
-			Groups:         groups(input.Verb, request),
-			Kind:           string(c.definition.Kind),
-			Object:         request.Identity.Service,
-			Family:         Family,
-			Implementation: c.definition.Implementation,
-			ContentDigest:  digest,
-			Request:        canonical,
-		})
-		for _, reference := range request.SecretReferences() {
-			if !slices.Contains(plan.Secrets, reference) {
-				plan.Secrets = append(plan.Secrets, reference)
-			}
-		}
-		claim := infrastructureservices.HostReservation{
-			Context: input.Context.Name, Kind: c.definition.Slug,
-			Service: request.Identity.Service, Keys: request.ReservationKeys(),
-		}
-		if !request.Placement.Local() {
-			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{
-				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port,
-				KnownHostsRef: request.Placement.KnownHostsRef, Installed: request.Placement.Installed(), Reservation: claim,
-			})
-			continue
-		}
-		plan.Reservations = append(plan.Reservations, claim)
-	}
-	slices.Sort(plan.Secrets)
-	return plan, nil
-}
+func (Capability) PrecedesController(reconciliation.BlockDefinition) bool { return true }
 
 // Requests derives one frozen request per managed service of this kind, in
 // canonical object order. It reads no host, endpoint or Secret material.
 func (c Capability) Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, error) {
+	return c.definition.requests(catalog, controllerMachine, contextName)
+}
+
+func (d Definition) requests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, error) {
 	if !ValidContextName(contextName) {
 		return nil, Refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	var requests []Request
-	for _, object := range ManagedObjects(catalog, c.definition) {
-		request, err := c.requestFor(catalog, object, controllerMachine, contextName)
+	for _, object := range ManagedObjects(catalog, d) {
+		request, err := d.requestFor(catalog, object, controllerMachine, contextName)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +119,7 @@ func (c Capability) Requests(catalog api.Catalog, controllerMachine, contextName
 	return requests, nil
 }
 
-func (c Capability) requestFor(catalog api.Catalog, object api.Object, controllerMachine, contextName string) (Request, error) {
+func (d Definition) requestFor(catalog api.Catalog, object api.Object, controllerMachine, contextName string) (Request, error) {
 	name := object.Name()
 	if !SafeSegment(name) {
 		return Request{}, Refusal("lifecycle.state", "the managed service name is not a safe host identifier", "rename "+object.Identity())
@@ -175,7 +133,7 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 	if err != nil {
 		return Request{}, err
 	}
-	image, err := ImageFor(spec, object.Identity(), c.definition.Image)
+	image, err := ImageFor(spec, object.Identity(), d.Image)
 	if err != nil {
 		return Request{}, err
 	}
@@ -201,25 +159,43 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 	}
 	request := Request{
 		BindAddress:    bind,
-		ContentRoot:    ContentRoot(contextName, c.definition.Slug, name),
+		ContentRoot:    ContentRoot(contextName, d.Slug, name),
 		Egress:         egress,
 		Endpoints:      endpoints,
-		Identity:       Identity{Block: c.definition.BlockID(name), Context: contextName, Service: name},
+		Identity:       Identity{Block: d.BlockID(name), Context: contextName, Service: name},
 		Image:          image,
 		ImageSource:    source,
-		Implementation: c.definition.Implementation,
-		Kind:           string(c.definition.Kind),
+		Implementation: d.Implementation,
+		Kind:           string(d.Kind),
 		Placement:      placement,
 		Port:           port,
-		Unit:           UnitName(contextName, c.definition.Slug, name),
-		Version:        c.definition.Version,
+		Unit:           UnitName(contextName, d.Slug, name),
+		Version:        d.Version,
 	}
-	if c.definition.Extend != nil {
-		if err := c.definition.Extend(catalog, spec, &request); err != nil {
+	if d.Extend != nil {
+		if err := d.Extend(catalog, spec, &request); err != nil {
 			return Request{}, err
 		}
 	}
 	return request, nil
+}
+
+func (r Request) Frame() Frame {
+	targets := r.ProbeTargets()
+	sockets := make([]string, 0, len(targets))
+	for _, address := range targets {
+		sockets = append(sockets, infrastructureservices.HostPort(address, r.Port))
+	}
+	frame := Frame{
+		Identity: r.Identity, Placement: r.Placement, Image: r.Image, ImageSource: r.ImageSource,
+		Unit: r.Unit, ContentRoot: r.ContentRoot, BindAddress: r.BindAddress, CredentialsRef: r.CredentialsRef,
+		Served: r.ServedAddresses(), Probed: targets, Sockets: sockets, Ports: []int{r.Port},
+		Secrets: r.SecretReferences(), Reservations: r.ReservationKeys(),
+	}
+	if r.TLS != nil {
+		frame.TLSSecret = r.TLS.Secret
+	}
+	return frame
 }
 
 // PlacementRequirements names, in name order, each provider the service's block
@@ -253,223 +229,4 @@ func PlacementRequirements(catalog api.Catalog, placement machineref.Placement, 
 		references = append(references, reconciliation.ObjectRef{Kind: string(api.Machine), Object: machine, Family: machineref.HardwareFamily})
 	}
 	return references
-}
-
-func (d Definition) describe(verb reconciliation.Verb, request Request) string {
-	if verb == reconciliation.Destroy {
-		return "remove the " + d.Subject + " " + request.Identity.Service + " from " + request.Placement.Machine
-	}
-	return d.Purpose + " for " + request.Identity.Service + " on " + request.Placement.Machine
-}
-
-func impacts(verb reconciliation.Verb, request Request) []string {
-	unit, root, listener := "create-container-unit", "create-path", "open-listener"
-	if verb == reconciliation.Destroy {
-		unit, root, listener = "remove-container-unit", "remove-path", "close-listener"
-	}
-	impacts := []string{unit + " " + request.Unit, root + " " + request.ContentRoot}
-	for _, address := range request.ProbeTargets() {
-		impacts = append(impacts, listener+" "+infrastructureservices.HostPort(address, request.Port))
-	}
-	slices.Sort(impacts)
-	return slices.Compact(impacts)
-}
-
-func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
-	machines := []string{request.Placement.Machine}
-	steps := [][2]string{
-		{"pull-image", "acquire the pinned service image"},
-		{"publish-configuration", "publish the service configuration and unit"},
-		{"start-service", "start the managed service"},
-		{"verify-readiness", "verify the service answers"},
-	}
-	if verb == reconciliation.Destroy {
-		steps = [][2]string{
-			{"stop-service", "stop the managed service"},
-			{"remove-configuration", "remove the configuration, unit and content root"},
-			{"verify-absence", "verify every owned resource is gone"},
-		}
-	}
-	return lifecycle.StepGroups(steps, machines)
-}
-
-// Removal reads a frozen managed-service block as the removal of the service it
-// installed. It takes back only what it created, so removing it consumes
-// nothing.
-func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
-	request, err := DecodeRequest(block.Request, c.definition.Version)
-	if err != nil {
-		return lifecycle.Removal{}, err
-	}
-	return lifecycle.Removal{
-		Description: c.definition.describe(reconciliation.Destroy, request),
-		Impacts:     impacts(reconciliation.Destroy, request),
-		Groups:      groups(reconciliation.Destroy, request),
-	}, nil
-}
-
-func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "apply")
-}
-
-func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "destroy")
-}
-
-func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
-	result, err := lifecycle.MutateBlock(ctx, c.mutation(operation), execution, operation)
-	if errors.Is(err, certificateMismatch) && result.Outcome == reconciliation.OutcomeUnknown {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
-	}
-	return result, err
-}
-
-type prepared struct {
-	request     Request
-	fingerprint string
-}
-
-func (c Capability) mutation(operation string) lifecycle.Mutation[prepared] {
-	return lifecycle.Mutation[prepared]{
-		Prepare: func(ctx context.Context, execution lifecycle.Execution) (prepared, error) {
-			request, fingerprint, err := c.prepare(ctx, execution, operation == "apply")
-			return prepared{request, fingerprint}, err
-		},
-		Run: func(ctx context.Context, execution lifecycle.Execution, _ string, call prepared) (lifecycle.RunResult, error) {
-			return c.run(ctx, execution, operation, call.request, call.fingerprint)
-		},
-		Reading:  serviceReading,
-		Unusable: Refusal("lifecycle.state", "the managed service adapter reported no usable outcome", ""),
-	}
-}
-
-// Observe is read-only. Live state matching the frozen request in full is
-// positive completion; nothing present is positive no effect; this context's
-// own service part way realized, a present one whose listener stays silent or
-// that started before a file it runs from included, is positive partial;
-// anything else, including an observation that could not be made, stays
-// unknown. A fresh destroy over an incomplete apply resolves the apply's block
-// through this reading too.
-func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return lifecycle.ObserveBlock(ctx, c.mutation("observe"), execution, reconciliation.Apply)
-}
-
-// ObserveRemoval reads the same observation for what a removal takes back, not
-// for readiness: nothing present is its completion; the unit active, the
-// container of the frozen image and the content root all present is positive
-// no effect, whether or not a listener answers; and part of them is a positive
-// partial removal the next attempt converges. Only an observation that cannot
-// be made or read as this request's stays unknown.
-func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return lifecycle.ObserveBlock(ctx, c.mutation("observe"), execution, reconciliation.Destroy)
-}
-
-// serviceReading reads a managed service observation for the verb the block
-// was frozen for.
-func serviceReading(call prepared, digest string) lifecycle.EffectReading {
-	request, fingerprint := call.request, call.fingerprint
-	return lifecycle.EffectReading{
-		Presence:   func(evidence []byte) error { return ValidatePresence(evidence, request, digest, fingerprint) },
-		Absence:    func(evidence []byte) error { return ValidateAbsence(evidence, digest) },
-		Partial:    func(evidence []byte) error { return ValidatePartial(evidence, request, digest, fingerprint) },
-		Unremoved:  func(evidence []byte) error { return ValidateUnremoved(evidence, request, digest) },
-		Unfinished: func(evidence []byte) error { return ValidateRemovalUnfinished(evidence, request, digest) },
-	}
-}
-
-func serviceEffect(verb reconciliation.Verb, evidence []byte, request Request, digest, fingerprint string) (reconciliation.EffectState, error) {
-	return lifecycle.ReadEffect(serviceReading(prepared{request, fingerprint}, digest), verb, evidence)
-}
-
-func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution, verify bool) (Request, string, error) {
-	if err := ctx.Err(); err != nil {
-		return Request{}, "", err
-	}
-	if c.runner == nil {
-		return Request{}, "", Refusal("lifecycle.state", "the managed service adapter is not configured", "")
-	}
-	request, err := DecodeRequest(execution.Block.Request, c.definition.Version)
-	if err != nil {
-		return Request{}, "", err
-	}
-	if request.CredentialsRef != "" && verify {
-		if err := ProveCredential(execution.Material, request.CredentialsRef, execution.Context, true); err != nil {
-			return Request{}, "", err
-		}
-	}
-	if request.TLS == nil {
-		return request, "", nil
-	}
-	if c.definition.Certificate == nil {
-		return Request{}, "", Refusal("lifecycle.state", "the managed service capability proves no serving certificate", "")
-	}
-	fingerprint, err := c.definition.Certificate(execution.Material, request.TLS.Secret, execution.Context, request.ServedAddresses(), c.now(), true)
-	if err != nil && verify {
-		return Request{}, "", err
-	}
-	if err != nil {
-		return request, "", nil
-	}
-	return request, fingerprint, nil
-}
-
-func (c Capability) ProveBinding(ctx context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	request, err := DecodeRequest(block.Request, c.definition.Version)
-	if err != nil {
-		return err
-	}
-	if request.CredentialsRef != "" {
-		if err := ProveCredential(material, request.CredentialsRef, contextName, false); err != nil {
-			return err
-		}
-	}
-	if request.TLS == nil {
-		return nil
-	}
-	if c.definition.Certificate == nil {
-		return Refusal("lifecycle.state", "the managed service capability proves no serving certificate", "")
-	}
-	_, err = c.definition.Certificate(material, request.TLS.Secret, contextName, request.ServedAddresses(), c.now(), false)
-	return err
-}
-
-func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request, fingerprint string) (lifecycle.RunResult, error) {
-	canonical, err := request.Canonical()
-	if err != nil {
-		return lifecycle.RunResult{}, err
-	}
-	materials := request.Materials(operation)
-	if operation == "apply" && request.CredentialsRef != "" {
-		if execution, err = c.passwordFile(execution, request); err != nil {
-			return lifecycle.RunResult{}, err
-		}
-		materials = append(materials, lifecycle.MaterialFile{Name: "htpasswd", Part: secrets.ValuePart, Secret: passwordFileMaterial, Variable: "passwordFile"})
-	}
-	values := map[string]string{}
-	if fingerprint != "" {
-		values["fingerprint"] = fingerprint
-	}
-	execution, placement, err := lifecycle.PinInstalledHost(execution, request.Placement, c.hostKeys)
-	if err != nil {
-		return lifecycle.RunResult{}, err
-	}
-	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
-		Implementation: c.definition.Implementation, Operation: operation, Variable: c.definition.Variable,
-		Canonical: canonical, Placement: placement, Materials: materials, Values: values,
-		Refusals: ReadinessRefusals(request.Kind, request.Identity.Service, request.Placement.Machine, request.BindAddress, []int{request.Port}),
-	}))
-}
-
-func (Capability) PrecedesController(reconciliation.BlockDefinition) bool { return true }
-
-// Quiescent is derived rather than probed. What consumes a managed service is
-// the Machines and installations of this same context, and a removal probes
-// every one of them, so a service whose consumers are all idle is idle too.
-// Refusing on the service's own listener would instead refuse a removal whose
-// consumers are already gone.
-func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
-	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its consumers are probed in this removal"}, nil
 }

@@ -1,7 +1,7 @@
 absent:
   apply no-effect: accepted
   removal completed: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
   absence: accepted
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:}]
   unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
@@ -17,48 +17,48 @@ absent, another request:
 absent, container left:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal evidence still reports an owned resource Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation:}]
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:}]
   unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
 absent, listener left:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal evidence still reports an owned resource Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation:}]
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:}]
   unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
 absent, root left:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal evidence still reports an owned resource Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation:}]
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:}]
   unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
 absent, started after files:
-  apply no-effect: accepted
-  removal completed: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: accepted
+  apply unknown: accepted
+  removal unknown: accepted
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation:}]
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:}]
   unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
 absent, unclaimed:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:}]
   unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
 absent, unit left:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal evidence still reports an owned resource Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation:}]
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:}]
   unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
@@ -73,24 +73,24 @@ garbage:
 nothing, unclaimed:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence reports nothing this context owns Source:<nil> Object:<nil> Field: Remediation:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence reports nothing its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present:
   apply completed: accepted
   removal no-effect: accepted
   presence: accepted
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves it complete, not partial Source:<nil> Object:<nil> Field: Remediation:}]
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, absent flag:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal evidence still reports an owned resource Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation:}]
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:}]
   unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:}]
@@ -98,17 +98,17 @@ present, another certificate:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:an artifact-server listener presented a different certificate than the operation bound Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, another image:
   apply partial: accepted
   removal partial: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the running artifact-server container is not the frozen image Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server runs an image the plan did not freeze Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: accepted
 present, another request:
   apply unknown: accepted
@@ -122,135 +122,135 @@ present, extra listener:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not cover every listener Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, http with a certificate:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:an HTTP artifact-server listener reported a certificate Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, malformed certificate:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:an artifact-server listener supplied no usable certificate fingerprint Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, moved listener:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not match its frozen listeners Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, no certificate:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:an artifact-server listener supplied no usable certificate fingerprint Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, no container:
   apply partial: accepted
   removal partial: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the running artifact-server container is not the frozen image Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server runs an image the plan did not freeze Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: accepted
 present, no content root:
   apply unknown: accepted
   removal partial: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server content root is missing Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server owns no content root Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence claims a postcondition it does not report Source:<nil> Object:<nil> Field: Remediation:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: accepted
 present, no postcondition:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, no root unclaimed:
   apply partial: accepted
   removal partial: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: accepted
 present, no status line:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:an artifact-server listener did not answer with an HTTP status line Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, one listener missing:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not cover every listener Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, renamed listener:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not match its frozen listeners Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, silent:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not cover every listener Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, stale and unclaimed:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, started before files:
   apply unknown: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server started before a file it runs from was last published Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence claims a postcondition it does not report Source:<nil> Object:<nil> Field: Remediation:}]
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
 present, unit failed:
   apply unknown: accepted
   removal partial: accepted
   presence: [{Severity:error Code:lifecycle.state Message:the artifact-server unit is not active Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence claims a postcondition it does not report Source:<nil> Object:<nil> Field: Remediation:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: accepted
 present, unit failed unclaimed:
   apply partial: accepted
   removal partial: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter did not prove removal Source:<nil> Object:<nil> Field: Remediation:}]
+  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:}]
+  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:}]
   partial: accepted
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
+  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:}]
   unfinished: accepted
