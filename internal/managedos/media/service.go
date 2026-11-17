@@ -695,3 +695,7 @@ func frozenFailure(name string, contexts []string) error {
 func failure(message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation("media.store", message, "", remediation)
 }
+
+func ValidName(name string) bool { return managedos.ValidMediaName(name) }
+
+func NormalizeDigest(value string) (string, bool) { return managedos.NormalizeMediaDigest(value) }

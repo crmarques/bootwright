@@ -229,7 +229,7 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 			return message
 		}
 	case "media add", "media delete":
-		if !mediaName(stringValue(flags, "name")) {
+		if !media.ValidName(stringValue(flags, "name")) {
 			return "--name must be a portable installer-image basename ending in .iso"
 		}
 		if path == "media add" {
@@ -365,17 +365,6 @@ func validateSecretInput(flags *pflag.FlagSet) string {
 	return ""
 }
 
-func mediaName(value string) bool {
-	if len(value) < 5 || len(value) > media.MaxMediaName || !strings.HasSuffix(value, ".iso") {
-		return false
-	}
-	stem := strings.TrimSuffix(value, ".iso")
-	if !regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$`).MatchString(stem) {
-		return false
-	}
-	return !regexp.MustCompile(`(?i)^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$`).MatchString(stem)
-}
-
 func validateMediaSource(flags *pflag.FlagSet) string {
 	file, sourceURL, urlFile := stringValue(flags, "from-file"), stringValue(flags, "from-url"), stringValue(flags, "from-url-file")
 	if given := len(slices.DeleteFunc([]string{file, sourceURL, urlFile}, func(v string) bool { return v == "" })); given != 1 {
@@ -383,11 +372,12 @@ func validateMediaSource(flags *pflag.FlagSet) string {
 	}
 	digest := stringValue(flags, "sha256")
 	if digest != "" {
-		digest = strings.TrimPrefix(digest, "sha256:")
-		if !regexp.MustCompile(`^[A-Fa-f0-9]{64}$`).MatchString(digest) {
+		normalized, valid := media.NormalizeDigest(digest)
+		if !valid || normalized == "" {
 			return "--sha256 must contain a verifiable SHA-256 digest"
 		}
-		normalizeScalar(flags, "sha256", strings.ToLower(digest))
+		digest = normalized
+		normalizeScalar(flags, "sha256", digest)
 	}
 	if file != "" {
 		return validateMediaFile(file)
