@@ -17097,7 +17097,7 @@ applies the CSI export principals' grants Go already froze instead of
 re-deriving them. One Ceph base request is derived per plan, and each caller
 gets a deep copy that refuses any field kind it cannot copy. An independent
 safety review found no blocking problem; its follow-ups are the deep copy fix
-and [B1528](m1.md#b1528).
+and [B1528](#b1528).
 
 ## X556 — Automation remainders frozen by Go
 
@@ -17144,4 +17144,17 @@ entry point and scenario, pinned before the fold, match byte for byte after
 it, and no contract moved. The artifact server now publishes its certificate
 when its request asks for TLS, which is when Go lends it, and refuses a TLS
 request without its material before any effect.
+
+## X559 — The keyring cap names its remedy
+
+### B1528
+
+Found by the independent review of X555. A keyring at its lifetime identity
+reservation cap refuses with the remedy: destroy the context's workloads,
+delete the context with its purge, and create it again. The secrets spec states
+that reservations are never retired and that a context driven by automation
+can reach the cap in months while an interactive one cannot. The exclusive
+publish port nothing called since X555 left the secret area, with the tests
+that exercised it, and the crash harness no longer tolerates stages under the
+retired identities directory.
 
