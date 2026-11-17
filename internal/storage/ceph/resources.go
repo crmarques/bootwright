@@ -19,7 +19,7 @@ const (
 
 var maxInt64 = big.NewInt(9223372036854775807)
 
-func policyRequest(c api.Catalog, policy api.Object, contextName string) (Request, error) {
+func policyRequest(c api.Catalog, policy api.Object, d derivation) (Request, error) {
 	s := policy.Spec()
 	cluster, _ := c.Find(api.CephCluster, s.Get("clusterRef").Text())
 	rule := s.Get("ruleName").Text()
@@ -34,7 +34,7 @@ func policyRequest(c api.Catalog, policy api.Object, contextName string) (Reques
 	if domain := s.Get("failureDomain").Text(); domain != "" && domain != "host" {
 		return Request{}, failure("lifecycle.unsupported", "placement policy "+policy.Name()+" selects CRUSH failure domain "+domain+"; only host is realized", "set spec.failureDomain to host or omit it; Bootwright does not support site or rack failure domains yet")
 	}
-	r, err := baseRequest(c, cluster, contextName)
+	r, err := d.base(c, cluster)
 	if err != nil {
 		return Request{}, err
 	}
@@ -47,9 +47,9 @@ func policyRequest(c api.Catalog, policy api.Object, contextName string) (Reques
 	return r, nil
 }
 
-func poolRequest(c api.Catalog, pool api.Object, contextName string) (Request, error) {
+func poolRequest(c api.Catalog, pool api.Object, d derivation) (Request, error) {
 	cluster, _ := c.Find(api.CephCluster, pool.Spec().Get("clusterRef").Text())
-	r, err := baseRequest(c, cluster, contextName)
+	r, err := d.base(c, cluster)
 	if err != nil {
 		return Request{}, err
 	}
@@ -301,7 +301,7 @@ func ratio(value api.Value) string {
 	return ""
 }
 
-func clientRequest(c api.Catalog, client api.Object, contextName string) (Request, error) {
+func clientRequest(c api.Catalog, client api.Object, d derivation) (Request, error) {
 	spec := client.Spec()
 	frozen := &Client{Access: spec.Get("access").Text(), DataPools: []string{}, Name: client.Name()}
 	var r Request
@@ -309,33 +309,33 @@ func clientRequest(c api.Catalog, client api.Object, contextName string) (Reques
 	switch {
 	case spec.Has("subvolumeRef"):
 		subvolume, _ := c.Find(api.CephSubvolume, spec.Get("subvolumeRef").Text())
-		if r, err = subvolumeRequest(c, subvolume, contextName); err != nil {
+		if r, err = subvolumeRequest(c, subvolume, d); err != nil {
 			return Request{}, err
 		}
 		frozen.Filesystem, frozen.Group, frozen.Subvolume = r.Subvolume.Filesystem, r.Subvolume.Group, r.Subvolume.Name
 	case spec.Has("filesystemRef"):
 		fs, _ := c.Find(api.CephFilesystem, spec.Get("filesystemRef").Text())
-		if r, err = filesystemRequest(c, fs, contextName); err != nil {
+		if r, err = filesystemRequest(c, fs, d); err != nil {
 			return Request{}, err
 		}
 		frozen.Filesystem = r.Filesystem.Name
 	default:
-		return poolClientRequest(c, client, contextName)
+		return poolClientRequest(c, client, d)
 	}
 	r.Action, r.Pool, r.Filesystem, r.Subvolume, r.Client = "client", nil, nil, nil, frozen
 	return WithClientCaps(r)
 }
 
-func poolClientRequest(c api.Catalog, client api.Object, contextName string) (Request, error) {
+func poolClientRequest(c api.Catalog, client api.Object, d derivation) (Request, error) {
 	pool, _ := c.Find(api.CephPool, client.Spec().Get("poolRef").Text())
-	r, err := poolRequest(c, pool, contextName)
+	r, err := poolRequest(c, pool, d)
 	if err != nil {
 		return Request{}, err
 	}
 	if r.Pool.Type == "erasure" {
 		return Request{}, failure("lifecycle.unsupported", "CephClient "+client.Name()+" names erasure-coded pool "+pool.Name()+"; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in the spec.dataPoolRef of the CephRBDImages on it; the client's caps then include that data pool")
 	}
-	dataPools, err := clientDataPools(c, client.Spec().Get("clusterRef").Text(), pool.Name(), contextName)
+	dataPools, err := clientDataPools(c, client.Spec().Get("clusterRef").Text(), pool.Name(), d)
 	if err != nil {
 		return Request{}, err
 	}
@@ -345,7 +345,7 @@ func poolClientRequest(c api.Catalog, client api.Object, contextName string) (Re
 	return WithClientCaps(r)
 }
 
-func clientDataPools(c api.Catalog, cluster, pool, contextName string) ([]string, error) {
+func clientDataPools(c api.Catalog, cluster, pool string, d derivation) ([]string, error) {
 	pools := []string{}
 	for _, image := range c.OfKind(api.CephRBDImage) {
 		spec := image.Spec()
@@ -358,7 +358,7 @@ func clientDataPools(c api.Catalog, cluster, pool, contextName string) ([]string
 	slices.Sort(pools)
 	for i, name := range pools {
 		data, _ := c.Find(api.CephPool, name)
-		if _, err := poolRequest(c, data, contextName); err != nil {
+		if _, err := poolRequest(c, data, d); err != nil {
 			return nil, err
 		}
 		pools[i] = cephcluster.PoolName(data)
@@ -367,10 +367,10 @@ func clientDataPools(c api.Catalog, cluster, pool, contextName string) ([]string
 	return pools, nil
 }
 
-func rbdImageRequest(c api.Catalog, image api.Object, contextName string) (Request, error) {
+func rbdImageRequest(c api.Catalog, image api.Object, d derivation) (Request, error) {
 	spec := image.Spec()
 	pool, _ := c.Find(api.CephPool, spec.Get("poolRef").Text())
-	r, err := poolRequest(c, pool, contextName)
+	r, err := poolRequest(c, pool, d)
 	if err != nil {
 		return Request{}, err
 	}
@@ -380,7 +380,7 @@ func rbdImageRequest(c api.Catalog, image api.Object, contextName string) (Reque
 	dataPool := spec.Get("dataPoolRef").Text()
 	if dataPool != "" {
 		data, _ := c.Find(api.CephPool, dataPool)
-		if _, err := poolRequest(c, data, contextName); err != nil {
+		if _, err := poolRequest(c, data, d); err != nil {
 			return Request{}, err
 		}
 	}
@@ -423,13 +423,13 @@ func filesystemOwner(c api.Catalog, pool api.Object) string {
 	return owner
 }
 
-func filesystemRequest(c api.Catalog, fs api.Object, contextName string) (Request, error) {
+func filesystemRequest(c api.Catalog, fs api.Object, d derivation) (Request, error) {
 	spec := fs.Spec()
 	data := filesystemDataPools(spec)
 	var r Request
 	for i, name := range append([]string{spec.Get("metadataPoolRef").Text()}, data...) {
 		pool, _ := c.Find(api.CephPool, name)
-		request, err := poolRequest(c, pool, contextName)
+		request, err := poolRequest(c, pool, d)
 		if err != nil {
 			return Request{}, err
 		}
@@ -474,10 +474,10 @@ func filesystemGroups(c api.Catalog, spec api.Value, defaultPool string) []Files
 	return groups
 }
 
-func subvolumeRequest(c api.Catalog, subvolume api.Object, contextName string) (Request, error) {
+func subvolumeRequest(c api.Catalog, subvolume api.Object, d derivation) (Request, error) {
 	spec := subvolume.Spec()
 	fs, _ := c.Find(api.CephFilesystem, spec.Get("filesystemRef").Text())
-	r, err := filesystemRequest(c, fs, contextName)
+	r, err := filesystemRequest(c, fs, d)
 	if err != nil {
 		return Request{}, err
 	}

@@ -352,7 +352,7 @@ func (c SMBCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (lif
 
 func smbDefinition(c api.Catalog, object api.Object, input lifecycle.PlanInput) (reconciliation.BlockDefinition, []string, error) {
 	cluster, _ := c.Find(api.CephCluster, object.Spec().Get("clusterRef").Text())
-	base, err := baseRequest(c, cluster, input.Context.Name)
+	base, err := planDerivation(input).base(c, cluster)
 	if err != nil {
 		return reconciliation.BlockDefinition{}, nil, err
 	}

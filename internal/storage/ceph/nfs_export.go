@@ -81,7 +81,7 @@ func nfsExportNativeOf(native api.Value, filesystem string) NFSExportNative {
 	return out
 }
 
-func nfsExportRequest(c api.Catalog, export api.Object, contextName string) (Request, error) {
+func nfsExportRequest(c api.Catalog, export api.Object, d derivation) (Request, error) {
 	name, spec := export.Name(), export.Spec()
 	var r Request
 	frozen := NFSExport{Name: name, Service: spec.Get("serviceID").Text()}
@@ -90,7 +90,7 @@ func nfsExportRequest(c api.Catalog, export api.Object, contextName string) (Req
 		if !exists {
 			return Request{}, failure("api.reference", "CephNFSExport "+name+"'s spec.objectUserRef names CephObjectUser "+ref+", which is not declared", "declare CephObjectUser "+ref+", or set spec.objectUserRef to the name of a declared CephObjectUser")
 		}
-		request, err := objectUserRequest(c, user, contextName)
+		request, err := objectUserRequest(c, user, d)
 		if err != nil {
 			return Request{}, err
 		}
@@ -98,14 +98,14 @@ func nfsExportRequest(c api.Catalog, export api.Object, contextName string) (Req
 		r, frozen.ObjectUser = request, &NFSExportObjectUser{Gateway: u.Gateway, Name: u.Name, Realm: u.Realm, Zone: u.Zone, ZoneGroup: u.ZoneGroup}
 	} else if ref := spec.Get("subvolumeRef").Text(); ref != "" {
 		subvolume, _ := c.Find(api.CephSubvolume, ref)
-		request, err := subvolumeRequest(c, subvolume, contextName)
+		request, err := subvolumeRequest(c, subvolume, d)
 		if err != nil {
 			return Request{}, err
 		}
 		r, frozen.Filesystem, frozen.Group, frozen.Subvolume = request, request.Subvolume.Filesystem, request.Subvolume.Group, request.Subvolume.Name
 	} else {
 		fs, _ := c.Find(api.CephFilesystem, spec.Get("filesystemRef").Text())
-		request, err := filesystemRequest(c, fs, contextName)
+		request, err := filesystemRequest(c, fs, d)
 		if err != nil {
 			return Request{}, err
 		}

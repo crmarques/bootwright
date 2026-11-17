@@ -33,7 +33,7 @@ func TestCoreConfigIsFrozenAcrossClusterChildrenAndChangedIntent(t *testing.T) {
 	catalog = api.NewCatalog(objects)
 	client := api.NewObject(api.CephClient, "consumer", api.Value{}, requestMap("clusterRef", "example", "poolRef", "volumes", "access", "readWrite"))
 	for _, object := range []api.Object{changed, pool, client} {
-		r, err := New(object.Kind(), nil).request(catalog, object, "synthetic")
+		r, err := New(object.Kind(), nil).request(catalog, object, contextDerivation("synthetic"))
 		if err != nil || r.Config["osd"]["osd_memory_target"] != "2147483648" || r.Config["osd"]["osd_memory_target_autotune"] != "false" ||
 			r.Config["global"]["osd_pool_default_size"] != "2" || r.Config["global"]["osd_pool_default_min_size"] != "2" {
 			t.Fatalf("%s lost frozen config: %+v %v", object.Identity(), r.Config, err)
@@ -101,7 +101,7 @@ func TestClusterSSHTransportIsFrozenForClusterAndChildren(t *testing.T) {
 			catalog = api.NewCatalog(objects)
 			client := api.NewObject(api.CephClient, "consumer", api.Value{}, requestMap("clusterRef", "example", "poolRef", "volumes", "access", "readWrite"))
 			for _, object := range []api.Object{cluster, pool, client} {
-				r, err := New(object.Kind(), nil).request(catalog, object, "synthetic")
+				r, err := New(object.Kind(), nil).request(catalog, object, contextDerivation("synthetic"))
 				if transport == "unknown" {
 					if err == nil {
 						t.Fatal("compiler accepted unknown transport")
@@ -199,7 +199,7 @@ func TestCorePoolUsesProviderReplicationCapacityAndDefaults(t *testing.T) {
 				spec = spec.With("replicated", test.replicated)
 			}
 			pool := api.NewObject(api.CephPool, "volumes", api.Value{}, spec)
-			request, err := poolRequest(catalog, pool, "synthetic")
+			request, err := poolRequest(catalog, pool, contextDerivation("synthetic"))
 			if test.refusal != "" {
 				issues := diagnostics.Of(err)
 				if len(issues) != 1 || issues[0].Code != "api.invariant" || !strings.Contains(issues[0].Message, test.refusal) || issues[0].Remediation == "" {
@@ -216,7 +216,7 @@ func TestCorePoolUsesProviderReplicationCapacityAndDefaults(t *testing.T) {
 
 func TestPoolReplicaRefusalNamesNoDistribution(t *testing.T) {
 	pool := api.NewObject(api.CephPool, "volumes", api.Value{}, requestMap("clusterRef", "example", "role", "rbd", "replicated", requestMap("size", 3, "minSize", 2)))
-	_, err := poolRequest(poolRequestCatalog(3, 3), pool, "synthetic")
+	_, err := poolRequest(poolRequestCatalog(3, 3), pool, contextDerivation("synthetic"))
 	issues := diagnostics.Of(err)
 	if len(issues) != 1 || issues[0].Code != "api.invariant" ||
 		issues[0].Message != "replication size 3 requires more than 3 OSD-bearing hosts; 3 are declared" ||

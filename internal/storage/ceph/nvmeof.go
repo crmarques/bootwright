@@ -158,10 +158,10 @@ func nvmeofDependencies(cluster api.Object, unit ServiceUnit) ([]string, error) 
 	return []string{reconciliation.BlockIdentity("ceph-pool-", name)}, nil
 }
 
-func nvmeofRequest(catalog api.Catalog, object api.Object, contextName string) (Request, error) {
+func nvmeofRequest(catalog api.Catalog, object api.Object, d derivation) (Request, error) {
 	spec := object.Spec()
 	cluster, _ := catalog.Find(api.CephCluster, spec.Get("clusterRef").Text())
-	request, err := baseRequest(catalog, cluster, contextName)
+	request, err := d.base(catalog, cluster)
 	if err != nil {
 		return Request{}, err
 	}
@@ -225,7 +225,7 @@ func nvmeofRequest(catalog api.Catalog, object api.Object, contextName string) (
 	slices.Sort(frozen.Hosts)
 	for _, namespace := range spec.Get("namespaces").Items() {
 		image, _ := catalog.Find(api.CephRBDImage, namespace.Get("imageRef").Text())
-		backing, err := rbdImageRequest(catalog, image, contextName)
+		backing, err := rbdImageRequest(catalog, image, d)
 		if err != nil {
 			return Request{}, err
 		}

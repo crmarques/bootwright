@@ -304,7 +304,7 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 	}
 	catalog := input.State.Effective()
 	for _, object := range catalog.OfKind(api.CephCluster) {
-		cluster, err := baseRequest(catalog, object, input.Context.Name)
+		cluster, err := planDerivation(input).base(catalog, object)
 		if err != nil {
 			return plan, err
 		}

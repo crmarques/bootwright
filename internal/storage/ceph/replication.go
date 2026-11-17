@@ -110,7 +110,7 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 		exclusive := []string{}
 		for i, fields := range [][2]string{{"clusterRef", "poolRef"}, {"peerClusterRef", "peerPoolRef"}} {
 			pool, _ := catalog.Find(api.CephPool, object.Spec().Get(fields[1]).Text())
-			base, err := poolRequest(catalog, pool, input.Context.Name)
+			base, err := poolRequest(catalog, pool, planDerivation(input))
 			if err != nil {
 				return plan, err
 			}
@@ -127,7 +127,7 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 			plan.Secrets = append(plan.Secrets, endpoint.HostSecretRefs...)
 		}
 		for _, image := range cephcluster.ReplicationImages(catalog, object) {
-			request, err := rbdImageRequest(catalog, image, input.Context.Name)
+			request, err := rbdImageRequest(catalog, image, planDerivation(input))
 			if err != nil {
 				return plan, err
 			}

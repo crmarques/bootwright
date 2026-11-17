@@ -69,14 +69,14 @@ func ObjectUserProvedAgainst(catalog api.Catalog, user api.Object, proofs []life
 	return ObjectUserProved(catalog, user, bound)
 }
 
-func objectUserRequest(c api.Catalog, user api.Object, contextName string) (Request, error) {
+func objectUserRequest(c api.Catalog, user api.Object, d derivation) (Request, error) {
 	name, spec := user.Name(), user.Spec()
 	ref := spec.Get("objectGatewayRef").Text()
 	gateway, exists := c.Find(api.CephObjectGateway, ref)
 	if !exists {
 		return Request{}, failure("api.reference", "CephObjectUser "+name+"'s spec.objectGatewayRef names CephObjectGateway "+ref+", which is not declared", "declare CephObjectGateway "+ref+", or set spec.objectGatewayRef to the name of a declared CephObjectGateway")
 	}
-	requests, err := gatewayRequests(c, gateway, contextName)
+	requests, err := gatewayRequests(c, gateway, d)
 	if err != nil {
 		return Request{}, err
 	}

@@ -58,7 +58,7 @@ func TestRGWExplicitSingleDaemonPerHostPlans(t *testing.T) {
 func TestPoolBudgetUsesClusterReplicaDefault(t *testing.T) {
 	pool := childOf(api.CephPool, "volumes", "role", "rbd", "replicated", requestMap(), "autoscale", requestMap("pgNumMin", 256))
 	catalog := planCatalog(3, 3, withCorePair, pool)
-	request, err := poolRequest(catalog, pool, "synthetic")
+	request, err := poolRequest(catalog, pool, contextDerivation("synthetic"))
 	if err != nil || request.Pool.Size != 2 {
 		t.Fatalf("cluster 2/2 default exceeded budget: %+v %v", request.Pool, err)
 	}
@@ -68,7 +68,7 @@ func TestPolicyRequestRefusesReplicaFloorBypass(t *testing.T) {
 	for _, protection := range []api.Value{requestMap("size", 1), requestMap("minSize", 1)} {
 		policy := childOf(api.CephPlacementPolicy, "policy", "ruleName", "synthetic", "replicated", protection)
 		catalog := planCatalog(4, 4, withCorePair, policy)
-		if _, err := policyRequest(catalog, policy, "synthetic"); err == nil {
+		if _, err := policyRequest(catalog, policy, contextDerivation("synthetic")); err == nil {
 			t.Fatal("policy with replica floor violation planned")
 		}
 	}

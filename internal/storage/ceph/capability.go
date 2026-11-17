@@ -27,30 +27,30 @@ func ClusterBlockID(cluster string) string {
 
 func (c Capability) WithProofs(proofs DependencyProofs) Capability { c.proofs = proofs; return c }
 
-func (c Capability) request(catalog api.Catalog, object api.Object, contextName string) (Request, error) {
+func (c Capability) request(catalog api.Catalog, object api.Object, d derivation) (Request, error) {
 	switch c.kind {
 	case api.CephCluster:
-		return baseRequest(catalog, object, contextName)
+		return d.base(catalog, object)
 	case api.CephPlacementPolicy:
-		return policyRequest(catalog, object, contextName)
+		return policyRequest(catalog, object, d)
 	case api.CephPool:
-		return poolRequest(catalog, object, contextName)
+		return poolRequest(catalog, object, d)
 	case api.CephClient:
-		return clientRequest(catalog, object, contextName)
+		return clientRequest(catalog, object, d)
 	case api.CephRBDImage:
-		return rbdImageRequest(catalog, object, contextName)
+		return rbdImageRequest(catalog, object, d)
 	case api.CephFilesystem:
-		return filesystemRequest(catalog, object, contextName)
+		return filesystemRequest(catalog, object, d)
 	case api.CephSubvolume:
-		return subvolumeRequest(catalog, object, contextName)
+		return subvolumeRequest(catalog, object, d)
 	case api.CephNVMeoFSubsystem:
-		return nvmeofRequest(catalog, object, contextName)
+		return nvmeofRequest(catalog, object, d)
 	case api.CephNFSExport:
-		return nfsExportRequest(catalog, object, contextName)
+		return nfsExportRequest(catalog, object, d)
 	case api.CephObjectUser:
-		return objectUserRequest(catalog, object, contextName)
+		return objectUserRequest(catalog, object, d)
 	case api.CephObjectBucket:
-		return objectBucketRequest(catalog, object, contextName)
+		return objectBucketRequest(catalog, object, d)
 	}
 	return Request{}, failure("lifecycle.unsupported", "the requested kind has no core Ceph adapter", "")
 }
@@ -65,7 +65,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	}
 	catalog := input.State.Effective()
 	for _, object := range catalog.OfKind(c.kind) {
-		requests, err := c.objectRequests(catalog, object, input.Context.Name)
+		requests, err := c.objectRequests(catalog, object, planDerivation(input))
 		if err != nil {
 			return plan, err
 		}
@@ -123,11 +123,11 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	return plan, nil
 }
 
-func (c Capability) objectRequests(catalog api.Catalog, object api.Object, contextName string) ([]Request, error) {
+func (c Capability) objectRequests(catalog api.Catalog, object api.Object, d derivation) ([]Request, error) {
 	if c.kind == api.CephObjectGateway {
-		return gatewayRequests(catalog, object, contextName)
+		return gatewayRequests(catalog, object, d)
 	}
-	request, err := c.request(catalog, object, contextName)
+	request, err := c.request(catalog, object, d)
 	if err != nil {
 		return nil, err
 	}

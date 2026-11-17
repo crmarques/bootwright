@@ -325,9 +325,9 @@ func gatewayDeadline(operation string) time.Duration {
 	return time.Duration(budget.calls*nativeCall+budget.waits*readinessWait+60) * time.Second
 }
 
-func gatewayRequests(c api.Catalog, gateway api.Object, contextName string) ([]Request, error) {
+func gatewayRequests(c api.Catalog, gateway api.Object, d derivation) ([]Request, error) {
 	cluster, _ := c.Find(api.CephCluster, gateway.Spec().Get("clusterRef").Text())
-	base, err := baseRequest(c, cluster, contextName)
+	base, err := d.base(c, cluster)
 	if err != nil {
 		return nil, err
 	}

@@ -224,7 +224,7 @@ func TestMonitoringUnitDeadline(t *testing.T) {
 			return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), auxiliaryService("prometheus", "", api.Value{}))...), "services")
 		})
 		cluster, _ := catalog.Find(api.CephCluster, "example")
-		base, err := New(api.CephCluster, nil).request(catalog, cluster, "synthetic")
+		base, err := New(api.CephCluster, nil).request(catalog, cluster, contextDerivation("synthetic"))
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
 		}

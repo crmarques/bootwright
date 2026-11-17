@@ -27,7 +27,7 @@ func TestAuthoredVersionsReachFrozenNativeRequestsWithoutCompatibilitySelection(
 				if refusals := capability.Unsupported(state); len(refusals) != 0 {
 					t.Fatal(refusals)
 				}
-				request, err := capability.request(catalog, catalog.OfKind(kind)[0], "synthetic")
+				request, err := capability.request(catalog, catalog.OfKind(kind)[0], contextDerivation("synthetic"))
 				if err != nil {
 					t.Fatal(err)
 				}

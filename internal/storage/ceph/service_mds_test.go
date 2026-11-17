@@ -24,7 +24,7 @@ func clusterRequestWith(t *testing.T, services func([]api.Value) []api.Value) (R
 			objects[i] = changed
 		}
 	}
-	return New(api.CephCluster, nil).request(api.NewCatalog(objects), changed, "synthetic")
+	return New(api.CephCluster, nil).request(api.NewCatalog(objects), changed, contextDerivation("synthetic"))
 }
 
 func TestProjectServicesKeepsMDSIdentityAndHosts(t *testing.T) {

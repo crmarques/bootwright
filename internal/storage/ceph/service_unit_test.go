@@ -92,7 +92,7 @@ func TestServiceUnitDeadlineIndependentOfHostCount(t *testing.T) {
 			return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), nfsService("files"))...), "services")
 		})
 		cluster, _ := catalog.Find(api.CephCluster, "example")
-		base, err := New(api.CephCluster, nil).request(catalog, cluster, "synthetic")
+		base, err := New(api.CephCluster, nil).request(catalog, cluster, contextDerivation("synthetic"))
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
 		}
@@ -318,7 +318,7 @@ func TestRBDMirrorUnitDeadlineAndIdentity(t *testing.T) {
 			return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), rbdMirrorRequestService())...), "services")
 		})
 		cluster, _ := catalog.Find(api.CephCluster, "example")
-		base, err := New(api.CephCluster, nil).request(catalog, cluster, "synthetic")
+		base, err := New(api.CephCluster, nil).request(catalog, cluster, contextDerivation("synthetic"))
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
 		}
@@ -416,7 +416,7 @@ func TestCrashUnitRequestGolden(t *testing.T) {
 			objects[i] = reversed
 		}
 	}
-	base, err := New(api.CephCluster, nil).request(api.NewCatalog(objects), reversed, "synthetic")
+	base, err := New(api.CephCluster, nil).request(api.NewCatalog(objects), reversed, contextDerivation("synthetic"))
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -438,7 +438,7 @@ func TestCrashUnitDeadlineAndIdentity(t *testing.T) {
 	for _, hosts := range []int{3, 6} {
 		catalog := planCatalog(hosts, hosts, nil)
 		cluster, _ := catalog.Find(api.CephCluster, "example")
-		base, err := New(api.CephCluster, nil).request(catalog, cluster, "synthetic")
+		base, err := New(api.CephCluster, nil).request(catalog, cluster, contextDerivation("synthetic"))
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
 		}

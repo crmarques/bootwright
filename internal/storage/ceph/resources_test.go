@@ -45,7 +45,7 @@ func planned(t *testing.T, catalog api.Catalog, kind api.Kind, name string) (Req
 	if !found {
 		t.Fatalf("the catalog has no %s %s", kind, name)
 	}
-	return New(kind, nil).request(catalog, object, "synthetic")
+	return New(kind, nil).request(catalog, object, contextDerivation("synthetic"))
 }
 
 func refusedWith(t *testing.T, err error, code, message, remedy string) {

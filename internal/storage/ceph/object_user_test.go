@@ -107,7 +107,7 @@ func TestObjectUserPlanAdmitsALongNameAndPropagatesGatewayRefusals(t *testing.T)
 		t.Fatalf("a 63-character user name: %v", diagnostics.Of(err))
 	}
 	catalog := planCatalog(3, 2, withPairAndHTTPRGW, objectGateway("objects"), objectUserObject("app-writer"))
-	_, gatewayErr := gatewayRequests(catalog, objectGateway("objects"), "synthetic")
+	_, gatewayErr := gatewayRequests(catalog, objectGateway("objects"), contextDerivation("synthetic"))
 	_, err := planned(t, catalog, api.CephObjectUser, "app-writer")
 	if gatewayErr == nil || err == nil || !reflect.DeepEqual(diagnostics.Of(err), diagnostics.Of(gatewayErr)) {
 		t.Fatalf("the user refused %v; its gateway refused %v", diagnostics.Of(err), diagnostics.Of(gatewayErr))

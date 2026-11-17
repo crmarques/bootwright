@@ -36,7 +36,7 @@ func HostPortRequirements(catalog api.Catalog) ([]HostPortRequirement, error) {
 		if cluster.Spec().Get("management").Text() == "external" {
 			continue
 		}
-		requests, err := (Capability{kind: api.CephCluster}).objectRequests(catalog, cluster, "")
+		requests, err := (Capability{kind: api.CephCluster}).objectRequests(catalog, cluster, contextDerivation(""))
 		if err != nil {
 			return nil, err
 		}
@@ -51,7 +51,7 @@ func HostPortRequirements(catalog api.Catalog) ([]HostPortRequirement, error) {
 		if !found || cluster.Spec().Get("management").Text() == "external" {
 			continue
 		}
-		requests, err := gatewayRequests(catalog, gateway, "")
+		requests, err := gatewayRequests(catalog, gateway, contextDerivation(""))
 		if err != nil {
 			return nil, err
 		}

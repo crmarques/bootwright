@@ -41,7 +41,7 @@ func TestTunnelBootstrapEligibilityIsAdmittedBeforeClusterAndChildRequests(t *te
 			catalog = api.NewCatalog(objects)
 			client := api.NewObject(api.CephClient, "consumer", api.Value{}, requestMap("clusterRef", "example", "poolRef", "volumes", "access", "readWrite"))
 			for _, object := range []api.Object{cluster, pool, client} {
-				request, err := New(object.Kind(), nil).request(catalog, object, "synthetic")
+				request, err := New(object.Kind(), nil).request(catalog, object, contextDerivation("synthetic"))
 				if !test.refused {
 					if err != nil || request.ClusterSSHTransport != test.transport {
 						t.Fatalf("%s request=%+v err=%v", object.Identity(), request, err)

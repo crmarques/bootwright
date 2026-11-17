@@ -22,7 +22,7 @@ func TestRequestServicesAreCanonicalAcrossAuthoredOrder(t *testing.T) {
 				objects[i] = object
 			}
 		}
-		r, err := New(api.CephCluster, nil).request(api.NewCatalog(objects), object, "synthetic")
+		r, err := New(api.CephCluster, nil).request(api.NewCatalog(objects), object, contextDerivation("synthetic"))
 		if err != nil {
 			t.Fatal(diagnostics.Of(err))
 		}
@@ -65,7 +65,7 @@ func osdRefusal(t *testing.T, change func(api.Value) api.Value) diagnostics.Diag
 			objects[i] = changed
 		}
 	}
-	_, err := New(api.CephCluster, nil).request(api.NewCatalog(objects), changed, "synthetic")
+	_, err := New(api.CephCluster, nil).request(api.NewCatalog(objects), changed, contextDerivation("synthetic"))
 	d := diagnostics.Of(err)
 	if len(d) != 1 {
 		t.Fatalf("OSD refusal: %+v", d)
@@ -152,7 +152,7 @@ func TestCatalogClusterRequestGolden(t *testing.T) {
 			objects[i] = authored
 		}
 	}
-	r, err := New(api.CephCluster, nil).request(api.NewCatalog(objects), authored, "synthetic")
+	r, err := New(api.CephCluster, nil).request(api.NewCatalog(objects), authored, contextDerivation("synthetic"))
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}

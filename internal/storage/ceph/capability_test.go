@@ -109,7 +109,7 @@ func TestUnsupportedReleaseOrTransportRefusesBeforeRegistration(t *testing.T) {
 					t.Fatalf("%s: pinned input refused: %+v", kind, refusals)
 				}
 				object := catalog.OfKind(kind)[0]
-				r, err := New(kind, nil).request(catalog, object, "synthetic")
+				r, err := New(kind, nil).request(catalog, object, contextDerivation("synthetic"))
 				if err != nil || r.ClusterSSHTransport != PinnedTransport {
 					t.Fatalf("%s: pinned request refused: %v", kind, err)
 				}

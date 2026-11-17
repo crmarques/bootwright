@@ -37,7 +37,7 @@ func TestPoolNativeNameProjectsClientFilesystemAndGateway(t *testing.T) {
 	objects = objects.WithSpec(objects.Spec().With("nativeName", api.StringValue("native-objects")))
 	gateway := objectGateway("objects", "pools", requestMap("dataPoolRef", objects.Name()))
 	catalog = planCatalog(3, 3, withPairAndRGW, objects, gateway)
-	requests, err := gatewayRequests(catalog, gateway, "synthetic")
+	requests, err := gatewayRequests(catalog, gateway, contextDerivation("synthetic"))
 	if err != nil {
 		t.Fatal(err)
 	}

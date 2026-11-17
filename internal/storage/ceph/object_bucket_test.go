@@ -153,7 +153,7 @@ func TestObjectBucketPlanRefusals(t *testing.T) {
 	_, err = planned(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data", "policy", large)), api.CephObjectBucket, "app-data")
 	refusedWith(t, err, "api.invariant", "CephObjectBucket app-data declares a policy larger than 65536 bytes of JSON", "shorten spec.policy to at most 65536 bytes of JSON")
 	catalog := planCatalog(3, 2, withPairAndHTTPRGW, objectGateway("objects"), objectUserObject("app-writer"), objectBucketObject("app-data"))
-	_, gatewayErr := gatewayRequests(catalog, objectGateway("objects"), "synthetic")
+	_, gatewayErr := gatewayRequests(catalog, objectGateway("objects"), contextDerivation("synthetic"))
 	_, err = planned(t, catalog, api.CephObjectBucket, "app-data")
 	if gatewayErr == nil || err == nil || !reflect.DeepEqual(diagnostics.Of(err), diagnostics.Of(gatewayErr)) {
 		t.Fatalf("the bucket refused %v; its gateway refused %v", diagnostics.Of(err), diagnostics.Of(gatewayErr))

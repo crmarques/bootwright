@@ -90,7 +90,7 @@ func TestClusterWithoutIngressPublishesNothing(t *testing.T) {
 func TestRequirementsNameTheMachineOfEachIngressHost(t *testing.T) {
 	catalog := delegatedCatalog(haproxyProtocolNFS(), nil)
 	cluster, _ := catalog.Find(api.CephCluster, "example")
-	requests, err := (Capability{kind: api.CephCluster}).objectRequests(catalog, cluster, "")
+	requests, err := (Capability{kind: api.CephCluster}).objectRequests(catalog, cluster, contextDerivation(""))
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}

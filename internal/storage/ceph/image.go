@@ -207,7 +207,7 @@ func (c ImageCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 	}
 	catalog := input.State.Effective()
 	for _, object := range catalog.OfKind(api.CephCluster) {
-		r, err := baseRequest(catalog, object, input.Context.Name)
+		r, err := planDerivation(input).base(catalog, object)
 		if err != nil {
 			return plan, err
 		}

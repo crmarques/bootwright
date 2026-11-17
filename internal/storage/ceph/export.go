@@ -161,7 +161,7 @@ func (c ConsumerCapability) Plan(ctx context.Context, input lifecycle.PlanInput)
 	catalog := input.State.Effective()
 	for _, obj := range catalog.OfKind(api.CephConsumer) {
 		cluster, _ := catalog.Find(api.CephCluster, obj.Spec().Get("clusterRef").Text())
-		base, err := baseRequest(catalog, cluster, input.Context.Name)
+		base, err := planDerivation(input).base(catalog, cluster)
 		if err != nil {
 			return plan, err
 		}
