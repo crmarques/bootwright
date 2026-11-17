@@ -16326,3 +16326,19 @@ Python programs are one tested file. A test holds the SNO case's static
 `workloads/` profile to the case defaults; retiring it stays on B1470 for the
 owner's decision.
 
+## X512 — One process runner in the collection
+
+### B1482
+
+Split from B1463 under [D274](backlog.md#d274) (part of audit 005 W2.5).
+`bounded_process` is the one way a collection plugin starts a process: a
+timeout stays a timeout when the reap is slow, and a leader whose descendant
+keeps a pipe open returns within a short drain instead of the whole budget.
+The six libvirt modules, the guest agent read, the managed-service and
+artifact-server inspections, the image pull and the mirror's image copy move
+off Ansible's `run_command` with an explicit environment and a bound (the
+copy's bound is the fill's per-image budget); the erase controller and its RAM
+image use `bounded_process`, which the erase kickstart now ships, and the
+second erase runner is gone. The Python site scan refuses a new `run_command`.
+An independent review found no blocking defect.
+
