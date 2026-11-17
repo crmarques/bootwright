@@ -28,8 +28,8 @@ func (s Service) executionContracts(plan reconciliation.Plan) (map[string]string
 	return contracts, nil
 }
 
-func (s Service) freezeExecutionPlan(plan reconciliation.Plan) (reconciliation.Plan, error) {
-	plan, err := plan.WithPreparation(s.preparation)
+func (s Service) freezeExecutionPlan(plan reconciliation.Plan, scope *reconciliation.PreparationScope) (reconciliation.Plan, error) {
+	plan, err := plan.WithPreparation(scope)
 	if err != nil {
 		return reconciliation.Plan{}, err
 	}

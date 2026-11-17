@@ -90,8 +90,8 @@ func isRefusal(err error) bool {
 	return errors.As(err, &refused)
 }
 
-func (s Service) additive(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, proveCustody bool) (*additiveAdmission, error) {
-	admission, err := s.addition(ctx, view, store, operation, frozen, states, proveCustody)
+func (d decider) additive(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, proveCustody bool) (*additiveAdmission, error) {
+	admission, err := d.addition(ctx, view, store, operation, frozen, states, proveCustody)
 	var refused notAnAddition
 	if errors.As(err, &refused) {
 		return admission, refused.error
@@ -99,14 +99,14 @@ func (s Service) additive(ctx context.Context, view View, store recordReader, op
 	return admission, err
 }
 
-func (s Service) addition(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, proveCustody bool) (*additiveAdmission, error) {
-	if frozen.Preparation != nil || s.preparation != nil {
-		return s.preparationAddition(ctx, view, store, operation, frozen, states, proveCustody)
+func (d decider) addition(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, proveCustody bool) (*additiveAdmission, error) {
+	if frozen.Preparation != nil || d.preparation != nil {
+		return d.preparationAddition(ctx, view, store, operation, frozen, states, proveCustody)
 	}
 	if operation.Verb != reconciliation.Apply || operation.State != reconciliation.OperationDone || inputDrift(view, operation) == "" {
 		return nil, nil
 	}
-	before, after, ok := s.compiledBoth(ctx, view, operation)
+	before, after, ok := d.compiledBoth(ctx, view, operation)
 	if !ok {
 		return nil, nil
 	}
@@ -123,10 +123,10 @@ func (s Service) addition(ctx context.Context, view View, store recordReader, op
 			"the completed apply "+operation.ID+" records no block completion for these blocks, so nothing proves it applied before it adds to it: "+strings.Join(unfinished, ", "),
 			unfinishedApplyExits(view)))
 	}
-	if err := s.refuseUnsupported(after); err != nil {
+	if err := d.planner.refuseUnsupported(after, d.preparation); err != nil {
 		return nil, refusal(err)
 	}
-	fresh, planned, err := s.planFrom(ctx, view, after)
+	fresh, planned, err := d.planner.planFrom(ctx, view, after, d.preparation)
 	if err != nil {
 		return nil, verdict(err)
 	}
@@ -147,28 +147,28 @@ func (s Service) addition(ctx context.Context, view View, store recordReader, op
 	if delta.Count(reconciliation.Added) == 0 {
 		return nil, nil
 	}
-	if err := s.refuseNewReservations(ctx, view, before, planned); err != nil {
+	if err := d.refuseNewReservations(ctx, view, before, planned); err != nil {
 		return nil, err
 	}
-	admission, err := s.admission(ctx, view, chain, held, fresh)
+	admission, err := d.admission(ctx, view, chain, held, fresh)
 	if err != nil {
 		return nil, err
 	}
 	admission.controller = planned.controller
-	if err := s.refuseUnnamedSecrets(view, chain, admission, addedSecrets); err != nil {
+	if err := d.refuseUnnamedSecrets(view, chain, admission, addedSecrets); err != nil {
 		return nil, err
 	}
 	if !proveCustody {
 		return admission, nil
 	}
-	if err := s.custodyProved(ctx, view, chain, admission.plan); err != nil {
+	if err := d.proofs.custodyProved(ctx, view, chain, admission.plan); err != nil {
 		return nil, err
 	}
 	return admission, nil
 }
 
-func (s Service) refuseNewReservations(ctx context.Context, view View, before *compilation.State, after capabilityBinding) error {
-	_, held, err := s.planFrom(ctx, view, before)
+func (d decider) refuseNewReservations(ctx context.Context, view View, before *compilation.State, after capabilityBinding) error {
+	_, held, err := d.planner.planFrom(ctx, view, before, d.preparation)
 	if err != nil {
 		return verdict(err)
 	}
@@ -184,14 +184,14 @@ func (s Service) refuseNewReservations(ctx context.Context, view View, before *c
 	return nil
 }
 
-func (s Service) refuseUnnamedSecrets(view View, chain lineage, admission *additiveAdmission, added []string) error {
+func (d decider) refuseUnnamedSecrets(view View, chain lineage, admission *additiveAdmission, added []string) error {
 	if len(added) == 0 {
 		return nil
 	}
 	var held []string
 	for _, member := range chain {
 		for _, block := range member.plan.Blocks {
-			capability, found := s.capabilities.Resolve(block.Kind, block.Implementation)
+			capability, found := d.capabilities.Resolve(block.Kind, block.Implementation)
 			referencer, names := capability.(SecretReferencer)
 			if !found || !names {
 				return refusal(failure("lifecycle.state", "the block "+block.ID+" cannot name the Secrets it references, so no Secret is added beside it", changeRemedy(view)))
@@ -211,21 +211,21 @@ func (s Service) refuseUnnamedSecrets(view View, chain lineage, admission *addit
 	return nil
 }
 
-func (s Service) compiledBoth(ctx context.Context, view View, operation operationstore.Operation) (before, after *compilation.State, ok bool) {
+func (d decider) compiledBoth(ctx context.Context, view View, operation operationstore.Operation) (before, after *compilation.State, ok bool) {
 	sources, err := view.Revision(ctx, operation.Revision)
 	if err != nil || digestOf(sources) != operation.InputDigest {
 		return nil, nil, false
 	}
-	if before, err = s.compileSources(ctx, sources); err != nil {
+	if before, err = d.sources.compileSources(ctx, sources); err != nil {
 		return nil, nil, false
 	}
-	if after, err = s.compile(ctx, view); err != nil {
+	if after, err = d.sources.compile(ctx, view); err != nil {
 		return nil, nil, false
 	}
 	return before, after, true
 }
 
-func (s Service) admission(ctx context.Context, view View, chain lineage, held, fresh reconciliation.Plan) (*additiveAdmission, error) {
+func (d decider) admission(ctx context.Context, view View, chain lineage, held, fresh reconciliation.Plan) (*additiveAdmission, error) {
 	plans := make([]reconciliation.Plan, 0, len(chain))
 	for _, member := range chain {
 		plans = append(plans, member.plan)
@@ -236,7 +236,7 @@ func (s Service) admission(ctx context.Context, view View, chain lineage, held, 
 	}
 	var references []string
 	for _, block := range added.Blocks {
-		named, err := s.admitted(ctx, held, block, view)
+		named, err := d.admitted(ctx, held, block, view)
 		if err != nil {
 			return nil, err
 		}
@@ -250,12 +250,12 @@ func (s Service) admission(ctx context.Context, view View, chain lineage, held, 
 	return &additiveAdmission{plan: added, merged: merged, secrets: references}, nil
 }
 
-func (s Service) admitted(ctx context.Context, held reconciliation.Plan, block reconciliation.Block, view View) ([]string, error) {
+func (d decider) admitted(ctx context.Context, held reconciliation.Plan, block reconciliation.Block, view View) ([]string, error) {
 	remedy := changeRemedy(view)
 	refuse := func(why string) error {
 		return refusal(failure("lifecycle.state", "the block "+block.ID+" cannot be added to the completed apply: "+why, remedy))
 	}
-	capability, found := s.capabilities.Resolve(block.Kind, block.Implementation)
+	capability, found := d.capabilities.Resolve(block.Kind, block.Implementation)
 	if !found {
 		return nil, refuse("this executable offers no implementation for it")
 	}
@@ -310,7 +310,7 @@ func changeRemedy(view View) string {
 	return "take back what it owns with " + contextCommand(name, string(reconciliation.Destroy)) + ", then run " + contextCommand(name, string(reconciliation.Apply))
 }
 
-func (s Service) additiveTransition(view View, operation operationstore.Operation, admission *additiveAdmission, selection reconciliation.Selection) (operationPlan, error) {
+func (d decider) additiveTransition(view View, operation operationstore.Operation, admission *additiveAdmission, selection reconciliation.Selection) (operationPlan, error) {
 	name := view.Identity().Name
 	selection, err := bindSelection(name, admission.plan, selection)
 	if err != nil {
@@ -397,7 +397,7 @@ func (s Service) AddsTo(ctx context.Context, name string, candidate desiredstate
 		if err != nil {
 			return err
 		}
-		if added, _ := s.deciding().additive(ctx, candidateView{View: view, inputs: candidate}, store, operation, frozen, states, false); added != nil {
+		if added, _ := s.decider(nil).additive(ctx, candidateView{View: view, inputs: candidate}, store, operation, frozen, states, false); added != nil {
 			adds = operation.ID
 		}
 		return nil

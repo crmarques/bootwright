@@ -11,9 +11,9 @@ func (d PreparationDefinition) admitsCommand(command string) bool {
 	return command == d.Command || command == string(reconciliation.Apply) && d.Automatic != nil
 }
 
-func (s Service) automaticPreparation(ctx context.Context, name string, selection reconciliation.Selection, preview bool) (Service, bool, error) {
-	if s.preparation != nil || len(s.options.Preparations) == 0 {
-		return s, false, nil
+func (s Service) automaticPreparation(ctx context.Context, name string, selection reconciliation.Selection, preview bool) (*reconciliation.PreparationScope, bool, error) {
+	if len(s.options.Preparations) == 0 {
+		return nil, false, nil
 	}
 	var scope *reconciliation.PreparationScope
 	err := s.workspace.ReadLifecycle(ctx, name, func(view View) error {
@@ -46,7 +46,7 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 		if err != nil {
 			return err
 		}
-		input := s.planInput(view, state, controller)
+		input := s.planInput(view, state, controller, nil)
 		for _, definition := range s.options.Preparations {
 			if definition.Automatic == nil {
 				continue
@@ -68,25 +68,28 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 		return nil
 	})
 	if err != nil || scope == nil {
-		return s, false, err
+		return nil, false, err
 	}
 	if selection.Until != "" {
-		return s, false, failure("lifecycle.stage", "the add-on boundary cannot be planned before preparation completes", "run "+contextCommand(name, "apply")+" to complete preparation and review the resolved installation plan before selecting --until")
+		return nil, false, failure("lifecycle.stage", "the add-on boundary cannot be planned before preparation completes", "run "+contextCommand(name, "apply")+" to complete preparation and review the resolved installation plan before selecting --until")
 	}
-	prepared, err := s.forPreparation(*scope)
+	prepared, err := s.admitPreparation(*scope)
 	return prepared, err == nil, err
 }
 
-func (s Service) applyPrepared(ctx context.Context, request ApplyRequest, selection reconciliation.Selection) (*OperationResult, error) {
-	prepared, automatic, err := s.automaticPreparation(ctx, request.ContextName, selection, false)
-	if err != nil {
-		return nil, err
+func (s Service) applyPrepared(ctx context.Context, request ApplyRequest, selection reconciliation.Selection, scope *reconciliation.PreparationScope) (*OperationResult, error) {
+	prepared, automatic := scope, false
+	if prepared == nil {
+		var err error
+		if prepared, automatic, err = s.automaticPreparation(ctx, request.ContextName, selection, false); err != nil {
+			return nil, err
+		}
 	}
-	result, err := prepared.mutate(ctx, reconciliation.Apply, request.ContextName, selection, request.Authorizations, nil, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed())
+	result, err := s.mutate(ctx, reconciliation.Apply, request.ContextName, selection, request.Authorizations, nil, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed(), prepared)
 	if err != nil || !automatic || result == nil || result.Receipt.State != string(reconciliation.OperationDone) || !selection.Stages.Selects(reconciliation.StageMachines) {
 		return result, err
 	}
-	next, err := s.mutate(ctx, reconciliation.Apply, request.ContextName, selection, request.Authorizations, nil, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed())
+	next, err := s.mutate(ctx, reconciliation.Apply, request.ContextName, selection, request.Authorizations, nil, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed(), nil)
 	if next == nil && err != nil {
 		return result, err
 	}

@@ -31,7 +31,7 @@ import (
 // one is finalized under either verb, since only its own bookkeeping is left.
 // Records that hold a block that is not done prove no completion, so they are
 // never finalized. Anything else returns no mark and keeps its decision.
-func finalization(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (operationPlan, error) {
+func finalization(ctx context.Context, view View, store decisionRecords, verb reconciliation.Verb, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (operationPlan, error) {
 	held := standingOf(operation, frozen, states)
 	switch {
 	case held.pending:
@@ -61,15 +61,15 @@ func finalization(ctx context.Context, view View, store OperationStore, verb rec
 // rewrites only the operation record's state, to the one its block records
 // give; no decision after the mark reads the evidence, reservations or Secret
 // bindings it also completes.
-func (s Service) afterFinalization(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection, marked operationPlan) (operationPlan, error) {
+func (d decider) afterFinalization(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection, marked operationPlan) (operationPlan, error) {
 	next, err := finalState(marked.plan, marked.states)
 	if err != nil {
 		return operationPlan{}, err
 	}
 	operation := marked.operation
 	operation.State = next
-	decided, err := s.decideOver(ctx, view, s.store(view), verb, selection, operation, marked.plan, marked.states, marked.basis.attempts, nil)
-	return s.withPhases(decided, err), err
+	decided, err := d.decideOver(ctx, view, d.store(view), verb, selection, operation, marked.plan, marked.states, marked.basis.attempts, nil)
+	return d.withPhases(decided, err), err
 }
 
 // finalState is the state a finalization records: the one the operation's
@@ -102,7 +102,7 @@ func holdsReservation(view View) bool {
 
 // releaseSet is every Secret binding a completed removal gives back: the one it
 // reopened, which its record names, and each binding of the applies it removed.
-func releaseSet(ctx context.Context, store OperationStore, operation operationstore.Operation) ([]string, error) {
+func releaseSet(ctx context.Context, store recordReader, operation operationstore.Operation) ([]string, error) {
 	release := joinBindings(nil, operation.Bindings...)
 	if operation.Source == "" {
 		return release, nil
@@ -127,11 +127,11 @@ func joinBindings(set []string, bindings ...string) []string {
 // again from what the context holds once it is done, so the invocation goes on
 // exactly as it would over an operation that had finalized on its own. A
 // finalization that leaves another behind refuses rather than repeating.
-func (s Service) finalizeFirst(ctx context.Context, name string, verb reconciliation.Verb, selection reconciliation.Selection, marked operationPlan) (operationPlan, ContextIdentity, error) {
+func (s Service) finalizeFirst(ctx context.Context, name string, verb reconciliation.Verb, selection reconciliation.Selection, marked operationPlan, scope *reconciliation.PreparationScope) (operationPlan, ContextIdentity, error) {
 	if err := s.finalize(ctx, name, marked); err != nil {
 		return operationPlan{}, ContextIdentity{}, err
 	}
-	decided, identity, err := s.decideShared(ctx, name, verb, selection)
+	decided, identity, err := s.decideShared(ctx, name, verb, selection, scope)
 	if err != nil {
 		return operationPlan{}, ContextIdentity{}, err
 	}

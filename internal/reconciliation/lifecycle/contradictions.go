@@ -53,7 +53,7 @@ func deletionCommand(view View) (string, bool) {
 // its effect in place and then release the binding that effect needs. It reads
 // only, under the lock the decision holds, before anything is presented,
 // bound, probed, registered or released.
-func refuseContradictions(ctx context.Context, store OperationStore, contextName string, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) error {
+func refuseContradictions(ctx context.Context, store decisionRecords, contextName string, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) error {
 	lost, err := store.LostBlockRecords(ctx, operation.ID, frozen)
 	if err != nil {
 		return err
@@ -119,7 +119,7 @@ func lostRecord(block string) string {
 // rather than skip the observation an effect that may have begun requires. A
 // failed apply whose every block is done never reaches it, because its own
 // verb finalizes it first.
-func refuseUncontinuable(ctx context.Context, store OperationStore, contextName string, operation operationstore.Operation, frozen reconciliation.Plan) error {
+func refuseUncontinuable(ctx context.Context, store decisionRecords, contextName string, operation operationstore.Operation, frozen reconciliation.Plan) error {
 	entries, err := uncontinuable(ctx, store, operation, frozen)
 	if err != nil || len(entries) == 0 {
 		return err
@@ -129,7 +129,7 @@ func refuseUncontinuable(ctx context.Context, store OperationStore, contextName 
 		reviewStatus(contextName))
 }
 
-func uncontinuable(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan) ([]string, error) {
+func uncontinuable(ctx context.Context, store decisionRecords, operation operationstore.Operation, frozen reconciliation.Plan) ([]string, error) {
 	lost, err := store.LostBlockRecords(ctx, operation.ID, frozen)
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func uncontinuable(ctx context.Context, store OperationStore, operation operatio
 // unknown removal that lost its record beside an attempt of it. A failed
 // removal holding a block not done is replaced by a fresh removal, which reads
 // no block record of it, so a record it lost contradicts nothing that follows.
-func recordContradictions(ctx context.Context, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) ([]string, error) {
+func recordContradictions(ctx context.Context, store decisionRecords, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) ([]string, error) {
 	if operation.State == reconciliation.OperationDone {
 		return unfinishedOver(ctx, store, operation, frozen, states)
 	}

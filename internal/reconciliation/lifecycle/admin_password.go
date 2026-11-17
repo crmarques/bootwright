@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
-func (s Service) AdministratorPassword(ctx context.Context, contextName, cluster, block, seed string) (secretstore.ProducedMaterial, bool, error) {
+func (s AdminCredentialService) AdministratorPassword(ctx context.Context, contextName, cluster, block, seed string) (secretstore.ProducedMaterial, bool, error) {
 	read := func(output string) (secretstore.ProducedMaterial, bool, error) {
 		return s.binder.ReadProduced(ctx, custody.ReadProducedRequest{ContextName: contextName, Block: block, Name: output})
 	}

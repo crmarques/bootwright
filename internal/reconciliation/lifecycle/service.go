@@ -62,7 +62,6 @@ type Options struct {
 }
 
 type Service struct {
-	preparation  *reconciliation.PreparationScope
 	workspace    Workspace
 	compiler     Compiler
 	binder       SecretBinder
@@ -71,7 +70,6 @@ type Service struct {
 	guard        ExecutionGuard
 	capabilities CapabilityResolver
 	options      Options
-	compiled     *compilations
 }
 
 func New(workspace Workspace, compiler Compiler, binder SecretBinder, host HostIdentity, automation AutomationIdentity, guard ExecutionGuard, capabilities CapabilityResolver, options Options) Service {
@@ -82,25 +80,33 @@ func (s Service) available(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if s.workspace == nil || s.compiler == nil || s.binder == nil || s.host == nil || s.automation == nil || s.guard == nil || s.capabilities == nil {
-		return availability.ErrNotImplemented
-	}
-	if s.options.Clock == nil || s.options.Entropy == nil || s.options.Operations == nil || s.options.EffectBearing == nil {
+	if !s.configured() {
 		return availability.ErrNotImplemented
 	}
 	return nil
 }
 
+func (s Service) configured() bool {
+	if s.workspace == nil || s.compiler == nil || s.binder == nil || s.host == nil || s.automation == nil || s.guard == nil || s.capabilities == nil {
+		return false
+	}
+	return s.options.Clock != nil && s.options.Entropy != nil && s.options.Operations != nil && s.options.EffectBearing != nil
+}
+
 // resolve fixes the context this invocation acts on. An omitted name uses the
 // invoking user's selection and refuses a stale marker.
 func (s Service) resolve(ctx context.Context, name string) (string, error) {
+	return resolveContext(ctx, s.options.Selection, name)
+}
+
+func resolveContext(ctx context.Context, selection CurrentSelection, name string) (string, error) {
 	if name != "" {
 		return name, nil
 	}
-	if s.options.Selection == nil {
+	if selection == nil {
 		return "", failure("context.state", "current context selection is not configured", "")
 	}
-	selected, err := s.options.Selection(ctx)
+	selected, err := selection(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -116,6 +122,10 @@ func (s Service) store(view View) OperationStore {
 }
 
 func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, error) {
+	return s.planWithin(ctx, request, nil)
+}
+
+func (s Service) planWithin(ctx context.Context, request PlanRequest, scope *reconciliation.PreparationScope) (*PlanResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
@@ -127,22 +137,23 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 	if err != nil {
 		return nil, err
 	}
-	s, _, err = s.automaticPreparation(ctx, name, selection, true)
-	if err != nil {
-		return nil, err
+	if scope == nil {
+		if scope, _, err = s.automaticPreparation(ctx, name, selection, true); err != nil {
+			return nil, err
+		}
 	}
 	var result *PlanResult
 	var decided operationPlan
 	var read basis
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
-		s := s.deciding()
-		previewed, from, durable, err := s.preview(ctx, view, selection)
+		decision := s.decider(scope)
+		previewed, from, durable, err := s.preview(ctx, decision, view, selection)
 		if err != nil {
 			return err
 		}
 		result, decided, read = previewed, from, durable
 		if s.options.PlanInspection != nil && decided.verb == reconciliation.Apply && !result.Finalizes {
-			state, err := s.compile(ctx, view)
+			state, err := decision.sources.compile(ctx, view)
 			if err != nil {
 				return err
 			}
@@ -167,8 +178,8 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 // stops at the decision: it allocates no identity and writes nothing. It also
 // returns that decision and the durable state it was read from, before any
 // finalization it previews.
-func (s Service) preview(ctx context.Context, view View, selection reconciliation.Selection) (*PlanResult, operationPlan, basis, error) {
-	decided, verb, err := s.decideAs(ctx, view, "", selection)
+func (s Service) preview(ctx context.Context, decision decider, view View, selection reconciliation.Selection) (*PlanResult, operationPlan, basis, error) {
+	decided, verb, err := decision.decideAs(ctx, view, "", selection)
 	if err != nil {
 		return nil, operationPlan{}, basis{}, err
 	}
@@ -178,7 +189,7 @@ func (s Service) preview(ctx context.Context, view View, selection reconciliatio
 	}
 	marked, finalizes := decided, decided.finalize
 	if finalizes {
-		if decided, err = s.afterFinalization(ctx, view, verb, decideSelection, decided); err != nil {
+		if decided, err = decision.afterFinalization(ctx, view, verb, decideSelection, decided); err != nil {
 			return nil, operationPlan{}, basis{}, err
 		}
 	}

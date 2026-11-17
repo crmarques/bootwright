@@ -46,7 +46,11 @@ func validPreparationDefinition(d PreparationDefinition) bool {
 }
 
 func (s Service) preparationDefinition(kind string) (PreparationDefinition, bool) {
-	for _, definition := range s.options.Preparations {
+	return preparationDefinitionOf(s.options.Preparations, kind)
+}
+
+func preparationDefinitionOf(definitions []PreparationDefinition, kind string) (PreparationDefinition, bool) {
+	for _, definition := range definitions {
 		if definition.Kind == kind {
 			return definition, true
 		}
@@ -55,56 +59,49 @@ func (s Service) preparationDefinition(kind string) (PreparationDefinition, bool
 }
 
 func (s Service) Prepare(ctx context.Context, request PrepareRequest) (*OperationResult, error) {
-	definition, found := s.preparationDefinition(request.Kind)
-	if !found {
-		return nil, failure("lifecycle.unsupported", "the preparation owner is not registered", "")
-	}
-	scope := reconciliation.PreparationScope{Kind: request.Kind, Command: definition.Command, Targets: slices.Clone(request.Targets), PreparePrerequisites: request.PreparePrerequisites}
-	slices.Sort(scope.Targets)
-	scope.Targets = slices.Compact(scope.Targets)
-	scoped, err := s.forPreparation(scope)
+	scope, err := s.requestedPreparation(request)
 	if err != nil {
 		return nil, err
 	}
-	return scoped.Apply(ctx, ApplyRequest{ContextName: request.ContextName, SkipConfirmation: request.SkipConfirmation})
+	return s.applyWithin(ctx, ApplyRequest{ContextName: request.ContextName, SkipConfirmation: request.SkipConfirmation}, scope)
 }
 
 func (s Service) PlanPreparation(ctx context.Context, request PrepareRequest) (*PlanResult, error) {
+	scope, err := s.requestedPreparation(request)
+	if err != nil {
+		return nil, err
+	}
+	return s.planWithin(ctx, PlanRequest{ContextName: request.ContextName}, scope)
+}
+
+func (s Service) requestedPreparation(request PrepareRequest) (*reconciliation.PreparationScope, error) {
 	definition, found := s.preparationDefinition(request.Kind)
 	if !found {
 		return nil, failure("lifecycle.unsupported", "the preparation owner is not registered", "")
 	}
 	targets := slices.Clone(request.Targets)
 	slices.Sort(targets)
-	targets = slices.Compact(targets)
-	scoped, err := s.forPreparation(reconciliation.PreparationScope{Kind: request.Kind, Command: definition.Command, Targets: targets, PreparePrerequisites: request.PreparePrerequisites})
-	if err != nil {
-		return nil, err
-	}
-	return scoped.Plan(ctx, PlanRequest{ContextName: request.ContextName})
+	return s.admitPreparation(reconciliation.PreparationScope{Kind: request.Kind, Command: definition.Command, Targets: slices.Compact(targets), PreparePrerequisites: request.PreparePrerequisites})
 }
 
-func (s Service) forPreparation(scope reconciliation.PreparationScope) (Service, error) {
+func (s Service) admitPreparation(scope reconciliation.PreparationScope) (*reconciliation.PreparationScope, error) {
 	if err := scope.Validate(); err != nil {
-		return Service{}, failure("lifecycle.state", err.Error(), "")
+		return nil, failure("lifecycle.state", err.Error(), "")
 	}
 	definition, found := s.preparationDefinition(scope.Kind)
 	if !found || !validPreparationDefinition(definition) || !definition.admitsCommand(scope.Command) {
-		return Service{}, failure("lifecycle.unsupported", "this executable has no registered preparation for "+scope.Kind, "")
+		return nil, failure("lifecycle.unsupported", "this executable has no registered preparation for "+scope.Kind, "")
 	}
-	s.preparation = &scope
-
-	s.options.EffectBearing = definition.Bearing
-	return s, nil
+	return &scope, nil
 }
 
-func (s Service) planningBindings() []CapabilityBinding {
-	if s.preparation == nil {
+func (s Service) planningBindings(scope *reconciliation.PreparationScope) []CapabilityBinding {
+	if scope == nil {
 		return s.capabilities.Bindings()
 	}
-	definition, _ := s.preparationDefinition(s.preparation.Kind)
+	definition, _ := s.preparationDefinition(scope.Kind)
 	bindings := slices.Clone(definition.Bindings)
-	if s.preparation.PreparePrerequisites {
+	if scope.PreparePrerequisites {
 		bindings = append(bindings, definition.Prerequisites...)
 	}
 	return bindings
@@ -141,8 +138,8 @@ func (s Service) preparationOwned(ctx context.Context, view View) (reconciliatio
 	return chain.plan()
 }
 
-func (s Service) retainPreparedOwnership(ctx context.Context, view View, definitions []reconciliation.BlockDefinition) ([]reconciliation.BlockDefinition, error) {
-	if s.preparation == nil {
+func (s Service) retainPreparedOwnership(ctx context.Context, view View, definitions []reconciliation.BlockDefinition, scope *reconciliation.PreparationScope) ([]reconciliation.BlockDefinition, error) {
+	if scope == nil {
 		return definitions, nil
 	}
 	owned, err := s.preparationOwned(ctx, view)
@@ -165,32 +162,31 @@ func (s Service) retainPreparedOwnership(ctx context.Context, view View, definit
 }
 
 func (s Service) validatePreparationScope(ctx context.Context, input PlanInput) error {
-	if s.preparation == nil {
+	if input.Preparation == nil {
 		return nil
 	}
-	definition, _ := s.preparationDefinition(s.preparation.Kind)
-	input.Preparation = s.preparation
-	return definition.Validate(ctx, input, *s.preparation)
+	definition, _ := s.preparationDefinition(input.Preparation.Kind)
+	return definition.Validate(ctx, input, *input.Preparation)
 }
 
-func (s Service) admitPreparationCommand(frozen reconciliation.Plan, operation operationstore.Operation) error {
+func (d decider) admitPreparationCommand(frozen reconciliation.Plan, operation operationstore.Operation) error {
 	if operation.Verb != reconciliation.Apply || operation.State == reconciliation.OperationDone {
 		return nil
 	}
-	if reflect.DeepEqual(frozen.Preparation, s.preparation) {
+	if reflect.DeepEqual(frozen.Preparation, d.preparation) {
 		return nil
 	}
 	if frozen.Preparation != nil {
-		return failure("lifecycle.state", "the unfinished operation is a frozen preparation and cannot become an installation", s.preparationCommand(operation.Context, frozen))
+		return failure("lifecycle.state", "the unfinished operation is a frozen preparation and cannot become an installation", d.preparationCommand(operation.Context, frozen))
 	}
 	return failure("lifecycle.state", "finish or remove the current operation before starting preparation", "continue its recorded command or destroy it with its original executable")
 }
 
-func (s Service) preparationCommand(name string, plan reconciliation.Plan) string {
+func (d decider) preparationCommand(name string, plan reconciliation.Plan) string {
 	if plan.Preparation == nil {
 		return contextCommand(name, string(plan.Verb), authorizing(plan)...)
 	}
-	definition, ok := s.preparationDefinition(plan.Preparation.Kind)
+	definition, ok := d.preparationDefinition(plan.Preparation.Kind)
 	if !ok {
 		return "use the executable that registered this preparation"
 	}
@@ -204,8 +200,8 @@ func (s Service) preparationCommand(name string, plan reconciliation.Plan) strin
 	return contextCommand(name, definition.Command, flags...)
 }
 
-func (s Service) preparationAddition(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, proveCustody bool) (*additiveAdmission, error) {
-	if operation.Verb != reconciliation.Apply || operation.State != reconciliation.OperationDone || (frozen.Preparation == nil && s.preparation == nil) {
+func (d decider) preparationAddition(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, proveCustody bool) (*additiveAdmission, error) {
+	if operation.Verb != reconciliation.Apply || operation.State != reconciliation.OperationDone || (frozen.Preparation == nil && d.preparation == nil) {
 		return nil, nil
 	}
 	if incomplete, err := unfinishedOver(ctx, store, operation, frozen, states); err != nil {
@@ -213,22 +209,22 @@ func (s Service) preparationAddition(ctx context.Context, view View, store recor
 	} else if len(incomplete) != 0 {
 		return nil, refusal(failure("lifecycle.state", "preparation has incomplete effects", unfinishedApplyExits(view)))
 	}
-	state, err := s.compile(ctx, view)
+	state, err := d.sources.compile(ctx, view)
 	if err != nil {
 		return nil, err
 	}
 	var before *compilation.State
 	if inputDrift(view, operation) != "" {
-		previous, _, ok := s.compiledBoth(ctx, view, operation)
+		previous, _, ok := d.compiledBoth(ctx, view, operation)
 		if !ok {
 			return nil, refusal(failure("lifecycle.state", "the preparation input cannot be compared with its recorded revision", changeRemedy(view)))
 		}
 		before = previous
 	}
-	if err := s.refuseUnsupported(state); err != nil {
+	if err := d.planner.refuseUnsupported(state, d.preparation); err != nil {
 		return nil, refusal(err)
 	}
-	fresh, binding, err := s.planFrom(ctx, view, state)
+	fresh, binding, err := d.planner.planFrom(ctx, view, state, d.preparation)
 	if err != nil {
 		return nil, verdict(err)
 	}
@@ -248,14 +244,14 @@ func (s Service) preparationAddition(ctx context.Context, view View, store recor
 		return nil, nil
 	}
 	scope := frozen.Preparation
-	if s.preparation != nil {
-		scope = s.preparation
+	if d.preparation != nil {
+		scope = d.preparation
 	}
-	definition, found := s.preparationDefinition(scope.Kind)
+	definition, found := d.preparationDefinition(scope.Kind)
 	if !found || !validPreparationDefinition(definition) || !definition.admitsCommand(scope.Command) {
 		return nil, refusal(failure("lifecycle.unsupported", "the preparation owner is not registered or is incomplete", ""))
 	}
-	if err := definition.Advance(ctx, PreparationAdvance{AppliedEvidence: s.planInput(view, state, binding.controller).AppliedEvidence, Scope: *scope, Context: view.Identity(), State: state, Before: before, Owned: owned, Fresh: fresh}); err != nil {
+	if err := definition.Advance(ctx, PreparationAdvance{AppliedEvidence: d.planner.planInput(view, state, binding.controller, d.preparation).AppliedEvidence, Scope: *scope, Context: view.Identity(), State: state, Before: before, Owned: owned, Fresh: fresh}); err != nil {
 		return nil, verdict(err)
 	}
 	plans := make([]reconciliation.Plan, 0, len(chain))
@@ -272,7 +268,7 @@ func (s Service) preparationAddition(ctx context.Context, view View, store recor
 	}
 	admission := &additiveAdmission{plan: added, merged: merged, secrets: binding.secrets, controller: binding.controller, preparedBinding: &binding}
 	if proveCustody {
-		if err := s.custodyProved(ctx, view, chain, added); err != nil {
+		if err := d.proofs.custodyProved(ctx, view, chain, added); err != nil {
 			return nil, err
 		}
 	}

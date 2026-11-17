@@ -287,7 +287,7 @@ func TestARebindDuringALineageRemovalNamesOnlyWhatTheRootBindingHolds(t *testing
 	}
 	var decided operationPlan
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) (decideErr error) {
-		decided, decideErr = h.service.decide(ctx, view, reconciliation.Destroy, reconciliation.Selection{})
+		decided, decideErr = h.service.decider(nil).decide(ctx, view, reconciliation.Destroy, reconciliation.Selection{})
 		return decideErr
 	})
 	if err != nil || decided.reopen != f.root.Bindings[0] {
@@ -456,7 +456,7 @@ func TestAPlanOfAnAdditiveApplyWarnsOverTheRemovalOfItsWholeLineage(t *testing.T
 	f := newLineageFixture(t, h, consumerDefinition())
 	var decided operationPlan
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) (decideErr error) {
-		decided, decideErr = h.service.decide(ctx, view, reconciliation.Apply, reconciliation.Selection{})
+		decided, decideErr = h.service.decider(nil).decide(ctx, view, reconciliation.Apply, reconciliation.Selection{})
 		return decideErr
 	})
 	if err != nil || decided.fresh || decided.operation.ID != f.head.ID {

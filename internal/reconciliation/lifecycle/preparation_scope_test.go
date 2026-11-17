@@ -223,3 +223,20 @@ func TestPreparationAdditionRefusesForeignReservationBeforeEffects(t *testing.T)
 		t.Fatal("refused reservation changed ownership or reached an adapter")
 	}
 }
+
+func TestAPreparationJudgesUnclaimedObjectsByItsOwnEffectBearing(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := prepareHarness(t, "inventory")
+	h.service.options.Preparations[0].Bearing = func(object api.Object) (Bearing, bool) {
+		return Bearing{Reason: "the preparation bears every object"}, object.Kind() == api.Environment
+	}
+	if _, err := h.service.Plan(ctx, PlanRequest{ContextName: testContextName}); err != nil {
+		t.Fatalf("an ordinary plan = %v: %+v", err, diagnostics.Of(err))
+	}
+	_, err := h.service.PlanPreparation(ctx, requestPreparation())
+	refused := diagnostics.Of(err)
+	if len(refused) != 1 || refused[0].Code != "lifecycle.unsupported" || refused[0].Message != "the preparation bears every object" {
+		t.Fatalf("a preparation's plan = %v: %+v, want its own bearing's refusal", err, refused)
+	}
+}

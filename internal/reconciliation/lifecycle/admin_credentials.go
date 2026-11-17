@@ -8,6 +8,7 @@ import (
 	"maps"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -39,13 +40,52 @@ type credentialBasis struct {
 	output, user, revision, binding string
 }
 
-func (s Service) UpdateAdminCredentials(ctx context.Context, request UpdateAdminCredentialsRequest) (*UpdateAdminCredentialsResult, error) {
+type AdminCredentialService struct {
+	workspace       Workspace
+	compiler        Compiler
+	binder          SecretBinder
+	capabilities    CapabilityResolver
+	operations      OperationStoreFactory
+	execution       adminExecution
+	begin           BeginInvocation
+	selection       CurrentSelection
+	confirmer       Confirmer
+	passwordMatches func([]byte, []byte) bool
+	configured      bool
+}
+
+func (s Service) AdminCredentials() AdminCredentialService {
+	return AdminCredentialService{
+		workspace: s.workspace, compiler: s.compiler, binder: s.binder, capabilities: s.capabilities, operations: s.options.Operations, execution: s,
+		begin: s.options.BeginInvocation, selection: s.options.Selection, confirmer: s.options.Confirmer, passwordMatches: s.options.PasswordMatches, configured: s.configured(),
+	}
+}
+
+func (s AdminCredentialService) available(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !s.configured {
+		return availability.ErrNotImplemented
+	}
+	return nil
+}
+
+func (s AdminCredentialService) resolve(ctx context.Context, name string) (string, error) {
+	return resolveContext(ctx, s.selection, name)
+}
+
+func (s AdminCredentialService) store(view View) OperationStore {
+	return s.operations(view.Operations(), view.Logs())
+}
+
+func (s AdminCredentialService) UpdateAdminCredentials(ctx context.Context, request UpdateAdminCredentialsRequest) (*UpdateAdminCredentialsResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
-	if s.options.BeginInvocation != nil {
+	if s.begin != nil {
 		var release func()
-		ctx, release = s.options.BeginInvocation(ctx)
+		ctx, release = s.begin(ctx)
 		defer release()
 	}
 	name, err := s.resolve(ctx, request.ContextName)
@@ -72,12 +112,12 @@ func (s Service) UpdateAdminCredentials(ctx context.Context, request UpdateAdmin
 			material[item.Version.Declaration.Name] = item.Material
 		}
 	}
-	if !request.SkipConfirmation && s.options.Confirmer != nil {
-		if err := s.options.Confirmer.Confirm(ctx, "update administrator credentials in context "+name, request.Name); err != nil {
+	if !request.SkipConfirmation && s.confirmer != nil {
+		if err := s.confirmer.Confirm(ctx, "update administrator credentials in context "+name, request.Name); err != nil {
 			return nil, err
 		}
 	}
-	located, err := s.approvedRuntime(ctx)
+	located, err := s.execution.approvedRuntime(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +129,7 @@ func (s Service) UpdateAdminCredentials(ctx context.Context, request UpdateAdmin
 		if current.operation.ID != basis.operation.ID || current.binding != basis.binding || current.block.RequestDigest != basis.block.RequestDigest || tx.Identity().Revision != basis.revision {
 			return failure("lifecycle.state", "the cluster's credential update basis changed", "repeat the credential update against the current context")
 		}
-		return s.withPython(ctx, located, func(launch prerequisites.PythonLaunch) error {
+		return s.execution.withPython(ctx, located, func(launch prerequisites.PythonLaunch) error {
 			return s.updateAdminCredential(ctx, tx, current, material, launch)
 		})
 	})
@@ -99,7 +139,7 @@ func (s Service) UpdateAdminCredentials(ctx context.Context, request UpdateAdmin
 	return &UpdateAdminCredentialsResult{Context: name, Cluster: request.Name, User: basis.user}, nil
 }
 
-func (s Service) credentialBasis(ctx context.Context, view View, name string) (credentialBasis, error) {
+func (s AdminCredentialService) credentialBasis(ctx context.Context, view View, name string) (credentialBasis, error) {
 	refuse := func() (credentialBasis, error) {
 		return credentialBasis{}, failure("access.unavailable", "administrator credential updates require a completed apply for cluster "+name, "complete the cluster's apply before updating its credentials")
 	}
@@ -145,7 +185,7 @@ func (s Service) credentialBasis(ctx context.Context, view View, name string) (c
 	if err != nil {
 		return credentialBasis{}, err
 	}
-	proofs, err := s.objectEvidenceAt(ctx, view, string(cluster.Kind()), name, evidenceOwners)
+	proofs, err := s.execution.objectEvidenceAt(ctx, view, string(cluster.Kind()), name, evidenceOwners)
 	if err != nil {
 		return credentialBasis{}, err
 	}
@@ -174,7 +214,7 @@ func (s Service) credentialBasis(ctx context.Context, view View, name string) (c
 	return refuse()
 }
 
-func (s Service) updateAdminCredential(ctx context.Context, tx Transaction, basis credentialBasis, material map[string]secrets.Material, launch prerequisites.PythonLaunch) error {
+func (s AdminCredentialService) updateAdminCredential(ctx context.Context, tx Transaction, basis credentialBasis, material map[string]secrets.Material, launch prerequisites.PythonLaunch) error {
 	execution, err := s.adminCredentialExecution(ctx, tx, basis, material, launch)
 	if err != nil {
 		return err
@@ -253,7 +293,7 @@ func (s Service) updateAdminCredential(ctx context.Context, tx Transaction, basi
 		candidate := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: data})
 		clear(data)
 		defer candidate.Clear()
-		if err := s.publishProduced(ctx, tx, basis.block, []Produced{{Name: basis.output + "-update", Material: candidate, Identity: identity}}, false); err != nil {
+		if err := s.execution.publishProduced(ctx, tx, basis.block, []Produced{{Name: basis.output + "-update", Material: candidate, Identity: identity}}, false); err != nil {
 			return err
 		}
 	}
@@ -269,10 +309,10 @@ func (s Service) updateAdminCredential(ctx context.Context, tx Transaction, basi
 	}
 	password := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(update.Password)})
 	defer password.Clear()
-	return s.publishProduced(ctx, tx, basis.block, []Produced{{Name: basis.output, Material: password, Identity: identity}}, false)
+	return s.execution.publishProduced(ctx, tx, basis.block, []Produced{{Name: basis.output, Material: password, Identity: identity}}, false)
 }
 
-func (s Service) adminProduced(ctx context.Context, tx Transaction, block, name string) (secretstore.ProducedMaterial, bool, error) {
+func (s AdminCredentialService) adminProduced(ctx context.Context, tx Transaction, block, name string) (secretstore.ProducedMaterial, bool, error) {
 	var value secretstore.ProducedMaterial
 	var found bool
 	err := tx.Secrets(ctx, func(selected secretstore.Context, area secretstore.Area) error {
@@ -290,7 +330,7 @@ func credentialDigest(material secrets.Material) string {
 	return hex.EncodeToString(digest[:])
 }
 
-func (s Service) validAdminUpdate(update adminUpdate) bool {
+func (s AdminCredentialService) validAdminUpdate(update adminUpdate) bool {
 	if len(update.Previous) != 64 || len(update.Password) < 23 || len(update.Password) > 64 || len(update.Guard) == 0 || len(update.Guard) > 4096 || !json.Valid(update.Guard) {
 		return false
 	}
@@ -302,10 +342,10 @@ func (s Service) validAdminUpdate(update adminUpdate) bool {
 			return false
 		}
 	}
-	return s.options.PasswordMatches != nil && s.options.PasswordMatches([]byte(update.Password), []byte(update.Hash))
+	return s.passwordMatches != nil && s.passwordMatches([]byte(update.Password), []byte(update.Hash))
 }
 
-func (s Service) adminCredentialExecution(ctx context.Context, tx Transaction, basis credentialBasis, material map[string]secrets.Material, launch prerequisites.PythonLaunch) (Execution, error) {
+func (s AdminCredentialService) adminCredentialExecution(ctx context.Context, tx Transaction, basis credentialBasis, material map[string]secrets.Material, launch prerequisites.PythonLaunch) (Execution, error) {
 	store := s.store(tx)
 	owner, err := routedIn(ctx, store, basis.operation, basis.block.ID)
 	if err != nil {
@@ -315,7 +355,7 @@ func (s Service) adminCredentialExecution(ctx context.Context, tx Transaction, b
 	if err != nil {
 		return Execution{}, err
 	}
-	proved, err := s.applyDependencies(ctx, store, owner.ID, basis.block.ID)
+	proved, err := s.execution.applyDependencies(ctx, store, owner.ID, basis.block.ID)
 	if err != nil {
 		return Execution{}, err
 	}
@@ -323,7 +363,7 @@ func (s Service) adminCredentialExecution(ctx context.Context, tx Transaction, b
 		ApplyOperation: owner.ID, ApplyRegistered: owner.Created, PreviousEvidence: own.Evidence, Proved: proved, ApplyProved: proved,
 		Material: maps.Clone(material), Launch: launch,
 		LocateTool: func(inner context.Context, tool evidence.InstalledTool) (string, error) {
-			return s.locateTool(inner, store, tx.Controller(), tx.Identity().Name, basis.operation, basis.plan, tool)
+			return s.execution.locateTool(inner, store, tx.Controller(), tx.Identity().Name, basis.operation, basis.plan, tool)
 		},
 	}
 	if execution.Material == nil {

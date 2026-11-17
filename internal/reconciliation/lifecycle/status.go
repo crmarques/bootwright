@@ -225,7 +225,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 			Revision: view.Identity().Revision, Environment: environment,
 			Files: report.Counts.FilesSeen, Objects: report.Counts.ObjectsDecoded,
 		}
-		claimed, refused := s.capabilityKinds(), Identities(s.unsupportedRefusals(state))
+		claimed, refused := s.capabilityKinds(), Identities(s.unsupportedRefusals(state, nil))
 		result.Clusters = clusterSummaries(catalog, api.ContainerClusterCategory, claimed, refused)
 		result.StorageClusters = storageSummaries(catalog, claimed, refused)
 		result.Shared = refusedServices(serviceSummaries(catalog, claimed, s.options.EffectBearing), refused)

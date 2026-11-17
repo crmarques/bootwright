@@ -42,8 +42,8 @@ func lifecycleFileClasses() map[string]string {
 
 func lifecyclePlannerEntries() []string {
 	return []string{
-		"Service.decideAs", "Service.decideFrom", "Service.decideOver", "Service.decideBy", "Service.freshApply",
-		"Service.freshDestroy", "Service.supersede", "Service.planFrom", "Service.removalOf", "Service.additive",
+		"decider.decideAs", "decider.decideFrom", "decider.decideOver", "decider.decideBy", "decider.freshApply",
+		"Service.freshDestroy", "decider.supersede", "Service.planFrom", "Service.removalOf", "decider.additive",
 		"Service.computePhases", "Service.presentation", "planPreview", "authorize",
 	}
 }
@@ -78,8 +78,8 @@ func lifecycleExecutorEntries() []string {
 
 func lifecycleReplanningTargets() []string {
 	return []string{
-		"Service.planFrom", "Service.freshApply", "Service.freshDestroy", "Service.removalOf", "Service.computePhases",
-		"Service.additive", "Service.decideFrom", "Service.decideOver", "Service.decideBy", "Service.decideAs",
+		"Service.planFrom", "decider.freshApply", "Service.freshDestroy", "Service.removalOf", "Service.computePhases",
+		"decider.additive", "decider.decideFrom", "decider.decideOver", "decider.decideBy", "decider.decideAs",
 	}
 }
 

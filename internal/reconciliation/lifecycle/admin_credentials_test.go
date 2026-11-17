@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -98,7 +99,7 @@ func TestAdminCredentialUpdateReusesCandidateAfterLostReplyAndPublicationFailure
 				}
 			}
 			request := UpdateAdminCredentialsRequest{ContextName: testContextName, Name: "edge", SkipConfirmation: true}
-			if result, err := h.service.UpdateAdminCredentials(context.Background(), request); err == nil || result != nil {
+			if result, err := h.service.AdminCredentials().UpdateAdminCredentials(context.Background(), request); err == nil || result != nil {
 				t.Fatalf("first update = %+v %v", result, err)
 			}
 			first := capability.remote
@@ -106,13 +107,13 @@ func TestAdminCredentialUpdateReusesCandidateAfterLostReplyAndPublicationFailure
 				t.Fatal("unproved update published as active")
 			}
 			h.binder.kill = nil
-			if _, err := h.service.UpdateAdminCredentials(context.Background(), request); err != nil {
+			if _, err := h.service.AdminCredentials().UpdateAdminCredentials(context.Background(), request); err != nil {
 				t.Fatal(err)
 			}
 			if capability.prepares != 1 || capability.remote != first || h.binder.produced["credential-cluster/admin-password"] != first {
 				t.Fatal("retry regenerated or lost candidate")
 			}
-			if _, err := h.service.UpdateAdminCredentials(context.Background(), request); err != nil {
+			if _, err := h.service.AdminCredentials().UpdateAdminCredentials(context.Background(), request); err != nil {
 				t.Fatal(err)
 			}
 			if capability.prepares != 2 || capability.remote == first {
@@ -126,7 +127,7 @@ func TestAdminCredentialUpdateRefusesBeforeAnApplyOrForAnUnknownCluster(t *testi
 	t.Parallel()
 	h, capability := adminHarness(t)
 	for _, name := range []string{"edge", "missing"} {
-		if result, err := h.service.UpdateAdminCredentials(context.Background(), UpdateAdminCredentialsRequest{Name: name}); err == nil || result != nil {
+		if result, err := h.service.AdminCredentials().UpdateAdminCredentials(context.Background(), UpdateAdminCredentialsRequest{Name: name}); err == nil || result != nil {
 			t.Fatalf("unproved update = %+v %v", result, err)
 		}
 	}
@@ -154,7 +155,7 @@ func TestAdminCredentialUpdateReportsAFailedOrCancelledCustodyReadAsItself(t *te
 			capability.strict = true
 			h.binder.readErr = map[string]error{"credential-cluster/admin-password": test.err}
 			request := UpdateAdminCredentialsRequest{ContextName: testContextName, Name: "edge", SkipConfirmation: true}
-			result, err := h.service.UpdateAdminCredentials(context.Background(), request)
+			result, err := h.service.AdminCredentials().UpdateAdminCredentials(context.Background(), request)
 			if result != nil || !errors.Is(err, test.err) {
 				t.Fatalf("update = %+v %v, want the custody read's own error", result, err)
 			}
@@ -203,7 +204,7 @@ func TestAdministratorPasswordRefusesIncompleteOrCorruptUpdates(t *testing.T) {
 				delete(h.binder.produced, pendingKey)
 			}
 			h.binder.unproved = map[string]bool{pendingKey: test.unproved}
-			read, found, err := h.service.AdministratorPassword(context.Background(), testContextName, "edge", "credential-cluster", "seed")
+			read, found, err := h.service.AdminCredentials().AdministratorPassword(context.Background(), testContextName, "edge", "credential-cluster", "seed")
 			defer read.Material.Clear()
 			if test.want {
 				if err != nil || !found {
@@ -211,6 +212,19 @@ func TestAdministratorPasswordRefusesIncompleteOrCorruptUpdates(t *testing.T) {
 				}
 			} else if err == nil || found || len(read.Material.Parts()) != 0 {
 				t.Fatalf("unfinished update disclosed material: found=%v err=%v", found, err)
+			}
+		})
+	}
+}
+
+func TestAnUnconfiguredLifecycleRefusesAdminCredentialUpdatesAsUnimplemented(t *testing.T) {
+	clockless := newHarness(t)
+	clockless.service.options.Clock = nil
+	for name, service := range map[string]Service{"a zero service": {}, "a service without a clock": clockless.service} {
+		t.Run(name, func(t *testing.T) {
+			result, err := service.AdminCredentials().UpdateAdminCredentials(context.Background(), UpdateAdminCredentialsRequest{ContextName: testContextName, Name: "edge"})
+			if !errors.Is(err, availability.ErrNotImplemented) || result != nil {
+				t.Fatalf("update = %+v (%v), want the unimplemented refusal", result, err)
 			}
 		})
 	}

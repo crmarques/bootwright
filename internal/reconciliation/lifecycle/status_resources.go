@@ -74,7 +74,7 @@ func (s Service) storageResources(ctx context.Context, view View, result *Storag
 		return err
 	}
 	if state != nil && report != nil {
-		result.Clusters = storageSummaries(state.Effective(), s.capabilityKinds(), Identities(s.unsupportedRefusals(state)))
+		result.Clusters = storageSummaries(state.Effective(), s.capabilityKinds(), Identities(s.unsupportedRefusals(state, nil)))
 	}
 	store := s.store(view)
 	index, err := store.Index(ctx)

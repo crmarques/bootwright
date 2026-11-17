@@ -15,15 +15,40 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
+type decider struct {
+	preparation  *reconciliation.PreparationScope
+	sources      *compilations
+	operations   OperationStoreFactory
+	capabilities CapabilityResolver
+	preparations []PreparationDefinition
+	planner      decisionPlanner
+	proofs       decisionProofs
+}
+
+func (s Service) decider(scope *reconciliation.PreparationScope) decider {
+	return decider{
+		preparation: scope, sources: newCompilations(s.compiler), operations: s.options.Operations,
+		capabilities: s.capabilities, preparations: s.options.Preparations, planner: s, proofs: s,
+	}
+}
+
+func (d decider) store(view View) decisionRecords {
+	return d.operations(view.Operations(), view.Logs())
+}
+
+func (d decider) preparationDefinition(kind string) (PreparationDefinition, bool) {
+	return preparationDefinitionOf(d.preparations, kind)
+}
+
 // decideShared takes one decision from durable state read under the shared
 // lock, together with the identity of the context it read.
-func (s Service) decideShared(ctx context.Context, name string, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, ContextIdentity, error) {
+func (s Service) decideShared(ctx context.Context, name string, verb reconciliation.Verb, selection reconciliation.Selection, scope *reconciliation.PreparationScope) (operationPlan, ContextIdentity, error) {
 	var decided operationPlan
 	var identity ContextIdentity
 	err := s.workspace.ReadLifecycle(ctx, name, func(view View) error {
 		var err error
 		identity = view.Identity()
-		decided, err = s.deciding().decide(ctx, view, verb, selection)
+		decided, err = s.decider(scope).decide(ctx, view, verb, selection)
 		return err
 	})
 	return decided, identity, err
@@ -33,27 +58,27 @@ func (s Service) decideShared(ctx context.Context, name string, verb reconciliat
 // from the context it read. Changed desired state never turns a continuation
 // into a reconciliation. An operation whose finalization is due is marked
 // before any other decision is taken.
-func (s Service) decide(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, error) {
-	decided, _, err := s.decideAs(ctx, view, verb, selection)
+func (d decider) decide(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, error) {
+	decided, _, err := d.decideAs(ctx, view, verb, selection)
 	return decided, err
 }
 
 // decideAs reports the verb it decided as; no verb chooses one, as a preview does.
-func (s Service) decideAs(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, reconciliation.Verb, error) {
-	decided, chosen, err := s.decideFrom(ctx, view, verb, selection)
+func (d decider) decideAs(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, reconciliation.Verb, error) {
+	decided, chosen, err := d.decideFrom(ctx, view, verb, selection)
 	decided.basis.context = view.Identity().Name
-	return s.withPhases(decided, err), chosen, err
+	return d.withPhases(decided, err), chosen, err
 }
 
-func (s Service) withPhases(decided operationPlan, err error) operationPlan {
+func (d decider) withPhases(decided operationPlan, err error) operationPlan {
 	if err == nil && decided.verb == reconciliation.Destroy {
-		decided.phases = s.computePhases(decided.plan)
+		decided.phases = d.planner.computePhases(decided.plan)
 	}
 	return decided
 }
 
-func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, reconciliation.Verb, error) {
-	store := s.store(view)
+func (d decider) decideFrom(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, reconciliation.Verb, error) {
+	store := d.store(view)
 	index, err := store.Index(ctx)
 	if err != nil {
 		return operationPlan{}, verb, err
@@ -71,7 +96,7 @@ func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.
 		if err := refuseUnindexed(ctx, view, store); err != nil {
 			return operationPlan{}, verb, err
 		}
-		decided, err := s.freshApply(ctx, view, selection)
+		decided, err := d.freshApply(ctx, view, selection)
 		return decided, verb, err
 	}
 	operation, err := store.ReadOperation(ctx, index.Current)
@@ -89,7 +114,7 @@ func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.
 	var known *additiveVerdict
 	if verb == "" {
 		held := standing{held: true, verb: operation.Verb, state: operation.State}
-		admitted, refused := s.additive(ctx, view, store, operation, frozen, states, true)
+		admitted, refused := d.additive(ctx, view, store, operation, frozen, states, true)
 		known = &additiveVerdict{admitted: admitted, refused: refused}
 		held.additive = admitted != nil
 		if verb = chosenVerb(held); verb == reconciliation.Destroy {
@@ -99,15 +124,15 @@ func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.
 	if marked, err := finalization(ctx, view, store, verb, operation, frozen, states, attempts); err != nil || marked.finalize {
 		return marked, verb, err
 	}
-	decided, err := s.decideOver(ctx, view, store, verb, selection, operation, frozen, states, attempts, known)
+	decided, err := d.decideOver(ctx, view, store, verb, selection, operation, frozen, states, attempts, known)
 	return decided, verb, err
 }
 
 // decideOver is the decision over a current operation whose finalization is
 // not due. A preview also takes it over the record a due finalization would
 // leave, so it decides as the verb does once that finalization is done.
-func (s Service) decideOver(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int, known *additiveVerdict) (operationPlan, error) {
-	decided, err := s.decideBy(ctx, view, store, verb, selection, operation, frozen, states, attempts, known)
+func (d decider) decideOver(ctx context.Context, view View, store decisionRecords, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int, known *additiveVerdict) (operationPlan, error) {
+	decided, err := d.decideBy(ctx, view, store, verb, selection, operation, frozen, states, attempts, known)
 	if err != nil {
 		return decided, err
 	}
@@ -119,9 +144,9 @@ type additiveVerdict struct {
 	refused  error
 }
 
-func (s Service) decideBy(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int, known *additiveVerdict) (operationPlan, error) {
+func (d decider) decideBy(ctx context.Context, view View, store decisionRecords, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int, known *additiveVerdict) (operationPlan, error) {
 	if verb == reconciliation.Apply {
-		if err := s.admitPreparationCommand(frozen, operation); err != nil {
+		if err := d.admitPreparationCommand(frozen, operation); err != nil {
 			return operationPlan{}, err
 		}
 	}
@@ -131,18 +156,18 @@ func (s Service) decideBy(ctx context.Context, view View, store OperationStore, 
 	var refused error
 	if verb == reconciliation.Apply {
 		if known == nil {
-			admitted, refused = s.additive(ctx, view, store, operation, frozen, states, true)
+			admitted, refused = d.additive(ctx, view, store, operation, frozen, states, true)
 		} else {
 			admitted, refused = known.admitted, known.refused
 		}
-		if refused != nil && (s.preparation != nil || frozen.Preparation != nil) {
+		if refused != nil && (d.preparation != nil || frozen.Preparation != nil) {
 			return operationPlan{}, refused
 		}
 		held.additive = admitted != nil
 	}
 	switch classify(verb, held) {
 	case transitionAdd:
-		decided, err := s.additiveTransition(view, operation, admitted, selection)
+		decided, err := d.additiveTransition(view, operation, admitted, selection)
 		if err != nil {
 			return operationPlan{}, err
 		}
@@ -152,17 +177,17 @@ func (s Service) decideBy(ctx context.Context, view View, store OperationStore, 
 			"the "+string(operation.Verb)+" "+operation.ID+" is due its finalization, which no decision over its record may skip",
 			"report this as a defect, and repeat the command, which finalizes that operation before it decides")
 	case transitionReplaceRemoval:
-		return s.supersede(ctx, view, store, operation, frozen, states, attempts)
+		return d.supersede(ctx, view, store, operation, frozen, states, attempts)
 	case transitionRefuse:
 		if operation.State != reconciliation.OperationDone {
-			return operationPlan{}, s.refuseOver(ctx, view, operation, frozen, states)
+			return operationPlan{}, d.refuseOver(ctx, view, operation, frozen, states)
 		}
 		return operationPlan{}, failure("lifecycle.state",
 			"the completed destroy "+operation.ID+" records no block completion for these blocks, so nothing proves their effects removed: "+strings.Join(unfinishedBlocks(frozen, states), ", "),
 			deletionExit(view))
 	case transitionSettle:
 		if operation.Verb == reconciliation.Apply {
-			decided, err := s.settleApply(ctx, view, operation, frozen, states, refused)
+			decided, err := d.settleApply(ctx, view, operation, frozen, states, refused)
 			return plannedFrom(decided, operation, states, attempts), err
 		}
 		return settledDestroy(ctx, store, operationPlan{noop: true, verb: verb, operation: operation, plan: frozen, states: states}), nil
@@ -172,13 +197,13 @@ func (s Service) decideBy(ctx context.Context, view View, store OperationStore, 
 			if err != nil {
 				return operationPlan{}, err
 			}
-			decided, err := s.freshDestroy(ctx, name, operation.Executable, operation.ID, scope, false)
+			decided, err := d.planner.freshDestroy(ctx, name, operation.Executable, operation.ID, scope, false)
 			if err != nil {
 				return operationPlan{}, err
 			}
 			return plannedFrom(decided, operation, states, attempts), nil
 		}
-		decided, err := s.freshApply(ctx, view, selection)
+		decided, err := d.freshApply(ctx, view, selection)
 		if err != nil {
 			return operationPlan{}, err
 		}
@@ -205,7 +230,7 @@ func (s Service) decideBy(ctx context.Context, view View, store OperationStore, 
 		}
 		decided.release = released
 	}
-	decided.executionProof = s.proveExecution(ctx, view, operation, frozen, states)
+	decided.executionProof = d.proofs.proveExecution(ctx, view, operation, frozen, states)
 	return plannedFrom(decided, operation, states, attempts), nil
 }
 
@@ -216,16 +241,16 @@ func (s Service) decideBy(ctx context.Context, view View, store OperationStore, 
 // re-proof, which rebuilds no runtime, or the replacement's host proof.
 // Otherwise it names the exit that proof's refusal names, followed by that
 // refusal. A finalization runs no block and is held to neither.
-func (s Service) refuseOver(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) error {
+func (d decider) refuseOver(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) error {
 	const message = "must be continued before another operation"
 	name := view.Identity().Name
 	next := nextAction(operation, frozen, states)
 	var proof error
 	switch {
 	case next == string(reconciliation.Destroy):
-		proof = s.verifyRemovalHost(ctx, view)
+		proof = d.proofs.verifyRemovalHost(ctx, view)
 	case pendingRemains(frozen, states):
-		proof = s.verifyContinuation(ctx, view, operation, s.proveExecution(ctx, view, operation, frozen, states), nil)
+		proof = d.proofs.verifyContinuation(ctx, view, operation, d.proofs.proveExecution(ctx, view, operation, frozen, states), nil)
 	}
 	refused := diagnostics.Of(proof)
 	if proof != nil && len(refused) == 0 {
@@ -254,14 +279,14 @@ func completedOwnership(frozen reconciliation.Plan) reconciliation.Plan {
 // while every block of the frozen plan is done, because the settled verb reports
 // that completion: a block whose record reads anything else, a lost one included,
 // contradicts it, and nothing then proves the input applied.
-func (s Service) settleApply(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, additiveRefusal error) (operationPlan, error) {
+func (d decider) settleApply(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, additiveRefusal error) (operationPlan, error) {
 	if inputDrift(view, operation) != "" {
 		if additiveRefusal != nil {
 			return operationPlan{}, additiveRefusal
 		}
-		return operationPlan{}, s.changedInput(ctx, view, operation)
+		return operationPlan{}, d.changedInput(ctx, view, operation)
 	}
-	unfinished, err := unfinishedOver(ctx, s.store(view), operation, frozen, states)
+	unfinished, err := unfinishedOver(ctx, d.store(view), operation, frozen, states)
 	if err != nil {
 		return operationPlan{}, err
 	}
@@ -313,11 +338,11 @@ func inputDrift(view View, operation operationstore.Operation) string {
 	return ""
 }
 
-func (s Service) changedInput(ctx context.Context, view View, operation operationstore.Operation) error {
+func (d decider) changedInput(ctx context.Context, view View, operation operationstore.Operation) error {
 	const message = "the desired state changed after this apply completed"
 	name := view.Identity().Name
 	remedy := changeRemedy(view)
-	named, ok := s.namedChange(ctx, view, operation)
+	named, ok := d.namedChange(ctx, view, operation)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -327,16 +352,16 @@ func (s Service) changedInput(ctx context.Context, view View, operation operatio
 	return failure("lifecycle.state", message+": "+named, remedy+"; "+contextCommand(name, "diff")+" shows each change")
 }
 
-func (s Service) namedChange(ctx context.Context, view View, operation operationstore.Operation) (string, bool) {
+func (d decider) namedChange(ctx context.Context, view View, operation operationstore.Operation) (string, bool) {
 	sources, err := view.Revision(ctx, operation.Revision)
 	if err != nil || digestOf(sources) != operation.InputDigest {
 		return "", false
 	}
-	before, err := s.compileSources(ctx, sources)
+	before, err := d.sources.compileSources(ctx, sources)
 	if err != nil {
 		return "", false
 	}
-	after, err := s.compile(ctx, view)
+	after, err := d.sources.compile(ctx, view)
 	if err != nil {
 		return "", false
 	}
@@ -441,15 +466,15 @@ func widenedApply(contextName string, selection reconciliation.Selection, needed
 // the one both verbs report before registration. It is pure, because a preview
 // takes it too: it compiles the frozen input and plans, and binds, reserves and
 // writes nothing.
-func (s Service) freshApply(ctx context.Context, view View, selection reconciliation.Selection) (operationPlan, error) {
-	state, err := s.compile(ctx, view)
+func (d decider) freshApply(ctx context.Context, view View, selection reconciliation.Selection) (operationPlan, error) {
+	state, err := d.sources.compile(ctx, view)
 	if err != nil {
 		return operationPlan{}, err
 	}
-	if err := s.refuseUnsupported(state); err != nil {
+	if err := d.planner.refuseUnsupported(state, d.preparation); err != nil {
 		return operationPlan{}, err
 	}
-	plan, binding, err := s.planFrom(ctx, view, state)
+	plan, binding, err := d.planner.planFrom(ctx, view, state, d.preparation)
 	if err != nil {
 		return operationPlan{}, err
 	}
@@ -496,7 +521,7 @@ func mayHaveStartedNothing(operation operationstore.Operation) bool {
 
 // supersede plans a fresh removal over what an incomplete operation still owns:
 // the blocks an apply started, or the blocks a removal has not yet proved gone.
-func (s Service) supersede(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (operationPlan, error) {
+func (d decider) supersede(ctx context.Context, view View, store decisionRecords, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (operationPlan, error) {
 	name := view.Identity().Name
 	if operation.Verb == reconciliation.Apply {
 		// An empty set the operation's own state cannot explain is refused by
@@ -511,7 +536,7 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 		if err != nil {
 			return operationPlan{}, err
 		}
-		decided, err := s.freshDestroy(ctx, name, operation.Executable, operation.ID, scope, startedNothing)
+		decided, err := d.planner.freshDestroy(ctx, name, operation.Executable, operation.ID, scope, startedNothing)
 		if err != nil {
 			return operationPlan{}, err
 		}
@@ -525,11 +550,11 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 	if err != nil {
 		return operationPlan{}, err
 	}
-	decided, err := s.freshDestroy(ctx, name, operation.Executable, operation.Source, scope, false)
+	decided, err := d.planner.freshDestroy(ctx, name, operation.Executable, operation.Source, scope, false)
 	if err != nil {
 		return operationPlan{}, err
 	}
-	decided.replacedPhases = s.computePhases(frozen)
+	decided.replacedPhases = d.planner.computePhases(frozen)
 	return plannedFrom(decided, operation, states, attempts), nil
 }
 

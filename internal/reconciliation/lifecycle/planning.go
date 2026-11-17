@@ -38,15 +38,17 @@ func (s Service) compile(ctx context.Context, view View) (*compilation.State, er
 }
 
 type compilations struct {
-	mutex  sync.Mutex
-	states map[string]*compilation.State
+	compiler Compiler
+	mutex    sync.Mutex
+	states   map[string]*compilation.State
 }
 
-func (s Service) deciding() Service {
-	if s.compiled == nil {
-		s.compiled = &compilations{states: map[string]*compilation.State{}}
-	}
-	return s
+func newCompilations(compiler Compiler) *compilations {
+	return &compilations{compiler: compiler, states: map[string]*compilation.State{}}
+}
+
+func (c *compilations) compile(ctx context.Context, view View) (*compilation.State, error) {
+	return c.compileSources(ctx, view.Inputs())
 }
 
 func compiledKey(sources desiredstate.Sources) string {
@@ -59,28 +61,29 @@ func compiledKey(sources desiredstate.Sources) string {
 }
 
 func (s Service) compileSources(ctx context.Context, sources desiredstate.Sources) (*compilation.State, error) {
-	if s.compiled == nil {
-		return s.compileFresh(ctx, sources)
-	}
+	return compileWith(ctx, s.compiler, sources)
+}
+
+func (c *compilations) compileSources(ctx context.Context, sources desiredstate.Sources) (*compilation.State, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	key := compiledKey(sources)
-	s.compiled.mutex.Lock()
-	defer s.compiled.mutex.Unlock()
-	if state, found := s.compiled.states[key]; found {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if state, found := c.states[key]; found {
 		return state, nil
 	}
-	state, err := s.compileFresh(ctx, sources)
+	state, err := compileWith(ctx, c.compiler, sources)
 	if err != nil {
 		return nil, err
 	}
-	s.compiled.states[key] = state
+	c.states[key] = state
 	return state, nil
 }
 
-func (s Service) compileFresh(ctx context.Context, sources desiredstate.Sources) (*compilation.State, error) {
-	state, report, err := s.compiler.Compile(ctx, sources)
+func compileWith(ctx context.Context, compiler Compiler, sources desiredstate.Sources) (*compilation.State, error) {
+	state, report, err := compiler.Compile(ctx, sources)
 	if err != nil {
 		return nil, err
 	}
@@ -172,16 +175,16 @@ func ancestorsOf(definitions []reconciliation.BlockDefinition, identity string) 
 
 // planFrom asks every resolvable capability for its blocks. Planning is pure:
 // it opens no payload, contacts nothing and materializes no Secret.
-func (s Service) planFrom(ctx context.Context, view View, state *compilation.State) (reconciliation.Plan, capabilityBinding, error) {
+func (s Service) planFrom(ctx context.Context, view View, state *compilation.State, scope *reconciliation.PreparationScope) (reconciliation.Plan, capabilityBinding, error) {
 	controller, err := controllerMachine(state)
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
-	bindings := s.planningBindings()
+	bindings := s.planningBindings(scope)
 	if len(bindings) == 0 {
 		return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "no lifecycle capability is available for the selected state", "")
 	}
-	input := s.planInput(view, state, controller)
+	input := s.planInput(view, state, controller, scope)
 	if err := s.validatePreparationScope(ctx, input); err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
@@ -203,7 +206,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		}
 		claimed.record(bound, contribution.Definitions)
 		for _, definition := range contribution.Definitions {
-			if s.preparation != nil && len(definition.Consumes) != 0 {
+			if scope != nil && len(definition.Consumes) != 0 {
 				return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "a preparation cannot authorize gated destructive effects", "prepare only controller, media and inventory prerequisites")
 			}
 			if definition.Family != "" && definition.Family != bound.family() {
@@ -220,7 +223,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 			}
 		}
 	}
-	definitions, err = s.retainPreparedOwnership(ctx, view, definitions)
+	definitions, err = s.retainPreparedOwnership(ctx, view, definitions, scope)
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
@@ -268,14 +271,14 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
-	plan, err = s.freezeExecutionPlan(plan)
+	plan, err = s.freezeExecutionPlan(plan, scope)
 	return plan, binding, err
 }
 
-func (s Service) planInput(view View, state *compilation.State, controller string) PlanInput {
+func (s Service) planInput(view View, state *compilation.State, controller string, scope *reconciliation.PreparationScope) PlanInput {
 	return PlanInput{AppliedEvidence: func(ctx context.Context, kind, object string) ([]BlockEvidence, error) {
 		return s.objectEvidenceAt(ctx, view, kind, object, appliedOwners)
-	}, Verb: reconciliation.Apply, Context: view.Identity(), State: state, Controller: controller, Preparation: s.preparation, Derived: NewDerivations()}
+	}, Verb: reconciliation.Apply, Context: view.Identity(), State: state, Controller: controller, Preparation: scope, Derived: NewDerivations()}
 }
 
 // refuseOwnSocketConflicts compares the sockets this context's own blocks claim
@@ -625,8 +628,8 @@ func firstDelimiter(text string) (string, int) {
 // diagnostic per object and reason that names the object, the reason and the
 // remedy. A capability reports what it cannot do within its own kinds; the
 // engine reports every effect-bearing kind no capability claims at all.
-func (s Service) refuseUnsupported(state *compilation.State) error {
-	refused := s.unsupportedRefusals(state)
+func (s Service) refuseUnsupported(state *compilation.State, scope *reconciliation.PreparationScope) error {
+	refused := s.unsupportedRefusals(state, scope)
 	if len(refused) == 0 {
 		return nil
 	}
@@ -648,9 +651,10 @@ func unsupportedFailure(refused []Refusal) error {
 	return &diagnostics.Failure{Diagnostics: reported}
 }
 
-func (s Service) unsupportedRefusals(state *compilation.State) []Refusal {
-	if s.preparation != nil {
-		return Unsupported(preparationResolver{CapabilityResolver: s.capabilities, bindings: s.planningBindings()}, state, s.options.EffectBearing)
+func (s Service) unsupportedRefusals(state *compilation.State, scope *reconciliation.PreparationScope) []Refusal {
+	if scope != nil {
+		definition, _ := s.preparationDefinition(scope.Kind)
+		return Unsupported(preparationResolver{CapabilityResolver: s.capabilities, bindings: s.planningBindings(scope)}, state, definition.Bearing)
 	}
 	return Unsupported(s.capabilities, state, s.options.EffectBearing)
 }

@@ -950,7 +950,7 @@ func TestADecisionOverAFinalizationDueRefusesWithoutEffect(t *testing.T) {
 		if got := classify(reconciliation.Destroy, standingOf(operation, frozen, states)); got != transitionFinalize {
 			t.Fatalf("the destroy classifies %q, want %q", got, transitionFinalize)
 		}
-		decided, err := h.service.decideOver(ctx, view, store, reconciliation.Destroy, reconciliation.Selection{}, operation, frozen, states, attempts, nil)
+		decided, err := h.service.decider(nil).decideOver(ctx, view, store, reconciliation.Destroy, reconciliation.Selection{}, operation, frozen, states, attempts, nil)
 		reported := diagnostics.Of(err)
 		if len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "due its finalization") {
 			t.Fatalf("decideOver over a due finalization returned %v", err)

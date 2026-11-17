@@ -519,6 +519,38 @@ type recordReader interface {
 	LastResolution(context.Context, string, string, int) (operationstore.Attempt, bool, error)
 }
 
+type decisionRecords interface {
+	recordReader
+	Claimed(context.Context) ([]string, error)
+	Idle(context.Context) ([]string, error)
+	Started(context.Context, string) (bool, error)
+	LostBlockRecords(context.Context, string, reconciliation.Plan) ([]string, error)
+}
+
+type decisionPlanner interface {
+	planFrom(context.Context, View, *compilation.State, *reconciliation.PreparationScope) (reconciliation.Plan, capabilityBinding, error)
+	planInput(View, *compilation.State, string, *reconciliation.PreparationScope) PlanInput
+	refuseUnsupported(*compilation.State, *reconciliation.PreparationScope) error
+	freshDestroy(context.Context, string, operationstore.Executable, string, removalScope, bool) (operationPlan, error)
+	computePhases(reconciliation.Plan) removalPhases
+}
+
+type decisionProofs interface {
+	proveExecution(context.Context, View, operationstore.Operation, reconciliation.Plan, map[string]reconciliation.BlockState) executionProof
+	verifyRemovalHost(context.Context, View) error
+	verifyContinuation(context.Context, View, operationstore.Operation, executionProof, *approved) error
+	custodyProved(context.Context, View, lineage, reconciliation.Plan) error
+}
+
+type adminExecution interface {
+	approvedRuntime(context.Context) (approved, error)
+	withPython(context.Context, approved, func(prerequisites.PythonLaunch) error) error
+	objectEvidenceAt(context.Context, View, string, string, ownersOf) ([]BlockEvidence, error)
+	applyDependencies(context.Context, recordReader, string, string) ([]BlockEvidence, error)
+	locateTool(context.Context, recordReader, prerequisites.StorageView, string, operationstore.Operation, reconciliation.Plan, evidence.InstalledTool) (string, error)
+	publishProduced(context.Context, Transaction, reconciliation.Block, []Produced, bool) error
+}
+
 // OperationStoreFactory opens the record set over one held records area and
 // the log area beside it, once per invocation.
 type OperationStoreFactory func(records, logs operationstore.Area) OperationStore

@@ -364,7 +364,7 @@ func (s Service) collect(ctx context.Context, name string, held, keep []string) 
 // evidence, or a reservation beside pristine evidence, is what a registration
 // interrupted before the index named its operation leaves, so the destroy
 // releases it.
-func unclaimed(ctx context.Context, view View, store OperationStore) (operationPlan, error) {
+func unclaimed(ctx context.Context, view View, store decisionRecords) (operationPlan, error) {
 	if err := refuseUnindexed(ctx, view, store); err != nil {
 		return operationPlan{}, err
 	}
@@ -385,7 +385,7 @@ func unclaimed(ctx context.Context, view View, store OperationStore) (operationP
 // without this only a later registration would reclaim it, and applies refused
 // at the retained-operation bound register nothing. A listing that fails marks
 // nothing, because reclaiming is housekeeping no verb is refused for.
-func settledDestroy(ctx context.Context, store OperationStore, decided operationPlan) operationPlan {
+func settledDestroy(ctx context.Context, store decisionRecords, decided operationPlan) operationPlan {
 	idle, err := store.Idle(ctx)
 	decided.idle = err == nil && len(idle) != 0
 	return decided
@@ -407,7 +407,7 @@ func (s Service) reclaimIdle(ctx context.Context, name string) {
 // index accounts for, before a verb over it settles, releases or registers.
 // Neither verb has a way on from there, so the refusal names the deletion of
 // the context.
-func refuseUnindexed(ctx context.Context, view View, store OperationStore) error {
+func refuseUnindexed(ctx context.Context, view View, store decisionRecords) error {
 	entries, err := unindexed(ctx, view, store)
 	if err != nil || len(entries) == 0 {
 		return err
@@ -422,7 +422,7 @@ func refuseUnindexed(ctx context.Context, view View, store OperationStore) error
 // each operation directory that lists a block record. No index names such a
 // directory, so it is an operation whose index was lost rather than a claim or
 // an interrupted registration, and its effects may be on a host.
-func unindexed(ctx context.Context, view View, store OperationStore) ([]string, error) {
+func unindexed(ctx context.Context, view View, store decisionRecords) ([]string, error) {
 	pristine, err := projection(reconciliation.Destroy, reconciliation.OperationDone)
 	if err != nil {
 		return nil, err

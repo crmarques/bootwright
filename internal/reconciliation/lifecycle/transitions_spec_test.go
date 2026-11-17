@@ -431,7 +431,7 @@ func decidedAs(t *testing.T, h *harness, verb reconciliation.Verb) (string, reco
 	var chosen reconciliation.Verb
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
 		var err error
-		decided, chosen, err = h.service.decideAs(ctx, view, verb, reconciliation.Selection{})
+		decided, chosen, err = h.service.decider(nil).decideAs(ctx, view, verb, reconciliation.Selection{})
 		return err
 	})
 	if err != nil {
@@ -482,10 +482,10 @@ func requirePreviewShape(t *testing.T, h *harness, where string, test stateMachi
 	var chosen reconciliation.Verb
 	var refusal error
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) error {
-		if _, chosen, refusal = h.service.decideAs(ctx, view, "", reconciliation.Selection{}); refusal != nil {
+		if _, chosen, refusal = h.service.decider(nil).decideAs(ctx, view, "", reconciliation.Selection{}); refusal != nil {
 			return nil
 		}
-		result, after, _, refusal = h.service.preview(ctx, view, reconciliation.Selection{})
+		result, after, _, refusal = h.service.preview(ctx, h.service.decider(nil), view, reconciliation.Selection{})
 		return nil
 	})
 	if err != nil {

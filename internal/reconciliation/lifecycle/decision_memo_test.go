@@ -37,7 +37,7 @@ func TestADecisionCompilesEachRevisionOnceAndLendsProducedMaterialOnce(t *testin
 			f, calls := countedAddition(t)
 			lent := f.binder.producedReads
 			for round := 1; round <= 2; round++ {
-				decided, _, err := f.service.decideShared(context.Background(), testContextName, verb, reconciliation.Selection{})
+				decided, _, err := f.service.decideShared(context.Background(), testContextName, verb, reconciliation.Selection{}, nil)
 				if err != nil || decided.predecessor == "" {
 					t.Fatalf("the decision = %+v (%v), want the additive apply", decided, err)
 				}
@@ -69,11 +69,11 @@ func TestAFailedCompilationIsNeverRememberedAsASuccess(t *testing.T) {
 	f, _ := countedAddition(t)
 	current := digestOf(f.workspace.inputs)
 	f.compiler.errs[current] = diagnostics.NewFailure("input.state", "the input does not compile", "")
-	if decided, _, err := f.service.decideShared(context.Background(), testContextName, reconciliation.Apply, reconciliation.Selection{}); err == nil || decided.predecessor != "" {
+	if decided, _, err := f.service.decideShared(context.Background(), testContextName, reconciliation.Apply, reconciliation.Selection{}, nil); err == nil || decided.predecessor != "" {
 		t.Fatalf("a decision over an input that fails to compile = %+v (%v)", decided, err)
 	}
 	delete(f.compiler.errs, current)
-	if decided, _, err := f.service.decideShared(context.Background(), testContextName, reconciliation.Apply, reconciliation.Selection{}); err != nil || decided.predecessor == "" {
+	if decided, _, err := f.service.decideShared(context.Background(), testContextName, reconciliation.Apply, reconciliation.Selection{}, nil); err != nil || decided.predecessor == "" {
 		t.Fatalf("the next decision = %+v (%v), want the additive apply", decided, err)
 	}
 }

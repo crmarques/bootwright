@@ -7,6 +7,10 @@ import (
 )
 
 func (s Service) Apply(ctx context.Context, request ApplyRequest) (*OperationResult, error) {
+	return s.applyWithin(ctx, request, nil)
+}
+
+func (s Service) applyWithin(ctx context.Context, request ApplyRequest, scope *reconciliation.PreparationScope) (*OperationResult, error) {
 	s, err := s.withParallelism(request.Parallelism)
 	if err != nil {
 		return nil, err
@@ -22,7 +26,7 @@ func (s Service) Apply(ctx context.Context, request ApplyRequest) (*OperationRes
 	if err != nil {
 		return nil, err
 	}
-	return s.applyPrepared(ctx, request, selection)
+	return s.applyPrepared(ctx, request, selection, scope)
 }
 
 // Destroy removes what an apply recorded as owned. It accepts no stage
@@ -32,10 +36,10 @@ func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*Operatio
 	if err != nil {
 		return nil, err
 	}
-	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, reconciliation.Selection{}, request.Authorizations, request.Unregistered, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed())
+	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, reconciliation.Selection{}, request.Authorizations, request.Unregistered, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed(), nil)
 }
 
-func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.Selection, authorizations, unregistered []string, skipConfirmation, unattended, borrowed bool) (*OperationResult, error) {
+func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.Selection, authorizations, unregistered []string, skipConfirmation, unattended, borrowed bool, scope *reconciliation.PreparationScope) (*OperationResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
@@ -54,7 +58,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if verb == reconciliation.Destroy {
 		stranded = s.held(ctx, name)
 	}
-	decided, identity, err := s.decideShared(ctx, name, verb, selection)
+	decided, identity, err := s.decideShared(ctx, name, verb, selection, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +68,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	// records prove. The verb then decides again from what that leaves.
 	finalized := decided.finalize
 	if decided.finalize {
-		if decided, identity, err = s.finalizeFirst(ctx, name, verb, selection, decided); err != nil {
+		if decided, identity, err = s.finalizeFirst(ctx, name, verb, selection, decided, scope); err != nil {
 			return nil, err
 		}
 	}

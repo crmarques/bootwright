@@ -222,7 +222,7 @@ func TestACanceledNamingReturnsTheCancellation(t *testing.T) {
 	cancel()
 	var refused error
 	if err := f.workspace.ReadLifecycle(context.Background(), testContextName, func(view View) error {
-		refused = f.service.changedInput(canceled, view, operation)
+		refused = f.service.decider(nil).changedInput(canceled, view, operation)
 		return nil
 	}); err != nil {
 		t.Fatal(err)

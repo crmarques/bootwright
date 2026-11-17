@@ -170,7 +170,7 @@ func (s Service) readDiff(ctx context.Context, view View, observed bool) (diffRe
 	}
 	read.input = inputState(view, read.operation, read.owning)
 	if read.input == diffChanged && read.operation.ID == read.owning.ID {
-		added, err := s.addition(ctx, view, store, read.owning, read.owningPlan, read.owningStates, observed)
+		added, err := s.decider(nil).addition(ctx, view, store, read.owning, read.owningPlan, read.owningStates, observed)
 		if err != nil && !isRefusal(err) {
 			return diffRead{}, err
 		}
@@ -254,10 +254,10 @@ func (s Service) freshPlan(ctx context.Context, view View, desired *compilation.
 }
 
 func (s Service) planSelected(ctx context.Context, view View, state *compilation.State) (reconciliation.Plan, error) {
-	if err := s.refuseUnsupported(state); err != nil {
+	if err := s.refuseUnsupported(state, nil); err != nil {
 		return reconciliation.Plan{}, err
 	}
-	plan, _, err := s.planFrom(ctx, view, state)
+	plan, _, err := s.planFrom(ctx, view, state, nil)
 	return plan, err
 }
 

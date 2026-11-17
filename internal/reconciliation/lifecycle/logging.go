@@ -123,7 +123,7 @@ func (s Service) restoreSettledApply(ctx context.Context, name string, decided o
 		if err != nil {
 			return err
 		}
-		if _, err := s.settleApply(ctx, tx, operation, frozen, states, nil); err != nil {
+		if _, err := s.decider(nil).settleApply(ctx, tx, operation, frozen, states, nil); err != nil {
 			return err
 		}
 		_, log, err := restore(ctx, store, operation)

@@ -20,7 +20,7 @@ func decidedDestroy(t *testing.T, h *harness) operationPlan {
 	ctx := context.Background()
 	var decided operationPlan
 	err := h.workspace.ReadLifecycle(ctx, testContextName, func(view View) (err error) {
-		decided, err = h.service.decide(ctx, view, reconciliation.Destroy, reconciliation.Selection{})
+		decided, err = h.service.decider(nil).decide(ctx, view, reconciliation.Destroy, reconciliation.Selection{})
 		return err
 	})
 	if err != nil || decided.verb != reconciliation.Destroy {
@@ -205,7 +205,7 @@ func TestPhasesAfterAFinalization(t *testing.T) {
 		}
 		marked := operationPlan{finalize: true, verb: reconciliation.Destroy, operation: operation, plan: frozen, states: states}
 		marked.basis.attempts = attempts
-		decided, err = h.service.afterFinalization(ctx, view, reconciliation.Destroy, reconciliation.Selection{}, marked)
+		decided, err = h.service.decider(nil).afterFinalization(ctx, view, reconciliation.Destroy, reconciliation.Selection{}, marked)
 		return err
 	})
 	if err != nil || !decided.fresh || decided.verb != reconciliation.Destroy {
