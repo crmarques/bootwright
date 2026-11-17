@@ -16631,3 +16631,21 @@ for the reads that remain. Pin tests of the mirror bridge refusals and the
 installer media conditions pass on the earlier and the moved code; selection
 results and goldens are unchanged.
 
+## X532 — Command facts on the catalog
+
+### B1502
+
+Split from B1469 under [D274](backlog.md#d274) (audit 005 W8.3). Each catalog
+entry carries its command's help example, scope, SSH flags, presentation role,
+invoker, validator, operand and runtime checks, classification and renderer,
+with structured, human and failure forms and the result types it emits;
+`writeResult` dispatches through the entry, and the two path switches, the
+flag validator's switch and the registry test's third list are gone. A test
+fails a command path matched outside the catalog. About 40,000 invocations
+(every golden fixture in every format, every command's help, a flag sweep,
+usage refusals, service errors and an interrupt) wrote byte-identical output
+before and after. Finding G04-03 is fixed with it: a structured reveal whose
+material its guard refuses now fails instead of reaching the human reveal
+writer, and both forms share one guard, the union of the two, so JSON and YAML
+`secret show` no longer export a part other than the one `--part` names.
+
