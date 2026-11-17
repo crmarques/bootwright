@@ -239,19 +239,63 @@ func TestRunThrottlesAKeyWithoutHoldingBackLaterKeys(t *testing.T) {
 	}
 }
 
-func TestRunReportsAPanicAsThatTargetsError(t *testing.T) {
-	outcomes := fanout.Run(t.Context(), fanout.Options[int, int]{Limit: 2}, indices(3), func(_ context.Context, input int) (int, error) {
-		if input == 1 {
-			panic("boom")
-		}
-		return input + 1, nil
+func recovered(t *testing.T, run func()) (value any) {
+	t.Helper()
+	defer func() { value = recover() }()
+	run()
+	return nil
+}
+
+func TestRunRepanicsAWorkerPanicOnTheCallerAfterJoiningEveryWorker(t *testing.T) {
+	var running, finished atomic.Int64
+	var settled []int
+	started := make(chan struct{})
+	value := recovered(t, func() {
+		fanout.Run(t.Context(), fanout.Options[int, int]{
+			Limit:   3,
+			Settled: func(index int, _ fanout.Outcome[int]) { settled = append(settled, index) },
+		}, indices(6), func(ctx context.Context, input int) (int, error) {
+			running.Add(1)
+			defer finished.Add(1)
+			if input == 1 {
+				<-started
+				panic("boom")
+			}
+			if input == 0 {
+				close(started)
+			}
+			<-ctx.Done()
+			return input, ctx.Err()
+		})
 	})
-	var panicked *fanout.PanicError
-	if !errors.As(outcomes[1].Err, &panicked) || panicked.Value != "boom" || len(panicked.Stack) == 0 || panicked.Error() != "fan-out work panicked: boom" {
-		t.Fatalf("outcome 1 = %+v", outcomes[1])
+	panicked, ok := value.(*fanout.PanicError)
+	if !ok || panicked.Value != "boom" || len(panicked.Stack) == 0 || panicked.Error() != "fan-out work panicked: boom" {
+		t.Fatalf("recovered %#v", value)
 	}
-	if outcomes[0].Value != 1 || outcomes[2].Value != 3 {
-		t.Fatalf("outcomes = %+v", outcomes)
+	if running.Load() != 3 || finished.Load() != 3 {
+		t.Fatalf("started %d workers, joined %d; want 3 and every one joined, none started after the panic", running.Load(), finished.Load())
+	}
+	if len(settled) != 0 {
+		t.Fatalf("settled %v after a panic", settled)
+	}
+}
+
+func TestRunJoinsRunningWorkersWhenACallbackPanics(t *testing.T) {
+	var finished atomic.Int64
+	value := recovered(t, func() {
+		fanout.Run(t.Context(), fanout.Options[int, int]{
+			Limit:   4,
+			Settled: func(int, fanout.Outcome[int]) { panic("settle") },
+		}, indices(4), func(ctx context.Context, input int) (int, error) {
+			defer finished.Add(1)
+			if input != 0 {
+				<-ctx.Done()
+			}
+			return input, nil
+		})
+	})
+	if value != "settle" || finished.Load() != 4 {
+		t.Fatalf("recovered %#v with %d of 4 workers joined", value, finished.Load())
 	}
 }
 

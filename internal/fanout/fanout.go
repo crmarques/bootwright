@@ -30,8 +30,9 @@ func (e *PanicError) Error() string {
 }
 
 type finished[O any] struct {
-	index   int
-	outcome Outcome[O]
+	index    int
+	outcome  Outcome[O]
+	panicked *PanicError
 }
 
 func Run[I, O any](ctx context.Context, options Options[I, O], inputs []I, work func(context.Context, I) (O, error)) []Outcome[O] {
@@ -55,6 +56,14 @@ func Run[I, O any](ctx context.Context, options Options[I, O], inputs []I, work 
 		waiting[index] = index
 	}
 	running, held := 0, map[string]int{}
+	ctx, cancel := context.WithCancel(ctx)
+	defer func() {
+		cancel()
+		for ; running > 0; running-- {
+			<-done
+		}
+	}()
+	var panicked *PanicError
 	for len(waiting) != 0 || running != 0 {
 		if err := ctx.Err(); err != nil {
 			for _, index := range waiting {
@@ -77,8 +86,8 @@ func Run[I, O any](ctx context.Context, options Options[I, O], inputs []I, work 
 				options.Started(index)
 			}
 			go func() {
-				value, err := guarded(ctx, inputs[index], work)
-				done <- finished[O]{index: index, outcome: Outcome[O]{Value: value, Err: err, Started: true}}
+				value, failure, err := guarded(ctx, inputs[index], work)
+				done <- finished[O]{index: index, outcome: Outcome[O]{Value: value, Err: err, Started: true}, panicked: failure}
 			}()
 		}
 		waiting = admitted
@@ -98,7 +107,20 @@ func Run[I, O any](ctx context.Context, options Options[I, O], inputs []I, work 
 		if name := key(next.index); name != "" {
 			held[name]--
 		}
-		settle(next.index, next.outcome)
+		if next.panicked != nil {
+			if panicked == nil {
+				panicked = next.panicked
+				cancel()
+			}
+			waiting = nil
+			continue
+		}
+		if panicked == nil {
+			settle(next.index, next.outcome)
+		}
+	}
+	if panicked != nil {
+		panic(panicked)
 	}
 	return outcomes
 }
@@ -112,12 +134,13 @@ func FirstError[O any](outcomes []Outcome[O]) error {
 	return nil
 }
 
-func guarded[I, O any](ctx context.Context, input I, work func(context.Context, I) (O, error)) (value O, err error) {
+func guarded[I, O any](ctx context.Context, input I, work func(context.Context, I) (O, error)) (value O, failure *PanicError, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			var zero O
-			value, err = zero, &PanicError{Value: recovered, Stack: debug.Stack()}
+			value, failure, err = zero, &PanicError{Value: recovered, Stack: debug.Stack()}, nil
 		}
 	}()
-	return work(ctx, input)
+	value, err = work(ctx, input)
+	return value, nil, err
 }

@@ -145,11 +145,8 @@ func (s Service) inspectAll(ctx context.Context, view RunView, store recordReade
 		Limit: s.Concurrency(), Throttle: s.Throttle(),
 		Key: func(block reconciliation.Block) string { return block.Throttle },
 		Settled: func(index int, outcome fanout.Outcome[blockReading]) {
-			switch {
-			case !outcome.Started:
+			if !outcome.Started {
 				outcome.Value = canceled
-			case outcome.Err != nil:
-				outcome.Value = blockReading{state: sideUnknown, reason: "the observation failed: " + outcome.Err.Error(), remedy: repeatObserved(read.context.Name)}
 			}
 			settle(waiting[index], outcome.Value)
 		},
