@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -153,5 +154,83 @@ func TestOriginalRemovalDependentsIncludesPositivelyPendingDescendants(t *testin
 	}
 	if !found {
 		t.Fatal("no original dependent projection")
+	}
+}
+
+func removed(id string) Result {
+	return Result{Outcome: reconciliation.OutcomeChanged, Evidence: json.RawMessage(`{"removed":"` + id + `"}`)}
+}
+
+func TestAReplacementLendsWhatEachRemovalItReplacesProvedNearestFirst(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("alpha"), dependent("bravo", "alpha"), dependent("charlie", "bravo"), dependent("delta", "charlie")})
+	if err := applyOnce(h); err != nil {
+		t.Fatal(err)
+	}
+	var chain []operationstore.Operation
+	for _, outcomes := range [][]Result{{removed("delta"), {Outcome: reconciliation.OutcomeFailed}}, {removed("charlie"), {Outcome: reconciliation.OutcomeFailed}}} {
+		h.capability.outcomes = outcomes
+		if _, err := h.service.Destroy(ctx, DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
+			t.Fatal("the seeded removal failure did not fire")
+		}
+		failed, _ := durableOperation(t, h)
+		chain = append(chain, failed)
+	}
+	h.capability.outcomes = []Result{removed("bravo"), removed("alpha")}
+	if _, err := h.service.Destroy(ctx, DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	replacement, _ := durableOperation(t, h)
+	if replacement.Replaces != chain[1].ID || chain[1].Replaces != chain[0].ID {
+		t.Fatalf("the replacement chain %s -> %s -> %s is not the removals' own", replacement.Replaces, chain[1].Replaces, chain[0].ID)
+	}
+	found := false
+	for _, execution := range h.capability.executions {
+		if execution.Block.ID != "alpha" || execution.ApplyOperation == execution.Operation {
+			continue
+		}
+		proved := map[string]string{}
+		for _, pair := range execution.RemovalProved {
+			if _, twice := proved[pair.Removed.Block.ID]; twice || pair.Removed.Block.ID != pair.Applied.Block.ID || pair.Removed.State != reconciliation.BlockDone || pair.Applied.State != reconciliation.BlockDone || pair.Applied.Operation != execution.ApplyOperation {
+				t.Fatalf("unpaired, unproved or repeated dependency: %+v", pair)
+			}
+			proved[pair.Removed.Block.ID] = pair.Removed.Operation + " " + string(pair.Removed.Evidence)
+		}
+		want := map[string]string{
+			"bravo":   execution.Operation + ` {"removed":"bravo"}`,
+			"charlie": chain[1].ID + ` {"removed":"charlie"}`,
+			"delta":   chain[0].ID + ` {"removed":"delta"}`,
+		}
+		if len(proved) != len(want) || proved["bravo"] != want["bravo"] || proved["charlie"] != want["charlie"] || proved["delta"] != want["delta"] {
+			t.Fatalf("the replacement lent %v, want %v", proved, want)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("the replacement never removed alpha")
+	}
+	records := operationstore.New(h.workspace.area, h.workspace.logArea, time.Now)
+	plan, err := records.ReadPlan(ctx, replacement.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alpha, _ := plan.Block("alpha")
+	foreign, apply, cycle := chain[0], chain[0], chain[0]
+	foreign.Source = "op-" + strings.Repeat("e1", 16)
+	apply.Verb = reconciliation.Apply
+	cycle.Replaces = chain[1].ID
+	for _, test := range []struct {
+		name    string
+		record  operationstore.Operation
+		message string
+	}{
+		{"foreign source", foreign, "is no removal of the same apply"},
+		{"apply hop", apply, "is no removal of the same apply"},
+		{"cycle", cycle, "name one another in a cycle"},
+	} {
+		store := &sourceStore{recordReader: records, operations: map[string]operationstore.Operation{chain[0].ID: test.record}}
+		_, _, err := removalRecords(ctx, store, replacement, plan, alpha)
+		t.Run(test.name, func(t *testing.T) { requireStateRefusal(t, err, test.message) })
 	}
 }

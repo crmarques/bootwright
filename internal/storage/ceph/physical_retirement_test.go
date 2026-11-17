@@ -570,6 +570,15 @@ func TestRetainedRootRetirementRequiresNativeCleanupAndAllDiskReceipts(t *testin
 			t.Fatal("native cleanup or disk proof lost")
 		}
 	}
+	replaced := e
+	replaced.RemovalProved = slices.Clone(e.RemovalProved)
+	for i := range replaced.RemovalProved {
+		replaced.RemovalProved[i].Applied.Operation = e.ApplyOperation
+		replaced.RemovalProved[i].Removed.Operation = "remove-replaced"
+	}
+	if lent, err := capability.Destroy(context.Background(), replaced); err != nil || string(lent.Evidence) != string(result.Evidence) {
+		t.Fatalf("cleanup and erase receipts a replaced removal proved were not accepted: %s (%v)", lent.Evidence, err)
+	}
 	for i, pair := range e.RemovalProved {
 		if pair.Applied.Implementation == "fixture-erase" {
 			e.RemovalProved = append(e.RemovalProved[:i:i], e.RemovalProved[i+1:]...)

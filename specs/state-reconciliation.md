@@ -452,8 +452,9 @@ operation directory is kept for audit and never named by the index: a
 completed operation, one a removal superseded, and the unreferenced directory
 an interrupted registration leaves once its plan landed. A later command reads
 one again only as the current operation's `source`, or as a member of the
-lineage of the current operation or of its `source`, or, for `status`, as the
-removal the current one replaces, and that one's own, and each counts toward the
+lineage of the current operation or of its `source`, or, for `status` and for
+a removal block's proof of what its dependencies' removal proved, as the
+removals the current one replaces, each through the next one's `replaces`, and each counts toward the
 [retained-operation bound](contexts.md#storage-locking-and-publication). The
 lineage of an apply is that apply and the predecessors its records name, read
 back oldest first through each one's own `predecessor`; a record that is missing,
@@ -1899,7 +1900,9 @@ it was written.
 
 A fresh removal may supersede any apply that has not completed, and a failed
 destroy, which is removed over what it has not yet proved gone and is never
-continued. An apply
+continued. A replacement's block also counts, as proof of its dependencies'
+removal, each one a removal of the same `source` it replaces proved `done` and
+no nearer removal carries. An apply
 qualifies however it stopped, because the set it owns is the same at a
 boundary, at a failure, and at an interruption.
 An unproved effect is not an exception: the removal resolves it first, by its
@@ -2650,7 +2653,9 @@ was replaced or finished, it withdraws that custody's private publication and
 boot-private files, sets its receipt and any finalizing or completed record
 aside as `superseded-<operation>-<record>.json` without adopting them, keeping
 those of only the four removals set aside last, and then writes its own, and an
-observation of it reads unprepared for this removal.
+observation of it reads unprepared for this removal. An erase a removal it
+replaces completed still counts as that removal's proof, never as custody
+this removal adopts.
 The path is unchanged. The installed OS's existing host key is never the erase
 receipt identity. The RAM service accepts only receipt reads and receipt-hash
 acknowledgement through pinned SSH. A complete receipt binds request, original
