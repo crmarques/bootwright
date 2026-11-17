@@ -63,7 +63,7 @@ func wireMachine(deps machineDependencies) cli.Services {
 	evidence := machineOwnership{reconciler: deps.Lifecycle}
 	client := sshlocal.New(deps.Home, deps.Owner, sessionFiles(deps.Files))
 	runner := ansiblerunner.New(operationPlaybook(), deps.Stager).AdmitReadOnly(readOnlyOperations()...)
-	powered := power.New(deps.State, machineRealization{reconciler: deps.Lifecycle}, machineIdentities{reconciler: deps.Lifecycle},
+	powered := power.New(deps.State, power.NewEvidenceRealization(deps.Lifecycle, realizesMachine), machineIdentities{reconciler: deps.Lifecycle},
 		deps.Lifecycle, runner, runner.BeginInvocation, deps.Confirmer, deps.Reporter, selection).
 		WithHostAccess(hostedAccess{lender: kubevirt.NewLender(runner), custody: deps.Custody})
 	accessState := nodeAccessState{state: deps.State}
@@ -180,44 +180,8 @@ func (o machineOwnership) Completed(ctx context.Context, contextName, kind, impl
 	return completed, nil
 }
 
-// machineRealization reads the block that realizes one Machine on its
-// provider. Its emulated controller or KubeVirt port is that block's effect,
-// so power asks it alone: the installation that follows it on the same
-// Machine, and the bare-metal claim of a physical one, create no controller.
-type machineRealization struct {
-	reconciler interface {
-		evidenceReader
-		appliedEvidence
-	}
-}
-
-func (r machineRealization) Realization(ctx context.Context, contextName, name string) (machine.OwnershipState, bool, error) {
-	published, err := r.reconciler.Evidence(ctx, contextName, "Machine", name)
-	if err != nil {
-		return machine.OwnershipState{}, false, err
-	}
-	if state, found := realizationOf(published); found {
-		return state, true, nil
-	}
-	applied, err := r.reconciler.AppliedEvidence(ctx, contextName, "Machine", name)
-	if err != nil {
-		return machine.OwnershipState{}, false, err
-	}
-	if state, found := realizationOf(applied); found && state.Verb == string(reconciliation.Apply) && state.State == string(reconciliation.BlockDone) {
-		return machine.OwnershipState{Verb: machine.VerbDestroy, State: machine.BlockDone}, true, nil
-	}
-	return machine.OwnershipState{}, false, nil
-}
-
-// realizationOf picks the libvirt or KubeVirt machine block the current plan
-// froze for one Machine, and reports the verb and state it reached.
-func realizationOf(published []lifecycle.BlockEvidence) (machine.OwnershipState, bool) {
-	for _, block := range published {
-		if block.Implementation == libvirt.MachineImplementation || block.Implementation == kubevirt.MachineImplementation {
-			return machine.OwnershipState{Verb: string(block.Verb), State: string(block.State)}, true
-		}
-	}
-	return machine.OwnershipState{}, false
+func realizesMachine(implementation string) bool {
+	return implementation == libvirt.MachineImplementation || implementation == kubevirt.MachineImplementation
 }
 
 // machineHostKeys reads the host key one context's own installation proved.

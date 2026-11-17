@@ -28,6 +28,11 @@ type Realization interface {
 	Realization(ctx context.Context, contextName, name string) (machine.OwnershipState, bool, error)
 }
 
+type RealizationEvidence interface {
+	Evidence(ctx context.Context, contextName, kind, object string) ([]lifecycle.BlockEvidence, error)
+	AppliedEvidence(ctx context.Context, contextName, kind, object string) ([]lifecycle.BlockEvidence, error)
+}
+
 // Identities reports the identity the context's current apply proved for one
 // physical Machine, which a power operation holds it to before any request,
 // and the controller host's own, read locally, which no request may reach.

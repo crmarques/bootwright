@@ -16,6 +16,7 @@ import (
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/power"
+	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/nativeartifacts/comparisonlocal"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
@@ -169,7 +170,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	})
 	services.MachineInventory, services.MachineAccess = machine.MachineInventory, machine.MachineAccess
 	services.MachineCopy = machine.MachineCopy
-	services.MachineDiscovery = machineDiscovery{lifecycle: reconciler}
+	services.MachineDiscovery = installation.NewDiscoveryService(reconciler)
 	services.EnvironmentAccess = machine.EnvironmentAccess
 	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust
 	services.ClusterAccess = wireClusterAccess(services.DesiredState, secrets.binder, deps.Selection, reconciler)

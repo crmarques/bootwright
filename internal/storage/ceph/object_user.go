@@ -1,6 +1,7 @@
 package ceph
 
 import (
+	"slices"
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -49,6 +50,23 @@ func ObjectUserProved(catalog api.Catalog, user api.Object, proofs []lifecycle.B
 		matched++
 	}
 	return matched == 1
+}
+
+func ObjectUserProvedAgainst(catalog api.Catalog, user api.Object, proofs []lifecycle.BlockEvidence, frozen []reconciliation.Block) bool {
+	bound := slices.Clone(proofs)
+	for i := range bound {
+		matches := 0
+		for _, block := range frozen {
+			if block.ID == ObjectUserBlockID(user.Name()) && block.Kind == bound[i].Kind && block.Object == bound[i].Object && block.Implementation == bound[i].Implementation {
+				bound[i].Block = block
+				matches++
+			}
+		}
+		if matches != 1 {
+			return false
+		}
+	}
+	return ObjectUserProved(catalog, user, bound)
 }
 
 func objectUserRequest(c api.Catalog, user api.Object, contextName string) (Request, error) {

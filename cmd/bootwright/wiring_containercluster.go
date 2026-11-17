@@ -11,7 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 	"github.com/crmarques/bootwright/internal/controller/evidence"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -54,35 +53,25 @@ func (m clusterClientMetadata) Client(ctx context.Context, contextName, cluster,
 	if err != nil {
 		return containeraccess.Client{}, err
 	}
-	for _, record := range records {
-		if record.Implementation != agentinstall.InstallImplementation || record.Verb != reconciliation.Apply || record.State != reconciliation.BlockDone {
-			continue
-		}
-		request, err := agentinstall.DecodeInstallRequest(record.Block.Request)
-		if err != nil {
-			return containeraccess.Client{}, err
-		}
-		if request.Identity.Cluster != cluster || request.Identity.Context != contextName {
-			continue
-		}
-		if m.custody == nil {
-			break
-		}
-		present, err := m.custody.ProducedAvailable(ctx, custody.ReadProducedRequest{ContextName: contextName, Block: agentinstall.InstallBlockID(cluster), Name: agentinstall.KubeconfigOutput})
-		if err != nil {
-			return containeraccess.Client{}, err
-		}
-		if !present {
-			break
-		}
-		tool := evidence.InstalledTool{Kind: "openshift-clients", Compatibility: request.Release.Distribution, Version: request.Release.Version, Executable: executable}
-		path, err := m.reconciler.AccessTool(ctx, contextName, tool)
-		if err != nil {
-			return containeraccess.Client{}, err
-		}
-		return containeraccess.Client{Executable: path, Version: tool.Version, Distribution: tool.Compatibility}, nil
+	tool, found, err := agentinstall.InstalledClient(records, contextName, cluster, executable)
+	if err != nil {
+		return containeraccess.Client{}, err
 	}
-	return containeraccess.Client{}, containeraccess.UnavailableCluster(contextName, cluster)
+	if !found || m.custody == nil {
+		return containeraccess.Client{}, containeraccess.UnavailableCluster(contextName, cluster)
+	}
+	present, err := m.custody.ProducedAvailable(ctx, custody.ReadProducedRequest{ContextName: contextName, Block: agentinstall.InstallBlockID(cluster), Name: agentinstall.KubeconfigOutput})
+	if err != nil {
+		return containeraccess.Client{}, err
+	}
+	if !present {
+		return containeraccess.Client{}, containeraccess.UnavailableCluster(contextName, cluster)
+	}
+	path, err := m.reconciler.AccessTool(ctx, contextName, tool)
+	if err != nil {
+		return containeraccess.Client{}, err
+	}
+	return containeraccess.Client{Executable: path, Version: tool.Version, Distribution: tool.Compatibility}, nil
 }
 
 func (m clusterClientMetadata) ClientReason(ctx context.Context, contextName, cluster, executable string) (string, error) {

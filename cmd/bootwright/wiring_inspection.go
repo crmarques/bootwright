@@ -14,7 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
@@ -59,12 +58,7 @@ func (d inspectionCustody) ObjectUserCredentials(ctx context.Context, contextNam
 		return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
 	}
 	defer read.Material.Clear()
-	value, ok := read.Material.Part(secrets.ValuePart)
-	defer clear(value)
-	if !ok || !slices.Equal(read.Material.Parts(), []secrets.Part{secrets.ValuePart}) {
-		return inspection.Custodied{}, true, inspection.ErrObjectUserMaterial
-	}
-	material, ok := ceph.ObjectUserCredentials(value, user)
+	material, ok := ceph.ObjectUserCredentialsOf(read.Material, user)
 	if !ok {
 		return inspection.Custodied{}, true, inspection.ErrObjectUserMaterial
 	}
@@ -85,17 +79,11 @@ func (d inspectionCustody) ClientKeyring(ctx context.Context, contextName, clien
 		return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
 	}
 	defer read.Material.Clear()
-	value, ok := read.Material.Part(secrets.ValuePart)
-	defer clear(value)
-	if !ok || !slices.Equal(read.Material.Parts(), []secrets.Part{secrets.ValuePart}) {
-		return inspection.Custodied{}, true, inspection.ErrClientMaterial
-	}
-	keyring, ok := ceph.ClientKeyring(value, client)
-	defer clear(keyring)
+	keyring, ok := ceph.ClientKeyringOf(read.Material, client)
 	if !ok {
 		return inspection.Custodied{}, true, inspection.ErrClientMaterial
 	}
-	return inspection.Custodied{Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: keyring}), Unproved: read.Unproved}, true, nil
+	return inspection.Custodied{Material: keyring, Unproved: read.Unproved}, true, nil
 }
 
 type cephInspection struct{ reconciler cephReader }
@@ -112,19 +100,7 @@ func (c cephInspection) ObjectUserProved(ctx context.Context, contextName string
 	if frozen == nil {
 		return false, nil
 	}
-	for i := range proofs {
-		matches := 0
-		for _, block := range frozen.Frozen {
-			if block.ID == ceph.ObjectUserBlockID(user.Name()) && block.Kind == proofs[i].Kind && block.Object == proofs[i].Object && block.Implementation == proofs[i].Implementation {
-				proofs[i].Block = block
-				matches++
-			}
-		}
-		if matches != 1 {
-			return false, nil
-		}
-	}
-	return ceph.ObjectUserProved(catalog, user, proofs), nil
+	return ceph.ObjectUserProvedAgainst(catalog, user, proofs, frozen.Frozen), nil
 }
 
 func (c cephInspection) Resources(ctx context.Context, contextName string, catalog api.Catalog) (map[string][]inspection.Resource, error) {

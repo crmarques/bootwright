@@ -21,6 +21,12 @@ type Runner interface {
 	Run(context.Context, lifecycle.RunRequest) (lifecycle.RunResult, error)
 }
 
+type DiscoveryOperations interface {
+	Prepare(context.Context, lifecycle.PrepareRequest) (*lifecycle.OperationResult, error)
+	AppliedEvidence(ctx context.Context, contextName, kind, object string) ([]lifecycle.BlockEvidence, error)
+	PlanPreparation(context.Context, lifecycle.PrepareRequest) (*lifecycle.PlanResult, error)
+}
+
 // Identities reads the identity a physical Machine's own block proved earlier
 // in this operation, from the evidence the attempt was handed. That evidence
 // is another capability's, so its owner decodes it and this capability asks

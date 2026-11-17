@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 
@@ -10,12 +9,9 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
-	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 )
-
-type machineDiscovery struct{ lifecycle lifecycle.Service }
 
 func discoveryNonce() (string, error) {
 	data := make([]byte, 32)
@@ -23,31 +19,6 @@ func discoveryNonce() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(data), nil
-}
-
-func (s machineDiscovery) Discover(ctx context.Context, r installation.DiscoverRequest) (*installation.DiscoverResult, error) {
-	operation, err := s.lifecycle.Prepare(ctx, lifecycle.PrepareRequest{ContextName: r.ContextName, Kind: installation.DiscoveryPreparation, Targets: r.Names, PreparePrerequisites: r.PreparePrerequisites, SkipConfirmation: r.SkipConfirmation})
-	if operation == nil {
-		return nil, err
-	}
-	result := &installation.DiscoverResult{Operation: operation, Inventories: []installation.DiscoveryInventory{}}
-	if err != nil || operation.Receipt.State != string(reconciliation.OperationDone) {
-		return result, err
-	}
-	for _, name := range r.Names {
-		records, readErr := s.lifecycle.AppliedEvidence(ctx, operation.Context.Name, installation.Kind, name)
-		if readErr != nil {
-			return result, readErr
-		}
-		inventory, found, readErr := installation.RecordedInventory(name, records)
-		if readErr != nil {
-			return result, readErr
-		}
-		if found {
-			result.Inventories = append(result.Inventories, inventory)
-		}
-	}
-	return result, nil
 }
 
 func discoveryPreparations(resolver lifecycle.CapabilityResolver) []lifecycle.PreparationDefinition {
@@ -71,8 +42,4 @@ func discoveryPreparations(resolver lifecycle.CapabilityResolver) []lifecycle.Pr
 		}
 	}
 	return []lifecycle.PreparationDefinition{definition}
-}
-
-func (s machineDiscovery) PlanDiscovery(ctx context.Context, r installation.DiscoverRequest) (*lifecycle.PlanResult, error) {
-	return s.lifecycle.PlanPreparation(ctx, lifecycle.PrepareRequest{ContextName: r.ContextName, Kind: installation.DiscoveryPreparation, Targets: r.Names, PreparePrerequisites: r.PreparePrerequisites})
 }

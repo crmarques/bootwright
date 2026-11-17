@@ -158,7 +158,7 @@ func TestARealizationAReplacementDestroyNoLongerNamesIsRemoved(t *testing.T) {
 		"never planned":                   {&removalReader{}, machine.OwnershipState{}, false, []string{"current", "applied"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			state, found, err := machineRealization{reconciler: test.reader}.Realization(context.Background(), "lab", "node-0")
+			state, found, err := power.NewEvidenceRealization(test.reader, realizesMachine).Realization(context.Background(), "lab", "node-0")
 			if err != nil || found != test.found || state != test.want || !slices.Equal(test.reader.asked, test.asked) {
 				t.Fatalf("realization = %+v, %t (%v) after %v", state, found, err, test.reader.asked)
 			}
@@ -212,8 +212,8 @@ func TestPowerAsksTheMachineBlockNotTheInstallation(t *testing.T) {
 			machine.OwnershipState{}, false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			state, found := realizationOf(test.published)
-			if state != test.want || found != test.found {
+			state, found, err := power.NewEvidenceRealization(&removalReader{current: test.published}, realizesMachine).Realization(context.Background(), "lab", "rhel-01")
+			if err != nil || state != test.want || found != test.found {
 				t.Fatalf("realization = %+v, %t, want %+v, %t", state, found, test.want, test.found)
 			}
 		})
