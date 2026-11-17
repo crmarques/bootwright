@@ -24,7 +24,9 @@ bootstrap entirely. Keep the environment outside tracked content. The gate check
 versions, supplies isolated inventory/configuration/cache paths, runs every
 shipped playbook through syntax checking, and runs Ansible Lint offline. It
 runs all applicable Ansible sanity checks, the sanity import test again under
-the managed-host floor interpreter, collection unit tests, the module and
+the managed-host floor interpreter, each Python source under `internal/` that a
+Go package embeds (parsed under the floor grammar, with deferred annotations,
+compiled with warnings as errors and imported there), collection unit tests, the module and
 module utility unit tests again under that floor, and the synthetic controller
 tool, supervisor and discovery diagnostic integration targets.
 
@@ -45,7 +47,7 @@ one lane, as a narrowed suite does, runs it alone on the terminal.
 A complete run, the argument-free form with no operator-run target selected,
 records its pass under a key over every input it reads: each file, directory
 and link under `ansible/` by path, mode and content (byte code and pytest's
-cache aside), the launcher, `scripts/cache-dir` and every
+cache aside), each embedded Python source under `internal/`, the launcher, `scripts/cache-dir` and every
 `scripts/tools/ansible*` file, the repository root's `.gitignore` and Ansible
 Lint and yamllint configuration files (an absent one included), the
 interpreter's version, every distribution installed beside it, and the names,

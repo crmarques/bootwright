@@ -570,6 +570,97 @@ class LanesTest(unittest.TestCase):
         self.assertTrue(commands[0][-1].endswith("tests/unit"))
 
 
+class EmbeddedPythonTest(unittest.TestCase):
+    """The Python the Go packages embed answers to the managed-host floor."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.addCleanup(self.temporary.cleanup)
+
+    def source(self, text):
+        path = self.root / "worker.py"
+        path.write_text(text, encoding="utf-8")
+        return subprocess.run(
+            [sys.executable, "-I", "-B", "-W", "error", "-c"]
+            + [ansible_check.EMBEDDED_FLOOR_CHECK, str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_every_embedded_source_under_internal_is_found_in_path_order(self):
+        for name in ("internal/b/two.py", "internal/a/one.py", "internal/a/x.txt"):
+            (self.root / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / name).write_text("", encoding="utf-8")
+        (self.root / "scripts").mkdir()
+        (self.root / "scripts/tool.py").write_text("", encoding="utf-8")
+        self.assertEqual(
+            [
+                str(path.relative_to(self.root))
+                for path in ansible_check.embedded_python(self.root)
+            ],
+            ["internal/a/one.py", "internal/b/two.py"],
+        )
+
+    def test_the_floor_run_checks_each_embedded_source_on_the_floor_interpreter(self):
+        for name in ("internal/a/one.py", "internal/b/two.py"):
+            (self.root / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / name).write_text("", encoding="utf-8")
+        ran = []
+        run_ = ansible_check.Run(
+            self.root,
+            Path("/venv/bin/python"),
+            self.root,
+            self.root,
+            self.root,
+            self.root,
+            {"PATH": "base"},
+            set(),
+            [],
+        )
+        with mock.patch.object(
+            ansible_check,
+            "run",
+            lambda command, output, **options: ran.append((command, options)),
+        ):
+            ansible_check.floor_embedded(run_, Path("/f/python"), {}, None)
+        self.assertEqual(
+            [(command[:6], command[7:], options["cwd"]) for command, options in ran],
+            [
+                (
+                    ["/f/python", "-I", "-B", "-W", "error", "-c"],
+                    [str(self.root / name)],
+                    self.root,
+                )
+                for name in ("internal/a/one.py", "internal/b/two.py")
+            ],
+        )
+        self.assertTrue(ran[0][1]["env"]["PATH"].startswith("/venv/bin:/f:"))
+
+    def test_the_shipped_copy_worker_passes_the_floor_check(self):
+        worker = Path(__file__).resolve().parents[2] / (
+            "internal/machine/sshlocal/copy_worker.py"
+        )
+        self.assertEqual(
+            self.source(worker.read_text(encoding="utf-8")).returncode,
+            0,
+        )
+
+    def test_the_check_refuses_later_grammar_missing_annotations_and_warnings(self):
+        header = "from __future__ import annotations\n"
+        for name, text in {
+            "a match statement": header + "match 1:\n    case 1:\n        pass\n",
+            "an except star": header + "try:\n    pass\nexcept* OSError:\n    pass\n",
+            "no deferred annotations": "x = 1\n",
+            "a syntax warning": header + "x = 1 if 1else 2\n",
+            "an entrypoint that fails": header + "raise ValueError('x')\n",
+        }.items():
+            with self.subTest(case=name):
+                self.assertNotEqual(self.source(text).returncode, 0)
+        self.assertEqual(self.source(header + "x = 1\n").returncode, 0)
+
+
 class PassKeyTest(unittest.TestCase):
     """Every input a complete run reads moves its key."""
 
@@ -584,6 +675,7 @@ class PassKeyTest(unittest.TestCase):
             "scripts/tools/ansible_check.py": "",
             "scripts/tools/ansible-requirements.txt": "a==1\n",
             "scripts/tools/focus.py": "",
+            "internal/machine/worker.py": "",
         }.items():
             (self.root / name).parent.mkdir(parents=True, exist_ok=True)
             (self.root / name).write_text(text, encoding="utf-8")
@@ -619,6 +711,9 @@ class PassKeyTest(unittest.TestCase):
             "a new harness file": lambda: (
                 self.root / "scripts/tools/ansible_new.py"
             ).write_text(""),
+            "an embedded Python source": lambda: (
+                self.root / "internal/machine/worker.py"
+            ).write_text("x = 1\n"),
         }
         for name, change in changes.items():
             with self.subTest(change=name):
@@ -850,13 +945,17 @@ class AcquireTest(unittest.TestCase):
     def test_a_download_that_differs_is_refused_and_leaves_nothing(self):
         data = b"pinned"
         for served in (b"pinneX", b"pinned and more", b"pin"):
-            with self.subTest(served=served), tempfile.TemporaryDirectory() as temporary:
+            with self.subTest(
+                served=served
+            ), tempfile.TemporaryDirectory() as temporary:
                 target = Path(temporary) / "z.tar.gz"
                 with self.assertRaises(SystemExit) as refused:
                     ansible_check._acquire.acquire(
                         self.pin(data), target, "artifact", 5, self.opener(served)
                     )
-                self.assertEqual(str(refused.exception), "artifact does not match its lock")
+                self.assertEqual(
+                    str(refused.exception), "artifact does not match its lock"
+                )
                 self.assertFalse(target.exists())
 
     def test_a_kept_file_is_verified_without_a_fetch(self):
@@ -865,11 +964,15 @@ class AcquireTest(unittest.TestCase):
             target = Path(temporary) / "z.tar.gz"
             target.write_bytes(data)
             opener = self.opener(b"")
-            ansible_check._acquire.acquire(self.pin(data), target, "artifact", 5, opener)
+            ansible_check._acquire.acquire(
+                self.pin(data), target, "artifact", 5, opener
+            )
             opener.open.assert_not_called()
             target.write_bytes(b"tampered")
             with self.assertRaises(SystemExit):
-                ansible_check._acquire.acquire(self.pin(data), target, "artifact", 5, opener)
+                ansible_check._acquire.acquire(
+                    self.pin(data), target, "artifact", 5, opener
+                )
 
     def test_a_redirect_stays_with_its_publisher(self):
         handler = ansible_check._acquire.PublisherRedirect()

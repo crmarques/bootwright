@@ -484,6 +484,55 @@ def floor_environment(environment: dict, executable: Path, interpreter: Path) ->
     )
 
 
+# Python the Go packages embed and run on a managed host, outside the
+# collection that ansible-test checks.
+EMBEDDED_ROOT = "internal"
+
+# What the floor interpreter does to one embedded source: parse it under the
+# floor's grammar, require deferred annotations, compile it with warnings as
+# errors, then import it with no standard input so its entrypoint returns at
+# once.
+EMBEDDED_FLOOR_CHECK = """import ast, io, sys
+path = sys.argv[1]
+with open(path, encoding="utf-8") as stream:
+    source = stream.read()
+tree = ast.parse(source, filename=path, feature_version=(3, 9))
+if not any(isinstance(node, ast.ImportFrom) and node.module == "__future__"
+           and any(alias.name == "annotations" for alias in node.names) for node in tree.body):
+    raise SystemExit(path + ": missing from __future__ import annotations")
+code = compile(source, path, "exec")
+sys.stdin = io.TextIOWrapper(io.BytesIO(b""))
+exec(code, {"__name__": "floor_check", "__file__": path})
+"""
+
+
+def embedded_python(root: Path) -> list[Path]:
+    """Return the Python sources the Go packages embed, in path order."""
+    return sorted((root / EMBEDDED_ROOT).rglob("*.py"))
+
+
+def floor_embedded(
+    run_: Run, interpreter: Path, environment: dict, output: Optional[TextIO]
+) -> None:
+    """Hold each embedded Python source to the managed-host floor interpreter."""
+    for path in embedded_python(run_.root):
+        run(
+            [
+                str(interpreter),
+                "-I",
+                "-B",
+                "-W",
+                "error",
+                "-c",
+                EMBEDDED_FLOOR_CHECK,
+                str(path),
+            ],
+            output,
+            cwd=run_.root,
+            env=floor_environment(environment, run_.executable, interpreter),
+        )
+
+
 def sanity_lane(run_: Run, wheelhouse: Path) -> Lane:
     """Return the lane of the sanity tests and the floor's import test.
 
@@ -531,6 +580,7 @@ def sanity_lane(run_: Run, wheelhouse: Path) -> Lane:
             env=floor_environment(environment, run_.executable, interpreter),
         )
         require_imported(test_collection, minor)
+        floor_embedded(run_, interpreter, environment, output)
 
     return lane
 
@@ -811,6 +861,11 @@ def tool_entries(root: Path) -> list[str]:
     for path in names:
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         lines.append(f"tool {path.relative_to(root)} {path.stat().st_mode:o} {digest}")
+    for path in embedded_python(root):
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        lines.append(
+            f"embedded {path.relative_to(root)} {path.stat().st_mode:o} {digest}"
+        )
     for name in ROOT_FILES:
         path = root / name
         if path.is_file():
@@ -830,6 +885,7 @@ def written_since(root: Path, start: float) -> bool:
     """
     paths = [root / name for name in TOOL_FILES + ROOT_FILES]
     paths += list((root / "scripts/tools").iterdir())
+    paths += embedded_python(root)
     for current, directories, files in os.walk(root / "ansible"):
         directories[:] = [
             name for name in directories if name not in UNREAD_DIRECTORIES
