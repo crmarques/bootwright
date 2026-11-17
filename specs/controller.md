@@ -1227,7 +1227,10 @@ oversized, non-local or ambiguous answers remain `unknown`; DNS names receive
 no loopback omission. Every inspection resolves the name anew, including the
 exclusive-transaction recheck. Inspection reads that interface's runtime
 firewalld zone and reports the socket, interface, zone and `open`, `closed` or
-`unknown` result. Inspection never changes firewall configuration. Explicitly managed host
+`unknown` result. Inspection never changes firewall configuration. One check
+reads the host-wide firewalld state, policies and direct rules once and each
+zone and service once, under one shared deadline; a socket reached after that
+deadline reports the exhausted budget. Explicitly managed host
 firewalls are prepared by the controller stage through the
 [host firewall capability](managed-os.md#host-firewall-requirements).
 

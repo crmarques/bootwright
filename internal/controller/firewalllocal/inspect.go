@@ -21,6 +21,31 @@ type Inspector struct {
 	LookupIP   func(context.Context, string) ([]netip.Addr, error)
 }
 
+type recorded struct {
+	data []byte
+	err  error
+}
+
+func (i Inspector) Session() firewall.Inspector {
+	read := i.Read
+	if read == nil {
+		read = command
+	}
+	seen := map[string]recorded{}
+	i.Read = func(ctx context.Context, args []string) ([]byte, error) {
+		key := strings.Join(args, "\x00")
+		if value, found := seen[key]; found {
+			return value.data, value.err
+		}
+		data, err := read(ctx, args)
+		if ctx.Err() == nil {
+			seen[key] = recorded{data: data, err: err}
+		}
+		return data, err
+	}
+	return i
+}
+
 func (i Inspector) Inspect(ctx context.Context, socket firewall.Socket) (firewall.Observation, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()

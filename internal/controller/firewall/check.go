@@ -35,10 +35,23 @@ func (c Check) Summary() string {
 	return fmt.Sprintf("%s %s:%d/%s: %s (interface %s, zone %s); %s", c.Socket.Object, address, c.Socket.Port, c.Socket.Protocol, c.Observation.Status, c.Observation.Interface, c.Observation.Zone, c.Observation.Reason)
 }
 
+const inspectionBudget = 45 * time.Second
+
 func CheckSockets(ctx context.Context, inspector Inspector, sockets []Socket) ([]Check, error) {
+	return checkSockets(ctx, inspector, sockets, inspectionBudget)
+}
+
+func inspectable(socket Socket, address netip.Addr, parseErr error) bool {
+	return socket.Address != "" && (parseErr != nil || !address.IsUnspecified()) && socket.Port > 0 && socket.Port <= 65535 && (socket.Protocol == "tcp" || socket.Protocol == "udp")
+}
+
+func checkSockets(ctx context.Context, inspector Inspector, sockets []Socket, budget time.Duration) ([]Check, error) {
 	parent := ctx
-	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
+	if session, ok := inspector.(Sessioner); ok {
+		inspector = session.Session()
+	}
 	ordered := slices.Clone(sockets)
 	slices.SortFunc(ordered, func(a, b Socket) int {
 		return strings.Compare(fmt.Sprintf("%s/%s/%s/%05d", a.Object, a.Address, a.Protocol, a.Port), fmt.Sprintf("%s/%s/%s/%05d", b.Object, b.Address, b.Protocol, b.Port))
@@ -53,7 +66,9 @@ func CheckSockets(ctx context.Context, inspector Inspector, sockets []Socket) ([
 			continue
 		}
 		observed := Observation{Status: "unknown", Reason: "read-only firewall inspection is unavailable"}
-		if inspector != nil && ctx.Err() == nil && socket.Address != "" && (err != nil || !address.IsUnspecified()) && socket.Port > 0 && socket.Port <= 65535 && (socket.Protocol == "tcp" || socket.Protocol == "udp") {
+		if inspector != nil && ctx.Err() != nil && inspectable(socket, address, err) {
+			observed = Observation{Status: "unknown", Reason: "the shared firewall inspection budget was exhausted before this socket was inspected"}
+		} else if inspector != nil && inspectable(socket, address, err) {
 			observed, err = inspector.Inspect(ctx, socket)
 			if err != nil {
 				if parent.Err() != nil {
