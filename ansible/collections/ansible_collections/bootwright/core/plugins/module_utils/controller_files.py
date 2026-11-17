@@ -614,17 +614,20 @@ class ReleaseStamp:
             raise Unreleased("openshift client release")
 
 
-def acquire(bundle, source, egress, seconds, routes):
+def acquire(bundle, source, egress, seconds, routes, reserved=False):
     """Stream one approved tool source into the bundle under its own deadline.
 
     Both the alarm and the transfer check use this source's deadline. Only a
     complete, digest-verified source gains a name; an interrupted one stays an
     unlinked file the kernel reclaims. A refused transfer keeps its message
-    and gains the class of what refused it."""
+    and gains the class of what refused it. A source whose capacity the caller
+    already reserved, with every other acquisition running beside it, skips
+    the walk that a concurrent link would change under it."""
     source_identity(source)
     name = "sources/" + source["id"]
     bundle.writable()
-    bundle.capacity(name, source["bytes"])
+    if not reserved:
+        bundle.capacity(name, source["bytes"])
     deadline = time.monotonic() + seconds
 
     def store(response):
@@ -917,6 +920,11 @@ class Bundle:
             raise Refused("published artifact integrity")
 
     def capacity(self, name, size):
+        self.reserve(((name, size),))
+
+    def reserve(self, entries):
+        """Refuse unless the bundle as it is now also holds every (name,
+        size) entry."""
         totals = {"bytes": 0, "sources": 0, "targets": 0, "entries": 0}
 
         def walk(descriptor, prefix="", depth=0):
@@ -964,14 +972,17 @@ class Bundle:
                 raise Refused("bundle entries changed")
 
         walk(self.fd)
-        totals["bytes"] += size
-        totals["sources"] += size if name.startswith("sources/tool-") else 0
-        totals["targets"] += size if name.startswith("tools/") else 0
+        added = 0
+        for name, size in entries:
+            totals["bytes"] += size
+            totals["sources"] += size if name.startswith("sources/tool-") else 0
+            totals["targets"] += size if name.startswith("tools/") else 0
+            added += len(relative(name))
         if (
             totals["bytes"] > MAX_BUNDLE
             or totals["sources"] > MAX_EXPANDED
             or totals["targets"] > MAX_EXPANDED
-            or totals["entries"] + len(relative(name)) > 32768
+            or totals["entries"] + added > 32768
         ):
             raise Refused("bundle capacity")
         self.verify()
@@ -1223,6 +1234,46 @@ def project(bundle, tool, inspect_only):
     return manifest, changed
 
 
+def admit(tool, egress, deadline):
+    """Check one frozen tool's projection, deadline and route before any bundle
+    is opened."""
+    tool_files(tool)
+    if (
+        not isinstance(deadline, int)
+        or isinstance(deadline, bool)
+        or not 0 < deadline <= MAX_DEADLINE
+    ):
+        raise Refused("acquisition deadline")
+    proxy_for(egress, endpoint(tool["source"]["url"]))
+
+
+def missing(bundle, tool, inspect_only):
+    """Whether tool's source must be acquired, refusing an inspection that
+    finds it absent and a target published without its retained source."""
+    if bundle.present("sources/" + tool["source"]["id"], tool["source"]["bytes"], 0o600):
+        return False
+    if inspect_only:
+        raise Refused("required retained source is missing")
+    bundle.writable()
+    for file in tool_files(tool):
+        if bundle.present(file["path"], MAX_SOURCE, 0o700):
+            raise Refused("unattributed target without retained source")
+    return True
+
+
+def evidence(bundle, tool, inspect_only, acquired):
+    """Project tool's retained source and return its result."""
+    manifest, published = project(bundle, tool, inspect_only)
+    return {
+        "changed": acquired or published,
+        "evidence": {
+            "source": tool["source"]["id"],
+            "sha256": tool["source"]["sha256"],
+            "files": sha256(canonical(manifest)),
+        },
+    }
+
+
 def prepare_tool(location, tool, egress, deadline, inspect_only=False, trust=None):
     """Acquire one frozen tool's source when it is missing, then project it.
 
@@ -1231,36 +1282,13 @@ def prepare_tool(location, tool, egress, deadline, inspect_only=False, trust=Non
     system trust when that host is the anchor's; no downloaded tool is ever
     executed."""
     anchor = lent_anchor(trust or {"host": "", "file": ""})
-    files = tool_files(tool)
-    if (
-        not isinstance(deadline, int)
-        or isinstance(deadline, bool)
-        or not 0 < deadline <= MAX_DEADLINE
-    ):
-        raise Refused("acquisition deadline")
-    proxy_for(egress, endpoint(tool["source"]["url"]))
+    admit(tool, egress, deadline)
     bundle = Bundle(location)
-    changed = False
     try:
-        name = "sources/" + tool["source"]["id"]
-        if not bundle.present(name, tool["source"]["bytes"], 0o600):
-            if inspect_only:
-                raise Refused("required retained source is missing")
-            bundle.writable()
-            for file in files:
-                if bundle.present(file["path"], MAX_SOURCE, 0o700):
-                    raise Refused("unattributed target without retained source")
+        acquired = missing(bundle, tool, inspect_only)
+        if acquired:
             with Routes(anchor) as routes:
                 acquire(bundle, tool["source"], egress, deadline, routes)
-            changed = True
-        manifest, published = project(bundle, tool, inspect_only)
-        return {
-            "changed": changed or published,
-            "evidence": {
-                "source": tool["source"]["id"],
-                "sha256": tool["source"]["sha256"],
-                "files": sha256(canonical(manifest)),
-            },
-        }
+        return evidence(bundle, tool, inspect_only, acquired)
     finally:
         bundle.close()

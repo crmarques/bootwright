@@ -71,7 +71,7 @@ func afterTheExit(records string) string {
 // A refused record names the class of what refused the adapter and the tool
 // it was acquiring: the runner gives that class its diagnostic, naming the
 // source's host, whichever of the record and the failed exit it reads first.
-// Any source but the tool being installed, or an acquisition class without
+// Any source but the request's tools, or an acquisition class without
 // one, breaks the protocol. An internal refusal keeps the generic failure.
 func TestARefusedRecordNamesItsClassifiedCause(t *testing.T) {
 	f := newRefusalFixture(t)
@@ -88,7 +88,7 @@ func TestARefusedRecordNamesItsClassifiedCause(t *testing.T) {
 	}{
 		{"a tool transfer past its deadline", installing + `printf '` + refused("timeout", "tool-helm") + `' >&3; exit 2`, "controller.install", "get.example.test did not answer within its bounded acquisition deadline", "unknown", true},
 		{"a tool source unresolved, exit first", installing + afterTheExit(refused("dns", "tool-helm")), "controller.install", "get.example.test could not be resolved by this host's configured resolver", "unknown", true},
-		{"a source other than the tool being installed", installing + `printf '` + refused("timeout", "tool-other") + `' >&3; exit 2`, "controller.unknown", "the Ansible capability protocol was invalid", "unknown", false},
+		{"a source other than the request's tools", installing + `printf '` + refused("timeout", "tool-other") + `' >&3; exit 2`, "controller.unknown", "the Ansible capability protocol was invalid", "unknown", false},
 		{"a tool source before its continue", f.handoff + acknowledged(f.toolPrepare) + `printf '` + refused("dns", "tool-helm") + `' >&3; exit 2`, "controller.unknown", "the Ansible capability protocol was invalid", "failed", false},
 		{"an acquisition class without its source", installing + `printf '` + refused("dns", "") + `' >&3; exit 2`, "controller.unknown", "the Ansible capability protocol was invalid", "unknown", false},
 		{"a native class", f.handoff + `printf '` + refused("database", "") + `' >&3; exit 2`, "controller.unknown", "the Ansible capability protocol was invalid", "failed", false},
@@ -190,5 +190,56 @@ func TestACanceledInstallationAfterItsContinueStaysUnknown(t *testing.T) {
 	result, err := canceledRun(t, f.handoff+acknowledged(f.toolPrepare)+acknowledged(`{"phase":"continue"}\n`)+`sleep 0.2; exit 2`, "installing helm", f.request)
 	if !errors.Is(err, context.Canceled) || result.Outcome != "unknown" {
 		t.Fatalf("the canceled run left %s with %v, want unknown", result.Outcome, err)
+	}
+}
+
+// One acknowledged continue authorizes every tool of the request, which the
+// adapter then installs at once: a classified refusal may name any of their
+// sources, the release-stamp refusal names the request's openshift-clients
+// tool wherever it stands, the evidence keeps one entry per tool in the
+// request's order, and a second continue breaks the protocol.
+func TestOneContinueAuthorizesEveryToolOfTheRequest(t *testing.T) {
+	sha := strings.Repeat("d", 64)
+	helm := prerequisites.ToolDefinition{Kind: "helm", Version: "3.17.3", Source: prerequisites.DependencySource{ID: "tool-helm", URL: "https://get.example.test/helm.tar.gz", SHA256: sha, Bytes: 1}}
+	kubectl := prerequisites.ToolDefinition{Kind: "kubectl", Version: "1.33.0", Source: prerequisites.DependencySource{ID: "tool-kubectl", URL: "https://dl.example.test/kubectl", SHA256: sha, Bytes: 1}}
+	oc := prerequisites.ToolDefinition{Kind: "openshift-clients", Version: "4.21.15", Source: prerequisites.DependencySource{ID: "tool-oc", URL: "https://mirror.example.test/oc.tar.gz", SHA256: sha, Bytes: 1}}
+	prepared := func(sources ...string) string {
+		data, err := canonicalRecord(map[string]any{"phase": "prepared", "preparation": map[string]any{"addedSources": sources}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data) + `\n`
+	}
+	completed, err := canonicalRecord(map[string]any{"phase": "completed", "outcome": "changed", "evidence": map[string]any{"request": strings.Repeat("a", 64), "postcondition": true,
+		"tools": []map[string]string{{"source": "tool-helm", "sha256": sha, "files": sha}, {"source": "tool-kubectl", "sha256": sha, "files": sha}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handoff := `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `
+	authorized := handoff + acknowledged(prepared("tool-helm", "tool-kubectl")) + acknowledged(`{"phase":"continue"}\n`)
+	both := []prerequisites.ToolDefinition{helm, kubectl}
+	for _, check := range []struct {
+		name, script     string
+		tools            []prerequisites.ToolDefinition
+		outcome, message string
+	}{
+		{"the later tool's refusal", authorized + `printf '{"phase":"refused","reason":"timeout","source":"tool-kubectl"}\n' >&3; exit 2`, both, "unknown", "dl.example.test did not answer within its bounded acquisition deadline"},
+		{"the earlier tool's refusal", authorized + `printf '{"phase":"refused","reason":"dns","source":"tool-helm"}\n' >&3; exit 2`, both, "unknown", "get.example.test could not be resolved by this host's configured resolver"},
+		{"a second continue", authorized + acknowledged(`{"phase":"continue"}\n`) + `exit 2`, both, "unknown", "the Ansible capability protocol was invalid"},
+		{"a release-stamp refusal after another tool", handoff + acknowledged(prepared("tool-helm", "tool-oc")) + acknowledged(`{"phase":"continue"}\n`) + `printf '{"phase":"refused","reason":"release-stamp"}\n' >&3; exit 2`, []prerequisites.ToolDefinition{helm, oc}, "unknown", "the oc of OpenShift client release 4.21.15 does not name its frozen release"},
+		{"every tool's evidence after one continue", authorized + `printf '` + string(completed) + `\n' >&3; exit 0`, both, "changed", ""},
+	} {
+		t.Run(check.name, func(t *testing.T) {
+			result, found := scriptedRun(t, check.script, func(request *capabilityRequest) { request.Tools = check.tools })
+			if check.message == "" {
+				if len(found) != 0 || result.Outcome != check.outcome {
+					t.Fatalf("the run left %s with %+v, want %s", result.Outcome, found, check.outcome)
+				}
+				return
+			}
+			if len(found) != 1 || found[0].Message != check.message || result.Outcome != check.outcome {
+				t.Fatalf("the run left %s with %+v, want %s %q", result.Outcome, found, check.outcome, check.message)
+			}
+		})
 	}
 }

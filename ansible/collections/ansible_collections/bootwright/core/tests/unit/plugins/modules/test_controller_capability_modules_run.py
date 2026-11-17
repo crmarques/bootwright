@@ -12,8 +12,8 @@ import pytest
 from ansible_collections.bootwright.core.plugins.modules import controller_protocol, controller_tool
 
 PROTOCOL = {"phase": "loaded", "request": {"version": "controller-v1"}}
-TOOL = {"bundle": {"path": "/var/lib/example/bundle"}, "tool": {"name": "oc"}, "egress": {"httpProxy": ""},
-        "inspect_only": True, "deadline": 205, "trust": {"host": "", "file": ""}}
+TOOL = {"bundle": {"path": "/var/lib/example/bundle"}, "tools": [{"name": "oc"}], "egress": {"httpProxy": ""},
+        "inspect_only": True, "acquisition": [{"source": "tool-oc", "seconds": 205}], "trust": {"host": "", "file": ""}}
 
 
 @pytest.mark.parametrize("module, arguments, message", [
@@ -28,7 +28,7 @@ def test_a_direct_run_fails_naming_its_action_and_returns_nothing_else(run_modul
 
 @pytest.mark.parametrize("module, arguments, missing", [
     (controller_protocol, {"request": {}}, "phase"),
-    (controller_tool, dict(TOOL, deadline=None), "deadline"),
+    (controller_tool, dict(TOOL, acquisition=None), "acquisition"),
 ])
 def test_a_run_missing_a_required_argument_fails_on_the_argument_before_the_capability_message(run_module, module, arguments, missing):
     arguments = {name: value for name, value in arguments.items() if value is not None}

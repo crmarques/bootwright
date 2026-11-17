@@ -756,7 +756,14 @@ extraction ([automation](#the-controller-runtime)). The fixed controller
 playbook composes `bootwright.core.controller_prerequisites`. It validates the
 request, announces the exact sources it is about to add, which must equal the
 sources the stage already recorded as the attempt's intent, and waits for
-each tool's acknowledgement before installing it. Target archives are
+one acknowledgement before installing any tool. It checks every tool first,
+then acquires each missing source at once, at most four together and two from
+one host, each in a fixed worker interpreter of its own, started through the bounded
+process runner and never forked from the Ansible worker, under its own
+deadline, and projects
+the tools and reports their evidence one after another in the request's order;
+after a refusal it starts no further acquisition and names the first refused
+tool in that order. Target archives are
 verified before safe extraction of only the named regular members into
 private versioned tool locations. Existing files are verified by their
 streamed digest, never overwritten. A target source streams to disk under its
@@ -787,10 +794,10 @@ fails, and never the exception's text: an acquisition names `dns`,
 acquiring, and any other refusal is `internal`. Go maps each class to its
 diagnostic and remedy, naming the source's host, and for `storage` the tool
 area that source was being written into; `internal`, a class without the
-source being installed, and a source the run is not installing keep the
+source, and a source the run is not installing keep the
 generic adapter failure or break the protocol. A run that failed after
-announcing its sources but before Go acknowledged any tool installed nothing
-and is failed; once a tool's acknowledgement may have been delivered, it is
+announcing its sources but before Go acknowledged the tools installed nothing
+and is failed; once that acknowledgement may have been delivered, it is
 unknown.
 
 The adapter alone proves the retained source and member digests and the `oc`

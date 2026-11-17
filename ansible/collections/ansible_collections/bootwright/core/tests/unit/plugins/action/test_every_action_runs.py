@@ -39,7 +39,7 @@ PROTOCOLS = {
 # The plugins that act on the controller, each with the helper that would act,
 # run with arguments they refuse before reaching it.
 EFFECTS = {
-    "controller_tool": "prepare_tool",
+    "controller_tool": "prepare_tools",
     "managedos_disk_discovery": "execute",
     "cluster_objects_read": "Engine",
     "cluster_objects_write": "Engine",

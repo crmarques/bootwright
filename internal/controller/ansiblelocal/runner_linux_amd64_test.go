@@ -183,7 +183,7 @@ func TestRunnerReportsProtocolPhasesAsProgress(t *testing.T) {
 	if _, err := runProcess(ctx, launch, treeOf(request), request, func(context.Context, []string) error { return nil }, progress, nil, boundary); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"running: starting the private Ansible runtime", "running: preparing the target clients", "running: installing kubectl 1.33.0, tool 1 of 1"}; !slices.Equal(details, want) {
+	if want := []string{"running: starting the private Ansible runtime", "running: preparing the target clients", "running: installing kubectl 1.33.0"}; !slices.Equal(details, want) {
 		t.Fatalf("progress = %q, want %q", details, want)
 	}
 }
@@ -267,7 +267,7 @@ func TestAProtocolRefusalReleasesAWaitingAdapter(t *testing.T) {
 // An adapter that refuses an unstamped oc names the refusal before it fails, so
 // the operator is told of the release-stamp check rather than to restore the
 // source a rerun reuses. It is named whichever of the record and the failed
-// exit the runner reads first, and only for the client being installed. Out of
+// exit the runner reads first, and only for a request that installs the client. Out of
 // its place, before that client's continue or after completed, the record is
 // refused like any other, again whichever the runner reads first.
 func TestAnUnstampedClientRefusalNamesTheReleaseStampCheck(t *testing.T) {

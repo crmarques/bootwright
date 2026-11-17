@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -186,12 +187,20 @@ type protocolRun struct {
 	// read before the failed exit has. One read after it still moves the
 	// position, so a later record is judged as if read first, but records and
 	// authorizes nothing.
-	published     bool
-	continuations int
+	published  bool
+	authorized bool
 	// effectRequested marks a continue record judged for an acknowledgement
-	// that lets the adapter install a tool. It is set before the write;
+	// that lets the adapter install the tools. It is set before the write;
 	// effectAuthorized marks that write delivered.
 	effectRequested, effectAuthorized bool
+}
+
+func installing(tools []prerequisites.ToolDefinition) string {
+	names := make([]string, len(tools))
+	for index, tool := range tools {
+		names[index] = tool.Kind + " " + tool.Version
+	}
+	return strings.Join(names, ", ")
 }
 
 // Spare reports that nothing a tool publication starts may outlive
@@ -231,24 +240,22 @@ func (run *protocolRun) Judge(ctx context.Context, record adapterprotocol.Record
 		}
 		run.prepared = run.prepared || valid && (exited || run.published)
 	case "continue":
-		valid = valid && run.loaded && run.prepared && run.continuations < len(request.Tools)
-		if valid {
-			run.continuations++
-		}
+		valid = valid && run.loaded && run.prepared && !run.authorized
+		run.authorized = run.authorized || valid
 		if valid && !exited {
-			tool := request.Tools[run.continuations-1]
-			run.report("installing " + tool.Kind + " " + tool.Version + ", tool " + strconv.Itoa(run.continuations) + " of " + strconv.Itoa(len(request.Tools)))
+			run.report("installing " + installing(request.Tools))
 		}
 	case "completed":
-		valid = valid && run.loaded && run.prepared && (record.Outcome == "changed" || record.Outcome == "unchanged") && run.continuations == len(request.Tools) && validEvidence(record.Evidence, request)
+		valid = valid && run.loaded && run.prepared && (record.Outcome == "changed" || record.Outcome == "unchanged") && run.authorized && validEvidence(record.Evidence, request)
 		run.completed = run.completed || valid
 	case "refused":
 		// The adapter names the one refusal with a remedy of its own
-		// before it fails, for the tool it is installing.
+		// before it fails, for the openshift-clients tool it installs.
 		if record.Reason == "release-stamp" {
-			valid = valid && run.loaded && run.prepared && run.continuations > 0 && request.Tools[run.continuations-1].Kind == "openshift-clients"
+			client := slices.IndexFunc(request.Tools, func(tool prerequisites.ToolDefinition) bool { return tool.Kind == "openshift-clients" })
+			valid = valid && run.loaded && run.prepared && run.authorized && client >= 0
 			if valid {
-				verdict.Failure = prerequisites.UnreleasedClient(request.Tools[run.continuations-1])
+				verdict.Failure = prerequisites.UnreleasedClient(request.Tools[client])
 			}
 			break
 		}
@@ -276,20 +283,20 @@ func (run *protocolRun) Judge(ctx context.Context, record adapterprotocol.Record
 }
 
 // Acknowledged records that a delivered continue acknowledgement lets the
-// adapter install a tool.
+// adapter install the tools.
 func (run *protocolRun) Acknowledged(record adapterprotocol.Record) {
 	if record.Phase == "continue" {
 		run.effectAuthorized = true
 	}
 }
 
-// refusedSource is the URL host of the tool being installed, which a
+// refusedSource is the URL host of the authorized tool whose source a
 // classified refusal names, and the publication bundle it was being written
 // into; any other source is not one this run is acquiring.
 func (run *protocolRun) refusedSource(source string) (string, string, bool) {
 	address, area := "", ""
-	if source != "" && run.continuations > 0 && run.request.Tools[run.continuations-1].Source.ID == source {
-		address, area = run.request.Tools[run.continuations-1].Source.URL, run.request.PublicationBundle.Path
+	if index := slices.IndexFunc(run.request.Tools, func(tool prerequisites.ToolDefinition) bool { return tool.Source.ID == source }); source != "" && run.authorized && index >= 0 {
+		address, area = run.request.Tools[index].Source.URL, run.request.PublicationBundle.Path
 	}
 	parsed, err := url.Parse(address)
 	if address == "" || err != nil || parsed.Hostname() == "" {

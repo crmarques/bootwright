@@ -53,26 +53,32 @@
     - name: Publish the exact synthetic client
       bootwright.core.controller_tool:
         bundle: '{{ controller_tool_bundle }}'
-        tool: '{{ controller_tool_definition }}'
+        tools:
+          - '{{ controller_tool_definition }}'
         egress: '{{ controller_tool_egress }}'
         trust:
           host: ''
           file: ''
         inspect_only: false
-        deadline: 121
+        acquisition:
+          - source: '{{ controller_tool_definition.source.id }}'
+            seconds: 121
       register: controller_tool_first
       no_log: true
 
     - name: Verify replay preserves the exact client
       bootwright.core.controller_tool:
         bundle: '{{ controller_tool_bundle }}'
-        tool: '{{ controller_tool_definition }}'
+        tools:
+          - '{{ controller_tool_definition }}'
         egress: '{{ controller_tool_egress }}'
         trust:
           host: ''
           file: ''
         inspect_only: false
-        deadline: 121
+        acquisition:
+          - source: '{{ controller_tool_definition.source.id }}'
+            seconds: 121
       register: controller_tool_second
       no_log: true
 

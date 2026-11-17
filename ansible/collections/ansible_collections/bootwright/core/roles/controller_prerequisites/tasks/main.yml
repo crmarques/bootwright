@@ -24,18 +24,28 @@
   register: controller_prerequisites_plan
   no_log: true
 
-- name: Prepare the exact target tool members
-  ansible.builtin.include_tasks: tool.yml
-  loop: '{{ bootwright_controller_request.tools }}'
-  loop_control:
-    label: '{{ item.kind }}'
+- name: Authorize the target tool preparation
+  bootwright.core.controller_protocol:
+    phase: continue
   no_log: true
+
+- name: Prepare every exact target tool at once
+  bootwright.core.controller_tool:
+    bundle: '{{ bootwright_controller_request.publicationBundle }}'
+    tools: '{{ bootwright_controller_request.tools }}'
+    egress: '{{ bootwright_controller_request.egress }}'
+    trust: '{{ bootwright_controller_request.trust }}'
+    inspect_only: false
+    acquisition: '{{ bootwright_controller_request.acquisition }}'
+  register: controller_prerequisites_tools
+  no_log: true
+  diff: false
 
 - name: Publish bounded controller completion evidence
   bootwright.core.controller_protocol:
     phase: completed
     request: '{{ bootwright_controller_request }}'
     preparation: '{{ controller_prerequisites_plan.preparation }}'
-    tools: '{{ controller_prerequisites_tool_evidence | default([]) }}'
-    tools_changed: '{{ controller_prerequisites_tools_changed | default(false) }}'
+    tools: '{{ controller_prerequisites_tools.evidence }}'
+    tools_changed: '{{ controller_prerequisites_tools.changed }}'
   no_log: true
