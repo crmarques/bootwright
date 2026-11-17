@@ -2,7 +2,9 @@ package preflight
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -131,5 +133,41 @@ func TestUnknownClusterIsRefusedBeforeObservations(t *testing.T) {
 	s.Project = func(api.Catalog, string) ([]Allocation, error) { t.Fatal("selected unknown cluster"); return nil, nil }
 	if report, err := s.Check(context.Background(), PreflightRequest{ContextName: "synthetic", Clusters: []string{"absent"}}); err == nil || report != nil {
 		t.Fatalf("%+v %v", report, err)
+	}
+}
+
+func TestGuestPrerequisitesOfSeveralHostsAreReadAtOnce(t *testing.T) {
+	var nodes []api.Value
+	objects := []api.Object{}
+	owned := ownedStub{}
+	for _, name := range []string{"guest-b", "guest-a"} {
+		nodes = append(nodes, api.MapValue(api.FieldValue{Name: "machineRef", Value: api.StringValue(name)}))
+		objects = append(objects, api.NewObject(api.Machine, name, api.Value{}, api.MapValue()))
+		owned["Machine/"+name] = machine.OwnershipState{Verb: machine.VerbApply, State: machine.BlockDone}
+	}
+	cluster := api.NewObject(api.CephCluster, "storage", api.Value{}, api.MapValue(api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(nodes...)})}))
+	s := testService()
+	s.Graph = graphStub{api.NewCatalog(append(objects, cluster))}
+	s.Ownership = owned
+	s.Project = func(api.Catalog, string) ([]Allocation, error) { return nil, nil }
+	var arrived sync.WaitGroup
+	arrived.Add(2)
+	both := make(chan struct{})
+	go func() {
+		arrived.Wait()
+		close(both)
+	}()
+	s.Guests = guestFunc(func(_ context.Context, _ string, host api.Object, _ PreflightRequest) ([]Check, error) {
+		arrived.Done()
+		select {
+		case <-both:
+		case <-time.After(5 * time.Second):
+			t.Error("a guest was read alone: the hosts were read one at a time")
+		}
+		return []Check{{ID: "host.identity", Target: host.Name(), Status: capacity.Passed}}, nil
+	})
+	report, err := s.Check(context.Background(), PreflightRequest{ContextName: "synthetic"})
+	if err != nil || len(report.Checks) != 2 || report.Checks[0].Target != "guest-a" || report.Checks[1].Target != "guest-b" {
+		t.Fatalf("report=%+v err=%v", report, err)
 	}
 }

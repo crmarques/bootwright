@@ -9,6 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/fanout"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
@@ -144,13 +145,15 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 			return nil, err
 		}
 	}
-	for _, name := range hostNames {
+	guests := fanout.Run(ctx, fanout.Options[string, []Check]{Limit: capacity.ProbeConcurrency}, hostNames, func(ctx context.Context, name string) ([]Check, error) {
 		ports := slices.DeleteFunc(slices.Clone(published), func(requirement HostPortRequirement) bool { return requirement.Machine != name })
-		checks, err := s.guestChecks(ctx, selected, catalog, name, owned, HostRequirements{Ports: ports, Fleet: fleet[name], Peers: peers[name]}, request)
-		if err != nil {
-			return nil, err
-		}
-		result.Checks = append(result.Checks, checks...)
+		return s.guestChecks(ctx, selected, catalog, name, owned, HostRequirements{Ports: ports, Fleet: fleet[name], Peers: peers[name]}, request)
+	})
+	if err := fanout.FirstError(guests); err != nil {
+		return nil, err
+	}
+	for _, guest := range guests {
+		result.Checks = append(result.Checks, guest.Value...)
 	}
 
 	slices.SortFunc(result.Checks, func(a, b Check) int { return strings.Compare(a.Target+"/"+a.ID, b.Target+"/"+b.ID) })

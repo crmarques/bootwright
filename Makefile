@@ -320,6 +320,7 @@ RACE_PACKAGES = ./internal/reconciliation/... ./internal/controller/privilege/..
 	./internal/controller/hostowned \
 	./internal/controller/firewalllocal \
 	./internal/containercluster/preflightlocal \
+	./internal/storage/preflight \
 	./internal/storage/preflightlocal \
 	./internal/controller/stagelocal \
 	./internal/controller/venvlocal \
