@@ -53,7 +53,7 @@ func (c InstallCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 	if input.State == nil {
 		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
 	}
-	_, requests, requirements, err := Requests(input.State.Effective(), input.Controller, input.Context.Name)
+	_, requests, requirements, err := plannedRequests(input)
 	if err != nil {
 		return lifecycle.CapabilityPlan{}, err
 	}

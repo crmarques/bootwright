@@ -38,6 +38,23 @@ func (c MediaCapability) WithIdentities(identities Identities) MediaCapability {
 
 const mediaVariablePrefix = "bootwright_cluster_media"
 
+type derivedRequests struct {
+	media        []MediaRequest
+	installs     []InstallRequest
+	requirements []Requirements
+}
+
+func plannedRequests(input lifecycle.PlanInput) ([]MediaRequest, []InstallRequest, []Requirements, error) {
+	derived, err := lifecycle.Derived(input, "containercluster/agentinstall.requests", func() (derivedRequests, error) {
+		media, installs, requirements, err := Requests(input.State.Effective(), input.Controller, input.Context.Name)
+		return derivedRequests{media: media, installs: installs, requirements: requirements}, err
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return slices.Clone(derived.media), slices.Clone(derived.installs), slices.Clone(derived.requirements), nil
+}
+
 // Plan derives one block per selected cluster. It reads no host, endpoint or
 // Secret material and performs no effect.
 func (c MediaCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
@@ -47,7 +64,7 @@ func (c MediaCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 	if input.State == nil {
 		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
 	}
-	requests, _, requirements, err := Requests(input.State.Effective(), input.Controller, input.Context.Name)
+	requests, _, requirements, err := plannedRequests(input)
 	if err != nil {
 		return lifecycle.CapabilityPlan{}, err
 	}
