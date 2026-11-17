@@ -16881,3 +16881,27 @@ and serial lookups once beside the identity helper. The release checks run as
 one Go command in one recipe line, and the Makefile now refuses a `GO`,
 `SHELL` or `.SHELLFLAGS` override that could skip them.
 
+## X547 — Go judges what Python decided
+
+### B1516
+
+Split from B1466 under [D274](backlog.md#d274) (audit 005 W5.2). The
+cluster-object engine emits an explicit `unknown` evidence member that the
+driver's evaluation reads first, so a program of checks alone that could not
+decide now reads unknown instead of completed; each object entry carries the
+exact comparison list Go chooses, which the engine only applies. The Ceph
+worker publishes its raw readiness facts (health checks and their scope,
+placement-group counts, license state) and Go applies the readiness rules to
+them; the worker keeps its own copy of the predicate only to end its host-side
+waits, a named exception in the architecture. The add-on instance, cluster
+network and Ceph core contracts moved. A table of 85 recorded health and
+placement-group cases gives the same verdict in Go as in the earlier worker.
+
+### B1518
+
+Found while landing X547: X535 froze the Ceph client grants into the request,
+but three lifecycle journey fixtures built client requests without them, so
+those journeys failed; X535's focused run had not selected the lifecycle
+package. The fixtures now derive the grants through the exported
+`ceph.WithClientCaps`, and the journeys pass with their assertions unchanged.
+
