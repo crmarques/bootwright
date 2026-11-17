@@ -190,7 +190,7 @@ The recipe refuses, and writes nothing into `dist`, when:
 | Refused | Because |
 | --- | --- |
 | `VULNCHECK=skip`, or any value but `on` | A release is built with the gate on. |
-| A variable that the command line, `make -e` or an `override` sets, other than the release inputs `VERSION`, `COMMIT`, `SOURCE`, `VULNCHECK`, `RELEASE_DIR`, `RELEASE_BUILD`, `CONTAINER_ENGINE`, `GO_IMAGE` and `PROXY_CA`; a `VULNDB`, `CLIENTS_CACHE`, `CONTAINER_OUT` or `WHEELS_CACHE` that the environment sets; a makefile read through `MAKEFILES`, a second `-f` or `--eval` | Every other variable, such as `GO_LICENSES`, `GO`, `STAMP` or `GOFLAGS`, could change what is built, checked or stamped, so a release takes it from the Makefile (`RELEASE_INPUTS` and `RELEASE_DEFAULTED`, which `TestEveryVariableTheEnvironmentCanSetIsAReleaseInputOrRefused` holds to every `?=` variable). |
+| A variable that the command line, `make -e` or an `override` sets, other than the release inputs `VERSION`, `COMMIT`, `SOURCE`, `VULNCHECK`, `RELEASE_DIR`, `RELEASE_BUILD`, `CONTAINER_ENGINE`, `GO_IMAGE` and `PROXY_CA`; a `VULNDB`, `CLIENTS_CACHE`, `CONTAINER_OUT` or `WHEELS_CACHE` that the environment sets; a makefile read through `MAKEFILES`, a second `-f` or `--eval`; a `SHELL` or `.SHELLFLAGS` the command line or an override sets | Every other variable, such as `GO_LICENSES`, `GO`, `STAMP` or `GOFLAGS`, could change what is built, checked or stamped, so a release takes it from the Makefile (`RELEASE_INPUTS` and `RELEASE_DEFAULTED`, which `TestEveryVariableTheEnvironmentCanSetIsAReleaseInputOrRefused` holds to every `?=` variable). |
 | A `GO_IMAGE` not pinned by `@sha256:<digest>` | The release would compile with whatever the tag names that day. |
 | `make -n`, `-i`, `-t` or `-q` | They would run only the lines that name `$(MAKE)`, or ignore a refusal; the Makefile refuses them while it is read. |
 | A modified or untracked file, before or after the build, or a `COMMIT` or `SOURCE` that is not the checkout's; on the host build, an ignored file under `ansible/collections` | The build would not be the commit it names, or would embed a file the commit does not hold. |
@@ -205,9 +205,13 @@ variables `RELEASE_ENVIRONMENT` names: the paths, caches and temporary
 directories, the CA files, the container engine's connection and the proxy and
 module-mirror settings above. The host build adds `GOFLAGS=-mod=readonly`, as
 the container build does, so no `GOFLAGS`, `GOEXPERIMENT`, `GOOS`, `GOARCH`,
-`GOAMD64` or `GOFIPS140` inherited changes what is compiled. All checks are one
-recipe run by one shell, not prerequisites or sub-makes, so no flag can skip
-one.
+`GOAMD64` or `GOFIPS140` inherited changes what is compiled. All checks are the Go
+command `scripts/tools/release`, run as the one line of the recipe (marked to
+run under `-n`, `-t` and `-q` too, with the Makefile refusing those flags and a
+`SHELL` or `.SHELLFLAGS` the command line sets while it is read), not
+prerequisites or sub-makes, so no flag can skip one. It decodes the
+executable's `version --output json` as JSON, and needs the Go toolchain
+`scripts/go` pins, even for `RELEASE_BUILD=container`.
 
 It builds into a private `dist/.build.XXXXXX`, so two releases cannot clobber
 each other, runs the checks there, verifies the staged `SHA256SUMS`, and
@@ -218,8 +222,10 @@ is a release that fails closed: verify nothing from it and run the recipe
 again. `TestReleaseRefusesWhatItMustNotShip`,
 `TestReleaseRefusesAMakeThatWouldRunOnlyPartOfIt`,
 `TestReleaseRefusesATreeThatChangesDuringTheBuild` and the host-build tests run
-the real Makefile in a throwaway Git checkout against a stand-in container
-engine and a stand-in `scripts/go`; they do not run a real compile, which the
+the real Makefile and the real release command in a throwaway Git checkout
+against a stand-in container engine and a stand-in `scripts/go` that runs the
+built command for the recipe's own line, with the command's own tests in
+`scripts/tools/release`; they do not run a real compile, which the
 release probe of the commit that added them did.
 
 ## Verification tiers

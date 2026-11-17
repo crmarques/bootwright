@@ -1,14 +1,52 @@
 package tooling_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
+
+var (
+	releaseToolOnce sync.Once
+	releaseToolPath string
+	releaseToolErr  error
+	releaseToolDir  string
+)
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if releaseToolDir != "" {
+		os.RemoveAll(releaseToolDir)
+	}
+	os.Exit(code)
+}
+
+// releaseTool is scripts/tools/release, built once for every checkout a test
+// makes, so each recipe runs the command the Makefile names.
+func releaseTool(t *testing.T) string {
+	t.Helper()
+	releaseToolOnce.Do(func() {
+		releaseToolDir, releaseToolErr = os.MkdirTemp("", "release-tool-")
+		if releaseToolErr != nil {
+			return
+		}
+		releaseToolPath = filepath.Join(releaseToolDir, "release")
+		build := exec.Command(filepath.Join("..", "..", "scripts", "go"), "-C", filepath.Join("..", "..", "scripts", "tools"), "build", "-o", releaseToolPath, "./release")
+		if output, err := build.CombinedOutput(); err != nil {
+			releaseToolErr = fmt.Errorf("%v\n%s", err, output)
+		}
+	})
+	if releaseToolErr != nil {
+		t.Fatalf("the release command did not build: %v", releaseToolErr)
+	}
+	return releaseToolPath
+}
 
 // releaseEngine stands in for the container engine of a release build. It
 // exports an executable that answers version and sbom, a bill of materials and
@@ -73,6 +111,10 @@ func goodRelease() releaseBuild {
 // settings of its environment and does what each step of make build needs.
 const nativeGo = `#!/bin/sh
 set -eu
+if [ "${1-}" = -C ] && [ "${2-}" = scripts/tools ] && [ "${3-}" = run ] && [ "${4-}" = ./release ]; then
+	shift 4
+	exec @RELEASE@ "$@"
+fi
 printf 'GOFLAGS=%s GOEXPERIMENT=%s GOOS=%s GOARCH=%s GOAMD64=%s GOFIPS140=%s GOENV=%s RELEASE_STRAY=%s HTTPS_PROXY=%s\n' "${GOFLAGS-unset}" "${GOEXPERIMENT-unset}" "${GOOS-unset}" "${GOARCH-unset}" "${GOAMD64-unset}" "${GOFIPS140-unset}" "${GOENV-unset}" "${RELEASE_STRAY-unset}" "${HTTPS_PROXY-unset}" >>"$(dirname "$0")/../go.log"
 previous=
 for argument in "$@"; do
@@ -137,7 +179,7 @@ func newReleaseCheckout(t *testing.T, build releaseBuild) releaseCheckout {
 	for name, content := range map[string]string{
 		"Makefile":            string(makefile),
 		"scripts/cache-dir":   "#!/bin/sh\necho \"$PWD/.cache\"\n",
-		"scripts/go":          nativeGo,
+		"scripts/go":          strings.Replace(nativeGo, "@RELEASE@", releaseTool(t), 1),
 		"scripts/govulncheck": "#!/bin/sh\nexit 0\n",
 		".gitignore":          "/dist/\n/bin/\n/go.log\n",
 	} {
@@ -319,6 +361,8 @@ func TestReleaseRefusesWhatItMustNotShip(t *testing.T) {
 		"VULNCHECK=skip":                             {build: good, arguments: []string{"VULNCHECK=skip"}, want: "VULNCHECK=skip is refused"},
 		"a VULNDB that is not the Makefile's":        {build: good, arguments: []string{"VULNDB=file:///nowhere"}, want: "VULNDB comes from the command line"},
 		"a GO that is not the Makefile's":            {build: good, arguments: []string{"GO=true"}, want: "GO comes from the command line"},
+		"a shell that is not make's":                 {build: good, arguments: []string{"SHELL=/bin/true"}, want: "SHELL or .SHELLFLAGS is set"},
+		"shell flags that are not make's":            {build: good, arguments: []string{".SHELLFLAGS=-c"}, want: "SHELL or .SHELLFLAGS is set"},
 		"a STAMP that is not the Makefile's":         {build: good, arguments: []string{"STAMP=-X main.vulnerabilityCheck=passed:2026-11-10"}, want: "STAMP comes from the command line"},
 		"a verdict that is not the Makefile's":       {build: good, arguments: []string{"VULNERABILITY_CHECK=passed:2026-11-10"}, want: "VULNERABILITY_CHECK comes from the command line"},
 		"a license table that is not the Makefile's": {build: good, arguments: []string{"GO_LICENSES=/nowhere.json"}, want: "GO_LICENSES comes from the command line"},
@@ -520,18 +564,17 @@ func TestTheReleaseRecipeIsOneRecipeThatRunsTheBuildWithTheVulnerabilityGateOn(t
 		t.Fatal("the Makefile has no release target without prerequisites, so a check could be skipped as one")
 	}
 	recipe, _, _ = strings.Cut(recipe, "\n\n")
-	for _, want := range []string{"$(MAKE) --no-print-directory build VULNCHECK=on", "$(MAKE) --no-print-directory container-build VULNCHECK=on", `env -i "$$@" GOENV=off GOFLAGS=-mod=readonly $(MAKE)`, `env -i "$$@" GOENV=off $(MAKE)`} {
-		if !strings.Contains(recipe, want) {
-			t.Errorf("the release recipe does not run %q:\n%s", want, recipe)
+	logical := strings.ReplaceAll(recipe, "\\\n", " ")
+	if strings.Count(logical, "\n") != 0 {
+		t.Errorf("the release recipe is more than one line, so a flag could skip one of them:\n%s", recipe)
+	}
+	for _, want := range []string{"+@GOENV=off GOFLAGS=-mod=readonly ./scripts/go -C scripts/tools run ./release ", "-vulncheck ", "-make-flags ", "-foreign "} {
+		if !strings.Contains(logical, want) {
+			t.Errorf("the release recipe does not contain %q:\n%s", want, recipe)
 		}
 	}
-	if strings.Count(recipe, "$(MAKE)") != 2 || strings.Contains(recipe, "release-verify") || strings.Contains(recipe, "release-preflight") {
-		t.Error("a release check runs as a sub-make, which -n, -i or -o would turn into a no-op")
-	}
-	check := strings.Index(recipe, `sha256sum --check --strict SHA256SUMS`)
-	replace := strings.Index(recipe, `mv -f -- "$$stage/$$name"`)
-	if check < 0 || replace < check {
-		t.Error("the release recipe replaces the shipped files before it verifies the staged checksums")
+	if strings.Count(logical, "$(MAKE)") != 1 || strings.Contains(logical, "release-verify") || strings.Contains(logical, "release-preflight") {
+		t.Error("a release check runs as a sub-make or prerequisite of the recipe, which -n, -i or -o would turn into a no-op")
 	}
 	ignored, err := os.ReadFile(filepath.Join("..", "..", ".gitignore"))
 	if err != nil {
@@ -539,5 +582,17 @@ func TestTheReleaseRecipeIsOneRecipeThatRunsTheBuildWithTheVulnerabilityGateOn(t
 	}
 	if !slices.Contains(strings.Split(string(ignored), "\n"), "/dist/") {
 		t.Error("the default RELEASE_DIR, dist, is not ignored, so a release would dirty the tree it was built from")
+	}
+}
+
+func TestReleaseCarriesAValueWithAQuoteToTheCommandWhole(t *testing.T) {
+	checkout := newReleaseCheckout(t, goodRelease())
+	value := "a'; touch hacked; echo 'b"
+	output, err := checkout.release(t, "VERSION=v1.2.3", "COMMIT="+value)
+	if err == nil || !strings.Contains(output, "COMMIT="+value+" is not the checkout's commit") {
+		t.Errorf("a commit with quotes was not carried to the command whole (%v):\n%s", err, output)
+	}
+	if _, statErr := os.Stat(filepath.Join(checkout.dir, "hacked")); statErr == nil {
+		t.Error("a quote in COMMIT ran a command")
 	}
 }

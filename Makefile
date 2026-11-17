@@ -128,10 +128,12 @@ container-build:
 
 # A release ships what one clean, committed checkout built with the
 # vulnerability gate on: the executable, its bill of materials, its third-party
-# notices and the SHA-256 of the three. It is one recipe, run by one shell, so
-# no check is a prerequisite or a sub-make that a flag could turn into a
-# no-op: it refuses under -n, -i, -t and -q, which would otherwise run only
-# the lines that name $(MAKE) or ignore a refusal; refuses another makefile
+# notices and the SHA-256 of the three. It is one recipe line, the Go command
+# scripts/tools/release, so no check is a prerequisite or a sub-make that a flag
+# could turn into a no-op: the Makefile refuses -n, -i, -t and -q while it is
+# read, since they would otherwise run only the lines that name $(MAKE) or
+# ignore a refusal, and the line is marked to run under them regardless; the
+# command refuses another makefile
 # read before this one, any variable the command line or an override sets
 # other than RELEASE_INPUTS, and any RELEASE_DEFAULTED variable the environment
 # sets; refuses a GO_IMAGE not pinned by digest, VULNCHECK other than on, a
@@ -156,6 +158,7 @@ RELEASE_ENVIRONMENT = PATH HOME TMPDIR GOTMPDIR GOCACHE GOMODCACHE GOPATH BOOTWR
 empty :=
 space := $(empty) $(empty)
 release_origin = $(subst $(space),_,$(origin $(1)))
+shell_quote = '$(subst ','\'',$(1))'
 RELEASE_FOREIGN = $(foreach variable,$(filter-out $(RELEASE_INPUTS) GNUMAKEFLAGS MAKEFLAGS MFLAGS MAKELEVEL,$(.VARIABLES)),$(if $(filter command_line override environment_override,$(call release_origin,$(variable))),$(variable))) \
 	$(foreach variable,$(RELEASE_DEFAULTED),$(if $(filter environment,$(origin $(variable))),$(variable)))
 
@@ -165,78 +168,19 @@ ifneq ($(filter release,$(MAKECMDGOALS)),)
 ifneq ($(RELEASE_FLAGS),)
 $(error release: make was run with -$(RELEASE_FLAGS), which would run only part of the recipe or ignore a refusal; run it without -n, -i, -t and -q)
 endif
+ifneq ($(filter command_line override environment_override,$(call release_origin,SHELL) $(call release_origin,.SHELLFLAGS)),)
+$(error release: SHELL or .SHELLFLAGS is set from the command line or an override, which could run the recipe under another program; a release takes both from make)
+endif
 endif
 
 release:
-	@set -eu; \
-	refuse() { echo "release: $$*" >&2; exit 1; }; \
-	test -z '$(RELEASE_FLAGS)' || refuse "make was run with -$(RELEASE_FLAGS), which would run only part of the recipe or ignore a refusal; run it without -n, -i, -t and -q"; \
-	test '$(words $(MAKEFILE_LIST))' = 1 && test -z '$(findstring --eval,$(MAKEFLAGS))' || refuse "make reads more than the Makefile ($(MAKEFILE_LIST)$(if $(findstring --eval,$(MAKEFLAGS)), and --eval)), which could set any variable; a release reads the Makefile alone"; \
-	test -z '$(strip $(RELEASE_FOREIGN))' || refuse "$(foreach variable,$(RELEASE_FOREIGN),$(variable) comes from the $(origin $(variable));) each could change what is built, checked or stamped; a release takes it from the Makefile and only $(RELEASE_INPUTS) from you"; \
-	test -z '$(GO_IMAGE)' || printf '%s\n' '$(GO_IMAGE)' | grep -Eqx '[^@[:space:]]+@sha256:[0-9a-f]{64}' || refuse "GO_IMAGE=$(GO_IMAGE) is not pinned by @sha256:<digest>, so the release would compile with whatever its tag names today"; \
-	test '$(VULNCHECK)' = on || refuse "VULNCHECK=$(VULNCHECK) is refused; a release is built with the vulnerability gate on"; \
-	case '$(RELEASE_BUILD)' in native|container) ;; *) refuse "RELEASE_BUILD=$(RELEASE_BUILD) is neither native nor container" ;; esac; \
-	case '$(VERSION)' in ''|*dirty*) refuse "name the release with VERSION=<version>; '$(VERSION)' is none or names a dirty tree" ;; esac; \
-	head="$$(git rev-parse HEAD 2>/dev/null)" || refuse "this is no Git checkout, so no commit identifies the build"; \
-	test "$$head" = '$(COMMIT)' || refuse "COMMIT=$(COMMIT) is not the checkout's commit $$head"; \
-	tree_clean() { \
-		changes="$$(git status --porcelain)" || refuse "git status failed"; \
-		test -z "$$changes" || refuse "the tree has modified or untracked files, so the build would not be its commit:$$(printf '\n%s' "$$changes")"; \
-	}; \
-	tree_clean; \
-	test '$(SOURCE)' = clean || refuse "SOURCE=$(SOURCE) is not clean"; \
-	if test '$(RELEASE_BUILD)' = native; then \
-		embedded="$$(git status --porcelain --ignored -- ansible/collections)" || refuse "git status failed"; \
-		test -z "$$embedded" || refuse "ignored files under ansible/collections would be embedded in the executable:$$(printf '\n%s' "$$embedded")"; \
-	fi; \
-	out='$(RELEASE_DIR)'; \
-	mkdir -p -- "$$out"; \
-	for name in $(RELEASE_FILES) SHA256SUMS; do \
-		if test -d "$$out/$$name" || { test -e "$$out/$$name" && ! test -O "$$out/$$name"; }; then \
-			refuse "$$out/$$name is a directory or belongs to another user; remove it or choose another RELEASE_DIR"; \
-		fi; \
-	done; \
-	stage="$$(mktemp -d "$$out/.build.XXXXXX")"; \
-	trap 'rm -rf -- "$$stage"' EXIT; \
-	trap 'exit 130' INT TERM; \
-	set --; \
-	for name in $(RELEASE_ENVIRONMENT); do \
-		eval "isset=\$${$$name+x} value=\$${$$name-}"; \
-		test -z "$$isset" || set -- "$$@" "$$name=$$value"; \
-	done; \
-	case '$(RELEASE_BUILD)' in \
-	native) \
-		rm -f -- $(addprefix bin/,$(RELEASE_FILES)); \
-		env -i "$$@" GOENV=off GOFLAGS=-mod=readonly $(MAKE) --no-print-directory build VULNCHECK=on VERSION='$(VERSION)' COMMIT='$(COMMIT)' SOURCE='$(SOURCE)'; \
-		for name in $(RELEASE_FILES); do cp -- "bin/$$name" "$$stage/$$name"; done ;; \
-	container) env -i "$$@" GOENV=off $(MAKE) --no-print-directory container-build VULNCHECK=on VERSION='$(VERSION)' COMMIT='$(COMMIT)' SOURCE='$(SOURCE)' \
-		CONTAINER_OUT="$$stage" CONTAINER_ENGINE='$(CONTAINER_ENGINE)' GO_IMAGE='$(GO_IMAGE)' PROXY_CA='$(PROXY_CA)' ;; \
-	esac; \
-	tree_clean; \
-	for name in $(RELEASE_FILES); do \
-		{ test -f "$$stage/$$name" && test -s "$$stage/$$name"; } || refuse "$$stage/$$name is missing or empty"; \
-	done; \
-	test -x "$$stage/bootwright" || refuse "$$stage/bootwright is not executable"; \
-	identity="$$("$$stage/bootwright" version --output json)" || refuse "the built executable cannot report its version"; \
-	field() { printf '%s\n' "$$identity" | sed -n 's/.*"'"$$1"'":"\([^"]*\)".*/\1/p'; }; \
-	verdict="$$(field vulnerabilityCheck)"; \
-	case "$$verdict" in \
-	passed\ [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;; \
-	*) refuse "the executable's vulnerability check is '$$verdict', not a pass; a release needs the gate to have passed" ;; \
-	esac; \
-	test "$$(field version)" = '$(VERSION)' || refuse "the executable reports version '$$(field version)', not '$(VERSION)'"; \
-	test "$$(field commit)" = "$$head" || refuse "the executable reports commit '$$(field commit)', not this checkout's $$head"; \
-	test "$$(field source)" = clean || refuse "the executable reports source '$$(field source)', not clean"; \
-	"$$stage/bootwright" sbom --format cyclonedx-json >"$$stage/.sbom" || refuse "the built executable cannot write its bill of materials"; \
-	cmp -s "$$stage/.sbom" "$$stage/bootwright.cdx.json" || refuse "bootwright.cdx.json is not the bill of materials of this executable"; \
-	digest="$$(sha256sum "$$stage/bootwright.cdx.json")"; \
-	grep -Fxq "Bill of materials: sha256:$${digest%% *}" "$$stage/bootwright.notices.txt" || refuse "bootwright.notices.txt was not composed from this bill of materials"; \
-	rm -f -- "$$stage/.sbom"; \
-	( cd "$$stage" && sha256sum $(RELEASE_FILES) >SHA256SUMS ); \
-	{ test -f "$$stage/SHA256SUMS" && ( cd "$$stage" && sha256sum --check --strict SHA256SUMS >/dev/null ); } || refuse "SHA256SUMS does not verify the staged files"; \
-	rm -f -- "$$out/SHA256SUMS"; \
-	for name in bootwright.cdx.json bootwright.notices.txt bootwright SHA256SUMS; do mv -f -- "$$stage/$$name" "$$out/$$name"; done; \
-	echo "release: $$out holds $(RELEASE_FILES) SHA256SUMS of $(VERSION), commit $$head"
+	+@GOENV=off GOFLAGS=-mod=readonly ./scripts/go -C scripts/tools run ./release -root $(call shell_quote,$(CURDIR)) \
+		-make-flags $(call shell_quote,$(RELEASE_FLAGS)) -makefile-list $(call shell_quote,$(MAKEFILE_LIST)) $(if $(findstring --eval,$(MAKEFLAGS)),-eval) \
+		$(foreach variable,$(RELEASE_FOREIGN),-foreign $(call shell_quote,$(variable)=$(origin $(variable)))) -inputs $(call shell_quote,$(RELEASE_INPUTS)) \
+		-go-image $(call shell_quote,$(GO_IMAGE)) -vulncheck $(call shell_quote,$(VULNCHECK)) -build $(call shell_quote,$(RELEASE_BUILD)) \
+		-version $(call shell_quote,$(VERSION)) -commit $(call shell_quote,$(COMMIT)) -source $(call shell_quote,$(SOURCE)) \
+		-dir $(call shell_quote,$(RELEASE_DIR)) -engine $(call shell_quote,$(CONTAINER_ENGINE)) -proxy-ca $(call shell_quote,$(PROXY_CA)) \
+		-make $(call shell_quote,$(MAKE)) -files $(call shell_quote,$(RELEASE_FILES)) -environment $(call shell_quote,$(RELEASE_ENVIRONMENT))
 
 test: wheels
 	# The timeout bounds a whole package, including the CLI's executable builds
