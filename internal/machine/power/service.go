@@ -14,6 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/fanout"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -117,17 +118,35 @@ func (s Service) Read(ctx context.Context, contextName string, names []string) (
 	}
 	// A reading is nothing an operator resumes or inspects, so it retains no
 	// output and names no remediation pointing at one.
-	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references}, func(inner context.Context, runtime lifecycle.Runtime) error {
-		for index, survey := range surveys {
+	scoped, limit := ctx, 1
+	if s.begin != nil && len(surveys) > 1 {
+		var release func()
+		scoped, release = s.begin(ctx)
+		defer release()
+		limit = lifecycle.MaxRunningBlocks
+	}
+	positions := make([]int, len(surveys))
+	for index := range positions {
+		positions[index] = index
+	}
+	err = s.runtime.WithRuntime(scoped, lifecycle.RuntimeRequest{ContextName: name, Secrets: references}, func(inner context.Context, runtime lifecycle.Runtime) error {
+		answers := fanout.Run(inner, fanout.Options[int, map[string]string]{Limit: limit}, positions, func(ctx context.Context, index int) (map[string]string, error) {
+			survey := surveys[index]
 			step := readStep(survey, index+1, len(surveys))
-			s.progress(inner, step, "running", "")
-			answered, err := s.observe(inner, runtime, survey, step)
+			s.progress(ctx, step, "running", "")
+			answered, err := s.observe(ctx, runtime, survey, step)
 			if err != nil {
-				s.progress(inner, step, settlement(inner, err), "")
-				return err
+				s.progress(ctx, step, settlement(ctx, err), "")
+				return nil, err
 			}
-			s.progress(inner, step, "ok", strconv.Itoa(len(answered))+" of "+strconv.Itoa(len(survey.Targets))+" machines read")
-			maps.Copy(readings, answered)
+			s.progress(ctx, step, "ok", strconv.Itoa(len(answered))+" of "+strconv.Itoa(len(survey.Targets))+" machines read")
+			return answered, nil
+		})
+		if err := fanout.FirstError(answers); err != nil {
+			return err
+		}
+		for _, answered := range answers {
+			maps.Copy(readings, answered.Value)
 		}
 		return nil
 	})

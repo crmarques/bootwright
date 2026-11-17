@@ -7,7 +7,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -296,6 +298,50 @@ func TestAReadingCrossesTheAdapterOncePerHostInsideOneRuntime(t *testing.T) {
 		if !slices.Contains(runtime.requested, want) {
 			t.Fatalf("Secret %q was not bound for the reading: %+v", want, runtime.requested)
 		}
+	}
+}
+
+// meetingSurveyor answers a run only once the second host's run has started,
+// so surveys run one host at a time time out instead of meeting.
+type meetingSurveyor struct {
+	t       *testing.T
+	mu      sync.Mutex
+	inner   surveyor
+	arrived sync.WaitGroup
+	both    chan struct{}
+}
+
+func (m *meetingSurveyor) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+	m.arrived.Done()
+	select {
+	case <-m.both:
+	case <-time.After(5 * time.Second):
+		m.t.Error("a host's survey ran alone: the surveys ran one host at a time")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.inner.Run(ctx, request)
+}
+
+// Each host's survey is an independent read, so inside one invocation scope
+// the hosts are read at once and the readings are the same.
+func TestAReadingSurveysEveryHostAtOnceInsideOneScope(t *testing.T) {
+	runner := &meetingSurveyor{t: t, inner: surveyor{reports: map[string]string{"guest": machine.PowerOn, "metal": machine.PowerOff}}, both: make(chan struct{})}
+	runner.arrived.Add(2)
+	go func() {
+		runner.arrived.Wait()
+		close(runner.both)
+	}()
+	scoped := &scope{fleet: &fleet{}}
+	readings, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, runner, scoped.begin, nil, nil, nil).Read(context.Background(), "lab", selected())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(readings) != 2 || readings["guest"] != machine.PowerOn || readings["metal"] != machine.PowerOff {
+		t.Fatalf("readings = %+v", readings)
+	}
+	if scoped.begun != 1 || len(scoped.endedAtRelease) != 1 {
+		t.Fatalf("scope begun %d, released %d times", scoped.begun, len(scoped.endedAtRelease))
 	}
 }
 
