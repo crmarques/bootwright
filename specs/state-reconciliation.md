@@ -581,10 +581,10 @@ sends the operator back to `status`, which needs the same unreadable record.
 | apply paused | continue that exact apply under any stage selection, or start a fresh destroy of the blocks it started |
 | apply unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or start a fresh destroy of the blocks it started, which resolves them first |
 | apply done | start a fresh destroy of its whole frozen plan and its predecessors', which first resolves every unproved block; an `apply` of the unchanged input settles without effect, of an input that only adds add-on instances starts an [additive apply](#additive-apply), and of any other changed input refuses; that apply refuses while a block of these plans is not `done`, naming that destroy and `context delete --purge` |
-| destroy running | continue that exact destroy |
-| destroy paused | continue that exact destroy |
+| destroy running | continue that exact destroy, or, under an erase relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
+| destroy paused | continue that exact destroy, or, under an erase relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first |
 | destroy failed | start a fresh destroy of what it has not removed |
-| destroy unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146) |
+| destroy unknown | continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or, under an erase relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves them first |
 
 For an apply that names a predecessor, every fresh destroy these rows start also takes back the whole frozen plan of each predecessor ([removal over a lineage](#removal-over-a-lineage)).
 
@@ -1389,7 +1389,9 @@ A new planner default or newly planned work affects a fresh operation and never
 changes a saved operation. A changed required authorization, safety dependency,
 reservation or trust/ownership rule is an execution-contract change: its owner
 moves an effect pin even when request bytes and schemas are unchanged. Such a
-change cannot be treated as a planning-only improvement. Effect pins are
+change cannot be treated as a planning-only improvement. An
+[erase relaxation](#erase-relaxation) is none: an input of one removal, frozen
+in its block, it moves no request, content digest or effect pin. Effect pins are
 Go-owned values outside the frozen request that fix an effect's semantics;
 a value already frozen in the request needs no redundant default pin.
 
@@ -1780,7 +1782,8 @@ states what removing that block does: the words it is planned and reported in,
 the impacts it lists, and the authorization it consumes. Nothing else of the
 block may change, so planning a removal can never alter what is removed, and a
 removal acknowledges the consequences of removing rather than the consequences
-its apply acknowledged.
+its apply acknowledged. An [erase relaxation](#erase-relaxation) is the one
+exception.
 
 Reading a frozen request is what makes a context removable without re-deriving
 it. A capability reads exactly the request version it writes; the frozen digest
@@ -1903,9 +1906,10 @@ An unproved effect is not an exception: the removal resolves it first, by its
 apply observation and otherwise by the removal's own check
 ([resolution outcomes](#resolution-outcomes)), and refuses,
 registering nothing, when it cannot. A continuation of an apply still
-resolves by the apply's check. A running or unknown removal is
+resolves by the apply's check. A running, paused or unknown removal is
 continued rather than replaced, because a removal that lost an outcome is
-resolved by repeating itself. A continuation runs a repaired adapter when the
+resolved by repeating itself, except under a new
+[erase relaxation](#erase-relaxation). A continuation runs a repaired adapter when the
 repair leaves every frozen block the same; replacement is the road out of any
 other repair, because a continuation stays frozen to its blocks and execution
 closure while a fresh operation runs under the current ones.
@@ -2779,7 +2783,8 @@ power, probe, or digest checks.
 
 `data-loss` is the only authorization token a block consumes; `rebind=<secret>`
 is the [access-credential rebind](#access-credential-rebind), which no block
-consumes and which refuses when it does not apply. `all`, unknown, duplicate,
+consumes and which refuses when it does not apply, and `erase=<machine>:<method>`
+is the [erase relaxation](#erase-relaxation), which no block consumes either. `all`, unknown, duplicate,
 empty, and inapplicable values are errors. A plan requires exactly the tokens its
 blocks [consume](#plan-and-execution). A token the frozen plan does not require
 is inapplicable and refuses with `lifecycle.authorization` before registration,
@@ -2808,6 +2813,49 @@ immutable plans, durable continuation, leases, exact ownership, and private
 attempt logs. [The CLI contract](cli.md) must cover the complete journey,
 including confirmation/authorization, results, diagnostics, cancellation, and
 recovery.
+
+### Erase relaxation
+
+An erase relaxation is the only relaxation an invocation can name, and only a
+`destroy` and the `plan` that previews it name one:
+`erase=<machine>:metadataClear` or `erase=<machine>:retain`, in the
+[grammar](cli/commands.md#flag-relationships-and-safeguards), relaxes the
+declared [removal erase](#opt-in-physical-logical-overwrite) of every target
+of that Machine for that one removal. The removal block whose capability offers
+a relaxation for that Machine validates the method and states the relaxed
+description, impacts and groups, and the block freezes the method as its
+relaxation beside its unchanged identity, request and digests; this is the one
+exception to a removal planning nothing of a block but its words, impacts,
+groups and authorization ([continuation and removal](#continuation-and-removal)).
+A relaxed block still consumes `data-loss`, and for a block an erase
+relaxation changes, that relaxation is one more member of the `data-loss`
+digest, so the relaxed removal is reviewed in its plan and bound by its digest
+while every unrelaxed block's digest stays what it was. A token naming a
+Machine that none of the removal's blocks relaxes, which is a Machine that
+declares no `spec.hardware.eraseOnRemoval`, one whose erase this removal no
+longer performs, or any Machine of a `destroy` that settles, refuses
+`lifecycle.authorization` before registration, naming the token and the
+command without it; the capability's own refusal of a method, such as for a
+Machine that already clears only metadata on every target, is reported as it
+refused. A relaxation waives only the erase it names: it never relaxes
+identity, ownership, power, probe or digest checks of any effect it does not
+waive.
+
+A fresh removal plans from the blocks it takes back with no relaxation,
+whatever an earlier removal froze, and applies only the relaxations its own
+invocation names. A failed removal's next command and `status` repeat the
+`--authorize erase=` tokens its plan froze for the blocks it has not removed,
+so the operator sees that choice again rather than having it carried over. A
+running, paused or unknown removal's continuation carries exactly the
+relaxations its plan froze: the identical set continues it, and any other set
+refuses `lifecycle.authorization`, naming that continuation. The one exception
+is a `destroy` naming a relaxation that removal's plan does not hold, which is
+how an operator stops waiting for a long or stuck erase: it supersedes the
+removal as a failed one is superseded, resolving every unproved block of it
+first and refusing, registering nothing, when it cannot, and then removes what
+that removal has not recorded removed under the relaxations it names
+([state machine](#state-machine)). A `plan` naming no relaxation previews that
+continuation.
 
 ### Access-credential rebind
 

@@ -1,12 +1,9 @@
 package lifecycle
 
 import (
-	"errors"
 	"maps"
 	"strings"
 	"testing"
-
-	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestParseEraseRelaxationsGrammar(t *testing.T) {
@@ -53,17 +50,5 @@ func TestIsEraseAuthorizationSeparatesTheRelaxationFromTheOtherTokens(t *testing
 		if got := IsEraseAuthorization(token); got != want {
 			t.Errorf("IsEraseAuthorization(%q) = %t, want %t", token, got, want)
 		}
-	}
-}
-
-func TestAnUnrealizedRelaxationIsRefusedNotIgnored(t *testing.T) {
-	t.Parallel()
-	if err := refuseUnrealizedRelaxations(nil); err != nil {
-		t.Fatalf("no relaxation was refused: %v", err)
-	}
-	var refusal *diagnostics.Failure
-	err := refuseUnrealizedRelaxations(map[string]string{"a": EraseRetain})
-	if !errors.As(err, &refusal) || refusal.Diagnostics[0].Code != "lifecycle.authorization" || !strings.Contains(refusal.Diagnostics[0].Message, "does not yet apply") {
-		t.Fatalf("a relaxation was not refused: %v", err)
 	}
 }

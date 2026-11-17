@@ -269,6 +269,11 @@ type PreStopRemoval interface {
 	RequiresPreStopRemoval(reconciliation.Block) bool
 }
 
+type RemovalRelaxer interface {
+	RelaxesMachine(reconciliation.Block) bool
+	Relax(context.Context, reconciliation.Block, string) (Removal, error)
+}
+
 type HostBound interface {
 	HostMachines(reconciliation.Block) ([]string, error)
 }

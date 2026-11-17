@@ -48,6 +48,7 @@ func authorize(contextName string, verb reconciliation.Verb, selection reconcili
 		}
 		authFlags = append(authFlags, "--authorize", token)
 	}
+	authFlags = append(authFlags, relaxationFlags(frozenRelaxations(plan))...)
 	passing := contextCommand(contextName, string(verb), invocationFlags(selection, authFlags, unregistered)...)
 	supplied := slices.Compact(slices.Sorted(slices.Values(authorizations)))
 	for _, token := range supplied {
@@ -102,6 +103,9 @@ func AuthorizationDigest(plan reconciliation.Plan, token string) string {
 		if slices.Contains(block.Consumes, token) {
 			sum.Write([]byte("\x00" + block.ID + "\x00" + block.Kind + "\x00" + block.Object + "\x00" + block.Implementation +
 				"\x00" + block.ContentDigest + "\x00" + block.RequestDigest))
+			if block.Relaxation != "" {
+				sum.Write([]byte("\x00relaxation\x00" + block.Relaxation))
+			}
 		}
 	}
 	return hex.EncodeToString(sum.Sum(nil))[:authorizationDigestLength]

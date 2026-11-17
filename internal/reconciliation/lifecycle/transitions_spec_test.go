@@ -245,7 +245,7 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"destroy running": {
-			transition: "continue that exact destroy",
+			transition: "continue that exact destroy, or, under an erase relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first",
 			cases: map[string]stateMachineCase{
 				"a removal whose executor died": {
 					arrange: func(t *testing.T, h *harness) {
@@ -257,7 +257,7 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"destroy paused": {
-			transition: "continue that exact destroy",
+			transition: "continue that exact destroy, or, under an erase relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves every unproved block first",
 			cases: map[string]stateMachineCase{
 				"a removal paused at the online boundary": {
 					arrange: func(t *testing.T, h *harness) {
@@ -285,7 +285,7 @@ func stateMachineRows() map[string]stateMachineRow {
 			},
 		},
 		"destroy unknown": {
-			transition: "continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146)",
+			transition: "continue it, resolving every unproved block first and then retrying what resolution leaves `failed` (D146), or, under an erase relaxation its frozen plan does not hold, start a fresh destroy of what it has not removed, which resolves them first",
 			cases: map[string]stateMachineCase{
 				"a removal whose first block lost its outcome": {
 					arrange: func(t *testing.T, h *harness) {
@@ -370,6 +370,10 @@ func TestApplyAdmitsOnlyTheFourScenarios(t *testing.T) {
 	}
 }
 
+// relaxationSupersedes names the rows whose destroy an erase relaxation the
+// frozen plan does not hold turns from a continuation into a fresh destroy.
+var relaxationSupersedes = map[string]bool{"destroy running": true, "destroy paused": true, "destroy unknown": true}
+
 // checkStateMachine requires the table to hold exactly the rows the test
 // knows, each stating its transition word for word, and drives the decision
 // both verbs take over every durable state each row covers.
@@ -390,6 +394,13 @@ func checkStateMachine(t *testing.T, lines []string) {
 				if got := decisionOver(t, h, verb); got != want {
 					t.Errorf("row %q, %s: the %s decides %q, want %q", row[0], name, verb, got, want)
 				}
+			}
+			relaxed := test.destroy
+			if relaxationSupersedes[row[0]] {
+				relaxed = "fresh destroy"
+			}
+			if got, err := decisionUnder(t, h, relaxingDestroy, map[string]string{"alpha": EraseRetain}); got != relaxed {
+				t.Errorf("row %q, %s: a destroy under an erase relaxation its plan does not hold decides %q (%v), want %q", row[0], name, got, err, relaxed)
 			}
 			decision, previewed := decidedAs(t, h, "")
 			if previewed != test.previewed {

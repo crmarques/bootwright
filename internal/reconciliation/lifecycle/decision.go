@@ -23,12 +23,13 @@ type decider struct {
 	preparations []PreparationDefinition
 	planner      decisionPlanner
 	proofs       decisionProofs
+	relaxing     eraseRelaxing
 }
 
 func (s Service) decider(scope *reconciliation.PreparationScope) decider {
 	return decider{
 		preparation: scope, sources: newCompilations(s.compiler), operations: s.options.Operations,
-		capabilities: s.capabilities, preparations: s.options.Preparations, planner: s, proofs: s,
+		capabilities: s.capabilities, preparations: s.options.Preparations, planner: s, proofs: s, relaxing: s.relaxing,
 	}
 }
 
@@ -208,6 +209,14 @@ func (d decider) decideBy(ctx context.Context, view View, store decisionRecords,
 			return operationPlan{}, err
 		}
 		return plannedFrom(decided, operation, states, attempts), nil
+	}
+	if verb == reconciliation.Destroy && operation.Verb == reconciliation.Destroy {
+		switch d.relaxing.over(frozenRelaxations(frozen)) {
+		case relaxationAdded:
+			return d.supersede(ctx, view, store, operation, frozen, states, attempts)
+		case relaxationDiffers:
+			return operationPlan{}, refuseChangedRelaxations(name, operation, frozen, states)
+		}
 	}
 	if err := refuseUncontinuable(ctx, store, name, operation, frozen); err != nil {
 		return operationPlan{}, err

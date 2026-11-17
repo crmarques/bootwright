@@ -70,6 +70,7 @@ type Service struct {
 	guard        ExecutionGuard
 	capabilities CapabilityResolver
 	options      Options
+	relaxing     eraseRelaxing
 }
 
 func New(workspace Workspace, compiler Compiler, binder SecretBinder, host HostIdentity, automation AutomationIdentity, guard ExecutionGuard, capabilities CapabilityResolver, options Options) Service {
@@ -122,10 +123,7 @@ func (s Service) store(view View) OperationStore {
 }
 
 func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, error) {
-	if err := refuseUnrealizedRelaxations(request.Relaxations); err != nil {
-		return nil, err
-	}
-	return s.planWithin(ctx, request, nil)
+	return s.relaxingFor(relaxingPlan, request.Relaxations).planWithin(ctx, request, nil)
 }
 
 func (s Service) planWithin(ctx context.Context, request PlanRequest, scope *reconciliation.PreparationScope) (*PlanResult, error) {
@@ -182,7 +180,11 @@ func (s Service) planWithin(ctx context.Context, request PlanRequest, scope *rec
 // returns that decision and the durable state it was read from, before any
 // finalization it previews.
 func (s Service) preview(ctx context.Context, decision decider, view View, selection reconciliation.Selection) (*PlanResult, operationPlan, basis, error) {
-	decided, verb, err := decision.decideAs(ctx, view, "", selection)
+	var previewed reconciliation.Verb
+	if len(decision.relaxing.methods) != 0 {
+		previewed = reconciliation.Destroy
+	}
+	decided, verb, err := decision.decideAs(ctx, view, previewed, selection)
 	if err != nil {
 		return nil, operationPlan{}, basis{}, err
 	}
@@ -207,6 +209,9 @@ func (s Service) preview(ctx context.Context, decision decider, view View, selec
 		return nil, operationPlan{}, basis{}, failure("lifecycle.stage",
 			"the next operation is a destroy, which accepts no stage selection",
 			"repeat "+contextCommand(view.Identity().Name, "plan")+" without "+strings.Join(given, " and "))
+	}
+	if err := s.refuseInapplicableRelaxations(view.Identity().Name, decided); err != nil {
+		return nil, operationPlan{}, basis{}, err
 	}
 	var result PlanResult
 	switch {

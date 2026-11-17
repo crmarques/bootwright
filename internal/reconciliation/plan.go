@@ -74,6 +74,7 @@ type BlockDefinition struct {
 	Impacts        []string        `json:"impacts"`
 	Consumes       []string        `json:"consumes"`
 	Groups         []Group         `json:"groups"`
+	Relaxation     string          `json:"relaxation,omitempty"`
 	Kind           string          `json:"kind"`
 	Object         string          `json:"object"`
 	Implementation string          `json:"implementation"`
@@ -104,6 +105,9 @@ func NewPlan(verb Verb, definitions []BlockDefinition) (Plan, error) {
 	}
 	requestBytes := 0
 	for _, definition := range definitions {
+		if definition.Relaxation != "" && verb != Destroy {
+			return Plan{}, planError("lifecycle plan relaxes a block it does not remove")
+		}
 		requestBytes += len(definition.Request)
 		if requestBytes > MaxPlanRequestBytes {
 			return Plan{}, planError("lifecycle plan exceeds its 4 MiB aggregate request limit")
@@ -484,6 +488,9 @@ func validateDefinition(definition BlockDefinition) error {
 			return planError("lifecycle block exclusive resources must be safe single-line text")
 		}
 	}
+	if definition.Relaxation != "" && !validRelaxation(definition.Relaxation) {
+		return planError("lifecycle block relaxation must be a bounded letter-only method")
+	}
 	if definition.Throttle != "" && !safeDescription(definition.Throttle) {
 		return planError("lifecycle block throttle must be safe single-line text")
 	}
@@ -559,6 +566,12 @@ func ValidSegment(value string) bool {
 		}
 	}
 	return true
+}
+
+func validRelaxation(value string) bool {
+	return len(value) <= maxIdentifier && !strings.ContainsFunc(value, func(c rune) bool {
+		return (c < 'a' || c > 'z') && (c < 'A' || c > 'Z')
+	})
 }
 
 func safeDescription(value string) bool {

@@ -31,7 +31,7 @@ func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy 
 	if err := s.proveContracts(scope.owned, scope.contracts); err != nil {
 		return operationPlan{}, failure("lifecycle.state", contractMessage(err), removeWith(frozenBy))
 	}
-	plan, err := s.removalOf(ctx, scope.owned, frozenBy)
+	plan, err := s.removalOf(ctx, scope.owned, frozenBy, s.relaxing.methods)
 	if err != nil {
 		return operationPlan{}, err
 	}
@@ -65,7 +65,7 @@ func (s Service) stopsFirst(plan reconciliation.Plan, phases removalPhases) []st
 // and request its apply froze; its capability supplies only what removing it
 // decides, so the plan describes the effects that exist rather than the effects
 // this executable would create from the same input today.
-func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, executable operationstore.Executable) (reconciliation.Plan, error) {
+func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, executable operationstore.Executable, relaxations map[string]string) (reconciliation.Plan, error) {
 	inverted, err := invertOwned(owned)
 	if err != nil {
 		return reconciliation.Plan{}, err
@@ -82,7 +82,13 @@ func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, execu
 		if err != nil {
 			return reconciliation.Plan{}, unreadable(block, executable, err)
 		}
+		block.Relaxation = ""
+		removal, relaxation, err := relaxedRemoval(ctx, capability, block, removal, relaxations)
+		if err != nil {
+			return reconciliation.Plan{}, err
+		}
 		definition := block.BlockDefinition
+		definition.Relaxation = relaxation
 		definition.Dependencies = slices.Clone(definition.Dependencies)
 		// Requirements are already resolved into the frozen dependencies this
 		// removal inverted, and a subset may no longer contain the block a

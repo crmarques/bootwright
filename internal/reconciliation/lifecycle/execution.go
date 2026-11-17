@@ -32,10 +32,7 @@ func (s Service) applyWithin(ctx context.Context, request ApplyRequest, scope *r
 // Destroy removes what an apply recorded as owned. It accepts no stage
 // selection: a removal covers exactly the effects that exist.
 func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*OperationResult, error) {
-	if err := refuseUnrealizedRelaxations(request.Relaxations); err != nil {
-		return nil, err
-	}
-	s, err := s.withParallelism(request.Parallelism)
+	s, err := s.relaxingFor(relaxingDestroy, request.Relaxations).withParallelism(request.Parallelism)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +71,9 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		if decided, identity, err = s.finalizeFirst(ctx, name, verb, selection, decided, scope); err != nil {
 			return nil, err
 		}
+	}
+	if err := s.refuseInapplicableRelaxations(name, decided); err != nil {
+		return nil, err
 	}
 	// What an interrupted registration left with no operation to own it is
 	// released the same way, for the same reason: it performs no effect, only

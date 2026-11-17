@@ -43,12 +43,3 @@ func ParseEraseRelaxations(tokens []string) (map[string]string, error) {
 	}
 	return relaxations, nil
 }
-
-func refuseUnrealizedRelaxations(relaxations map[string]string) error {
-	if len(relaxations) == 0 {
-		return nil
-	}
-	return failure("lifecycle.authorization",
-		"--authorize erase= names a relaxation this build does not yet apply to a removal",
-		"repeat the command without --authorize erase=")
-}

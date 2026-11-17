@@ -109,6 +109,49 @@ func TestPlanDigestChangesWithEveryFrozenField(t *testing.T) {
 	}
 }
 
+// A relaxation is frozen only on a removal, enters its digest only when set,
+// and an unrelaxed removal encodes exactly as it did before the member existed.
+func TestOnlyARemovalFreezesARelaxationAndOnlyASetOneEncodes(t *testing.T) {
+	relaxed := definition("alpha")
+	relaxed.Relaxation = "metadataClear"
+	if _, err := NewPlan(Apply, []BlockDefinition{relaxed}); err == nil {
+		t.Fatal("an apply froze a relaxation")
+	}
+	for _, method := range []string{"metadata-clear", "retain ", strings.Repeat("a", 64)} {
+		invalid := definition("alpha")
+		invalid.Relaxation = method
+		if _, err := NewPlan(Destroy, []BlockDefinition{invalid}); err == nil {
+			t.Fatalf("a removal froze the relaxation %q", method)
+		}
+	}
+	plain, err := NewPlan(Destroy, []BlockDefinition{definition("alpha")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := NewPlan(Destroy, []BlockDefinition{relaxed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(plain)
+	if err != nil || strings.Contains(string(encoded), "relaxation") {
+		t.Fatalf("an unrelaxed removal encodes %s (%v)", encoded, err)
+	}
+	if encoded, err = json.Marshal(frozen); err != nil || !strings.Contains(string(encoded), `"relaxation":"metadataClear"`) {
+		t.Fatalf("a relaxed removal encodes %s (%v)", encoded, err)
+	}
+	var read Plan
+	if err := json.Unmarshal(encoded, &read); err != nil || read.Blocks[0].Relaxation != "metadataClear" {
+		t.Fatalf("a relaxed removal reads back %+v (%v)", read, err)
+	}
+	first, err := plain.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second, err := frozen.Digest(); err != nil || second == first {
+		t.Fatal("the relaxation does not participate in the plan digest")
+	}
+}
+
 func TestPlanRefusesInvalidGraphs(t *testing.T) {
 	cyclic := []BlockDefinition{definition("alpha", "bravo"), definition("bravo", "alpha")}
 	duplicate := []BlockDefinition{definition("alpha"), definition("alpha")}

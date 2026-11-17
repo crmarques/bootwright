@@ -87,7 +87,7 @@ func boundFlags(plan reconciliation.Plan, digest func(string) string) []string {
 	for _, token := range tokens {
 		flags = append(flags, "--authorize", token+"="+digest(token))
 	}
-	return flags
+	return append(flags, relaxationFlags(frozenRelaxations(plan))...)
 }
 
 // requiredTokens are the authorizations a plan's blocks consume, in the order
