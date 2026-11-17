@@ -96,17 +96,21 @@ func contextEntryAllowed(path, name string, directory bool) bool {
 	return false
 }
 
+func identifyingEntry(path string) string {
+	switch path {
+	case "":
+		return "context.yaml"
+	case "state":
+		return "reservation.json"
+	}
+	return ""
+}
+
 func deletionOrder(path string, names []string) {
+	last := identifyingEntry(path)
 	slices.SortFunc(names, func(a, b string) int {
 		if a == b {
 			return 0
-		}
-		last := ""
-		if path == "" {
-			last = "context.yaml"
-		}
-		if path == "state" {
-			last = "reservation.json"
 		}
 		if a == last {
 			return 1
@@ -168,7 +172,7 @@ func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *direct
 		return state("context traversal exceeds its bound")
 	}
 	deletionOrder(path, names)
-	for _, name := range names {
+	for index, name := range names {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -209,6 +213,11 @@ func (s *Store) walkContextTreeWithRemovalGuard(ctx context.Context, dir *direct
 			}
 		}
 		if action == removeContextTree {
+			if index > 0 && name == identifyingEntry(path) {
+				if err := s.syncDirectory(ctx, dir); err != nil {
+					return err
+				}
+			}
 			if err := s.checkpoint(ctx, checkpointBeforeContextUnlink); err != nil {
 				return err
 			}

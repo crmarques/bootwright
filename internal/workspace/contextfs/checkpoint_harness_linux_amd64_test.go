@@ -893,7 +893,7 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointBeforeContextSubtree: 24, checkpointBeforeContextUnlink: 16, checkpointBeforeRegistryRename: 5,
 			checkpointBeforeSecretPrune: 1, checkpointBeforeSecretRename: 3, checkpointBeforeSecretUnlink: 1,
 			checkpointCreateFile: 15, checkpointMkdir: 10, checkpointSyncContextFile: 9,
-			checkpointSyncDirectory: 57, checkpointSyncFile: 15, checkpointWriteFile: 15,
+			checkpointSyncDirectory: 59, checkpointSyncFile: 15, checkpointWriteFile: 15,
 		},
 		"init-recovery": {
 			checkpointSyncInitialRegistryFile: 1, checkpointBeforeInitialRegistryRecovery: 1,
@@ -908,7 +908,7 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 		},
 		"delete": {
 			checkpointBeforeContextSubtree: 10, checkpointCreateFile: 2, checkpointWriteFile: 2,
-			checkpointSyncFile: 2, checkpointSyncDirectory: 10, checkpointBeforeRegistryRename: 2,
+			checkpointSyncFile: 2, checkpointSyncDirectory: 12, checkpointBeforeRegistryRename: 2,
 			checkpointAfterRegistryRename: 2, checkpointBeforeContextUnlink: 10,
 			checkpointBeforeContextRmdir: 1,
 		},

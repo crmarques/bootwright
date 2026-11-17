@@ -15,8 +15,11 @@ import (
 )
 
 // A purge removes each directory's entries as one batch and makes that
-// directory durable once after it, so it syncs a directory once for each
-// directory it empties rather than once for each entry it unlinks.
+// directory durable once after it, and once before the entry that identifies
+// the context (state/reservation.json, then context.yaml), so that entry is
+// never durably gone while another child is not. It syncs a directory once
+// for each directory it empties and each such entry rather than once for each
+// entry it unlinks.
 func TestAPurgeSyncsEachDirectoryOnceAfterItsBatch(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -58,7 +61,7 @@ func TestAPurgeSyncsEachDirectoryOnceAfterItsBatch(t *testing.T) {
 		t.Fatalf("the purge unlinked %d entries, want the context's %d", reached[checkpointBeforeContextUnlink], entries)
 	}
 	t.Logf("entries %d emptied directories %d directory syncs %d", entries, emptied, reached[checkpointSyncDirectory])
-	if outside := reached[checkpointSyncDirectory] - emptied; outside != 5 {
-		t.Fatalf("the purge synced a directory %d times for %d entries in %d directories, want once for each directory it empties and 5 times outside its walk", reached[checkpointSyncDirectory], entries, emptied)
+	if outside := reached[checkpointSyncDirectory] - emptied - 2; outside != 5 {
+		t.Fatalf("the purge synced a directory %d times for %d entries in %d directories, want once for each directory it empties, once before each of its 2 identifying entries and 5 times outside its walk", reached[checkpointSyncDirectory], entries, emptied)
 	}
 }
