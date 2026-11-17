@@ -16446,7 +16446,7 @@ keeps the bundle within 75% of the input cap. Measured at `-p 4`:
 `cmd/bootwright` 167 s to 29 s, `contextfs` 101 s to 45 s, `lifecycle` 32 s to
 22 s, `ansiblerunner` 9 s to 4 s. An independent review found no shared state;
 its two timing fixes are applied, and its lock finding is
-[B1490](m1.md#b1490).
+[B1490](#b1490).
 
 ## X520 — Every module runs under test
 
@@ -16563,4 +16563,23 @@ managed OS) for W8.2 to settle. A second rule resolves every literal `Get` and
 read, and 21 paths of foreign vocabularies (NMState, Ceph options, IAM
 policies, the document envelope) are listed with their owner. The architecture
 names the two sanctioned Go network contacts. No production code changed.
+
+## X527 — Locks unlock before they close
+
+### B1490
+
+Found by the independent review of X519; the selection store's directory lock
+then made `cmd/bootwright`'s parallel context tests flaky, so it was fixed as a
+gate repair under [D274](backlog.md#d274). A `flock` released only by closing
+its descriptor stays held while a child forked by another goroutine keeps a
+copy until it executes. Every such release that this code alone locked now
+unlocks first: the selection store, the context store's directories (the
+controller bundle area among them), retirement, run retirement, setup and
+runtime holds and uninstall, the ansiblerunner holder, sweep, scratch and
+claim paths, and the controller staging sweep and discard. The adapter job
+lock and the automation stage lock are shared with the adapter on purpose and
+still close only; their fork window is [B1498](m1.md#b1498). Five tests keep a
+duplicate of the locked descriptor, as a forked child does, and show a fresh
+non-blocking lock succeeds after release; they failed before. The flaky
+context test passed 20 runs in a row.
 
