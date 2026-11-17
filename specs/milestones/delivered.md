@@ -16821,3 +16821,13 @@ the new modules, at about 71% of the input cap. An AST comparison found the 104
 moved bodies unchanged; a native failure's site string now names the
 collaborator module. Every request, verdict and golden is unchanged.
 
+## X546 — The Ceph package proxy reference is unordered
+
+### B1515
+
+Gate repair found while landing X543: the CephCluster package repository
+proxy reference another session added had no edge catalog row and no reason.
+Ceph package acquisition admits only an external Proxy, which no block
+realizes, so the reference is listed as unordered with that reason, as the
+Machine and install profile proxy references are.
+
