@@ -18,6 +18,7 @@ import os
 import pathlib
 
 import pytest
+from ansible.module_utils.testing import patch_module_args
 from ansible.utils.collection_loader import AnsibleCollectionConfig
 from ansible.utils.collection_loader._collection_finder import _AnsibleCollectionFinder
 
@@ -27,6 +28,22 @@ COLLECTIONS = pathlib.Path(__file__).resolve().parents[5]
 def pytest_configure():
     if AnsibleCollectionConfig.collection_finder is None:
         _AnsibleCollectionFinder(paths=[str(COLLECTIONS)])._install()
+
+
+@pytest.fixture
+def run_module(capsys):
+    """run_module(module, arguments) runs the module's main() in process, as a task would, and returns what it printed.
+
+    The arguments are its task arguments; exit_json and fail_json each end
+    the run, and the result is the JSON they print.
+    """
+    def run(module, arguments):
+        capsys.readouterr()
+        with patch_module_args(arguments), pytest.raises(SystemExit):
+            module.main()
+        return json.loads(capsys.readouterr().out)
+
+    return run
 
 
 @pytest.fixture(autouse=True)
