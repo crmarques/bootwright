@@ -124,7 +124,7 @@ func TestAPresentedUpdateResultDoesNotRepeatItsWarnings(t *testing.T) {
 			Diagnostics: contextUpdatePlan().Diagnostics, Presented: presented,
 		}
 		var out, errOut bytes.Buffer
-		if err := writeAdmission(&out, &errOut, "context update", result); err != nil {
+		if err := writeAdmission(&out, &errOut, true, result); err != nil {
 			t.Fatal(err)
 		}
 		if (errOut.Len() == 0) != presented || !bytes.HasPrefix(out.Bytes(), []byte("  ✓ Context updated\n")) {

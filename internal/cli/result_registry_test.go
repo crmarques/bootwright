@@ -17,61 +17,14 @@ import (
 func TestCommandResultFieldRegistryMatchesSpec(t *testing.T) {
 	registry := map[string][]reflect.Type{}
 	used := map[reflect.Type]bool{}
-	for _, row := range []struct {
-		typ   reflect.Type
-		paths string
-	}{
-		{reflect.TypeFor[addOnInfoDocument](), "add-ons info"},
-		{reflect.TypeFor[addOnsPresentation](), "add-ons list"},
-		{reflect.TypeFor[controllerPresentation](), "controller install|controller check"},
-		{reflect.TypeFor[setupPlanResult](), "controller install"},
-		{reflect.TypeFor[rebindPresentation](), "controller rebind"},
-		{reflect.TypeFor[uninstallPresentation](), "controller uninstall"},
-		{reflect.TypeFor[contextPresentation](), "context use|context current"},
-		{reflect.TypeFor[contextListPresentation](), "context list"},
-		{reflect.TypeFor[contextAdmissionPresentation](), "context init|context update"},
-		{reflect.TypeFor[contextDeletionPresentation](), "context delete"},
-		{reflect.TypeFor[secretMutationPresentation](), "secret set|secret generate|secret delete"},
-		{reflect.TypeFor[mediaMutationPresentation](), "media add|media delete"},
-		{reflect.TypeFor[encryptionMutationPresentation](), "secret encryption init|secret encryption rotate"},
-		{reflect.TypeFor[exportResult](), "completion bash|completion fish|completion zsh|completion powershell|secret show|cluster kubeconfig|cluster keyring"},
-		{reflect.TypeFor[helpPresentation](), "help"},
-		{reflect.TypeFor[versionPresentation](), "version"},
-		{reflect.TypeFor[schemaPresentation](), "schema"},
-		{reflect.TypeFor[billOfMaterialsPresentation](), "sbom"},
-		{reflect.TypeFor[acquisitionsPresentation](), "render acquisitions"},
-		{reflect.TypeFor[planPresentation](), "plan|machine discover"},
-		{reflect.TypeFor[operationPresentation](), "apply|destroy"},
-		{reflect.TypeFor[machineDiscoveryPresentation](), "machine discover"},
-		{reflect.TypeFor[validationResult](), "validate"},
-		{reflect.TypeFor[storagePreflightResult](), "preflight"},
-		{reflect.TypeFor[effectiveResult](), "render effective"},
-		{reflect.TypeFor[renderPresentation](), "render effective"},
-		{reflect.TypeFor[statusResult](), "status"},
-		{reflect.TypeFor[diffResult](), "diff"},
-		{reflect.TypeFor[secretCheckResult](), "secret check"},
-		{reflect.TypeFor[secretListResult](), "secret list"},
-		{reflect.TypeFor[secretInfoResult](), "secret info"},
-		{reflect.TypeFor[encryptionStatusResult](), "secret encryption status"},
-		{reflect.TypeFor[trustResult](), "machine trust"},
-		{reflect.TypeFor[machineListPresentation](), "machine list"},
-		{reflect.TypeFor[machineInfoPresentation](), "machine info"},
-		{reflect.TypeFor[machinePowerPresentation](), "machine start|machine stop|machine restart"},
-		{reflect.TypeFor[machineCopyPresentation](), "machine cp"},
-		{reflect.TypeFor[mediaListPresentation](), "media list"},
-		{reflect.TypeFor[adminCredentialsPresentation](), "cluster update-admin-credentials"},
-		{reflect.TypeFor[clusterListPresentation](), "cluster list"},
-		{reflect.TypeFor[clusterInfoPresentation](), "cluster info"},
-		{reflect.TypeFor[clusterHandoffPresentation](), "cluster oc|cluster kubectl"},
-		{reflect.TypeFor[logsResult](), "logs"},
-		{reflect.TypeFor[logsOutputResult](), "logs"},
-	} {
-		if !slices.Contains(cliResults, row.typ) {
-			t.Fatalf("registry names an unregistered result type %s", row.typ)
-		}
-		used[row.typ] = true
-		for _, path := range strings.Split(row.paths, "|") {
-			registry[path] = append(registry[path], row.typ)
+	for _, spec := range commandCatalog() {
+		for _, shown := range spec.results {
+			typ := reflect.TypeOf(shown)
+			if !slices.Contains(cliResults, typ) {
+				t.Fatalf("%s names an unregistered result type %s", spec.path, typ)
+			}
+			used[typ] = true
+			registry[spec.path] = append(registry[spec.path], typ)
 		}
 	}
 	for _, typ := range cliResults {

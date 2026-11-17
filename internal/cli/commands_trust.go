@@ -8,7 +8,7 @@ import (
 )
 
 func machineTrustCommand() commandSpec {
-	spec := commandSpec{path: "machine trust", validate: validateMachineTrustCommand, example: "--context lab --dry-run", invoke: Services.invokeMachineTrust, short: "Inspect and maintain exact host-key trust", flags: []flagSpec{listFlag("name", "Select comma-separated machine names (default: all)"), listFlag("replace", "Select comma-separated replacements, each optionally <machine>=SHA256:<fingerprint> (default: none)"), stringFlag("expect", "Name comma-separated verified fingerprints as <machine>=SHA256:<fingerprint>"), dryRunFlag(), confirmationFlag()}}
+	spec := commandSpec{path: "machine trust", results: []jsonResult{trustResult{}}, render: renderMachineTrust(), validate: validateMachineTrustCommand, example: "--context lab --dry-run", invoke: Services.invokeMachineTrust, short: "Inspect and maintain exact host-key trust", flags: []flagSpec{listFlag("name", "Select comma-separated machine names (default: all)"), listFlag("replace", "Select comma-separated replacements, each optionally <machine>=SHA256:<fingerprint> (default: none)"), stringFlag("expect", "Name comma-separated verified fingerprints as <machine>=SHA256:<fingerprint>"), dryRunFlag(), confirmationFlag()}}
 	spec.long = spec.short + ". It observes exactly the endpoints this context declares and records what" +
 		" they present. A Machine that proves its host key another way is reported and left alone;" +
 		" a changed key is superseded only by naming it in --replace. A key whose fingerprint --expect or --replace names" +

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/storage/preflight"
-	"github.com/spf13/cobra"
 )
 
 type storageCapacityResult struct {
@@ -98,11 +97,4 @@ func storagePreflightHeadlineStatus(summary preflight.Summary) string {
 		return "PENDING"
 	}
 	return "OK"
-}
-
-func (r *Runner) writeNegativeReadinessResults(command *cobra.Command, path string, result commandResult, diagnostics []diagnostic) (bool, error) {
-	if path == "preflight" && result.storagePreflight != nil {
-		return true, writeStoragePreflight(r.config.Out, r.config.ErrOut, path, result.storagePreflight, diagnostics, 1, selectedJSON(command))
-	}
-	return r.writeNegativeSecretCheck(command, path, result, diagnostics)
 }

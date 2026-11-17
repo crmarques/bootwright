@@ -169,7 +169,7 @@ func validControllerReport(report *prerequisites.Report) bool {
 }
 
 func successfulControllerReport(command string, report *prerequisites.Report) bool {
-	if command == "controller check" {
+	if specFor(command).inspection {
 		return report.Outcome == "ready" && !report.DryRun
 	}
 	return report.DryRun && report.Outcome == "planned" || !report.DryRun && (report.Outcome == "unchanged" || report.Outcome == "changed")
@@ -178,7 +178,7 @@ func successfulControllerReport(command string, report *prerequisites.Report) bo
 // controllerHeadline names what the reader is looking at. Readiness inspection
 // never presents a plan, so only setup announces one.
 func controllerHeadline(command string, report *prerequisites.Report) string {
-	if command == "controller check" {
+	if specFor(command).inspection {
 		return "Controller readiness"
 	}
 	if report.PlanPresented || !report.DryRun {
@@ -320,7 +320,7 @@ func controllerNextCommand(command string, report *prerequisites.Report) string 
 	if report.Next != "" {
 		return report.Next
 	}
-	if report.Outcome == "ready" && command == "controller check" {
+	if report.Outcome == "ready" && specFor(command).inspection {
 		return "bootwright context init --name <name> --input-dir <dir>"
 	}
 	if report.Outcome == "changed" || report.Outcome == "unchanged" {
@@ -388,7 +388,7 @@ func controllerScopeText(text *display, report *prerequisites.Report) {
 }
 
 func showReceiptTable(command string, report *prerequisites.Report) bool {
-	return report.Table != nil && (command == "controller check" || report.Outcome == "unchanged")
+	return report.Table != nil && (specFor(command).inspection || report.Outcome == "unchanged")
 }
 
 // controllerPlanText writes the plan body. The scope and checks are skipped

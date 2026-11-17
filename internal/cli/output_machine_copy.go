@@ -66,7 +66,7 @@ func writeMachineCopy(out, errOut io.Writer, path string, result *machineaccess.
 }
 
 func (r *Runner) writeCopyOutcome(ctx context.Context, command *cobra.Command, path string, result commandResult, err error) (bool, int) {
-	if path != "machine cp" || result.copy == nil || len(result.copy.Machines) == 0 {
+	if result.copy == nil || len(result.copy.Machines) == 0 {
 		return false, 0
 	}
 	status := 0

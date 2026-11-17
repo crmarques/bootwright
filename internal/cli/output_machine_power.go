@@ -131,19 +131,8 @@ func writeSingleMachinePower(out io.Writer, result power.Result) error {
 
 func (r *Runner) writeFailedPowerBatch(command *cobra.Command, path string, result commandResult, diagnostics []diagnostic) (bool, error) {
 	requested := len(normalizeNames(stringValue(command.Flags(), "name")))
-	if !powerCommandPath(path) || requested < 2 || !validMachinePower(result.power, true) {
+	if requested < 2 || !validMachinePower(result.power, true) {
 		return false, nil
 	}
 	return true, writeMachinePowerFailure(r.config.Out, r.config.ErrOut, path, result.power, requested, diagnostics, selectedJSON(command))
-}
-
-func powerCommandPath(path string) bool {
-	return path == "machine start" || path == "machine stop" || path == "machine restart"
-}
-
-func (r *Runner) writeExecutedFailure(command *cobra.Command, path string, result commandResult, diagnostics []diagnostic) (bool, error) {
-	if handled, err := r.writeExecutedLifecycle(path, result, diagnostics); handled {
-		return true, err
-	}
-	return r.writeFailedPowerBatch(command, path, result, diagnostics)
 }

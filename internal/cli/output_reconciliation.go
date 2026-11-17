@@ -22,6 +22,8 @@ type LifecyclePlanPresenter struct {
 	model *lifecyclePresentation
 }
 
+const destroyVerb = "destroy"
+
 func NewLifecyclePlanPresenter(out io.Writer) *LifecyclePlanPresenter {
 	return &LifecyclePlanPresenter{out: out}
 }
@@ -361,14 +363,14 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 func settledNote(verb, recovered string) string {
 	switch recovered {
 	case lifecycle.RecoveredFinalization:
-		if verb == "destroy" {
+		if verb == destroyVerb {
 			return "Nothing to remove: this invocation only completed an interrupted finalization."
 		}
 		return "Nothing to do: this invocation only completed an interrupted finalization."
 	case lifecycle.RecoveredRelease:
 		return "Nothing to remove: this invocation only released what an interrupted registration left."
 	}
-	if verb == "destroy" {
+	if verb == destroyVerb {
 		return "Nothing to remove: this context owns no realized state."
 	}
 	return "Nothing to do; bootwright diff --observe compares the records with the hosts."

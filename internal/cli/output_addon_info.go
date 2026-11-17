@@ -81,16 +81,6 @@ func writeAddOnInfo(out io.Writer, command string, result *catalog.DescribeResul
 	return err
 }
 
-func writeAddOnResult(out io.Writer, path string, result commandResult, structured bool) (bool, error) {
-	switch {
-	case path == "add-ons list" && result.addOns != nil:
-		return true, writeAddOns(out, path, result.addOns, structured)
-	case path == "add-ons info" && result.addOnInfo != nil:
-		return true, writeAddOnInfo(out, path, result.addOnInfo, structured)
-	}
-	return false, nil
-}
-
 func groupShort(part string) string {
 	return map[string]string{
 		"add-ons":    "Inspect built-in add-on packages",

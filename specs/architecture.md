@@ -391,11 +391,13 @@ facts; the CLI never discovers them. Lifecycle presentation copies frozen plan
 values and observes durable events without admitting or scheduling work.
 `runner.go` orders one invocation:
 parse, validate, dispatch, render. `catalog.go` is the single list of commands;
-each entry also records whether the command requires root and whether it is
-implemented, so no second list of command paths exists. Each
+each entry also records the command's facts: whether it requires root and
+whether it is implemented, its help example, inherited-flag scope, invoker,
+validator, invocation classification and result renderer, so no second list of
+command paths exists. Each
 `commands_<domain>.go` keeps its command declarations, consumer interface, and
 request translation together and `output_<domain>.go` its rendering;
-`dispatch.go` and `results.go` route a path and a result to them, and
+`dispatch.go` and `render.go` run an entry's invoker and renderer, and
 `services.go` holds one interface field per domain service. CLI code never
 constructs a driven adapter or sequences a cross-domain workflow.
 
@@ -431,12 +433,12 @@ allowlist, and the stub set, whose commands the CLI catalog leaves unavailable.
 
 Adding a command touches its spec in `commands_<domain>.go`, marked `available`
 once implemented, the request type in the capability's `requests.go`, the
-method on its `Service` and consumer interface, a case in `dispatch.go`, a
-renderer in `output_<domain>.go` with its case in `results.go`, and the binding
+method on its `Service` and consumer interface, its invoker, validator and
+renderer named on that spec, and the binding
 in `wiring_<domain>.go`. `TestPublicCatalog` and
 `TestCommandModesComeFromTheCatalog` hold its flags and modes,
-`TestEveryCatalogCommandHasApplicationDispatch` fails until dispatch has the
-case, and implementing a stub removes it from `stubCapabilities`.
+`TestEveryCatalogCommandHasApplicationDispatch` fails until the spec has its
+invoker, and implementing a stub removes it from `stubCapabilities`.
 
 ## Extending capabilities
 

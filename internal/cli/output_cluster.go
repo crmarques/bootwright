@@ -365,20 +365,11 @@ func displayClusterInfo(result *inspection.InfoResult) clusterInfoPresentation {
 	return shown
 }
 
-func writeClusterResult(out, errOut io.Writer, command string, result commandResult, jsonMode bool) (bool, error) {
-	if command == "cluster update-admin-credentials" && result.adminCredentials != nil {
-		return true, writeAdminCredentials(out, command, result.adminCredentials, jsonMode)
-	}
-	if (command == "cluster oc" || command == "cluster kubectl") && result.handoff != nil {
-		return true, writeHandoff(out, result.handoff)
-	}
-	if command == "cluster list" && validClusterList(result.clusterList) {
-		return true, writeClusterList(out, command, result.clusterList, jsonMode)
-	}
+func writeClusterInfoResult(out, errOut io.Writer, command string, result commandResult, jsonMode bool) (bool, error) {
 	if result.clusterInfo != nil {
 		defer clearDashboards(result.clusterInfo)
 	}
-	if command == "cluster info" && validClusterInfo(result.clusterInfo) {
+	if validClusterInfo(result.clusterInfo) {
 		return true, writeClusterInfo(out, errOut, command, result.clusterInfo, jsonMode)
 	}
 	return false, nil

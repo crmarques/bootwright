@@ -26,7 +26,7 @@ func completionFixture(t *testing.T) *cobra.Command {
 	validate := &cobra.Command{Use: "validate", Short: "Validate input"}
 	validate.Flags().StringArrayP("file", "f", nil, "Read input")
 	validate.Flags().Bool("strict", false, "Check strictly")
-	root.AddCommand(cluster, validate, &cobra.Command{Use: "help"})
+	root.AddCommand(cluster, validate, &cobra.Command{Use: "help", Annotations: map[string]string{helpAnnotation: "true"}})
 	if err := configureCompletion(root, completionCatalog{}); err != nil {
 		t.Fatal(err)
 	}

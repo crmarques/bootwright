@@ -3,11 +3,14 @@ package cli
 import (
 	"slices"
 	"strings"
+
+	"github.com/spf13/cobra"
 )
 
 const (
 	contextFreeAnnotation = "bootwright.contextFree"
 	sshFlagsAnnotation    = "bootwright.sshFlags"
+	helpAnnotation        = "bootwright.help"
 )
 
 var (
@@ -18,6 +21,10 @@ var (
 func inheritedFlagScope(path string) (contextFree bool, sshFlags []string) {
 	spec := specFor(path)
 	return spec.contextFree, spec.sshFlags
+}
+
+func isHelpCommand(command *cobra.Command) bool {
+	return command != nil && command.Annotations[helpAnnotation] == "true"
 }
 
 func acceptsFlag(commandAnnotations map[string]string, name string) bool {

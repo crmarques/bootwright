@@ -20,21 +20,26 @@ type commandSpec struct {
 	operands string
 	// implemented marks a command whose application use case is available.
 	// available also marks commands that need the privileged context store.
-	implemented   bool
-	privileged    bool
-	session       bool
-	example       string
-	contextFree   bool
-	sshFlags      []string
-	presentation  bool
-	helpCommand   bool
-	invoke        commandInvoker
-	validate      commandValidator
-	operandCheck  func([]string) error
-	operandRemedy func(*pflag.FlagSet) string
-	refuse        func(*Runner, *cobra.Command) string
-	classify      classifyRules
-	present       commandPresenter
+	implemented      bool
+	privileged       bool
+	session          bool
+	example          string
+	contextFree      bool
+	sshFlags         []string
+	presentation     bool
+	helpCommand      bool
+	invoke           commandInvoker
+	validate         commandValidator
+	operandCheck     func([]string) error
+	operandRemedy    func(*pflag.FlagSet) string
+	refuse           func(*Runner, *cobra.Command) string
+	classify         classifyRules
+	present          commandPresenter
+	render           commandRenderer
+	results          []jsonResult
+	operation        bool
+	controllerReport bool
+	inspection       bool
 }
 
 type classifyRules struct {
@@ -152,7 +157,15 @@ func globalFlags() []flagSpec {
 	}
 }
 
-var commandCatalog = sync.OnceValue(buildCommandCatalog)
+var (
+	catalogOnce  sync.Once
+	catalogCache []commandSpec
+)
+
+func commandCatalog() []commandSpec {
+	catalogOnce.Do(func() { catalogCache = buildCommandCatalog() })
+	return catalogCache
+}
 
 func buildCommandCatalog() []commandSpec {
 	var catalog []commandSpec

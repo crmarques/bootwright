@@ -12,7 +12,7 @@ import (
 )
 
 func logsCommandSpec() commandSpec {
-	return available(commandSpec{path: "logs", validate: validateLogsFlags, operandRemedy: logsOperandRemedy, example: "--context lab --follow", invoke: Services.invokeLogs, short: "Show a context's operation events and retained adapter output",
+	return available(commandSpec{path: "logs", results: []jsonResult{logsResult{}, logsOutputResult{}}, render: renderLogs(), validate: validateLogsFlags, operandRemedy: logsOperandRemedy, example: "--context lab --follow", invoke: Services.invokeLogs, short: "Show a context's operation events and retained adapter output",
 		flags: []flagSpec{
 			stringFlag("operation", "Select an operation by its op- ID (default: the current operation)"),
 			stringFlag("block", "Keep one block's events, or name the block whose output --raw prints"),

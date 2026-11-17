@@ -321,7 +321,7 @@ func TestSecretTextEscapesOnce(t *testing.T) {
 	if err := writeSecretListText(&list, listed); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeSecretMutation(&mutation, "secret set", changed); err != nil {
+	if err := writeSecretMutation(&mutation, secretSet, changed); err != nil {
 		t.Fatal(err)
 	}
 	checkRow := []string{shown("name"), shown("type"), shown("source"), shown("part"), shown("status"), "-"}

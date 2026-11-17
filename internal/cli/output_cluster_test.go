@@ -245,7 +245,7 @@ func TestExplicitObjectUserOutputIsStructuredAndClearsCustody(t *testing.T) {
 		ceph.ObjectUsers = []inspection.ObjectUserAccess{{Name: "documents", Gateway: "objects", Credentials: material}}
 		var out bytes.Buffer
 		options := PresentationOptions{Format: format, Width: 220, Detail: "full"}
-		if handled, err := writeClusterResult(WithPresentation(&out, options), io.Discard, "cluster info", commandResult{clusterInfo: storageOnly(ceph)}, format == "json"); err != nil || !handled {
+		if handled, err := writeClusterInfoResult(WithPresentation(&out, options), io.Discard, "cluster info", commandResult{clusterInfo: storageOnly(ceph)}, format == "json"); err != nil || !handled {
 			t.Fatal(err)
 		}
 		if !strings.Contains(out.String(), "ACCESS") || !strings.Contains(out.String(), "PRIVATE") {
@@ -274,7 +274,7 @@ func TestObjectUserOutputFailureClearsAllBorrowedMaterial(t *testing.T) {
 					ceph.ObjectUsers[0].Gateway = ""
 				}
 				var stderr bytes.Buffer
-				handled, err := writeClusterResult(failingWriter{}, &stderr, "cluster info", commandResult{clusterInfo: storageOnly(ceph)}, format == "json")
+				handled, err := writeClusterInfoResult(failingWriter{}, &stderr, "cluster info", commandResult{clusterInfo: storageOnly(ceph)}, format == "json")
 				if invalid {
 					if handled || err != nil {
 						t.Fatal("invalid result was rendered", handled, err)

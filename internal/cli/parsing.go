@@ -153,7 +153,7 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 			if child := exactChild(current, arg); child != nil && !child.Hidden {
 				current = child
 				path = append(path, arg)
-				helpCommand = child.CommandPath() == "bootwright help"
+				helpCommand = isHelpCommand(child)
 				continue
 			}
 			if !current.Runnable() {

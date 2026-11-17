@@ -115,15 +115,15 @@ func validSecretList(result *custody.ListResult) bool {
 	return true
 }
 
-func validSecretMutation(path string, result *custody.MutationResult) bool {
+func validSecretMutation(verb secretVerb, result *custody.MutationResult) bool {
 	if result == nil || !validSecretContext(result.Context) || result.Changed < 0 || result.Unchanged < 0 || !validSecretParts(result.Parts) {
 		return false
 	}
-	switch path {
-	case "secret generate":
+	switch verb {
+	case secretGenerate:
 		return len(result.Parts) == 0 && len(result.ChangedNames) == result.Changed && len(result.UnchangedNames) == result.Unchanged &&
 			distinctNames(append(slices.Clone(result.ChangedNames), result.UnchangedNames...))
-	case "secret delete":
+	case secretDelete:
 		return result.Name != "" && len(result.Parts) == 0 && result.Changed+result.Unchanged == 1
 	}
 	return result.Name != ""
@@ -183,10 +183,10 @@ func validEncryptionStatus(result *encryption.StatusResult) bool {
 	return true
 }
 
-func writeSecretMutation(out io.Writer, path string, result *custody.MutationResult) error {
+func writeSecretMutation(out io.Writer, verb secretVerb, result *custody.MutationResult) error {
 	var text display
-	switch path {
-	case "secret generate":
+	switch verb {
+	case secretGenerate:
 		switch {
 		case result.Changed > 0:
 			text.headline("OK", "Secrets generated")
@@ -200,14 +200,14 @@ func writeSecretMutation(out io.Writer, path string, result *custody.MutationRes
 			field{Label: "Changed", Value: displayNameList(result.ChangedNames)},
 			field{Label: "Unchanged", Value: displayNameList(result.UnchangedNames)},
 		)
-	case "secret delete":
+	case secretDelete:
 		if result.Changed > 0 {
 			text.headline("OK", "Secret "+result.Name+" deleted")
 		} else {
 			text.headline("SKIPPED", "Secret "+result.Name+" has no current version; nothing was deleted")
 		}
 	default:
-		text.headline("OK", "Secret "+strings.TrimPrefix(path, "secret ")+" complete")
+		text.headline("OK", "Secret set complete")
 		text.section("")
 		text.fields(
 			field{Label: "Name", Value: result.Name},
@@ -290,9 +290,9 @@ func writeSecretReveal(out io.Writer, result *custody.RevealResult, requested se
 	return err
 }
 
-func writeEncryptionMutation(out io.Writer, path string, result *encryption.MutationResult) error {
+func writeEncryptionMutation(out io.Writer, rotation bool, result *encryption.MutationResult) error {
 	action := "initialized"
-	if path == "secret encryption rotate" {
+	if rotation {
 		action = "rotated"
 	} else if !result.Changed {
 		action = "already initialized"
@@ -306,7 +306,7 @@ func writeEncryptionMutation(out io.Writer, path string, result *encryption.Muta
 		{Label: "Key custody", Value: result.Implementation.KeyCustody.ID},
 		{Label: "Active key", Value: result.ActiveKey},
 	}
-	if path == "secret encryption rotate" {
+	if rotation {
 		fields = append(fields,
 			field{Label: "Retired keys", Value: displayNameList(result.RetiredKeys)},
 			field{Label: "Re-encrypted", Value: strconv.Itoa(result.ReencryptedVersions) + " versions, " + strconv.Itoa(result.ReencryptedParts) + " parts"},

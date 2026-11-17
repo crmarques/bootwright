@@ -108,7 +108,7 @@ func completionResolve(root *cobra.Command, words []string, descriptions bool, c
 			}
 			continue
 		}
-		if cmd == root && token == "help" && !helpMode {
+		if cmd == root && isHelpCommand(exactChild(root, token)) && !helpMode {
 			helpMode = true
 			continue
 		}

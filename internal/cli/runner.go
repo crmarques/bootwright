@@ -116,6 +116,7 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 			}
 		}
 		if spec.helpCommand {
+			parent.Annotations[helpAnnotation] = "true"
 			parent.Use += " [command ...]"
 			root.SetHelpCommand(parent)
 		}
@@ -267,8 +268,11 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 	services.logOutput = r.config.Out
 	result, err := services.invoke(ctx, path, command.Flags(), command.Flags().Args())
 	defer result.clearSensitive()
-	if handled, status := r.writeCopyOutcome(ctx, command, path, result, err); handled {
-		return status
+	spec := specFor(path)
+	if outcome := spec.render.outcome; outcome != nil {
+		if handled, status := outcome(r, renderCall{ctx: ctx, command: command, path: path, result: result}, err); handled {
+			return status
+		}
 	}
 	logs := result.createdLogs()
 	if r.config.FinishProgress != nil {
@@ -284,13 +288,13 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 	if err == nil && result.session != nil {
 		return result.session.ExitCode
 	}
-	setupJSON := (path == "controller install" || path == "controller check") && selectedJSON(command)
-	if err != nil && !setupJSON && (path == "controller install" || path == "controller check") && validControllerReport(result.controller) {
+	setupJSON := spec.controllerReport && selectedJSON(command)
+	if err != nil && !setupJSON && spec.controllerReport && validControllerReport(result.controller) {
 		if presentErr := writeControllerReport(r.config.Out, r.config.ErrOut, path, result.controller); presentErr != nil {
 			return 1
 		}
 	}
-	if interruptedLifecycle(ctx, path, result) {
+	if interruptedLifecycle(ctx, spec, result) {
 		return r.writeInterruptedLifecycle(path, result.lifecycleOperation)
 	}
 	if canceled := ctx.Err(); canceled != nil {
@@ -334,14 +338,11 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 
 func (r *Runner) writeServiceDiagnostics(command *cobra.Command, path string, result commandResult, reported []diagnostic, usage bool, logs []string) int {
 	reported = remediatedFor(command, reported)
-	if handled, presentErr := r.writeNegativeReadinessResults(command, path, result, reported); handled {
-		if presentErr != nil {
+	spec := specFor(path)
+	if failed := spec.render.failed; failed != nil {
+		if handled, _ := failed(r, renderCall{command: command, path: path, result: result}, reported); handled {
 			return 1
 		}
-		return 1
-	}
-	if handled, _ := r.writeExecutedFailure(command, path, result, reported); handled {
-		return 1
 	}
 	// A service's refusal of how it was invoked, such as a flag set the
 	// declared Secret type does not take, is a usage failure.
@@ -349,8 +350,8 @@ func (r *Runner) writeServiceDiagnostics(command *cobra.Command, path string, re
 	if usage {
 		exitCode = 2
 	}
-	if (path == "controller install" || path == "controller check") && selectedStructured(command) && validControllerReport(result.controller) {
-		if path == "controller install" && result.controller.DryRun {
+	if spec.controllerReport && selectedStructured(command) && validControllerReport(result.controller) {
+		if result.controller.DryRun {
 			return r.setupPlanFailure(path, result.controller, reported, exitCode)
 		}
 		if writeStructuredController(r.config.Out, path, result.controller, reported, exitCode) != nil {

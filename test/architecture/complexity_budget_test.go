@@ -227,8 +227,6 @@ func goFunctionsAwaitingSplit() []string {
 		"internal/addons/admission_olm.go.validateCustomResource",
 		"internal/addons/clusterobjects/evidence_validation.go.ValidateEvidence",
 		"internal/addons/instance/requests.go.Request.validate",
-		"internal/cli/output_additional.go.writeAdditionalStructuredResult",
-		"internal/cli/results.go.Runner.writeResult",
 		"internal/controller/ansiblelocal/runner_linux_amd64.go.protocolRun.Judge",
 		"internal/controller/privilege/sudo.go.Supervisor.Run",
 		"internal/machine/diskselection/selection.go.Select",

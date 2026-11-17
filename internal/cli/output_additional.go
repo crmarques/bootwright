@@ -6,12 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"slices"
 	"strings"
 	"unicode/utf8"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -123,93 +121,6 @@ type encryptionMutationPresentation struct {
 }
 
 func (encryptionMutationPresentation) documentedResult() {}
-
-func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path string, result commandResult) (bool, error) {
-	var shown jsonResult
-	var reported []diagnostic
-	switch {
-	case (path == "context init" || path == "context update") && validAdmission(result.admission):
-		a := result.admission
-		shown = contextAdmissionPresentation{Context: contextSummary(a.Context), Counts: displayCounts(a.Counts), FilesCopied: a.FilesCopied, InputChanged: a.InputChanged}
-		reported = a.Diagnostics
-	case path == "context use" && result.use != nil && validContextSummary(result.use.Context):
-		shown = contextPresentation{Context: contextSummary(result.use.Context)}
-	case path == "context current" && result.current != nil && validContextSummary(result.current.Context):
-		shown = contextPresentation{Context: contextSummary(result.current.Context)}
-	case path == "context list" && validContextList(result.list):
-		rows := slices.Clone(result.list.Contexts)
-		slices.SortStableFunc(rows, func(a, b contexts.Summary) int { return strings.Compare(a.Name, b.Name) })
-		list := contextListPresentation{Contexts: []contextSummaryPresentation{}}
-		for _, row := range rows {
-			list.Contexts = append(list.Contexts, contextSummary(row))
-		}
-		shown = list
-	case path == "context delete" && result.deletion != nil && result.deletion.Name != "" && result.deletion.Outcome == "deleted":
-		d := result.deletion
-		shown = contextDeletionPresentation{Name: escapeDisplayLine(d.Name), Outcome: escapeDisplayLine(d.Outcome), CurrentCleared: d.CurrentCleared, OrphansAbandoned: d.OrphansAbandoned, ReleasedReservations: displayLines(d.ReleasedReservations)}
-		if d.OrphansAbandoned {
-			reported = []diagnostic{{Severity: "warning", Code: "context.orphaned", Message: "the objects this context owned were abandoned and are no longer managed"}}
-		}
-	case (path == "secret set" || path == "secret generate" || path == "secret delete") && validSecretMutation(path, result.secretMutation):
-		m := result.secretMutation
-		shown = secretMutationPresentation{Context: displaySecretContext(m.Context), Name: escapeDisplayLine(m.Name), Changed: m.Changed, Unchanged: m.Unchanged, ChangedNames: displayNames(m.ChangedNames), UnchangedNames: displayNames(m.UnchangedNames), Parts: displaySecretPartValues(m.Parts)}
-	case path == "controller rebind" && validRebind(result.rebind):
-		shown = rebindPresentation{Outcome: escapeDisplayLine(result.rebind.Outcome), Bindings: result.rebind.Bindings, Reservations: result.rebind.Reservations}
-	case path == "controller uninstall" && validUninstall(result.uninstall):
-		shown = displayUninstall(result.uninstall)
-	case (path == "media add" || path == "media delete") && validMediaMutation(result.mediaMutation):
-		m := result.mediaMutation
-		shown = mediaMutationPresentation{Name: escapeDisplayLine(m.Name), Outcome: escapeDisplayLine(m.Outcome), Size: m.Size, SHA256: escapeDisplayLine(m.SHA256)}
-	case (path == "secret encryption init" || path == "secret encryption rotate") && validEncryptionMutation(result.encryptionMutation):
-		m := result.encryptionMutation
-		i := m.Implementation
-		shown = encryptionMutationPresentation{Context: displaySecretContext(m.Context), Implementation: encryptionSelectionPresentation{
-			Type: escapeDisplayLine(i.Type), Store: componentStatus{ID: escapeDisplayLine(i.Store.ID), InterfaceVersion: i.Store.InterfaceVersion, StateVersion: i.Store.StateVersion, ConfigVersion: i.Store.ConfigVersion},
-			KeyCustody: componentStatus{ID: escapeDisplayLine(i.KeyCustody.ID), InterfaceVersion: i.KeyCustody.InterfaceVersion, StateVersion: i.KeyCustody.StateVersion, ConfigVersion: i.KeyCustody.ConfigVersion},
-		}, ActiveKey: escapeDisplayLine(m.ActiveKey), Changed: m.Changed, RetiredKeys: displayNames(m.RetiredKeys), ReencryptedVersions: m.ReencryptedVersions, ReencryptedParts: m.ReencryptedParts}
-	case path == "render effective" && validRender(result.rendered):
-		shown = displayRender(result.rendered)
-	case (path == "controller check" || path == "controller install" && result.controller != nil && !result.controller.DryRun) && validControllerReport(result.controller):
-		return true, writeStructuredController(out, path, result.controller, nil, 0)
-	case path == "machine discover" && result.machineDiscovery != nil:
-		return true, writeMachineDiscovery(out, path, result.machineDiscovery, true)
-	case (path == "plan" || path == "machine discover") && result.lifecyclePlan != nil:
-		shown, reported = displayPlan(result.lifecyclePlan), result.lifecyclePlan.Warnings
-	case (path == "apply" || path == "destroy" || path == "machine discover") && result.lifecycleOperation != nil:
-		return true, writeStructuredOperation(out, path, result.lifecycleOperation, nil, 0)
-	case path == "secret show" && result.secretReveal != nil:
-		r := result.secretReveal
-		if !validSecretPart(r.Part) {
-			return false, nil
-		}
-		value, present := r.Material.Part(r.Part)
-		defer clear(value)
-		if !present || len(value) > secrets.MaxPartBytes || r.Material.Size() > secrets.MaxVersionBytes {
-			return false, nil
-		}
-		shown = exportedResult("application/octet-stream", value)
-	case (path == "cluster oc" || path == "cluster kubectl") && result.handoff != nil:
-		shown = displayHandoff(result.handoff)
-	case path == "cluster kubeconfig" && result.kubeconfig != nil:
-		r := result.kubeconfig
-		value, present := r.Material.Part(secrets.ValuePart)
-		defer clear(value)
-		if !present || len(value) == 0 || len(value) > secrets.MaxPartBytes || !slices.Equal(r.Material.Parts(), []secrets.Part{secrets.ValuePart}) {
-			return false, nil
-		}
-		shown, reported = exportedResult("application/yaml", value), kubeconfigWarnings(r)
-	case path == "cluster keyring" && result.keyring != nil:
-		value, ok := keyringValue(result.keyring)
-		if !ok {
-			return false, nil
-		}
-		defer clear(value)
-		shown, reported = exportedResult("text/plain", value), keyringWarnings(result.keyring)
-	default:
-		return false, nil
-	}
-	return true, writeStructuredResult(out, path, shown, reported, nil, 0)
-}
 
 type exportPresentation struct {
 	MediaType string `json:"mediaType"`

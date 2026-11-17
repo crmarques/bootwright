@@ -13,9 +13,9 @@ import (
 
 func machineCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "machine discover", example: "--context lab --name node --prepare-prerequisites --dry-run", invoke: Services.invokeMachineDiscovery, short: "Inventory physical root disks through a temporary RAM boot", long: "Record the disk identities of the selected powered-off physical machines: from the BMC drive inventory when it is complete, otherwise by booting inventory-only RHEL media and powering off. --name takes a comma-separated list. --dry-run previews without effects. --prepare-prerequisites also plans controller and infrastructure setup; review the complete plan before confirmation. Discovery never installs an OS or creates RAID volumes.", flags: []flagSpec{machineNamesFlag(), boolFlag("dry-run", "Preview the discovery plan without booting a machine"), boolFlag("prepare-prerequisites", "Also plan and confirm controller and infrastructure prerequisites"), confirmationFlag()}}),
+		available(commandSpec{path: "machine discover", results: []jsonResult{planPresentation{}, machineDiscoveryPresentation{}}, render: renderMachineDiscovery(), operation: true, example: "--context lab --name node --prepare-prerequisites --dry-run", invoke: Services.invokeMachineDiscovery, short: "Inventory physical root disks through a temporary RAM boot", long: "Record the disk identities of the selected powered-off physical machines: from the BMC drive inventory when it is complete, otherwise by booting inventory-only RHEL media and powering off. --name takes a comma-separated list. --dry-run previews without effects. --prepare-prerequisites also plans controller and infrastructure setup; review the complete plan before confirmation. Discovery never installs an OS or creates RAID volumes.", flags: []flagSpec{machineNamesFlag(), boolFlag("dry-run", "Preview the discovery plan without booting a machine"), boolFlag("prepare-prerequisites", "Also plan and confirm controller and infrastructure prerequisites"), confirmationFlag()}}),
 		available(commandSpec{
-			path: "machine list", validate: validateMachineList, example: "--context lab --power-status", invoke: Services.invokeMachineList, short: "List machines and the lifecycle position each has reached",
+			path: "machine list", results: []jsonResult{machineListPresentation{}}, render: renderMachineList(), validate: validateMachineList, example: "--context lab --power-status", invoke: Services.invokeMachineList, short: "List machines and the lifecycle position each has reached",
 			long: "List machines and the lifecycle position each has reached, as this context's own durable " +
 				"evidence proves it. Add --power-status to also read each machine's power state from its management " +
 				"controller, which is the only part of this command that contacts a host.",
@@ -25,7 +25,7 @@ func machineCommands() []commandSpec {
 			},
 		}),
 		available(commandSpec{
-			path: "machine info", validate: validateInfoNames("machine"), example: "--context lab --name node", invoke: Services.invokeMachineInfo, short: "Inspect machine placement, access, and recorded evidence",
+			path: "machine info", results: []jsonResult{machineInfoPresentation{}}, render: renderMachineInfo(), validate: validateInfoNames("machine"), example: "--context lab --name node", invoke: Services.invokeMachineInfo, short: "Inspect machine placement, access, and recorded evidence",
 			long:  "Show the selected machines' declared placement and access and the lifecycle evidence recorded by this context. --name takes a comma-separated list (default: all). This command reads local inventory without contacting a host or reading power.",
 			flags: []flagSpec{stringFlag("name", "Select comma-separated machine names (default: all)")},
 		}),
@@ -60,7 +60,7 @@ func powerCommand(path, short string, interrupts bool, invoke commandInvoker) co
 		validate = firstRefusal(validateMachineNames, validatePowerConfirmation)
 	}
 	return commandSpec{
-		path: path, short: short, flags: flags, example: "--context lab --name node", invoke: invoke, validate: validate,
+		path: path, short: short, flags: flags, example: "--context lab --name node", invoke: invoke, validate: validate, render: renderMachinePower(), results: []jsonResult{machinePowerPresentation{}},
 		long: short + ". --name takes a comma-separated list, and the command applies to every listed machine at once. Success reports the power state the controller proved, not the state that was requested.",
 	}
 }

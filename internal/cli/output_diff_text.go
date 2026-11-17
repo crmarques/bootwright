@@ -104,7 +104,7 @@ func diffAgainst(result *lifecycle.DiffResult) string {
 	case result.Observed:
 		return "what apply " + operation.Apply + " (" + operation.State + ") realized, read live: " + strconv.Itoa(result.Blocks.Observed) +
 			" blocks observed, " + strconv.Itoa(result.Blocks.Unknown) + " unknown, " + strconv.Itoa(result.Blocks.Unprojected) + " not projected"
-	case operation.Verb == "destroy":
+	case operation.Verb == destroyVerb:
 		return "destroy " + operation.ID + " (" + operation.State + ") of apply " + operation.Apply + ", as its records prove; no host was contacted"
 	}
 	return "apply " + operation.ID + " (" + operation.State + ") of input revision " + operation.Revision + ", as its records prove; no host was contacted"
@@ -120,7 +120,7 @@ func diffInput(result *lifecycle.DiffResult) string {
 		return contexts.AddedInput(operation.Apply)
 	case result.Input == "changed":
 		return "changed since " + operation.Apply + "; bootwright apply refuses it until bootwright destroy --context " + name + " takes back what that apply owns"
-	case operation.Verb == "destroy":
+	case operation.Verb == destroyVerb:
 		return "unchanged since " + operation.Apply + ", which the removal in progress takes back" + next
 	}
 	return "unchanged since " + operation.Apply + next
