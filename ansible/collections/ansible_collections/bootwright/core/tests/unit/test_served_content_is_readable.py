@@ -40,7 +40,7 @@ from ansible_collections.bootwright.core.tests.unit import listener_proof, role_
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
-SERVER = ROLES / "infra_artifact_server_nginx"
+SERVER = ROLES / "infra_managed_service"
 TEMPLATE = SERVER / "templates" / "nginx.conf.j2"
 MEDIA = ROLES / "containercluster_media_agent"
 
@@ -305,14 +305,14 @@ def media_scope(image, material="", **variables):
 
 def installed_certificate(content_root):
     """Where the server installs its copy of the serving certificate, as the template names it."""
-    server = templar(SERVER, {"bootwright_artifact_server_request": {"contentRoot": content_root}})
+    server = templar(SERVER, {"bootwright_managed_service_request": {"contentRoot": content_root}})
     variable, leaf = CERTIFICATE.search(TEMPLATE.read_text()).groups()
     return server.resolve_variable_expression(variable) + leaf
 
 
 def test_the_fetch_reads_the_address_a_machine_boots_from_verified_by_the_bound_certificate(tmp_path):
     text = TEMPLATE.read_text()
-    server = templar(SERVER, {"bootwright_artifact_server_request": {"contentRoot": CONTENT_ROOT}})
+    server = templar(SERVER, {"bootwright_managed_service_request": {"contentRoot": CONTENT_ROOT}})
     # The image the requests carry lies beneath the root the template serves,
     # in PrivatePath's layout.
     assert IMAGE["path"] == server.resolve_variable_expression(ROOT.search(text).group(1)) + "/private/clusters/sno"

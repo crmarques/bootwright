@@ -22,26 +22,28 @@ import pytest
 from ansible.template import Templar, trust_as_template
 from ansible_collections.bootwright.core.plugins.module_utils.infra_service import UNIT_DIRECTORY
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
-from ansible_collections.bootwright.core.tests.unit.test_managed_service_role import load_tasks, shared_variables
+from ansible_collections.bootwright.core.tests.unit.test_managed_service_role import entry_variables, load_tasks, shared_variables
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 DIGEST = "d" * 64
 IMAGE = "registry.example/service@sha256:" + "0" * 64
-SERVER = "infra_artifact_server_nginx"
+SERVER = "artifact_server"
 
 MANAGED = "infra_managed_service"
 IMPLEMENTATIONS = {"DNSServer": "dns-server-dnsmasq-v1", "NTPServer": "ntp-server-chrony-v1", "Proxy": "proxy-squid-v1",
                    "Registry": "registry-distribution-v1"}
 
-# The one managed-service role selects its templates by the frozen implementation.
-MANAGED_SOURCES = {
+# The one managed-service role selects its templates by the frozen
+# implementation, the artifact server's by the row its entry point selects.
+TEMPLATES = {
     "configuration": "{{ infra_managed_service_implementation.configuration_template }}",
     "unitSource": "{{ infra_managed_service_implementation.unit_template }}",
-    "request": "bootwright_managed_service_request", "digest": "bootwright_managed_service_digest",
 }
+MANAGED_SOURCES = dict(TEMPLATES, entry="apply.yml",
+                       request="bootwright_managed_service_request", digest="bootwright_managed_service_digest")
 
-# Each service, by managed-service kind or by the artifact server's role, with
-# the role that realizes it, the variables it takes, the sources it templates
+# Each service, by managed-service kind or as the artifact server, with
+# the role and entry point that realize it, the variables it takes, the sources it templates
 # and the files it runs from. The content root and unit are the ones the
 # planners name: managedservice.ContentRoot and UnitName with each catalog's
 # slug, and artifactserver.ContentRoot with the artifact server's unit prefix.
@@ -55,9 +57,8 @@ SERVICES = {
     "Registry": dict(MANAGED_SOURCES, role=MANAGED, kind="Registry", service="mirror",
                      contentRoot="/var/lib/bootwright-hosted/lab/services/registry/mirror", unit="bootwright-lab-registry-mirror"),
     SERVER: {
-        "role": SERVER,
-        "request": "bootwright_artifact_server_request", "digest": "bootwright_artifact_server_digest",
-        "configuration": "nginx.conf.j2", "unitSource": "unit.container.j2", "service": "lab-artifacts",
+        **TEMPLATES, "role": MANAGED, "entry": "artifact_server_apply.yml",
+        "request": "bootwright_artifact_server_request", "digest": "bootwright_artifact_server_digest", "service": "lab-artifacts",
         "contentRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts",
         "unit": "bootwright-lab-artifacts-lab-artifacts",
     },
@@ -90,7 +91,7 @@ SKIPPED = {"changed": False, "skipped": True}
 
 
 def load(role):
-    return load_tasks(SERVICES[role]["role"], "apply.yml")
+    return load_tasks(SERVICES[role]["role"], SERVICES[role]["entry"])
 
 
 def only(tasks, predicate, what):
@@ -144,8 +145,11 @@ def scope(role, tls):
         request["kind"] = service["kind"]
         request["implementation"] = IMPLEMENTATIONS[service["kind"]]
     if role == SERVER:
-        request["tls"] = {"minVersion": "TLSv1.2"} if tls else {}
+        request["version"] = "artifact-server-nginx-v1"
+        if tls:
+            request["tls"] = {"minVersion": "TLSv1.2"}
         variables["bootwright_artifact_server_material"] = MATERIAL if tls else {}
+        variables.update(entry_variables(service["entry"]))
     if role == "Registry":
         request.update({"tls": {"minVersion": "TLSv1.2", "secret": "mirror-serving"}, "credentialsRef": "mirror-push", "labelLevel": "s0:c537,c638"})
         variables["bootwright_managed_service_material"] = dict(MATERIAL, **CLIENT)
@@ -155,11 +159,14 @@ def scope(role, tls):
 
 def publishers(tasks, role):
     """The task that publishes each file the service runs from."""
+    templar = Templar(loader=LOADER, variables=scope(role, tls=True))
+
     def templating(source):
         return lambda task: (task.get("ansible.builtin.template") or {}).get("src") == source
 
     def copying(leaf, module="bootwright.core.private_file"):
-        return lambda task: str((task.get(module) or {}).get("path", "")).endswith(leaf) and task.get("check_mode") is not True
+        return lambda task: (str(templar.template((task.get(module) or {}).get("path", ""))).endswith(leaf)
+                             and task.get("check_mode") is not True)
 
     served = ("/server.crt", "/server.key") if role == SERVER else ("/tls.crt", "/tls.key")
     predicates = {"configuration": templating(SERVICES[role]["configuration"]), "unit": templating(SERVICES[role]["unitSource"]),

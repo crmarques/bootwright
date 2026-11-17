@@ -7,11 +7,32 @@ infra_managed_service_config_dir: '{{ bootwright_managed_service_request.content
 infra_managed_service_unit_path: /etc/containers/systemd/{{ bootwright_managed_service_request.unit }}.container
 infra_managed_service_configuration_path: '{{ infra_managed_service_config_dir }}/{{ infra_managed_service_implementation.configuration }}'
 infra_managed_service_service: '{{ bootwright_managed_service_request.unit }}.service'
+# The artifact server reads its own request, binds one or more listeners and
+# serves its published content from a directory of its own.
+infra_managed_service_artifact_server: "{{ infra_managed_service_implementation.protocol == 'artifact-server' }}"
+infra_managed_service_served_dir: '{{ bootwright_managed_service_request.contentRoot }}/public'
+# The port a refusal before effects names: a network service's one, or the
+# artifact server's first listener's.
+infra_managed_service_port: >-
+  {{ bootwright_managed_service_request.listeners[0].port if infra_managed_service_artifact_server
+     else bootwright_managed_service_request.port }}
 # A registry serves from its certificate and password file, each in a private
 # directory of its own, and stores what it is pushed under its content root.
+# The artifact server keeps its serving material in a private directory too,
+# created only when it serves TLS.
 infra_managed_service_tls_dir: '{{ bootwright_managed_service_request.contentRoot }}/tls'
 infra_managed_service_auth_dir: '{{ bootwright_managed_service_request.contentRoot }}/auth'
 infra_managed_service_data_dir: '{{ bootwright_managed_service_request.contentRoot }}/data'
+infra_managed_service_certificate_path: >-
+  {{ infra_managed_service_tls_dir }}/{{ infra_managed_service_implementation.certificate | default('tls.crt') }}
+infra_managed_service_key_path: >-
+  {{ infra_managed_service_tls_dir }}/{{ infra_managed_service_implementation.private_key | default('tls.key') }}
+# The digest of the serving certificate the artifact server's HTTPS listeners
+# must present: Go's own digest of the bound certificate, no secret.
+infra_managed_service_bound_fingerprint: "{{ bootwright_managed_service_material.fingerprint | default('') }}"
+infra_managed_service_private_directories: >-
+  {{ infra_managed_service_implementation.private_directories | default([])
+     + (['tls'] if infra_managed_service_artifact_server and bootwright_managed_service_request.tls is defined else []) }}
 # A registry's container runs at the one SELinux level Go froze from its unit,
 # so the storage it writes stays readable across every start.
 infra_managed_service_label_level: '{{ bootwright_managed_service_request.labelLevel }}'
@@ -20,7 +41,7 @@ infra_managed_service_label_level: '{{ bootwright_managed_service_request.labelL
 infra_managed_service_credential_accepted: '{{ infra_managed_service_accepted.accepted | default(false) }}'
 infra_managed_service_runs_from: >-
   {{ [infra_managed_service_configuration_path]
-     + ([infra_managed_service_tls_dir ~ '/tls.crt', infra_managed_service_tls_dir ~ '/tls.key']
+     + ([infra_managed_service_certificate_path, infra_managed_service_key_path]
         if bootwright_managed_service_request.tls is defined else [])
      + ([infra_managed_service_auth_dir ~ '/htpasswd']
         if bootwright_managed_service_request.credentialsRef is defined else []) }}
@@ -28,3 +49,8 @@ infra_managed_service_listen: >-
   {{ '[' ~ bootwright_managed_service_request.bindAddress ~ ']'
      if ':' in bootwright_managed_service_request.bindAddress
      else bootwright_managed_service_request.bindAddress }}
+# The TLS versions the artifact server's HTTPS listeners accept.
+infra_managed_service_protocols: >-
+  {{ 'TLSv1.3'
+     if (bootwright_managed_service_request.tls | default({})).get('minVersion', 'TLSv1.2') == 'TLSv1.3'
+     else 'TLSv1.2 TLSv1.3' }}

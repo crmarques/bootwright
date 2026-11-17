@@ -1,4 +1,4 @@
-"""The artifact-server inspection reports a listener the server does not own.
+"""The service inspection reports a listener the artifact server does not own.
 
 The socket rule itself is tested over host_sockets and artifact_server.foreign
 in tests/unit/plugins/module_utils/test_host_sockets.py. These cases run the
@@ -15,10 +15,11 @@ import pytest
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.testing import patch_module_args
 
-from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, host_sockets, infra_service
-from ansible_collections.bootwright.core.plugins.modules import artifact_server_inspect as inspect
+from ansible_collections.bootwright.core.plugins.module_utils import artifact_server, bounded_process, host_sockets, infra_service
+from ansible_collections.bootwright.core.plugins.modules import infra_service_inspect as inspect
 
 UNIT = "bootwright-lab-artifacts"
+VERSION = "artifact-server-nginx-v1"
 IMAGE = "registry.example/nginx@sha256:" + "0" * 64
 
 
@@ -72,7 +73,7 @@ def server(tmp_path, port):
     other = free.getsockname()[1]
     free.close()
     return {
-        "unit": UNIT, "contentRoot": str(tmp_path), "bindAddress": "127.0.0.1",
+        "unit": UNIT, "contentRoot": str(tmp_path), "bindAddress": "127.0.0.1", "version": VERSION,
         "listeners": [{"name": "http", "port": other, "protocol": "http"},
                       {"name": "https", "port": port, "protocol": "https"}],
     }
@@ -108,23 +109,23 @@ def test_an_unreadable_socket_table_fails_the_task(tmp_path, monkeypatch, capsys
 
 @pytest.mark.parametrize("failure,reason", [(socket.timeout(), "readiness-timeout"), (ConnectionRefusedError(), "listener-failed")])
 def test_readiness_classifies_timeout_and_refusal(monkeypatch, capsys, failure, reason):
-    monkeypatch.setattr(inspect, "observe", lambda *_: {"unit": "active"})
-    monkeypatch.setattr(inspect, "probe_targets", lambda _: [{"name": "http", "address": "192.0.2.1", "port": 8080, "protocol": "http"}])
+    monkeypatch.setattr(artifact_server, "observe", lambda *_: {"unit": "active"})
+    monkeypatch.setattr(artifact_server, "probe_targets", lambda _: [{"name": "http", "address": "192.0.2.1", "port": 8080, "protocol": "http"}])
 
     def fail(_target):
         raise failure
-    monkeypatch.setattr(inspect, "probe", fail)
-    result = run({"request": {}, "readiness": True, "attempts": 1}, capsys)
+    monkeypatch.setattr(artifact_server, "probe", fail)
+    result = run({"request": {"version": VERSION}, "readiness": True, "attempts": 1}, capsys)
     assert result["failures"] == [{"port": 8080, "reason": reason}]
     assert not result["listeners"]
 
 
 def test_readiness_certificate_mismatch_never_completes(monkeypatch, capsys):
     target = {"name": "https", "address": "192.0.2.1", "port": 8443, "protocol": "https"}
-    monkeypatch.setattr(inspect, "observe", lambda *_: {"unit": "active"})
-    monkeypatch.setattr(inspect, "probe_targets", lambda _: [target])
-    monkeypatch.setattr(inspect, "probe", lambda _: dict(target, fingerprint="b" * 64, status="HTTP/1.1 200 OK"))
-    result = run({"request": {}, "readiness": True, "attempts": 1, "fingerprint": "a" * 64}, capsys)
+    monkeypatch.setattr(artifact_server, "observe", lambda *_: {"unit": "active"})
+    monkeypatch.setattr(artifact_server, "probe_targets", lambda _: [target])
+    monkeypatch.setattr(artifact_server, "probe", lambda _: dict(target, fingerprint="b" * 64, status="HTTP/1.1 200 OK"))
+    result = run({"request": {"version": VERSION}, "readiness": True, "attempts": 1, "fingerprint": "a" * 64}, capsys)
     assert result["failures"] == [{"port": 8443, "reason": "certificate-mismatch"}]
     assert not result["listeners"]
 
@@ -135,10 +136,10 @@ def test_missing_or_malformed_fingerprint_is_unknown(monkeypatch, capsys, finger
     answer = dict(target, status="HTTP/1.1 200 OK")
     if fingerprint is not None:
         answer["fingerprint"] = fingerprint
-    monkeypatch.setattr(inspect, "observe", lambda *_: {"unit": "active"})
-    monkeypatch.setattr(inspect, "probe_targets", lambda _: [target])
-    monkeypatch.setattr(inspect, "probe", lambda _: answer)
-    result = run({"request": {}, "readiness": True, "attempts": 1, "fingerprint": "a" * 64}, capsys)
+    monkeypatch.setattr(artifact_server, "observe", lambda *_: {"unit": "active"})
+    monkeypatch.setattr(artifact_server, "probe_targets", lambda _: [target])
+    monkeypatch.setattr(artifact_server, "probe", lambda _: answer)
+    result = run({"request": {"version": VERSION}, "readiness": True, "attempts": 1, "fingerprint": "a" * 64}, capsys)
     assert result["failures"] == [{"port": 8443, "reason": "readiness-unproved"}]
     assert not result["listeners"]
 

@@ -97,16 +97,18 @@ func TestDocumentationLeavesTheAutomationDigest(t *testing.T) {
 	}
 }
 
-// A role states the frozen request version it accepts twice: its argument spec
-// admits one, and its first task asserts one. When a request version moves and
-// only one of them follows, every call through that role fails on the stale
-// assertion before the adapter reports anything, so the two are kept in step
-// here rather than on a host. The substrate's machine port dispatcher takes no
+// A role states the frozen request version it accepts twice: each entry point
+// of its argument spec admits one, and its first task asserts it. When a request
+// version moves and only one of them follows, every call through that role fails
+// on the stale assertion before the adapter reports anything, so the two are
+// kept in step here rather than on a host. The managed service role's artifact
+// server entry points admit the artifact server's own version, which its shared
+// tasks assert beside the network services' one. The substrate's machine port dispatcher takes no
 // frozen request of its own, so it states no version. The shared pinned-SSH
 // identity helper likewise consumes its caller's validated identity port, and
 // the shared artifact listener proof its caller's URL.
 func TestRoleVersionAssertionsMatchTheirArgumentSpecs(t *testing.T) {
-	admitted := map[string]string{}
+	admitted := map[string][]string{}
 	asserted := map[string][]string{}
 	for name, data := range Assets() {
 		role, ok := roleOwning(name)
@@ -115,11 +117,11 @@ func TestRoleVersionAssertionsMatchTheirArgumentSpecs(t *testing.T) {
 		}
 		switch {
 		case strings.HasSuffix(name, "/meta/argument_specs.yml"):
-			choices := admittedVersions(string(data))
-			if len(choices) != 1 {
-				t.Fatalf("%s admits %d request versions; a role accepts exactly one", name, len(choices))
+			choices, each := admittedVersions(string(data))
+			if !each || len(choices) == 0 {
+				t.Fatalf("%s admits %d request versions; each entry point accepts exactly one", name, len(choices))
 			}
-			admitted[role] = choices[0]
+			admitted[role] = choices
 		case strings.Contains(name, "/tasks/") && strings.HasSuffix(name, ".yml"):
 			asserted[role] = append(asserted[role], assertedVersions(string(data))...)
 		}
@@ -130,14 +132,16 @@ func TestRoleVersionAssertionsMatchTheirArgumentSpecs(t *testing.T) {
 			t.Fatalf("role %s asserts a request version its argument spec does not admit", role)
 		}
 		for _, version := range versions {
-			if version != expected {
+			if !slices.Contains(expected, version) {
 				t.Fatalf("role %s asserts request version %q but its argument spec admits %q", role, version, expected)
 			}
 		}
 	}
-	for role := range admitted {
-		if len(asserted[role]) == 0 {
-			t.Fatalf("role %s admits a request version no task asserts", role)
+	for role, versions := range admitted {
+		for _, version := range versions {
+			if !slices.Contains(asserted[role], version) {
+				t.Fatalf("role %s admits request version %q, which no task asserts", role, version)
+			}
 		}
 	}
 }
@@ -151,17 +155,30 @@ func roleOwning(name string) (string, bool) {
 	return role, ok
 }
 
-func admittedVersions(specification string) []string {
-	var document yaml.Node
-	if err := yaml.Unmarshal([]byte(specification), &document); err != nil {
-		return nil
+func admittedVersions(specification string) ([]string, bool) {
+	var document struct {
+		ArgumentSpecs yaml.Node `yaml:"argument_specs"`
 	}
-	found := versionChoices(&document, nil)
+	if err := yaml.Unmarshal([]byte(specification), &document); err != nil || document.ArgumentSpecs.Kind != yaml.MappingNode {
+		return nil, false
+	}
+	var found []string
+	for index := 1; index < len(document.ArgumentSpecs.Content); index += 2 {
+		entry := versionChoices(document.ArgumentSpecs.Content[index], nil)
+		slices.Sort(entry)
+		if entry = slices.Compact(entry); len(entry) > 1 {
+			return nil, false
+		}
+		found = append(found, entry...)
+	}
 	slices.Sort(found)
-	return slices.Compact(found)
+	return slices.Compact(found), true
 }
 
 func versionChoices(node *yaml.Node, found []string) []string {
+	if node.Kind == yaml.AliasNode && node.Alias != nil {
+		node = node.Alias
+	}
 	if node.Kind == yaml.MappingNode {
 		for index := 0; index+1 < len(node.Content); index += 2 {
 			key, value := node.Content[index], node.Content[index+1]

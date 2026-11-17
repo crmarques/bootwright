@@ -122,8 +122,10 @@ MACHINE = {
 # Each rendered template with the variables its task sees beside the role's
 # defaults: the request, and the task's own loop item or registered result.
 SCOPES = {
-    ("infra_artifact_server_nginx", "nginx.conf.j2"): {"bootwright_artifact_server_request": ARTIFACT_SERVER},
-    ("infra_artifact_server_nginx", "unit.container.j2"): {"bootwright_artifact_server_request": ARTIFACT_SERVER},
+    ("infra_managed_service", "nginx.conf.j2"): {"bootwright_managed_service_request": ARTIFACT_SERVER,
+                                                 "infra_managed_service_selected": "artifact-server-nginx-v1"},
+    ("infra_managed_service", "nginx.container.j2"): {"bootwright_managed_service_request": ARTIFACT_SERVER,
+                                                      "infra_managed_service_selected": "artifact-server-nginx-v1"},
     ("infra_managed_service", "dnsmasq.conf.j2"): {"bootwright_managed_service_request": service(
         "DNSServer", "dns-server-dnsmasq", "dns", 53, forwarders=["198.51.100.53"], records=[
             {"addresses": ["192.0.2.11"], "name": "rhel-01.lab.example.test"},
@@ -266,9 +268,13 @@ def test_a_managed_service_implementation_selects_the_templates_its_daemon_write
     unit = render(MANAGED_SERVICE, kind["unit_template"], variables)
     volumes = [line[len("Volume="):].split(":", 1)[0] for line in unit.splitlines() if line.startswith("Volume=")]
     root = variables["bootwright_managed_service_request"]["contentRoot"]
-    private = [root + "/" + name for name in kind.get("private_directories", [])]
-    assert volumes == [configuration] + private, "the %s unit mounts %s, not the published %s and its private directories" % (
-        variables["bootwright_managed_service_request"]["kind"], volumes, configuration)
+    private = [root + "/" + name for name in templar.template(variables["infra_managed_service_private_directories"])]
+    served = ([templar.template(variables["infra_managed_service_served_dir"])]
+              if templar.template(variables["infra_managed_service_artifact_server"]) else [])
+    assert volumes == [configuration] + private + served, (
+        "the %s unit mounts %s, not the published %s, its private directories and what it serves" % (
+            templar.template(variables["infra_managed_service_selected"] if "infra_managed_service_selected" in variables
+                             else variables["bootwright_managed_service_request"]["kind"]), volumes, configuration))
 
 
 def dnsmasq_answers(configuration):

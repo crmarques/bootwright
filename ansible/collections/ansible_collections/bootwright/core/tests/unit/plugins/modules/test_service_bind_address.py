@@ -1,4 +1,4 @@
-"""Both service modules preserve the distinction between absent and unproved addresses."""
+"""The service inspection preserves, for both kinds it reads, the distinction between absent and unproved addresses."""
 
 from __future__ import annotations
 
@@ -8,19 +8,26 @@ import socket
 import pytest
 from ansible.module_utils.testing import patch_module_args
 
-from ansible_collections.bootwright.core.plugins.modules import artifact_server_inspect, infra_service_inspect
+from ansible_collections.bootwright.core.plugins.module_utils import artifact_server
+from ansible_collections.bootwright.core.plugins.modules import infra_service_inspect
+
+# Each kind the inspection reads, by its request's version.
+VERSIONS = ("artifact-server-nginx-v1", "managed-service-v1")
 
 
-@pytest.fixture(params=[artifact_server_inspect, infra_service_inspect])
+@pytest.fixture(params=VERSIONS)
 def inspect(request, monkeypatch):
-    module = request.param
+    module = infra_service_inspect
+    monkeypatch.setattr(artifact_server, "observe", lambda *_arguments: {"unit": "active"})
     monkeypatch.setattr(module, "observe", lambda *_arguments: {"unit": "active"})
+    monkeypatch.setattr(module, "tested_version", request.param, raising=False)
     return module
 
 
 def run(module, capsys, requested=True):
     capsys.readouterr()
-    with patch_module_args({"request": {"bindAddress": "192.0.2.1"}, "bind_address": requested}), pytest.raises(SystemExit):
+    arguments = {"request": {"bindAddress": "192.0.2.1", "version": module.tested_version}, "bind_address": requested}
+    with patch_module_args(arguments), pytest.raises(SystemExit):
         module.main()
     return json.loads(capsys.readouterr().out)
 

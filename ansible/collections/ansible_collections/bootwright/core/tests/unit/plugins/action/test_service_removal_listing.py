@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.action import (
-    artifact_server_protocol,
-    infra_service_protocol,
-)
+from ansible_collections.bootwright.core.plugins.action import infra_service_protocol as plugin
+
+# The one managed unit protocol plugin, by the kind each task names.
+artifact_server_protocol, infra_service_protocol = plugin.ARTIFACT_SERVER, plugin.SERVICE
 
 PROTOCOLS = (infra_service_protocol, artifact_server_protocol)
 

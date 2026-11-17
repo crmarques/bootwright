@@ -1,0 +1,12 @@
+---
+# The artifact server is one more implementation of the managed unit
+# lifecycle. Its run is handed under its own capability's variables, which
+# this entry point names as the shared tasks read them, selecting its row of
+# the implementation table, as its request names no implementation.
+- name: Realize the frozen artifact server
+  ansible.builtin.import_tasks: apply.yml
+  vars:
+    bootwright_managed_service_request: '{{ bootwright_artifact_server_request }}'
+    bootwright_managed_service_digest: '{{ bootwright_artifact_server_digest }}'
+    bootwright_managed_service_material: '{{ bootwright_artifact_server_material }}'
+    infra_managed_service_selected: artifact-server-nginx-v1

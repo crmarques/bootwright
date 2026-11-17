@@ -12,7 +12,7 @@ from __future__ import annotations
 import pathlib
 import re
 
-GOLDEN = (pathlib.Path(__file__).resolve().parent / "goldens" / "templates" / "infra_artifact_server_nginx"
+GOLDEN = (pathlib.Path(__file__).resolve().parent / "goldens" / "templates" / "infra_managed_service"
           / "nginx.conf")
 FIELDS = {"$remote_addr", "$time_iso8601", "$ssl_protocol", "$ssl_cipher", "$request_method", "$status",
           "$body_bytes_sent"}

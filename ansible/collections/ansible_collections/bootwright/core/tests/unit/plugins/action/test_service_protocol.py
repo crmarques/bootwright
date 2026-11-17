@@ -1,6 +1,6 @@
 """A refused postcondition publishes no evidence, so the names are the message.
 
-Both service protocols publish under `no_log`, and the adapter's output
+Both service protocol kinds publish under `no_log`, and the adapter's output
 callback prints nothing a hidden task raised (plugins/callback/censored.py),
 so the refusal reaches no output. It names fields, never values, so it stays
 safe to print should it ever be.
@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from ansible_collections.bootwright.core.plugins.action import (
-    artifact_server_protocol,
-    infra_service_protocol,
-)
+from ansible_collections.bootwright.core.plugins.action import infra_service_protocol as plugin
+
+# The one managed unit protocol plugin, by the kind each task names.
+artifact_server_protocol, infra_service_protocol = plugin.ARTIFACT_SERVER, plugin.SERVICE
 
 PROTOCOLS = (artifact_server_protocol, infra_service_protocol)
 
@@ -105,12 +105,33 @@ def test_only_an_observation_publishes_an_unmet_postcondition():
 def test_a_managed_service_hands_a_foreign_listener_refusal(monkeypatch):
     records = []
     monkeypatch.setattr(
-        infra_service_protocol, "emit", lambda record, acknowledge=False: records.append((record, acknowledge)),
+        plugin, "emit", lambda record, acknowledge=False: records.append((record, acknowledge)),
     )
-    action = infra_service_protocol.ActionModule.__new__(infra_service_protocol.ActionModule)
-    action._task = SimpleNamespace(args={"phase": "refused", "reason": "foreign-listener", "port": 53})
+    action = plugin.ActionModule.__new__(plugin.ActionModule)
+    action._task = SimpleNamespace(args={"kind": "managed-service", "phase": "refused", "reason": "foreign-listener", "port": 53})
     assert action.run(task_vars={}) == {"changed": False}
     assert records == [({"phase": "refused", "reason": "foreign-listener-53"}, False)]
+
+
+# One plugin serves both kinds, so a task names its kind, and a phase of no
+# kind it knows hands nothing; each kind fails under its own capability's name.
+def test_a_phase_names_its_kind_and_each_kind_keeps_its_capability(monkeypatch):
+    records = []
+    monkeypatch.setattr(plugin, "emit", lambda record, acknowledge=False: records.append(record))
+    action = plugin.ActionModule.__new__(plugin.ActionModule)
+    for kind in (None, "", "registry", "ArtifactServer"):
+        arguments = {"phase": "loaded"} if kind is None else {"phase": "loaded", "kind": kind}
+        action._task = SimpleNamespace(args=arguments)
+        assert action.run(task_vars={}) == {"failed": True, "msg": "unsupported managed unit protocol kind"}
+    assert records == []
+    for kind, name in (("managed-service", "managed-service"), ("artifact-server", "artifact-server")):
+        action._task = SimpleNamespace(args={"kind": kind, "phase": "completed", "outcome": "changed", "digest": "bad"})
+        assert action.run(task_vars={}) == {"failed": True, "msg": "the %s capability result could not be published" % name}
+    action._task = SimpleNamespace(args={"kind": "managed-service", "phase": "refused", "reason": "certificate-mismatch", "port": 443})
+    assert action.run(task_vars={})["failed"] is True
+    action._task = SimpleNamespace(args={"kind": "artifact-server", "phase": "refused", "reason": "certificate-mismatch", "port": 443})
+    assert action.run(task_vars={}) == {"changed": False}
+    assert records == [{"phase": "refused", "reason": "certificate-mismatch-443"}]
 
 
 def test_artifact_start_freshness_is_required_for_presence_but_not_removal():
@@ -128,12 +149,12 @@ def test_artifact_start_freshness_is_required_for_presence_but_not_removal():
 def test_an_answer_carries_a_certificate_fingerprint_only_in_its_own_form():
     answer = {"address": "192.0.2.5", "answer": "HTTP/1.1 200 OK", "port": 5000}
     fingerprint = "ab" * 32
-    assert infra_service_protocol.answer_evidence(answer) == answer
-    assert infra_service_protocol.answer_evidence(dict(answer, fingerprint=fingerprint)) == dict(answer, fingerprint=fingerprint)
+    assert plugin.answer_evidence(answer) == answer
+    assert plugin.answer_evidence(dict(answer, fingerprint=fingerprint)) == dict(answer, fingerprint=fingerprint)
     for refused in (dict(answer, fingerprint="AB" * 32), dict(answer, fingerprint="ab"), dict(answer, fingerprint=None),
                     dict(answer, certificate=fingerprint)):
         try:
-            infra_service_protocol.answer_evidence(refused)
+            plugin.answer_evidence(refused)
         except ValueError:
             continue
         raise AssertionError("published %r" % refused)

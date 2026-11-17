@@ -2,8 +2,12 @@
 - name: Validate the frozen managed service request
   ansible.builtin.assert:
     that:
-      - bootwright_managed_service_request.version == 'managed-service-v1'
-      - bootwright_managed_service_request.implementation in infra_managed_service_implementations
+      - >-
+        (infra_managed_service_selected | default(bootwright_managed_service_request.implementation))
+        in infra_managed_service_implementations
+      - >-
+        (infra_managed_service_artifact_server and bootwright_managed_service_request.version == 'artifact-server-nginx-v1')
+        or (not infra_managed_service_artifact_server and bootwright_managed_service_request.version == 'managed-service-v1')
       - bootwright_managed_service_request.unit is string
       - bootwright_managed_service_request.unit is match('^bootwright-[a-z0-9-]*[a-z0-9]$(?!\n)')
       - bootwright_managed_service_request.unit.startswith('bootwright-' ~ bootwright_managed_service_request.identity.context ~ '-')
@@ -15,13 +19,14 @@
         bootwright_managed_service_request.contentRoot.split('/')[1:]
         | select('in', ['', '.', '..']) | list | length == 0
       - >-
-        bootwright_managed_service_request.kind != 'Registry'
+        bootwright_managed_service_request.kind | default('') != 'Registry'
         or bootwright_managed_service_request.labelLevel | default('') is match('^s0:c[0-9]{1,4},c[0-9]{1,4}$(?!\n)')
       - >-
         (bootwright_managed_service_request.contentRoot | dirname | dirname | dirname)
         == '/var/lib/bootwright-hosted/' ~ bootwright_managed_service_request.identity.context
       - bootwright_managed_service_request.image is search('@sha256:[0-9a-f]{64}$(?!\n)')
-      - bootwright_managed_service_request.port | int > 0
+      - infra_managed_service_artifact_server or bootwright_managed_service_request.port | int > 0
+      - not infra_managed_service_artifact_server or bootwright_managed_service_request.listeners | length > 0
       - >-
         bootwright_managed_service_request.destinations | default([]) | to_json(separators=[',', ':'])
         is match('^[][{}a-z0-9.:,"-]*$(?!\n)')
@@ -59,6 +64,7 @@
 
 - name: Complete the qualified execution handoff
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: loaded
   no_log: true
 
@@ -83,9 +89,10 @@
 
 - name: Name a missing container runtime to the runner
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: refused
     reason: container-runtime
-    port: '{{ bootwright_managed_service_request.port }}'
+    port: '{{ infra_managed_service_port }}'
   when: (infra_managed_service_runtime.rc | default(127)) != 0
   no_log: true
 
@@ -110,9 +117,10 @@
 
 - name: Name a bind address the placement host does not hold to the runner
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: refused
     reason: unassigned-bind-address
-    port: '{{ bootwright_managed_service_request.port }}'
+    port: '{{ infra_managed_service_port }}'
   when: not infra_managed_service_sockets.bindAddressAssigned
   no_log: true
 
@@ -125,6 +133,7 @@
 
 - name: Name a listener the service does not own to the runner
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: refused
     reason: foreign-listener
     port: '{{ infra_managed_service_sockets.foreign[0].port }}'
@@ -143,6 +152,7 @@
 
 - name: Report image acquisition
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: pull-image
     status: running
@@ -159,6 +169,7 @@
 
 - name: Report image acquisition completion
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: pull-image
     status: ok
@@ -166,6 +177,7 @@
 
 - name: Report configuration publication
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: publish-configuration
     status: running
@@ -184,9 +196,9 @@
     owner: root
     group: root
     mode: '0755'
-  loop:
-    - '{{ bootwright_managed_service_request.contentRoot }}'
-    - '{{ infra_managed_service_config_dir }}'
+  loop: >-
+    {{ [bootwright_managed_service_request.contentRoot, infra_managed_service_config_dir]
+       + ([infra_managed_service_served_dir] if infra_managed_service_artifact_server else []) }}
   register: infra_managed_service_directories
 
 - name: Create the implementation's private directories
@@ -196,7 +208,7 @@
     owner: root
     group: root
     mode: '0700'
-  loop: '{{ infra_managed_service_implementation.private_directories | default([]) }}'
+  loop: '{{ infra_managed_service_private_directories }}'
   register: infra_managed_service_private_directories
 
 # A registry's storage keeps one SELinux label for its whole life: the unit
@@ -241,11 +253,13 @@
 
 # The serving material and the client credential reach the placement host
 # inside the module's own argument, so they cross a remote connection only in
-# the pipelined module payload and never in a file transfer.
+# the pipelined module payload and never in a file transfer. The artifact
+# server's workers read its certificate, so only its key is kept private.
 - name: Publish the serving certificate
   bootwright.core.private_file:
     content: "{{ lookup('ansible.builtin.file', bootwright_managed_service_material.certificate, rstrip=false) }}"
-    path: '{{ infra_managed_service_tls_dir }}/tls.crt'
+    path: '{{ infra_managed_service_certificate_path }}'
+    mode: "{{ infra_managed_service_implementation.certificate_mode | default(omit) }}"
   register: infra_managed_service_certificate
   when: bootwright_managed_service_request.tls is defined
   no_log: true
@@ -254,7 +268,7 @@
 - name: Publish the serving private key
   bootwright.core.private_file:
     content: "{{ lookup('ansible.builtin.file', bootwright_managed_service_material.privateKey, rstrip=false) }}"
-    path: '{{ infra_managed_service_tls_dir }}/tls.key'
+    path: '{{ infra_managed_service_key_path }}'
   register: infra_managed_service_key
   when: bootwright_managed_service_request.tls is defined
   no_log: true
@@ -317,6 +331,7 @@
 
 - name: Report configuration publication completion
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: publish-configuration
     status: ok
@@ -324,6 +339,7 @@
 
 - name: Report service start
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: start-service
     status: running
@@ -350,6 +366,7 @@
 
 - name: Report service start completion
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: start-service
     status: ok
@@ -357,6 +374,7 @@
 
 - name: Report readiness verification
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: verify-readiness
     status: running
@@ -367,8 +385,9 @@
 - name: Prove the managed service answers on every declared address
   bootwright.core.infra_service_inspect:
     request: '{{ bootwright_managed_service_request }}'
-    runs_from: '{{ infra_managed_service_runs_from }}'
+    runs_from: '{{ omit if infra_managed_service_artifact_server else infra_managed_service_runs_from }}'
     readiness: true
+    fingerprint: '{{ infra_managed_service_bound_fingerprint if infra_managed_service_artifact_server else omit }}'
   register: infra_managed_service_after_open
   when: bootwright_managed_service_request.credentialsRef is not defined
 
@@ -395,6 +414,7 @@
 
 - name: Report the classified readiness refusal
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: refused
     reason: '{{ infra_managed_service_after.failures[0].reason }}'
     port: '{{ infra_managed_service_after.failures[0].port }}'
@@ -406,12 +426,13 @@
     that:
       - infra_managed_service_after.unproved | length == 0
     fail_msg: >-
-      a declared managed service address did not answer within its readiness
-      window: {{ infra_managed_service_after.unproved | join("; ") }}
+      a declared {{ 'artifact-server listener' if infra_managed_service_artifact_server else 'managed service address' }}
+      did not answer within its readiness window: {{ infra_managed_service_after.unproved | join("; ") }}
     quiet: true
 
 - name: Report readiness completion
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: verify-readiness
     status: ok
@@ -419,6 +440,7 @@
 
 - name: Publish bounded managed service completion evidence
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: completed
     outcome: >-
       {{ 'changed'
@@ -436,5 +458,6 @@
          else 'unchanged' }}
     digest: '{{ bootwright_managed_service_digest }}'
     observation: '{{ infra_managed_service_after.observation }}'
-    answers: '{{ infra_managed_service_after.answers }}'
+    answers: '{{ infra_managed_service_after.answers | default(omit) }}'
+    listeners: '{{ infra_managed_service_after.listeners | default(omit) }}'
   no_log: true

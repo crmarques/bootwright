@@ -1,10 +1,12 @@
-"""One role realizes every managed network service, keyed by the request's frozen implementation.
+"""One role realizes every managed network service and the artifact server, keyed by a frozen implementation.
 
-The DNS server, NTP server and proxy were one role copied three times. The one
-role's argument spec admits exactly the frozen kinds, their implementation
-identities and the one request version they share, and each implementation
-selects only its own daemon configuration and unit templates from a fixed
-table, so every task is shared.
+The DNS server, NTP server and proxy were one role copied three times, and the
+artifact server a fourth copy. The one role's network service entry points
+admit exactly the frozen kinds, their implementation identities and the one
+request version they share; its artifact server entry points admit the
+artifact server's own request under its own variables and select its row.
+Each implementation selects only its own daemon configuration and unit
+templates from a fixed table, so every task is shared.
 
 The proxy refuses loopback, unspecified and link-local destinations and its
 cache manager before it admits any derived client, admits a client only to the
@@ -36,6 +38,9 @@ ROLE = COLLECTION / "roles" / "infra_managed_service"
 PLAYBOOKS = COLLECTION / "playbooks" / "infrastructureservices"
 SERVICES = ("dns_server", "ntp_server", "proxy", "registry")
 OPERATIONS = ("apply", "observe", "destroy")
+# The artifact server's entry points, each importing the network services' own.
+ARTIFACT_ENTRY = "artifact_server_"
+ARTIFACT_IMPLEMENTATION = "artifact-server-nginx-v1"
 ROLES = COLLECTION / "roles"
 SQUID = COLLECTION / "tests" / "unit" / "goldens" / "templates" / "infra_managed_service" / "squid.conf"
 PODMAN_STOP_TIMEOUT = 10
@@ -43,6 +48,10 @@ PODMAN_STOP_TIMEOUT = 10
 
 def implementations():
     return yaml.safe_load((ROLE / "vars" / "main.yml").read_text())["infra_managed_service_implementations"]
+
+
+def network_implementations():
+    return sorted(name for name, row in implementations().items() if row["protocol"] == "managed-service")
 
 
 def imported_roles(playbook):
@@ -62,6 +71,27 @@ def test_one_role_serves_every_managed_network_service(service, operation):
     assert imported_roles(playbook) == [("bootwright.core.infra_managed_service", operation)]
 
 
+# The artifact server's entry point names its own variables as the shared
+# tasks read them and selects its row, then runs the network services' tasks.
+@pytest.mark.parametrize("operation", OPERATIONS)
+def test_the_artifact_server_runs_the_managed_service_role(operation):
+    playbook = PLAYBOOKS / ("artifact_server_%s.yml" % operation)
+    assert imported_roles(playbook) == [("bootwright.core.infra_managed_service", ARTIFACT_ENTRY + operation)]
+    entry = yaml.safe_load((ROLE / "tasks" / (ARTIFACT_ENTRY + operation + ".yml")).read_text())
+    assert len(entry) == 1 and entry[0]["ansible.builtin.import_tasks"] == operation + ".yml"
+    assert entry[0]["vars"] == {
+        "bootwright_managed_service_request": "{{ bootwright_artifact_server_request }}",
+        "bootwright_managed_service_digest": "{{ bootwright_artifact_server_digest }}",
+        "bootwright_managed_service_material": "{{ bootwright_artifact_server_material }}",
+        "infra_managed_service_selected": ARTIFACT_IMPLEMENTATION,
+    }
+
+
+@pytest.mark.parametrize("retired", ["infra_artifact_server_nginx"])
+def test_no_copied_artifact_server_role_remains(retired):
+    assert not (COLLECTION / "roles" / retired).exists()
+
+
 @pytest.mark.parametrize("retired", ["infra_dns_server_dnsmasq", "infra_ntp_server_chrony", "infra_proxy_squid"])
 def test_no_copied_managed_service_role_remains(retired):
     assert not (COLLECTION / "roles" / retired).exists()
@@ -69,14 +99,21 @@ def test_no_copied_managed_service_role_remains(retired):
 
 def test_the_argument_spec_keys_the_request_by_its_frozen_implementation():
     specs = yaml.safe_load((ROLE / "meta" / "argument_specs.yml").read_text())["argument_specs"]
-    assert sorted(specs) == sorted(OPERATIONS)
+    assert sorted(specs) == sorted(OPERATIONS + tuple(ARTIFACT_ENTRY + operation for operation in OPERATIONS))
     options = [specs[operation]["options"] for operation in OPERATIONS]
     assert options[0] == options[1] == options[2]
     request = options[0]["bootwright_managed_service_request"]["options"]
     assert request["kind"]["choices"] == ["DNSServer", "NTPServer", "Proxy", "Registry"]
-    assert request["implementation"]["choices"] == sorted(implementations()) == [
+    assert request["implementation"]["choices"] == network_implementations() == [
         "dns-server-dnsmasq-v1", "ntp-server-chrony-v1", "proxy-squid-v1", "registry-distribution-v1"]
     assert request["version"]["choices"] == ["managed-service-v1"]
+    served = [specs[ARTIFACT_ENTRY + operation]["options"] for operation in OPERATIONS]
+    assert served[0] == served[1] == served[2]
+    assert sorted(served[0]) == ["bootwright_artifact_server_digest", "bootwright_artifact_server_material",
+                                 "bootwright_artifact_server_request"]
+    assert served[0]["bootwright_artifact_server_request"]["options"]["version"]["choices"] == [ARTIFACT_IMPLEMENTATION]
+    assert sorted(implementations()) == sorted(network_implementations() + [ARTIFACT_IMPLEMENTATION])
+    assert implementations()[ARTIFACT_IMPLEMENTATION]["protocol"] == "artifact-server"
 
 
 def test_each_implementation_selects_only_its_own_templates():
@@ -281,8 +318,7 @@ def test_a_proxy_that_freezes_destinations_logs_to_a_capped_tmpfs_and_drops_line
 def test_the_apply_refuses_a_destination_that_could_write_another_squid_directive():
     tasks = load_tasks("infra_managed_service", "apply.yml")
     validate = validate_of(tasks)
-    scope = {"bootwright_managed_service_request": PROXY, "bootwright_managed_service_digest": "0" * 64,
-             "infra_managed_service_implementations": implementations()}
+    scope = variables("bootwright_managed_service", PROXY)
     assert holds(validate, scope)
     for injected in ("mirror.lab.example.test\nhttp_access allow all", "mirror.lab.example.test all", "Mirror.example.test", "a#b",
                      "-n", "all.", "a..b"):
@@ -312,24 +348,45 @@ def shared_file(task):
     return None
 
 
+def imported_file(task):
+    """The role's own task file a task imports, or None."""
+    imported = task.get("ansible.builtin.import_tasks")
+    return imported if isinstance(imported, str) else None
+
+
 def load_tasks(role, name):
-    """A task file's tasks, each shared lifecycle file it includes read in its place."""
+    """A task file's tasks, each file it imports and each shared lifecycle file it includes read in its place."""
     loaded = LOADER.load_from_file(str(ROLES / role / "tasks" / name), trusted_as_template=True)
     tasks = []
     for task in (task for task in loaded if isinstance(task, dict)):
         shared = shared_file(task)
-        tasks.extend(load_tasks(SHARED, shared) if shared else [task])
+        if imported_file(task):
+            tasks.extend(load_tasks(role, imported_file(task)))
+        else:
+            tasks.extend(load_tasks(SHARED, shared) if shared else [task])
     return tasks
+
+
+def entry_variables(name):
+    """The variables an entry point's import hands the tasks it runs: the artifact server's, or none."""
+    loaded = LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True)
+    found = {}
+    for task in (task for task in loaded if isinstance(task, dict) and imported_file(task)):
+        found.update(task.get("vars") or {})
+    return found
 
 
 # The artifact server and the managed services pull, start and remove their
 # unit through one shared lifecycle, so a fix to it reaches both.
-@pytest.mark.parametrize("role", ["infra_managed_service", "infra_artifact_server_nginx"])
-def test_each_managed_unit_role_runs_the_one_shared_lifecycle(role):
+@pytest.mark.parametrize("entry", ["", ARTIFACT_ENTRY], ids=["managed service", "artifact server"])
+def test_each_managed_unit_role_runs_the_one_shared_lifecycle(entry):
     included = []
-    for entry in ("apply.yml", "destroy.yml"):
-        loaded = LOADER.load_from_file(str(ROLES / role / "tasks" / entry), trusted_as_template=True)
-        included.extend((entry, shared_file(task)) for task in loaded if isinstance(task, dict) and shared_file(task))
+    for name in ("apply.yml", "destroy.yml"):
+        loaded = LOADER.load_from_file(str(ROLE / "tasks" / (entry + name)), trusted_as_template=True)
+        for task in (task for task in loaded if isinstance(task, dict)):
+            if imported_file(task):
+                loaded += LOADER.load_from_file(str(ROLE / "tasks" / imported_file(task)), trusted_as_template=True)
+        included.extend((name, shared_file(task)) for task in loaded if isinstance(task, dict) and shared_file(task))
     assert included == [("apply.yml", "image_pull.yml"), ("apply.yml", "unit_start.yml"), ("destroy.yml", "unit_removal.yml")]
 
 
@@ -379,30 +436,34 @@ ARTIFACT = {
     "identity": {"context": "lab"},
     "contentRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/media",
 }
+# Each kind's entry point, by the prefix of its task files and of its variables.
 DESTROYS = [
-    ("infra_managed_service", "bootwright_managed_service", MANAGED, ["services", "dns"]),
-    ("infra_artifact_server_nginx", "bootwright_artifact_server", ARTIFACT, ["services", "artifact-server"]),
+    ("", "bootwright_managed_service", MANAGED, ["services", "dns"]),
+    (ARTIFACT_ENTRY, "bootwright_artifact_server", ARTIFACT, ["services", "artifact-server"]),
 ]
 HOSTED = "bootwright.core.hosted_area"
 
 
 def variables(prefix, request):
-    found = {prefix + "_request": request, prefix + "_digest": "0" * 64}
-    if prefix == "bootwright_managed_service":
-        found["infra_managed_service_implementations"] = implementations()
+    """What the role's tasks see: its defaults and fixed vars, the frozen request, and what the artifact server's entry names."""
+    found = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
+    found.update(LOADER.load_from_file(str(ROLE / "vars" / "main.yml"), trusted_as_template=True))
+    found.update({prefix + "_request": request, prefix + "_digest": "0" * 64})
+    if prefix == "bootwright_artifact_server":
+        found.update(entry_variables(ARTIFACT_ENTRY + "apply.yml"))
     return found
 
 
 def role_scope(role, prefix, request_):
     found = variables(prefix, request_)
-    found.update(LOADER.load_from_file(str(ROLES / role / "defaults" / "main.yml"), trusted_as_template=True))
     found.update(shared_variables(role))
     return found
 
 
-@pytest.mark.parametrize("role, prefix, request_, area", DESTROYS, ids=["managed service", "artifact server"])
-def test_a_destroy_removes_each_empty_parent_never_recursively(role, prefix, request_, area):
-    tasks = load_tasks(role, "destroy.yml")
+@pytest.mark.parametrize("entry, prefix, request_, area", DESTROYS, ids=["managed service", "artifact server"])
+def test_a_destroy_removes_each_empty_parent_never_recursively(entry, prefix, request_, area):
+    role = SHARED
+    tasks = load_tasks(role, entry + "destroy.yml")
     root = index_of(tasks, lambda task: task.get("name") == "Remove the owned content root", "removes the content root")
     removal = index_of(tasks, lambda task: task.get(HOSTED, {}).get("state") == "absent", "removes the empty parents")
     assert removal == root + 1
@@ -418,10 +479,11 @@ def test_a_destroy_removes_each_empty_parent_never_recursively(role, prefix, req
     assert not holds(validate, variables(prefix, foreign))
 
 
-@pytest.mark.parametrize("role, prefix, request_, area", DESTROYS, ids=["managed service", "artifact server"])
+@pytest.mark.parametrize("kind, prefix, request_, area", DESTROYS, ids=["managed service", "artifact server"])
 @pytest.mark.parametrize("entry", ["apply.yml", "destroy.yml"])
-def test_the_hosted_ancestors_are_proved_right_after_the_handoff(role, prefix, request_, area, entry):
-    tasks = load_tasks(role, entry)
+def test_the_hosted_ancestors_are_proved_right_after_the_handoff(kind, prefix, request_, area, entry):
+    role = SHARED
+    tasks = load_tasks(role, kind + entry)
     handoff = index_of(tasks, lambda task: any(key.endswith("_protocol") and task[key].get("phase") == "loaded" for key in task),
                        "hands the runner its loaded record")
     proof = tasks[handoff + 1]
@@ -430,9 +492,10 @@ def test_the_hosted_ancestors_are_proved_right_after_the_handoff(role, prefix, r
     assert templar.template(proof[HOSTED]["path"]) == area
 
 
-@pytest.mark.parametrize("role, prefix, request_, area", DESTROYS, ids=["managed service", "artifact server"])
-def test_the_apply_creates_its_hosted_ancestors_before_the_content_root(role, prefix, request_, area):
-    tasks = load_tasks(role, "apply.yml")
+@pytest.mark.parametrize("entry, prefix, request_, area", DESTROYS, ids=["managed service", "artifact server"])
+def test_the_apply_creates_its_hosted_ancestors_before_the_content_root(entry, prefix, request_, area):
+    role = SHARED
+    tasks = load_tasks(role, entry + "apply.yml")
     create = index_of(tasks, lambda task: task.get(HOSTED, {}).get("state") == "present", "creates the hosted ancestors")
     directories = index_of(tasks, lambda task: task.get("name") == "Create the owned service directories", "creates the content root")
     assert create == directories - 1
@@ -442,7 +505,7 @@ def test_the_apply_creates_its_hosted_ancestors_before_the_content_root(role, pr
 
 def test_a_destroy_reports_a_removed_parent_as_a_change():
     for role in (destroy[0] for destroy in DESTROYS):
-        tasks = load_tasks(role, "destroy.yml")
+        tasks = load_tasks(SHARED, role + "destroy.yml")
         completion = tasks[index_of(tasks, lambda task: "removal evidence" in str(task.get("name", "")), "publishes the evidence")]
         module = next(value for key, value in completion.items() if key.endswith("_protocol"))
         assert ("%s_parents is changed" % SHARED) in str(module["outcome"]), role
@@ -456,9 +519,10 @@ def test_the_apply_refuses_a_content_root_outside_its_context_and_kind():
         assert not holds(validate, variables("bootwright_managed_service", dict(MANAGED, contentRoot=root))), root
 
 
+# Each kind's apply, by its entry point's task file, and the protocol both name.
 APPLIES = [
-    ("infra_managed_service", "infra_service_protocol"),
-    ("infra_artifact_server_nginx", "artifact_server_protocol"),
+    ("apply.yml", "infra_service_protocol"),
+    (ARTIFACT_ENTRY + "apply.yml", "infra_service_protocol"),
 ]
 EFFECT_MODULES = ("ansible.builtin.file", "ansible.builtin.template", "ansible.builtin.copy")
 EFFECT_COMMANDS = (["/usr/bin/podman", "pull"], ["/usr/bin/systemctl", "daemon-reload"],
@@ -474,9 +538,10 @@ def effects(task):
 # socket held by anything else before its first effect: the refusal is named
 # to the runner first, then the run fails naming every socket, and nothing has
 # been pulled, published or started.
-@pytest.mark.parametrize("role, protocol", APPLIES)
-def test_a_foreign_listener_refuses_before_any_effect(role, protocol):
-    tasks = load_tasks(role, "apply.yml")
+@pytest.mark.parametrize("entry, protocol", APPLIES)
+def test_a_foreign_listener_refuses_before_any_effect(entry, protocol):
+    role = SHARED
+    tasks = load_tasks(role, entry)
     module = "bootwright.core." + protocol
     observe = index_of(tasks, lambda task: (task.get("bootwright.core.%s" % protocol.replace("_protocol", "_inspect")) or {}).get("foreign") is True,
                        "observes the sockets")
@@ -499,9 +564,10 @@ def test_a_foreign_listener_refuses_before_any_effect(role, protocol):
     assert message.endswith("nothing was pulled, published or started: udp 192.0.2.1:53; tcp [fd00::1]:53"), message
 
 
-@pytest.mark.parametrize("role, protocol", APPLIES)
-def test_an_unassigned_bind_address_refuses_before_any_effect(role, protocol):
-    tasks = load_tasks(role, "apply.yml")
+@pytest.mark.parametrize("entry, protocol", APPLIES)
+def test_an_unassigned_bind_address_refuses_before_any_effect(entry, protocol):
+    role = SHARED
+    tasks = load_tasks(role, entry)
     module = "bootwright.core." + protocol
     inspect = "bootwright.core." + protocol.replace("_protocol", "_inspect")
     observe = index_of(tasks, lambda task: (task.get(inspect) or {}).get("bind_address") is True, "proves the bind address")
@@ -519,15 +585,16 @@ def test_an_unassigned_bind_address_refuses_before_any_effect(role, protocol):
 # without a working podman is refused with the service's own diagnostic right
 # after the hosted directories are proved, before any effect is made. A missing executable and a
 # podman that fails to run both leave a result the refusal reads as not working.
-@pytest.mark.parametrize("role, protocol", APPLIES)
+@pytest.mark.parametrize("entry, protocol", APPLIES)
 @pytest.mark.parametrize("result, refused", [
     ({"rc": 0}, False),
     ({"rc": 1}, True),
     ({"rc": 2, "msg": "[Errno 2] No such file or directory: b'/usr/bin/podman'"}, True),
     ({"msg": "no result"}, True),
 ])
-def test_a_host_without_podman_refuses_before_any_other_task(role, protocol, result, refused):
-    tasks = load_tasks(role, "apply.yml")
+def test_a_host_without_podman_refuses_before_any_other_task(entry, protocol, result, refused):
+    role = SHARED
+    tasks = load_tasks(role, entry)
     module = "bootwright.core." + protocol
     handoff = index_of(tasks, lambda task: (task.get(module) or {}).get("phase") == "loaded", "completes the handoff")
     prove = index_of(tasks, lambda task: argv_of(task) == ["/usr/bin/podman", "--version"], "proves the container runtime")
@@ -553,7 +620,7 @@ def refusal_action(protocol):
 # Go gave a diagnostic for each port the request binds under exactly this
 # reason, so anything else would break the runner's protocol and is never
 # published: the task fails before it emits.
-@pytest.mark.parametrize("protocol", [protocol for _role, protocol in APPLIES])
+@pytest.mark.parametrize("kind", ["managed-service", "artifact-server"])
 @pytest.mark.parametrize("arguments, published", [
     ({"reason": "foreign-listener", "port": 53}, "foreign-listener-53"),
     ({"reason": "foreign-listener", "port": "8443"}, "foreign-listener-8443"),
@@ -568,11 +635,11 @@ def refusal_action(protocol):
     ({"reason": "foreign-listener", "port": "053"}, None),
     ({"reason": "foreign-listener", "port": 1.0}, None),
 ], ids=repr)
-def test_a_refusal_no_diagnostic_names_is_never_published(protocol, arguments, published, monkeypatch):
-    module, action = refusal_action(protocol)
+def test_a_refusal_no_diagnostic_names_is_never_published(kind, arguments, published, monkeypatch):
+    module, action = refusal_action("infra_service_protocol")
     emitted = []
     monkeypatch.setattr(module, "emit", lambda message, **kwargs: emitted.append(message))
-    action._task = SimpleNamespace(args=dict(arguments, phase="refused"))
+    action._task = SimpleNamespace(args=dict(arguments, phase="refused", kind=kind))
     result = action.run(task_vars={})
     if published is None:
         assert result["failed"] is True and result["msg"].endswith("capability result could not be published")
@@ -582,12 +649,9 @@ def test_a_refusal_no_diagnostic_names_is_never_published(protocol, arguments, p
     assert emitted == [{"phase": "refused", "reason": published}]
 
 
-@pytest.mark.parametrize("role,protocol", [
-    ("infra_managed_service", "infra_service_protocol"),
-    ("infra_artifact_server_nginx", "artifact_server_protocol"),
-])
-def test_readiness_refusal_precedes_stop_and_completion(role, protocol):
-    tasks = yaml.safe_load((ROLES / role / "tasks" / "apply.yml").read_text())
+@pytest.mark.parametrize("entry,protocol", APPLIES)
+def test_readiness_refusal_precedes_stop_and_completion(entry, protocol):
+    tasks = load_tasks(SHARED, entry)
     refusal = next(i for i, task in enumerate(tasks) if task.get("name") == "Report the classified readiness refusal")
     stop = next(i for i, task in enumerate(tasks) if task.get("name", "").startswith("Refuse an unproved"))
     completed = next(i for i, task in enumerate(tasks) if task.get("bootwright.core." + protocol, {}).get("phase") == "completed")

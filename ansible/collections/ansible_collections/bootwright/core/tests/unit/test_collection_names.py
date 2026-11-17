@@ -30,14 +30,12 @@ SHAPE = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+")
 
 ROLE_MISFITS = {
     "cluster_objects": "opens with no domain",
-    "infra_artifact_server_nginx": "opens with infra, not a domain, and names its implementation after the capability",
     "infra_managed_service": "opens with infra, not a domain",
     "managedos_install_anaconda": "names its implementation after the capability",
     "physical_erase": "opens with no domain",
 }
 
 PLUGIN_MISFITS = {
-    "artifact_server_protocol": "invoked by a role that is itself a misfit",
     "ceph_cluster_protocol": "opens with its implementation and no domain",
     "ceph_export_protocol": "opens with its implementation and no domain",
     "ceph_image_protocol": "opens with its implementation and no domain",

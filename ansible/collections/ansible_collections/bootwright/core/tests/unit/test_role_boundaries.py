@@ -118,9 +118,9 @@ DEBUG = re.compile(r"(?<![\w-])--debug\b")
 # The Quadlet units the roles install. Finding fewer means the walk stopped
 # seeing them, which would pass the container rule vacuously.
 UNITS = {
-    "infra_artifact_server_nginx/templates/unit.container.j2",
     "infra_managed_service/templates/chrony.container.j2",
     "infra_managed_service/templates/dnsmasq.container.j2",
+    "infra_managed_service/templates/nginx.container.j2",
     "infra_managed_service/templates/squid.container.j2",
     "substrate_libvirt_machine/templates/unit.container.j2",
 }
@@ -281,6 +281,12 @@ def handoff_problems(where, tasks):
     return problems + ["%s hands the runner no loaded record among its own tasks" % where]
 
 
+def imports_an_entry_point(path, tasks, files):
+    """Whether an entry point is one import of another entry point of its role, whose handoff is then its own."""
+    imported = tasks[0].get("ansible.builtin.import_tasks") if len(tasks) == 1 else None
+    return isinstance(imported, str) and "%s/tasks/%s" % (path.parent.parent.name, imported) in files
+
+
 def test_every_entry_point_hands_the_runner_loaded_before_anything_else():
     entries = entry_points()
     assert len(entries) >= ENTRY_POINTS, "the walk no longer sees every playbook's entry point"
@@ -293,7 +299,7 @@ def test_every_entry_point_hands_the_runner_loaded_before_anything_else():
                      and all(action(task) == "ansible.builtin.assert" for task in tasks[:-1])
                      and tasks[-1].get("ansible.builtin.include_role", {}).get("name") == "bootwright.core.cluster_objects"
                      and tasks[-1]["ansible.builtin.include_role"].get("tasks_from") == path.stem)
-        if not delegated:
+        if not delegated and not imports_an_entry_point(path, tasks, files):
             problems.extend(handoff_problems(label(path), tasks))
     for name in shared:
         problems.extend(handoff_problems(name, load(ROLES / name)))
@@ -301,12 +307,13 @@ def test_every_entry_point_hands_the_runner_loaded_before_anything_else():
         tasks = load(path)
         handed = sum(phase(task) == "loaded" for task in role_tasks.flatten(tasks))
         delegated = path.parent.parent.name in ("addons_instance", "containercluster_network") and handed == 0
+        delegated = delegated or (handed == 0 and imports_an_entry_point(path, tasks, files))
         if label(path) in files and handed != 1 and not delegated:
             problems.append("%s is an entry point that hands the runner loaded %d times" % (label(path), handed))
         if label(path) not in files and handed:
             problems.append("%s hands the runner loaded, which only an entry point does, once" % label(path))
         for target in sorted(included_files(tasks)):
-            if "%s/tasks/%s" % (path.parent.parent.name, target) in files:
+            if "%s/tasks/%s" % (path.parent.parent.name, target) in files and not imports_an_entry_point(path, tasks, files):
                 problems.append("%s includes the entry point %s, whose loaded record runs again" % (label(path), target))
     assert not problems, "\n".join(problems)
 

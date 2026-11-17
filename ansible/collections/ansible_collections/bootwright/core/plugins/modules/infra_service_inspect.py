@@ -1,26 +1,30 @@
 #!/usr/bin/python
-"""Observe one managed network service and, when asked, prove it answers."""
+"""Observe one managed network service or the artifact server and, when asked, prove it answers."""
 
 from __future__ import annotations
 
 DOCUMENTATION = r"""
 module: infra_service_inspect
-short_description: Observe one Bootwright managed network service
+short_description: Observe one Bootwright managed network service or artifact server
 version_added: "0.1.0"
 description:
   - Reports the owned unit, container and content root, whether the container
     started after every file it runs from was last written and, when readiness
-    is requested, the answer the service gives on each declared address.
+    is requested, the answer the service gives on each declared address or,
+    for the artifact server, each declared listener.
+  - The request's version names its kind; an artifact-server-nginx-v1 request
+    is read as the artifact server, every other one as a managed network service.
   - Performs no change and is safe to repeat.
 options:
   request:
-    description: The frozen managed-service request.
+    description: The frozen managed-service or artifact-server request.
     type: dict
     required: true
   runs_from:
     description:
       - Absolute paths of the files the daemon reads at its start. Its unit
-        definition is always compared as well.
+        definition is always compared as well. The artifact server names its
+        own from its listeners and takes none.
     type: list
     elements: str
     default: []
@@ -55,6 +59,8 @@ options:
     description:
       - The SHA-256 of the certificate a registry must present. A listener
         presenting another one, or a probe given none, is sent no credential.
+      - For the artifact server, the bound serving certificate digest every
+        HTTPS listener must present.
     type: str
     default: ''
 author:
@@ -82,7 +88,12 @@ answers:
   description:
     - One entry per declared address when readiness was requested; a registry's
       also names the SHA-256 fingerprint of the certificate it presented.
-  returned: when readiness is requested
+  returned: when readiness of a managed network service is requested
+  type: list
+  elements: dict
+listeners:
+  description: One entry per declared listener socket of the artifact server when readiness was requested.
+  returned: when readiness of the artifact server is requested
   type: list
   elements: dict
 foreign:
@@ -101,10 +112,10 @@ accepted:
     - Whether the active service answered every probe target, a registry with
       the credential it was handed and none of them presenting another
       certificate than the bound one.
-  returned: when readiness is requested
+  returned: when readiness of a managed network service is requested
   type: bool
 unproved:
-  description: Addresses that did not answer within the bounded window.
+  description: Addresses or listener sockets that did not answer within the bounded window.
   returned: always
   type: list
   elements: str
@@ -114,6 +125,7 @@ import socket
 import time
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.bootwright.core.plugins.module_utils import artifact_server
 from ansible_collections.bootwright.core.plugins.module_utils.host_addresses import bind_address_assigned
 from ansible_collections.bootwright.core.plugins.module_utils.infra_service import (
     command_runner,
@@ -130,6 +142,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.infra_service impo
 
 MAX_ATTEMPTS = 120
 RETRY_DELAY = 1
+ARTIFACT_SERVER = "artifact-server-nginx-v1"
 
 
 def answer_for(request, address, credential):
@@ -152,6 +165,73 @@ def accepted(observation, failures, answers):
             and not any(entry["answer"] == "certificate-mismatch" for entry in answers))
 
 
+def service_readiness(params, request, attempts, observation):
+    """What a managed network service answers on each declared address, and what it did not."""
+    failures, answers, unproved = [], [], []
+    credential = (params["authorization"], params["fingerprint"])
+    for address in probe_targets(request):
+        answer, fingerprint, last, cause = None, None, None, "listener-failed"
+        for remaining in range(attempts):
+            try:
+                answer, fingerprint = answer_for(request, address, credential)
+                break
+            except (OSError, ValueError) as failure:
+                last = probe_failure(failure)
+                cause = "readiness-timeout" if isinstance(failure, socket.timeout) else "listener-failed"
+                if isinstance(failure, Refused):
+                    break
+                if remaining + 1 < attempts:
+                    time.sleep(RETRY_DELAY)
+        if answer is None:
+            failures.append({"port": int(request["port"]), "reason": cause})
+            unproved.append("%s:%s (%s)" % (address, request["port"], last))
+            continue
+        entry = {"address": address, "answer": answer, "port": int(request["port"])}
+        if fingerprint is not None:
+            entry["fingerprint"] = fingerprint
+        answers.append(entry)
+    failures.sort(key=lambda failure: failure["reason"] == "readiness-timeout")
+    return {"failures": failures, "answers": answers, "unproved": unproved, "accepted": accepted(observation, failures, answers)}
+
+
+def certified(answer, target, fingerprint):
+    """The listener's answer, or None and why, when an HTTPS listener did not prove the bound certificate."""
+    if answer is None or target["protocol"] != "https" or not fingerprint:
+        return answer, None, None
+    observed = answer.get("fingerprint")
+    if not isinstance(observed, str) or len(observed) != 64 or set(observed) - set("0123456789abcdef"):
+        return None, "readiness-unproved", "certificate fingerprint was not proved"
+    if observed != fingerprint:
+        return None, "certificate-mismatch", "certificate differs from the bound fingerprint"
+    return answer, None, None
+
+
+def listener_readiness(params, request, attempts):
+    """What each artifact-server listener answers, and what it did not."""
+    failures, listeners, unproved = [], [], []
+    for target in artifact_server.probe_targets(request):
+        answer, last, cause = None, None, "listener-failed"
+        for remaining in range(attempts):
+            try:
+                answer = artifact_server.probe(target)
+                break
+            except (OSError, ValueError) as failure:
+                last = probe_failure(failure)
+                cause = "readiness-timeout" if isinstance(failure, socket.timeout) else "listener-failed"
+                if remaining + 1 < attempts:
+                    time.sleep(RETRY_DELAY)
+        answer, refused, why = certified(answer, target, params["fingerprint"])
+        if refused is not None:
+            cause, last = refused, why
+        if answer is None:
+            failures.append({"port": target["port"], "reason": cause})
+            unproved.append("%s %s:%d (%s)" % (target["name"], target["address"], target["port"], last))
+            continue
+        listeners.append(answer)
+    failures.sort(key=lambda failure: failure["reason"] in ("readiness-timeout", "readiness-unproved"))
+    return {"failures": failures, "listeners": listeners, "unproved": unproved}
+
+
 def main():
     module = AnsibleModule(
         argument_spec={
@@ -167,11 +247,16 @@ def main():
         supports_check_mode=True,
     )
     request = module.params["request"]
+    server = request.get("version") == ARTIFACT_SERVER
     attempts = max(1, min(int(module.params["attempts"]), MAX_ATTEMPTS))
     try:
-        observation = observe(command_runner(), request, module.params["runs_from"])
+        if server:
+            observation = artifact_server.observe(command_runner(), request)
+        else:
+            observation = observe(command_runner(), request, module.params["runs_from"])
     except (OSError, ValueError) as failure:
-        module.fail_json(msg="the managed service could not be observed: %s" % type(failure).__name__)
+        module.fail_json(msg="%s could not be observed: %s" % (
+            "the artifact server" if server else "the managed service", type(failure).__name__))
         return
     result = {"changed": False, "observation": observation, "unproved": []}
     if module.params["bind_address"]:
@@ -182,41 +267,15 @@ def main():
             return
     if module.params["foreign"]:
         try:
-            result["foreign"] = foreign(request, observation)
+            result["foreign"] = (artifact_server.foreign if server else foreign)(request, observation)
         except (OSError, ValueError) as failure:
             module.fail_json(msg="the host's socket tables could not be read: %s" % type(failure).__name__)
             return
-    if not module.params["readiness"]:
-        module.exit_json(**result)
-        return
-    result["failures"] = []
-    answers, unproved = [], []
-    credential = (module.params["authorization"], module.params["fingerprint"])
-    for address in probe_targets(request):
-        answer, fingerprint, last, cause = None, None, None, "listener-failed"
-        for remaining in range(attempts):
-            try:
-                answer, fingerprint = answer_for(request, address, credential)
-                break
-            except (OSError, ValueError) as failure:
-                last = probe_failure(failure)
-                cause = "readiness-timeout" if isinstance(failure, socket.timeout) else "listener-failed"
-                if isinstance(failure, Refused):
-                    break
-                if remaining + 1 < attempts:
-                    time.sleep(RETRY_DELAY)
-        if answer is None:
-            result["failures"].append({"port": int(request["port"]), "reason": cause})
-            unproved.append("%s:%s (%s)" % (address, request["port"], last))
-            continue
-        entry = {"address": address, "answer": answer, "port": int(request["port"])}
-        if fingerprint is not None:
-            entry["fingerprint"] = fingerprint
-        answers.append(entry)
-    result["answers"] = answers
-    result["failures"].sort(key=lambda failure: failure["reason"] == "readiness-timeout")
-    result["unproved"] = unproved
-    result["accepted"] = accepted(observation, result["failures"], answers)
+    if module.params["readiness"]:
+        if server:
+            result.update(listener_readiness(module.params, request, attempts))
+        else:
+            result.update(service_readiness(module.params, request, attempts, observation))
     module.exit_json(**result)
 
 

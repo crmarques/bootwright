@@ -7,7 +7,7 @@
 # root down is 0711 and every file 0640 root:root, so nothing is listable, the
 # unguessable segment is the only way to name what it contains, and only root
 # and the serving worker, whose group is root
-# (infra_artifact_server_nginx/templates/nginx.conf.j2), can read it.
+# (infra_managed_service/templates/nginx.conf.j2), can read it.
 - name: Create the private subtree this block owns
   ansible.builtin.file:
     path: '{{ managedos_install_anaconda_private_root }}'

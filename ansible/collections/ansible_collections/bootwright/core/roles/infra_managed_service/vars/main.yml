@@ -1,21 +1,34 @@
 ---
 # Fixed by the role, never authored. Each managed network service
-# implementation selects only its daemon configuration and unit templates;
-# every task is shared.
+# implementation and the artifact server select only the capability their
+# protocol reports, their daemon configuration and unit templates and their
+# serving material names; every task is shared.
 infra_managed_service_implementations:
+  artifact-server-nginx-v1:
+    protocol: artifact-server
+    configuration: nginx.conf
+    configuration_template: nginx.conf.j2
+    unit_template: nginx.container.j2
+    certificate: server.crt
+    certificate_mode: '0644'
+    private_key: server.key
   dns-server-dnsmasq-v1:
+    protocol: managed-service
     configuration: dnsmasq.conf
     configuration_template: dnsmasq.conf.j2
     unit_template: dnsmasq.container.j2
   ntp-server-chrony-v1:
+    protocol: managed-service
     configuration: chrony.conf
     configuration_template: chrony.conf.j2
     unit_template: chrony.container.j2
   proxy-squid-v1:
+    protocol: managed-service
     configuration: squid.conf
     configuration_template: squid.conf.j2
     unit_template: squid.container.j2
   registry-distribution-v1:
+    protocol: managed-service
     configuration: config.yml
     configuration_template: distribution.yml.j2
     unit_template: distribution.container.j2
@@ -23,5 +36,8 @@ infra_managed_service_implementations:
       - tls
       - auth
       - data
+# A network service's request names its implementation; the artifact
+# server's entry points select theirs, as its request names none.
 infra_managed_service_implementation: >-
-  {{ infra_managed_service_implementations[bootwright_managed_service_request.implementation] }}
+  {{ infra_managed_service_implementations[infra_managed_service_selected if infra_managed_service_selected is defined
+                                           else bootwright_managed_service_request.implementation] }}

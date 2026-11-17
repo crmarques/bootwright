@@ -22,18 +22,18 @@ http {
     sendfile on;
     keepalive_timeout 30;
 
-{% for listener in bootwright_artifact_server_request.listeners %}
+{% for listener in bootwright_managed_service_request.listeners %}
     server {
-        listen {{ infra_artifact_server_nginx_listen }}:{{ listener.port }}{% if listener.protocol == 'https' %} ssl{% endif %};
+        listen {{ infra_managed_service_listen }}:{{ listener.port }}{% if listener.protocol == 'https' %} ssl{% endif %};
 
 {% if listener.protocol == 'https' %}
-        ssl_certificate {{ infra_artifact_server_nginx_tls_dir }}/server.crt;
-        ssl_certificate_key {{ infra_artifact_server_nginx_tls_dir }}/server.key;
-        ssl_protocols {{ infra_artifact_server_nginx_protocols }};
+        ssl_certificate {{ infra_managed_service_tls_dir }}/server.crt;
+        ssl_certificate_key {{ infra_managed_service_tls_dir }}/server.key;
+        ssl_protocols {{ infra_managed_service_protocols }};
         ssl_prefer_server_ciphers off;
         ssl_session_timeout 10m;
 {% endif %}
-        root {{ infra_artifact_server_nginx_served_dir }};
+        root {{ infra_managed_service_served_dir }};
         autoindex off;
 
         location / {

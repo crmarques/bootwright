@@ -484,7 +484,6 @@ func automationCapitalized() map[string]automationFormat {
 		"Bootwright does not realize":                       prose,
 		"Bootwright installation publishes":                 prose,
 		"Bootwright libvirt provider host":                  prose,
-		"Bootwright managed artifact server":                prose,
 		"Bootwright managed network service":                prose,
 		"Bootwright never pins that":                        prose,
 		"Bootwright writes atomically and":                  prose,

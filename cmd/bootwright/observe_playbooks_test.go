@@ -53,7 +53,6 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		"cluster_objects":                       "cluster_objects_protocol",
 		"containercluster_install_agent":        "containercluster_install_protocol",
 		"containercluster_media_agent":          "containercluster_media_protocol",
-		"infra_artifact_server_nginx":           "artifact_server_protocol",
 		"infra_managed_service":                 "infra_service_protocol",
 		"infrastructureservices_mirror_fill":    "infrastructureservices_mirror_files_protocol",
 		"infrastructureservices_mirror_images":  "infrastructureservices_mirror_images_protocol",
@@ -166,7 +165,6 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("containercluster_media_agent", "observe.yml", "ansible.builtin.slurp", "reads which context incarnation the build receipt records", read)
 	add("containercluster_media_agent", "observe.yml", "ansible.builtin.fail", "refuses the hand-over from a work area another context incarnation built", read)
 	add("containercluster_media_agent", "observe.yml", "ansible.builtin.copy", "hands the kept kubeconfig to custody through the declared output", observeCustodyCopy)
-	add("infra_artifact_server_nginx", "observe.yml", observeCollection+"artifact_server_inspect", "reads the served unit, container and content", read)
 	add("infra_managed_service", "observe.yml", observeCollection+"infra_service_inspect", "reads the managed service's unit, container and answers", read)
 	add("machine_hardware", "observe.yml", observeCollection+"machine_hardware_read", "reads each network interface's permanent hardware address", read)
 	add("machine_hardware", "observe.yml", "ansible.builtin.fail", "refuses a host whose interfaces it could not read without touching it", read)
@@ -292,6 +290,10 @@ func (w *observeWalk) reportf(format string, args ...any) {
 	w.errs = append(w.errs, fmt.Sprintf(format, args...))
 }
 
+func observeEntry(entry string) bool {
+	return entry == "observe" || strings.HasSuffix(entry, "_observe")
+}
+
 func (w *observeWalk) playbook(key, playbook string) {
 	var plays []map[string]any
 	if err := yaml.Unmarshal(w.assets[playbookRoot+playbook], &plays); err != nil || len(plays) == 0 {
@@ -318,7 +320,7 @@ func (w *observeWalk) playbook(key, playbook string) {
 		params := observeParams(task, "ansible.builtin.import_role")
 		role, ok := params["name"].(string)
 		entry, literal := params["tasks_from"].(string)
-		if !ok || !literal || strings.Contains(entry, "{{") || len(params) != 2 || index == 0 && entry != "observe" || index > 0 && role != first {
+		if !ok || !literal || strings.Contains(entry, "{{") || len(params) != 2 || index == 0 && !observeEntry(entry) || index > 0 && role != first {
 			w.reportf("%s: %s play %d is not a single import_role of its role's observe phases", key, playbook, index+1)
 			return
 		}

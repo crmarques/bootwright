@@ -275,9 +275,19 @@ CASES = {
 }
 
 
+# A golden of a kind the one managed unit plugin serves, by the plugin and the
+# kind each of its tasks names; every other golden is its plugin's own.
+KINDS = {
+    "artifact_server_protocol": ("infra_service_protocol", {"kind": "artifact-server"}),
+    "infra_service_protocol": ("infra_service_protocol", {"kind": "managed-service"}),
+}
+
+
 def run(name, arguments, monkeypatch, refuse=False):
     """One run of a plugin's ActionModule with the channel recorded, or with a
     channel that refuses every record when refuse is set."""
+    name, kind = KINDS.get(name, (name, {}))
+    arguments = dict(kind, **arguments)
     module = importlib.import_module(PACKAGE + name)
     records = []
 

@@ -26,7 +26,7 @@ PACKAGE = "ansible_collections.bootwright.core.plugins.action."
 # loaded record every entry point hands first.
 PROTOCOLS = {
     "containercluster_admin_protocol", "storage_ceph_admin_protocol",
-    "artifact_server_protocol", "ceph_cluster_protocol", "ceph_image_protocol", "ceph_smb_protocol", "ceph_replication_protocol", "ceph_export_protocol",
+    "ceph_cluster_protocol", "ceph_image_protocol", "ceph_smb_protocol", "ceph_replication_protocol", "ceph_export_protocol",
     "cluster_objects_protocol", "containercluster_install_protocol", "containercluster_media_protocol",
     "controller_protocol", "infra_service_protocol", "infrastructureservices_mirror_files_protocol", "infrastructureservices_mirror_images_protocol",
     "infrastructureservices_mirror_release_protocol",
@@ -75,6 +75,8 @@ def test_a_protocol_plugin_hands_the_runner_loaded_and_waits_for_its_acknowledge
     arguments = {"phase": "loaded"}
     if name == "cluster_objects_protocol":
         arguments["budget"] = 600
+    if name == "infra_service_protocol":
+        arguments["kind"] = "managed-service"
     _module, result, records = running(name, arguments, monkeypatch)
     assert not result.get("failed"), result
     assert result.get("changed") is False

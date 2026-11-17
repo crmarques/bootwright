@@ -318,13 +318,13 @@ def test_the_servers_own_content_root_is_never_refused(tmp_path, monkeypatch, op
 
 
 def test_the_tree_proves_exactly_the_area_the_artifact_server_proves():
-    server = role_tasks.role_defaults(ROLE.parent / "infra_artifact_server_nginx")
+    server = role_tasks.role_defaults(ROLE.parent / "infra_managed_service")
     tree = role_tasks.role_defaults(ROLE)
     content_root = PUBLICATION.split("/public/", maxsplit=1)[0]
-    values = {"bootwright_artifact_server_request": {"contentRoot": content_root},
+    values = {"bootwright_managed_service_request": {"contentRoot": content_root},
               "bootwright_os_tree_request": {"area": ["services", "artifact-server"], "publication": {"path": PUBLICATION}}}
     proved = [Templar(loader=LOADER, variables=dict(values, **source)).template(source[name])
-              for source, name in ((server, "infra_artifact_server_nginx_area"), (tree, "managedos_package_tree_area"))]
+              for source, name in ((server, "infra_managed_service_area"), (tree, "managedos_package_tree_area"))]
     assert proved[0] == proved[1] == ["services", "artifact-server"]
 
 

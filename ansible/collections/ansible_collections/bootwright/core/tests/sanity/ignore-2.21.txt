@@ -1,6 +1,4 @@
 plugins/callback/censored.py validate-modules:missing-gplv3-license
-plugins/modules/artifact_server_inspect.py validate-modules:missing-gplv3-license
-plugins/modules/artifact_server_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/ceph_cluster.py validate-modules:missing-gplv3-license
 plugins/modules/ceph_cluster_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/ceph_host.py validate-modules:missing-gplv3-license

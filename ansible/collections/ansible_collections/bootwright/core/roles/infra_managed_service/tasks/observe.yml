@@ -1,6 +1,7 @@
 ---
 - name: Complete the qualified execution handoff
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: loaded
   no_log: true
 
@@ -9,7 +10,7 @@
 - name: Observe the managed service without changing it
   bootwright.core.infra_service_inspect:
     request: '{{ bootwright_managed_service_request }}'
-    runs_from: '{{ infra_managed_service_runs_from }}'
+    runs_from: '{{ omit if infra_managed_service_artifact_server else infra_managed_service_runs_from }}'
     readiness: true
     attempts: 1
   register: infra_managed_service_observation_open
@@ -33,12 +34,14 @@
 
 - name: Publish bounded managed service observation evidence
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: completed
     observed: true
     outcome: unchanged
     digest: '{{ bootwright_managed_service_digest }}'
     observation: '{{ infra_managed_service_observed.observation }}'
-    answers: '{{ infra_managed_service_observed.answers }}'
+    answers: '{{ infra_managed_service_observed.answers | default(omit) }}'
+    listeners: '{{ infra_managed_service_observed.listeners | default(omit) }}'
     removed: >-
       {{ not infra_managed_service_observed.observation.unit
          and not infra_managed_service_observed.observation.containerPresent

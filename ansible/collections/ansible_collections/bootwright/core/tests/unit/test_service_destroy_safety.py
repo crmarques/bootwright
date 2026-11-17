@@ -19,7 +19,6 @@ from ansible_collections.bootwright.core.tests.unit.test_managed_service_role im
     ARTIFACT,
     LOADER,
     MANAGED,
-    ROLES,
     SHARED,
     argv_of,
     holds,
@@ -40,8 +39,8 @@ ARTIFACT_APPLY = dict(
 ENTRIES = [
     ("infra_managed_service", "apply.yml", "bootwright_managed_service", MANAGED, "dns", "resolver"),
     ("infra_managed_service", "destroy.yml", "bootwright_managed_service", MANAGED, "dns", "resolver"),
-    ("infra_artifact_server_nginx", "destroy.yml", "bootwright_artifact_server", ARTIFACT, "artifact-server", "media"),
-    ("infra_artifact_server_nginx", "apply.yml", "bootwright_artifact_server", ARTIFACT_APPLY, "artifact-server", "media"),
+    ("infra_managed_service", "artifact_server_destroy.yml", "bootwright_artifact_server", ARTIFACT, "artifact-server", "media"),
+    ("infra_managed_service", "artifact_server_apply.yml", "bootwright_artifact_server", ARTIFACT_APPLY, "artifact-server", "media"),
 ]
 PLANTED = [
     ("lab", "{p}/lab/services/{k}/.."),
@@ -77,9 +76,10 @@ PLANTED_UNITS = [
     "",
     "..",
 ]
+# Each kind's destroy, by its entry point's task file.
 DESTROYS = [
-    ("infra_managed_service", "bootwright_managed_service", dict(MANAGED)),
-    ("infra_artifact_server_nginx", "bootwright_artifact_server", dict(ARTIFACT, unit="bootwright-lab-artifact-server-media")),
+    ("destroy.yml", "bootwright_managed_service", dict(MANAGED)),
+    ("artifact_server_destroy.yml", "bootwright_artifact_server", dict(ARTIFACT, unit="bootwright-lab-artifact-server-media")),
 ]
 NOT_LOADED = "Failed to reset failed state of unit x.service: Unit x.service not loaded."
 
@@ -117,10 +117,9 @@ def test_a_request_without_a_unit_refuses_before_any_effect(role, entry, prefix,
     assert not admitted
 
 
-def role_variables(role, prefix, request_):
+def role_variables(prefix, request_):
     found = variables(prefix, request_)
-    found.update(LOADER.load_from_file(str(ROLES / role / "defaults" / "main.yml"), trusted_as_template=True))
-    found.update(shared_variables(role))
+    found.update(shared_variables(SHARED))
     return found
 
 
@@ -134,16 +133,16 @@ def evaluate(templar, conditions):
     return all(templar.evaluate_conditional(trust_as_template(str(condition))) for condition in conditions)
 
 
-@pytest.mark.parametrize("role, prefix, request_", DESTROYS, ids=["managed service", "artifact server"])
-def test_a_destroy_resets_a_unit_it_finds_failed(role, prefix, request_):
-    tasks = load_tasks(role, "destroy.yml")
+@pytest.mark.parametrize("entry, prefix, request_", DESTROYS, ids=["managed service", "artifact server"])
+def test_a_destroy_resets_a_unit_it_finds_failed(entry, prefix, request_):
+    tasks = load_tasks(SHARED, entry)
     reset = index_of(tasks, is_reset, "resets the failed unit")
     stop = index_of(tasks, lambda task: argv_of(task)[:2] == ["/usr/bin/systemctl", "stop"], "stops the unit")
     reload_ = index_of(tasks, lambda task: argv_of(task)[:2] == ["/usr/bin/systemctl", "daemon-reload"], "reloads")
     show = index_of(tasks, lambda task: argv_of(task)[:3] == ["/usr/bin/systemctl", "show", "--property=ActiveState"], "observes the unit")
     proof = index_of(tasks, lambda task: task.get("name") == "Prove every owned resource is gone", "proves absence")
     assert stop < reload_ < show < reset < proof
-    templar = Templar(loader=LOADER, variables=role_variables(role, prefix, request_))
+    templar = Templar(loader=LOADER, variables=role_variables(prefix, request_))
     assert templar.template(tasks[reset]["ansible.builtin.command"]["argv"][2]) == request_["unit"] + ".service"
     assert templar.template(tasks[show]["ansible.builtin.command"]["argv"][-1]) == request_["unit"] + ".service"
     assert tasks[show]["register"] == SHARED + "_listed"
@@ -151,9 +150,9 @@ def test_a_destroy_resets_a_unit_it_finds_failed(role, prefix, request_):
     assert evaluate(listed, tasks[reset]["when"])
 
 
-@pytest.mark.parametrize("role", [destroy[0] for destroy in DESTROYS])
-def test_a_destroy_ignores_a_unit_that_is_not_loaded(role):
-    tasks = load_tasks(role, "destroy.yml")
+@pytest.mark.parametrize("entry", [destroy[0] for destroy in DESTROYS])
+def test_a_destroy_ignores_a_unit_that_is_not_loaded(entry):
+    tasks = load_tasks(SHARED, entry)
     reset = tasks[index_of(tasks, is_reset, "resets the failed unit")]
     for shown in ("inactive", "active", ""):
         listed = Templar(loader=LOADER, variables={SHARED + "_listed": {"stdout": shown}})
@@ -168,9 +167,9 @@ def test_a_destroy_ignores_a_unit_that_is_not_loaded(role):
         assert evaluate(templar, reset["changed_when"]) is changed, result
 
 
-@pytest.mark.parametrize("role", [destroy[0] for destroy in DESTROYS])
-def test_a_destroy_counts_a_reset_as_a_change(role):
-    tasks = load_tasks(role, "destroy.yml")
+@pytest.mark.parametrize("entry", [destroy[0] for destroy in DESTROYS])
+def test_a_destroy_counts_a_reset_as_a_change(entry):
+    tasks = load_tasks(SHARED, entry)
     completion = tasks[index_of(tasks, lambda task: "removal evidence" in str(task.get("name", "")), "publishes the evidence")]
     module = next(value for key, value in completion.items() if key.endswith("_protocol"))
     unchanged = {"changed": False}
@@ -178,7 +177,7 @@ def test_a_destroy_counts_a_reset_as_a_change(role):
         SHARED + "_unit_removed": unchanged,
         SHARED + "_root_removed": unchanged,
         SHARED + "_parents": unchanged,
-        role + "_before": {"observation": {"unit": ""}},
+        SHARED + "_before": {"observation": {"unit": ""}},
     }
     for reset, outcome in [({"changed": True}, "changed"), ({"changed": False, "skipped": True}, "unchanged")]:
         templar = Templar(loader=LOADER, variables=dict(base, **{SHARED + "_reset": reset}))

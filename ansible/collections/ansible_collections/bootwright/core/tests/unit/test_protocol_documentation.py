@@ -56,7 +56,7 @@ DOCUMENTING = [name for name in NAMES if documented_reasons(load(name)[0]) is no
 
 
 def test_every_protocol_module_is_found_with_its_action():
-    assert len(NAMES) >= 27
+    assert len(NAMES) >= 26
     assert {"ceph_cluster_protocol", "ceph_export_protocol", "ceph_image_protocol", "ceph_replication_protocol", "ceph_smb_protocol"} <= set(DOCUMENTING)
     assert not [path.stem for path in (PLUGINS / "action").glob("*_protocol.py") if not (PLUGINS / "modules" / path.name).is_file()]
 

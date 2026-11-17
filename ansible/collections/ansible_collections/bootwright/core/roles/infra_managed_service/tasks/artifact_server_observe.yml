@@ -1,0 +1,9 @@
+---
+# The artifact server's observation, as artifact_server_apply.yml names its run.
+- name: Observe the frozen artifact server
+  ansible.builtin.import_tasks: observe.yml
+  vars:
+    bootwright_managed_service_request: '{{ bootwright_artifact_server_request }}'
+    bootwright_managed_service_digest: '{{ bootwright_artifact_server_digest }}'
+    bootwright_managed_service_material: '{{ bootwright_artifact_server_material }}'
+    infra_managed_service_selected: artifact-server-nginx-v1

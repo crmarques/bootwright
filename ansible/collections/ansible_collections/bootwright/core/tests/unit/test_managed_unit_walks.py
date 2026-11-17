@@ -45,8 +45,8 @@ EARLIER = STARTED / 1e9 - 3600
 ENTRIES = {
     "managed-service": ("infra_managed_service", "bootwright_managed_service", {
         "apply": "apply.yml", "observe": "observe.yml", "destroy": "destroy.yml"}),
-    "artifact-server": ("infra_artifact_server_nginx", "bootwright_artifact_server", {
-        "apply": "apply.yml", "observe": "observe.yml", "destroy": "destroy.yml"}),
+    "artifact-server": ("infra_managed_service", "bootwright_artifact_server", {
+        "apply": "artifact_server_apply.yml", "observe": "artifact_server_observe.yml", "destroy": "artifact_server_destroy.yml"}),
 }
 
 PLAIN_SERVER = dict(ARTIFACT_SERVER, endpoints=ARTIFACT_SERVER["endpoints"][:1], listeners=ARTIFACT_SERVER["listeners"][:1])

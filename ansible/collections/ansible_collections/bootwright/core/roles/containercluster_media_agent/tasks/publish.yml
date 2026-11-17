@@ -102,7 +102,7 @@
   no_log: true
 
 # The server's workers run as the image's application user in group root
-# (infra_artifact_server_nginx/templates/nginx.conf.j2), so the group grants
+# (infra_managed_service/templates/nginx.conf.j2), so the group grants
 # them read and nothing is granted to any other account. A replay applies it
 # too, and a replay that had to change it reports the repair as a change.
 - name: Keep the published image readable only by the serving process

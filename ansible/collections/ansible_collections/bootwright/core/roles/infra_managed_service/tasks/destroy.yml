@@ -2,8 +2,12 @@
 - name: Validate the frozen managed service request
   ansible.builtin.assert:
     that:
-      - bootwright_managed_service_request.version == 'managed-service-v1'
-      - bootwright_managed_service_request.implementation in infra_managed_service_implementations
+      - >-
+        (infra_managed_service_selected | default(bootwright_managed_service_request.implementation))
+        in infra_managed_service_implementations
+      - >-
+        (infra_managed_service_artifact_server and bootwright_managed_service_request.version == 'artifact-server-nginx-v1')
+        or (not infra_managed_service_artifact_server and bootwright_managed_service_request.version == 'managed-service-v1')
       - bootwright_managed_service_request.unit is string
       - bootwright_managed_service_request.unit is match('^bootwright-[a-z0-9-]*[a-z0-9]$(?!\n)')
       - bootwright_managed_service_request.unit.startswith('bootwright-' ~ bootwright_managed_service_request.identity.context ~ '-')
@@ -23,6 +27,7 @@
 
 - name: Complete the qualified execution handoff
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: loaded
   no_log: true
 
@@ -34,6 +39,7 @@
 
 - name: Report service stop
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: stop-service
     status: running
@@ -55,6 +61,7 @@
 
 - name: Report service stop completion
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: stop-service
     status: ok
@@ -62,6 +69,7 @@
 
 - name: Report configuration removal
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: remove-configuration
     status: running
@@ -81,6 +89,7 @@
 
 - name: Report configuration removal completion
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: remove-configuration
     status: ok
@@ -88,6 +97,7 @@
 
 - name: Report absence verification
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: verify-absence
     status: running
@@ -100,6 +110,7 @@
 
 - name: Report absence verification completion
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: group
     group: verify-absence
     status: ok
@@ -107,6 +118,7 @@
 
 - name: Publish bounded managed service removal evidence
   bootwright.core.infra_service_protocol:
+    kind: '{{ infra_managed_service_implementation.protocol }}'
     phase: completed
     outcome: >-
       {{ 'changed'
