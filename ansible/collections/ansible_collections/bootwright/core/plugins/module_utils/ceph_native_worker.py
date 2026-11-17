@@ -28,7 +28,8 @@ if globals().get("__package__"):
 
 PREFIX = "ansible_collections.bootwright.core.plugins.module_utils"
 MODULES = ("native_diagnostics", "native_specializations", "canonical_json", "ceph_monitoring_template", "bounded_process", "tls_trust",
-           "private_files", "registry_auth", "held_directory", "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native_observe", "ceph_native",
+           "private_files", "registry_auth", "held_directory",
+           "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native_observe", "ceph_native",
            "ceph_native_resources", "ceph_native_stretch", "ceph_native_nfs", "ceph_native_nvmeof", "ceph_native_observability", "ceph_native_units",
            "ceph_native_object", "ceph_smb_native",
            "ceph_replication_native", "ceph_export_dns", "ceph_export_native",

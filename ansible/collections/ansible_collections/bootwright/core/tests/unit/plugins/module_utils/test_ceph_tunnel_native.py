@@ -18,7 +18,9 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime, ceph_native, ceph_tunnel, ceph_tunnel_custody, ceph_tunnel_staging, private_files
+from ansible_collections.bootwright.core.plugins.module_utils import (
+    ceph_host_runtime, ceph_native, ceph_tunnel, ceph_tunnel_custody, ceph_tunnel_staging, private_files,
+)
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources
 from ansible_collections.bootwright.core.plugins.module_utils import native_specializations
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs

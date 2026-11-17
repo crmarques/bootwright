@@ -16,7 +16,6 @@ from __future__ import annotations
 import base64
 import datetime
 import json
-import os
 import re
 import time
 from urllib.parse import quote
