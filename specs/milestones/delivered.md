@@ -16583,3 +16583,18 @@ duplicate of the locked descriptor, as a forked child does, and show a fresh
 non-blocking lock succeeds after release; they failed before. The flaky
 context test passed 20 runs in a row.
 
+## X529 — One invocation value and a complete binder port
+
+### B1499
+
+Split from B1469 under [D274](backlog.md#d274) (the first part of audit 005
+W8.4). The lifecycle scheduler owns one invocation value (transaction, store,
+approval, boundary, operation, plan and material) that the attempt path takes:
+`invoke` drops from 18 parameters to 7, `resolveUnknown` from 16 to 8, and
+`attempt` and `observe` from 13 to 7 and 6; a removal reading replaces the
+removal flag and its two companions. The secret binder port now declares the
+produced reads and the rebind, so the seven run-time assertions are gone, the
+wiring asserts that the custody service satisfies the port, and the producer
+identity check always runs: through a wrapping binder it had been skipped, as
+a new test shows. Every plan, journal, refusal and golden is unchanged.
+
