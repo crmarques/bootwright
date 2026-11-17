@@ -205,10 +205,10 @@ func TestTheMachineReadsEachEvidenceFormForItsVerb(t *testing.T) {
 		"no receipt": {func(e *MachineEvidence) { e.Receipts = nil }, reconciliation.EffectUnknown, reconciliation.EffectNoEffect},
 	} {
 		evidence := machineFixture(t, digest, test.change)
-		if got, _ := machineEffect(reconciliation.Apply, evidence, request, digest); got != test.apply {
+		if got, _ := lifecycle.ReadEffect(machineReading(request, digest), reconciliation.Apply, evidence); got != test.apply {
 			t.Errorf("%s: apply reads %s, want %s", name, got, test.apply)
 		}
-		if got, _ := machineEffect(reconciliation.Destroy, evidence, request, digest); got != test.destroy {
+		if got, _ := lifecycle.ReadEffect(machineReading(request, digest), reconciliation.Destroy, evidence); got != test.destroy {
 			t.Errorf("%s: destroy reads %s, want %s", name, got, test.destroy)
 		}
 	}

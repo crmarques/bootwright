@@ -103,11 +103,7 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 	if verb == reconciliation.Destroy {
 		steps = [][2]string{{"release-claim", "release the claim and leave the machine as it is"}}
 	}
-	out := make([]reconciliation.Group, 0, len(steps))
-	for _, step := range steps {
-		out = append(out, reconciliation.Group{ID: step[0], Description: step[1], Machines: machines})
-	}
-	return out
+	return lifecycle.StepGroups(steps, machines)
 }
 
 // Removal reads a frozen physical-machine block as the release of the claim it
@@ -126,37 +122,24 @@ func (c MachineCapability) Removal(ctx context.Context, block reconciliation.Blo
 }
 
 func (c MachineCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "apply")
+	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "apply")
 }
 
 func (c MachineCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "destroy")
+	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "destroy")
 }
 
-func (c MachineCapability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
-	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
-	request, err := c.prepare(ctx, execution)
-	if err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+func (c MachineCapability) mutation() lifecycle.Mutation[Request] {
+	return lifecycle.Mutation[Request]{
+		Prepare: c.prepare, Run: c.run,
+		Reading: func(request Request, digest string) lifecycle.EffectReading {
+			return lifecycle.EffectReading{
+				Presence: func(evidence []byte) error { return ValidatePresence(evidence, request, digest) },
+				Absence:  func(evidence []byte) error { return ValidateAbsence(evidence, digest) },
+			}
+		},
+		Unusable: refusal("lifecycle.state", "the machine adapter reported no usable outcome", ""),
 	}
-	result, err := c.run(ctx, execution, operation, request)
-	if err != nil {
-		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
-	}
-	outcome, usable := result.Outcome, result.Outcome.Settled()
-	if !usable {
-		return unknown, refusal("lifecycle.state", "the machine adapter reported no usable outcome", "")
-	}
-	digest := execution.Block.RequestDigest
-	if operation == "apply" {
-		err = ValidatePresence(result.Evidence, request, digest)
-	} else {
-		err = ValidateAbsence(result.Evidence, digest)
-	}
-	if err != nil {
-		return unknown, err
-	}
-	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
 
 // Observe is read-only. The exact machine answering with its complete declared
@@ -175,26 +158,12 @@ func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Exec
 	if err != nil {
 		return unknown, err
 	}
-	if effect, _ := machineEffect(reconciliation.Apply, result.Evidence, request, execution.Block.RequestDigest); effect == reconciliation.EffectCompleted {
+	if ValidatePresence(result.Evidence, request, execution.Block.RequestDigest) == nil {
 		return lifecycle.Observation{
 			Effect: reconciliation.EffectCompleted, Outcome: result.Outcome, Evidence: result.Evidence,
 		}, nil
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectUnknown, Evidence: result.Evidence}, nil
-}
-
-// machineEffect is the one reading of a machine observation for the verb the
-// block was frozen for. An apply's only check is the presence proof, so
-// evidence it refuses is unknown and comes back with that refusal. A removal
-// takes back only the claim and reads nothing, so it is always complete.
-func machineEffect(verb reconciliation.Verb, evidence []byte, request Request, digest string) (reconciliation.EffectState, error) {
-	if verb == reconciliation.Destroy {
-		return reconciliation.EffectCompleted, nil
-	}
-	if err := ValidatePresence(evidence, request, digest); err != nil {
-		return reconciliation.EffectUnknown, err
-	}
-	return reconciliation.EffectCompleted, nil
 }
 
 // ObserveRemoval runs nothing. The removal releases only the claim and never

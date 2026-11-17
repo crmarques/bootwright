@@ -40,7 +40,7 @@ func (MachineCapability) Unresolved(verb reconciliation.Verb, block reconciliati
 			Remedy: unansweredRemedy(request),
 		}, true
 	}
-	effect, refused := machineEffect(verb, evidence, request, block.RequestDigest)
+	effect, refused := lifecycle.ReadEffect(machineReading(request, block.RequestDigest), verb, evidence)
 	if effect != reconciliation.EffectUnknown {
 		return lifecycle.Unresolved{}, false
 	}

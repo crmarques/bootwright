@@ -53,7 +53,7 @@ func TestAFailedBootBarrierIsNoRemovalEffect(t *testing.T) {
 	if err := ValidateHostUnremoved(data, request, "digest"); err != nil {
 		t.Fatalf("a failed boot barrier held with everything else was refused as no removal effect: %v", err)
 	}
-	effect, err := hostEffect(reconciliation.Destroy, data, request, "digest")
+	effect, err := lifecycle.ReadEffect(hostReading(request, "digest"), reconciliation.Destroy, data)
 	if err != nil || effect != reconciliation.EffectNoEffect {
 		t.Fatalf("destroy over a failed boot barrier = %v, %v", effect, err)
 	}
@@ -65,7 +65,7 @@ func TestAFailedBootBarrierIsNoRemovalEffect(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			damaged := evidence
 			damage(&damaged.FirewallReady)
-			effect, _ := hostEffect(reconciliation.Destroy, encode(t, damaged), request, "digest")
+			effect, _ := lifecycle.ReadEffect(hostReading(request, "digest"), reconciliation.Destroy, encode(t, damaged))
 			if effect == reconciliation.EffectNoEffect {
 				t.Fatal("a failed barrier that is also missing, foreign or disabled proved no removal effect")
 			}

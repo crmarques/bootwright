@@ -53,7 +53,7 @@ func (MachineCapability) Unresolved(verb reconciliation.Verb, block reconciliati
 			Remedy: "stop what listens on " + socket + " on " + host,
 		}, true
 	}
-	effect, refused := machineEffect(verb, evidence, request, block.RequestDigest)
+	effect, refused := lifecycle.ReadEffect(machineReading(request, block.RequestDigest), verb, evidence)
 	if effect != reconciliation.EffectUnknown {
 		return lifecycle.Unresolved{}, false
 	}
@@ -73,7 +73,7 @@ func (HostCapability) Unresolved(verb reconciliation.Verb, block reconciliation.
 	if _, err := decodeHostEvidence(evidence, block.RequestDigest); err != nil {
 		return lifecycle.Unresolved{}, false
 	}
-	effect, refused := hostEffect(verb, evidence, request, block.RequestDigest)
+	effect, refused := lifecycle.ReadEffect(hostReading(request, block.RequestDigest), verb, evidence)
 	if effect != reconciliation.EffectUnknown {
 		return lifecycle.Unresolved{}, false
 	}

@@ -167,7 +167,7 @@ func hostGroups(verb reconciliation.Verb, request HostRequest) []reconciliation.
 			{"verify-absence", "verify every owned resource is gone"},
 		}
 	}
-	return groupsFor(steps, machines)
+	return lifecycle.StepGroups(steps, machines)
 }
 
 // Plan derives one block per realized Machine. Each requires its provider host
@@ -291,15 +291,7 @@ func machineGroups(verb reconciliation.Verb, request MachineRequest) []reconcili
 			{"verify-absence", "verify every owned resource is gone"},
 		}
 	}
-	return groupsFor(steps, machines)
-}
-
-func groupsFor(steps [][2]string, machines []string) []reconciliation.Group {
-	out := make([]reconciliation.Group, 0, len(steps))
-	for _, step := range steps {
-		out = append(out, reconciliation.Group{ID: step[0], Description: step[1], Machines: machines})
-	}
-	return out
+	return lifecycle.StepGroups(steps, machines)
 }
 
 // Removal reads a frozen provider-host block as the removal of what it
@@ -318,37 +310,18 @@ func (c HostCapability) Removal(ctx context.Context, block reconciliation.Block)
 }
 
 func (c HostCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "apply")
+	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "apply")
 }
 
 func (c HostCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "destroy")
+	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "destroy")
 }
 
-func (c HostCapability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
-	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
-	request, err := c.prepare(ctx, execution)
-	if err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+func (c HostCapability) mutation() lifecycle.Mutation[HostRequest] {
+	return lifecycle.Mutation[HostRequest]{
+		Prepare: c.prepare, Run: c.run, Reading: hostReading,
+		Unusable: refusal("lifecycle.state", "the provider host adapter reported no usable outcome", ""),
 	}
-	result, err := c.run(ctx, execution, operation, request)
-	if err != nil {
-		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
-	}
-	outcome, err := usableOutcome(result, "provider host")
-	if err != nil {
-		return unknown, err
-	}
-	digest := execution.Block.RequestDigest
-	if operation == "apply" {
-		err = ValidateHostPresence(result.Evidence, request, digest)
-	} else {
-		err = ValidateHostAbsence(result.Evidence, digest)
-	}
-	if err != nil {
-		return unknown, err
-	}
-	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
 
 // Observe is read-only against the frozen request. Live state matching it in
@@ -359,7 +332,7 @@ func (c HostCapability) mutate(ctx context.Context, execution lifecycle.Executio
 // storage driver that does not answer reports no network and no pool, so it
 // proves nothing: silence with nothing else of this context's is unknown.
 func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, reconciliation.Apply)
+	return lifecycle.ObserveBlock(ctx, c.mutation(), execution, reconciliation.Apply)
 }
 
 // ObserveRemoval reads the same observation for what a removal takes back, not
@@ -372,54 +345,19 @@ func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Executi
 // connection or driver that does not answer proves none of them absent, so it
 // stays unknown.
 func (c HostCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, reconciliation.Destroy)
+	return lifecycle.ObserveBlock(ctx, c.mutation(), execution, reconciliation.Destroy)
 }
 
-// hostEffect is the one reading of a provider host observation for the verb
-// the block was frozen for: an apply's checks are its presence, absence and
-// partial forms, a removal's its absence, unremoved and unfinished forms, each
-// in that order. When none accepts the evidence the effect is unknown, and the
-// refusal that decided it comes back with it: the presence check's for an
-// apply, the unfinished removal's for a removal.
-func hostEffect(verb reconciliation.Verb, evidence []byte, request HostRequest, digest string) (reconciliation.EffectState, error) {
-	if verb == reconciliation.Destroy {
-		switch {
-		case ValidateHostAbsence(evidence, digest) == nil:
-			return reconciliation.EffectCompleted, nil
-		case ValidateHostUnremoved(evidence, request, digest) == nil:
-			return reconciliation.EffectNoEffect, nil
-		}
-		if err := ValidateHostRemovalUnfinished(evidence, request, digest); err != nil {
-			return reconciliation.EffectUnknown, err
-		}
-		return reconciliation.EffectPartial, nil
+// hostReading reads a provider host observation for the verb the block was
+// frozen for.
+func hostReading(request HostRequest, digest string) lifecycle.EffectReading {
+	return lifecycle.EffectReading{
+		Presence:   func(evidence []byte) error { return ValidateHostPresence(evidence, request, digest) },
+		Absence:    func(evidence []byte) error { return ValidateHostAbsence(evidence, digest) },
+		Partial:    func(evidence []byte) error { return ValidateHostPartial(evidence, digest) },
+		Unremoved:  func(evidence []byte) error { return ValidateHostUnremoved(evidence, request, digest) },
+		Unfinished: func(evidence []byte) error { return ValidateHostRemovalUnfinished(evidence, request, digest) },
 	}
-	presence := ValidateHostPresence(evidence, request, digest)
-	switch {
-	case presence == nil:
-		return reconciliation.EffectCompleted, nil
-	case ValidateHostAbsence(evidence, digest) == nil:
-		return reconciliation.EffectNoEffect, nil
-	case ValidateHostPartial(evidence, digest) == nil:
-		return reconciliation.EffectPartial, nil
-	}
-	return reconciliation.EffectUnknown, presence
-}
-
-// observe runs the one read-only observation both resolutions share and reads
-// its evidence for the verb the block was frozen for.
-func (c HostCapability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
-	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
-	request, err := c.prepare(ctx, execution)
-	if err != nil {
-		return unknown, err
-	}
-	result, err := c.run(ctx, execution, "observe", request)
-	if err != nil {
-		return unknown, err
-	}
-	effect, _ := hostEffect(verb, result.Evidence, request, execution.Block.RequestDigest)
-	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
 }
 
 func (c HostCapability) prepare(ctx context.Context, execution lifecycle.Execution) (HostRequest, error) {
@@ -460,44 +398,25 @@ func (c MachineCapability) Removal(ctx context.Context, block reconciliation.Blo
 }
 
 func (c MachineCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "apply")
+	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "apply")
 }
 
 func (c MachineCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "destroy")
+	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "destroy")
 }
 
-func (c MachineCapability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
-	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
-	request, err := c.prepare(ctx, execution)
-	if err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+func (c MachineCapability) mutation() lifecycle.Mutation[MachineRequest] {
+	return lifecycle.Mutation[MachineRequest]{
+		Prepare: c.prepare, Run: c.run, Reading: machineReading,
+		Unusable: refusal("lifecycle.state", "the machine adapter reported no usable outcome", ""),
 	}
-	result, err := c.run(ctx, execution, operation, request)
-	if err != nil {
-		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
-	}
-	outcome, err := usableOutcome(result, "machine")
-	if err != nil {
-		return unknown, err
-	}
-	digest := execution.Block.RequestDigest
-	if operation == "apply" {
-		err = ValidateMachinePresence(result.Evidence, request, digest)
-	} else {
-		err = ValidateMachineAbsence(result.Evidence, digest)
-	}
-	if err != nil {
-		return unknown, err
-	}
-	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
 
 // Observe is read-only. Nothing present with no recorded before-state is
 // positive no effect; this context's own domain, controller or disks part way
 // realized is positive partial; a foreign domain stays unknown.
 func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, reconciliation.Apply)
+	return lifecycle.ObserveBlock(ctx, c.mutation(), execution, reconciliation.Apply)
 }
 
 // ObserveRemoval reads the same observation for what a removal takes back, not
@@ -510,54 +429,19 @@ func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Exec
 // converges, whatever the apply's postcondition says. A listener alone is not
 // proved to be this Machine's, so it stays unknown.
 func (c MachineCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, reconciliation.Destroy)
+	return lifecycle.ObserveBlock(ctx, c.mutation(), execution, reconciliation.Destroy)
 }
 
-// machineEffect is the one reading of a machine observation for the verb the
-// block was frozen for: an apply's checks are its presence, absence and
-// partial forms, a removal's its absence, unremoved and unfinished forms, each
-// in that order. When none accepts the evidence the effect is unknown, and the
-// refusal that decided it comes back with it: the presence check's for an
-// apply, the unfinished removal's for a removal.
-func machineEffect(verb reconciliation.Verb, evidence []byte, request MachineRequest, digest string) (reconciliation.EffectState, error) {
-	if verb == reconciliation.Destroy {
-		switch {
-		case ValidateMachineAbsence(evidence, digest) == nil:
-			return reconciliation.EffectCompleted, nil
-		case ValidateMachineUnremoved(evidence, request, digest) == nil:
-			return reconciliation.EffectNoEffect, nil
-		}
-		if err := ValidateMachineRemovalUnfinished(evidence, request, digest); err != nil {
-			return reconciliation.EffectUnknown, err
-		}
-		return reconciliation.EffectPartial, nil
+// machineReading reads a machine observation for the verb the block was frozen
+// for.
+func machineReading(request MachineRequest, digest string) lifecycle.EffectReading {
+	return lifecycle.EffectReading{
+		Presence:   func(evidence []byte) error { return ValidateMachinePresence(evidence, request, digest) },
+		Absence:    func(evidence []byte) error { return ValidateMachineAbsence(evidence, digest) },
+		Partial:    func(evidence []byte) error { return ValidateMachinePartial(evidence, digest) },
+		Unremoved:  func(evidence []byte) error { return ValidateMachineUnremoved(evidence, request, digest) },
+		Unfinished: func(evidence []byte) error { return ValidateMachineRemovalUnfinished(evidence, request, digest) },
 	}
-	presence := ValidateMachinePresence(evidence, request, digest)
-	switch {
-	case presence == nil:
-		return reconciliation.EffectCompleted, nil
-	case ValidateMachineAbsence(evidence, digest) == nil:
-		return reconciliation.EffectNoEffect, nil
-	case ValidateMachinePartial(evidence, digest) == nil:
-		return reconciliation.EffectPartial, nil
-	}
-	return reconciliation.EffectUnknown, presence
-}
-
-// observe runs the one read-only observation both resolutions share and reads
-// its evidence for the verb the block was frozen for.
-func (c MachineCapability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
-	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
-	request, err := c.prepare(ctx, execution)
-	if err != nil {
-		return unknown, err
-	}
-	result, err := c.run(ctx, execution, "observe", request)
-	if err != nil {
-		return unknown, err
-	}
-	effect, _ := machineEffect(verb, result.Evidence, request, execution.Block.RequestDigest)
-	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
 }
 
 func (c MachineCapability) prepare(ctx context.Context, execution lifecycle.Execution) (MachineRequest, error) {
@@ -588,13 +472,6 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 		Implementation: MachineImplementation, Operation: operation, Variable: machineVariable,
 		Canonical: canonical, Placement: request.Placement, Materials: materials,
 	}))
-}
-
-func usableOutcome(result lifecycle.RunResult, subject string) (reconciliation.Outcome, error) {
-	if result.Outcome.Settled() {
-		return result.Outcome, nil
-	}
-	return "", refusal("lifecycle.state", "the "+subject+" adapter reported no usable outcome", "")
 }
 
 // Unsupported refuses every selected object neither capability can realize,

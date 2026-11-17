@@ -138,15 +138,7 @@ func hostGroups(verb reconciliation.Verb, request HostRequest) []reconciliation.
 	if verb == reconciliation.Destroy {
 		steps = [][2]string{{"release-proof", "take nothing back; the host cluster is the operator's"}}
 	}
-	return groupsFor(steps, []string{request.Placement.Machine})
-}
-
-func groupsFor(steps [][2]string, machines []string) []reconciliation.Group {
-	out := make([]reconciliation.Group, 0, len(steps))
-	for _, step := range steps {
-		out = append(out, reconciliation.Group{ID: step[0], Description: step[1], Machines: machines})
-	}
-	return out
+	return lifecycle.StepGroups(steps, []string{request.Placement.Machine})
 }
 
 func (c HostCapability) Removal(_ context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
@@ -164,50 +156,26 @@ func (c HostCapability) Removal(_ context.Context, block reconciliation.Block) (
 // Apply runs the proof. It changes nothing on the host, so a proof that holds
 // is unchanged and one that does not fails before any Machine is touched.
 func (c HostCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	request, err := c.prepare(ctx, execution)
-	if err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
-	}
-	result, err := c.prove(ctx, execution, "apply", request)
-	if err != nil {
-		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
-	}
-	outcome, err := usableOutcome(result, "KubeVirt provider")
-	if err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
-	}
-	if err := ValidateHostPresence(result.Evidence, request, execution.Block.RequestDigest); err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
-	}
-	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
+	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "apply")
 }
 
 // Destroy publishes the proof released: it reads nothing on the host and is
 // lent no access, because the proof created nothing there to take back.
 func (c HostCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	request, err := c.prepare(ctx, execution)
-	if err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
-	}
-	result, err := c.prove(ctx, execution, "destroy", request)
-	if err != nil {
-		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
-	}
-	outcome, err := usableOutcome(result, "KubeVirt provider")
-	if err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
-	}
-	if err := ValidateHostAbsence(result.Evidence, execution.Block.RequestDigest); err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
-	}
-	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
+	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "destroy")
 }
 
-func usableOutcome(result lifecycle.RunResult, subject string) (reconciliation.Outcome, error) {
-	if result.Outcome.Settled() {
-		return result.Outcome, nil
+func (c HostCapability) mutation() lifecycle.Mutation[HostRequest] {
+	return lifecycle.Mutation[HostRequest]{
+		Prepare: c.prepare, Run: c.prove,
+		Reading: func(request HostRequest, digest string) lifecycle.EffectReading {
+			return lifecycle.EffectReading{
+				Presence: func(evidence []byte) error { return ValidateHostPresence(evidence, request, digest) },
+				Absence:  func(evidence []byte) error { return ValidateHostAbsence(evidence, digest) },
+			}
+		},
+		Unusable: refusal("lifecycle.state", "the KubeVirt provider adapter reported no usable outcome", ""),
 	}
-	return "", refusal("lifecycle.state", "the "+subject+" adapter reported no usable outcome", "")
 }
 
 // Observe repeats the proof read-only: a holding proof is completed, any
@@ -450,7 +418,7 @@ func machineGroups(verb reconciliation.Verb, request MachineRequest) []reconcili
 			{"verify-absence", "verify the VirtualMachine, its DataVolumes and its claims are gone"},
 		}
 	}
-	return groupsFor(steps, []string{request.Identity.Object})
+	return lifecycle.StepGroups(steps, []string{request.Identity.Object})
 }
 
 func (c MachineCapability) Removal(_ context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
@@ -467,40 +435,21 @@ func (c MachineCapability) Removal(_ context.Context, block reconciliation.Block
 }
 
 func (c MachineCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "apply")
+	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "apply")
 }
 
 func (c MachineCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "destroy")
+	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "destroy")
 }
 
-func (c MachineCapability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
-	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
-	request, err := c.prepare(ctx, execution)
-	if err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+func (c MachineCapability) mutation() lifecycle.Mutation[MachineRequest] {
+	return lifecycle.Mutation[MachineRequest]{
+		Prepare: c.prepare, Run: c.run, Reading: machineReading,
+		Unusable: refusal("lifecycle.state", "the KubeVirt machine adapter reported no usable outcome", ""),
+		Proved: func(execution lifecycle.Execution, request MachineRequest, result lifecycle.RunResult) error {
+			return samePin(result.Evidence, execution.Block.RequestDigest, execution.ApplyProved, request.Provider)
+		},
 	}
-	result, err := c.run(ctx, execution, operation, request)
-	if err != nil {
-		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
-	}
-	outcome, err := usableOutcome(result, "KubeVirt machine")
-	if err != nil {
-		return unknown, err
-	}
-	digest := execution.Block.RequestDigest
-	if operation == "apply" {
-		err = ValidateMachinePresence(result.Evidence, request, digest)
-	} else {
-		err = ValidateMachineAbsence(result.Evidence, digest)
-	}
-	if err != nil {
-		return unknown, err
-	}
-	if err := samePin(result.Evidence, digest, execution.ApplyProved, request.Provider); err != nil {
-		return unknown, err
-	}
-	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
 
 // samePin holds a mutation's evidence to the cluster its provider's proof recorded.
@@ -530,49 +479,24 @@ func (c MachineCapability) ObserveRemoval(ctx context.Context, execution lifecyc
 	return c.observe(ctx, execution, reconciliation.Destroy)
 }
 
-// machineEffect is the one reading of an observation for the verb the block
-// was frozen for, as the libvirt arm reads its own.
-func machineEffect(verb reconciliation.Verb, evidence []byte, request MachineRequest, digest string) (reconciliation.EffectState, error) {
-	if verb == reconciliation.Destroy {
-		switch {
-		case ValidateMachineAbsence(evidence, digest) == nil:
-			return reconciliation.EffectCompleted, nil
-		case ValidateMachineUnremoved(evidence, request, digest) == nil:
-			return reconciliation.EffectNoEffect, nil
-		}
-		if err := ValidateMachineRemovalUnfinished(evidence, request, digest); err != nil {
-			return reconciliation.EffectUnknown, err
-		}
-		return reconciliation.EffectPartial, nil
+// machineReading reads an observation for the verb the block was frozen for,
+// as the libvirt arm reads its own.
+func machineReading(request MachineRequest, digest string) lifecycle.EffectReading {
+	return lifecycle.EffectReading{
+		Presence:   func(evidence []byte) error { return ValidateMachinePresence(evidence, request, digest) },
+		Absence:    func(evidence []byte) error { return ValidateMachineAbsence(evidence, digest) },
+		Partial:    func(evidence []byte) error { return ValidateMachinePartial(evidence, digest) },
+		Unremoved:  func(evidence []byte) error { return ValidateMachineUnremoved(evidence, request, digest) },
+		Unfinished: func(evidence []byte) error { return ValidateMachineRemovalUnfinished(evidence, request, digest) },
 	}
-	presence := ValidateMachinePresence(evidence, request, digest)
-	switch {
-	case presence == nil:
-		return reconciliation.EffectCompleted, nil
-	case ValidateMachineAbsence(evidence, digest) == nil:
-		return reconciliation.EffectNoEffect, nil
-	case ValidateMachinePartial(evidence, digest) == nil:
-		return reconciliation.EffectPartial, nil
-	}
-	return reconciliation.EffectUnknown, presence
 }
 
 func (c MachineCapability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
-	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
-	request, err := c.prepare(ctx, execution)
-	if err != nil {
-		return unknown, err
-	}
-	result, err := c.run(ctx, execution, "observe", request)
-	if err != nil {
-		return unknown, err
-	}
-	effect, _ := machineEffect(verb, result.Evidence, request, execution.Block.RequestDigest)
-	observation := lifecycle.Observation{Effect: effect, Evidence: result.Evidence}
-	if effect == reconciliation.EffectCompleted && verb == reconciliation.Apply {
+	observation, err := lifecycle.ObserveBlock(ctx, c.mutation(), execution, verb)
+	if err == nil && observation.Effect == reconciliation.EffectCompleted && verb == reconciliation.Apply {
 		observation.Outcome = reconciliation.OutcomeUnchanged
 	}
-	return observation, nil
+	return observation, err
 }
 
 func (c MachineCapability) prepare(ctx context.Context, execution lifecycle.Execution) (MachineRequest, error) {
