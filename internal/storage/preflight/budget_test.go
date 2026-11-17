@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"sync/atomic"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
@@ -123,20 +124,20 @@ func TestAllocatedCapacityNeedsLiveCreditAndNeverDoubleCharges(t *testing.T) {
 
 func TestCapacityObserverReceivesDeadlineAndAllHostAllocations(t *testing.T) {
 	b := fixtureBudget()
-	calls := 0
+	var calls atomic.Int64
 	b.Observer = observeFunc(func(ctx context.Context, target Target) (Facts, error) {
-		calls++
+		calls.Add(1)
 		if _, ok := ctx.Deadline(); !ok {
-			t.Fatal("observation has no deadline")
+			t.Error("observation has no deadline")
 		}
 		if len(target.Allocations) != 2 {
-			t.Fatal("other guest commitments were hidden")
+			t.Error("other guest commitments were hidden")
 		}
 		return Facts{}, nil
 	})
 	_, err := b.Check(context.Background(), []Allocation{{Machine: "a", Host: "host", Pool: "/a"}, {Machine: "b", Host: "host", Pool: "/b"}}, nil, false)
-	if err != nil || calls != 2 {
-		t.Fatalf("%d %v", calls, err)
+	if err != nil || calls.Load() != 2 {
+		t.Fatalf("%d %v", calls.Load(), err)
 	}
 }
 

@@ -15,6 +15,7 @@ const (
 	Pending            = "pending"
 	ProbeTimeout       = 10 * time.Second
 	RemoteProbeTimeout = 60 * time.Second
+	ProbeConcurrency   = 8
 )
 
 type Quantities struct{ CPU, Memory, Disk int64 }

@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/crmarques/bootwright/internal/fanout"
 )
 
 type Budget struct {
@@ -63,13 +65,15 @@ func (b Budget) Check(ctx context.Context, allocations []Allocation, writes []Wr
 	if err != nil {
 		return nil, err
 	}
+	observed := fanout.Run(ctx, fanout.Options[*budgetGroup, observation]{Limit: ProbeConcurrency}, groups, func(ctx context.Context, group *budgetGroup) (observation, error) {
+		return b.observeGroup(ctx, group, dryRun)
+	})
+	if err := fanout.FirstError(observed); err != nil {
+		return nil, err
+	}
 	rows := make([]observation, 0, len(groups))
-	for _, group := range groups {
-		row, err := b.observeGroup(ctx, group, dryRun)
-		if err != nil {
-			return nil, err
-		}
-		rows = append(rows, row)
+	for _, row := range observed {
+		rows = append(rows, row.Value)
 	}
 	hosts, disks, err := groupObservations(rows)
 	if err != nil {
@@ -88,23 +92,33 @@ func (b Budget) addWrites(ctx context.Context, disks map[string]observation, wri
 	for _, row := range disks {
 		hosts[row.target.Host] = true
 	}
-	observed := map[string]Facts{}
+	var keys []string
+	targets := map[string]Target{}
 	for _, write := range writes {
 		if write.Label == "" || write.Path == "" || write.Bytes < 0 {
 			return errors.New("capacity projection contains an invalid write")
 		}
+		key := write.Host + "\x00" + write.Path
+		if _, seen := targets[key]; hosts[write.Host] && !seen {
+			keys = append(keys, key)
+			targets[key] = Target{Host: write.Host, Pool: write.Path, Context: write.Context, Local: write.Local, DiskOnly: true}
+		}
+	}
+	probed := fanout.Run(ctx, fanout.Options[string, Facts]{Limit: ProbeConcurrency}, keys, func(ctx context.Context, key string) (Facts, error) {
+		return b.observeDisk(ctx, targets[key])
+	})
+	if err := fanout.FirstError(probed); err != nil {
+		return err
+	}
+	observed := make(map[string]Facts, len(keys))
+	for index, key := range keys {
+		observed[key] = probed[index].Value
+	}
+	for _, write := range writes {
 		if !hosts[write.Host] {
 			continue
 		}
-		key := write.Host + "\x00" + write.Path
-		facts, seen := observed[key]
-		if !seen {
-			var err error
-			if facts, err = b.observeDisk(ctx, Target{Host: write.Host, Pool: write.Path, Context: write.Context, Local: write.Local, DiskOnly: true}); err != nil {
-				return err
-			}
-			observed[key] = facts
-		}
+		facts := observed[write.Host+"\x00"+write.Path]
 		var err error
 		for id, row := range disks {
 			if row.target.Host != write.Host {
