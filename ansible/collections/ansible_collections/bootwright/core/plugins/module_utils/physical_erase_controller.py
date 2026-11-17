@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shutil
 import stat
 import time
 
@@ -59,6 +60,12 @@ def contact(argv, data=b""):
         return ssh.Outcome(None, b"", False, False, "exit")
     cause = None if code != 255 else next((name for marker, name in SESSION_CAUSES if marker in errors), "exit")
     return ssh.Outcome(code, output, False, False, cause)
+
+
+def removal(attempt):
+    """The removal operation an original attempt <operation>/<block>/<attempt> names, or ''."""
+    parts = attempt.split("/") if isinstance(attempt, str) else []
+    return parts[0] if len(parts) == 3 and re.fullmatch("[A-Za-z0-9-]{1,128}", parts[0]) else ""
 
 
 def native(argv, timeout=60):
@@ -147,7 +154,55 @@ class Controller:
             raise worker.Refusal("foreign-target")
         return state
 
+    def supersede(self):
+        """Withdraw an earlier removal's unfinished custody before this removal writes its own.
+
+        Custody belongs to one removal attempt lineage. One a failed or
+        replaced removal left, with no finalizing or completed record, is
+        withdrawn: its private image, its boot-private key and files, and its
+        receipt, kept aside as superseded-<operation>.json and never adopted.
+        A finalizing or completed custody is kept as it is, and a retry of
+        the same removal keeps its custody unchanged.
+        """
+        path = self.root / "custody.json"
+        if not path.exists():
+            return
+        state = json.loads(read(path))
+        earlier = removal(state.get("originalAttempt"))
+        if earlier == removal(self.material["originalAttempt"]):
+            return
+        if (self.root / "finalizing.json").exists() or (self.root / "completed.json").exists():
+            return
+        if state.get("request") != self.digest or state.get("applyOperation") != self.material["applyOperation"]:
+            raise worker.Refusal("foreign-custody")
+        if not re.fullmatch("[0-9a-f]{64}", str(state.get("token"))) or not earlier:
+            raise worker.Refusal("custody-token")
+        publication = Path(self.request["install"]["private"]["path"])
+        private = publication / state["token"]
+        try:
+            info = private.lstat()
+        except FileNotFoundError:
+            pass
+        else:
+            if not stat.S_ISDIR(info.st_mode):
+                raise worker.Refusal("custody-token")
+            shutil.rmtree(private)
+            descriptor = os.open(publication, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        for name in ("host-key", "host-key.pub", "ks.cfg", "ssh_config", "known_hosts", "erase.iso"):
+            (self.root / name).unlink(missing_ok=True)
+        receipt = self.root / "receipt.json"
+        if receipt.exists():
+            os.replace(receipt, self.root / ("superseded-" + earlier + ".json"))
+        os.fsync(self.lock)
+        path.unlink()
+        os.fsync(self.lock)
+
     def prepare(self):
+        self.supersede()
         path = self.root / "custody.json"
         if not path.exists():
             self.worker_request = self.worker_for(self.material["originalAttempt"])

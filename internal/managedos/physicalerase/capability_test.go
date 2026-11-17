@@ -496,3 +496,21 @@ func TestPhysicalEraseRootTargetAgreesWithTheDeclaredRootSize(t *testing.T) {
 		}
 	}
 }
+
+func TestPhysicalEraseFreshRemovalBootsUnderItsOwnLineageAndRefusesASupersededReceipt(t *testing.T) {
+	request, execution := eraseDestroyExecution(t)
+	runner := &fakeRunner{}
+	capability := New(runner).WithIdentities(&pinReader{pinned: true, identity: machineref.HardwareIdentity{UUID: "example-system"}})
+	superseded := eraseFixtureReceipt(request)
+	superseded.Request = execution.Block.RequestDigest
+	superseded.OriginalAttempt = "remove-1/" + execution.Block.ID + "/1"
+	proof, _ := json.Marshal(EraseEvidence{Version: EraseImplementation, Request: execution.Block.RequestDigest, Prepared: true, Removed: true, Receipt: &superseded})
+	runner.result = lifecycle.RunResult{Outcome: "changed", Evidence: proof}
+	_, err := capability.Destroy(context.Background(), execution)
+	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "another removal attempt lineage") {
+		t.Fatalf("a superseded removal's receipt = %v, want the lineage refusal", found)
+	}
+	if got, want := runner.requests[0].MaterialValues["originalAttempt"], "remove-2/"+execution.Block.ID+"/1"; got != want {
+		t.Fatalf("the fresh removal's original attempt = %q, want %q", got, want)
+	}
+}

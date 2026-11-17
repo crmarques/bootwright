@@ -250,3 +250,84 @@ class UnreachableWorkerTests(unittest.TestCase):
                 self.assertNotIn(b"192.0.2.10", outcome.stdout)
         with patch.object(controller.bounded_process, "run", side_effect=controller.bounded_process.Failure("timeout")):
             self.assertEqual(controller.contact(["/usr/bin/ssh"]).cause, "timeout")
+
+
+class RemovalCustodyTests(unittest.TestCase):
+    """Custody belongs to one removal: a fresh removal never boots under, or adopts, an earlier one's attempt."""
+
+    OPERATION = "op-" + "0" * 32
+
+    def prepared(self, temporary, attempt):
+        import contextlib
+
+        hosted, publication = Path(temporary) / "hosted", Path(temporary) / "published"
+        publication.mkdir(exist_ok=True)
+        request = {"version": "physical-erase-v1", "network": "network --bootproto=dhcp",
+                   "install": {"identity": {"context": "lab", "object": "metal-01"}, "address": "192.0.2.10",
+                               "private": {"path": str(publication), "url": "https://artifact.example.test/private"}}}
+        material = {"applyOperation": self.OPERATION, "originalAttempt": attempt, "authorizedKey": "ssh-ed25519 AAAA fleet"}
+
+        def keygen(argv, timeout=60):
+            if argv[-2] == "-f" and "-y" not in argv:
+                Path(argv[-1]).write_text("private host key " + attempt)
+                Path(argv[-1] + ".pub").write_text("public host key")
+            return b"ecdsa-sha2-nistp256 AAAA host"
+
+        with contextlib.ExitStack() as stack:
+            for target, name, value in (
+                (controller, "ROOT", hosted),
+                (controller, "directory", lambda path, create, mode=0o700: path.mkdir(mode=0o700, exist_ok=True) if create else None),
+                (controller, "read", lambda path, limit=32768: Path(path).read_bytes()),
+                (controller, "native", keygen),
+                (controller.worker, "validate_request", lambda value: None),
+                (controller.worker, "validate_receipt", lambda request, receipt: None),
+                (controller.Controller, "worker_for", lambda self, original: {"originalAttempt": original, "request": self.digest}),
+                (controller.ssh_key_policy, "read_policy", lambda: {}),
+                (controller.ssh_key_policy, "effective_policy", lambda policy: {"configuration": "Host *\n"}),
+                (controller.ssh_key_policy, "check_keys", lambda policy, keys: None),
+                (controller.boot, "kickstart", lambda network, worker_request, key, authorized: "kickstart " + worker_request["originalAttempt"]),
+                (controller.Controller, "session", lambda self, command, data=b"": controller.ssh.Outcome(255, b"", False, False, "refused")),
+            ):
+                stack.enter_context(patch.object(target, name, value))
+            instance = controller.Controller(request, "a" * 64, material, create=True)
+            try:
+                return instance.prepare(), instance.root, publication
+            finally:
+                instance.close()
+
+    def test_a_fresh_removal_withdraws_the_earlier_removals_custody_and_boots_under_its_own_attempt(self):
+        import json
+
+        with tempfile.TemporaryDirectory() as temporary:
+            first, root, publication = self.prepared(temporary, "op-remove-1/erase-metal-01/1")
+            earlier = json.loads((root / "custody.json").read_text())
+            (publication / earlier["token"]).mkdir()
+            (publication / earlier["token"] / "erase.iso").write_bytes(b"earlier private image")
+            (root / "receipt.json").write_text(json.dumps({"state": "complete", "originalAttempt": earlier["originalAttempt"]}))
+            again, _root, _publication = self.prepared(temporary, "op-remove-1/erase-metal-01/2")
+            self.assertEqual(again["private"], first["private"], "a retry of the same removal keeps its custody")
+            self.assertIsNotNone(again["receipt"])
+
+            fresh, _root, _publication = self.prepared(temporary, "op-remove-2/erase-metal-01/1")
+            custody = json.loads((root / "custody.json").read_text())
+            self.assertEqual(custody["originalAttempt"], "op-remove-2/erase-metal-01/1")
+            self.assertEqual(custody["worker"]["originalAttempt"], "op-remove-2/erase-metal-01/1")
+            self.assertNotEqual(custody["token"], earlier["token"])
+            self.assertFalse((publication / earlier["token"]).exists(), "the earlier removal's private image is still published")
+            self.assertIsNone(fresh["receipt"])
+            self.assertEqual((root / "host-key").read_text(), "private host key op-remove-2/erase-metal-01/1")
+            self.assertEqual((root / "ks.cfg").read_text(), "kickstart op-remove-2/erase-metal-01/1")
+            superseded = json.loads((root / "superseded-op-remove-1.json").read_text())
+            self.assertEqual(superseded["originalAttempt"], earlier["originalAttempt"])
+            self.assertFalse((root / "receipt.json").exists())
+
+    def test_a_completed_earlier_removal_keeps_its_custody(self):
+        import json
+
+        with tempfile.TemporaryDirectory() as temporary:
+            _first, root, _publication = self.prepared(temporary, "op-remove-1/erase-metal-01/1")
+            earlier = (root / "custody.json").read_bytes()
+            (root / "completed.json").write_text(json.dumps({"removed": True}))
+            self.prepared(temporary, "op-remove-2/erase-metal-01/1")
+            self.assertEqual((root / "custody.json").read_bytes(), earlier)
+            self.assertTrue((root / "completed.json").exists())

@@ -2650,9 +2650,14 @@ the execution host, in
 `/var/lib/bootwright-hosted/<context>/machines/<machine>/erase/<operation>/`
 of the context's [hosted directory](contexts.md#hosted-root), beneath the
 immutable original apply operation identity so reuse of a context name cannot
-adopt an old receipt. Initial private custody is
-atomically committed before boot; its first erase attempt remains frozen across
-retries. The installed OS's existing host key is never the erase
+adopt an old receipt. Custody belongs to one removal: initial private custody is
+atomically committed before boot, and its first erase attempt remains frozen across
+retries of that removal. A fresh removal that finds custody naming another
+removal's attempt, with no finalizing or completed record, withdraws that
+custody's private publication and boot-private files, sets its receipt aside as
+`superseded-<operation>.json` without adopting it, and then writes its own; a
+finalizing or completed custody of an earlier removal is kept, never adopted.
+The path is unchanged. The installed OS's existing host key is never the erase
 receipt identity. The RAM service accepts only receipt reads and receipt-hash
 acknowledgement through pinned SSH. A complete receipt binds request, original
 attempt, system UUID, MAC set and exact written/verified coverage of every disk.
