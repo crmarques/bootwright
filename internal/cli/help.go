@@ -20,14 +20,9 @@ func writeHelp(w io.Writer, command *cobra.Command) error {
 	text.section("Usage")
 	text.lines([]string{command.UseLine()})
 	if command == command.Root() {
-		for _, group := range []struct{ title, names string }{
-			{"Host", "controller media"},
-			{"Context", "context secret validate preflight plan apply destroy status logs diff"},
-			{"Resources", "machine cluster add-ons render"},
-			{"Tools", "version schema sbom completion help"},
-		} {
+		for _, group := range rootHelpGroups {
 			var rows [][]string
-			for _, name := range strings.Fields(group.names) {
+			for _, name := range group.names {
 				if child := exactChild(command, name); child != nil && !child.Hidden {
 					rows = append(rows, []string{name, child.Short})
 				}
@@ -92,25 +87,11 @@ func writeConciseHelp(w io.Writer, command *cobra.Command) error {
 	return err
 }
 
-func presentationCommand(path string) bool {
-	return path == "help" || path == "version" || path == "schema" || path == "sbom" || strings.HasPrefix(path, "completion ")
-}
+func presentationCommand(path string) bool { return specFor(path).presentation }
 
-func helpExample(path string) string {
-	examples := map[string]string{
-		"add-ons list": "--output json", "add-ons info": "--name metallb",
-		"machine info": "--context lab --name node", "secret info": "--context lab --name ssh-key",
-		"context init": "--name lab --input-dir ./input", "context update": "--name lab --input-dir ./input", "context use": "--name lab", "context list": "", "context current": "--short", "context delete": "--name lab --purge",
-		"secret set": "--name token --value-file ./token --yes", "secret generate": "--name ssh-key", "secret check": "--output json", "secret list": "--output json", "secret show": "--name token --part value", "secret delete": "--name token", "secret encryption init": "", "secret encryption status": "", "secret encryption rotate": "",
-		"controller rebind": "", "controller uninstall": "", "media add": "--name installer.iso --from-file ./installer.iso", "media list": "--checksums", "media delete": "--name installer.iso",
-		"validate": "--file ./input --output json", "preflight": "--context lab --stage controller,substrates", "controller check": "", "plan": "--context lab --stage machines", "status": "--context lab", "logs": "--context lab --follow", "diff": "--context lab --observe", "render effective": "--input-dir ./input --output-dir ./artifacts", "render acquisitions": "--input-dir ./input", "apply": "--context lab --stage machines", "destroy": "--context lab",
-		"machine cp": "--context lab --name node local:./config.yaml remote:config.yaml", "machine list": "--context lab --power-status", "machine rsh": "--context lab --name node", "machine exec": "--context lab --name node -- uname -a", "machine discover": "--context lab --name node --prepare-prerequisites --dry-run", "machine start": "--context lab --name node", "machine stop": "--context lab --name node", "machine restart": "--context lab --name node", "machine trust": "--context lab --dry-run", "controller install": "--dry-run", "cluster kubeconfig": "--context lab --name cluster", "cluster keyring": "--context lab --name storage --client vm-disks",
-		"cluster oc": "--context lab --name cluster -- get nodes", "cluster kubectl": "--context lab --name cluster -- get nodes", "cluster update-admin-credentials": "--context lab --name cluster", "cluster list": "--context lab", "cluster info": "--context lab --name storage", "cluster rsh": "--context lab --name storage --node node-1", "cluster exec": "--context lab --name storage -- uname -a",
-		"version": "", "schema": "--format json-schema", "sbom": "--format cyclonedx-json", "help": "context init", "completion bash": "", "completion zsh": "", "completion fish": "", "completion powershell": "",
-	}
-	suffix, ok := examples[path]
-	if !ok {
+func helpExample(spec commandSpec) string {
+	if !spec.implemented && !spec.presentation {
 		return ""
 	}
-	return "  " + strings.TrimSpace("bootwright "+path+" "+suffix)
+	return "  " + strings.TrimSpace("bootwright "+spec.path+" "+spec.example)
 }

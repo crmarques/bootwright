@@ -11,7 +11,7 @@ type AdminCredentialsService interface {
 	UpdateAdminCredentials(context.Context, lifecycle.UpdateAdminCredentialsRequest) (*lifecycle.UpdateAdminCredentialsResult, error)
 }
 
-func (s Services) invokeAdminCredentials(ctx context.Context, values *requestValues) (commandResult, error) {
+func (s Services) invokeAdminCredentials(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
 	if s.AdminCredentials == nil {
 		return commandResult{}, errMissingService
 	}

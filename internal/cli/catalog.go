@@ -1,6 +1,15 @@
 package cli
 
-import "strings"
+import (
+	"context"
+	"strings"
+	"sync"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+)
+
+type commandInvoker func(Services, context.Context, *requestValues, []string) (commandResult, error)
 
 type commandSpec struct {
 	path     string
@@ -11,9 +20,36 @@ type commandSpec struct {
 	operands string
 	// implemented marks a command whose application use case is available.
 	// available also marks commands that need the privileged context store.
-	implemented bool
-	privileged  bool
-	session     bool
+	implemented   bool
+	privileged    bool
+	session       bool
+	example       string
+	contextFree   bool
+	sshFlags      []string
+	presentation  bool
+	helpCommand   bool
+	invoke        commandInvoker
+	validate      commandValidator
+	operandCheck  func([]string) error
+	operandRemedy func(*pflag.FlagSet) string
+	refuse        func(*Runner, *cobra.Command) string
+	classify      classifyRules
+	present       commandPresenter
+}
+
+type classifyRules struct {
+	localInput, rootless, ambient, urlStdin func(*pflag.FlagSet) bool
+	unavailable, secretStdin                func(*pflag.FlagSet) string
+}
+
+var rootHelpGroups = []struct {
+	title string
+	names []string
+}{
+	{"Host", []string{"controller", "media"}},
+	{"Context", []string{"context", "secret", "validate", "preflight", "plan", "apply", "destroy", "status", "logs", "diff"}},
+	{"Resources", []string{"machine", "cluster", "add-ons", "render"}},
+	{"Tools", []string{"version", "schema", "sbom", "completion", "help"}},
 }
 
 func SessionCommand(path string) bool { return specFor(path).session }
@@ -38,6 +74,12 @@ type flagSpec struct {
 	// undisclosed marks a value no output repeats.
 	undisclosed bool
 	bare        string
+	// emptyOK marks a flag whose empty occurrence is meaningful, nameList a
+	// comma-separated list the validation normalizes, and blankOK a list
+	// that may hold only separators.
+	emptyOK  bool
+	nameList bool
+	blankOK  bool
 }
 
 func stringFlag(name, help string) flagSpec { return flagSpec{name: name, help: help, kind: "string"} }
@@ -101,7 +143,7 @@ func globalFlags() []flagSpec {
 		enumFlag("detail", "compact", "Select human detail", "compact", "full"),
 		boolFlag("ascii", "Use ASCII status markers"),
 		{name: "width", help: "Set presentation width (0: automatic)", kind: "string", defaultValue: "0"},
-		stringFlag("context", "Select a context (default: current context)"),
+		emptyFlag("context", "Select a context (default: current context)"),
 		stringFlag("ssh-id-file", "Offer an explicit private key for eligible SSH access"),
 		stringFlag("ssh-user", "Borrow an explicit POSIX account for eligible SSH access"),
 		boolFlag("ssh-ask-sudo-password", "Request the borrowed account's sudo password"),
@@ -110,7 +152,9 @@ func globalFlags() []flagSpec {
 	}
 }
 
-func commandCatalog() []commandSpec {
+var commandCatalog = sync.OnceValue(buildCommandCatalog)
+
+func buildCommandCatalog() []commandSpec {
 	var catalog []commandSpec
 	catalog = append(catalog, workspaceCommands()...)
 	catalog = append(catalog, addOnCatalogCommands()...)
@@ -150,7 +194,25 @@ func outputFlag() flagSpec {
 }
 
 func clustersFlag() flagSpec {
-	return stringFlag("clusters", "Select comma-separated cluster names (default: all)")
+	return listFlag("clusters", "Select comma-separated cluster names (default: all)")
+}
+
+func blankClustersFlag() flagSpec {
+	f := clustersFlag()
+	f.blankOK = true
+	return f
+}
+
+func listFlag(name, help string) flagSpec {
+	f := emptyFlag(name, help)
+	f.nameList = true
+	return f
+}
+
+func emptyFlag(name, help string) flagSpec {
+	f := stringFlag(name, help)
+	f.emptyOK = true
+	return f
 }
 
 func dryRunFlag() flagSpec {
@@ -169,7 +231,7 @@ func contextFileFlag() flagSpec {
 
 func stageFlag() flagSpec {
 	flag := stringFlag("stage", "Select comma-separated stages to start (default: all)")
-	flag.enum, flag.enumList = []string{"controller", "infrastructure-services", "substrates", "machines", "clusters", "add-ons"}, true
+	flag.enum, flag.enumList, flag.nameList = []string{"controller", "infrastructure-services", "substrates", "machines", "clusters", "add-ons"}, true, true
 	return flag
 }
 

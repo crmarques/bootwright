@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 )
 
@@ -11,9 +10,15 @@ import (
 // dispatch switch agree. A command added to the public tree without its
 // dispatch arm fails here instead of reaching an operator as an internal error.
 func TestEveryCatalogCommandHasApplicationDispatch(t *testing.T) {
-	presentation := map[string]bool{"version": true, "schema": true, "sbom": true, "help": true}
 	for _, spec := range commandCatalog() {
-		if presentation[spec.path] || strings.HasPrefix(spec.path, "completion ") {
+		if spec.presentation {
+			if spec.invoke != nil {
+				t.Errorf("%s: a presentation command has no application dispatch", spec.path)
+			}
+			continue
+		}
+		if spec.invoke == nil {
+			t.Errorf("%s: no invoke", spec.path)
 			continue
 		}
 		_, err := Services{}.invoke(context.Background(), spec.path, dispatchFlags(), nil)

@@ -16,8 +16,8 @@ func validateDiffFlags(command *cobra.Command) string {
 	return ""
 }
 
-func (r *Runner) diffToolRefusal(command *cobra.Command, path string) string {
-	if path != "diff" || stringValue(command.Flags(), "tool") == "" {
+func (r *Runner) diffToolRefusal(command *cobra.Command) string {
+	if stringValue(command.Flags(), "tool") == "" {
 		return ""
 	}
 	if columns := r.config.Presentation.Columns; columns == nil || columns() <= 0 {

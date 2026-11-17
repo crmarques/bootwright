@@ -100,57 +100,9 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 		return commandResult{}, errors.New("command flags are not configured")
 	}
 	values := requestValues{flags: flags}
-	switch path {
-	case "context init", "context update", "context use", "context list", "context current", "context delete":
-		return s.invokeContexts(ctx, path, &values, args)
-	case "add-ons list", "add-ons info":
-		return s.invokeAddOnCatalog(ctx, path, &values, args)
-	case "secret set", "secret generate", "secret check", "secret list", "secret info", "secret show", "secret delete":
-		return s.invokeSecrets(ctx, path, &values, args)
-	case "secret encryption init", "secret encryption status", "secret encryption rotate":
-		return s.invokeEncryption(ctx, path, &values, args)
-	case "media add", "media list", "media delete":
-		return s.invokeMedia(ctx, path, &values, args)
-	case "render effective":
-		if values.text("output-dir") != "" {
-			return s.invokeArtifacts(ctx, path, &values, args)
-		}
-		return s.invokeDesiredState(ctx, path, &values, args)
-	case "validate", "render acquisitions":
-		return s.invokeDesiredState(ctx, path, &values, args)
-	case "controller install", "controller check", "controller rebind", "controller uninstall":
-		return s.invokeController(ctx, path, &values, args)
-	case "preflight":
-		return s.invokeEnvironmentPreflight(ctx, &values)
-	case "cluster update-admin-credentials":
-		return s.invokeAdminCredentials(ctx, &values)
-	case "cluster list", "cluster info", "cluster keyring":
-		return s.invokeEnvironmentInspection(ctx, path, &values, args)
-	case "cluster rsh", "cluster exec":
-		return s.invokeEnvironmentAccess(ctx, path, &values, args)
-	case "plan", "status", "diff", "apply", "destroy":
-		return s.invokeLifecycle(ctx, path, &values, args)
-	case "logs":
-		return s.invokeLogs(ctx, &values)
-	case "render installer":
-		return commandResult{}, s.invokeInstaller(ctx, path, &values, args)
-	case "render storage":
-		return commandResult{}, s.invokeStorageArtifacts(ctx, path, &values, args)
-	case "machine list", "machine info":
-		return s.invokeMachineInventory(ctx, path, &values, args)
-	case "machine cp":
-		return s.invokeMachineCopy(ctx, &values, args)
-	case "machine rsh", "machine exec":
-		return s.invokeMachineAccess(ctx, path, &values, args)
-	case "machine discover":
-		return s.invokeMachineDiscovery(ctx, &values)
-	case "machine start", "machine stop", "machine restart":
-		return s.invokeMachinePower(ctx, path, &values, args)
-	case "machine trust":
-		return s.invokeMachineTrust(ctx, path, &values, args)
-	case "cluster oc", "cluster kubectl", "cluster kubeconfig":
-		return s.invokeClusterAccess(ctx, path, &values, args)
-	default:
+	spec := specFor(path)
+	if spec.invoke == nil {
 		return commandResult{}, errors.New("command has no application dispatch")
 	}
+	return spec.invoke(s, ctx, &values, args)
 }

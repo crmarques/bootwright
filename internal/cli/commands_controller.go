@@ -2,21 +2,20 @@ package cli
 
 import (
 	"context"
-	"errors"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
 func controllerCheckCommand() commandSpec {
-	return available(commandSpec{path: "controller check", short: "Check what controller install prepares on this host", long: "Verify, without installing or changing anything, the context-independent controller prerequisites controller install prepares on this host: its host packages, the controller runtime and the state root. It selects no context; the prerequisites a context adds are checked by preflight --stage controller and installed by the controller stage of apply."})
+	return available(commandSpec{path: "controller check", classify: classifyRules{ambient: always}, example: "", contextFree: true, invoke: Services.invokeControllerCheck, short: "Check what controller install prepares on this host", long: "Verify, without installing or changing anything, the context-independent controller prerequisites controller install prepares on this host: its host packages, the controller runtime and the state root. It selects no context; the prerequisites a context adds are checked by preflight --stage controller and installed by the controller stage of apply."})
 }
 
 func controllerSetupCommand() commandSpec {
-	return available(commandSpec{path: "controller install", short: "Install context-independent controller prerequisites", flags: []flagSpec{dryRunFlag(), confirmationFlag()}, long: "Prepare this host's context-independent controller prerequisites: the baseline host packages, installed through the host's own dnf, and the controller runtime, a venv on the OS Python holding exactly the wheels this build locks and carries, so it downloads no wheel. This command selects no context; the prerequisites a context adds are installed by the controller stage of apply. A ready host makes no request and no change. Otherwise the plan shows dnf's own preview before confirmation. --dry-run never elevates: it names the host package requirements without a preview and makes no changes, and --dry-run --output json or --output yaml also lists every locked wheel's file, URL and SHA-256. Review the plan before confirming; --yes skips ordinary confirmation."})
+	return available(commandSpec{path: "controller install", classify: classifyRules{rootless: dryRunSelected, ambient: always}, example: "--dry-run", contextFree: true, invoke: Services.invokeControllerInstall, short: "Install context-independent controller prerequisites", flags: []flagSpec{dryRunFlag(), confirmationFlag()}, long: "Prepare this host's context-independent controller prerequisites: the baseline host packages, installed through the host's own dnf, and the controller runtime, a venv on the OS Python holding exactly the wheels this build locks and carries, so it downloads no wheel. This command selects no context; the prerequisites a context adds are installed by the controller stage of apply. A ready host makes no request and no change. Otherwise the plan shows dnf's own preview before confirmation. --dry-run never elevates: it names the host package requirements without a preview and makes no changes, and --dry-run --output json or --output yaml also lists every locked wheel's file, URL and SHA-256. Review the plan before confirming; --yes skips ordinary confirmation."})
 }
 
 func controllerRebindCommand() commandSpec {
-	return available(commandSpec{path: "controller rebind", short: "Rebind the controller record to this host's changed identity", flags: []flagSpec{
+	return available(commandSpec{path: "controller rebind", example: "", contextFree: true, invoke: Services.invokeControllerRebind, short: "Rebind the controller record to this host's changed identity", flags: []flagSpec{
 		confirmationFlag(),
 		undisclosedFlag("machine-id", "Name this host's machine-id; required with --yes"),
 		undisclosedFlag("product-uuid", "Name this host's DMI product UUID; required with --yes"),
@@ -26,7 +25,7 @@ func controllerRebindCommand() commandSpec {
 }
 
 func controllerUninstallCommand() commandSpec {
-	return available(commandSpec{path: "controller uninstall", short: "Remove what controller install added to this host", flags: []flagSpec{
+	return available(commandSpec{path: "controller uninstall", validate: validateUninstall, classify: classifyRules{ambient: uninstallAmbient}, example: "", contextFree: true, invoke: Services.invokeControllerUninstall, short: "Remove what controller install added to this host", flags: []flagSpec{
 		confirmationFlag(),
 		boolFlag("discard-unreadable", "Discard what this build cannot read or attribute: a store another build wrote, or guest disks no removal took back; never removes packages"),
 		boolFlag("keep-packages", "Leave every host package installed and remove only Bootwright's state"),
@@ -40,36 +39,47 @@ type ControllerService interface {
 	Uninstall(context.Context, prerequisites.UninstallRequest) (*prerequisites.UninstallResult, error)
 }
 
-func (s Services) invokeController(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {
+func (s Services) invokeControllerCheck(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
 	if s.Controller == nil {
 		return commandResult{}, errMissingService
 	}
-	var result commandResult
-	var err error
-	switch path {
-	case "controller check":
-		result.controller, err = invokeResult(ctx, values, prerequisites.CheckRequest{}, s.Controller.Check)
-	case "controller install":
-		result.controller, err = invokeResult(ctx, values, prerequisites.SetupRequest{
-			DryRun:           values.boolean("dry-run"),
-			SkipConfirmation: values.boolean("yes"),
-		}, s.Controller.Setup)
-	case "controller rebind":
-		result.rebind, err = invokeResult(ctx, values, prerequisites.RebindRequest{
-			SkipConfirmation: values.boolean("yes"),
-			MachineID:        values.text("machine-id"),
-			ProductUUID:      values.text("product-uuid"),
-			FilesystemUUID:   values.text("root-uuid"),
-			RecordedRetired:  values.boolean("recorded-host-retired"),
-		}, s.Controller.Rebind)
-	case "controller uninstall":
-		result.uninstall, err = invokeResult(ctx, values, prerequisites.UninstallRequest{
-			SkipConfirmation:  values.boolean("yes"),
-			KeepPackages:      values.boolean("keep-packages"),
-			DiscardUnreadable: values.boolean("discard-unreadable"),
-		}, s.Controller.Uninstall)
-	default:
-		return commandResult{}, errors.New("command has no application dispatch")
+	result, err := invokeResult(ctx, values, prerequisites.CheckRequest{}, s.Controller.Check)
+	return commandResult{controller: result}, err
+}
+
+func (s Services) invokeControllerInstall(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
+	if s.Controller == nil {
+		return commandResult{}, errMissingService
 	}
-	return result, err
+	result, err := invokeResult(ctx, values, prerequisites.SetupRequest{
+		DryRun:           values.boolean("dry-run"),
+		SkipConfirmation: values.boolean("yes"),
+	}, s.Controller.Setup)
+	return commandResult{controller: result}, err
+}
+
+func (s Services) invokeControllerRebind(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
+	if s.Controller == nil {
+		return commandResult{}, errMissingService
+	}
+	result, err := invokeResult(ctx, values, prerequisites.RebindRequest{
+		SkipConfirmation: values.boolean("yes"),
+		MachineID:        values.text("machine-id"),
+		ProductUUID:      values.text("product-uuid"),
+		FilesystemUUID:   values.text("root-uuid"),
+		RecordedRetired:  values.boolean("recorded-host-retired"),
+	}, s.Controller.Rebind)
+	return commandResult{rebind: result}, err
+}
+
+func (s Services) invokeControllerUninstall(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
+	if s.Controller == nil {
+		return commandResult{}, errMissingService
+	}
+	result, err := invokeResult(ctx, values, prerequisites.UninstallRequest{
+		SkipConfirmation:  values.boolean("yes"),
+		KeepPackages:      values.boolean("keep-packages"),
+		DiscardUnreadable: values.boolean("discard-unreadable"),
+	}, s.Controller.Uninstall)
+	return commandResult{uninstall: result}, err
 }

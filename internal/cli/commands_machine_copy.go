@@ -9,7 +9,7 @@ import (
 
 func machineCopyCommand() commandSpec {
 	return available(commandSpec{
-		path: "machine cp", short: "Copy files or directories to or from machines", operands: "<source> <destination>",
+		path: "machine cp", validate: validateMachineNames, operandCheck: copyOperands, example: "--context lab --name node local:./config.yaml remote:config.yaml", sshFlags: accountSSHFlags, invoke: Services.invokeMachineCopy, short: "Copy files or directories to or from machines", operands: "<source> <destination>",
 		long: "Copy one local:<path> to remote:<path>, or the reverse. Directories are copied recursively. " +
 			"--name takes a comma-separated list; transfers run concurrently, at most eight at a time. " +
 			"Several-machine downloads require a local directory and save each source beneath <directory>/<machine>/<source-basename>. " +
@@ -20,6 +20,11 @@ func machineCopyCommand() commandSpec {
 			"Bootwright flags go before the two copy operands.",
 		flags: []flagSpec{machineNamesFlag(), boolFlag("overwrite", "Replace existing regular files atomically")},
 	})
+}
+
+func copyOperands(args []string) error {
+	_, _, err := machine.ParseCopyPaths(args)
+	return err
 }
 
 type MachineCopyService interface {

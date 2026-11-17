@@ -10,7 +10,7 @@ import (
 
 func storageAccessCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "cluster keyring", short: "Export a CephClient's raw sensitive Ceph keyring bytes to standard output",
+		available(commandSpec{path: "cluster keyring", example: "--context lab --name storage --client vm-disks", invoke: Services.invokeClusterKeyring, short: "Export a CephClient's raw sensitive Ceph keyring bytes to standard output",
 			flags: []flagSpec{nameFlag(), requiredFlag("client", "Select the exact CephClient name")},
 			long:  "Export the raw sensitive Ceph keyring bytes of one CephClient to standard output. Applicable to managed CephClusters only."}),
 	}

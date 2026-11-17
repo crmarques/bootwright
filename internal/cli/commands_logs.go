@@ -12,7 +12,7 @@ import (
 )
 
 func logsCommandSpec() commandSpec {
-	return available(commandSpec{path: "logs", short: "Show a context's operation events and retained adapter output",
+	return available(commandSpec{path: "logs", validate: validateLogsFlags, operandRemedy: logsOperandRemedy, example: "--context lab --follow", invoke: Services.invokeLogs, short: "Show a context's operation events and retained adapter output",
 		flags: []flagSpec{
 			stringFlag("operation", "Select an operation by its op- ID (default: the current operation)"),
 			stringFlag("block", "Keep one block's events, or name the block whose output --raw prints"),
@@ -34,7 +34,7 @@ type LogsService interface {
 	Follow(context.Context, logview.Selection, logview.Sink) (*logview.Summary, error)
 }
 
-func (s Services) invokeLogs(ctx context.Context, values *requestValues) (commandResult, error) {
+func (s Services) invokeLogs(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
 	if s.Logs == nil {
 		return commandResult{}, errMissingService
 	}
@@ -81,9 +81,9 @@ func validateLogsFlags(command *cobra.Command) string {
 	return ""
 }
 
-func logsOperandRemedy(path string, flags *pflag.FlagSet) string {
+func logsOperandRemedy(flags *pflag.FlagSet) string {
 	operands := flags.Args()
-	if path != "logs" || len(operands) != 1 || stringValue(flags, "install") != logview.NewestInstall || !strings.HasPrefix(operands[0], "install-") ||
+	if len(operands) != 1 || stringValue(flags, "install") != logview.NewestInstall || !strings.HasPrefix(operands[0], "install-") ||
 		logview.Validate(logview.Selection{Install: operands[0]}) != nil {
 		return ""
 	}

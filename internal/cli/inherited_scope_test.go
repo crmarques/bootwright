@@ -61,16 +61,6 @@ func TestInheritedFlagScopeIsTheFlagsEachCommandReads(t *testing.T) {
 			}
 		})
 	}
-	for path := range contextFreeCommands {
-		if specFor(path).path != path {
-			t.Errorf("contextFreeCommands names %q, which the catalog does not list", path)
-		}
-	}
-	for path := range sshFlagsByCommand {
-		if specFor(path).path != path {
-			t.Errorf("sshFlagsByCommand names %q, which the catalog does not list", path)
-		}
-	}
 }
 
 func TestACommandRefusesAnInheritedFlagItDoesNotRead(t *testing.T) {

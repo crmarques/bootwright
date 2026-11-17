@@ -12,7 +12,7 @@ type MachineDiscoveryService interface {
 	PlanDiscovery(context.Context, installation.DiscoverRequest) (*lifecycle.PlanResult, error)
 }
 
-func (s Services) invokeMachineDiscovery(ctx context.Context, values *requestValues) (commandResult, error) {
+func (s Services) invokeMachineDiscovery(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
 	if s.MachineDiscovery == nil {
 		return commandResult{}, errMissingService
 	}

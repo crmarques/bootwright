@@ -133,3 +133,34 @@ func TestCatalogFlagSpellingsFollowTheSelectorRules(t *testing.T) {
 		}
 	}
 }
+
+func TestRootHelpGroupsListEveryTopLevelCommandOnce(t *testing.T) {
+	top := map[string]bool{}
+	for _, spec := range commandCatalog() {
+		top[strings.Fields(spec.path)[0]] = true
+	}
+	listed := map[string]int{}
+	for _, group := range rootHelpGroups {
+		for _, name := range group.names {
+			listed[name]++
+		}
+	}
+	for name := range top {
+		if listed[name] != 1 {
+			t.Errorf("top-level command %q is listed %d times in the root help groups", name, listed[name])
+		}
+	}
+	for name := range listed {
+		if !top[name] {
+			t.Errorf("root help names %q, which the catalog does not list", name)
+		}
+	}
+}
+
+func TestPresentationCommandsCarryNoApplicationDispatch(t *testing.T) {
+	for _, spec := range commandCatalog() {
+		if spec.presentation && spec.invoke != nil {
+			t.Errorf("%s: a presentation command carries an application dispatch", spec.path)
+		}
+	}
+}

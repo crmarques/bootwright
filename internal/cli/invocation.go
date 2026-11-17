@@ -51,23 +51,23 @@ func ClassifyInvocation(args []string) InvocationClass {
 	if resolved.helpTarget != nil || boolValue(command.Flags(), "help") || validateInvocation(command, path) != "" || !privilegedOperation(path) {
 		return classification
 	}
-	if path == "validate" && len(arrayValue(command.Flags(), "file")) != 0 {
+	rules, flags := specFor(path).classify, command.Flags()
+	if rules.localInput != nil && rules.localInput(flags) {
 		return classification
 	}
-	if (path == "render effective" || path == "render acquisitions") && stringValue(command.Flags(), "input-dir") != "" {
+	if unavailableSelection(path, flags) != "" {
 		return classification
 	}
-	if unavailableSelection(path, command.Flags()) != "" {
-		return classification
-	}
-	ambient := contextFreeAcquisition(path, command.Flags())
-	if path == "controller install" && boolValue(command.Flags(), "dry-run") {
+	ambient := contextFreeAcquisition(path, flags)
+	if rules.rootless != nil && rules.rootless(flags) {
 		classification.AmbientRoute = ambient
 		return classification
 	}
 	classification.RequiresRoot, classification.AmbientRoute = true, ambient
-	classification.SecretStdin = secretStdin(path, command.Flags())
-	classification.URLStdin = path == "media add" && stringValue(command.Flags(), "from-url-file") == "-"
+	if rules.secretStdin != nil {
+		classification.SecretStdin = rules.secretStdin(flags)
+	}
+	classification.URLStdin = rules.urlStdin != nil && rules.urlStdin(flags)
 	return classification
 }
 
@@ -75,15 +75,8 @@ func ClassifyInvocation(args []string) InvocationClass {
 // that this build does not run, so the invocation is refused as unavailable
 // before any privilege, context or observation.
 func unavailableSelection(path string, flags *pflag.FlagSet) string {
-	if path == "preflight" && slices.Contains(normalizeNames(stringValue(flags, "stage")), "add-ons") {
-		return "preflight --stage add-ons"
-	}
-	return ""
-}
-
-func secretStdin(path string, flags *pflag.FlagSet) string {
-	if path == "secret set" && (boolValue(flags, "value-stdin") || boolValue(flags, "password-stdin")) {
-		return stringValue(flags, "name")
+	if unavailable := specFor(path).classify.unavailable; unavailable != nil {
+		return unavailable(flags)
 	}
 	return ""
 }
@@ -94,17 +87,40 @@ func secretStdin(path string, flags *pflag.FlagSet) string {
 // selects no context and always does, a controller preflight does only while
 // its final --context is empty, and a media import only from a URL.
 func contextFreeAcquisition(path string, flags *pflag.FlagSet) bool {
-	switch path {
-	case "controller install":
-		return true
-	case "controller uninstall":
-		return !boolValue(flags, "keep-packages") && !boolValue(flags, "discard-unreadable")
-	case "controller check":
-		return true
-	case "media add":
-		return stringValue(flags, "from-url") != "" || stringValue(flags, "from-url-file") != ""
+	ambient := specFor(path).classify.ambient
+	return ambient != nil && ambient(flags)
+}
+
+func always(*pflag.FlagSet) bool { return true }
+
+func hasFiles(flags *pflag.FlagSet) bool { return len(arrayValue(flags, "file")) != 0 }
+
+func hasInputDir(flags *pflag.FlagSet) bool { return stringValue(flags, "input-dir") != "" }
+
+func dryRunSelected(flags *pflag.FlagSet) bool { return boolValue(flags, "dry-run") }
+
+func uninstallAmbient(flags *pflag.FlagSet) bool {
+	return !boolValue(flags, "keep-packages") && !boolValue(flags, "discard-unreadable")
+}
+
+func mediaAmbient(flags *pflag.FlagSet) bool {
+	return stringValue(flags, "from-url") != "" || stringValue(flags, "from-url-file") != ""
+}
+
+func urlFromStdin(flags *pflag.FlagSet) bool { return stringValue(flags, "from-url-file") == "-" }
+
+func preflightUnavailable(flags *pflag.FlagSet) string {
+	if slices.Contains(normalizeNames(stringValue(flags, "stage")), "add-ons") {
+		return "preflight --stage add-ons"
 	}
-	return false
+	return ""
+}
+
+func secretStdin(flags *pflag.FlagSet) string {
+	if boolValue(flags, "value-stdin") || boolValue(flags, "password-stdin") {
+		return stringValue(flags, "name")
+	}
+	return ""
 }
 
 // Diagnostic reports a refusal at the privilege boundary, before application

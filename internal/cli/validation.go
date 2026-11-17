@@ -9,9 +9,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/managedos/media"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -20,15 +18,9 @@ var untilObject = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.[a-z0
 
 func validateInvocation(command *cobra.Command, path string) string {
 	flags := command.Flags()
-	var spec commandSpec
-	for _, candidate := range commandCatalog() {
-		if candidate.path == path {
-			spec = candidate
-			break
-		}
-	}
-	if path == "machine cp" {
-		if _, _, err := machine.ParseCopyPaths(flags.Args()); err != nil {
+	spec := specFor(path)
+	if spec.operandCheck != nil {
+		if err := spec.operandCheck(flags.Args()); err != nil {
 			return err.Error()
 		}
 	} else if hasPayload(command) {
@@ -36,21 +28,23 @@ func validateInvocation(command *cobra.Command, path string) string {
 			return "a non-empty command argument vector is required"
 		}
 	} else if len(flags.Args()) != 0 {
-		if remedy := logsOperandRemedy(path, flags); remedy != "" {
-			return remedy
+		if spec.operandRemedy != nil {
+			if remedy := spec.operandRemedy(flags); remedy != "" {
+				return remedy
+			}
 		}
 		return "this command accepts no positional operands"
 	}
-	if message := validateFlagValues(flags, path, spec); message != "" {
+	if message := validateFlagValues(flags, spec); message != "" {
 		return payloadFlagRemedy(command, message)
 	}
-	if message := validateSharedFlags(command, path); message != "" {
+	if message := validateSharedFlags(command, spec); message != "" {
 		return message
 	}
-	if path == "logs" {
-		return validateLogsFlags(command)
+	if spec.validate != nil {
+		return spec.validate(command)
 	}
-	return validateCommandFlags(command, path)
+	return ""
 }
 
 func payloadFlagRemedy(command *cobra.Command, message string) string {
@@ -66,13 +60,13 @@ func payloadFlagRemedy(command *cobra.Command, message string) string {
 	return message
 }
 
-func validateFlagValues(flags *pflag.FlagSet, path string, spec commandSpec) string {
+func validateFlagValues(flags *pflag.FlagSet, spec commandSpec) string {
 	for _, flag := range append(globalFlags(), spec.flags...) {
 		parsed := flags.Lookup(flag.name)
 		if parsed == nil {
 			continue
 		}
-		if value, ok := parsed.Value.(*scalarValue); ok && value.hasEmptyOccurrence && !allowsEmpty(path, flag.name) {
+		if value, ok := parsed.Value.(*scalarValue); ok && value.hasEmptyOccurrence && !flag.emptyOK {
 			return "--" + flag.name + " must not contain an empty occurrence"
 		}
 		if flag.kind == "stringArray" {
@@ -104,7 +98,7 @@ func validateFlagValues(flags *pflag.FlagSet, path string, spec commandSpec) str
 	return ""
 }
 
-func validateSharedFlags(command *cobra.Command, path string) string {
+func validateSharedFlags(command *cobra.Command, spec commandSpec) string {
 	flags := command.Flags()
 	width, err := strconv.Atoi(stringValue(flags, "width"))
 	if err != nil || width != 0 && (width < 24 || width > 500) {
@@ -123,7 +117,7 @@ func validateSharedFlags(command *cobra.Command, path string) string {
 	if boolValue(flags, "ssh-user-for-provisioned") && stringValue(flags, "ssh-user") == "" {
 		return "--ssh-user-for-provisioned requires --ssh-user"
 	}
-	if SessionCommand(path) && selectedStructured(command) {
+	if spec.session && selectedStructured(command) {
 		return "live SSH sessions require --output text"
 	}
 	if boolValue(flags, "ssh-ask-sudo-password") && selectedJSON(command) {
@@ -132,136 +126,20 @@ func validateSharedFlags(command *cobra.Command, path string) string {
 	if flags.Lookup("until") != nil && flags.Changed("until") && !untilObject.MatchString(stringValue(flags, "until")) {
 		return "--until must name an add-on instance as <cluster>.<package>"
 	}
-	normalized := []string{"clusters", "replace", "stage"}
-	if path == "machine trust" {
-		normalized = append(normalized, "name")
-	}
-	for _, name := range normalized {
-		if flags.Lookup(name) == nil {
+	for _, flag := range spec.flags {
+		if !flag.nameList || flags.Lookup(flag.name) == nil {
 			continue
 		}
-		raw := stringValue(flags, name)
+		raw := stringValue(flags, flag.name)
 		names := normalizeNames(raw)
-		if name == "clusters" && len(names) == 0 && strings.TrimSpace(raw) != "" {
-			if path != "machine list" {
+		if flag.name == "clusters" && len(names) == 0 && strings.TrimSpace(raw) != "" {
+			if !flag.blankOK {
 				return "--clusters must not contain only separators"
 			}
-			normalizeScalar(flags, name, ",")
+			normalizeScalar(flags, flag.name, ",")
 		} else {
-			normalizeScalar(flags, name, strings.Join(names, ","))
+			normalizeScalar(flags, flag.name, strings.Join(names, ","))
 		}
-	}
-	if strings.HasPrefix(path, "context ") && flags.Lookup("name") != nil && !dnsLabel(stringValue(flags, "name")) {
-		return "--name must be a lowercase DNS label"
-	}
-	return ""
-}
-
-func validateMachineNames(flags *pflag.FlagSet, path string) string {
-	raw := stringValue(flags, "name")
-	if path == "machine rsh" {
-		if strings.Contains(raw, ",") {
-			return "machine rsh opens one interactive session; name one machine"
-		}
-		return ""
-	}
-	names := normalizeNames(raw)
-	if len(names) == 0 {
-		return "--name must name at least one machine"
-	}
-	normalizeScalar(flags, "name", strings.Join(names, ","))
-	return ""
-}
-
-func validateCommandFlags(command *cobra.Command, path string) string {
-	flags := command.Flags()
-	switch path {
-	case "machine cp", "machine rsh", "machine exec", "machine start", "machine stop", "machine restart":
-		if message := validateMachineNames(flags, path); message != "" {
-			return message
-		}
-	case "cluster rsh", "cluster exec", "cluster info", "cluster update-admin-credentials":
-		if message := validateClusterNames(flags, path); message != "" {
-			return message
-		}
-	case "machine info", "secret info":
-		if message := validateInfoNames(flags, path); message != "" {
-			return message
-		}
-	}
-	switch path {
-	case "context init", "context update":
-		if len(arrayValue(flags, "file")) > 1 {
-			return "at most one --file occurrence is allowed"
-		}
-		if path == "context update" && len(arrayValue(flags, "file")) == 0 && stringValue(flags, "input-dir") == "" {
-			return "context update requires --file or --input-dir"
-		}
-	case "controller uninstall":
-		return validateUninstallFlags(flags)
-	case "context delete":
-		if !boolValue(flags, "purge") {
-			return "context delete requires --purge=true"
-		}
-	case "apply", "destroy":
-		parallelism, err := strconv.Atoi(stringValue(flags, "parallelism"))
-		if err != nil || parallelism < 1 {
-			return "--parallelism must be a positive integer"
-		}
-		var authorizations []string
-		for _, occurrence := range arrayValue(flags, "authorize") {
-			for _, token := range strings.Split(occurrence, ",") {
-				authorizations = append(authorizations, strings.TrimSpace(token))
-			}
-		}
-		if !lifecycle.ValidAuthorizations(authorizations) {
-			return "--authorize accepts data-loss or data-loss=<digest> and rebind=<secret>, each at most once"
-		}
-		for _, occurrence := range arrayValue(flags, "unregistered") {
-			for _, name := range strings.Split(occurrence, ",") {
-				if strings.TrimSpace(name) == "" {
-					return "--unregistered must not contain an empty member"
-				}
-			}
-		}
-	case "secret set":
-		if message := validateSecretInput(flags); message != "" {
-			return message
-		}
-	case "media add", "media delete":
-		if !media.ValidName(stringValue(flags, "name")) {
-			return "--name must be a portable installer-image basename ending in .iso"
-		}
-		if path == "media add" {
-			if message := validateMediaSource(flags); message != "" {
-				return message
-			}
-		}
-	case "render effective", "render acquisitions":
-		return validateRenderFlags(path, flags)
-	case "preflight":
-		if stages := normalizeNames(stringValue(flags, "stage")); flags.Changed("stage") && len(stages) == 0 {
-			return "--stage must name at least one stage"
-		} else if len(stages) != 0 && !slices.Contains(stages, "clusters") && stringValue(flags, "clusters") != "" {
-			return "--clusters requires the clusters stage"
-		}
-	case "diff":
-		return validateDiffFlags(command)
-	case "machine list":
-		if boolValue(flags, "short") && selectedJSON(command) {
-			return "--short conflicts with " + structuredLabel(command) + " output"
-		}
-		// A short invocation carries names alone, so a reading it could never
-		// print would contact every management controller for nothing.
-		if boolValue(flags, "short") && boolValue(flags, "power-status") {
-			return "--short conflicts with --power-status"
-		}
-	case "machine stop", "machine restart":
-		if selectedJSON(command) && !boolValue(flags, "yes") {
-			return structuredLabel(command) + " power changes require --yes"
-		}
-	case "machine trust":
-		return validateMachineTrust(command, flags)
 	}
 	return ""
 }
@@ -318,10 +196,6 @@ func validateRenderDirectories(flags *pflag.FlagSet) string {
 		return "--sensitive requires --output-dir"
 	}
 	return ""
-}
-
-func allowsEmpty(path, name string) bool {
-	return name == "context" || name == "sha256" || name == "clusters" || name == "replace" || (path == "machine trust" && name == "name")
 }
 
 func dnsLabel(value string) bool {
@@ -447,17 +321,4 @@ func structuredLabel(command *cobra.Command) string {
 		return "YAML"
 	}
 	return "JSON"
-}
-
-func validateRenderFlags(path string, flags *pflag.FlagSet) string {
-	if path == "render acquisitions" {
-		if stringValue(flags, "input-dir") != "" && flags.Changed("context") {
-			return "--input-dir conflicts with --context"
-		}
-		return ""
-	}
-	if boolValue(flags, "origins") && stringValue(flags, "output-dir") != "" {
-		return "--origins conflicts with --output-dir"
-	}
-	return validateRenderDirectories(flags)
 }

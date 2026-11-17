@@ -89,17 +89,16 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 			parent = child
 		}
 		parent.Short, parent.Long = spec.short, spec.long
-		parent.Example = helpExample(spec.path)
+		parent.Example = helpExample(spec)
 		parent.Annotations = map[string]string{"bootwright.command": spec.path}
 		if spec.payload || spec.operands != "" {
 			parent.Annotations["bootwright.payload"] = "true"
 		}
-		contextFree, sshFlags := inheritedFlagScope(spec.path)
-		if contextFree {
+		if spec.contextFree {
 			parent.Annotations[contextFreeAnnotation] = "true"
 		}
-		parent.Annotations[sshFlagsAnnotation] = strings.Join(sshFlags, ",")
-		if !spec.implemented && !presentationCommand(spec.path) {
+		parent.Annotations[sshFlagsAnnotation] = strings.Join(spec.sshFlags, ",")
+		if !spec.implemented && !spec.presentation {
 			if !hasAvailableSubcommand(parent.Annotations["bootwright.command"]) {
 				parent.Short += " (unavailable)"
 			}
@@ -116,7 +115,7 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 				parent.Use += " <command>..."
 			}
 		}
-		if spec.path == "help" {
+		if spec.helpCommand {
 			parent.Use += " [command ...]"
 			root.SetHelpCommand(parent)
 		}
@@ -229,8 +228,10 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	if message := validateInvocation(command, path); message != "" {
 		return r.failure(command, path, "cli.usage", message, 2, selectedJSON(command))
 	}
-	if message := r.diffToolRefusal(command, path); message != "" {
-		return r.failure(command, path, "cli.usage", message, 2, selectedJSON(command))
+	if refuse := specFor(path).refuse; refuse != nil {
+		if message := refuse(r, command); message != "" {
+			return r.failure(command, path, "cli.usage", message, 2, selectedJSON(command))
+		}
 	}
 	if path == "" || path == "completion" {
 		if err := r.writeSelectedHelp(command); err != nil {
@@ -241,29 +242,8 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	if command.Annotations["bootwright.command"] == "" {
 		return r.failure(command, path, "cli.usage", "a complete command path is required", 2, selectedStructured(command))
 	}
-	if path == "version" {
-		if err := r.writeSelectedVersion(); err != nil {
-			return 1
-		}
-		return 0
-	}
-	if path == "schema" {
-		if err := r.writeSelectedSchema(); err != nil {
-			return r.failure(command, path, "runtime.encode", "the schema could not be encoded", 1, selectedStructured(command))
-		}
-		return 0
-	}
-	if path == "sbom" {
-		if err := r.writeSelectedBillOfMaterials(); err != nil {
-			return r.failure(command, path, "runtime.encode", "the bill of materials could not be composed: "+err.Error(), 1, selectedStructured(command))
-		}
-		return 0
-	}
-	if strings.HasPrefix(path, "completion ") {
-		if err := r.writeSelectedCompletion(root, path, boolValue(command.Flags(), "no-descriptions")); err != nil {
-			return 1
-		}
-		return 0
+	if present := specFor(path).present; present != nil {
+		return present(r, root, command, path)
 	}
 	if selection := unavailableSelection(path, command.Flags()); selection != "" {
 		return r.unavailableSelection(path, selection, selectedStructured(command))
