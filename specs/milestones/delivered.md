@@ -16831,3 +16831,21 @@ Ceph package acquisition admits only an external Proxy, which no block
 realizes, so the reference is listed as unordered with that reason, as the
 Machine and install profile proxy references are.
 
+## X543 — The artifact server on the managed service lifecycle
+
+### B1512
+
+Split from B1465 under [D274](backlog.md#d274) (audit 005 W4.3).
+`managedservice.Service` is the one lifecycle (plan, removal, mutation, both
+observations, binding proof, unresolved reading, secret references,
+quiescence) with its evidence checks once; each kind supplies a small port, the
+network services through their definition and the artifact server with its
+own multi-listener request and evidence. The registry and the artifact server
+share one serving fingerprint check. The artifact server's Python observes
+through `infra_service` with one status-line reader, both protocol plugins use
+one `managed_unit_capability`, and the managed service role owns the image
+pull, unit start and unit removal tasks the nginx role now includes. Each kind
+now reads its evidence by the one rule the spec states: a claimed
+postcondition without a start after the files is unknown, and absence evidence
+that reports such a start proves no absence. No contract golden moved.
+
