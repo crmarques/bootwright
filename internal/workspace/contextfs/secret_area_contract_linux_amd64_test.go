@@ -11,6 +11,7 @@ import (
 )
 
 func TestSecretAreaHonoursTheSecretAreaContract(t *testing.T) {
+	t.Parallel()
 	areacontract.Verify(t, func(t *testing.T) areacontract.Open {
 		store, sources := fixture(t)
 		token := secretToken(publish(t, store, "example", sources))

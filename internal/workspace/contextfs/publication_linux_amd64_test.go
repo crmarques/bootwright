@@ -62,6 +62,7 @@ func openContextState(t *testing.T, store *Store, record contexts.Record) *direc
 // the command returns; left behind, stages accumulate until every controller
 // publication on the host refuses.
 func TestARefusedControllerPublicationLeavesNoStage(t *testing.T) {
+	t.Parallel()
 	for _, interruption := range []struct {
 		name    string
 		message string
@@ -133,6 +134,7 @@ func TestARefusedControllerPublicationLeavesNoStage(t *testing.T) {
 // destination that appeared before the rename refuses it, and its stage goes
 // with the refusal.
 func TestAFirstControllerPublicationOverAnExistingRecordLeavesNoStage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, sources := fixture(t)
 	publish(t, store, "alpha", sources)
@@ -166,6 +168,7 @@ func TestAFirstControllerPublicationOverAnExistingRecordLeavesNoStage(t *testing
 // Once the stage is renamed the receipt may be durable, so any later failure is
 // reported as an unknown outcome, never as uncommitted, and nothing is staged.
 func TestAFailureAfterTheRenameIsAnUnknownOutcome(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := checkpointSealedFixture(t)
 	path := filepath.Join(store.options.Root, controllerContainer, controllerSubtree, "state.json")
@@ -214,6 +217,7 @@ func TestAFailureAfterTheRenameIsAnUnknownOutcome(t *testing.T) {
 // still refuse the rename itself. That failure is uncommitted, reports the
 // publication's own message or the rename's error, and removes the stage.
 func TestARenameTheFilesystemRefusesLeavesNoStage(t *testing.T) {
+	t.Parallel()
 	const refusal = "test record could not be atomically published"
 	refused := func(err error) bool {
 		reported := diagnostics.Of(err)
@@ -256,6 +260,7 @@ func TestARenameTheFilesystemRefusesLeavesNoStage(t *testing.T) {
 // changed or was substituted before the rename is never published, and a target
 // replaced after the rename is never reported as committed.
 func TestAPublicationProvesItsStageAndItsTarget(t *testing.T) {
+	t.Parallel()
 	data := []byte("{\"version\":1}\n")
 	substitute := func(store *Store, path string) error {
 		replacement := filepath.Join(filepath.Dir(store.options.Root), "substitute")
@@ -338,6 +343,7 @@ func substituteSameBytes(store *Store, path string) error {
 // cancelled or refused by its own destination proof, removes its stage, and
 // one that fails after the rename is uncertain and has no stage left.
 func TestARefusedRegistryReplacementLeavesNoStage(t *testing.T) {
+	t.Parallel()
 	refuse := func(*Store, context.CancelFunc) error { return errors.New("refused at the registry rename") }
 	for _, interruption := range []struct {
 		name    string
@@ -395,6 +401,7 @@ func TestARefusedRegistryReplacementLeavesNoStage(t *testing.T) {
 // not committed; one that fails after the rename is uncertain and finishes the
 // callback's mutation authority.
 func TestARefusedSecretReplacementLeavesNoStage(t *testing.T) {
+	t.Parallel()
 	refuse := func(*Store, context.CancelFunc) error { return errors.New("refused at the secret rename") }
 	for _, interruption := range []struct {
 		name        string

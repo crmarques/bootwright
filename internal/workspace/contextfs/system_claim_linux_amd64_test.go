@@ -23,6 +23,7 @@ import (
 // claimed beside its bmc: key before any media is inserted, naming the context
 // that holds it (B802).
 func TestTwoSpellingsOfOneControllerRefuseTheSecondSystemClaim(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	_, sources := fixture(t)
@@ -64,6 +65,7 @@ func TestTwoSpellingsOfOneControllerRefuseTheSecondSystemClaim(t *testing.T) {
 // it with every other key it held (D38), so the managed bridge's removal is
 // stranded only while the using context is still a context (B803).
 func TestAnAbandonedContextsBridgeUseIsReleasedWithItsDeletion(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	_, sources := fixture(t)
@@ -113,6 +115,7 @@ func TestAnAbandonedContextsBridgeUseIsReleasedWithItsDeletion(t *testing.T) {
 // transaction opened: a bridge-use another context publishes while this
 // context's transaction is open is what the re-proof finds (B803).
 func TestAReproofReadsAClaimPublishedAfterTheTransactionOpened(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	_, sources := fixture(t)
@@ -150,6 +153,7 @@ func TestAReproofReadsAClaimPublishedAfterTheTransactionOpened(t *testing.T) {
 // or after an interrupted effect, refuses naming the removing context, and the
 // removal still completes and releases what it held (B839).
 func TestAClaimOnAKeyARemovalIsReleasingRefusesUntilTheRemovalCompletes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	scenarios := map[string]struct {
 		removing, using     prerequisites.HostReservation
@@ -232,6 +236,7 @@ func TestAClaimOnAKeyARemovalIsReleasingRefusesUntilTheRemovalCompletes(t *testi
 // host-key form, naming the host by that key; a host
 // pinning another key is another host and admits it (B844, D188).
 func TestTwoSpellingsOfOneSSHHostConflictByItsPinnedHostKey(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	key := func(seed byte) string {
 		blob := binary.BigEndian.AppendUint32(nil, uint32(len("ssh-ed25519")))

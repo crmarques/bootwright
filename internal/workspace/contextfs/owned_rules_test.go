@@ -13,6 +13,7 @@ import (
 // Record validation follows the owning grammar, discovery exclusions and
 // pristine evidence encoding even when their implementations change.
 func TestTheStoreCopiesOfOwnedRulesAgreeWithTheirOwners(t *testing.T) {
+	t.Parallel()
 	t.Run("the context-name grammar is the API's name rule", func(t *testing.T) {
 		for _, name := range []string{"lab", "lab-rhel", "a", "a1", strings.Repeat("a", 63), strings.Repeat("a", 64),
 			"", "-lab", "lab-", "Lab", "lab_rhel", "lab.rhel", "lab rhel", "ü", "0lab", "lab0", "0", "a--b", "a\n", "a\x00b"} {

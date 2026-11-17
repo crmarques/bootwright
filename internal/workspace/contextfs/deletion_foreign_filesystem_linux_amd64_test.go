@@ -89,6 +89,7 @@ func refuseMountedEntry(t *testing.T, base string) {
 // when it is a mount point and otherwise to remove it; every other reason
 // keeps the exit to remove it.
 func TestAnEntryOnAnotherFilesystemIsUnmountedNeverRemoved(t *testing.T) {
+	t.Parallel()
 	file, err := os.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

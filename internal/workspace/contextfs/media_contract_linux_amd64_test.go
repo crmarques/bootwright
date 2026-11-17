@@ -10,5 +10,6 @@ import (
 )
 
 func TestMediaStoreHonoursTheStoreContract(t *testing.T) {
+	t.Parallel()
 	storecontract.Verify(t, func(t *testing.T) media.Store { return mediaFixture(t) })
 }

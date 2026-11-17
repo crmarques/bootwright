@@ -56,6 +56,7 @@ func observeUnpublishedSecrets(ctx context.Context, area secretstore.Area) ([]se
 }
 
 func TestSecretUnpublishedPruneAllowsNextPublication(t *testing.T) {
+	t.Parallel()
 	store, token, root := unpublishedSecretFixture(t)
 	ctx := context.Background()
 	err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
@@ -96,6 +97,7 @@ func TestSecretUnpublishedPruneAllowsNextPublication(t *testing.T) {
 }
 
 func TestSecretUnpublishedPruneRejectsChangedProof(t *testing.T) {
+	t.Parallel()
 	for _, target := range []string{"source.json", "intent.json", "store.json", "parts/orphan.enc"} {
 		t.Run(strings.ReplaceAll(target, "/", "_"), func(t *testing.T) {
 			store, token, root := unpublishedSecretFixture(t)
@@ -133,6 +135,7 @@ func TestSecretUnpublishedPruneRejectsChangedProof(t *testing.T) {
 }
 
 func TestSecretUnpublishedPruneRequiresBoundedDurableGuards(t *testing.T) {
+	t.Parallel()
 	for _, failure := range []string{"no-guards", "too-many-guards", "wrong-bytes", "guard-target", "metadata-target", "sync-failure", "read-only", "publication-started"} {
 		t.Run(failure, func(t *testing.T) {
 			store, token, root := unpublishedSecretFixture(t)
@@ -185,6 +188,7 @@ func TestSecretUnpublishedPruneRequiresBoundedDurableGuards(t *testing.T) {
 }
 
 func TestSecretMetadataCommitRejectsChangedReadDependency(t *testing.T) {
+	t.Parallel()
 	store, token, root := unpublishedSecretFixture(t)
 	ctx := context.Background()
 	fired := false
@@ -218,6 +222,7 @@ func TestSecretMetadataCommitRejectsChangedReadDependency(t *testing.T) {
 }
 
 func TestSecretMetadataCommitGuardsNewArtifactsAndReplacements(t *testing.T) {
+	t.Parallel()
 	for _, artifact := range []struct {
 		name   string
 		path   string
@@ -315,6 +320,7 @@ func TestSecretMetadataCommitGuardsNewArtifactsAndReplacements(t *testing.T) {
 }
 
 func TestSecretReadExpectationCannotBeRefreshedAfterSubstitution(t *testing.T) {
+	t.Parallel()
 	store, token, root := unpublishedSecretFixture(t)
 	ctx := context.Background()
 	err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
@@ -340,6 +346,7 @@ func TestSecretReadExpectationCannotBeRefreshedAfterSubstitution(t *testing.T) {
 }
 
 func TestSecretReadExpectationBytesClearAfterCallback(t *testing.T) {
+	t.Parallel()
 	for _, fail := range []bool{false, true} {
 		store, token, _ := unpublishedSecretFixture(t)
 		var held []byte
@@ -360,6 +367,7 @@ func TestSecretReadExpectationBytesClearAfterCallback(t *testing.T) {
 }
 
 func TestSecretSyncFileRequiresObservedStableFile(t *testing.T) {
+	t.Parallel()
 	for _, failure := range []string{"unobserved", "read-only", "same-byte-replacement", "parent-replacement", "symlink"} {
 		t.Run(failure, func(t *testing.T) {
 			store, token, root := unpublishedSecretFixture(t)
@@ -448,6 +456,7 @@ func interruptedSecretKeyFixture(t *testing.T) (*Store, secretstore.Context, str
 }
 
 func TestSecretInitializationRetrySynchronizesRecoveredKey(t *testing.T) {
+	t.Parallel()
 	for _, failSync := range []bool{false, true} {
 		store, token, root, access := interruptedSecretKeyFixture(t)
 		fileSynchronized, parentSynchronized, publishedBeforeSync := false, false, false
@@ -483,6 +492,7 @@ func TestSecretInitializationRetrySynchronizesRecoveredKey(t *testing.T) {
 }
 
 func TestAContextInitRetryResumesOverATornKeyringStage(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	ctx := context.Background()
 	renames := 0

@@ -28,6 +28,7 @@ func operationsRoot(t *testing.T, store *Store, name string) string {
 // The diagnostic has to name that entry: without the path it says only that
 // something, somewhere, is unsafe, and an operator has no way to find it.
 func TestAForeignOperationEntryIsRefusedByName(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	root := operationsRoot(t, store, "example")
@@ -57,6 +58,7 @@ func TestAForeignOperationEntryIsRefusedByName(t *testing.T) {
 // not a foreign one, and refusing the write over it is what failed a real first
 // apply and then passed on a retry that could no longer reproduce it.
 func TestAnEntryThatVanishesDuringMeasurementDoesNotRefuseTheWrite(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	root := operationsRoot(t, store, "example")
@@ -86,6 +88,7 @@ func TestAnEntryThatVanishesDuringMeasurementDoesNotRefuseTheWrite(t *testing.T)
 // A file where a directory component belongs fails to open as a directory,
 // which is neither absence nor a permission fault; it is named the same way.
 func TestAFileInPlaceOfAnOperationDirectoryIsRefusedByName(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	root := operationsRoot(t, store, "example")
@@ -109,6 +112,7 @@ func TestAFileInPlaceOfAnOperationDirectoryIsRefusedByName(t *testing.T) {
 // on the retry, so the answer has to reproduce before the entry is called
 // foreign.
 func TestAnEntryThatRefusesOnlyWhileItIsPublishedDoesNotRefuseTheWrite(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	root := operationsRoot(t, store, "example")
@@ -143,6 +147,7 @@ func TestAnEntryThatRefusesOnlyWhileItIsPublishedDoesNotRefuseTheWrite(t *testin
 // be diagnosed by inference from git history, because a transient answer and a
 // foreign entry read identically in the message.
 func TestAForeignOperationEntryNamesWhatRefusedIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	root := operationsRoot(t, store, "example")
@@ -174,6 +179,7 @@ func TestAForeignOperationEntryNamesWhatRefusedIt(t *testing.T) {
 // what failed the first apply of a zeroed environment: the block that publishes
 // a before-state synced the record it had just replaced.
 func TestSyncingARecordPathIsRefusedAsANonDirectory(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	record := "op-example/blocks/controller-prerequisites/attempt-000001.json"

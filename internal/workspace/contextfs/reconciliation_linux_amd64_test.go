@@ -29,6 +29,7 @@ func lifecycleFixture(t *testing.T) (*Store, contexts.Record) {
 }
 
 func TestLifecycleViewExposesTheContextSnapshot(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	seen := false
@@ -58,6 +59,7 @@ func TestLifecycleViewExposesTheContextSnapshot(t *testing.T) {
 }
 
 func TestLifecycleReadRefusesUnusableContexts(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := fixture(t)
 	if err := store.ReadLifecycle(ctx, "example", func(lifecycle.View) error { return nil }); err == nil {
@@ -78,6 +80,7 @@ func TestLifecycleReadRefusesUnusableContexts(t *testing.T) {
 }
 
 func TestLifecycleReadRefusesAContextWithoutInput(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, sources := fixture(t)
 	var record contexts.Record
@@ -110,6 +113,7 @@ func TestLifecycleReadRefusesAContextWithoutInput(t *testing.T) {
 }
 
 func TestOperationAreaPublishesAndReplacesRecords(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
@@ -144,6 +148,7 @@ func TestOperationAreaPublishesAndReplacesRecords(t *testing.T) {
 }
 
 func TestOperationAreaConfinesEveryPath(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
@@ -168,6 +173,7 @@ func TestOperationAreaConfinesEveryPath(t *testing.T) {
 }
 
 func TestOperationAreaIsReadOnlyForInspection(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	err := store.ReadLifecycle(ctx, "example", func(view lifecycle.View) error {
@@ -189,6 +195,7 @@ func TestOperationAreaIsReadOnlyForInspection(t *testing.T) {
 }
 
 func TestOperationCapabilityExpiresWithItsCallback(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	var escaped operationstore.Area
@@ -207,6 +214,7 @@ func TestOperationCapabilityExpiresWithItsCallback(t *testing.T) {
 }
 
 func TestLifecycleEvidenceIsPublishedUnderItsExpectation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	pending, err := reconciliation.Evidence{Operation: reconciliation.MutationPending, Ownership: reconciliation.OwnershipRetained}.Bytes()
@@ -239,6 +247,7 @@ func TestLifecycleEvidenceIsPublishedUnderItsExpectation(t *testing.T) {
 }
 
 func TestSecondLifecycleMutatorRefusesWhileOneHoldsTheStore(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	other := New(Options{Root: store.options.Root, Owner: &Ownership{UID: uint32(os.Geteuid()), GID: uint32(os.Getegid())}})
@@ -294,6 +303,7 @@ func sealedBundleFixture(t *testing.T, store *Store, record contexts.Record) str
 // bundle attribution forward; dropping it leaves an unreserved directory that
 // refuses every later read of the store.
 func TestReservationsRetainBundleAttribution(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	digest := sealedBundleFixture(t, store, record)
@@ -326,6 +336,7 @@ func TestReservationsRetainBundleAttribution(t *testing.T) {
 }
 
 func TestReservationsRefuseAnotherContextsKeys(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	reserveFixture(t, store, record)
@@ -369,6 +380,7 @@ func TestReservationsRefuseAnotherContextsKeys(t *testing.T) {
 // A wildcard bind holds its port on every address, so it and a socket at any
 // other address on that port refuse each other across contexts.
 func TestAWildcardSocketReservationRefusesEveryAddressAtItsPort(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	_, sources := fixture(t)
@@ -411,6 +423,7 @@ func TestAWildcardSocketReservationRefusesEveryAddressAtItsPort(t *testing.T) {
 // on one SSH host, an IPv6 host included, and never those on another host or
 // on the controller.
 func TestSSHQualifiedReservationsConflictOnTheirHostAlone(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	_, sources := fixture(t)
@@ -441,6 +454,7 @@ func TestSSHQualifiedReservationsConflictOnTheirHostAlone(t *testing.T) {
 // the same claims again, so only the holder's release, which a completed
 // destroy makes, lets this context reserve.
 func TestEveryConflictingClaimIsNamedAndAContinuationKeepsRefusing(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	_, sources := fixture(t)
@@ -488,6 +502,7 @@ func TestEveryConflictingClaimIsNamedAndAContinuationKeepsRefusing(t *testing.T)
 }
 
 func TestReservationRequiresACompletedSetup(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
@@ -508,6 +523,7 @@ func TestReservationRequiresACompletedSetup(t *testing.T) {
 // Every publication checkpoint must be reachable, or the fault injection below
 // proves nothing about interruption.
 func TestLifecyclePublicationCheckpointsFireAndFailClosed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, checkpoint := range []string{"before-evidence", "before-reservation", "before-operation-rename", "after-operation-rename", "append-operation-log", "measure-operation-entry"} {
 		t.Run(checkpoint, func(t *testing.T) {
@@ -566,6 +582,7 @@ func TestLifecyclePublicationCheckpointsFireAndFailClosed(t *testing.T) {
 // mutation of the context, and a record name may appear only with its complete
 // bytes.
 func TestPublicationLeavesNoStageOnFailure(t *testing.T) {
+	t.Parallel()
 	evidence := func(operation reconciliation.MutationOperation) []byte {
 		data, err := reconciliation.Evidence{Operation: operation, Ownership: reconciliation.OwnershipRetained}.Bytes()
 		if err != nil {
@@ -707,6 +724,7 @@ func TestPublicationLeavesNoStageOnFailure(t *testing.T) {
 // destination that no longer holds what the transaction observed refuses the
 // publication and removes its complete stage.
 func TestAnEvidenceDestinationChangedBeforeTheRenameLeavesNoStage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	runtime := filepath.Join(store.options.Root, "contexts", record.Name, "state")
@@ -752,6 +770,7 @@ func TestAnEvidenceDestinationChangedBeforeTheRenameLeavesNoStage(t *testing.T) 
 // rather than block: both take the same exclusive root lock, so a lifecycle
 // operation binds its Secrets before it opens the transaction.
 func TestSecretAcquisitionInsideALifecycleTransactionRefuses(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	selected := secretstore.Context{Name: record.Name, Mode: string(record.Mode), Revision: record.Revision}
@@ -774,6 +793,7 @@ func TestSecretAcquisitionInsideALifecycleTransactionRefuses(t *testing.T) {
 // transaction must offer the same opener controller reads do. Without it every
 // effect refuses before it starts.
 func TestLifecycleTransactionOpensTheApprovedBundle(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	digest := sealedBundleFixture(t, store, record)
@@ -807,6 +827,7 @@ func TestLifecycleTransactionOpensTheApprovedBundle(t *testing.T) {
 // mutating it. It still executes inside the approved bundle and still retains
 // what its adapter printed, and both capabilities expire with the callback.
 func TestABoundedRunOpensTheApprovedBundleAndRetainsItsOutput(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	digest := sealedBundleFixture(t, store, record)
@@ -860,6 +881,7 @@ func TestABoundedRunOpensTheApprovedBundleAndRetainsItsOutput(t *testing.T) {
 // holds its directory, which then refuses removal, so the run area removes the
 // file itself while it still holds what the run wrote, and nothing stays.
 func TestARunFileWhosePublicationFailedIsRemoved(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	identity := "run-" + strings.Repeat("b", 32)
@@ -905,6 +927,7 @@ func TestARunFileWhosePublicationFailedIsRemoved(t *testing.T) {
 
 // Inspection can locate retained clients but receives no writable or run area.
 func TestALifecycleInspectionRunsNothing(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	digest := sealedBundleFixture(t, store, record)
@@ -940,6 +963,7 @@ func TestALifecycleInspectionRunsNothing(t *testing.T) {
 // writes an empty record rather than removing the file. Deleting it must not
 // refuse the very layout the store admits.
 func TestDestroyedContextIsDeletable(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
@@ -979,6 +1003,7 @@ func TestDestroyedContextIsDeletable(t *testing.T) {
 // leaves a context that can never be deleted and refuses every later secret
 // mutation.
 func TestAContextThatRanABoundedRunStaysUsableAndDeletable(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	// All four entries at once: a context that ran an operation and a bounded
@@ -1016,6 +1041,7 @@ func TestAContextThatRanABoundedRunStaysUsableAndDeletable(t *testing.T) {
 // is the directory the area writes into: the records under the state root,
 // the operation logs and runs under the log root.
 func TestEachAreaIsNamedRelativeToItsRoot(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	root, err := store.rootPath()
@@ -1063,6 +1089,7 @@ func TestEachAreaIsNamedRelativeToItsRoot(t *testing.T) {
 // The location a result prints has to be the directory the area actually
 // writes into, or an operator follows a path that never fills.
 func TestOperationAreaLocationIsWhereItWrites(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	var location string
@@ -1084,6 +1111,7 @@ func TestOperationAreaLocationIsWhereItWrites(t *testing.T) {
 }
 
 func TestARecreatedDirectoryOnTheSameInodeIsAnotherIncarnation(t *testing.T) {
+	t.Parallel()
 	first := formatIncarnation(64768, 1234, directoryBirth{born: true, seconds: 1761490000, nanos: 5})
 	if first != "64768:1234:b1761490000.000000005" {
 		t.Fatalf("incarnation = %q", first)
@@ -1109,6 +1137,7 @@ func TestARecreatedDirectoryOnTheSameInodeIsAnotherIncarnation(t *testing.T) {
 }
 
 func TestADamagedOperationIndexStillLetsTheAcknowledgedDeletionRemoveTheContext(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for form, damage := range map[string]func(*testing.T, string){
 		"oversized": func(t *testing.T, path string) {

@@ -44,6 +44,7 @@ func requireUnknownControllerRemedy(t *testing.T, name string, err error, fired 
 // that apply of its own context, never setup's exact retry. Repeating the
 // named apply then succeeds over the state the uncertain publication left.
 func TestAnUnknownControllerPublicationNamesTheApplyThatMetIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	host := syntheticControllerState(t).Host
 	for _, test := range []struct {
@@ -81,6 +82,7 @@ func TestAnUnknownControllerPublicationNamesTheApplyThatMetIt(t *testing.T) {
 // A destroy meets it while it releases its reservations and names that
 // destroy; repeating it releases them.
 func TestAnUnknownControllerPublicationNamesTheDestroyThatMetIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := checkpointSealedFixture(t)
 	if err := checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error { return tx.Reserve(ctx, checkpointClaim) }); err != nil {
@@ -109,6 +111,7 @@ func TestAnUnknownControllerPublicationNamesTheDestroyThatMetIt(t *testing.T) {
 // A context deletion meets it while it drops the context's claims, after the
 // registry recorded the deletion, and names the purge that finishes it.
 func TestAnUnknownControllerPublicationNamesTheDeletionThatMetIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)

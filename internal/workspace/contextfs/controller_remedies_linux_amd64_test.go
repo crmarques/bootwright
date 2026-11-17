@@ -18,6 +18,7 @@ import (
 // setup and then the command itself as its remedy, never setup's exact retry
 // and never inside its message; setup's own refusals keep that retry.
 func TestControllerRefusalsNameTheirOwnRemedies(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	host := syntheticControllerState(t).Host
@@ -69,6 +70,7 @@ func TestControllerRefusalsNameTheirOwnRemedies(t *testing.T) {
 // A tool area no attribution names is settled by setup, which every command
 // reading it is sent to.
 func TestAToolAreaSetupMustSettleNamesSetup(t *testing.T) {
+	t.Parallel()
 	stored := controllerStored{bundles: []controllerBundleReservation{{ID: clientClosure, Mode: "sealed"}}}
 	_, err := openControllerBundle(context.Background(), nil, nil, contexts.Registry{}, stored, clientClosure, func() bool { return true }, false, nil)
 	reported := diagnostics.Of(err)

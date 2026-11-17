@@ -34,6 +34,7 @@ func publishStoreRecord(ctx context.Context, area secretstore.Area, content stri
 // one publication, re-proves the layout and the secret directory before it is
 // lent, and re-proves the registry before it publishes.
 func TestTheLifecycleSecretsAreaChecksLikeMutateSecrets(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	token := secretToken(record)
@@ -138,6 +139,7 @@ func TestTheLifecycleSecretsAreaChecksLikeMutateSecrets(t *testing.T) {
 // The area expires when its callback returns, and the capability to lend one
 // expires with the transaction.
 func TestTheLifecycleSecretsAreaClosesWithTheTransaction(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	var kept lifecycle.Transaction
@@ -170,6 +172,7 @@ func TestTheLifecycleSecretsAreaClosesWithTheTransaction(t *testing.T) {
 // the lending lock before the first is released, so a missing lock is caught
 // as the second callback entering early rather than by a timing guess.
 func TestTheLifecycleSecretsAreaSerializesConcurrentCallers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {

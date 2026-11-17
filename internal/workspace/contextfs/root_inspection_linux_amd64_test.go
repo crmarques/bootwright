@@ -18,6 +18,7 @@ import (
 // another process may not list as far as it can see, and every root this
 // build cannot use with the refusal each store command gives it (B349).
 func TestTheStateRootInspectionNamesARootThisBuildCannotUse(t *testing.T) {
+	t.Parallel()
 	owner := ownerText(uint32(os.Geteuid()), uint32(os.Getegid()))
 	required := "a directory owned by " + owner + " with mode 0700 on a local filesystem"
 	for _, test := range []struct {
@@ -102,6 +103,7 @@ func inspectedEntries(t *testing.T, root string) [][]rootEntrySnapshot {
 // The inspection a dry run calls is the owner's own: it judges the root for
 // the identity store commands require and lists it only as that identity.
 func TestTheStateRootInspectionIsTheStoresOwn(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	if err := os.Mkdir(store.options.Root, 0755); err != nil {
 		t.Fatal(err)

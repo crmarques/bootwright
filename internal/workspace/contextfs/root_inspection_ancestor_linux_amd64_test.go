@@ -16,6 +16,7 @@ import (
 // so the dry run judges it as the store does, however the root itself stands,
 // and creates nothing while it does.
 func TestTheStateRootInspectionReachesTheRootAsTheStoreOpensIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, present := range []bool{true, false} {
 		for _, owner := range []bool{false, true} {

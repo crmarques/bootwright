@@ -52,6 +52,7 @@ func rebindRefused(t *testing.T, err error, message string) {
 // a context bound before it runs on the new host and no longer on the old.
 // Repeated, it changes nothing.
 func TestARebindKeepsEveryBindingAndReservation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
@@ -94,6 +95,7 @@ func TestARebindKeepsEveryBindingAndReservation(t *testing.T) {
 // that changed since the confirmation read it is not the one confirmed: both
 // refusals leave the record as it was.
 func TestARebindRefusesAnotherStoreAndAChangedRecord(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
@@ -127,6 +129,7 @@ func TestARebindRefusesAnotherStoreAndAChangedRecord(t *testing.T) {
 // and its retry rebinds; one stopped after it reports an uncertain outcome
 // whose retry finds the record already naming this host.
 func TestAnInterruptedRebindIsRetried(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, point := range []checkpoint{checkpointBeforeControllerRename, checkpointAfterControllerRename} {
 		t.Run(string(point), func(t *testing.T) {

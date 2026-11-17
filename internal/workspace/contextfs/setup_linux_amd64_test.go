@@ -103,6 +103,7 @@ func onlyDiagnostic(t *testing.T, err error) diagnostics.Diagnostic {
 // The setup subtree is setup's own: the registry never names it, and the
 // store's verification admits it without decoding what it holds.
 func TestTheSetupSubtreeIsOutsideTheRegistryDescriptor(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	registryPath := filepath.Join(store.options.Root, "registry.json")
 	before, err := os.ReadFile(registryPath)
@@ -145,6 +146,7 @@ func TestTheSetupSubtreeIsOutsideTheRegistryDescriptor(t *testing.T) {
 }
 
 func TestASetupSubtreeOfAnotherTypeRefusesTheStore(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	mkdirs(t, 0700, filepath.Join(store.options.Root, controllerContainer))
 	if err := os.WriteFile(filepath.Join(store.options.Root, controllerContainer, installSubtree), nil, 0600); err != nil {
@@ -158,6 +160,7 @@ func TestASetupSubtreeOfAnotherTypeRefusesTheStore(t *testing.T) {
 // Setup records its intent durably before any effect, so a killed setup
 // leaves the pending record every later launch refuses on.
 func TestPendingIntentIsDurableBeforeEffects(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join(t.TempDir(), "state")
 	store := New(testOptions(root))
 	var mutex sync.Mutex
@@ -213,6 +216,7 @@ func TestPendingIntentIsDurableBeforeEffects(t *testing.T) {
 }
 
 func TestARefusedIntentLeavesNoRecord(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join(t.TempDir(), "state")
 	store := New(testOptions(root))
 	fired := false
@@ -240,6 +244,7 @@ func TestARefusedIntentLeavesNoRecord(t *testing.T) {
 }
 
 func TestTheSetupRecordRoundTripsCanonically(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	want := setupReceiptState()
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
@@ -265,6 +270,7 @@ func TestTheSetupRecordRoundTripsCanonically(t *testing.T) {
 // A setup record another build wrote, or one this build cannot read, never
 // strands a launch: it refuses naming setup, and setup discards it.
 func TestAnotherBuildsSetupFormatRefusesALaunch(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		entry   string
@@ -321,6 +327,7 @@ func TestAnotherBuildsSetupFormatRefusesALaunch(t *testing.T) {
 // A setup subtree that cannot be read is not another build's: an I/O, bound or
 // permission failure refuses both a launch and setup and keeps every entry.
 func TestAnUnreadableSetupSubtreeRefusesAndIsKept(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("root reads a file whatever its mode")
 	}
@@ -392,6 +399,7 @@ func chmodRestored(t *testing.T, path string, mode os.FileMode) {
 }
 
 func TestOwnSetupStateIsNeverDiscarded(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	err := store.MutateSetup(context.Background(), func(tx prerequisites.SetupTransaction) error {
 		if err := tx.Record(context.Background(), setupReceiptState()); err != nil {
@@ -407,6 +415,7 @@ func TestOwnSetupStateIsNeverDiscarded(t *testing.T) {
 // Retirement takes the runtime's lock exclusively without waiting, so a
 // runtime any launch holds is skipped and kept whole.
 func TestRetirementSkipsARuntimeALaunchHolds(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	digest := setupDigest(5)
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
@@ -451,6 +460,7 @@ func TestRetirementSkipsARuntimeALaunchHolds(t *testing.T) {
 // Discarding another build's state never removes a runtime a launch holds:
 // the discard refuses as busy and leaves the runtime whole.
 func TestDiscardRefusesWhileALaunchHoldsARuntime(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	digest := setupDigest(5)
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
@@ -495,6 +505,7 @@ func TestDiscardRefusesWhileALaunchHoldsARuntime(t *testing.T) {
 // Publication renames a complete stage without replacing anything, so racing
 // publishers of one runtime leave exactly one and every loser its stage gone.
 func TestConcurrentPublishersLeaveOneRuntime(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	digest := setupDigest(6)
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
@@ -551,6 +562,7 @@ func TestConcurrentPublishersLeaveOneRuntime(t *testing.T) {
 }
 
 func TestARuntimeIsPublishedOnlyWithItsRecord(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	err := store.MutateSetup(context.Background(), func(tx prerequisites.SetupTransaction) error {
 		stage, err := tx.StageRuntime(context.Background())
@@ -573,6 +585,7 @@ func TestARuntimeIsPublishedOnlyWithItsRecord(t *testing.T) {
 }
 
 func TestADiscardedStageLeavesNoEntryAndPublishesNothing(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
 		stage := stageRuntime(t, tx, "discarded", setupDigest(9))
@@ -593,6 +606,7 @@ func TestADiscardedStageLeavesNoEntryAndPublishesNothing(t *testing.T) {
 }
 
 func TestSetupKeepsTheNewestEightRuns(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
 		for range maxSetupRuns + 1 {
@@ -617,6 +631,7 @@ func TestSetupKeepsTheNewestEightRuns(t *testing.T) {
 // output retention never lets a later setup reuse an ID a receipt or pending
 // intent still attributes; a name no setup output takes is left alone.
 func TestSetupOutputNumbersPastTheReceiptsIDs(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join(t.TempDir(), "state")
 	store := New(testOptions(root))
 	host := filepath.Join(root+logsSuffix, logController)
@@ -645,6 +660,7 @@ func TestSetupOutputNumbersPastTheReceiptsIDs(t *testing.T) {
 }
 
 func TestWheelPathsAreConfinedToTheCache(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
 		path, err := tx.WheelPath(context.Background(), setupDigest(9), "ansible_core-2.21.6-py3-none-any.whl")
@@ -668,6 +684,7 @@ func TestWheelPathsAreConfinedToTheCache(t *testing.T) {
 }
 
 func TestASecondSetupIsBusy(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	mutateSetup(t, store, func(prerequisites.SetupTransaction) error {
 		err := store.MutateSetup(context.Background(), func(prerequisites.SetupTransaction) error { return nil })
@@ -679,6 +696,7 @@ func TestASecondSetupIsBusy(t *testing.T) {
 }
 
 func TestACompletedSetupUnlocksBeforeClosingItsSharedDescription(t *testing.T) {
+	t.Parallel()
 	for _, outcome := range []struct {
 		name string
 		err  error
@@ -745,6 +763,7 @@ func duplicateSetupLock(t *testing.T, store *Store) int {
 // A launch's rebuild waits for the setup lock instead of refusing, and stops
 // waiting when its context ends.
 func TestAwaitingSetupWaitsForTheHolderAndHonoursCancellation(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	release, entered := make(chan struct{}), make(chan struct{})
 	held := make(chan error, 1)
@@ -785,6 +804,7 @@ func TestAwaitingSetupWaitsForTheHolderAndHonoursCancellation(t *testing.T) {
 // A runtime whose launch lock is gone cannot be held by any launch, so
 // retirement removes it rather than reporting it retired and leaving it.
 func TestRetiringARuntimeWithoutItsLaunchLockRemovesIt(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	digest := setupDigest(5)
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
@@ -814,6 +834,7 @@ func TestRetiringARuntimeWithoutItsLaunchLockRemovesIt(t *testing.T) {
 // A hold proves the runtime's record names the digest it was asked for, so a
 // runtime renamed into another's place is never launched as that one.
 func TestAHoldRefusesARuntimeWhoseRecordNamesAnother(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	digest := setupDigest(5)
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
@@ -840,6 +861,7 @@ func TestAHoldRefusesARuntimeWhoseRecordNamesAnother(t *testing.T) {
 // Leftover stages and runtimes past any small bound never wedge setup: the
 // sweep and the listing admit them, and the sweep removes every stage.
 func TestTheSweepAdmitsManyRuntimeEntries(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
 		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "kept", setupDigest(2)), setupDigest(2))
@@ -866,6 +888,7 @@ func TestTheSweepAdmitsManyRuntimeEntries(t *testing.T) {
 // Pruning keeps exactly the named wheel directories and removes every other
 // entry of the cache.
 func TestPruningKeepsOnlyTheNamedWheels(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
 		if pruned, err := tx.PruneWheels(context.Background(), nil); pruned != 0 || err != nil {

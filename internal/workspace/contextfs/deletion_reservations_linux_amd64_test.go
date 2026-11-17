@@ -21,6 +21,7 @@ import (
 // record holds for it, so another context can then reserve the same keys,
 // and every other context's reservations stay.
 func TestADeletedContextsReservationsAreReleasedForAnotherContext(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	_, sources := fixture(t)
@@ -88,6 +89,7 @@ func TestADeletedContextsReservationsAreReleasedForAnotherContext(t *testing.T) 
 // entries this apply needs and those other contexts hold, with the exits that
 // free some; at the bound they are published.
 func TestReservationsPastTheRecordBoundRefuseBeforePublication(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	_, sources := fixture(t)
@@ -132,6 +134,7 @@ func TestReservationsPastTheRecordBoundRefuseBeforePublication(t *testing.T) {
 // object and the Machine the context is bound to, and no other kind of claim,
 // no path and no other context's area.
 func TestADeletionNamesEachInstallerWorkAreaAndItsMachine(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	_, sources := fixture(t)

@@ -21,6 +21,7 @@ import (
 // filesystem and the remedy, and the setup dry run's state-root check reports
 // the same refusal. A root on ext4, XFS or Btrfs is used.
 func TestAProductionRootOnATransientFilesystemRefusesBeforeAnyPublication(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name  string
 		magic int64
@@ -96,6 +97,7 @@ func TestAProductionRootOnATransientFilesystemRefusesBeforeAnyPublication(t *tes
 // An isolated test root injected at composition may lie on tmpfs, as /tmp does
 // on many hosts.
 func TestAnInjectedTestRootOnTmpfsIsUsed(t *testing.T) {
+	t.Parallel()
 	var filesystem syscall.Statfs_t
 	if err := syscall.Statfs("/tmp", &filesystem); err != nil || filesystem.Type != 0x01021994 {
 		t.Skip("/tmp is not tmpfs here")

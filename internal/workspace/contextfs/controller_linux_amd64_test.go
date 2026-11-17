@@ -118,6 +118,7 @@ func bind(t *testing.T, store *Store, name string) {
 // binding after a completed setup creates the controller record holding this
 // host's identity and that binding, and attributes the directory it lives in.
 func TestControllerAbsentReadsAndTheFirstBindingCreatesTheRecord(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	called := false
 	err := store.ReadController(context.Background(), "", func(view prerequisites.StorageView) error {
@@ -170,6 +171,7 @@ func TestControllerAbsentReadsAndTheFirstBindingCreatesTheRecord(t *testing.T) {
 // interrupted setup or another build's format, the first binding refuses
 // naming setup and leaves no controller directory behind.
 func TestTheFirstBindingRefusesBeforeSetupCompletes(t *testing.T) {
+	t.Parallel()
 	for name, arrange := range map[string]func(*testing.T, *Store){
 		"no setup": func(*testing.T, *Store) {},
 		"an interrupted setup": func(t *testing.T, store *Store) {
@@ -209,6 +211,7 @@ func TestTheFirstBindingRefusesBeforeSetupCompletes(t *testing.T) {
 // subtree that is no directory and a record no descriptor declares each refuse
 // every read.
 func TestTheStoreAdmitsControllerWithOnlyInstallAndRecord(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
@@ -278,6 +281,7 @@ func TestTheStoreAdmitsControllerWithOnlyInstallAndRecord(t *testing.T) {
 // A controller read never declares the shared subtree, and an ordinary context
 // write preserves the descriptor the first binding published.
 func TestControllerReadDeclaresNothingAndContextWritesPreserveTheDescriptor(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	before, _ := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
@@ -304,6 +308,7 @@ func TestControllerReadDeclaresNothingAndContextWritesPreserveTheDescriptor(t *t
 }
 
 func TestControllerBindingSurvivesUpdateAndDisposableDeletionRetainsHost(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	value := syntheticControllerState(t)
@@ -380,6 +385,7 @@ func boundFixture(t *testing.T) *Store {
 }
 
 func TestToolAreaCapabilityBoundsModesSealAndLifetime(t *testing.T) {
+	t.Parallel()
 	store := boundFixture(t)
 	ctx := context.Background()
 	var escaped prerequisites.BundleArea
@@ -463,6 +469,7 @@ func TestToolAreaCapabilityBoundsModesSealAndLifetime(t *testing.T) {
 }
 
 func TestToolAreaRejectsUnknownSubstitutionAndSymlinks(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"unattributed", "symlink", "hardlink", "world-readable", "replace-directory"} {
 		t.Run(mode, func(t *testing.T) {
 			store := boundFixture(t)
@@ -516,6 +523,7 @@ func TestToolAreaRejectsUnknownSubstitutionAndSymlinks(t *testing.T) {
 }
 
 func TestControllerReadAndMutationShareRootCoordination(t *testing.T) {
+	t.Parallel()
 	store := impatient(boundFixture(t))
 	ctx := context.Background()
 	err := store.ReadController(ctx, "", func(prerequisites.StorageView) error {
@@ -539,6 +547,7 @@ func TestControllerReadAndMutationShareRootCoordination(t *testing.T) {
 }
 
 func TestControllerRecordCanonicalBoundsAndIntegrity(t *testing.T) {
+	t.Parallel()
 	value := syntheticControllerState(t)
 	digest, _ := value.Host.PrivateDigest()
 	value.ToolSources = []prerequisites.DependencySource{{ID: "helm-v3.17.0", URL: "https://downloads.example.test/helm.tar.gz", SHA256: strings.Repeat("b", 64), Bytes: 123}}
@@ -586,6 +595,7 @@ func TestControllerRecordCanonicalBoundsAndIntegrity(t *testing.T) {
 // of a setup: no receipt, retained resolution or execution bundle. A record
 // of another version, or one carrying any of those, refuses.
 func TestTheControllerRecordHoldsNoReceipt(t *testing.T) {
+	t.Parallel()
 	encoded, err := encodeRecord(controllerRecord(syntheticControllerState(t), nil), maxControllerState)
 	if err != nil {
 		t.Fatal(err)
@@ -626,6 +636,7 @@ func TestTheControllerRecordHoldsNoReceipt(t *testing.T) {
 // unqualified and `ssh/<address>:<port>/` keys side by side, the same claim on
 // two hosts included, and reads back as written.
 func TestARecordHoldsUnqualifiedAndSSHQualifiedKeys(t *testing.T) {
+	t.Parallel()
 	golden, err := os.ReadFile(filepath.Join("testdata", "controller-record.golden"))
 	if err != nil {
 		t.Fatal(err)
@@ -665,6 +676,7 @@ func TestARecordHoldsUnqualifiedAndSSHQualifiedKeys(t *testing.T) {
 // record that holds none reads, one that holds a kind reads back as written,
 // and a member that is not an API kind name refuses.
 func TestARecordHoldsTheAPIKindAClaimReservesFor(t *testing.T) {
+	t.Parallel()
 	value := syntheticControllerState(t)
 	value.Reservations = []prerequisites.HostReservation{
 		{Context: "lab", Kind: prerequisites.ClusterMediaReservation, Service: "sno", ObjectKind: "OpenShiftCluster", Keys: []string{"path:/var/lib/bootwright/media/sno"}},
@@ -696,6 +708,7 @@ func TestARecordHoldsTheAPIKindAClaimReservesFor(t *testing.T) {
 }
 
 func TestControllerDirectoryCreationInterruptionNeverAdoptsOrphan(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	recordPreparedSetup(t, store)
@@ -733,6 +746,7 @@ func TestControllerDirectoryCreationInterruptionNeverAdoptsOrphan(t *testing.T) 
 // one recovery that is safe: the fresh install, and what it costs, the contexts
 // with their Secrets and the stored media. The record is left as it was.
 func TestAControllerRecordOfAnotherVersionNamesTheFreshInstall(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	recordPreparedSetup(t, store)

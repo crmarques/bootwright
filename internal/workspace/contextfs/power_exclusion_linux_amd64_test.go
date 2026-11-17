@@ -12,6 +12,7 @@ import (
 )
 
 func TestMachinePowerAndLifecycleNetworkRestartExcludeOneAnother(t *testing.T) {
+	t.Parallel()
 	for _, powerFirst := range []bool{false, true} {
 		name := "network-restart-holds-the-context"
 		if powerFirst {

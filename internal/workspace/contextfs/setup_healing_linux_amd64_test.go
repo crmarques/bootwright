@@ -162,6 +162,7 @@ func (p *healingPlans) PresentControllerPlan(_ context.Context, report prerequis
 }
 
 func TestHealingASubtreeOverAHealthyRuntimeLeavesItLaunchable(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	identity, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, strings.Repeat("1", 32), "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666")
 	if err != nil {

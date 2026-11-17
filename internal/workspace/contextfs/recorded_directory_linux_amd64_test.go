@@ -84,6 +84,7 @@ func incarnationOf(t *testing.T, store *Store, name string) string {
 // context's incarnation names the recorded device, so a reboot leaves it as
 // it was.
 func TestAStoreWhoseRecordedDevicesARebootRenumberedOpens(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
@@ -139,6 +140,7 @@ func TestAStoreWhoseRecordedDevicesARebootRenumberedOpens(t *testing.T) {
 // revision, a controller record whose tool area is sealed, and the retry of an
 // interrupted initialization.
 func TestEveryRecordedDirectorySiteOpensAfterARenumbering(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	t.Run("opened contexts", func(t *testing.T) {
 		store, retained, selected := retainedFixture(t)
@@ -195,6 +197,7 @@ func TestEveryRecordedDirectorySiteOpensAfterARenumbering(t *testing.T) {
 // A recorded inode the directory at its path no longer has is another
 // directory, whatever device either names, and still refuses as replaced.
 func TestADirectoryWithAnotherInodeStillRefusesAsReplaced(t *testing.T) {
+	t.Parallel()
 	t.Run("context", func(t *testing.T) {
 		store, record := lifecycleFixture(t)
 		renumberRecordedDevices(t, store)
@@ -227,6 +230,7 @@ func TestADirectoryWithAnotherInodeStillRefusesAsReplaced(t *testing.T) {
 // was recorded plays no part. A test cannot mount, so the comparison is held
 // to fabricated status values.
 func TestARecordedDirectoryIsItsInodeOnItsParentsFilesystem(t *testing.T) {
+	t.Parallel()
 	parent := syscall.Stat_t{Dev: 101, Ino: 7}
 	for _, test := range []struct {
 		name  string

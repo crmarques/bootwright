@@ -17,6 +17,7 @@ import (
 )
 
 func TestSetupPackageIntentGoldenAndUnloggedIdentityRoundTrip(t *testing.T) {
+	t.Parallel()
 	state := setupReceiptState()
 	state.Pending = &prerequisites.PendingSetup{
 		ID: "install-" + strings.Repeat("a", 32), PlanDigest: setupDigest(4),
@@ -48,6 +49,7 @@ func TestSetupPackageIntentGoldenAndUnloggedIdentityRoundTrip(t *testing.T) {
 }
 
 func TestSetupSequenceExhaustionKeepsReceiptWithoutAStoredRun(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
 		_, run, err := tx.OpenRun(context.Background())
@@ -79,6 +81,7 @@ func TestSetupSequenceExhaustionKeepsReceiptWithoutAStoredRun(t *testing.T) {
 }
 
 func TestSetupRunOperationalCreationFaultsRemainOptional(t *testing.T) {
+	t.Parallel()
 	for _, fault := range []struct {
 		point      string
 		occurrence int
@@ -128,6 +131,7 @@ func TestSetupRunOperationalCreationFaultsRemainOptional(t *testing.T) {
 }
 
 func TestSetupRunAccessFailureClassification(t *testing.T) {
+	t.Parallel()
 	for _, item := range []struct {
 		name   string
 		err    error
@@ -152,6 +156,7 @@ func TestSetupRunAccessFailureClassification(t *testing.T) {
 }
 
 func TestSetupLogInspectionWithUnavailableStatIsOptional(t *testing.T) {
+	t.Parallel()
 	file, err := os.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

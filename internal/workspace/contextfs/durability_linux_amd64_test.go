@@ -17,6 +17,7 @@ import (
 )
 
 func TestInitializationRetryRequiresDurableRegistryIntent(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	ctx := context.Background()
 	if err := store.Transact(ctx, true, nil, func(contexts.Transaction) error { return nil }); err != nil {
@@ -66,6 +67,7 @@ func TestInitializationRetryRequiresDurableRegistryIntent(t *testing.T) {
 }
 
 func TestDeletionRetryRequiresDurableRegistryIntent(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	store.fail = func(point string) error {
@@ -106,6 +108,7 @@ func TestDeletionRetryRequiresDurableRegistryIntent(t *testing.T) {
 }
 
 func TestInitializationFlushesReusedFilesBeforeReady(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	ctx := context.Background()
 	config := contexts.DefaultConfiguration("pending").Canonical()
@@ -209,6 +212,7 @@ func TestInitializationFlushesReusedFilesBeforeReady(t *testing.T) {
 }
 
 func TestDeletionRefusesSubstitutedChildBeforeDescending(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	input := filepath.Join(store.options.Root, "contexts", record.Name, "desired-state")

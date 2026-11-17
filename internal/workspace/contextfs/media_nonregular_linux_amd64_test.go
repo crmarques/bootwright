@@ -18,6 +18,7 @@ import (
 // directory that still holds entries is refused naming it and its remedy, and
 // nothing inside it is removed.
 func TestAFailedNonRegularMediaEntryIsRemovedByMediaDelete(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	replace := func(path string, occupy func(string) error) error {
 		if err := os.Remove(path); err != nil {

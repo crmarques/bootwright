@@ -18,6 +18,7 @@ import (
 // whose body this build could otherwise read, so every access refuses and
 // nothing in the store is rewritten.
 func TestSupersededRegistryFormatsRefuseWithoutRewriting(t *testing.T) {
+	t.Parallel()
 	for _, number := range []int{contexts.RegistryVersion - 1, contexts.RegistryVersion + 1} {
 		version := strconv.Itoa(number)
 		t.Run("v"+version, func(t *testing.T) {
@@ -45,6 +46,7 @@ func TestSupersededRegistryFormatsRefuseWithoutRewriting(t *testing.T) {
 }
 
 func TestRegistryCanonicalFields(t *testing.T) {
+	t.Parallel()
 	version := "\"version\":" + strconv.Itoa(contexts.RegistryVersion)
 	valid := []byte("{" + version + ",\"contexts\":[]}\n")
 	for _, data := range [][]byte{
@@ -76,6 +78,7 @@ func TestRegistryCanonicalFields(t *testing.T) {
 // The controller descriptor is absent until confirmed setup introduces it, so a
 // store that never had one encodes without the member.
 func TestRegistryOmitsAnAbsentControllerDescriptor(t *testing.T) {
+	t.Parallel()
 	registry := emptyRegistry()
 	data, err := encodeRecord(registry, maxRegistry)
 	if err != nil || bytes.Contains(data, []byte("controller")) {
@@ -93,6 +96,7 @@ func TestRegistryOmitsAnAbsentControllerDescriptor(t *testing.T) {
 }
 
 func TestRegistryRefusesUnorderedOrDuplicateNames(t *testing.T) {
+	t.Parallel()
 	ready := func(name string) contexts.Record {
 		return contexts.Record{Name: name, Mode: contexts.Ready, SecretStoreType: "local-keyring", DirectoryDevice: 1, DirectoryInode: 2}
 	}
@@ -112,6 +116,7 @@ func TestRegistryRefusesUnorderedOrDuplicateNames(t *testing.T) {
 // An interrupted reservation leaves the name reserved and creates no directory;
 // the retry resumes that exact name rather than reserving a second one.
 func TestRegistryReservationRetryResumesItsReservedName(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	publish(t, store, "example", sources)
 	ctx := context.Background()

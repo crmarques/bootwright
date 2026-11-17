@@ -138,6 +138,7 @@ func resolvedSetupFixture(t *testing.T, store *Store, record contexts.Record) {
 // on this host retained a newer helm, whose closure this context never
 // published.
 func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	resolvedSetupFixture(t, store, record)

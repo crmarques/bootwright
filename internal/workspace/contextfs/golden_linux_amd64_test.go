@@ -141,6 +141,7 @@ func lineDiff(want, got string) string {
 // reads it: decodeRecord, which hands a registry to decodeRegistry, then the
 // record's own validator.
 func TestWorkspaceRecordsMatchTheirGoldens(t *testing.T) {
+	t.Parallel()
 	const (
 		input       = "/home/operator/platform"
 		environment = "/home/operator/platform/environments/lab"
@@ -217,6 +218,7 @@ func TestWorkspaceRecordsMatchTheirGoldens(t *testing.T) {
 // stage sealed, retained tool sources, both tool area reservation shapes and
 // both a shared and an exclusive host reservation.
 func TestControllerRecordMatchesItsGolden(t *testing.T) {
+	t.Parallel()
 	value := syntheticControllerState(t)
 	hostDigest, err := value.Host.PrivateDigest()
 	if err != nil {

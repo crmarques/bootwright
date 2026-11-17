@@ -20,6 +20,7 @@ import (
 // refused exactly as setup's inspection refuses it, with the exit to replace
 // it with a directory.
 func TestAStateRootBehindALinkNamesTheAncestorAndItsExit(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	uid, gid := uint32(os.Geteuid()), uint32(os.Getegid())
 	for kind, prepare := range map[string]func(t *testing.T, base string) string{

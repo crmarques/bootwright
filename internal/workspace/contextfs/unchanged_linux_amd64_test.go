@@ -29,6 +29,7 @@ func unchanged(t *testing.T, store *Store, name, environment string, sources des
 // directory or Environment directory, and a selected revision whose frozen
 // bytes no longer verify, are changed input that a publication replaces.
 func TestUnchangedInputIsExactlyTheSelectedRevision(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	input := sources.Roots[0]
@@ -64,6 +65,7 @@ func TestUnchangedInputIsExactlyTheSelectedRevision(t *testing.T) {
 // A context without input has no selected revision, so any input is changed,
 // and a deletion transaction serves no input comparison at all.
 func TestUnchangedInputNeedsASelectedRevisionOutsideADeletion(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	if err := store.Transact(context.Background(), true, nil, func(tx contexts.Transaction) error {

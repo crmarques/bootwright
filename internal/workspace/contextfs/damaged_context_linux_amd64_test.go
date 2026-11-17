@@ -71,6 +71,7 @@ func revisionEntry(beta contexts.Record, name ...string) string {
 // the store's own refusal, never the root's absolute path, with the exit that
 // damage has: the purge only for an entry it can remove.
 func TestADamagedContextIsNamedEverywhere(t *testing.T) {
+	t.Parallel()
 	const purge = "bootwright context delete --name beta --purge, or restore the whole store"
 	const unsafe = "restore the whole store from a matching backup: context delete refuses an entry it cannot open safely"
 	for _, row := range []struct {
@@ -137,6 +138,7 @@ func TestADamagedContextIsNamedEverywhere(t *testing.T) {
 // removes nothing. An initializing context, whose init writes its evidence
 // first, still refuses evidence it cannot find.
 func TestEvidenceAbsentFromAReadyContextReadsEmpty(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _, beta := damagedPair(t)
 	mutation := filepath.Join("contexts", beta.Name, "state", "mutation.json")
@@ -252,6 +254,7 @@ func claimForBeta(t *testing.T, store *Store, beta contexts.Record) ([]string, f
 // as lost and then abandoned with its claims, an entry the store refuses to
 // open refuses the purge too, and another damaged context still refuses, named.
 func TestThePurgeOfADamagedContextRunsOverExactlyThatContext(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	t.Run("configuration removed", func(t *testing.T) {
 		store, alpha, beta := damagedPair(t)

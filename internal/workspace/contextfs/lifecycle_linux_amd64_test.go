@@ -34,6 +34,7 @@ func deleteContext(t *testing.T, store *Store, record contexts.Record) error {
 }
 
 func TestExplicitRootUsesRootOwnershipByDefault(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() != 0 || os.Getegid() != 0 {
 		t.Skip("requires namespace root with mapped user and group IDs")
 	}
@@ -70,6 +71,7 @@ func TestExplicitRootUsesRootOwnershipByDefault(t *testing.T) {
 }
 
 func TestDirectNamedLayoutAndPermanentDeletion(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	base := filepath.Join(store.options.Root, "contexts", "example")
@@ -113,6 +115,7 @@ func TestDirectNamedLayoutAndPermanentDeletion(t *testing.T) {
 }
 
 func TestInterruptedDeletionResumesOnlyRecordedIdentity(t *testing.T) {
+	t.Parallel()
 	for _, point := range []string{"before-context-unlink", "before-context-rmdir"} {
 		t.Run(point, func(t *testing.T) {
 			store, sources := fixture(t)
@@ -151,6 +154,7 @@ func TestInterruptedDeletionResumesOnlyRecordedIdentity(t *testing.T) {
 // allocated after the unlink, so no filesystem can hand that number to the
 // replacement, and comparing identities does not depend on inode reuse.
 func TestDeletedNameIsReservableAgainWithAFreshDirectory(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	base := filepath.Join(store.options.Root, "contexts", "example")
@@ -198,6 +202,7 @@ func TestDeletedNameIsReservableAgainWithAFreshDirectory(t *testing.T) {
 }
 
 func TestDeletionRefusesUnknownObjectsBeforeRemovingAnything(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"unknown", "link", "hardlink", "fifo"} {
 		t.Run(kind, func(t *testing.T) {
 			store, sources := fixture(t)
@@ -231,6 +236,7 @@ func TestDeletionRefusesUnknownObjectsBeforeRemovingAnything(t *testing.T) {
 }
 
 func TestPendingInitializationDoesNotPoisonUnrelatedContexts(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	ready := publish(t, store, "ready", sources)
 	config := contexts.DefaultConfiguration("pending").Canonical()
@@ -284,6 +290,7 @@ func TestPendingInitializationDoesNotPoisonUnrelatedContexts(t *testing.T) {
 }
 
 func TestInitializationInterruptionReservesExactIdentity(t *testing.T) {
+	t.Parallel()
 	for _, point := range []string{"after-context-reservation", "after-context-directory", "before-context-ready"} {
 		t.Run(point, func(t *testing.T) {
 			store, sources := fixture(t)
@@ -344,6 +351,7 @@ func TestInitializationInterruptionReservesExactIdentity(t *testing.T) {
 // directory. A reservation write interrupted once its bytes are complete,
 // whether refused or cancelled, must therefore leave it for the retry.
 func TestInterruptedReservationWriteRemainsResumable(t *testing.T) {
+	t.Parallel()
 	for _, point := range []string{"sync-file", "sync-directory"} {
 		for _, cancelled := range []bool{false, true} {
 			mode := "refused"
@@ -406,6 +414,7 @@ func TestInterruptedReservationWriteRemainsResumable(t *testing.T) {
 }
 
 func TestEagerSecretInitializationNeedsNoDesiredInput(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	var ready contexts.Record
 	err := store.Transact(context.Background(), true, nil, func(tx contexts.Transaction) error {
@@ -461,6 +470,7 @@ func TestEagerSecretInitializationNeedsNoDesiredInput(t *testing.T) {
 }
 
 func TestInterruptedInitializationCanBePurgedBeforeIdentityPublication(t *testing.T) {
+	t.Parallel()
 	for _, point := range []string{"after-context-directory", "after-context-publish"} {
 		t.Run(point, func(t *testing.T) {
 			store, _ := fixture(t)
@@ -499,6 +509,7 @@ func TestInterruptedInitializationCanBePurgedBeforeIdentityPublication(t *testin
 }
 
 func TestInitializingRecoveryNeverAdoptsAForeignFinalDirectoryOrStage(t *testing.T) {
+	t.Parallel()
 	for _, shape := range []string{"empty-final", "foreign-stage", "public-stage", "linked-reservation"} {
 		for _, purge := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/purge-%t", shape, purge), func(t *testing.T) {

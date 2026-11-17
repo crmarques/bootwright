@@ -140,6 +140,7 @@ func writePrivate(t *testing.T, path string, data []byte) {
 }
 
 func TestImmutableInputAndReadOnlyLifecycleBoundary(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	sources.Files = append(sources.Files, desiredstate.NewSourceFile(filepath.Join(sources.Roots[0], "excluded.yaml"), []byte{0xff, 0xfe}))
 	record := publish(t, store, "example", sources)
@@ -181,6 +182,7 @@ func TestImmutableInputAndReadOnlyLifecycleBoundary(t *testing.T) {
 }
 
 func TestMissingStoreAndInputPreflight(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	view, err := store.View(context.Background())
 	if err != nil || view.Version != contexts.RegistryVersion || len(view.Contexts) != 0 {
@@ -200,6 +202,7 @@ func TestMissingStoreAndInputPreflight(t *testing.T) {
 }
 
 func TestEmptyRootViewRemainsReadOnly(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	if err := os.Mkdir(store.options.Root, 0700); err != nil {
 		t.Fatal(err)
@@ -218,6 +221,7 @@ func TestEmptyRootViewRemainsReadOnly(t *testing.T) {
 // leaves one, which a view ignores and the next reserve removes as it
 // publishes.
 func TestAViewToleratesARegistryStageAKillLeft(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	checkpoints := 0
 	store.fail = func(point string) error {
@@ -428,6 +432,7 @@ func snapshotRootEntries(t *testing.T, root string) []rootEntrySnapshot {
 }
 
 func TestInitialRegistryRecoveryRefusesUnknownOrUnsafeState(t *testing.T) {
+	t.Parallel()
 	const pending = "pending-00000000000000000000000000000000.json"
 	for _, kind := range []string{"unrelated", "wrong-name", "partial", "noncanonical", "extra", "multiple", "mode", "hardlink", "symlink", "fifo", "directory"} {
 		t.Run(kind, func(t *testing.T) {
@@ -502,6 +507,7 @@ func TestInitialRegistryRecoveryRefusesUnknownOrUnsafeState(t *testing.T) {
 }
 
 func TestInitialRegistryRecoveryRejectsCandidateSubstitution(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	if err := store.Transact(context.Background(), true, nil, func(contexts.Transaction) error { return nil }); err != nil {
 		t.Fatal(err)
@@ -539,6 +545,7 @@ func TestInitialRegistryRecoveryRejectsCandidateSubstitution(t *testing.T) {
 }
 
 func TestInitialRegistryRecoveryReportsUncertainDurability(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	if err := os.Mkdir(store.options.Root, 0700); err != nil {
 		t.Fatal(err)
@@ -589,6 +596,7 @@ func TestInitialRegistryRecoveryReportsUncertainDurability(t *testing.T) {
 }
 
 func TestInitialRegistryRecoveryRejectsPostRenameRootChange(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	if err := os.Mkdir(store.options.Root, 0700); err != nil {
 		t.Fatal(err)
@@ -662,6 +670,7 @@ func TestRootSelectionIgnoresEnvironment(t *testing.T) {
 }
 
 func TestUnsafeStoreObjects(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"root-mode", "root-link", "ancestor-link", "registry-link", "registry-hardlink", "registry-fifo", "missing-reservation", "missing-manifest", "manifest-mode", "blob-link", "blob-digest"} {
 		t.Run(kind, func(t *testing.T) {
 			store, sources := fixture(t)
@@ -746,6 +755,7 @@ func TestUnsafeStoreObjects(t *testing.T) {
 }
 
 func TestRegistryStrictnessAndManifestPaths(t *testing.T) {
+	t.Parallel()
 	valid, _ := encodeRecord(emptyRegistry(), maxRegistry)
 	for _, data := range [][]byte{
 		[]byte(`{"version":1,"version":1,"current":"","identities":[],"contexts":[]}` + "\n"),
@@ -781,6 +791,7 @@ func TestRegistryStrictnessAndManifestPaths(t *testing.T) {
 }
 
 func TestMutationGuardLayoutAndLeases(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	impatient(store)
 	record := publish(t, store, "example", sources)
@@ -825,6 +836,7 @@ func TestMutationGuardLayoutAndLeases(t *testing.T) {
 }
 
 func TestTransactionDoesNotPublishWithoutCommit(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	var orphan string
@@ -853,6 +865,7 @@ func TestTransactionDoesNotPublishWithoutCommit(t *testing.T) {
 }
 
 func TestReplacementDuringTransactionRefuses(t *testing.T) {
+	t.Parallel()
 	for _, target := range []string{"registry", "root", "revision-bytes", "evidence"} {
 		t.Run(target, func(t *testing.T) {
 			store, sources := fixture(t)
@@ -900,6 +913,7 @@ func TestReplacementDuringTransactionRefuses(t *testing.T) {
 }
 
 func TestPublicationFailurePoints(t *testing.T) {
+	t.Parallel()
 	for _, point := range []string{"mkdir", "create-file", "write-file", "sync-file", "sync-directory", "before-registry-rename", "after-registry-rename"} {
 		t.Run(point, func(t *testing.T) {
 			store, sources := fixture(t)
@@ -942,6 +956,7 @@ func TestPublicationFailurePoints(t *testing.T) {
 }
 
 func TestConcurrentReadersSeeCompleteRevisions(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	impatient(store)
 	publish(t, store, "example", sources)
@@ -1070,6 +1085,7 @@ func FuzzPersistedRecords(f *testing.F) {
 }
 
 func TestEveryPublicationEffectCanBeInterrupted(t *testing.T) {
+	t.Parallel()
 	traceStore, traceSources := fixture(t)
 	publish(t, traceStore, "example", traceSources)
 	var trace []string
@@ -1119,6 +1135,7 @@ func TestEveryPublicationEffectCanBeInterrupted(t *testing.T) {
 }
 
 func TestPendingSourceReplacementRefusesPublication(t *testing.T) {
+	t.Parallel()
 	for _, replacement := range []string{"same-bytes", "different-bytes", "symlink"} {
 		t.Run(replacement, func(t *testing.T) {
 			store, sources := fixture(t)
@@ -1178,6 +1195,7 @@ func TestPendingSourceReplacementRefusesPublication(t *testing.T) {
 }
 
 func TestViewValidatesManifestAgreement(t *testing.T) {
+	t.Parallel()
 	for _, malformed := range []bool{false, true} {
 		store, sources := fixture(t)
 		record := publish(t, store, "example", sources)
@@ -1211,6 +1229,7 @@ func TestViewValidatesManifestAgreement(t *testing.T) {
 }
 
 func TestAggregateManifestBytesPrecedeDecoding(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	var paths []string
 	for i := range 9 {
@@ -1237,6 +1256,7 @@ func TestAggregateManifestBytesPrecedeDecoding(t *testing.T) {
 }
 
 func TestRecordSizePreflightMatchesCanonicalEncoding(t *testing.T) {
+	t.Parallel()
 	descriptor := contexts.ControllerDescriptor{Version: 1, Mode: "ready", DirectoryDevice: ^uint64(0), DirectoryInode: ^uint64(0)}
 	values := []any{
 		emptyRegistry(),

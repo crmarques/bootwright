@@ -83,6 +83,7 @@ func readTestSecret(t *testing.T, store *Store, token secretstore.Context) strin
 }
 
 func TestSecretEveryPublicationEffectIsAtomic(t *testing.T) {
+	t.Parallel()
 	baseline, token := secretPublicationFixture(t)
 	points := []string{}
 	baseline.fail = func(point string) error { points = append(points, point); return nil }
@@ -129,6 +130,7 @@ func TestSecretEveryPublicationEffectIsAtomic(t *testing.T) {
 }
 
 func TestSecretEveryRotationEffectPreservesCompleteMaterial(t *testing.T) {
+	t.Parallel()
 	rotate := func(store *Store, token secretstore.Context) error {
 		access := secretstore.NewAccess(store, secretstore.NewCatalog(localkeyring.New()), nil)
 		return access.Mutate(context.Background(), token, func(session secretstore.StoreSession, _ secretstore.Selection) error {

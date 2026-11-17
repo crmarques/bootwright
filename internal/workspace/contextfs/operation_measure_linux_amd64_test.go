@@ -77,6 +77,7 @@ func publishEarlierOperation(t *testing.T, store *Store) {
 // size, a log's bytes and its creation, and each removal. What it counted is
 // what a fresh walk finds.
 func TestTheOperationAreaMeasuresItsSubtreeOncePerTransaction(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	publishEarlierOperation(t, store)
@@ -131,6 +132,7 @@ func TestTheOperationAreaMeasuresItsSubtreeOncePerTransaction(t *testing.T) {
 // entry free and room for its bytes, so the area fills to its bounds and the
 // next write refuses, naming the operation area.
 func TestTheIncrementalMeasureRefusesAtTheSameBound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const refusal = "lifecycle operation storage has reached its bounds"
 	t.Run("entries", func(t *testing.T) {
@@ -177,6 +179,7 @@ func TestTheIncrementalMeasureRefusesAtTheSameBound(t *testing.T) {
 // under the next one, which walks the subtree; every write that would create
 // an entry, a record, a log or a directory, refuses, naming the area.
 func TestAnAreaAtItsEntryBoundCompletesWhatItHolds(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const refusal = "lifecycle operation storage has reached its bounds"
 	store, _ := lifecycleFixture(t)
@@ -236,6 +239,7 @@ func TestAnAreaAtItsEntryBoundCompletesWhatItHolds(t *testing.T) {
 // larger refuses, under the transaction that counted its way there and under
 // the next one, which walks the subtree.
 func TestAReplacementAtTheByteBoundIsChargedItsGrowth(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	const refusal = "lifecycle operation storage has reached its bounds"
 	store, _ := lifecycleFixture(t)
@@ -279,6 +283,7 @@ func TestAReplacementAtTheByteBoundIsChargedItsGrowth(t *testing.T) {
 // before its read-back failed has, so the area forgets what it counted and the
 // next write walks the subtree again.
 func TestAFailedOperationWriteMeasuresAgain(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	publishEarlierOperation(t, store)

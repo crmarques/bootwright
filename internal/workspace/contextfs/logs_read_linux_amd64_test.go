@@ -51,6 +51,7 @@ func readAt(t *testing.T, file logview.LogFile) string {
 }
 
 func TestReadLogsTakesOnlyTheSharedRootLockAndReadsNoInput(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	appendLog(t, store, logOperation+"/operation.jsonl", "{}\n")
@@ -107,6 +108,7 @@ func TestReadLogsTakesOnlyTheSharedRootLockAndReadsNoInput(t *testing.T) {
 }
 
 func TestALogHandleOutlivesItsReadAndSeesAppendedBytes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	target := logOperation + "/blocks/network/attempt-000001.output"
@@ -143,6 +145,7 @@ func TestALogHandleOutlivesItsReadAndSeesAppendedBytes(t *testing.T) {
 }
 
 func TestLogOpenRefusesALinkASecondLinkAGroupReadableFileOrANonRegularOne(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	appendLog(t, store, logOperation+"/operation.jsonl", "{}\n")
@@ -180,6 +183,7 @@ func TestLogOpenRefusesALinkASecondLinkAGroupReadableFileOrANonRegularOne(t *tes
 }
 
 func TestLogOpenRefusesASymlinkedDirectoryInItsDescent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	appendLog(t, store, logOperation+"/blocks/network/attempt-000001.jsonl", "{}\n")
@@ -244,6 +248,7 @@ func mutating(t *testing.T, store *Store) bool {
 }
 
 func TestMutatingSeesAnExclusiveLeaseAndNotASharedOne(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	release := holdWhile(t, func(held func()) error {
@@ -269,6 +274,7 @@ func TestMutatingSeesAnExclusiveLeaseAndNotASharedOne(t *testing.T) {
 }
 
 func TestRunLivenessFollowsItsRunsSharedLock(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	var run string
@@ -327,6 +333,7 @@ func (o *retryObserver) Done() <-chan struct{} {
 }
 
 func TestARunStillHoldsItsFileBesideAnInstantProbe(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "run-000001.output")
 	writePrivate(t, path, nil)
 	probe, err := os.Open(path)
@@ -352,6 +359,7 @@ func TestARunStillHoldsItsFileBesideAnInstantProbe(t *testing.T) {
 }
 
 func TestSetupLivenessFollowsSetupLock(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	if _, found, err := store.OpenSetup(ctx, ""); found || err != nil {
@@ -400,6 +408,7 @@ func TestSetupLivenessFollowsSetupLock(t *testing.T) {
 }
 
 func TestNewestSetupOutputSurvivesPruningBetweenListAndOpen(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	host := filepath.Join(store.options.Root+logsSuffix, logController)

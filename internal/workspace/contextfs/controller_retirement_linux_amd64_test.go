@@ -79,6 +79,7 @@ func bindOther(t *testing.T, store *Store, area string) {
 // moves its binding to a new area retires the one no binding names any more,
 // directory and record entry both, while the area it names stays.
 func TestAStageRetiresTheAreaNoBindingNames(t *testing.T) {
+	t.Parallel()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
 	if err := publishClients(store, clientClosure, true); err != nil {
@@ -101,6 +102,7 @@ func TestAStageRetiresTheAreaNoBindingNames(t *testing.T) {
 // An area another context's binding names stays through every retirement,
 // and that context's deletion retires it.
 func TestAnAreaAnotherBindingNamesStaysUntilItsContextIsDeleted(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
@@ -136,6 +138,7 @@ func TestAnAreaAnotherBindingNamesStaysUntilItsContextIsDeleted(t *testing.T) {
 // A stage that selects no tool names none, so the area its binding named is
 // retired; an area still being published is an unfinished stage's and stays.
 func TestAStageWithoutToolsReleasesItsAreaAndKeepsUnfinishedOnes(t *testing.T) {
+	t.Parallel()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
 	if err := publishClients(store, clientClosure, false); err != nil {
@@ -153,6 +156,7 @@ func TestAStageWithoutToolsReleasesItsAreaAndKeepsUnfinishedOnes(t *testing.T) {
 // A stage that proves an area an earlier attempt published whole but never
 // sealed seals it before naming it.
 func TestRetirementSealsTheUnsealedAreaItNames(t *testing.T) {
+	t.Parallel()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
 	if err := publishClients(store, clientClosure, false); err != nil {
@@ -169,6 +173,7 @@ func TestRetirementSealsTheUnsealedAreaItNames(t *testing.T) {
 
 // An area this operation holds open is never retired under it.
 func TestAnAreaTheOperationHoldsOpenStays(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
@@ -195,6 +200,7 @@ func TestAnAreaTheOperationHoldsOpenStays(t *testing.T) {
 // A retirement interrupted after its areas turned retiring leaves a store
 // every read accepts, and the next retirement finishes it.
 func TestAnInterruptedRetirementIsFinishedByTheNext(t *testing.T) {
+	t.Parallel()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
 	if err := publishClients(store, clientClosure, true); err != nil {

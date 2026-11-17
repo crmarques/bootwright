@@ -78,6 +78,7 @@ func uninstallDiagnostic(t *testing.T, err error, code, message string) {
 // renamed tree without following a link: a link inside to a file outside is
 // removed as itself and the file it names survives.
 func TestAnUninstallRenamesTheStateAsideThenRemovesIt(t *testing.T) {
+	t.Parallel()
 	store, base := installedStore(t)
 	outside := filepath.Join(base, "operator-data")
 	if err := os.WriteFile(outside, []byte("keep\n"), 0600); err != nil {
@@ -128,6 +129,7 @@ func TestAnUninstallRenamesTheStateAsideThenRemovesIt(t *testing.T) {
 // removes every renamed tree of the store's owner and reports it, and leaves
 // a link or a file that only looks like one.
 func TestTheNextUninstallFinishesAnInterruptedOne(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	store := New(testOptions(filepath.Join(base, "bootwright")))
 	root := filepath.Join(base, ".bootwright-uninstall-"+strings.Repeat("a", 32))
@@ -165,6 +167,7 @@ func TestTheNextUninstallFinishesAnInterruptedOne(t *testing.T) {
 // extraction, a held root lock and a held setup lock each refuse busy rather
 // than wait; and a store another build wrote refuses with its own remedy.
 func TestAnUninstallInspectionRefusesWhatItMustNotRemove(t *testing.T) {
+	t.Parallel()
 	t.Run("contexts and media", func(t *testing.T) {
 		store, sources := fixture(t)
 		publish(t, store, "lab", sources)
@@ -238,6 +241,7 @@ func TestAnUninstallInspectionRefusesWhatItMustNotRemove(t *testing.T) {
 // A host with no state root, no staging directory and no renamed tree reads
 // empty, and removing its state removes nothing.
 func TestAnUninstallOfAnEmptyHostRemovesNothing(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "bootwright")))
 	view, err := uninstallView(t, store)
 	if err != nil || view.RootExists || view.StagingSeen || len(view.Leftovers) != 0 {
@@ -252,6 +256,7 @@ func TestAnUninstallOfAnEmptyHostRemovesNothing(t *testing.T) {
 // on the same filesystem, refuses during inspection, before any effect. A
 // bind mount needs privilege, so the entry read stands in for one.
 func TestAnUninstallRefusesAMountedRootOrStagingBeforeAnyEffect(t *testing.T) {
+	t.Parallel()
 	for _, mounted := range []string{"bootwright", "bootwright-staging"} {
 		t.Run(mounted, func(t *testing.T) {
 			store, base := installedStore(t)
@@ -280,6 +285,7 @@ func TestAnUninstallRefusesAMountedRootOrStagingBeforeAnyEffect(t *testing.T) {
 // Renamed trees are removed before this run renames anything, so a rename
 // that then fails strands none of them.
 func TestAnUninstallFinishesLeftoversBeforeItsOwnRenames(t *testing.T) {
+	t.Parallel()
 	store, base := installedStore(t)
 	leftover := filepath.Join(base, ".bootwright-uninstall-"+strings.Repeat("d", 32))
 	mkdirs(t, 0700, filepath.Join(leftover, controllerContainer, installSubtree))
@@ -301,6 +307,7 @@ func TestAnUninstallFinishesLeftoversBeforeItsOwnRenames(t *testing.T) {
 // held tree named like a leftover is never removed, and a held one refuses
 // busy, so two finishing runs never race.
 func TestAnUninstallLeavesWhatIsNotItsOwn(t *testing.T) {
+	t.Parallel()
 	store, base := installedStore(t)
 	staging := filepath.Join(base, "bootwright-staging")
 	mkdirs(t, 0731, staging)
@@ -363,6 +370,7 @@ func everyRootStore(t *testing.T) (*Store, string) {
 // physical-erase receipt included, and an empty libvirt image prefix, each
 // renamed aside within its own parent, leaving every sibling there.
 func TestAnUninstallRemovesEveryRootItKeeps(t *testing.T) {
+	t.Parallel()
 	store, base := everyRootStore(t)
 	for _, sibling := range []string{filepath.Join(base, "log", "messages"), filepath.Join(base, "images", "operator.qcow2")} {
 		if err := os.WriteFile(sibling, nil, 0600); err != nil {
@@ -395,6 +403,7 @@ func TestAnUninstallRemovesEveryRootItKeeps(t *testing.T) {
 // link there is not Bootwright's, and a mounted log or hosted root refuses
 // before any effect.
 func TestAnUninstallNamesGuestDisksAndRefusesForeignRoots(t *testing.T) {
+	t.Parallel()
 	store, base := everyRootStore(t)
 	disk := filepath.Join(base, "images", "bootwright", "lab")
 	mkdirs(t, 0700, filepath.Join(disk, "machines", "rhel-01"))
@@ -432,6 +441,7 @@ func TestAnUninstallNamesGuestDisksAndRefusesForeignRoots(t *testing.T) {
 // the same locks; a malformed registry of this version, a held root lock and a
 // held setup lock refuse instead.
 func TestAnUninstallHandsAnotherBuildsStoreToTheService(t *testing.T) {
+	t.Parallel()
 	unreadable := map[string]func(root string){
 		"another registry version": func(root string) {
 			writePrivate(t, filepath.Join(root, "registry.json"), []byte(`{"version":99,"contexts":[]}`+"\n"))
@@ -510,6 +520,7 @@ func (c interruptedContext) Err() error {
 // guest disks, leaves renamed trees in /var/lib, /var/log and the image
 // prefix's parent, which the next uninstall finds as leftovers and removes.
 func TestTheNextUninstallFinishesAnInterruptedDiscard(t *testing.T) {
+	t.Parallel()
 	store, base := everyRootStore(t)
 	writePrivate(t, filepath.Join(base, "bootwright", "registry.json"), []byte(`{"version":99,"contexts":[]}`+"\n"))
 	mkdirs(t, 0700, filepath.Join(base, "images", "bootwright", "lab", "machines", "rhel-01"))
@@ -568,6 +579,7 @@ func (refusingPresenter) PresentControllerPlan(context.Context, prerequisites.Re
 // hides what that registry names: the discard still refuses each context and
 // each image, after the inspection read both under the root lock.
 func TestADiscardBesideAnUnattributedEntryStillRefusesContextsAndMedia(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	publish(t, store, "lab", sources)
 	for name, stray := range map[string]string{"in the root": filepath.Join(store.options.Root, "notes.txt"), "in the host container": filepath.Join(store.options.Root, controllerContainer, "notes.txt")} {
@@ -607,6 +619,7 @@ func TestADiscardBesideAnUnattributedEntryStillRefusesContextsAndMedia(t *testin
 // each be unattributable, and a pending registry stage that cannot be read
 // beside no registry refuses rather than reads as another build's.
 func TestADiscardRefusesAListingOrReadFailureOfTheStore(t *testing.T) {
+	t.Parallel()
 	for name, directory := range map[string]string{"the root": "", "the host container": controllerContainer} {
 		t.Run(name, func(t *testing.T) {
 			store, base := everyRootStore(t)
@@ -654,6 +667,7 @@ func TestADiscardRefusesAListingOrReadFailureOfTheStore(t *testing.T) {
 // effect unless that parent is sticky and the owner's, while such a parent
 // with nothing in it to act on refuses nothing.
 func TestAnUninstallRefusesAParentAnotherUserMayWrite(t *testing.T) {
+	t.Parallel()
 	store := New(testOptions(filepath.Join(t.TempDir(), "bootwright")))
 	base := filepath.Dir(store.options.Root)
 	mkdirs(t, 0777, base)
@@ -685,6 +699,7 @@ func TestAnUninstallRefusesAParentAnotherUserMayWrite(t *testing.T) {
 // is renamed back, so no leftover a later run would remove remains, and the
 // uninstall refuses.
 func TestAnUninstallRenamesBackATreeThatChangedAcrossItsRename(t *testing.T) {
+	t.Parallel()
 	store, base := installedStore(t)
 	fired := 0
 	store.uninstallEntry = func(parent, name string) (syscall.Stat_t, error) {
@@ -716,6 +731,7 @@ func TestAnUninstallRenamesBackATreeThatChangedAcrossItsRename(t *testing.T) {
 // A root of the store's owner but another group is not Bootwright's, as a
 // leftover of that group is not, so no renamed copy of it is ever skipped.
 func TestAnUninstallRefusesARootOfAnotherGroup(t *testing.T) {
+	t.Parallel()
 	groups, err := os.Getgroups()
 	if err != nil {
 		t.Fatal(err)

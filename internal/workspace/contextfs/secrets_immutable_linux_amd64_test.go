@@ -23,6 +23,7 @@ const immutableCrashRootEnvironment = "BOOTWRIGHT_TEST_IMMUTABLE_CRASH_ROOT"
 var immutableIdentityPath = "identities/ver-00000000000000000000000000000000.json"
 
 func TestSecretImmutableWritePublishesOnlyCompleteFinalName(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	token := secretToken(record)
@@ -56,11 +57,13 @@ func TestSecretImmutableWritePublishesOnlyCompleteFinalName(t *testing.T) {
 }
 
 func TestSecretCapacityUsesStableLimitCode(t *testing.T) {
+	t.Parallel()
 	err := (&secretArea{}).capacity(context.Background(), 0, maxSecretBytes+1)
 	expectSecretFailureCode(t, err, "secret.store.limit")
 }
 
 func TestReadOnlySecretScanToleratesCompletedPendingRename(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	token := secretToken(record)
@@ -107,6 +110,7 @@ func TestReadOnlySecretScanToleratesCompletedPendingRename(t *testing.T) {
 }
 
 func TestSecretImmutableWriteDoesNotReplaceExistingFinalName(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	token := secretToken(record)
@@ -137,6 +141,7 @@ func TestSecretImmutableWriteDoesNotReplaceExistingFinalName(t *testing.T) {
 }
 
 func TestSecretReadSessionPreventsConcurrentMutation(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	impatient(store)
 	record := publish(t, store, "example", sources)

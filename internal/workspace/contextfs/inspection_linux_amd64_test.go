@@ -15,6 +15,7 @@ import (
 // refused at once, and every write of its transaction refuses. Once it ends,
 // the exclusive transaction the confirmed command takes runs.
 func TestAnInspectionHoldsTheSharedLockAndWritesNothing(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, sources := fixture(t)
 	impatient(store)

@@ -14,6 +14,7 @@ import (
 )
 
 func TestLifecycleEffectsAllowReadersAndAnotherContext(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, sources := fixture(t)
 	publish(t, store, "example", sources)
@@ -71,6 +72,7 @@ func TestLifecycleEffectsAllowReadersAndAnotherContext(t *testing.T) {
 }
 
 func TestConcurrentContextReservationsRebaseWithoutLosingAnotherOwner(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, sources := fixture(t)
 	publish(t, store, "example", sources)
@@ -106,6 +108,7 @@ func TestConcurrentContextReservationsRebaseWithoutLosingAnotherOwner(t *testing
 }
 
 func TestLifecycleBundleLeaseSurvivesOtherContextsAndDefersRetirement(t *testing.T) {
+	t.Parallel()
 	for _, bounded := range []bool{false, true} {
 		t.Run(map[bool]string{false: "mutation", true: "bounded-run"}[bounded], func(t *testing.T) {
 			ctx := context.Background()
@@ -154,6 +157,7 @@ func TestLifecycleBundleLeaseSurvivesOtherContextsAndDefersRetirement(t *testing
 }
 
 func TestLifecycleSecretsRefreshRegistryAfterAnotherContextIsCreated(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	_, sources := fixture(t)
@@ -169,6 +173,7 @@ func TestLifecycleSecretsRefreshRegistryAfterAnotherContextIsCreated(t *testing.
 }
 
 func TestLifecycleControllerSnapshotRejectsOwnMeaningChanges(t *testing.T) {
+	t.Parallel()
 	before := controllerStored{data: []byte("before"), value: syntheticControllerState(t)}
 	before.value.Bindings = []prerequisites.ControllerBinding{{Context: "example", Machine: "controller"}}
 	before.value.Reservations = []prerequisites.HostReservation{{Context: "example", Kind: "test", Service: "service", Keys: []string{"path:/var/lib/example"}}}

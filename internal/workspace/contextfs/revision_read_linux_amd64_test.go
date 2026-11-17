@@ -111,6 +111,7 @@ func copyTree(t *testing.T, from, to string) {
 }
 
 func TestARetainedRevisionReadsItsOwnBytes(t *testing.T) {
+	t.Parallel()
 	store, retained, _ := retainedFixture(t)
 	if err := store.ReadLifecycle(context.Background(), "example", func(view lifecycle.View) error {
 		sources, err := view.Revision(context.Background(), retained.Revision)
@@ -130,6 +131,7 @@ func TestARetainedRevisionReadsItsOwnBytes(t *testing.T) {
 }
 
 func TestTheSelectedRevisionReadsAsTheViewsInputs(t *testing.T) {
+	t.Parallel()
 	store, _, selected := retainedFixture(t)
 	if err := store.RunLifecycle(context.Background(), "example", func(view lifecycle.RunView) error {
 		sources, err := view.Revision(context.Background(), selected.Revision)
@@ -143,6 +145,7 @@ func TestTheSelectedRevisionReadsAsTheViewsInputs(t *testing.T) {
 }
 
 func TestARevisionReadRefusesAnInvalidOrMissingIdentity(t *testing.T) {
+	t.Parallel()
 	store, _, _ := retainedFixture(t)
 	for id, message := range map[string]string{
 		"":              "the input revision identity is invalid",
@@ -156,6 +159,7 @@ func TestARevisionReadRefusesAnInvalidOrMissingIdentity(t *testing.T) {
 }
 
 func TestARevisionReadRefusesALinkedOrSubstitutedDirectory(t *testing.T) {
+	t.Parallel()
 	t.Run("a linked revision directory", func(t *testing.T) {
 		store, retained, _ := retainedFixture(t)
 		path := retainedPath(store, retained, retained.Revision)
@@ -201,6 +205,7 @@ func TestARevisionReadRefusesALinkedOrSubstitutedDirectory(t *testing.T) {
 }
 
 func TestARevisionReadRefusesAManifestOfAnotherContextOrRevision(t *testing.T) {
+	t.Parallel()
 	t.Run("another revision", func(t *testing.T) {
 		store, retained, selected := retainedFixture(t)
 		data, err := os.ReadFile(retainedPath(store, retained, selected.Revision, "manifest.json"))
@@ -227,6 +232,7 @@ func TestARevisionReadRefusesAManifestOfAnotherContextOrRevision(t *testing.T) {
 }
 
 func TestARevisionReadRefusesATamperedBlob(t *testing.T) {
+	t.Parallel()
 	store, retained, _ := retainedFixture(t)
 	replaceFile(t, retainedPath(store, retained, retained.Revision, blobName(0)), []byte("version: tampered\n"))
 	_, err := readRevision(t, store, retained.Revision)
@@ -234,6 +240,7 @@ func TestARevisionReadRefusesATamperedBlob(t *testing.T) {
 }
 
 func TestARevisionReadRefusesAfterItsCallbackReturned(t *testing.T) {
+	t.Parallel()
 	store, retained, selected := retainedFixture(t)
 	var inspection lifecycle.View
 	var bounded lifecycle.RunView
@@ -296,6 +303,7 @@ func storeTree(t *testing.T, root string) map[string]treeEntry {
 }
 
 func TestARevisionReadWritesNothing(t *testing.T) {
+	t.Parallel()
 	store, retained, selected := retainedFixture(t)
 	before := storeTree(t, store.options.Root)
 	for _, id := range []string{retained.Revision, selected.Revision, missingRevision, "bad"} {

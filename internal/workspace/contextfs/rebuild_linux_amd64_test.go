@@ -36,6 +36,7 @@ func (p rebuildPython) Build(context.Context, prerequisites.RuntimePublisher, pr
 }
 
 func TestARebuildOnTheRealStoreKeepsItsRefusal(t *testing.T) {
+	t.Parallel()
 	interpreter := prerequisites.PythonInterpreter{Path: "/usr/bin/python3.14", ABI: "cp314"}
 	lock := prerequisites.RuntimeLock{Digest: setupDigest(1)}
 	for _, test := range []struct {
@@ -70,6 +71,7 @@ func TestARebuildOnTheRealStoreKeepsItsRefusal(t *testing.T) {
 // setup to finish and then rebuilds from the cache, rather than refusing the
 // way a second setup does.
 func TestARebuildWaitsForAHeldSetupLockThenRebuilds(t *testing.T) {
+	t.Parallel()
 	interpreter := prerequisites.PythonInterpreter{Path: "/usr/bin/python3.14", ABI: "cp314"}
 	lock := prerequisites.RuntimeLock{Digest: setupDigest(1)}
 	runtime := prerequisites.Runtime{Digest: prerequisites.RuntimeDigest(lock.Digest, "cp314", interpreter.Path), LockDigest: lock.Digest, Interpreter: interpreter}

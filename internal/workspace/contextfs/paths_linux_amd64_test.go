@@ -18,6 +18,7 @@ import (
 // should be is absent, and a path the kernel will not answer is absent with a
 // context.state warning naming it.
 func TestContextPathsReportPresenceWithoutFollowingALink(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	root, logs, hosted, images := filepath.Join(base, "state"), filepath.Join(base, "logs"), filepath.Join(base, "hosted"), filepath.Join(base, "images")
 	if err := os.MkdirAll(filepath.Join(root, "contexts", "lab"), 0o700); err != nil {

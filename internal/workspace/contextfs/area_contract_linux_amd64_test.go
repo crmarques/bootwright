@@ -12,6 +12,7 @@ import (
 )
 
 func TestOperationAreaHonoursTheAreaContract(t *testing.T) {
+	t.Parallel()
 	areacontract.Verify(t, func(t *testing.T, use func(operationstore.Area)) {
 		store, _ := lifecycleFixture(t)
 		err := store.MutateLifecycle(context.Background(), "example", func(tx lifecycle.Transaction) error {

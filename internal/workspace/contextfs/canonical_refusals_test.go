@@ -9,6 +9,7 @@ import (
 // A persisted record reads back only as the exact canonical bytes its type
 // encodes, LF-terminated, and every other encoding refuses in its own words.
 func TestThePersistedRecordRefusesEachNonCanonicalEncodingInItsOwnWords(t *testing.T) {
+	t.Parallel()
 	const exact = `{"version":1,"name":"lab"}` + "\n"
 	var record reservation
 	if err := decodeRecord([]byte(exact), maxRecord, &record); err != nil {

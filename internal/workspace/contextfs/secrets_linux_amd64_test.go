@@ -19,6 +19,7 @@ func secretToken(record contexts.Record) secretstore.Context {
 }
 
 func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	token := secretToken(record)
@@ -90,6 +91,7 @@ func TestSecretAreaIsAbsentReadOnlyAndAtomicallyPublished(t *testing.T) {
 }
 
 func TestSecretReplaceRejectsSameByteInodeSubstitution(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	token := secretToken(record)
@@ -137,6 +139,7 @@ func TestSecretReplaceRejectsSameByteInodeSubstitution(t *testing.T) {
 }
 
 func TestSecretReplaceReportsPostRenameUncertainty(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	token := secretToken(record)
@@ -174,6 +177,7 @@ func TestSecretReplaceReportsPostRenameUncertainty(t *testing.T) {
 }
 
 func TestSecretAreaCannotEscapePanickingCallback(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	var escaped secretstore.Area

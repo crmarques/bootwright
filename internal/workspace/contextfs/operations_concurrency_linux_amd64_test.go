@@ -19,6 +19,7 @@ import (
 // its writers together, and every one of them must succeed: a directory a
 // concurrent writer created first is opened as if it had existed.
 func TestConcurrentWritersShareTheDirectoriesTheyCreate(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	const rounds, writers = 8, 16

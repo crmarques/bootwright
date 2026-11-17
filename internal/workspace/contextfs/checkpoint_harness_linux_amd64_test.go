@@ -547,6 +547,7 @@ func checkpointInitialRegistryRecovery(root string) (string, error) {
 // run exactly the scenarios checkpointTraceShapes pins, each reaching its
 // pinned checkpoints, and the traces together to reach every catalogued one.
 func TestEveryCataloguedCheckpointIsExercisedByTheHarness(t *testing.T) {
+	t.Parallel()
 	shapes := checkpointTraceShapes()
 	scenarios := map[string]bool{}
 	reached := map[string]bool{}
@@ -606,6 +607,7 @@ func checkpointShapeDifference(reached, pinned map[checkpoint]int) string {
 // files and test catalog: every publication passes a catalogued checkpoint
 // constant, checkpoints() lists each constant once, and none goes unused.
 func TestEveryCheckpointIsACataloguedConstant(t *testing.T) {
+	t.Parallel()
 	paths, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)

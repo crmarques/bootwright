@@ -11,6 +11,7 @@ import (
 )
 
 func TestLifecycleWorkspaceHonoursTheWorkspaceContract(t *testing.T) {
+	t.Parallel()
 	workspacecontract.Verify(t, func(t *testing.T) workspacecontract.Subject {
 		store, record := lifecycleFixture(t)
 		reserveFixture(t, store, record)

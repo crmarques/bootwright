@@ -15,6 +15,7 @@ import (
 // already present under the name the registry has just reserved refuses, and
 // nothing is written into it (X33's mutants, B255).
 func TestAFreshReservationNeverAdoptsAnExistingDirectory(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	ctx := context.Background()
 	if err := store.Transact(ctx, true, nil, func(contexts.Transaction) error { return nil }); err != nil {

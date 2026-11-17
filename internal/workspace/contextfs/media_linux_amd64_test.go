@@ -165,6 +165,7 @@ func mediaDirectory(t *testing.T, store *Store) []string {
 }
 
 func TestMediaPublicationRetainsExactBytesAndTheirRecord(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "installer bytes", false)
@@ -202,6 +203,7 @@ func TestMediaPublicationRetainsExactBytesAndTheirRecord(t *testing.T) {
 }
 
 func TestMediaReplacementSupersedesBothTheRecordAndTheBytes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "first", false)
@@ -222,6 +224,7 @@ func TestMediaReplacementSupersedesBothTheRecordAndTheBytes(t *testing.T) {
 }
 
 func TestMediaPublicationRefusesToOverwriteAnOccupiedName(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "first", false)
 	stage := fillStage(t, store, "demo.iso", "second")
@@ -231,6 +234,7 @@ func TestMediaPublicationRefusesToOverwriteAnOccupiedName(t *testing.T) {
 }
 
 func TestMediaDeletionRemovesTheRecordAndTheImage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "installer bytes", false)
@@ -249,6 +253,7 @@ func TestMediaDeletionRemovesTheRecordAndTheImage(t *testing.T) {
 // later publication replaces it, and the next mutation removes the temporary
 // file.
 func TestInterruptedStagingIsOccupiedButNeverAdopted(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "installer bytes", false)
@@ -285,6 +290,7 @@ func TestInterruptedStagingIsOccupiedButNeverAdopted(t *testing.T) {
 }
 
 func TestMediaStagingRefusesAnImageBeyondItsLimit(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	stage := claimStage(t, store, "demo.iso")
 	if _, err := stage.Fill(context.Background(), mediaPayload("too many bytes"), 4); err == nil {
@@ -304,6 +310,7 @@ func TestMediaStagingRefusesAnImageBeyondItsLimit(t *testing.T) {
 // A media claim is shared, so several contexts hold one at once and it blocks
 // nothing but a change to the image it names.
 func TestSharedMediaReservationsAreVisibleAndNeverConflict(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	other, sources := fixture(t)
@@ -354,6 +361,7 @@ func (diagnosedSource) Close() error { return nil }
 // A source that names why it failed, such as a download that met its transfer
 // deadline, keeps that cause rather than a generic one.
 func TestAFillKeepsTheSourcesOwnDiagnostic(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	stage := claimStage(t, store, "demo.iso")
 	cause := diagnostics.NewFailureWithRemediation("media.store", "the download from images.example did not finish within its 6-hour transfer deadline", "", "copy the image locally")
@@ -365,6 +373,7 @@ func TestAFillKeepsTheSourcesOwnDiagnostic(t *testing.T) {
 }
 
 func TestMediaRefusesAStoreThatWasNeverInitialized(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	if err := store.ReadMedia(context.Background(), func(media.View) error { return nil }); err == nil {
 		t.Fatal("an absent store produced a media view")
@@ -372,6 +381,7 @@ func TestMediaRefusesAStoreThatWasNeverInitialized(t *testing.T) {
 }
 
 func TestAMissingMediaCallbackIsRefusedAndCreatesNothing(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	for name, call := range map[string]func() error{
@@ -445,6 +455,7 @@ func expectMediaRefusal(t *testing.T, err error, message string) {
 // acquires: another command takes the exclusive root lock mid-download, and
 // finds nothing of the image under any name.
 func TestMediaAddHoldsNoRootLockWhileItAcquires(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	var during []error
@@ -508,6 +519,7 @@ func addMeetingALock(t *testing.T, store *Store, name, data, pin string) error {
 // An unpinned add whose publication meets another command's lock refuses with
 // that lock's lifecycle.lease, removes its stage and publishes nothing.
 func TestMediaAddThatCannotRetakeTheRootLockPublishesNothing(t *testing.T) {
+	t.Parallel()
 	store := impatient(mediaFixture(t))
 	err := addMeetingALock(t, store, "demo.iso", "installer bytes", "")
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" {
@@ -522,6 +534,7 @@ func TestMediaAddThatCannotRetakeTheRootLockPublishesNothing(t *testing.T) {
 // and publishes; the second refuses by name before it acquires anything, while
 // an add of another name proceeds.
 func TestConcurrentMediaAddsOfOneNameRefuseTheSecondBeforeItAcquires(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	started, release := make(chan struct{}), make(chan struct{})
@@ -571,6 +584,7 @@ func TestConcurrentMediaAddsOfOneNameRefuseTheSecondBeforeItAcquires(t *testing.
 // The stage is never visible as an image, and the next media mutation removes
 // it, including a new add of the same name.
 func TestAnAbandonedStageIsInvisibleAndTheNextAddRemovesIt(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	stage := claimStage(t, store, "demo.iso")
@@ -603,6 +617,7 @@ func TestAnAbandonedStageIsInvisibleAndTheNextAddRemovesIt(t *testing.T) {
 
 // A live stage is held by its owner, so another mutation's pruning keeps it.
 func TestALiveStageSurvivesAnotherMediaMutation(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	stage := claimStage(t, store, "demo.iso")
 	addMedia(t, store, "other.iso", "other image", false)
@@ -631,6 +646,7 @@ func TestALiveStageSurvivesAnotherMediaMutation(t *testing.T) {
 // replaced meanwhile is refused before a replacement removes the image it would
 // supersede.
 func TestASubstitutedStageNeverReplacesTheStoredImage(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "old image", false)
 	stored := map[string][]byte{}
@@ -659,6 +675,7 @@ func TestASubstitutedStageNeverReplacesTheStoredImage(t *testing.T) {
 // proved it but before its rename, is caught once renamed: its bytes are never
 // given a record.
 func TestAStageChangedDuringItsRenameIsNeverRecorded(t *testing.T) {
+	t.Parallel()
 	for name, change := range map[string]func(*testing.T, *Store){
 		"substituted":        func(t *testing.T, store *Store) { substituteStage(t, store, "demo.iso", "bad image") },
 		"rewritten in place": func(t *testing.T, store *Store) { rewriteInPlace(t, store, "demo.iso", "bad image") },
@@ -693,6 +710,7 @@ func TestAStageChangedDuringItsRenameIsNeverRecorded(t *testing.T) {
 // Publication proves the stage unchanged since Fill measured its bytes: bytes
 // appended since are refused, never published under the image name.
 func TestAStageThatGrewAfterItWasFilledIsNeverPublished(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	stage := fillStage(t, store, "demo.iso", "installer bytes")
 	file, err := os.OpenFile(filepath.Join(store.options.Root, "media", mediaStageName("demo.iso")), os.O_WRONLY|os.O_APPEND, 0)
@@ -787,6 +805,7 @@ func expectChangedStageRefused(t *testing.T, rewritten *rewrittenPublication, er
 // status taken then: bytes rewritten in place at the same size before the
 // publication are refused, and the add publishes no image and no record.
 func TestAStageRewrittenInPlaceAfterItWasFilledIsNeverPublished(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }}
 	rewritten := &rewrittenPublication{Store: store, t: t, name: "demo.iso", data: "INSTALLER BYTES"}
@@ -803,6 +822,7 @@ func TestAStageRewrittenInPlaceAfterItWasFilledIsNeverPublished(t *testing.T) {
 // size is removed, and the lock's refusal stands alone, never promising that a
 // repetition publishes it without acquiring it again.
 func TestAPinnedAddNeverRetainsAStageRewrittenInPlaceAfterItWasFilled(t *testing.T) {
+	t.Parallel()
 	store := impatient(mediaFixture(t))
 	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }}
 	rewritten := &rewrittenPublication{Store: store, t: t, name: "demo.iso", data: "INSTALLER BYTES", locked: true}
@@ -824,6 +844,7 @@ func TestAPinnedAddNeverRetainsAStageRewrittenInPlaceAfterItWasFilled(t *testing
 // Publication installs only a record that describes the bytes Fill wrote, so a
 // record naming another digest or another size is refused.
 func TestMediaPublicationRefusesARecordThatDoesNotDescribeItsStage(t *testing.T) {
+	t.Parallel()
 	data := "installer bytes"
 	for _, entry := range []managedos.MediaEntry{
 		{Name: "demo.iso", Size: int64(len(data)), SHA256: mediaDigest("different bytes")},
@@ -849,6 +870,7 @@ func TestMediaPublicationRefusesARecordThatDoesNotDescribeItsStage(t *testing.T)
 // list, and only a seventeenth stage is refused, naming how to discard a
 // retained one. An image's own retained stage never counts against its claim.
 func TestMediaStagingRefusesBeyondItsBound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	for index := range managedos.MaxMediaEntries {
@@ -955,6 +977,7 @@ func pinnedAdd(name, data string) media.AddMediaRequest {
 // description, which a descriptor another process shares keeps open, so a close
 // alone would leave the abandoned stage held and every prune would keep it.
 func TestAReleasedStageIsUnlockedEvenWhileAnotherDescriptorSharesIt(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	stage := fillStage(t, store, "demo.iso", "partial").(*mediaStage)
 	shared, _, errno := syscall.Syscall(syscall.SYS_FCNTL, stage.file.Fd(), syscall.F_DUPFD_CLOEXEC, 0)
@@ -975,6 +998,7 @@ func TestAReleasedStageIsUnlockedEvenWhileAnotherDescriptorSharesIt(t *testing.T
 // A media name whose record name would pass one 255-byte file name is refused
 // before anything is acquired or created.
 func TestAnOverLongMediaNameIsRefusedBeforeItIsAcquired(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }}
 	_, err := mediaService(store, acquirer).Add(context.Background(), pinnedAdd(strings.Repeat("a", 247)+".iso", "installer bytes"))
@@ -1004,6 +1028,7 @@ func (p *mediaPrompt) Confirm(ctx context.Context, _, _ string) error {
 // shared holds both succeed while it waits, and the confirmed replacement and
 // deletion then complete.
 func TestMediaConfirmationsHoldNoRootLock(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "first", false)
@@ -1030,6 +1055,7 @@ func TestMediaConfirmationsHoldNoRootLock(t *testing.T) {
 // and a confirmation reviews that image from its record alone, so its
 // replacement and its deletion both still complete.
 func TestADamagedImageStaysReplaceableAndDeletableWithConfirmation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for _, verb := range []string{"add", "delete"} {
 		t.Run(verb, func(t *testing.T) {
@@ -1067,6 +1093,7 @@ func TestADamagedImageStaysReplaceableAndDeletableWithConfirmation(t *testing.T)
 // repeating the command publishes it. Other media commands keep the pair and
 // never list it.
 func TestAPinnedAddThatCannotRetakeTheRootLockRetainsItsStage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := impatient(mediaFixture(t))
 	err := addMeetingALock(t, store, "demo.iso", "installer bytes", mediaDigest("installer bytes"))
@@ -1103,6 +1130,7 @@ func TestAPinnedAddThatCannotRetakeTheRootLockRetainsItsStage(t *testing.T) {
 // so the repeated add publishes the image without acquiring it again, as the
 // refusal promised.
 func TestARetentionThatFinishesDuringAPruneKeepsItsPair(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := impatient(mediaFixture(t))
 	started, proceed, added := make(chan struct{}), make(chan struct{}), make(chan error, 1)
@@ -1155,6 +1183,7 @@ func TestARetentionThatFinishesDuringAPruneKeepsItsPair(t *testing.T) {
 // The repeated add adopts the retained stage, re-reads it and publishes it
 // with the source it was retained with; its own source is never opened.
 func TestARepeatedAddPublishesARetainedStageWithoutAcquiring(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	retained := retainStage(t, store, "demo.iso", "installer bytes")
@@ -1182,6 +1211,7 @@ func TestARepeatedAddPublishesARetainedStageWithoutAcquiring(t *testing.T) {
 // A repeated add whose own publication meets another command's lock keeps the
 // stage it adopted, so a later repetition still publishes it.
 func TestARepeatedAddWhosePublicationMeetsALockAgainKeepsTheRetainedStage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := impatient(mediaFixture(t))
 	retainStage(t, store, "demo.iso", "installer bytes")
@@ -1211,6 +1241,7 @@ func TestARepeatedAddWhosePublicationMeetsALockAgainKeepsTheRetainedStage(t *tes
 // An add of the image with another pin or none removes its retained stage
 // before it claims, and acquires and publishes afresh.
 func TestAnAddWithAnotherPinOrNoneDiscardsTheRetainedStage(t *testing.T) {
+	t.Parallel()
 	for name, pin := range map[string]string{"another pin": mediaDigest("new image"), "no pin": ""} {
 		t.Run(name, func(t *testing.T) {
 			store := mediaFixture(t)
@@ -1236,6 +1267,7 @@ func TestAnAddWithAnotherPinOrNoneDiscardsTheRetainedStage(t *testing.T) {
 // re-read before publication: the add refuses, publishes nothing and removes
 // the pair.
 func TestARetainedStageWhoseBytesChangedIsNeverPublished(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	retainStage(t, store, "demo.iso", "installer bytes")
 	file, err := os.OpenFile(filepath.Join(store.options.Root, "media", mediaStageName("demo.iso")), os.O_WRONLY, 0)
@@ -1262,6 +1294,7 @@ func TestARetainedStageWhoseBytesChangedIsNeverPublished(t *testing.T) {
 // publishes no image and no record. The pair stays retained, and the
 // repetition's own re-read finds the other bytes and removes it.
 func TestAnAdoptedStageRewrittenInPlaceAfterItsVerificationIsNeverPublished(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	retainStage(t, store, "demo.iso", "installer bytes")
@@ -1283,6 +1316,7 @@ func TestAnAdoptedStageRewrittenInPlaceAfterItsVerificationIsNeverPublished(t *t
 // media delete removes a retained stage with its record, refuses by name while
 // an add holds that stage, and keeps it while the image is frozen.
 func TestMediaDeleteDiscardsARetainedStage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	remove := func(store *Store) (*media.MutationResult, error) {
 		return mediaService(store, &mediaAcquirer{}).Delete(ctx, media.DeleteMediaRequest{Name: "demo.iso", SkipConfirmation: true})
@@ -1342,6 +1376,7 @@ func TestMediaDeleteDiscardsARetainedStage(t *testing.T) {
 
 // A retained record whose stage is gone is removed by the next media mutation.
 func TestAPrunedRetainedRecordWithoutItsStageIsRemoved(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	retainStage(t, store, "demo.iso", "installer bytes")
 	if err := os.Remove(filepath.Join(store.options.Root, "media", mediaStageName("demo.iso"))); err != nil {
@@ -1358,6 +1393,7 @@ func TestAPrunedRetainedRecordWithoutItsStageIsRemoved(t *testing.T) {
 // A record torn by a killed retention does not make a retained pair, so the
 // next media mutation removes the record and its abandoned stage.
 func TestATornRetainedRecordLeavesItsStageAbandoned(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	retainStage(t, store, "demo.iso", "installer bytes")
 	record := filepath.Join(store.options.Root, "media", mediaStageName("demo.iso")+".json")
@@ -1384,6 +1420,7 @@ func TestATornRetainedRecordLeavesItsStageAbandoned(t *testing.T) {
 // have now rather than refusing the whole listing, so the listing marks it a
 // mismatch and still lists every other image.
 func TestAShortImageIsListedAsAMismatchNotARefusal(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "installer bytes", false)
@@ -1427,6 +1464,7 @@ func TestAShortImageIsListedAsAMismatchNotARefusal(t *testing.T) {
 // the bytes against the record itself: none takes the torn image for the one
 // it published.
 func TestThePublicationChecksRefuseATornImage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "installer bytes", false)

@@ -61,6 +61,7 @@ func clientReservation(t *testing.T, store *Store, id string) controllerBundleRe
 // The shared area is content-addressed and durable: its reservation names the
 // closure, its attribution names the directory, and sealing makes it immutable.
 func TestClientAreaPublishesUnderItsOwnReservation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
@@ -99,6 +100,7 @@ func TestClientAreaPublishesUnderItsOwnReservation(t *testing.T) {
 // A tool area is named only by a closure digest, and one area never stands
 // for another: a digest the record does not hold opens a new reservation.
 func TestClientAreaRefusesANameThatIsNoDigest(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
@@ -113,6 +115,7 @@ func TestClientAreaRefusesANameThatIsNoDigest(t *testing.T) {
 // empty directory. The exact retry owns it and completes; a directory carrying
 // foreign content is never adopted.
 func TestClientAreaAttributionInterruptionCompletesOnRetry(t *testing.T) {
+	t.Parallel()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
 
@@ -133,6 +136,7 @@ func TestClientAreaAttributionInterruptionCompletesOnRetry(t *testing.T) {
 }
 
 func TestClientAreaRefusesAnUnattributableDirectory(t *testing.T) {
+	t.Parallel()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
 
@@ -153,6 +157,7 @@ func TestClientAreaRefusesAnUnattributableDirectory(t *testing.T) {
 // Retained identities are the durable intent an acquisition is recorded under,
 // and immutable once published.
 func TestRetainDependenciesIsAppendOnly(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
@@ -187,6 +192,7 @@ func TestRetainDependenciesIsAppendOnly(t *testing.T) {
 // Every client-area checkpoint must leave the store readable, because an
 // interrupted controller stage may never brick inspection or preflight.
 func TestClientAreaCheckpointsLeaveStoreReadable(t *testing.T) {
+	t.Parallel()
 	for _, point := range []string{"before-client-area-reservation", "after-client-area-directory", "before-client-area-attribution", "before-client-area-sealing"} {
 		t.Run(point, func(t *testing.T) {
 			store, record := lifecycleFixture(t)

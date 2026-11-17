@@ -65,6 +65,7 @@ func heldNamesOf(t *testing.T, root string) []string {
 }
 
 func TestARunOutputNumberNeedsItsPrefix(t *testing.T) {
+	t.Parallel()
 	if number, valid := outputNumber("000007.output", runPrefix); valid {
 		t.Fatalf("an output without the run prefix read as run %d", number)
 	}
@@ -77,6 +78,7 @@ func TestARunOutputNumberNeedsItsPrefix(t *testing.T) {
 // the number past the highest, and an entry that is no run is neither counted
 // nor removed.
 func TestABoundedRunKeepsTheNewestRuns(t *testing.T) {
+	t.Parallel()
 	store, _ := lifecycleFixture(t)
 	root := runsRoot(t, store, "example")
 	for number := 1; number <= 20; number++ {
@@ -99,6 +101,7 @@ func TestABoundedRunKeepsTheNewestRuns(t *testing.T) {
 // Runs opened together under the shared lease take distinct numbers, from
 // one upward with no gap.
 func TestConcurrentBoundedRunsTakeDistinctSequentialNumbers(t *testing.T) {
+	t.Parallel()
 	store, _ := lifecycleFixture(t)
 	const runs = maxBoundedRuns - 1
 	opened := make([]string, runs)
@@ -120,6 +123,7 @@ func TestConcurrentBoundedRunsTakeDistinctSequentialNumbers(t *testing.T) {
 // only the newest, so machine power commands keep working however many ran
 // before.
 func TestBoundedRunsKeepWorkingHoweverManyRan(t *testing.T) {
+	t.Parallel()
 	store, _ := lifecycleFixture(t)
 	root := runsRoot(t, store, "example")
 	for number := 1; number <= 2*maxOperationEntries/8; number++ {
@@ -135,6 +139,7 @@ func TestBoundedRunsKeepWorkingHoweverManyRan(t *testing.T) {
 // keeps everything written to it while newer runs come and go, and is retired
 // only once its own callback returned.
 func TestARunInProgressIsNeverRetired(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	root := runsRoot(t, store, "example")
@@ -173,6 +178,7 @@ func TestARunInProgressIsNeverRetired(t *testing.T) {
 // regular file. A run that is a link, is linked elsewhere or holds another
 // mode is left exactly as it is, and the new run still opens beside it.
 func TestARetiredRunIsRemovedOnlyAsTheStoreLeftIt(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name  string
 		leave func(t *testing.T, run string)
@@ -226,6 +232,7 @@ func TestARetiredRunIsRemovedOnlyAsTheStoreLeftIt(t *testing.T) {
 // The highest number a run takes is the last: an area holding it refuses the
 // next run, naming the directory to remove.
 func TestBoundedRunNumbersRefuseOnceExhausted(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	root := runsRoot(t, store, "example")
@@ -242,6 +249,7 @@ func TestBoundedRunNumbersRefuseOnceExhausted(t *testing.T) {
 // A run whose file exists but cannot be handed out, because making it durable
 // failed or the run was interrupted, leaves no file behind.
 func TestARunThatCannotOpenLeavesNoFile(t *testing.T) {
+	t.Parallel()
 	injected := errors.New("the runs area could not be made durable")
 	for _, test := range []struct {
 		name string

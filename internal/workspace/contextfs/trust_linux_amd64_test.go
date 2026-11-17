@@ -18,6 +18,7 @@ import (
 const trustRecords = `{"formatVersion":1,"hosts":[{"machine":"node-a"}]}` + "\n"
 
 func TestAContextThatTrustsNothingReadsAsAbsent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	data, err := store.ReadHostKeys(ctx, "example")
@@ -30,6 +31,7 @@ func TestAContextThatTrustsNothingReadsAsAbsent(t *testing.T) {
 }
 
 func TestTrustRecordsArePublishedAgainstTheirExactPriorContent(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	if err := store.ReplaceHostKeys(ctx, "example", []byte(trustRecords), nil); err != nil {
@@ -58,6 +60,7 @@ func TestTrustRecordsArePublishedAgainstTheirExactPriorContent(t *testing.T) {
 }
 
 func TestTrustPublicationRefusesUnusableRequests(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	if err := store.ReplaceHostKeys(ctx, "example", nil, nil); err == nil {
@@ -76,6 +79,7 @@ func TestTrustPublicationRefusesUnusableRequests(t *testing.T) {
 }
 
 func TestTrustRecordsAreRootOwnedAndPrivate(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	if err := store.ReplaceHostKeys(ctx, "example", []byte(trustRecords), nil); err != nil {
@@ -100,6 +104,7 @@ func TestTrustRecordsAreRootOwnedAndPrivate(t *testing.T) {
 // enumerates that layout has to admit it: otherwise trusting one host key
 // leaves a context that refuses every later mutation and can never be deleted.
 func TestAContextThatTrustsAHostKeyStaysUsableAndDeletable(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {

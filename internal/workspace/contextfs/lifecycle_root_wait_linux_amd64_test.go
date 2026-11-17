@@ -65,6 +65,7 @@ func rootWaitFixture(t *testing.T) *Store {
 }
 
 func TestAnInOperationRootTransactionWaitsOutAHeldRootLock(t *testing.T) {
+	t.Parallel()
 	for name, how := range map[string]int{"shared": syscall.LOCK_SH, "exclusive": syscall.LOCK_EX} {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
@@ -93,6 +94,7 @@ func TestAnInOperationRootTransactionWaitsOutAHeldRootLock(t *testing.T) {
 }
 
 func TestAnInOperationBundleReadWaitsOutAHeldRootLock(t *testing.T) {
+	t.Parallel()
 	store := boundFixture(t)
 	ctx := context.Background()
 	if err := withClientArea(t, store, func(_ lifecycle.Transaction, area prerequisites.BundleArea) error {
@@ -107,6 +109,7 @@ func TestAnInOperationBundleReadWaitsOutAHeldRootLock(t *testing.T) {
 }
 
 func TestAnInOperationRootWaitPastItsBoundRefusesBeforeItPublishes(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := rootWaitFixture(t)
 	store.rootWait = rootHold
@@ -129,6 +132,7 @@ func TestAnInOperationRootWaitPastItsBoundRefusesBeforeItPublishes(t *testing.T)
 }
 
 func TestCancellationEndsAnInOperationRootWait(t *testing.T) {
+	t.Parallel()
 	store := rootWaitFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -155,6 +159,7 @@ func TestCancellationEndsAnInOperationRootWait(t *testing.T) {
 }
 
 func TestACancelledRootWaitTakesNoLock(t *testing.T) {
+	t.Parallel()
 	store := rootWaitFixture(t)
 	root, err := store.openRoot(context.Background(), false, nil)
 	if err != nil {
@@ -170,6 +175,7 @@ func TestACancelledRootWaitTakesNoLock(t *testing.T) {
 }
 
 func TestAMutatorWaitsOutALogReadersHoldThenRefusesPastTheBound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store := rootWaitFixture(t)
 	release := holdRoot(t, store, syscall.LOCK_SH)
@@ -214,6 +220,7 @@ func waitsOutAReader(t *testing.T, store *Store, name string, mutate func() erro
 }
 
 func TestASecretWriteAndAMediaPublicationWaitOutAReadersHold(t *testing.T) {
+	t.Parallel()
 	store, record := lifecycleFixture(t)
 	waitsOutAReader(t, store, "a secret write", func() error {
 		return store.MutateSecrets(context.Background(), secretToken(record), func(secretstore.Area) error { return nil })

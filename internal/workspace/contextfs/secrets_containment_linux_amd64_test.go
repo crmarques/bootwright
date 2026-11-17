@@ -14,6 +14,7 @@ import (
 )
 
 func TestSecretContainmentPrimitiveRefusesExistingMountCrossing(t *testing.T) {
+	t.Parallel()
 	root, err := os.Open("/")
 	if err != nil {
 		t.Fatal(err)
@@ -31,6 +32,7 @@ func TestSecretContainmentPrimitiveRefusesExistingMountCrossing(t *testing.T) {
 }
 
 func TestSecretSubtreeRefusesUnsafeEntriesBeforeCallback(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"symlink", "hardlink", "fifo", "public-mode"} {
 		t.Run(kind, func(t *testing.T) {
 			store, token := secretPublicationFixture(t)

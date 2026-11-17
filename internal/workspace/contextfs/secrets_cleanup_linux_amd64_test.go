@@ -57,6 +57,7 @@ func observeSecretCleanup(ctx context.Context, area secretstore.Area) ([]byte, e
 }
 
 func TestSecretPrunePreservesPublicationPhases(t *testing.T) {
+	t.Parallel()
 	store, token, root := secretCleanupFixture(t)
 	ctx := context.Background()
 	err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
@@ -98,6 +99,7 @@ func TestSecretPrunePreservesPublicationPhases(t *testing.T) {
 }
 
 func TestSecretPruneRejectsUnobservedUnsafeAndReadOnlyTargets(t *testing.T) {
+	t.Parallel()
 	for _, target := range []string{"store.json", "parts/old.enc", "../outside", "/outside", "parts/../store.json", "parts/old.enc/child"} {
 		t.Run(strings.ReplaceAll(target, "/", "_"), func(t *testing.T) {
 			store, token, root := secretCleanupFixture(t)
@@ -138,6 +140,7 @@ func TestSecretPruneRejectsUnobservedUnsafeAndReadOnlyTargets(t *testing.T) {
 }
 
 func TestSecretPruneRejectsSubstitution(t *testing.T) {
+	t.Parallel()
 	for _, target := range []string{"file", "parent", "metadata", "symlink", "hardlink"} {
 		t.Run(target, func(t *testing.T) {
 			store, token, root := secretCleanupFixture(t)
@@ -202,6 +205,7 @@ func TestSecretPruneRejectsSubstitution(t *testing.T) {
 }
 
 func TestSecretPruneRequiresDurabilityBeforeUnlink(t *testing.T) {
+	t.Parallel()
 	for _, point := range []string{"before-secret-prune", "sync-context-file", "sync-directory"} {
 		t.Run(point, func(t *testing.T) {
 			store, token, root := secretCleanupFixture(t)
@@ -236,6 +240,7 @@ func TestSecretPruneRequiresDurabilityBeforeUnlink(t *testing.T) {
 }
 
 func TestSecretPruneRejectsUncertainPublication(t *testing.T) {
+	t.Parallel()
 	store, token, root := secretCleanupFixture(t)
 	ctx := context.Background()
 	err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
@@ -284,6 +289,7 @@ func TestSecretPruneRejectsUncertainPublication(t *testing.T) {
 }
 
 func TestSecretPruneRunsUnderExclusiveRootLock(t *testing.T) {
+	t.Parallel()
 	store, token, _ := secretCleanupFixture(t)
 	impatient(store)
 	ctx := context.Background()
@@ -320,6 +326,7 @@ func TestSecretPruneRunsUnderExclusiveRootLock(t *testing.T) {
 }
 
 func TestSecretPruneInterruptedRemovalCanResume(t *testing.T) {
+	t.Parallel()
 	store, token, root := secretCleanupFixture(t)
 	ctx := context.Background()
 	if err := store.MutateSecrets(ctx, token, func(area secretstore.Area) error {
@@ -363,6 +370,7 @@ func TestSecretPruneInterruptedRemovalCanResume(t *testing.T) {
 }
 
 func TestSecretPruneFreesCapacityWithoutAnotherArtifact(t *testing.T) {
+	t.Parallel()
 	store, token, root := secretCleanupFixture(t)
 	ctx := context.Background()
 	var existing int64

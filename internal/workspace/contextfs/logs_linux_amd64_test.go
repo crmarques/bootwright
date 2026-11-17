@@ -24,6 +24,7 @@ import (
 )
 
 func TestTheLogAreasHonourTheAreaContract(t *testing.T) {
+	t.Parallel()
 	t.Run("operation logs", func(t *testing.T) {
 		areacontract.Verify(t, func(t *testing.T, use func(operationstore.Area)) {
 			store, _ := lifecycleFixture(t)
@@ -63,6 +64,7 @@ func appendOperationLog(store *Store) error {
 // private; an existing one that is a link or holds another mode refuses
 // context.state naming its path, and nothing repairs it.
 func TestTheLogRootIsCreatedPrivateAndRefusesALinkOrForeignMode(t *testing.T) {
+	t.Parallel()
 	store, _ := lifecycleFixture(t)
 	if err := appendOperationLog(store); err != nil {
 		t.Fatalf("the first log write failed: %#v", diagnostics.Of(err))
@@ -162,6 +164,7 @@ func registerOperation(t *testing.T, store *Store, id string) {
 // name another directory changes no read, and the next registration replaces
 // it as a link without writing where it pointed.
 func TestTheCurrentLinkNamesTheNewestRegistrationAndIsNeverFollowed(t *testing.T) {
+	t.Parallel()
 	store, _ := lifecycleFixture(t)
 	current := filepath.Join(contextLogsPath(store, "example"), currentLink)
 	first, second, third := fmt.Sprintf("op-%032x", 1), fmt.Sprintf("op-%032x", 2), fmt.Sprintf("op-%032x", 3)
@@ -219,6 +222,7 @@ func plantOperationLog(t *testing.T, store *Store, id string, modified time.Time
 // half the context log bound, and never the logs of the operation the index
 // named or of the one registering.
 func TestOperationLogRetentionKeepsCurrentWithinCountAndBytes(t *testing.T) {
+	t.Parallel()
 	t.Run("count", func(t *testing.T) {
 		store, _ := lifecycleFixture(t)
 		current := fmt.Sprintf("op-%032x", 0xc0)
@@ -271,6 +275,7 @@ func deleteExample(store *Store, record contexts.Record) error {
 // directory holding what this store would not have created refuses the
 // deletion naming that entry, leaving the registry entry for a repetition.
 func TestDeletionRemovesTheContextLogDirectory(t *testing.T) {
+	t.Parallel()
 	store, record := lifecycleFixture(t)
 	registerOperation(t, store, fmt.Sprintf("op-%032x", 1))
 	logs := contextLogsPath(store, "example")
@@ -304,6 +309,7 @@ func TestDeletionRemovesTheContextLogDirectory(t *testing.T) {
 // another link, is not an entry deletion may unlink: it refuses naming the
 // file and removes nothing else's.
 func TestDeletionRefusesAFileThatIsNoPrivateSingleLinkFile(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name  string
 		plant func(t *testing.T, path string)
@@ -358,6 +364,7 @@ func TestDeletionRefusesAFileThatIsNoPrivateSingleLinkFile(t *testing.T) {
 // with none: initialization removes the leftover directory before the context
 // is ready.
 func TestInitRemovesALeftoverLogDirectory(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	leftover := filepath.Join(store.options.Root+logsSuffix, logContexts, "example", operationLogs, fmt.Sprintf("op-%032x", 1))
 	mkdirs(t, 0700, leftover)
@@ -371,6 +378,7 @@ func TestInitRemovesALeftoverLogDirectory(t *testing.T) {
 // A log area write the root refuses is an error its caller sees, which the
 // lifecycle latches as runtime.log; the store repairs nothing.
 func TestALogAreaWriteFailureLatchesRuntimeLog(t *testing.T) {
+	t.Parallel()
 	store, _ := lifecycleFixture(t)
 	if err := appendOperationLog(store); err != nil {
 		t.Fatal(err)

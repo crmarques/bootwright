@@ -61,6 +61,7 @@ func requireSelectedInput(t *testing.T, store *Store, record contexts.Record, co
 }
 
 func TestRepeatedInputUpdatesCollectUnselectedRevisions(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	for index := range 32 {
@@ -74,6 +75,7 @@ func TestRepeatedInputUpdatesCollectUnselectedRevisions(t *testing.T) {
 }
 
 func TestInputCleanupWaitsForDurableSelectionAndResumes(t *testing.T) {
+	t.Parallel()
 	for _, point := range []string{"before-registry-rename", "after-registry-rename", "sync-published-registry", "before-revision-cleanup", "before-context-unlink", "before-revision-rmdir"} {
 		t.Run(point, func(t *testing.T) {
 			store, sources := fixture(t)
@@ -126,6 +128,7 @@ func TestInputCleanupWaitsForDurableSelectionAndResumes(t *testing.T) {
 }
 
 func TestInputCleanupSyncFailureKeepsDurableSelection(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	removing, failed := false, false
@@ -155,6 +158,7 @@ func TestInputCleanupSyncFailureKeepsDurableSelection(t *testing.T) {
 }
 
 func TestInputCleanupPreservesProtectedRevisions(t *testing.T) {
+	t.Parallel()
 	for _, evidence := range []string{
 		"{\"version\":1,\"operation\":\"applied\",\"ownership\":\"retained\"}\n",
 		"{\"version\":1,\"operation\":\"pending\",\"ownership\":\"none\"}\n",
@@ -173,6 +177,7 @@ func TestInputCleanupPreservesProtectedRevisions(t *testing.T) {
 }
 
 func TestFailedPublicationRemovesItsRevision(t *testing.T) {
+	t.Parallel()
 	for _, target := range []struct {
 		point      string
 		occurrence int
@@ -225,6 +230,7 @@ func TestFailedPublicationRemovesItsRevision(t *testing.T) {
 }
 
 func TestInputCleanupRefusesReplacedRevision(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	old := filepath.Join(revisionDirectory(store, record), record.Revision)
@@ -260,6 +266,7 @@ func TestInputCleanupRefusesReplacedRevision(t *testing.T) {
 }
 
 func TestInputCleanupRefusesUnsafeUnselectedPayload(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	blob := filepath.Join(revisionDirectory(store, record), record.Revision, "file-0000")
@@ -277,6 +284,7 @@ func TestInputCleanupRefusesUnsafeUnselectedPayload(t *testing.T) {
 }
 
 func TestInputCleanupRevalidatesSelectionAndEvidenceBeforeUnlink(t *testing.T) {
+	t.Parallel()
 	for _, target := range []string{"selection", "mutation evidence"} {
 		t.Run(target, func(t *testing.T) {
 			store, sources := fixture(t)
@@ -313,6 +321,7 @@ func TestInputCleanupRevalidatesSelectionAndEvidenceBeforeUnlink(t *testing.T) {
 }
 
 func TestInputUpdateReclaimsFullRevisionDirectory(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	for index := range maxRevisions - 1 {

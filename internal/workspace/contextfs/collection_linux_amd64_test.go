@@ -92,6 +92,7 @@ func expectRefusal(t *testing.T, err error, message string) {
 // operation and trust areas; the next command that takes the lease
 // removes every one before it verifies the layout.
 func TestTheNextLeaseCollectsWhatAKilledPublicationLeft(t *testing.T) {
+	t.Parallel()
 	store, _ := lifecycleFixture(t)
 	layOutEveryStateEntry(t, store)
 	runtime := contextStatePath(store)
@@ -121,6 +122,7 @@ func TestTheNextLeaseCollectsWhatAKilledPublicationLeft(t *testing.T) {
 // Deleting a ready context takes its lease first, so what a killed
 // publication left never refuses the walk that removes the context.
 func TestAContextDeleteCollectsBeforeItWalks(t *testing.T) {
+	t.Parallel()
 	store, record := lifecycleFixture(t)
 	runtime := contextStatePath(store)
 	for index := range 2 {
@@ -137,6 +139,7 @@ func TestAContextDeleteCollectsBeforeItWalks(t *testing.T) {
 // A secret mutation verifies the context's layout too, so it collects the
 // state directory's stages first even when no lease came before it.
 func TestASecretMutationFirstCollectsTheContextsStages(t *testing.T) {
+	t.Parallel()
 	store, record := lifecycleFixture(t)
 	runtime := contextStatePath(store)
 	for index := range 2 {
@@ -154,6 +157,7 @@ func TestASecretMutationFirstCollectsTheContextsStages(t *testing.T) {
 // and its bundles, the count at which every controller publication refuses;
 // the next command that opens a registry transaction removes all of them.
 func TestTheNextExclusiveCommandCollectsControllerStages(t *testing.T) {
+	t.Parallel()
 	for _, command := range []struct {
 		name string
 		run  func(context.Context, *Store) error
@@ -192,6 +196,7 @@ func TestTheNextExclusiveCommandCollectsControllerStages(t *testing.T) {
 // registry.json. Reads and secret mutations keep it; the next command that
 // opens a registry transaction removes it.
 func TestTheNextRegistryTransactionCollectsRootRegistryStages(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	plant := func(t *testing.T, store *Store) []string {
 		t.Helper()
@@ -264,6 +269,7 @@ func TestTheNextRegistryTransactionCollectsRootRegistryStages(t *testing.T) {
 // A read holds only the shared root lock, which a live writer of a stage may
 // hold beside it, so no read removes anything.
 func TestReadsNeverCollectAStage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	sealedBundleFixture(t, store, record)
@@ -328,6 +334,7 @@ func TestReadsNeverCollectAStage(t *testing.T) {
 // The state directory's own five entries already fill its layout bound, so
 // collection lists it with room for abandoned stages beside them.
 func TestTheStateDirectoryCollectsBesideItsFullLayout(t *testing.T) {
+	t.Parallel()
 	store, _ := lifecycleFixture(t)
 	layOutEveryStateEntry(t, store)
 	runtime := contextStatePath(store)
@@ -351,6 +358,7 @@ func TestTheStateDirectoryCollectsBesideItsFullLayout(t *testing.T) {
 // Beyond its allowance the state directory is not listed for collection at
 // all, so the layout verification refuses it exactly as it did before.
 func TestStagesBeyondTheStateAllowanceStillRefuse(t *testing.T) {
+	t.Parallel()
 	store, _ := lifecycleFixture(t)
 	layOutEveryStateEntry(t, store)
 	runtime := contextStatePath(store)
@@ -368,6 +376,7 @@ func TestStagesBeyondTheStateAllowanceStillRefuse(t *testing.T) {
 // for the component that keeps it. A proven stage that is substituted before
 // its removal stays too, and the command refuses, naming it.
 func TestTheCollectorLeavesWhatItCannotProve(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	content := []byte("{}\n")
 	for _, unproven := range []struct {
@@ -542,6 +551,7 @@ func TestTheCollectorLeavesWhatItCannotProve(t *testing.T) {
 // A cancelled command stops walking at the next entry, stage or not, so a
 // large operation tree never outlasts the cancellation.
 func TestACancelledCollectionStopsItsWalk(t *testing.T) {
+	t.Parallel()
 	store, record := lifecycleFixture(t)
 	root, err := store.openRoot(context.Background(), false, nil)
 	if err != nil {
@@ -564,6 +574,7 @@ func TestACancelledCollectionStopsItsWalk(t *testing.T) {
 // The next lease removes every entry named as a stage in the operation, run
 // and trust areas, so no area creates a record or directory named as one.
 func TestAnAreaRefusesARecordNamedAsAStage(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	if err := checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error {
@@ -605,6 +616,7 @@ func TestAnAreaRefusesARecordNamedAsAStage(t *testing.T) {
 // once and never held, so nothing later in the transaction treats the context
 // as leased.
 func TestARefusedLeaseIsReleasedAndNeverHeld(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
@@ -633,6 +645,7 @@ func TestARefusedLeaseIsReleasedAndNeverHeld(t *testing.T) {
 }
 
 func TestInspectionRefusesUnsafePublicationStagesWithoutCollecting(t *testing.T) {
+	t.Parallel()
 	for _, shape := range []string{"public", "oversize", "linked", "too-many"} {
 		t.Run(shape, func(t *testing.T) {
 			store, _ := lifecycleFixture(t)

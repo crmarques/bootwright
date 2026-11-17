@@ -140,6 +140,7 @@ func requireNoBundlePayload(t *testing.T, store *Store, listed []prerequisites.B
 // stage, so the exact replay of the stage that retries it publishes the file
 // whole.
 func TestABundleWriteCancelledAfterItsCreateLeavesNoFile(t *testing.T) {
+	t.Parallel()
 	store := boundFixture(t)
 	directory := filepath.Join(bundlePath(store, clientClosure), "bin")
 	written, listed := writeBundlePayload(t, store, func(ctx context.Context, area prerequisites.BundleArea, payload []byte) error {
@@ -176,6 +177,7 @@ func TestABundleWriteFaultedAfterItsCreateLeavesNoFile(t *testing.T) {
 // publishes the file under its final name, and a sealed area holding one
 // refuses.
 func TestAStageAKilledBundleWriteLeftIsSweptByTheReplay(t *testing.T) {
+	t.Parallel()
 	store := boundFixture(t)
 	ctx := context.Background()
 	digest := clientClosure
@@ -303,6 +305,7 @@ func TestStoreCapacityNamesOnlyTheErrno(t *testing.T) {
 // named by its own text: capacity as capacity, anything else beside the
 // generic refusal, and never through the text of the error carrying it.
 func TestSafeErrorNamesTheKernelsAnswer(t *testing.T) {
+	t.Parallel()
 	private := &os.PathError{Op: "open", Path: "/private/state/contexts/example", Err: syscall.EDQUOT}
 	for _, row := range []struct {
 		name        string
@@ -327,6 +330,7 @@ func TestSafeErrorNamesTheKernelsAnswer(t *testing.T) {
 // answer and its remedy; only a failed integrity proof of the store's own
 // state is secret.store.corrupt, and an unclassified error stays a conflict.
 func TestASecretWriteFailureIsCorruptOnlyWhenTheStoreFailedItsProof(t *testing.T) {
+	t.Parallel()
 	limit := secretstore.Failure("store.limit", "bounded secret storage is full")
 	for _, row := range []struct {
 		name, code, message string
@@ -367,6 +371,7 @@ var _ media.Payload = (*failingSource)(nil)
 // Only the stage's own write is the store's failure: a source that fails is
 // still blamed on the source, with its own remedy.
 func TestAMediaSourceFailureStillBlamesTheSource(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	stage := claimStage(t, store, "demo.iso")
 	_, err := stage.Fill(context.Background(), &failingSource{}, managedos.MaxMediaBytes)
@@ -380,6 +385,7 @@ func TestAMediaSourceFailureStillBlamesTheSource(t *testing.T) {
 // now, so a directory renamed over a held one refuses as replaced and its
 // names are never returned.
 func TestAHeldListingRefusesASubstitutedDirectory(t *testing.T) {
+	t.Parallel()
 	store, sources := fixture(t)
 	publish(t, store, "example", sources)
 	root, err := store.openRoot(context.Background(), false, nil)
@@ -440,6 +446,7 @@ func requireOtherBuildRemedy(t *testing.T, operation string, err error) {
 // as damage to move aside, and every command leaves it as it is: one without a
 // registry, and one whose registry.json is of another format version.
 func TestAnotherBuildsRootRefusesWithTheLiveEnvironmentRemedy(t *testing.T) {
+	t.Parallel()
 	for name, entries := range map[string]map[string]string{
 		"without a registry":       {"contexts.yaml": "contexts: []\n", ".bootwright-managed-root": "managed\n"},
 		"another registry version": {"registry.json": "{\"version\":99,\"contexts\":[]}\n"},
@@ -480,6 +487,7 @@ func TestAnotherBuildsRootRefusesWithTheLiveEnvironmentRemedy(t *testing.T) {
 // leaves it as it was, and uninstall hands that refusal to its service, which
 // only a discard accepts.
 func TestAStoreWithTheEarlierLayoutIsAnotherBuilds(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
@@ -529,6 +537,7 @@ func TestAStoreWithTheEarlierLayoutIsAnotherBuilds(t *testing.T) {
 // A root that is not private names what it is and what it must be, and its
 // remedy, since nothing repairs it.
 func TestARootThatIsNotPrivateNamesTheRequiredMode(t *testing.T) {
+	t.Parallel()
 	store, _ := fixture(t)
 	if err := os.Mkdir(store.options.Root, 0700); err != nil {
 		t.Fatal(err)

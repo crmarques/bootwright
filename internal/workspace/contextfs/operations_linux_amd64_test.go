@@ -34,6 +34,7 @@ import (
 // exactly what admission needs, it registers, runs its block and completes,
 // leaving one entry free.
 func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	block := func(id string) reconciliation.BlockDefinition {
@@ -243,6 +244,7 @@ func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
 // removal then registers, runs its block and completes within the area's
 // bound, which holds no output at all.
 func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{{
@@ -394,6 +396,7 @@ func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
 }
 
 func TestOperationPlanUsesItsOwnRecordBound(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	err := checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error {

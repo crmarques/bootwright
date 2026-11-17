@@ -35,6 +35,7 @@ func (*canceledSource) Close() error { return nil }
 // A copy canceled mid-body is reported as the cancellation, never as a source
 // that could not be read in full, and leaves nothing behind.
 func TestAFillCanceledMidBodyReportsTheCancellation(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	stage := claimStage(t, store, "demo.iso")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -95,6 +96,7 @@ func expectFailedRow(t *testing.T, row media.MediaRow, name, failure string) {
 // While a checksum listing reads its images it holds no root lock, so an
 // exclusive mutation taken during each check succeeds.
 func TestAChecksumListingHoldsNoRootLockWhileItHashes(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "installer bytes", false)
 	addMedia(t, store, "other.iso", "other bytes", false)
@@ -115,6 +117,7 @@ func TestAChecksumListingHoldsNoRootLockWhileItHashes(t *testing.T) {
 
 // An image deleted while it is read is listed failed, and the others verify.
 func TestAnImageDeletedWhileItIsHashedIsListedFailed(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "installer bytes", false)
 	addMedia(t, store, "other.iso", "other bytes", false)
@@ -135,6 +138,7 @@ func TestAnImageDeletedWhileItIsHashedIsListedFailed(t *testing.T) {
 // An image extended while it is read is listed failed, not a mismatch, and
 // the others verify.
 func TestAnImageChangedWhileItIsHashedIsListedFailed(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "installer bytes", false)
 	addMedia(t, store, "other.iso", "other bytes", false)
@@ -174,6 +178,7 @@ func replaceRecord(t *testing.T, store *Store, name, data string) {
 // A record that does not decode lists its image failed, with only its name,
 // beside every other image, with or without checksums.
 func TestAnUndecodableRecordIsListedFailedBesideTheOthers(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "installer bytes", false)
 	addMedia(t, store, "other.iso", "other bytes", false)
@@ -192,6 +197,7 @@ func TestAnUndecodableRecordIsListedFailedBesideTheOthers(t *testing.T) {
 
 // A record whose file is not private lists its image failed.
 func TestAnUnsafeRecordIsListedFailed(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "installer bytes", false)
 	addMedia(t, store, "other.iso", "other bytes", false)
@@ -208,6 +214,7 @@ func TestAnUnsafeRecordIsListedFailed(t *testing.T) {
 // An image whose file is not private keeps its record's fields and is listed
 // failed; checksums never read it, and every other image still verifies.
 func TestAnUnsafeImageIsListedFailedBesideTheOthers(t *testing.T) {
+	t.Parallel()
 	store := mediaFixture(t)
 	addMedia(t, store, "demo.iso", "installer bytes", false)
 	addMedia(t, store, "other.iso", "other bytes", false)

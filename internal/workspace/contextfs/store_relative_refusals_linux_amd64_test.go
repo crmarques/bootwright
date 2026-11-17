@@ -17,6 +17,7 @@ import (
 // every store refusal does, so it reads the same whatever the root's location
 // on the host.
 func TestALifecycleOperationEntryRefusalNamesItsStoreRelativePath(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	if err := syscall.Mkfifo(filepath.Join(operationsRoot(t, store, "example"), "op-1"), 0600); err != nil {
@@ -37,6 +38,7 @@ func TestALifecycleOperationEntryRefusalNamesItsStoreRelativePath(t *testing.T) 
 // fresh handle, so the held root handle keeps its directory offset for every
 // later listing through it.
 func TestReadingTheRegistryLeavesTheHeldRootListingAlone(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	store, _ := fixture(t)
 	if err := os.Mkdir(store.options.Root, 0700); err != nil {
