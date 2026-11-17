@@ -131,11 +131,7 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 			{"verify-absence", "verify every owned resource is gone"},
 		}
 	}
-	out := make([]reconciliation.Group, 0, len(steps))
-	for _, step := range steps {
-		out = append(out, reconciliation.Group{ID: step[0], Description: step[1], Machines: machines})
-	}
-	return out
+	return lifecycle.StepGroups(steps, machines)
 }
 
 // Removal reads a frozen artifact-server block as the removal of the service it
@@ -162,32 +158,30 @@ func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) 
 }
 
 func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
-	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
-	request, fingerprint, err := c.prepare(ctx, execution, operation == "apply")
-	if err != nil {
+	result, err := lifecycle.MutateBlock(ctx, c.mutation(operation), execution, operation)
+	if errors.Is(err, certificateMismatch) && result.Outcome == reconciliation.OutcomeUnknown {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
-	result, err := c.run(ctx, execution, operation, request, fingerprint)
-	if err != nil {
-		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
+	return result, err
+}
+
+type prepared struct {
+	request     Request
+	fingerprint string
+}
+
+func (c Capability) mutation(operation string) lifecycle.Mutation[prepared] {
+	return lifecycle.Mutation[prepared]{
+		Prepare: func(ctx context.Context, execution lifecycle.Execution) (prepared, error) {
+			request, fingerprint, err := c.prepare(ctx, execution, operation == "apply")
+			return prepared{request, fingerprint}, err
+		},
+		Run: func(ctx context.Context, execution lifecycle.Execution, _ string, call prepared) (lifecycle.RunResult, error) {
+			return c.run(ctx, execution, operation, call.request, call.fingerprint)
+		},
+		Reading:  serverReading,
+		Unusable: refusal("lifecycle.state", "the artifact-server adapter reported no usable outcome", ""),
 	}
-	outcome, usable := result.Outcome, result.Outcome.Settled()
-	if !usable {
-		return unknown, refusal("lifecycle.state", "the artifact-server adapter reported no usable outcome", "")
-	}
-	digest := execution.Block.RequestDigest
-	if operation == "apply" {
-		err = ValidatePresence(result.Evidence, request, digest, fingerprint)
-	} else {
-		err = ValidateAbsence(result.Evidence, digest)
-	}
-	if err != nil {
-		if errors.Is(err, certificateMismatch) {
-			return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
-		}
-		return unknown, err
-	}
-	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
 
 // Observe is read-only. Live state matching the frozen request in full is
@@ -197,7 +191,7 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 // could not be made, stays unknown. A fresh destroy over an incomplete apply
 // resolves the apply's block through this reading too.
 func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, reconciliation.Apply)
+	return lifecycle.ObserveBlock(ctx, c.mutation("observe"), execution, reconciliation.Apply)
 }
 
 // ObserveRemoval reads the same observation for what a removal takes back, not
@@ -207,55 +201,25 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 // positive partial removal the next attempt converges. Only an observation
 // that cannot be made or read as this request's stays unknown.
 func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, reconciliation.Destroy)
+	return lifecycle.ObserveBlock(ctx, c.mutation("observe"), execution, reconciliation.Destroy)
 }
 
-// serverEffect is the one reading of an artifact-server observation for the
-// verb the block was frozen for: an apply's checks are its presence, absence
-// and partial forms, a removal's its absence, unremoved and unfinished forms,
-// each in that order. When none accepts the evidence the effect is unknown,
-// and the refusal that decided it comes back with it: the presence check's for
-// an apply, the unfinished removal's for a removal. Only an apply reads the
-// fingerprint of the bound certificate.
+// serverReading reads an artifact-server observation for the verb the block
+// was frozen for. Only an apply reads the fingerprint of the bound
+// certificate.
+func serverReading(call prepared, digest string) lifecycle.EffectReading {
+	request, fingerprint := call.request, call.fingerprint
+	return lifecycle.EffectReading{
+		Presence:   func(evidence []byte) error { return ValidatePresence(evidence, request, digest, fingerprint) },
+		Absence:    func(evidence []byte) error { return ValidateAbsence(evidence, digest) },
+		Partial:    func(evidence []byte) error { return ValidatePartial(evidence, request, digest, fingerprint) },
+		Unremoved:  func(evidence []byte) error { return ValidateUnremoved(evidence, request, digest) },
+		Unfinished: func(evidence []byte) error { return ValidateRemovalUnfinished(evidence, request, digest) },
+	}
+}
+
 func serverEffect(verb reconciliation.Verb, evidence []byte, request Request, digest, fingerprint string) (reconciliation.EffectState, error) {
-	if verb == reconciliation.Destroy {
-		switch {
-		case ValidateAbsence(evidence, digest) == nil:
-			return reconciliation.EffectCompleted, nil
-		case ValidateUnremoved(evidence, request, digest) == nil:
-			return reconciliation.EffectNoEffect, nil
-		}
-		if err := ValidateRemovalUnfinished(evidence, request, digest); err != nil {
-			return reconciliation.EffectUnknown, err
-		}
-		return reconciliation.EffectPartial, nil
-	}
-	presence := ValidatePresence(evidence, request, digest, fingerprint)
-	switch {
-	case presence == nil:
-		return reconciliation.EffectCompleted, nil
-	case ValidateAbsence(evidence, digest) == nil:
-		return reconciliation.EffectNoEffect, nil
-	case ValidatePartial(evidence, request, digest, fingerprint) == nil:
-		return reconciliation.EffectPartial, nil
-	}
-	return reconciliation.EffectUnknown, presence
-}
-
-// observe runs the one read-only observation both resolutions share and reads
-// its evidence for the verb the block was frozen for.
-func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
-	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
-	request, fingerprint, err := c.prepare(ctx, execution, false)
-	if err != nil {
-		return unknown, err
-	}
-	result, err := c.run(ctx, execution, "observe", request, fingerprint)
-	if err != nil {
-		return unknown, err
-	}
-	effect, _ := serverEffect(verb, result.Evidence, request, execution.Block.RequestDigest, fingerprint)
-	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
+	return lifecycle.ReadEffect(serverReading(prepared{request, fingerprint}, digest), verb, evidence)
 }
 
 // prepare decodes the frozen request and, when the operation serves content,

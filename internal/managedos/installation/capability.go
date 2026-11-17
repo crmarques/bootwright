@@ -289,11 +289,7 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 			steps = append([][2]string{{"unregister-subscription", "remove the subscription consumer this installation registered the machine with"}}, steps...)
 		}
 	}
-	out := make([]reconciliation.Group, 0, len(steps))
-	for _, step := range steps {
-		out = append(out, reconciliation.Group{ID: step[0], Description: step[1], Machines: machines})
-	}
-	return out
+	return lifecycle.StepGroups(steps, machines)
 }
 
 func (Capability) RequiresPreStopRemoval(block reconciliation.Block) bool {
@@ -327,32 +323,43 @@ func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) 
 }
 
 func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
-	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
-	request, marker, err := c.prepare(ctx, execution)
-	if err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+	return lifecycle.MutateBlock(ctx, c.mutation(operation), execution, operation)
+}
+
+type prepared struct {
+	request Request
+	marker  []byte
+}
+
+func (c Capability) mutation(operation string) lifecycle.Mutation[prepared] {
+	mutation := lifecycle.Mutation[prepared]{
+		Prepare: func(ctx context.Context, execution lifecycle.Execution) (prepared, error) {
+			request, marker, err := c.prepare(ctx, execution)
+			return prepared{request, marker}, err
+		},
+		Run: func(ctx context.Context, execution lifecycle.Execution, _ string, call prepared) (lifecycle.RunResult, error) {
+			return c.run(ctx, execution, operation, call.request, call.marker, "")
+		},
+		Reading: func(call prepared, digest string) lifecycle.EffectReading {
+			return lifecycle.EffectReading{
+				Presence: func(evidence []byte) error {
+					return ValidatePresence(evidence, call.request, digest, string(call.marker))
+				},
+				Absence: func(evidence []byte) error { return ValidateAbsence(evidence, digest) },
+			}
+		},
+		Unusable: refusal("lifecycle.state", "the installation adapter reported no usable outcome", ""),
 	}
-	result, err := c.run(ctx, execution, operation, request, marker, "")
-	if err != nil {
-		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
-	}
-	outcome, usable := result.Outcome, result.Outcome.Settled()
-	if !usable {
-		return unknown, refusal("lifecycle.state", "the installation adapter reported no usable outcome", "")
-	}
-	digest := execution.Block.RequestDigest
-	if operation == "apply" {
-		err = ValidatePresence(result.Evidence, request, digest, string(marker))
-	} else if err = ValidateAbsence(result.Evidence, digest); err == nil {
-		var unregister bool
-		if unregister, err = unregisters(execution, request, marker); err == nil {
-			err = ValidateReleased(result.Evidence, request, digest, unregister)
+	if operation == string(reconciliation.Destroy) {
+		mutation.Proved = func(execution lifecycle.Execution, call prepared, result lifecycle.RunResult) error {
+			unregister, err := unregisters(execution, call.request, call.marker)
+			if err != nil {
+				return err
+			}
+			return ValidateReleased(result.Evidence, call.request, execution.Block.RequestDigest, unregister)
 		}
 	}
-	if err != nil {
-		return unknown, err
-	}
-	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
+	return mutation
 }
 
 // Observe is read-only. A guest holding the frozen marker with its content
@@ -401,14 +408,13 @@ func decidedEffect(verb reconciliation.Verb, evidence []byte, request Request, d
 	if verb == reconciliation.Destroy {
 		return removalEffect(evidence, request, digest, marker, unregister)
 	}
-	presence := ValidatePresence(evidence, request, digest, marker)
-	switch {
-	case presence == nil:
-		return reconciliation.EffectCompleted, nil
-	case ValidateNoEffect(evidence, digest) == nil:
-		return reconciliation.EffectNoEffect, nil
-	case ValidatePartial(evidence, digest, marker) == nil:
-		return reconciliation.EffectPartial, nil
+	effect, presence := lifecycle.ReadEffect(lifecycle.EffectReading{
+		Presence: func(evidence []byte) error { return ValidatePresence(evidence, request, digest, marker) },
+		Absence:  func(evidence []byte) error { return ValidateNoEffect(evidence, digest) },
+		Partial:  func(evidence []byte) error { return ValidatePartial(evidence, digest, marker) },
+	}, verb, evidence)
+	if effect != reconciliation.EffectUnknown {
+		return effect, nil
 	}
 	if decoded, err := decodeEvidence(evidence, digest); err == nil {
 		if foreign := foreignRegistration(decoded); foreign != nil {
@@ -422,19 +428,20 @@ func decidedEffect(verb reconciliation.Verb, evidence []byte, request Request, d
 }
 
 func removalEffect(evidence []byte, request Request, digest, marker string, unregister bool) (reconciliation.EffectState, error) {
-	withdrawn := ValidateWithdrawn(evidence, digest) == nil
-	released := ValidateReleased(evidence, request, digest, unregister) == nil
-	switch {
-	case withdrawn && released:
-		return reconciliation.EffectCompleted, nil
-	case ValidatePresence(evidence, request, digest, marker) == nil:
-		return reconciliation.EffectNoEffect, nil
+	effect, unfinished := lifecycle.ReadEffect(lifecycle.EffectReading{
+		Absence: func(evidence []byte) error {
+			if err := ValidateWithdrawn(evidence, digest); err != nil {
+				return err
+			}
+			return ValidateReleased(evidence, request, digest, unregister)
+		},
+		Unremoved:  func(evidence []byte) error { return ValidatePresence(evidence, request, digest, marker) },
+		Unfinished: func(evidence []byte) error { return ValidateWithdrawalUnfinished(evidence, digest) },
+	}, reconciliation.Destroy, evidence)
+	if effect != reconciliation.EffectUnknown {
+		return effect, nil
 	}
-	unfinished := ValidateWithdrawalUnfinished(evidence, digest)
-	if unfinished == nil {
-		return reconciliation.EffectPartial, nil
-	}
-	if withdrawn {
+	if ValidateWithdrawn(evidence, digest) == nil {
 		if decoded, err := decodeEvidence(evidence, digest); err == nil && ownRegistration(decoded) {
 			return reconciliation.EffectPartial, nil
 		}

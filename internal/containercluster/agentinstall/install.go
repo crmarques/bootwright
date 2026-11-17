@@ -186,11 +186,7 @@ func installGroups(verb reconciliation.Verb, request InstallRequest) []reconcili
 			{"verify-absence", "verify no node presents this cluster's media"},
 		}
 	}
-	out := make([]reconciliation.Group, 0, len(steps))
-	for _, step := range steps {
-		out = append(out, reconciliation.Group{ID: step[0], Description: step[1], Machines: machines})
-	}
-	return out
+	return lifecycle.StepGroups(steps, machines)
 }
 
 // Removal reads a frozen installation block as the removal of what it opened:
@@ -295,33 +291,20 @@ func (c InstallCapability) ObserveRemoval(ctx context.Context, execution lifecyc
 	return c.observe(ctx, execution, reconciliation.Destroy)
 }
 
-// installEffect is the one reading of an installation observation for the
-// verb the block was frozen for: an apply's checks are its presence, no effect
-// and partial forms, a removal's its released and partial release forms, each
-// in that order. When none accepts the evidence the effect is unknown, and the
-// refusal that decided it comes back with it: the presence check's for an
-// apply, the partial release's for a removal. bootRecorded says the apply's
+// installEffect reads an installation observation for the verb the block was
+// frozen for; a removal has no unremoved form. bootRecorded says the apply's
 // records hold a boot of this block.
 func installEffect(verb reconciliation.Verb, evidence []byte, request InstallRequest, digest string, bootRecorded bool) (reconciliation.EffectState, error) {
+	reading := lifecycle.EffectReading{
+		Presence:   func(evidence []byte) error { return ValidateInstallPresence(evidence, request, digest) },
+		Absence:    func(evidence []byte) error { return ValidateInstallNoEffect(evidence, digest, bootRecorded) },
+		Partial:    func(evidence []byte) error { return ValidateInstallPartial(evidence, digest) },
+		Unfinished: func(evidence []byte) error { return ValidateInstallReleasePartial(evidence, request, digest) },
+	}
 	if verb == reconciliation.Destroy {
-		if ValidateInstallReleased(evidence, digest) == nil {
-			return reconciliation.EffectCompleted, nil
-		}
-		if err := ValidateInstallReleasePartial(evidence, request, digest); err != nil {
-			return reconciliation.EffectUnknown, err
-		}
-		return reconciliation.EffectPartial, nil
+		reading.Absence = func(evidence []byte) error { return ValidateInstallReleased(evidence, digest) }
 	}
-	presence := ValidateInstallPresence(evidence, request, digest)
-	switch {
-	case presence == nil:
-		return reconciliation.EffectCompleted, nil
-	case ValidateInstallNoEffect(evidence, digest, bootRecorded) == nil:
-		return reconciliation.EffectNoEffect, nil
-	case ValidateInstallPartial(evidence, digest) == nil:
-		return reconciliation.EffectPartial, nil
-	}
-	return reconciliation.EffectUnknown, presence
+	return lifecycle.ReadEffect(reading, verb, evidence)
 }
 
 // observe runs the read-only observation operation, scoped to what the verb

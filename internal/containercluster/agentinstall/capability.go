@@ -149,11 +149,7 @@ func mediaGroups(verb reconciliation.Verb, request MediaRequest) []reconciliatio
 			steps = steps[:1]
 		}
 	}
-	out := make([]reconciliation.Group, 0, len(steps))
-	for _, step := range steps {
-		out = append(out, reconciliation.Group{ID: step[0], Description: step[1], Machines: machines})
-	}
-	return out
+	return lifecycle.StepGroups(steps, machines)
 }
 
 // Removal reads a frozen media block as the removal of what it published. The
@@ -172,37 +168,21 @@ func (c MediaCapability) Removal(ctx context.Context, block reconciliation.Block
 }
 
 func (c MediaCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "apply")
+	return lifecycle.MutateBlock(ctx, c.mutation("apply", mediaProof), execution, "apply")
 }
 
 func (c MediaCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return c.mutate(ctx, execution, "destroy")
+	return lifecycle.MutateBlock(ctx, c.mutation("destroy", mediaProof), execution, "destroy")
 }
 
-func (c MediaCapability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
-	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
-	request, err := c.prepare(ctx, execution)
-	if err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+func (c MediaCapability) mutation(operation string, reading func(MediaRequest, string) lifecycle.EffectReading) lifecycle.Mutation[MediaRequest] {
+	return lifecycle.Mutation[MediaRequest]{
+		Prepare: c.prepare, Reading: reading,
+		Run: func(ctx context.Context, execution lifecycle.Execution, _ string, request MediaRequest) (lifecycle.RunResult, error) {
+			return c.run(ctx, execution, operation, request)
+		},
+		Unusable: refusal("lifecycle.state", "the boot-media adapter reported no usable outcome", ""),
 	}
-	result, err := c.run(ctx, execution, operation, request)
-	if err != nil {
-		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
-	}
-	outcome, usable := result.Outcome, result.Outcome.Settled()
-	if !usable {
-		return unknown, refusal("lifecycle.state", "the boot-media adapter reported no usable outcome", "")
-	}
-	digest := execution.Block.RequestDigest
-	if operation == "apply" {
-		err = ValidateMediaPresence(result.Evidence, request, digest)
-	} else {
-		err = ValidateMediaAbsence(result.Evidence, digest)
-	}
-	if err != nil {
-		return unknown, err
-	}
-	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
 
 // Observe is read-only. A published image built from this exact request by the
@@ -210,7 +190,7 @@ func (c MediaCapability) mutate(ctx context.Context, execution lifecycle.Executi
 // is positive no effect; anything of this block's own left behind is a positive
 // partial realization the next attempt converges by building again.
 func (c MediaCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, reconciliation.Apply)
+	return lifecycle.ObserveBlock(ctx, c.mutation("observe", mediaReading), execution, reconciliation.Apply)
 }
 
 // ObserveRemoval reads the same observation for what a removal proves. The
@@ -219,54 +199,33 @@ func (c MediaCapability) Observe(ctx context.Context, execution lifecycle.Execut
 // describes is positive no effect; and anything of this block's own left is a
 // positive partial removal the next attempt converges.
 func (c MediaCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return c.observe(ctx, execution, reconciliation.Destroy)
+	return lifecycle.ObserveBlock(ctx, c.mutation("observe", mediaReading), execution, reconciliation.Destroy)
 }
 
-// mediaEffect is the one reading of a boot-media observation for the verb the
-// block was frozen for: an apply's checks are its presence, no effect and
-// partial forms, a removal's its no effect, presence and partial forms, each in
-// that order. When none accepts the evidence the effect is unknown, and the
-// refusal that decided it comes back with it: the presence check's for an
-// apply, the partial check's for a removal.
+// mediaProof is what a mutation's evidence must prove: the published image for
+// an apply, and the published image and work area gone for a destroy.
+func mediaProof(request MediaRequest, digest string) lifecycle.EffectReading {
+	return lifecycle.EffectReading{
+		Presence: func(evidence []byte) error { return ValidateMediaPresence(evidence, request, digest) },
+		Absence:  func(evidence []byte) error { return ValidateMediaAbsence(evidence, digest) },
+	}
+}
+
+// mediaReading reads a boot-media observation for the verb the block was
+// frozen for. Its no effect form is a removal's completion, and its presence
+// form a removal's no effect.
+func mediaReading(request MediaRequest, digest string) lifecycle.EffectReading {
+	return lifecycle.EffectReading{
+		Presence:   func(evidence []byte) error { return ValidateMediaPresence(evidence, request, digest) },
+		Absence:    func(evidence []byte) error { return ValidateMediaNoEffect(evidence, digest) },
+		Partial:    func(evidence []byte) error { return ValidateMediaPartial(evidence, digest) },
+		Unremoved:  func(evidence []byte) error { return ValidateMediaPresence(evidence, request, digest) },
+		Unfinished: func(evidence []byte) error { return ValidateMediaPartial(evidence, digest) },
+	}
+}
+
 func mediaEffect(verb reconciliation.Verb, evidence []byte, request MediaRequest, digest string) (reconciliation.EffectState, error) {
-	if verb == reconciliation.Destroy {
-		switch {
-		case ValidateMediaNoEffect(evidence, digest) == nil:
-			return reconciliation.EffectCompleted, nil
-		case ValidateMediaPresence(evidence, request, digest) == nil:
-			return reconciliation.EffectNoEffect, nil
-		}
-		if err := ValidateMediaPartial(evidence, digest); err != nil {
-			return reconciliation.EffectUnknown, err
-		}
-		return reconciliation.EffectPartial, nil
-	}
-	presence := ValidateMediaPresence(evidence, request, digest)
-	switch {
-	case presence == nil:
-		return reconciliation.EffectCompleted, nil
-	case ValidateMediaNoEffect(evidence, digest) == nil:
-		return reconciliation.EffectNoEffect, nil
-	case ValidateMediaPartial(evidence, digest) == nil:
-		return reconciliation.EffectPartial, nil
-	}
-	return reconciliation.EffectUnknown, presence
-}
-
-// observe runs the one read-only observation both resolutions share and reads
-// its evidence for the verb the block was frozen for.
-func (c MediaCapability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
-	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
-	request, err := c.prepare(ctx, execution)
-	if err != nil {
-		return unknown, err
-	}
-	result, err := c.run(ctx, execution, "observe", request)
-	if err != nil {
-		return unknown, err
-	}
-	effect, _ := mediaEffect(verb, result.Evidence, request, execution.Block.RequestDigest)
-	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
+	return lifecycle.ReadEffect(mediaReading(request, digest), verb, evidence)
 }
 
 // Keeps names the custody entry of the administrator kubeconfig the cluster's
