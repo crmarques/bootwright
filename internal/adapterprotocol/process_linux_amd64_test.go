@@ -4,14 +4,39 @@ package adapterprotocol
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
 )
+
+func TestEntrypointRefusesAnInterpreterThatIsNotTheIsolatedVenvEvenWhenAssertsAreStripped(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("no python3")
+	}
+	marker := filepath.Join(t.TempDir(), "ran")
+	target := filepath.Join(t.TempDir(), "target.py")
+	if err := os.WriteFile(target, []byte("open("+strconv.Quote(marker)+", 'w').close()\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, flags := range [][]string{{"-I", "-B"}, {"-O", "-I", "-B"}, {"-OO", "-I", "-B"}} {
+		_ = os.Remove(marker)
+		output, err := exec.Command(python, append(flags, "-c", entrypoint, target)...).CombinedOutput()
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) || exit.ExitCode() != 2 {
+			t.Fatalf("python3 %v: want exit 2, got %v\n%s", flags, err, output)
+		}
+		if _, statErr := os.Stat(marker); statErr == nil {
+			t.Fatalf("python3 %v ran the target in a non-venv interpreter", flags)
+		}
+	}
+}
 
 // cancelingJudge admits every record and asks for its acknowledgement, but
 // cancels the run while it judges, so the run's context is done before the

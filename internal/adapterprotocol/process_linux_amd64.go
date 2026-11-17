@@ -27,7 +27,8 @@ const parentDeath = syscall.SIGTERM
 // entrypoint refuses an interpreter that is not the isolated controller venv
 // before any Ansible code loads; the venv's own site supplies its packages.
 const entrypoint = `import sys
-assert sys.flags.isolated and sys.flags.dont_write_bytecode and sys.prefix != sys.base_prefix
+if not (sys.flags.isolated and sys.flags.dont_write_bytecode and sys.prefix != sys.base_prefix):
+    sys.exit(2)
 path = sys.argv.pop(1)
 with open(path, 'rb') as stream:
     code = compile(stream.read(), path, 'exec')
