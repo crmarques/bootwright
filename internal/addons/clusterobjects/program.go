@@ -25,44 +25,8 @@ func Canonical(value any) ([]byte, error) {
 	return reconciliation.Freeze(generic, "cluster object")
 }
 
-func valueJSON(v api.Value) (any, error) {
-	switch v.Type() {
-	case api.String:
-		return v.Text(), nil
-	case api.Boolean:
-		return v.Bool(), nil
-	case api.Integer, api.Number:
-		return json.Number(v.Text()), nil
-	case api.Mapping:
-		result := map[string]any{}
-		for _, f := range v.Fields() {
-			if _, exists := result[f.Name]; exists {
-				return nil, fmt.Errorf("duplicate object field %s", f.Name)
-			}
-			value, err := valueJSON(f.Value)
-			if err != nil {
-				return nil, err
-			}
-			result[f.Name] = value
-		}
-		return result, nil
-	case api.Sequence:
-		result := make([]any, 0, v.Len())
-		for _, item := range v.Items() {
-			value, err := valueJSON(item)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, value)
-		}
-		return result, nil
-	default:
-		return nil, fmt.Errorf("absent object value")
-	}
-}
-
 func NewObjectEntry(object Object) (ObjectEntry, error) {
-	value, err := valueJSON(object.Body)
+	value, err := object.Body.NativeChecked(api.NativeOptions{RefuseAbsent: true, RefuseDuplicates: true})
 	if err != nil {
 		return ObjectEntry{}, err
 	}

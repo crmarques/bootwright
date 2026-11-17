@@ -72,8 +72,8 @@ func bucketPolicy(bucket api.Object) (string, error) {
 		return "", nil
 	}
 	name := bucket.Name()
-	value, ok := smbValue(declared)
-	if _, mapped := value.(map[string]any); !ok || !mapped {
+	value, err := declared.NativeChecked(smbNativeOptions)
+	if _, mapped := value.(map[string]any); err != nil || !mapped {
 		return "", failure("api.invariant", "CephObjectBucket "+name+" declares a policy holding a value that is not a JSON string, integer, boolean, list or mapping", "write spec.policy as the native S3 bucket policy document with only strings, integers, booleans, lists and mappings")
 	}
 	encoded, err := canonicaljson.Encode(value, canonicaljson.Bare)

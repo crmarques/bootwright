@@ -120,7 +120,7 @@ func ImageDigestSources(catalog api.Catalog, cluster api.Object) []any {
 	var authored []string
 	for _, source := range cluster.Spec().Get("install", "registries", "imageDigestSources").Items() {
 		authored = append(authored, source.Get("source").Text())
-		sources = append(sources, nativeValue(source))
+		sources = append(sources, source.Native(api.NumberBinary))
 	}
 	mirror, declared := infrastructureservices.ImageMirrorOf(catalog)
 	if !declared {

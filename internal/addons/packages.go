@@ -155,7 +155,7 @@ type Rendered struct {
 
 func Decode[T any](v api.Value) (T, error) {
 	var result T
-	data, err := json.Marshal(nativeValue(v))
+	data, err := json.Marshal(v.Native(api.NumberText))
 	if err != nil {
 		return result, err
 	}
@@ -163,30 +163,6 @@ func Decode[T any](v api.Value) (T, error) {
 	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&result)
 	return result, err
-}
-func nativeValue(v api.Value) any {
-	switch v.Type() {
-	case api.Mapping:
-		result := map[string]any{}
-		for _, field := range v.Fields() {
-			result[field.Name] = nativeValue(field.Value)
-		}
-		return result
-	case api.Sequence:
-		result := make([]any, 0, v.Len())
-		for _, item := range v.Items() {
-			result = append(result, nativeValue(item))
-		}
-		return result
-	case api.String:
-		return v.Text()
-	case api.Boolean:
-		return v.Bool()
-	case api.Integer, api.Number:
-		return json.Number(v.Text())
-	default:
-		return nil
-	}
 }
 
 type Registry struct{ entries []Package }

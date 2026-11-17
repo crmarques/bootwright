@@ -17,7 +17,7 @@ import (
 func installManifests(catalog api.Catalog, cluster api.Object, timeSources []string) ([]InstallManifest, error) {
 	result := []InstallManifest{}
 	if config := cluster.Spec().Get("networking", "ovnKubernetesConfig"); config.Present() && config.Len() != 0 {
-		result = append(result, InstallManifest{File: "bootwright-00-ovn-network.yaml", APIVersion: "operator.openshift.io/v1", Kind: "Network", Name: "cluster", Content: map[string]any{"apiVersion": "operator.openshift.io/v1", "kind": "Network", "metadata": map[string]any{"name": "cluster"}, "spec": map[string]any{"defaultNetwork": map[string]any{"type": "OVNKubernetes", "ovnKubernetesConfig": nativeValue(config)}}}})
+		result = append(result, InstallManifest{File: "bootwright-00-ovn-network.yaml", APIVersion: "operator.openshift.io/v1", Kind: "Network", Name: "cluster", Content: map[string]any{"apiVersion": "operator.openshift.io/v1", "kind": "Network", "metadata": map[string]any{"name": "cluster"}, "spec": map[string]any{"defaultNetwork": map[string]any{"type": "OVNKubernetes", "ovnKubernetesConfig": config.Native(api.NumberBinary)}}}})
 	}
 	if _, mirrored := managedservice.ImageMirror(catalog); !mirrored || len(timeSources) == 0 {
 		return result, nil

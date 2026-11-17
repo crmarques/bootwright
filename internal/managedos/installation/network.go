@@ -80,7 +80,7 @@ func withRoutePurge(composed api.Value) api.Value {
 }
 
 func boundedDocument(machine api.Object, composed api.Value) (map[string]any, error) {
-	document, _ := nativeDocument(composed).(map[string]any)
+	document, _ := composed.Native(api.NumberBinary).(map[string]any)
 	encoded, err := canonicaljson.Encode(document, canonicaljson.Bare)
 	if err == nil && len(encoded) > composedNetworkBytes {
 		return nil, refusal("api.value", "the composed network of "+machine.Identity()+" exceeds 32 KiB, which its installation does not carry",
@@ -95,37 +95,4 @@ func boundedDocument(machine api.Object, composed api.Value) (map[string]any, er
 			"write each number in the network of "+machine.Identity()+" as an integer of at most 15 digits, or as text")
 	}
 	return document, nil
-}
-
-func nativeDocument(value api.Value) any {
-	switch value.Type() {
-	case api.Mapping:
-		out := map[string]any{}
-		for _, field := range value.Fields() {
-			out[field.Name] = nativeDocument(field.Value)
-		}
-		return out
-	case api.Sequence:
-		items := value.Items()
-		out := make([]any, 0, len(items))
-		for _, item := range items {
-			out = append(out, nativeDocument(item))
-		}
-		return out
-	case api.Boolean:
-		return value.Bool()
-	case api.Integer:
-		if number, ok := value.Int64(); ok {
-			return number
-		}
-		return value.Text()
-	case api.Number:
-		if number, ok := value.Float64(); ok {
-			return number
-		}
-		return value.Text()
-	case api.Absent:
-		return nil
-	}
-	return value.Text()
 }

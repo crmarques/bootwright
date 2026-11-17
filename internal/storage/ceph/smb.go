@@ -166,43 +166,13 @@ func smbRemoval(verb reconciliation.Verb, r SMBRequest) lifecycle.Removal {
 	return lifecycle.Removal{Description: "realize Ceph " + smbSubject(r), Impacts: []string{"realize Ceph " + smbSubject(r)}, Consumes: []string{}}
 }
 
-func smbValue(v api.Value) (any, bool) {
-	switch v.Type() {
-	case api.Mapping:
-		out := map[string]any{}
-		for _, field := range v.Fields() {
-			value, ok := smbValue(field.Value)
-			if !ok {
-				return nil, false
-			}
-			out[field.Name] = value
-		}
-		return out, true
-	case api.Sequence:
-		out := []any{}
-		for _, item := range v.Items() {
-			value, ok := smbValue(item)
-			if !ok {
-				return nil, false
-			}
-			out = append(out, value)
-		}
-		return out, true
-	case api.String:
-		return v.Text(), true
-	case api.Integer:
-		return v.Int64()
-	case api.Boolean:
-		return v.Bool(), true
-	}
-	return nil, false
-}
+var smbNativeOptions = api.NativeOptions{Numbers: api.NumberInteger, RefuseAbsent: true}
 
 func smbNative(c api.Catalog, cluster, object api.Object) (json.RawMessage, error) {
 	native := object.Spec().Get("native")
-	value, ok := smbValue(native)
+	value, err := native.NativeChecked(smbNativeOptions)
 	document, mapped := value.(map[string]any)
-	if !ok || !mapped {
+	if err != nil || !mapped {
 		return nil, failure("lifecycle.state", "CephSMBResource "+object.Name()+" holds a native value Bootwright cannot freeze", "")
 	}
 	switch native.Get("resource_type").Text() {

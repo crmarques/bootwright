@@ -302,7 +302,7 @@ func networkConfig(catalog api.Catalog, node api.Object, interfaces []substrate.
 	if issues := openshift.NodeNetworkIssues(node, catalog, composed); len(issues) > 0 {
 		return nil, refusal(issues[0].Code, issues[0].Message, issues[0].Remediation)
 	}
-	native, ok := nativeValue(composed).(map[string]any)
+	native, ok := composed.Native(api.NumberBinary).(map[string]any)
 	if !ok {
 		return nil, refusal("api.value", "the cluster node's network configuration is not a mapping",
 			"correct spec.network on "+node.Identity())
@@ -363,41 +363,6 @@ func networkConfig(catalog api.Catalog, node api.Object, interfaces []substrate.
 		native["dns-resolver"] = resolverConfig
 	}
 	return native, nil
-}
-
-// nativeValue converts one admitted value into the plain data a frozen request
-// carries, so the adapter receives the same document the graph declared.
-func nativeValue(value api.Value) any {
-	switch value.Type() {
-	case api.Mapping:
-		out := map[string]any{}
-		for _, field := range value.Fields() {
-			out[field.Name] = nativeValue(field.Value)
-		}
-		return out
-	case api.Sequence:
-		items := value.Items()
-		out := make([]any, 0, len(items))
-		for _, item := range items {
-			out = append(out, nativeValue(item))
-		}
-		return out
-	case api.Boolean:
-		return value.Bool()
-	case api.Integer:
-		if number, ok := value.Int64(); ok {
-			return number
-		}
-		return value.Text()
-	case api.Number:
-		if number, ok := value.Float64(); ok {
-			return number
-		}
-		return value.Text()
-	case api.Absent:
-		return nil
-	}
-	return value.Text()
 }
 
 func endpointNames(catalog api.Catalog, object api.Object) []Endpoint {

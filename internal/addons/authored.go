@@ -64,7 +64,7 @@ func ExecutableAuthored(definition api.Object) bool {
 }
 
 func DescriptorDigest(spec api.Value) (string, error) {
-	data, err := canonicaljson.Encode(nativeValue(spec), canonicaljson.Bare)
+	data, err := canonicaljson.Encode(spec.Native(api.NumberText), canonicaljson.Bare)
 	if err != nil {
 		return "", err
 	}
