@@ -16498,3 +16498,19 @@ exempted by rule (a fact another task file or the defaults provide, a block's
 lazy `vars`) and tested. No role changed. Running role entry points through
 ansible-core (W6.1) stays on B1467.
 
+## X523 — One effect reading and mutation skeleton
+
+### B1493
+
+Split from B1465 under [D274](backlog.md#d274) (audit 005 W4.1).
+`internal/reconciliation/lifecycle` owns the rule that turns an observation
+into an effect state (`EffectReading`, `ReadEffect`) and the mutation skeleton
+(`Mutation`, `MutateBlock`, `ObserveBlock`: prepare, run, the settled-outcome
+check, the presence or absence proof and the clearing of produced material),
+plus the step groups. The libvirt host and machine, KubeVirt provider and
+machine, and bare-metal arms, and their unresolved readings, use them and keep
+only their validators, invocations, refusal text and hooks. Pin tests written
+on the earlier code hold every Apply, Destroy and observation result,
+evidence and diagnostic unchanged. The other copies stay on
+[B1465](m1.md#b1465).
+
