@@ -16431,3 +16431,20 @@ peak signal each time four probes overlapped, so under load it panicked while
 holding the test prober's lock and the fan-out's join waited forever. The
 prober now signals once; the product is unchanged.
 
+## X519 — Faster test suites
+
+### B1487
+
+Split from B1468 under [D274](backlog.md#d274) (audit 005 W7.5). The
+independent tests of `cmd/bootwright`, `workspace/contextfs` and
+`reconciliation/lifecycle`, and the slow process tests of `ansiblerunner`, run
+in parallel; tests that change the environment, directory, umask, limits,
+signals, package variables or golden files, or that assert which job and
+scratch entries remain, stay serial. Examples compile once per test binary.
+The Ceph worker assembles its shipped sources once per process, and a test
+keeps the bundle within 75% of the input cap. Measured at `-p 4`:
+`cmd/bootwright` 167 s to 29 s, `contextfs` 101 s to 45 s, `lifecycle` 32 s to
+22 s, `ansiblerunner` 9 s to 4 s. An independent review found no shared state;
+its two timing fixes are applied, and its lock finding is
+[B1490](m1.md#b1490).
+
