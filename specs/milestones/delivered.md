@@ -17005,3 +17005,23 @@ power's realization reading moved from the wiring to their owners;
 name implementation identities. Substrate admission dispatches per arm from
 tables in arm-named files, with the hypervisor-client need as a facts row.
 
+## X549 — Cheaper stores
+
+### B1519
+
+Split from B1468 under [D274](backlog.md#d274) (audit 005 W7.4). A context
+removal syncs each directory once after its batch and once more before its
+identifying entry, so that entry is never durably gone before its siblings; a
+commit re-proves only the ready records changed since the transaction's own
+opening proof under the same lock; attempt admission reads usage from the
+operation area and block states from what the store itself wrote; adapter
+output publishes at 8 KiB or after one second, retries a failed publication
+and publishes the rest at the run's end even when the run was interrupted; the
+operation log is found by listing; the secret area keeps its count across its
+own writes; keyring identity reservations are read when publishing and by
+`secret check` and `secret encryption status`. Each count test failed first on
+the earlier code, and every crash point and recovery is unchanged. An
+independent durability review accepted every commit; its fixes are applied.
+The compaction of identity reservations into one authenticated record
+([D274](backlog.md#d274) (7)) is not part of this slice.
+
