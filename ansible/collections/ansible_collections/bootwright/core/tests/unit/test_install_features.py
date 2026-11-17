@@ -19,5 +19,5 @@ def test_media_scopes_the_controller_route_and_secret_writer():
     assert writer["no_log"] is True
     assert writer["diff"] is False
     assert "mode" not in writer["bootwright.core.private_file"]
-    assert "registry_pull_secret" in writer["bootwright.core.private_file"]["content"]
-    assert "installer_proxy_credentials" in writer["bootwright.core.private_file"]["content"]
+    assert writer["bootwright.core.private_file"]["content"] == (
+        "{{ bootwright_cluster_media_request | bootwright.core.installer_config(bootwright_cluster_media_material) }}")

@@ -18,6 +18,7 @@ tests/unit/plugins.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import pathlib
 
@@ -125,3 +126,66 @@ def test_a_cluster_selecting_no_trust_bundle_writes_none(tmp_path):
     pull_secret = tmp_path / "pull-secret"
     pull_secret.write_text(PULL_SECRET + "\n")
     assert "additionalTrustBundle" not in json.loads(render(install_config("ocp"), pull_secret))
+
+
+MIRROR_PULL_SECRET = '{"auths": {"mirror.example.test:8443": {"auth": "bWlycm9yOnNlY3JldA=="}}}'
+PROXY = {"httpProxy": "http://proxy.example.test:3128", "httpsProxy": "http://proxy.example.test:3128",
+         "noProxy": ".lab.example.test"}
+USERNAME = {"host": "mirror.example.test:8443", "credentialsRef": "mirror", "credentialsType": "usernamePassword"}
+DOCKER = {"host": "mirror.example.test:8443", "credentialsRef": "mirror", "credentialsType": "dockerConfigJson"}
+PROXIED = {"credentialsRef": "proxy"}
+
+
+def composed(tmp_path, mirror=None, credentials=(), proxy=None, bundles=0):
+    """The task's content over a request binding the mirror and proxy credentials it names."""
+    config = dict(install_config("ocp"), additionalTrustBundle="")
+    request = {"installConfig": config}
+    (tmp_path / "pull-secret").write_text(PULL_SECRET + "\n")
+    material = {"pullSecret": str(tmp_path / "pull-secret"), "sshKey": SSH_KEY}
+    if mirror:
+        request["registryMirror"] = mirror
+    if proxy is not None:
+        config["proxy"] = dict(PROXY)
+        request["installProxy"] = proxy
+    for key, text in credentials:
+        (tmp_path / key).write_text(text)
+        material[key] = str(tmp_path / key)
+    if bundles:
+        request["trustBundleRefs"] = ["ca-%d" % index for index in range(bundles)]
+        for index in range(bundles):
+            (tmp_path / ("trust-%d" % index)).write_text("\n" + certificate(index) + "\n\n")
+            material["trustBundle%d" % index] = str(tmp_path / ("trust-%d" % index))
+    loaded = LOADER.load_from_file(str(MEDIA / "tasks" / "build.yml"), trusted_as_template=True)
+    written = [task for task in role_tasks.flatten([task for task in loaded if isinstance(task, dict)])
+               if task.get("name") == "Write the install configuration with its bound material"][0]
+    variables = dict(written.get("vars") or {})
+    variables.update(bootwright_cluster_media_request=request, bootwright_cluster_media_material=material)
+    return Templar(loader=LOADER, variables=variables).template(written["bootwright.core.private_file"]["content"])
+
+
+# The bytes the role wrote for each case while the composition was a Jinja
+# expression in build.yml, so its move into one filter (B1513) is proved to
+# change none of them.
+@pytest.mark.parametrize("arguments, digest", [
+    ({},
+     "b0810c1a331771722ec5c7c78e0f03a2944aa7641d7931795d44f3f83239e7f0"),
+    ({"bundles": 3},
+     "7b9b12e395c8e1fe768c867ebd222c5c205866723d20d5870284e0f51b5c00d4"),
+    ({"mirror": USERNAME, "credentials": (("mirrorUsername", "mirror\n"), ("mirrorPassword", "s3cret pass\n"))},
+     "32083f5d34d7ee86ef31ddcecdcd2a9ad3b4f2c40aeb9a81e942429d36222e1d"),
+    ({"mirror": USERNAME, "credentials": (("mirrorUsername", "mirror"),)},
+     "ec18ce2b94e47ccf8aa016904cf0630ccca7c9b3382d780558d3a364578de482"),
+    ({"mirror": DOCKER, "credentials": (("mirrorAuth", MIRROR_PULL_SECRET + "\n"),)},
+     "3b20e9f3375fa55cf7385d411f8602216229102e2caa65f735da73a36746a836"),
+    ({"proxy": PROXIED, "credentials": (("proxyUsername", "user@lab\n"), ("proxyPassword", "p:ss/w rd"))},
+     "0722d552539d78a3bcbdc3e47aa64a07564908cf99a4ce01973c8edfcb7c3a34"),
+    ({"proxy": {}},
+     "2bca3e8392cb74596976b15a0f8be008b3add37fb2255bd234a595c996c21b1d"),
+    ({"mirror": USERNAME, "proxy": PROXIED, "bundles": 2, "credentials": (
+        ("mirrorUsername", "mirror"), ("mirrorPassword", "secret"), ("proxyUsername", "user"), ("proxyPassword", "pass"))},
+     "39a66cacf66c469e1ce1b7a1240243e98b090ea68b483c2e3d48728ac5408ce9"),
+], ids=["plain", "bundles", "username mirror", "username without password", "docker mirror", "proxy credentials",
+        "proxy without credentials", "everything"])
+def test_the_install_configuration_bytes_are_pinned(tmp_path, arguments, digest):
+    found = hashlib.sha256(composed(tmp_path, **arguments).encode("utf-8")).hexdigest()
+    assert found == digest, found

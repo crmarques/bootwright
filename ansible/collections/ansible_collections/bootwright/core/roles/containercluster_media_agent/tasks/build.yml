@@ -46,52 +46,17 @@
       changed_when: false
 
     # The bound material reaches the installer inputs here and nowhere else: the
-    # frozen request carries the declarations, never their values. The filter
-    # quotes every string, because the installer's YAML reader would read a
-    # plain cluster name 1e3 or y as 1000 or true.
-    # Each additional trust bundle is bound as trustBundle<index>, in the order
-    # the cluster selects them, and the installer takes them as one PEM bundle.
-    # Each is trimmed, because the installer refuses a bundle that holds
-    # anything after its last certificate, a blank line included.
+    # frozen request carries the declarations, never their values, and the
+    # filter reads each bound file on the controller and quotes every string,
+    # because the installer's YAML reader would read a plain cluster name 1e3
+    # or y as 1000 or true.
     # The module carries the rendered file in its own argument, so the material
     # crosses a remote connection only inside the pipelined module payload and
     # never in a file transfer, and lands staged, private and renamed.
     - name: Write the install configuration with its bound material
-      vars:
-        containercluster_media_agent_trust_bundles: >-
-          {{ range(bootwright_cluster_media_request.trustBundleRefs | default([]) | length)
-             | map('string') | map('regex_replace', '^', 'trustBundle')
-             | map('extract', bootwright_cluster_media_material) | list }}
-        # Ansible's templating keeps '\n' in a Jinja string literal as a
-        # backslash and an n, so the line break the bundles are joined with is
-        # spelled here.
-        containercluster_media_agent_line_break: "\n"
       bootwright.core.private_file:
         content: >-
-          {{ bootwright_cluster_media_request.installConfig
-             | combine({
-                 'pullSecret': lookup('ansible.builtin.file', bootwright_cluster_media_material.pullSecret, rstrip=false) | trim
-                   | bootwright.core.registry_pull_secret(
-                     bootwright_cluster_media_request.registryMirror | default({}),
-                     lookup('ansible.builtin.file', bootwright_cluster_media_material.mirrorUsername, rstrip=false)
-                       if bootwright_cluster_media_material.mirrorUsername is defined else
-                     lookup('ansible.builtin.file', bootwright_cluster_media_material.mirrorAuth, rstrip=false)
-                       if bootwright_cluster_media_material.mirrorAuth is defined else '',
-                     lookup('ansible.builtin.file', bootwright_cluster_media_material.mirrorPassword, rstrip=false)
-                       if bootwright_cluster_media_material.mirrorPassword is defined else ''),
-                 'sshKey': bootwright_cluster_media_material.sshKey,
-               })
-             | combine({
-                 'additionalTrustBundle': query('ansible.builtin.file', *containercluster_media_agent_trust_bundles, rstrip=false)
-                                          | map('trim') | join(containercluster_media_agent_line_break),
-               } if containercluster_media_agent_trust_bundles | length > 0 else {})
-             | bootwright.core.installer_proxy_credentials(
-                 bootwright_cluster_media_request.installProxy | default({}),
-                 lookup('ansible.builtin.file', bootwright_cluster_media_material.proxyUsername, rstrip=false)
-                   if bootwright_cluster_media_material.proxyUsername is defined else '',
-                 lookup('ansible.builtin.file', bootwright_cluster_media_material.proxyPassword, rstrip=false)
-                   if bootwright_cluster_media_material.proxyPassword is defined else '')
-             | bootwright.core.to_installer_yaml }}
+          {{ bootwright_cluster_media_request | bootwright.core.installer_config(bootwright_cluster_media_material) }}
         path: '{{ containercluster_media_agent_work }}/install-config.yaml'
       changed_when: true
       no_log: true
