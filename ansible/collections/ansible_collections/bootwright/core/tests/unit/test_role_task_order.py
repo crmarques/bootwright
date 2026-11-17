@@ -211,7 +211,61 @@ def test_every_physical_erase_effect_phase_is_followed_by_its_named_refusal():
             assert following["vars"] == {"physical_erase_refused": "{{ " + register + " }}"}
             assert following["when"] == register + ".refused is defined"
             seen.add(arguments["phase"])
-    assert seen == {"observe", "prepare", "build", "start", "poll", "ack", "stop-proof", "finish"}
+    assert seen == {"observe", "prepare", "build", "start", "poll", "ack", "stop-proof", "finish", "withdraw"}
     named, stop = load(ROLES / "physical_erase/tasks/refused.yml")
     assert named["bootwright.core.physical_erase_protocol"]["phase"] == "refused" and named["no_log"] is True
     assert "no_log" not in stop and set(REFERENCE.findall(stop["ansible.builtin.fail"]["msg"])) & {"material", "detail", "private", "url"} == set()
+
+
+ERASE_REQUEST = {"version": "physical-erase-v1", "install": {"target": {
+    "physical": True, "substrate": "baremetal",
+    "controller": {"tlsVerify": True, "endpoint": "https://bmc.example.test", "virtualMedia": {"trust": "established"}}}}}
+RETAIN_MATERIAL = {"relaxationBase64": "cmV0YWlu", "applyOperation": "op-" + "0" * 32, "originalAttempt": "op-remove-2/erase-metal-01/1"}
+
+
+def erase_run(material, answers):
+    """Run the erase role's destroy over stubbed modules; the module calls it made and the interpreter."""
+    calls = []
+
+    def execute(task, templar):
+        effects = ("ansible.builtin.include_role", "ansible.builtin.command", "ansible.builtin.file")
+        modules = [key for key in task if key.startswith("bootwright.") or key in effects]
+        if not modules:
+            return None
+        arguments = task[modules[0]] if isinstance(task[modules[0]], dict) else {}
+        calls.append((modules[0], arguments.get("phase", "")))
+        return answers.get((modules[0], arguments.get("phase", "")), {"changed": False})
+
+    variables = {"bootwright_physical_erase_request": ERASE_REQUEST, "bootwright_physical_erase_digest": "d" * 64,
+                 "bootwright_physical_erase_material": material}
+    interpreter = role_tasks.Interpreter(ROLES / "physical_erase", variables, execute=execute)
+    return calls, interpreter
+
+
+def test_a_retained_erase_only_withdraws_its_custody_and_never_reaches_the_management_controller():
+    retained = {"version": "physical-erase-v1", "request": "d" * 64, "prepared": True, "removed": True, "retained": True}
+    calls, interpreter = erase_run(RETAIN_MATERIAL, {("bootwright.core.physical_erase", "withdraw"): {"changed": True, "evidence": retained}})
+    assert interpreter.run("destroy.yml")
+    assert calls == [("bootwright.core.physical_erase_protocol", "loaded"), ("bootwright.core.physical_erase", "withdraw"),
+                     ("bootwright.core.physical_erase_protocol", "completed")]
+    assert interpreter.variables["physical_erase_withdrawn"]["evidence"] == retained
+    ran = [name for name, outcome in interpreter.trace if outcome == "ran"]
+    assert not any(re.search("(?i)redfish|bmc|boot the|boot only|power|eject|worker|acknowledg|listener|served|media", name) for name in ran), ran
+
+
+def test_an_erase_that_boots_its_worker_still_requires_its_pinned_identity():
+    calls, interpreter = erase_run({"applyOperation": "op-" + "0" * 32}, {})
+    try:
+        interpreter.run("destroy.yml")
+    except role_tasks.TaskFailed as failure:
+        assert failure.task["name"] == "Validate the pinned identity of the machine to erase"
+    else:
+        raise AssertionError("an erase without its pinned identity ran")
+    assert calls == [("bootwright.core.physical_erase_protocol", "loaded")]
+    for relaxation in ("bWV0YWRhdGFDbGVhcg==", "UmV0YWlu"):
+        material = {"relaxationBase64": relaxation, "pinnedUUIDBase64": "ZXhhbXBsZQ==", "applyOperation": "op-" + "0" * 32}
+        removed = {("bootwright.core.physical_erase", "observe"): {"changed": False, "evidence": {"removed": True}, "finalizing": False}}
+        calls, interpreter = erase_run(material, removed)
+        assert interpreter.run("destroy.yml")
+        assert calls == [("bootwright.core.physical_erase_protocol", "loaded"), ("bootwright.core.physical_erase", "observe"),
+                         ("bootwright.core.physical_erase_protocol", "completed")], relaxation

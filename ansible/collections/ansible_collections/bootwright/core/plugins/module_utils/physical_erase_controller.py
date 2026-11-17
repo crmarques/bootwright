@@ -26,6 +26,32 @@ from ansible_collections.bootwright.core.plugins.module_utils import ssh_key_pol
 ROOT = Path(hosted_area.ROOT)
 REQUEST_VERSION = "physical-erase-v1"
 MEDIA = Path("/var/lib/bootwright/media")
+METADATA_CLEAR = "metadataClear"
+RETAIN = "retain"
+# The custody files only a booting erase needs: its host key, the kickstart
+# that embeds it, the worker session's SSH files and the unpublished image.
+BOOT_PRIVATE = ("host-key", "host-key.pub", "ks.cfg", "ssh_config", "known_hosts", "erase.iso")
+TOKEN = "[0-9a-f]{64}"
+
+
+def relaxation(material):
+    """The erase relaxation Go froze in this removal's block, or '' for none.
+
+    Go hands it as relaxationBase64 only when the removal carries one; any
+    value other than the canonical encoding of exactly metadataClear or
+    retain refuses, so a damaged value never reads as no relaxation.
+    """
+    if "relaxationBase64" not in material:
+        return ""
+    encoded = material["relaxationBase64"]
+    if isinstance(encoded, str):
+        try:
+            decoded = base64.b64decode(encoded, validate=True).decode("ascii")
+        except ValueError:
+            decoded = ""
+        if decoded in (METADATA_CLEAR, RETAIN) and base64.b64encode(decoded.encode("ascii")).decode("ascii") == encoded:
+            return decoded
+    raise worker.Refusal("relaxation")
 
 
 # ssh's exit 255 is a session that reached no worker, any other exit an
@@ -119,8 +145,17 @@ class Controller:
         """The RAM worker's request: the frozen targets, the original identity and the root's WWN and serial number.
 
         Go names the root's WWN: the one its declaration names or, for a root
-        declared by serial number, the one it reported at installation.
+        declared by serial number, the one it reported at installation. A
+        removal relaxed to metadataClear clears only the metadata of every
+        target, so its custody, kickstart, receipt and progress all hold the
+        relaxed targets; a retained erase boots no worker and has none.
         """
+        method = relaxation(self.material)
+        if method == RETAIN:
+            raise worker.Refusal("relaxation")
+        targets = self.request["targets"]
+        if method == METADATA_CLEAR:
+            targets = [dict(target, method=METADATA_CLEAR) for target in targets]
         hardware = self.request["install"]["target"]["hardware"]
         try:
             wwn = base64.b64decode(self.material["rootWWNBase64"], validate=True).decode("ascii")
@@ -132,7 +167,7 @@ class Controller:
             "request": self.digest,
             "uuid": base64.b64decode(self.material["pinnedUUIDBase64"], validate=True).decode("ascii").strip().lower(),
             "macs": sorted(nic["macAddress"].lower() for nic in hardware["interfaces"]),
-            "targets": self.request["targets"],
+            "targets": targets,
             "deadlineSeconds": self.request["deadlineSeconds"],
             "root": {"wwn": wwn, "serialNumber": hardware.get("serialNumber", "")},
         }
@@ -171,34 +206,101 @@ class Controller:
             return
         if state.get("request") != self.digest or state.get("applyOperation") != self.material["applyOperation"]:
             raise worker.Refusal("foreign-custody")
-        if not re.fullmatch("[0-9a-f]{64}", str(state.get("token"))) or not earlier:
+        if not re.fullmatch(TOKEN, str(state.get("token"))) or not earlier:
             raise worker.Refusal("custody-token")
+        self.unpublish(state["token"])
+        for name in BOOT_PRIVATE:
+            (self.root / name).unlink(missing_ok=True)
+        self.set_aside(earlier)
+
+    def unpublish(self, token):
+        """Withdraw the private publication <private.path>/<token>; whether one was there."""
         publication = Path(self.request["install"]["private"]["path"])
-        private = publication / state["token"]
+        private = publication / token
         try:
             info = private.lstat()
         except FileNotFoundError:
-            pass
-        else:
-            if not stat.S_ISDIR(info.st_mode):
-                raise worker.Refusal("custody-token")
-            shutil.rmtree(private)
-            descriptor = os.open(publication, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
-            try:
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
-        for name in ("host-key", "host-key.pub", "ks.cfg", "ssh_config", "known_hosts", "erase.iso"):
-            (self.root / name).unlink(missing_ok=True)
-        # The completion record goes last, so an interrupted supersession is
-        # never read as this removal's completed or finalizing custody.
+            return False
+        if not stat.S_ISDIR(info.st_mode):
+            raise worker.Refusal("custody-token")
+        shutil.rmtree(private)
+        descriptor = os.open(publication, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        return True
+
+    def set_aside(self, earlier):
+        """Keep an earlier removal's records as superseded-<operation>-<record>.json, then drop its custody record.
+
+        The completion record goes last, so an interrupted supersession is
+        never read as this removal's completed or finalizing custody.
+        """
         for record in ("receipt", "finalizing", "completed"):
             kept = self.root / (record + ".json")
             if kept.exists():
                 os.replace(kept, self.root / ("superseded-" + earlier + "-" + record + ".json"))
         os.fsync(self.lock)
-        path.unlink()
+        (self.root / "custody.json").unlink()
         os.fsync(self.lock)
+
+    def custody(self):
+        """The custody record's token and removal, and whether that removal is another than this one's, or None without one.
+
+        A record naming no valid token or original attempt refuses: its
+        private publication could not be found to withdraw.
+        """
+        mine = removal(self.material.get("originalAttempt"))
+        if not mine:
+            raise worker.Refusal("original-attempt")
+        path = self.root / "custody.json"
+        if not path.exists():
+            return None
+        state = json.loads(read(path))
+        token = state.get("token") if isinstance(state, dict) else None
+        holder = removal(state.get("originalAttempt")) if isinstance(state, dict) else ""
+        if not isinstance(token, str) or not re.fullmatch(TOKEN, token) or not holder:
+            raise worker.Refusal("custody-token")
+        return {"token": token, "removal": holder, "earlier": holder != mine}
+
+    def withdraw(self):
+        """Withdraw a retained erase's leftover private publication and boot-private custody; whether anything was withdrawn.
+
+        A retained erase never boots its worker or reaches the management
+        controller, and acts only on the custody of this block's apply
+        operation: the private publication its token names and the
+        boot-private files. Custody naming another removal's attempt serves
+        no live removal, so it is withdrawn the same way and its records set
+        aside as that removal's superseded records, never adopted. The
+        request and apply-operation checks of a booting removal are waived
+        with the erase, as the custody refusals' retain remedy promises.
+        """
+        state = self.custody()
+        changed = self.unpublish(state["token"]) if state else False
+        for name in BOOT_PRIVATE:
+            try:
+                (self.root / name).unlink()
+            except FileNotFoundError:
+                continue
+            changed = True
+        os.fsync(self.lock)
+        if state and state["earlier"]:
+            self.set_aside(state["removal"])
+            changed = True
+        return changed
+
+    def withdrawn(self):
+        """Whether a retained erase's withdrawal is proved, without changing anything.
+
+        It is proved when no custody names another removal, no private
+        publication of this custody's token remains and no boot-private file
+        is left.
+        """
+        state = self.custody()
+        if state and (state["earlier"] or os.path.lexists(Path(self.request["install"]["private"]["path"]) / state["token"])):
+            return False
+        return not any(os.path.lexists(self.root / name) for name in BOOT_PRIVATE)
 
     def prepare(self):
         self.supersede()

@@ -2787,11 +2787,16 @@ earlier removal's erase worker may still be running)`, and its result says
 the same. It never contacts the management controller or boots the worker: its
 run is handed no controller, fleet or certificate material and no pinned
 identity, only `relaxationBase64`, the original attempt and the apply operation.
-On the execution host it withdraws this block's own leftover private erase
-publication and boot-private custody, reports custody another removal holds
-without deleting it, and records retention, `prepared`, `removed` and
-`retained` with no receipt. Its observation reads that retention as completed
-and anything short of it as partial, which the destroy repeats. A waived
+On the execution host it acts only on the custody of its apply operation: it
+withdraws the private erase publication and boot-private files that custody
+left, and custody naming another removal's attempt serves no live removal, so
+it is withdrawn too and its records set aside as superseded, never adopted;
+custody naming no token or attempt refuses as drifted. It records retention,
+`prepared`, `removed` and `retained` with no receipt. Its observation changes
+nothing and reads that retention as completed only when no custody of another
+removal, publication or boot-private file remains, and anything short of it
+as partial, which the destroy repeats. It never stops an earlier removal's
+worker or ejects its media. A waived
 retention never reads as a never-started installation's retention, and
 [physical Ceph retirement](ceph.md#devices-and-destructive-ownership) accepts
 it.

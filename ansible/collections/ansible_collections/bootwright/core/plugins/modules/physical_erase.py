@@ -25,6 +25,7 @@ options:
       - stop-proof
       - finish
       - observe
+      - withdraw
   request:
     description: Frozen physical erase request.
     type: dict
@@ -68,8 +69,8 @@ cause:
   returned: when polled unanswered
   type: str
 evidence:
-  description: Bounded erase evidence.
-  returned: when observed or finished
+  description: Bounded erase evidence; a retained erase's names C(retained) and carries no receipt.
+  returned: when observed, finished or withdrawn
   type: dict
 refused:
   description: The closed code of a refused effect phase.
@@ -93,7 +94,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import physical_er
 UNPROVED = "physical erase did not prove its bounded custody or receipt contract"
 # The phases that act on custody, the RAM worker or the management controller,
 # and of them those that reach the controller.
-EFFECT_PHASES = ("prepare", "start", "poll", "ack", "stop-proof", "finish")
+EFFECT_PHASES = ("prepare", "start", "poll", "ack", "stop-proof", "finish", "withdraw")
 CONTROLLED = ("start", "stop-proof")
 # Each internal refusal the runner names, by the closed code its diagnostic
 # carries; the custody drift codes share one code and one remedy.
@@ -130,7 +131,7 @@ UNPREPARED = {"prepared": False, "removed": False}
 def main():
     module = AnsibleModule(
         argument_spec={
-            "phase": {"type": "str", "required": True, "choices": ["prepare", "build", "start", "poll", "ack", "stop-proof", "finish", "observe"]},
+            "phase": {"type": "str", "required": True, "choices": ["prepare", "build", "start", "poll", "ack", "stop-proof", "finish", "observe", "withdraw"]},
             "request": {"type": "dict", "required": True},
             "digest": {"type": "str", "required": True},
             "material": {"type": "dict", "required": True, "no_log": True},
@@ -140,6 +141,17 @@ def main():
     controller = None
     try:
         phase = module.params["phase"]
+        # A retained erase reaches only its custody's withdrawal and its
+        # read-only observation; withdrawal serves no other removal.
+        waived = custody.relaxation(module.params["material"]) == custody.RETAIN
+        if (phase == "withdraw") != waived and not (waived and phase == "observe"):
+            raise worker.Refusal("relaxation")
+        if waived:
+            try:
+                controller = custody.Controller(module.params["request"], module.params["digest"], module.params["material"])
+            except FileNotFoundError:
+                controller = None
+            module.exit_json(**retention(controller, phase, module.params["digest"]))
         controller = custody.Controller(module.params["request"], module.params["digest"], module.params["material"], create=phase == "prepare")
         if phase == "prepare":
             module.exit_json(changed=True, **controller.prepare())
@@ -194,6 +206,24 @@ def main():
     finally:
         if controller is not None:
             controller.close()
+
+
+def retention(controller, phase, digest):
+    """A retained erase's withdraw or observe answer, reached without its worker or management controller.
+
+    No custody of this block's apply operation leaves nothing to withdraw.
+    The withdraw phase withdraws what custody has left and answers the
+    retention; the observe phase changes nothing and answers the retention
+    only once that withdrawal is proved, otherwise an unfinished removal.
+    """
+    retained = {"version": worker.VERSION, "request": digest, "prepared": True, "removed": True, "retained": True}
+    if controller is None:
+        return {"changed": False, "evidence": retained, "finalizing": False}
+    if phase == "withdraw":
+        return {"changed": controller.withdraw(), "evidence": retained, "finalizing": False}
+    if controller.withdrawn():
+        return {"changed": False, "evidence": retained, "finalizing": False}
+    return {"changed": False, "evidence": {"version": worker.VERSION, "request": digest, "prepared": True, "removed": False}, "finalizing": False}
 
 
 def refuse(module, code, detail, line):

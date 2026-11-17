@@ -13,125 +13,172 @@
       - bootwright_physical_erase_request.install.target.controller.tlsVerify | bool
       - bootwright_physical_erase_request.install.target.controller.endpoint.startswith('https://')
       - bootwright_physical_erase_request.install.target.controller.virtualMedia.trust in ['established', 'importCertificate', 'disableVerification']
-      - bootwright_physical_erase_material.pinnedUUIDBase64 | length > 0
     quiet: true
   no_log: true
 
-- name: Read a prior durable completion before preparing private material
-  bootwright.core.physical_erase:
-    phase: observe
-    request: '{{ bootwright_physical_erase_request }}'
-    digest: '{{ bootwright_physical_erase_digest }}'
-    material: '{{ bootwright_physical_erase_material }}'
-  register: physical_erase_before
-  no_log: true
-
-- name: Report a refused prior completion read outside no_log
-  ansible.builtin.include_tasks: refused.yml
-  vars:
-    physical_erase_refused: '{{ physical_erase_before }}'
-  when: physical_erase_before.refused is defined
-
-- name: Complete an unfinished offline erase
-  when: not (physical_erase_before.evidence.removed | bool)
+# A retained erase (--authorize erase=<machine>:retain) waives the erase: Go
+# hands it no controller, fleet or certificate material and no pinned
+# identity, so it never boots the worker or reaches the management controller.
+# It only withdraws what this block's custody left on the execution host.
+- name: Withdraw a retained erase's leftover custody without contacting its management controller
+  when: (bootwright_physical_erase_material.relaxationBase64 | default('')) == ('retain' | b64encode)
   block:
-    - name: Complete acknowledgement and offline proof before final custody cleanup
-      when: not (physical_erase_before.finalizing | bool)
-      block:
-        - name: Hold the original attempt and erase-only host key in private custody
-          bootwright.core.physical_erase:
-            phase: prepare
-            request: '{{ bootwright_physical_erase_request }}'
-            digest: '{{ bootwright_physical_erase_digest }}'
-            material: '{{ bootwright_physical_erase_material }}'
-          register: physical_erase_prepared
-          no_log: true
+    - name: Validate the retained erase's custody material
+      ansible.builtin.assert:
+        that:
+          - bootwright_physical_erase_material.applyOperation | length > 0
+          - bootwright_physical_erase_material.originalAttempt | length > 0
+        quiet: true
+      no_log: true
 
-        - name: Report a refused prepare phase outside no_log
-          ansible.builtin.include_tasks: refused.yml
-          vars:
-            physical_erase_refused: '{{ physical_erase_prepared }}'
-          when: physical_erase_prepared.refused is defined
-
-        - name: Boot the offline worker when no completed receipt exists
-          ansible.builtin.include_tasks: boot.yml
-          when: physical_erase_prepared.receipt is none and not (physical_erase_prepared.running | bool)
-
-        - name: Wait for every target byte to be overwritten and independently read back
-          bootwright.core.physical_erase_await:
-            request: '{{ bootwright_physical_erase_request }}'
-            digest: '{{ bootwright_physical_erase_digest }}'
-            material: '{{ bootwright_physical_erase_material }}'
-          register: physical_erase_receipt
-          no_log: true
-
-        - name: Report a refused await phase outside no_log
-          ansible.builtin.include_tasks: refused.yml
-          vars:
-            physical_erase_refused: '{{ physical_erase_receipt }}'
-          when: physical_erase_receipt.refused is defined
-
-        - name: Durably record the verified receipt before acknowledging shutdown
-          bootwright.core.physical_erase_protocol:
-            phase: prepared
-            receipt: '{{ physical_erase_receipt.receipt }}'
-          no_log: true
-
-        - name: Acknowledge the recorded receipt to the pinned RAM worker
-          bootwright.core.physical_erase:
-            phase: ack
-            request: '{{ bootwright_physical_erase_request }}'
-            digest: '{{ bootwright_physical_erase_digest }}'
-            material: '{{ bootwright_physical_erase_material }}'
-          register: physical_erase_acknowledged
-          no_log: true
-
-        - name: Report a refused acknowledgement phase outside no_log
-          ansible.builtin.include_tasks: refused.yml
-          vars:
-            physical_erase_refused: '{{ physical_erase_acknowledged }}'
-          when: physical_erase_acknowledged.refused is defined
-
-        - name: Prove the same machine powered off and eject only its erase media
-          bootwright.core.physical_erase:
-            phase: stop-proof
-            request: '{{ bootwright_physical_erase_request }}'
-            digest: '{{ bootwright_physical_erase_digest }}'
-            material: '{{ bootwright_physical_erase_material }}'
-          register: physical_erase_stopped
-          no_log: true
-
-        - name: Report a refused power-off proof phase outside no_log
-          ansible.builtin.include_tasks: refused.yml
-          vars:
-            physical_erase_refused: '{{ physical_erase_stopped }}'
-          when: physical_erase_stopped.refused is defined
-
-        - name: Withdraw the private erase publication
-          ansible.builtin.file:
-            path: '{{ physical_erase_prepared.private }}'
-            state: absent
-          no_log: true
-
-    - name: Retain the receipt and remove boot-private custody
+    - name: Withdraw the leftover private publication and boot-private custody
       bootwright.core.physical_erase:
-        phase: finish
+        phase: withdraw
         request: '{{ bootwright_physical_erase_request }}'
         digest: '{{ bootwright_physical_erase_digest }}'
         material: '{{ bootwright_physical_erase_material }}'
-      register: physical_erase_finished
+      register: physical_erase_withdrawn
       no_log: true
 
-    - name: Report a refused cleanup phase outside no_log
+    - name: Report a refused withdrawal outside no_log
       ansible.builtin.include_tasks: refused.yml
       vars:
-        physical_erase_refused: '{{ physical_erase_finished }}'
-      when: physical_erase_finished.refused is defined
+        physical_erase_refused: '{{ physical_erase_withdrawn }}'
+      when: physical_erase_withdrawn.refused is defined
 
-- name: Publish the verified physical erase completion
-  bootwright.core.physical_erase_protocol:
-    phase: completed
-    outcome: '{{ "unchanged" if physical_erase_before.evidence.removed else "changed" }}'
-    digest: '{{ bootwright_physical_erase_digest }}'
-    evidence: '{{ physical_erase_before.evidence if physical_erase_before.evidence.removed else physical_erase_finished.evidence }}'
-  no_log: true
+    - name: Publish the retained physical erase
+      bootwright.core.physical_erase_protocol:
+        phase: completed
+        outcome: '{{ "changed" if physical_erase_withdrawn.changed else "unchanged" }}'
+        digest: '{{ bootwright_physical_erase_digest }}'
+        evidence: '{{ physical_erase_withdrawn.evidence }}'
+      no_log: true
+
+- name: Erase every declared target offline
+  when: (bootwright_physical_erase_material.relaxationBase64 | default('')) != ('retain' | b64encode)
+  block:
+    - name: Validate the pinned identity of the machine to erase
+      ansible.builtin.assert:
+        that:
+          - bootwright_physical_erase_material.pinnedUUIDBase64 | default('') | length > 0
+        quiet: true
+      no_log: true
+
+    - name: Read a prior durable completion before preparing private material
+      bootwright.core.physical_erase:
+        phase: observe
+        request: '{{ bootwright_physical_erase_request }}'
+        digest: '{{ bootwright_physical_erase_digest }}'
+        material: '{{ bootwright_physical_erase_material }}'
+      register: physical_erase_before
+      no_log: true
+
+    - name: Report a refused prior completion read outside no_log
+      ansible.builtin.include_tasks: refused.yml
+      vars:
+        physical_erase_refused: '{{ physical_erase_before }}'
+      when: physical_erase_before.refused is defined
+
+    - name: Complete an unfinished offline erase
+      when: not (physical_erase_before.evidence.removed | bool)
+      block:
+        - name: Complete acknowledgement and offline proof before final custody cleanup
+          when: not (physical_erase_before.finalizing | bool)
+          block:
+            - name: Hold the original attempt and erase-only host key in private custody
+              bootwright.core.physical_erase:
+                phase: prepare
+                request: '{{ bootwright_physical_erase_request }}'
+                digest: '{{ bootwright_physical_erase_digest }}'
+                material: '{{ bootwright_physical_erase_material }}'
+              register: physical_erase_prepared
+              no_log: true
+
+            - name: Report a refused prepare phase outside no_log
+              ansible.builtin.include_tasks: refused.yml
+              vars:
+                physical_erase_refused: '{{ physical_erase_prepared }}'
+              when: physical_erase_prepared.refused is defined
+
+            - name: Boot the offline worker when no completed receipt exists
+              ansible.builtin.include_tasks: boot.yml
+              when: physical_erase_prepared.receipt is none and not (physical_erase_prepared.running | bool)
+
+            - name: Wait for every target byte to be overwritten and independently read back
+              bootwright.core.physical_erase_await:
+                request: '{{ bootwright_physical_erase_request }}'
+                digest: '{{ bootwright_physical_erase_digest }}'
+                material: '{{ bootwright_physical_erase_material }}'
+              register: physical_erase_receipt
+              no_log: true
+
+            - name: Report a refused await phase outside no_log
+              ansible.builtin.include_tasks: refused.yml
+              vars:
+                physical_erase_refused: '{{ physical_erase_receipt }}'
+              when: physical_erase_receipt.refused is defined
+
+            - name: Durably record the verified receipt before acknowledging shutdown
+              bootwright.core.physical_erase_protocol:
+                phase: prepared
+                receipt: '{{ physical_erase_receipt.receipt }}'
+              no_log: true
+
+            - name: Acknowledge the recorded receipt to the pinned RAM worker
+              bootwright.core.physical_erase:
+                phase: ack
+                request: '{{ bootwright_physical_erase_request }}'
+                digest: '{{ bootwright_physical_erase_digest }}'
+                material: '{{ bootwright_physical_erase_material }}'
+              register: physical_erase_acknowledged
+              no_log: true
+
+            - name: Report a refused acknowledgement phase outside no_log
+              ansible.builtin.include_tasks: refused.yml
+              vars:
+                physical_erase_refused: '{{ physical_erase_acknowledged }}'
+              when: physical_erase_acknowledged.refused is defined
+
+            - name: Prove the same machine powered off and eject only its erase media
+              bootwright.core.physical_erase:
+                phase: stop-proof
+                request: '{{ bootwright_physical_erase_request }}'
+                digest: '{{ bootwright_physical_erase_digest }}'
+                material: '{{ bootwright_physical_erase_material }}'
+              register: physical_erase_stopped
+              no_log: true
+
+            - name: Report a refused power-off proof phase outside no_log
+              ansible.builtin.include_tasks: refused.yml
+              vars:
+                physical_erase_refused: '{{ physical_erase_stopped }}'
+              when: physical_erase_stopped.refused is defined
+
+            - name: Withdraw the private erase publication
+              ansible.builtin.file:
+                path: '{{ physical_erase_prepared.private }}'
+                state: absent
+              no_log: true
+
+        - name: Retain the receipt and remove boot-private custody
+          bootwright.core.physical_erase:
+            phase: finish
+            request: '{{ bootwright_physical_erase_request }}'
+            digest: '{{ bootwright_physical_erase_digest }}'
+            material: '{{ bootwright_physical_erase_material }}'
+          register: physical_erase_finished
+          no_log: true
+
+        - name: Report a refused cleanup phase outside no_log
+          ansible.builtin.include_tasks: refused.yml
+          vars:
+            physical_erase_refused: '{{ physical_erase_finished }}'
+          when: physical_erase_finished.refused is defined
+
+    - name: Publish the verified physical erase completion
+      bootwright.core.physical_erase_protocol:
+        phase: completed
+        outcome: '{{ "unchanged" if physical_erase_before.evidence.removed else "changed" }}'
+        digest: '{{ bootwright_physical_erase_digest }}'
+        evidence: '{{ physical_erase_before.evidence if physical_erase_before.evidence.removed else physical_erase_finished.evidence }}'
+      no_log: true

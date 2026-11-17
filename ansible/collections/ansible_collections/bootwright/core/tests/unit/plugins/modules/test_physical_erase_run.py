@@ -28,13 +28,16 @@ def stubbed_controller(tmp_path, monkeypatch):
     demands root's ownership. `receipt` is what receipt() returns, or the exception it raises, and
     `await_error` is the exception poll() raises.
     """
-    state = {"calls": [], "closed": 0, "root": tmp_path, "receipt": None, "await_error": None, "created": None, "earlier": False}
+    state = {"calls": [], "closed": 0, "root": tmp_path, "receipt": None, "await_error": None, "created": None, "earlier": False,
+             "custody": True, "withdrawn": False}
 
     class Controller:
         root = tmp_path
 
         def __init__(self, request, digest, material, create=False):
             assert digest == DIGEST
+            if isinstance(state["custody"], Exception):
+                raise state["custody"]  # pylint: disable=raising-bad-type
             state["created"] = create
 
         def prepare(self):
@@ -67,6 +70,16 @@ def stubbed_controller(tmp_path, monkeypatch):
 
         def finish(self, evidence):
             state["calls"].append(("finish", evidence))
+
+        def withdraw(self):
+            state["calls"].append("withdraw")
+            if isinstance(state["withdrawn"], Exception):
+                raise state["withdrawn"]  # pylint: disable=raising-bad-type
+            return state["withdrawn"]
+
+        def withdrawn(self):
+            state["calls"].append("withdrawn")
+            return state["withdrawn"]
 
         def close(self):
             state["closed"] += 1
@@ -216,3 +229,41 @@ def test_the_module_names_exactly_the_refusals_its_protocol_and_go_remedy():
     # Go's eraseRefusals gives each of these fifteen a diagnostic (TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy).
     assert set(module.NAMED.values()) | set(module.BUILT.values()) == set(protocol.REFUSALS) and len(protocol.REFUSALS) == 15
     assert "refused" in protocol.CAPABILITY.phases and protocol.CAPABILITY.detail is True
+
+
+RETAIN = {"relaxationBase64": "cmV0YWlu", "applyOperation": "op-" + "0" * 32, "originalAttempt": "op-remove-2/erase-metal-01/1"}
+RETAINED = {"version": worker.VERSION, "request": DIGEST, "prepared": True, "removed": True, "retained": True}
+
+
+def test_a_retained_erase_withdraws_its_custody_and_answers_retention_without_a_receipt(controller, run_module):
+    for withdrawn in (True, False):
+        controller["withdrawn"], controller["calls"] = withdrawn, []
+        result = run_module(module, dict(arguments("withdraw"), material=RETAIN))
+        assert result["changed"] is withdrawn and result["evidence"] == RETAINED and "receipt" not in result["evidence"]
+        assert controller["calls"] == ["withdraw"] and controller["created"] is False
+    controller["custody"], controller["calls"] = FileNotFoundError("no custody"), []
+    nothing = run_module(module, dict(arguments("withdraw"), material=RETAIN))
+    assert nothing["changed"] is False and nothing["evidence"] == RETAINED and controller["calls"] == []
+
+
+def test_a_retained_erase_observation_changes_nothing_and_proves_retention_only_once_withdrawn(controller, run_module):
+    unproved = run_module(module, dict(arguments("observe"), material=RETAIN))
+    assert unproved["changed"] is False and unproved["evidence"] == evidence() and controller["calls"] == ["withdrawn"]
+    controller["withdrawn"] = True
+    proved = run_module(module, dict(arguments("observe"), material=RETAIN))
+    assert proved["changed"] is False and proved["evidence"] == RETAINED
+    controller["custody"] = FileNotFoundError("no custody")
+    assert run_module(module, dict(arguments("observe"), material=RETAIN))["evidence"] == RETAINED
+    assert "withdraw" not in controller["calls"]
+
+
+def test_a_withdrawal_refusal_is_named_and_only_a_retained_erase_withdraws(controller, run_module):
+    controller["withdrawn"] = worker.Refusal("custody-token")
+    refused = run_module(module, dict(arguments("withdraw"), material=RETAIN))
+    assert "failed" not in refused and refused["refused"] == "custody-drift"
+    metadata = dict(RETAIN, relaxationBase64="bWV0YWRhdGFDbGVhcg==")
+    for phase, material in (("withdraw", {}), ("withdraw", metadata), ("prepare", RETAIN), ("start", RETAIN), ("finish", RETAIN),
+                            ("observe", dict(RETAIN, relaxationBase64="UmV0YWlu"))):
+        controller["calls"] = []
+        failed = run_module(module, dict(arguments(phase), material=material))
+        assert failed["failed"] is True and failed["msg"] == REFUSED and controller["calls"] == [], (phase, material)

@@ -1,0 +1,30 @@
+{
+  "declared": [
+    {"deviceName": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", "method": "logicalOverwrite", "serialNumber": "ROOT", "sizeBytes": 8192, "wwn": "0x5000c500a1b2c3d4"},
+    {"method": "metadataClear", "serialNumber": "DATA", "sizeBytes": 2000398934016},
+    {"deviceName": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d9", "method": "logicalOverwrite", "serialNumber": "BULK", "sizeBytes": 960197124096, "wwn": "0x5000c500a1b2c3d9"}
+  ],
+  "vectors": [
+    {
+      "relaxation": "",
+      "targets": [
+        {"deviceName": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", "method": "logicalOverwrite", "serialNumber": "ROOT", "sizeBytes": 8192, "wwn": "0x5000c500a1b2c3d4"},
+        {"method": "metadataClear", "serialNumber": "DATA", "sizeBytes": 2000398934016},
+        {"deviceName": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d9", "method": "logicalOverwrite", "serialNumber": "BULK", "sizeBytes": 960197124096, "wwn": "0x5000c500a1b2c3d9"}
+      ],
+      "coverage": [8192, 805306368, 960197124096]
+    },
+    {
+      "relaxation": "metadataClear",
+      "relaxationBase64": "bWV0YWRhdGFDbGVhcg==",
+      "targets": [
+        {"deviceName": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", "method": "metadataClear", "serialNumber": "ROOT", "sizeBytes": 8192, "wwn": "0x5000c500a1b2c3d4"},
+        {"method": "metadataClear", "serialNumber": "DATA", "sizeBytes": 2000398934016},
+        {"deviceName": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d9", "method": "metadataClear", "serialNumber": "BULK", "sizeBytes": 960197124096, "wwn": "0x5000c500a1b2c3d9"}
+      ],
+      "coverage": [8192, 805306368, 671088640]
+    }
+  ],
+  "retain": "cmV0YWlu",
+  "refused": ["", "bWV0YWRhdGFDbGVhcg", "bWV0YWRhdGFDbGVhcg==\n", "bG9naWNhbE92ZXJ3cml0ZQ==", "UmV0YWlu", "not base64!", "cmV0YWluIA=="]
+}
