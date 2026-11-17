@@ -412,6 +412,17 @@ func (a *operationArea) Read(ctx context.Context, target string, maximum int) ([
 	return data, true, nil
 }
 
+func (a *operationArea) Usage(ctx context.Context) (int, int64, error) {
+	if err := a.available(ctx, false); err != nil {
+		return 0, 0, err
+	}
+	entries, bytes, _, err := a.measured(ctx)
+	if errors.Is(err, syscall.ENOENT) {
+		return 0, 0, nil
+	}
+	return entries, bytes, err
+}
+
 func (a *operationArea) Entries(ctx context.Context, target string) ([]operationstore.Entry, error) {
 	if err := a.available(ctx, false); err != nil {
 		return nil, err

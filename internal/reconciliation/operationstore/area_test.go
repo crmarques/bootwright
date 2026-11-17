@@ -23,6 +23,7 @@ type memoryArea struct {
 	directories map[string]bool
 	fail        map[string]error
 	reads       int
+	listings    int
 	appends     int
 	syncs       []string
 	location    string
@@ -76,6 +77,16 @@ func (a *memoryArea) Read(ctx context.Context, target string, maximum int) ([]by
 	return slices.Clone(data), true, nil
 }
 
+func (a *memoryArea) Usage(ctx context.Context) (int, int64, error) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	if err := ctx.Err(); err != nil {
+		return 0, 0, err
+	}
+	entries, bytes := areadouble.Usage(a.files, a.directories)
+	return entries, bytes, nil
+}
+
 func (a *memoryArea) Entries(ctx context.Context, target string) ([]Entry, error) {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -85,6 +96,7 @@ func (a *memoryArea) Entries(ctx context.Context, target string) ([]Entry, error
 	if err := a.check("entries", target); err != nil {
 		return nil, err
 	}
+	a.listings++
 	return areadouble.Entries[Entry](a.files, a.directories, target), nil
 }
 

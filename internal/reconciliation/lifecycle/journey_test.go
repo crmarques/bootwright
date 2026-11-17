@@ -166,6 +166,16 @@ func (a *memoryArea) Read(ctx context.Context, target string, maximum int) ([]by
 	return slices.Clone(data), ok, nil
 }
 
+func (a *memoryArea) Usage(ctx context.Context) (int, int64, error) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	if err := ctx.Err(); err != nil {
+		return 0, 0, err
+	}
+	entries, bytes := areadouble.Usage(a.files, a.directories)
+	return entries, bytes, nil
+}
+
 func (a *memoryArea) Entries(ctx context.Context, target string) ([]operationstore.Entry, error) {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()

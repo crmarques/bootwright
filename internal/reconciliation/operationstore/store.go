@@ -32,6 +32,7 @@ type Store struct {
 	running  *Executable
 	mutex    sync.Mutex
 	expected map[string][]byte
+	states   map[string]reconciliation.BlockState
 	// outputs guards what the attempts' retained output may still add to the
 	// log area beneath MaxContextLogBytes, which is measured once, at the
 	// first flush: a JSONL log written since is never cut by that bound, so
@@ -301,7 +302,7 @@ func IntoTheReserve(err error) bool {
 func (s *Store) AdmitAttempt(ctx context.Context, operation Operation, plan reconciliation.Plan, block string, removal bool) (func(), error) {
 	s.attempts.Lock()
 	defer s.attempts.Unlock()
-	held, size, err := s.held(ctx, "", "")
+	held, size, err := s.area.Usage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -360,17 +361,21 @@ func refuseAttempt(apply bool, holds string, needed, kept int64) error {
 }
 
 func (s *Store) resolutions(ctx context.Context, id string, plan reconciliation.Plan, block string) (int, error) {
-	states, err := s.BlockStates(ctx, id, plan)
-	if err != nil {
-		return 0, err
-	}
 	blocks := map[string]bool{block: true}
 	for name := range s.inflight {
 		blocks[name] = true
 	}
-	for name, state := range states {
+	for _, planned := range plan.Blocks {
+		state, known := s.knownState(s.blockPath(id, planned.ID))
+		if !known {
+			record, err := s.readBlock(ctx, id, planned.ID)
+			if err != nil {
+				return 0, err
+			}
+			state = record.State
+		}
 		if state == reconciliation.BlockUnknown || state == reconciliation.BlockRunning {
-			blocks[name] = true
+			blocks[planned.ID] = true
 		}
 	}
 	return len(blocks), nil
@@ -898,6 +903,7 @@ func (s *Store) readBlockRecord(ctx context.Context, id, block string) (BlockRec
 	}
 	if !found {
 		s.remember(target, nil)
+		s.knowState(target, reconciliation.BlockPending, true)
 		return BlockRecord{Version: 1, Block: block, State: reconciliation.BlockPending}, false, nil
 	}
 	var record BlockRecord
@@ -911,6 +917,7 @@ func (s *Store) readBlockRecord(ctx context.Context, id, block string) (BlockRec
 		return BlockRecord{}, false, recordError("lifecycle block record contradicts its location")
 	}
 	s.remember(target, slices.Clone(data))
+	s.knowState(target, record.State, true)
 	return record, true, nil
 }
 
@@ -928,10 +935,32 @@ func (s *Store) publishBlock(ctx context.Context, id string, record BlockRecord)
 	}
 	current, _ := s.expectation(target)
 	if err := s.area.Replace(ctx, target, encoded, current); err != nil {
+		s.knowState(target, "", false)
 		return err
 	}
 	s.remember(target, slices.Clone(encoded))
+	s.knowState(target, record.State, true)
 	return nil
+}
+
+func (s *Store) knowState(target string, state reconciliation.BlockState, known bool) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if !known {
+		delete(s.states, target)
+		return
+	}
+	if s.states == nil {
+		s.states = map[string]reconciliation.BlockState{}
+	}
+	s.states[target] = state
+}
+
+func (s *Store) knownState(target string) (reconciliation.BlockState, bool) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	state, known := s.states[target]
+	return state, known
 }
 
 // StartAttempt allocates the next attempt number and durably records running,

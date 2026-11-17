@@ -1839,6 +1839,43 @@ func TestAnApplyKeepsTheResolutionsARemovalMakesBeforeItRegisters(t *testing.T) 
 // registered removal's attempt keeps no reserve but one entry more, beside
 // the writes of every attempt in flight. Each refusal is one the caller can
 // name an exit for.
+// An admission measures the area through its usage and counts the blocks a
+// removal must resolve from the block states this store already read or
+// wrote, so admitting an attempt neither lists the area nor reads a block
+// record once the executor has read the plan's states.
+func TestAdmitAttemptReadsNoRecordAndListsNoDirectory(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	plan := testPlan(t, "alpha", "beta", "gamma", "delta")
+	operation := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.BlockStates(ctx, operation.ID, plan); err != nil {
+		t.Fatal(err)
+	}
+	for _, block := range []string{"beta", "gamma", "delta"} {
+		reads, listings := area.reads, area.listings
+		release, err := store.AdmitAttempt(ctx, operation, plan, block, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		release()
+		if read, listed := area.reads-reads, area.listings-listings; read != 0 || listed != 0 {
+			t.Fatalf("admitting an attempt of %s read %d records and listed %d directories, want none", block, read, listed)
+		}
+	}
+}
+
 func TestAdmitAttemptKeepsTheRemovalReserve(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)

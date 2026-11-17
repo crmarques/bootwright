@@ -17,6 +17,7 @@ type Entry struct {
 type Area interface {
 	Read(ctx context.Context, path string, maximum int) ([]byte, bool, error)
 	Entries(ctx context.Context, path string) ([]Entry, error)
+	Usage(ctx context.Context) (entries int, bytes int64, err error)
 	EnsureDirectory(ctx context.Context, path string) error
 	// WriteExclusive refuses an existing destination, so a reused attempt
 	// number can never overwrite durable evidence.

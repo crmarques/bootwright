@@ -96,3 +96,20 @@ func IsDirectory(files map[string][]byte, directories map[string]bool, target st
 	}
 	return false
 }
+
+func Usage(files map[string][]byte, directories map[string]bool) (int, int64) {
+	held := map[string]bool{}
+	for name := range directories {
+		if name != "" && name != "." {
+			held[name] = true
+		}
+	}
+	size := int64(0)
+	for name, data := range files {
+		size += int64(len(data))
+		for parent := path.Dir(name); parent != "." && parent != ""; parent = path.Dir(parent) {
+			held[parent] = true
+		}
+	}
+	return len(held) + len(files), size
+}

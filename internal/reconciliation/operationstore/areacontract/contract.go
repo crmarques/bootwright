@@ -31,6 +31,7 @@ func Verify(t *testing.T, within Within) {
 		{"expectation requires the exact bytes", expectationRequiresTheExactBytes},
 		{"append creates then extends in order", appendCreatesThenExtendsInOrder},
 		{"entries list each name once in order", entriesListEachNameOnceInOrder},
+		{"usage counts every entry and record byte", usageCountsEveryEntryAndRecordByte},
 		{"a removal takes only an empty directory", removalTakesOnlyAnEmptyDirectory},
 		{"a record removal takes only the expected record", recordRemovalTakesOnlyTheExpectedRecord},
 		{"read refuses a record beyond its maximum", readRefusesARecordBeyondItsMaximum},
@@ -123,6 +124,31 @@ func entriesListEachNameOnceInOrder(t *testing.T, area operationstore.Area) {
 	lists(t, area, "d")
 	lists(t, area, "absent")
 	lists(t, area, "absent/deeper")
+}
+
+func usageCountsEveryEntryAndRecordByte(t *testing.T, area operationstore.Area) {
+	ctx := context.Background()
+	uses(t, area, 0, 0)
+	succeeds(t, area.WriteExclusive(ctx, "r.json", []byte("record\n")), "a record")
+	succeeds(t, area.Append(ctx, "log.txt", []byte("a\n")), "a log")
+	succeeds(t, area.WriteExclusive(ctx, "p/f.json", []byte("nested record\n")), "a nested record")
+	succeeds(t, area.WriteExclusive(ctx, "p/g.json", []byte("sibling\n")), "a sibling record")
+	succeeds(t, area.EnsureDirectory(ctx, "d"), "a directory")
+	uses(t, area, 6, 31)
+	succeeds(t, area.Append(ctx, "log.txt", []byte("bc\n")), "a second append")
+	succeeds(t, area.Replace(ctx, "r.json", []byte("replaced record\n"), []byte("record\n")), "a replacement")
+	uses(t, area, 6, 43)
+	succeeds(t, area.RemoveRecord(ctx, "p/g.json", []byte("sibling\n")), "a record removal")
+	succeeds(t, area.RemoveDirectory(ctx, "d"), "a directory removal")
+	uses(t, area, 4, 35)
+}
+
+func uses(t *testing.T, area operationstore.Area, entries int, bytes int64) {
+	t.Helper()
+	held, size, err := area.Usage(context.Background())
+	if err != nil || held != entries || size != bytes {
+		t.Fatalf("usage = %d entries and %d bytes (%v), want %d and %d", held, size, err, entries, bytes)
+	}
 }
 
 func removalTakesOnlyAnEmptyDirectory(t *testing.T, area operationstore.Area) {
