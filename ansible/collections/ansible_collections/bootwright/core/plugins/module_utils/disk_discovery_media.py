@@ -32,13 +32,15 @@ MAX_BOOT_GROWTH = 64 << 20
 SUPPORTED_INITRDS = frozenset(("/images/pxeboot/initrd.img", "/isolinux/initrd.img"))
 BOOT_TREE = {"/": frozenset((".discinfo", ".treeinfo", "EFI", "images", "isolinux")), "/images": frozenset(("efiboot.img", "pxeboot"))}
 MAX_REMOVED = 64
+# The fixed native tools a failure may name; any other is reported as unknown.
+TOOLS = ("xorriso", "lsinitrd", "mkksiso", "ssh-keygen", "unsquashfs", "debugfs", "readelf", "chcon")
 
 
 class CommandFailure(ValueError):
     """Only a fixed tool name and its exit status may leave this boundary."""
 
     def __init__(self, tool, code):
-        self.tool = tool if tool in ("xorriso", "lsinitrd", "mkksiso", "ssh-keygen", "unsquashfs", "debugfs", "readelf", "chcon") else "unknown"
+        self.tool = tool if tool in TOOLS else "unknown"
         self.code = code if type(code) is int and -128 <= code <= 255 else -1
         super().__init__("discovery native command refused")
 
