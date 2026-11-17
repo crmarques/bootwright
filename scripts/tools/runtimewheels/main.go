@@ -6,8 +6,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -20,6 +18,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/crmarques/bootwright/tools/verifiedfetch"
 )
 
 const (
@@ -83,10 +83,10 @@ func place(o options) (summary, error) {
 		destination := filepath.Join(o.dest, f.Filename)
 		cached := filepath.Join(o.cache, f.SHA256, f.Filename)
 		switch {
-		case verified(destination, f) == nil:
+		case verifiedfetch.Verified(destination, f.pin()) == nil:
 			done.present++
 			continue
-		case o.cache != "" && verified(cached, f) == nil:
+		case o.cache != "" && verifiedfetch.Verified(cached, f.pin()) == nil:
 			done.cached++
 		default:
 			if o.cache == "" {
@@ -95,7 +95,7 @@ func place(o options) (summary, error) {
 			if err := os.MkdirAll(filepath.Dir(cached), 0o755); err != nil {
 				return done, err
 			}
-			if err := write(cached, f, func(sink io.Writer) error { return fetch(o, f, sink) }); err != nil {
+			if err := verifiedfetch.Write(cached, f.pin(), 0o644, fetch(o, f)); err != nil {
 				return done, err
 			}
 			done.downloaded++
@@ -103,7 +103,7 @@ func place(o options) (summary, error) {
 				continue
 			}
 		}
-		if err := write(destination, f, func(sink io.Writer) error { return copyFile(cached, sink) }); err != nil {
+		if err := verifiedfetch.Write(destination, f.pin(), 0o644, verifiedfetch.CopyFile(cached)); err != nil {
 			return done, err
 		}
 	}
@@ -156,81 +156,20 @@ func lockedFiles(path string) ([]file, error) {
 	return files, nil
 }
 
-func fetch(o options, f file, sink io.Writer) error {
+func fetch(o options, f file) func(io.Writer) error {
 	base, err := url.Parse(o.files)
 	if err != nil || (base.Scheme != "https" && base.Scheme != "http" && base.Scheme != "file") {
-		return fmt.Errorf("-files %q is not an https://, http:// or file:// base", o.files)
+		return func(io.Writer) error {
+			return fmt.Errorf("-files %q is not an https://, http:// or file:// base", o.files)
+		}
 	}
 	suffix := strings.TrimPrefix(f.URL, lockOrigin)
 	if base.Scheme == "file" {
-		return copyFile(filepath.Join(base.Path, filepath.FromSlash(suffix)), sink)
+		return verifiedfetch.CopyFile(filepath.Join(base.Path, filepath.FromSlash(suffix)))
 	}
-	response, err := o.client.Get(strings.TrimSuffix(o.files, "/") + "/" + suffix)
-	if err != nil {
-		return fmt.Errorf("%s: %w", f.Filename, err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s: the server answered %s", f.Filename, response.Status)
-	}
-	_, err = io.Copy(sink, io.LimitReader(response.Body, f.Size+1))
-	return err
+	return verifiedfetch.Download(o.client, strings.TrimSuffix(o.files, "/")+"/"+suffix, f.pin())
 }
 
-func copyFile(path string, sink io.Writer) error {
-	source, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer source.Close()
-	_, err = io.Copy(sink, source)
-	return err
-}
-
-// write gives a file its name only once its bytes match the lock.
-func write(path string, f file, fill func(io.Writer) error) error {
-	partial, err := os.CreateTemp(filepath.Dir(path), ".part-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(partial.Name())
-	defer partial.Close()
-	if err := fill(partial); err != nil {
-		return err
-	}
-	if _, err := partial.Seek(0, io.SeekStart); err != nil {
-		return err
-	}
-	if err := matches(partial, f); err != nil {
-		return err
-	}
-	if err := partial.Chmod(0o644); err != nil {
-		return err
-	}
-	if err := partial.Close(); err != nil {
-		return err
-	}
-	return os.Rename(partial.Name(), path)
-}
-
-func verified(path string, f file) error {
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() != f.Size {
-		return errors.New("absent")
-	}
-	handle, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer handle.Close()
-	return matches(handle, f)
-}
-
-func matches(reader io.Reader, f file) error {
-	hash := sha256.New()
-	written, err := io.Copy(hash, io.LimitReader(reader, f.Size+1))
-	if err != nil || written != f.Size || hex.EncodeToString(hash.Sum(nil)) != f.SHA256 {
-		return fmt.Errorf("%s does not match its locked size and SHA-256", f.Filename)
-	}
-	return nil
+func (f file) pin() verifiedfetch.Pin {
+	return verifiedfetch.Pin{Name: f.Filename, Bytes: f.Size, SHA256: f.SHA256}
 }

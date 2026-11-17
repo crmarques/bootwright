@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/crmarques/bootwright/tools/verifiedfetch"
 
 	"golang.org/x/vuln/scan"
 
@@ -42,7 +42,7 @@ func (s clientSource) scan(entry pin) ([]byte, error) {
 		return nil, errors.New("-artifacts and -db are required to scan the clients")
 	}
 	sweep(s.cache)
-	release, err := s.fetch(asset.URL, pinned{entry.Default.Bytes, entry.Default.SHA256})
+	release, err := s.fetch(asset.URL, verifiedfetch.Pin{Name: entry.Kind + " " + entry.Default.Version, Bytes: entry.Default.Bytes, SHA256: entry.Default.SHA256})
 	if err != nil {
 		return nil, fmt.Errorf("%s %s: %w", entry.Kind, entry.Default.Version, err)
 	}
@@ -75,11 +75,6 @@ func (s clientSource) scan(entry pin) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-type pinned struct {
-	bytes  int64
-	sha256 string
-}
-
 func (s clientSource) buildModules(entry pin) ([]byte, error) {
 	lookup := s.pins
 	if lookup == nil {
@@ -93,7 +88,7 @@ func (s clientSource) buildModules(entry pin) ([]byte, error) {
 		return nil, errors.New("-artifacts is required to read the clients' go.mod files")
 	}
 	sweep(s.cache)
-	file, err := s.fetch(module.URL, pinned{module.Bytes, module.SHA256})
+	file, err := s.fetch(module.URL, verifiedfetch.Pin{Name: entry.Kind + " " + entry.Default.Version + " go.mod", Bytes: module.Bytes, SHA256: module.SHA256})
 	if err != nil {
 		return nil, fmt.Errorf("%s %s go.mod: %w", entry.Kind, entry.Default.Version, err)
 	}
@@ -101,64 +96,8 @@ func (s clientSource) buildModules(entry pin) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(file, module.Bytes+1))
 }
 
-func (s clientSource) fetch(url string, want pinned) (*os.File, error) {
-	directory := filepath.Join(s.cache, want.sha256)
-	cached := filepath.Join(directory, path.Base(url))
-	if file, err := openVerified(cached, want); err == nil {
-		return file, nil
-	}
-	if err := os.MkdirAll(directory, 0o755); err != nil {
-		return nil, err
-	}
-	partial, err := os.CreateTemp(directory, ".part-*")
-	if err != nil {
-		return nil, err
-	}
-	defer os.Remove(partial.Name())
-	defer partial.Close()
-	response, err := s.client.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s answered %s", url, response.Status)
-	}
-	if _, err := io.Copy(partial, io.LimitReader(response.Body, want.bytes+1)); err != nil {
-		return nil, err
-	}
-	if err := partial.Close(); err != nil {
-		return nil, err
-	}
-	file, err := openVerified(partial.Name(), want)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", url, err)
-	}
-	if err := os.Rename(partial.Name(), cached); err != nil {
-		file.Close()
-		return nil, err
-	}
-	return file, nil
-}
-
-func openVerified(file string, want pinned) (*os.File, error) {
-	source, err := os.Open(file)
-	if err != nil {
-		return nil, err
-	}
-	digest := sha256.New()
-	size, err := io.Copy(digest, source)
-	if err == nil && (size != want.bytes || hex.EncodeToString(digest.Sum(nil)) != want.sha256) {
-		err = fmt.Errorf("the file is %d bytes with another SHA-256 than the pinned %d bytes and %s", size, want.bytes, want.sha256)
-	}
-	if err == nil {
-		_, err = source.Seek(0, io.SeekStart)
-	}
-	if err != nil {
-		source.Close()
-		return nil, err
-	}
-	return source, nil
+func (s clientSource) fetch(url string, want verifiedfetch.Pin) (*os.File, error) {
+	return verifiedfetch.Cached(s.client, url, filepath.Join(s.cache, want.SHA256), want)
 }
 
 func stage(source io.Reader, destination string) error {

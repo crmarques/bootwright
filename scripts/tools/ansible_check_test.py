@@ -1,6 +1,7 @@
 """Tests of the Ansible check harness, which its units suite runs."""
 
 import contextlib
+import hashlib
 import importlib.util
 import io
 import os
@@ -799,6 +800,83 @@ class WrittenSinceTest(unittest.TestCase):
             path.write_text("a", encoding="utf-8")
             os.utime(path, ns=(status.st_atime_ns, status.st_mtime_ns))
             self.assertTrue(ansible_check.written_since(root, time.time()))
+
+
+class AcquireTest(unittest.TestCase):
+    """One pinned acquisition: verify, keep only on a match, one redirect rule."""
+
+    def pin(self, data: bytes) -> dict:
+        return {
+            "url": "https://github.com/x/y/z.tar.gz",
+            "bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
+
+    def opener(self, data: bytes):
+        response = mock.MagicMock()
+        response.__enter__.return_value = io.BytesIO(data)
+        return mock.MagicMock(**{"open.return_value": response})
+
+    def test_a_download_matching_its_pin_is_kept(self):
+        data = b"pinned"
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "nested/z.tar.gz"
+            ansible_check._acquire.acquire(
+                self.pin(data), target, "artifact", 5, self.opener(data)
+            )
+            self.assertEqual(target.read_bytes(), data)
+
+    def test_a_download_that_differs_is_refused_and_leaves_nothing(self):
+        data = b"pinned"
+        for served in (b"pinneX", b"pinned and more", b"pin"):
+            with self.subTest(served=served), tempfile.TemporaryDirectory() as temporary:
+                target = Path(temporary) / "z.tar.gz"
+                with self.assertRaises(SystemExit) as refused:
+                    ansible_check._acquire.acquire(
+                        self.pin(data), target, "artifact", 5, self.opener(served)
+                    )
+                self.assertEqual(str(refused.exception), "artifact does not match its lock")
+                self.assertFalse(target.exists())
+
+    def test_a_kept_file_is_verified_without_a_fetch(self):
+        data = b"pinned"
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "z.tar.gz"
+            target.write_bytes(data)
+            opener = self.opener(b"")
+            ansible_check._acquire.acquire(self.pin(data), target, "artifact", 5, opener)
+            opener.open.assert_not_called()
+            target.write_bytes(b"tampered")
+            with self.assertRaises(SystemExit):
+                ansible_check._acquire.acquire(self.pin(data), target, "artifact", 5, opener)
+
+    def test_a_redirect_stays_with_its_publisher(self):
+        handler = ansible_check._acquire.PublisherRedirect()
+        request = mock.Mock(full_url="https://github.com/x/y/z.tar.gz")
+        allowed = (
+            "https://github.com/other/path",
+            "https://objects.githubusercontent.com/z",
+        )
+        refused = (
+            "http://github.com/x",
+            "https://evil.example/z",
+            "https://user:secret@github.com/x",
+            "https://githubusercontent.com.evil.example/z",
+        )
+        for url in allowed:
+            with self.subTest(url=url), mock.patch.object(
+                ansible_check._acquire.HTTPRedirectHandler, "redirect_request"
+            ) as base:
+                handler.redirect_request(request, None, 302, "", {}, url)
+                base.assert_called_once()
+        for url in refused:
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                handler.redirect_request(request, None, 302, "", {}, url)
+        outside = mock.Mock(full_url="https://ci-files.example/z")
+        with self.assertRaises(ValueError):
+            handler.redirect_request(
+                outside, None, 302, "", {}, "https://objects.githubusercontent.com/z"
+            )
 
 
 if __name__ == "__main__":

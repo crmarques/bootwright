@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/tools/verifiedfetch"
+
 	"github.com/crmarques/bootwright/tools/clientassets"
 )
 
@@ -37,7 +39,7 @@ func TestAReleaseFileIsKeptByItsDigestAndNeverTrustedUnverified(t *testing.T) {
 	source := clientSource{cache: t.TempDir(), db: "unused", client: server.Client()}
 	entry := releaseOf(body)
 	asset := clientassets.Asset{URL: server.URL + "/release/kubectl"}
-	want := pinned{entry.Default.Bytes, entry.Default.SHA256}
+	want := verifiedfetch.Pin{Name: "client", Bytes: entry.Default.Bytes, SHA256: entry.Default.SHA256}
 	first, err := source.fetch(asset.URL, want)
 	if err != nil {
 		t.Fatal(err)
@@ -58,7 +60,7 @@ func TestAReleaseFileIsKeptByItsDigestAndNeverTrustedUnverified(t *testing.T) {
 	third.Close()
 	other := releaseOf([]byte("another file"))
 	other.Default.Bytes = entry.Default.Bytes
-	if _, err := (clientSource{cache: t.TempDir(), client: server.Client()}).fetch(asset.URL, pinned{other.Default.Bytes, other.Default.SHA256}); err == nil {
+	if _, err := (clientSource{cache: t.TempDir(), client: server.Client()}).fetch(asset.URL, verifiedfetch.Pin{Name: "client", Bytes: other.Default.Bytes, SHA256: other.Default.SHA256}); err == nil {
 		t.Fatal("a download with another digest than the table's was kept")
 	}
 }

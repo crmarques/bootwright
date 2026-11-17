@@ -6,60 +6,13 @@ lock, and builds an isolated environment holding only the reviewed tool closure.
 Any host Python new enough to run this script can perform that bootstrap.
 """
 
-import hashlib
 import json
 from pathlib import Path
 import subprocess
 import sys
 import tarfile
-from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, build_opener
 
-
-def cache_root(root: Path) -> Path:
-    """Return the shared check cache that scripts/cache-dir names."""
-    completed = subprocess.run(
-        [str(root / "scripts/cache-dir")], check=True, capture_output=True, text=True
-    )
-    return Path(completed.stdout.strip())
-
-
-class PublisherRedirect(HTTPRedirectHandler):
-    """Keep the interpreter acquisition within its declared HTTPS publisher."""
-
-    def redirect_request(self, request, response, code, message, headers, new_url):
-        original, target = urlsplit(request.full_url), urlsplit(new_url)
-        if (
-            target.scheme != "https"
-            or target.username is not None
-            or target.password is not None
-            or not (
-                target.hostname == original.hostname
-                or target.hostname.endswith(".githubusercontent.com")
-            )
-        ):
-            raise ValueError("Unexpected interpreter publisher redirect")
-        return super().redirect_request(
-            request, response, code, message, headers, new_url
-        )
-
-
-def acquire(lock, archive):
-    if archive.exists():
-        data = archive.read_bytes()
-    else:
-        opener = build_opener(PublisherRedirect())
-        with opener.open(lock["url"], timeout=300) as response:
-            data = response.read(lock["bytes"] + 1)
-    if (
-        len(data) != lock["bytes"]
-        or hashlib.sha256(data).hexdigest() != lock["sha256"]
-    ):
-        raise SystemExit("Ansible check interpreter does not match its lock")
-    if not archive.exists():
-        archive.parent.mkdir(parents=True, exist_ok=True)
-        with archive.open("xb") as stream:
-            stream.write(data)
+from _acquire import acquire, cache_root
 
 
 def main() -> int:
@@ -76,7 +29,7 @@ def main() -> int:
 
     if not interpreter.exists():
         archive = area / "interpreter.tar.gz"
-        acquire(lock, archive)
+        acquire(lock, archive, "Ansible check interpreter", 300)
         runtime = area / "runtime"
         if not (runtime / lock["member"]).exists():
             with tarfile.open(archive) as bundle:

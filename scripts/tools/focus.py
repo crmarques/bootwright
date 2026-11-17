@@ -70,6 +70,7 @@ ANSIBLE_INPUTS = (
     "scripts/tools/ansible-check-interpreter.json",
     "scripts/tools/ansible-requirements.txt",
     "scripts/tools/ansible-test-artifacts.json",
+    "scripts/tools/_acquire.py",
     "scripts/tools/ansible_check_bootstrap.py",
     "scripts/tools/ansible_test_prepare.py",
 )

@@ -4,6 +4,7 @@ import concurrent.futures
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, distributions, version
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -18,13 +19,12 @@ import traceback
 from typing import Callable, Optional, TextIO
 from xml.etree import ElementTree
 
-
-def cache_root(root: Path) -> Path:
-    """Return the shared check cache that scripts/cache-dir names."""
-    completed = subprocess.run(
-        [str(root / "scripts/cache-dir")], check=True, capture_output=True, text=True
-    )
-    return Path(completed.stdout.strip())
+_acquisition = importlib.util.spec_from_file_location(
+    "_acquire", Path(__file__).with_name("_acquire.py")
+)
+_acquire = importlib.util.module_from_spec(_acquisition)
+_acquisition.loader.exec_module(_acquire)
+cache_root = _acquire.cache_root
 
 
 SUITES = ("syntax", "lint", "sanity", "units", "integration")
