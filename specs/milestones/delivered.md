@@ -16806,3 +16806,18 @@ contracts moved. An independent review found credentials kept in material,
 verification unchanged in every role and each node bound to its own
 controller.
 
+## X542 — The Ceph worker in collaborators
+
+### B1511
+
+Split from B1469 under [D274](backlog.md#d274) (audit 005 W8.8). The Ceph
+native worker's registry custody, OSD devices, dashboard and bootstrap (SSH
+authorization, sshd policy, tunnel, configuration, Call Home configuration,
+mount) are collaborators of the worker in modules of their own, the request's
+scope and host validation is `ceph_native_validate`, and `dispatch` reads a
+route table by action; `ceph_core.py`'s closed evidence schema is
+`ceph_evidence` and its SSH transport `ceph_transport`. The shipped bundles list
+the new modules, at about 71% of the input cap. An AST comparison found the 104
+moved bodies unchanged; a native failure's site string now names the
+collaborator module. Every request, verdict and golden is unchanged.
+
