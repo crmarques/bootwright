@@ -213,7 +213,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	if err != nil {
 		return result, err
 	}
-	boundary, warned, cause := s.converge(work, tx, store, located, logging, operation, plan, decided.phases, states, material, decided.selection)
+	boundary, warned, cause := s.converge(work, invocation{tx: tx, store: store, approved: located, boundary: logging, operation: operation, plan: plan, material: material}, decided.phases, states, decided.selection)
 	result.Warnings = warned
 	logging.close(ctx, log)
 	final, terminal := s.finish(recordingContext(ctx), tx, store, operation, plan, states, boundary, logging.faulted(), result)

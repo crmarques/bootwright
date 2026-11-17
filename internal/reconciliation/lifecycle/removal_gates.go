@@ -127,7 +127,11 @@ func (s Service) resolveMember(ctx context.Context, tx Transaction, store Operat
 	if removal {
 		phases = removalPhases{}
 	}
-	cause := s.observe(work, tx, store, approved, logging, replaced, frozen, phases, states, material, removal, decided.plan, decided.phases)
+	var removalPlan *reconciliation.Plan
+	if removal {
+		removalPlan = &decided.plan
+	}
+	cause := s.observe(work, invocation{tx: tx, store: store, approved: approved, boundary: logging, operation: replaced, plan: frozen, material: material}, phases, states, removalPlan, decided.phases)
 	logging.close(ctx, log)
 	if err := s.recordFromBlocks(recordingContext(ctx), tx, store, replaced, frozen, states); err != nil {
 		return memberResolution{}, err

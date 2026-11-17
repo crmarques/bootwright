@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
-	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
 func readinessPlan(random *rand.Rand, size int) reconciliation.Plan {
@@ -39,7 +38,7 @@ func TestTheSchedulerAdmitsWhatTheFrozenAdmissionAdmitsAsBlocksSettle(t *testing
 				states[block.ID] = moves[random.IntN(len(moves))]
 			}
 		}
-		c := Service{}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, reconciliation.Selection{}, removalPhases{}, removalPhases{})
+		c := Service{}.newScheduler(invocation{plan: plan}, states, reconciliation.Selection{}, removalPhases{}, removalPhases{})
 		for move := range 3 * len(plan.Blocks) {
 			wantKind, want := firstAdmission(plan, c.states, c.selection, c.observed, c.worked, c.running)
 			gotKind, got := admissionOver(plan, c.states, c.selection, c.observed, c.worked, c.running, c.startable)
@@ -54,7 +53,7 @@ func TestTheSchedulerAdmitsWhatTheFrozenAdmissionAdmitsAsBlocksSettle(t *testing
 
 func BenchmarkSchedulerAdmissionOverAWidePlan(b *testing.B) {
 	plan := readinessPlan(rand.New(rand.NewPCG(1, 2)), 256)
-	c := Service{}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, map[string]reconciliation.BlockState{}, nil, reconciliation.Selection{}, removalPhases{}, removalPhases{})
+	c := Service{}.newScheduler(invocation{plan: plan}, map[string]reconciliation.BlockState{}, reconciliation.Selection{}, removalPhases{}, removalPhases{})
 	for b.Loop() {
 		admissionOver(plan, c.states, c.selection, c.observed, c.worked, c.running, c.startable)
 	}

@@ -15,7 +15,6 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
-	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // recordingContext is the boundary an outcome is recorded under. Every
@@ -36,7 +35,8 @@ func recordingContext(ctx context.Context) context.Context { return context.With
 // that cannot start returns no state and the block keeps the one it had: a
 // pending block stays pending and a failed one it would have retried stays
 // failed, exactly as their records still say.
-func (s Service) attempt(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, retired map[string]bool, position, total int, warn func([]operationstore.Warning)) (reconciliation.BlockState, error) {
+func (s Service) attempt(ctx context.Context, run invocation, block reconciliation.Block, retired map[string]bool, position, total int, warn func([]operationstore.Warning)) (reconciliation.BlockState, error) {
+	tx, store, boundary, operation, plan := run.tx, run.store, run.boundary, run.operation, run.plan
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return "", failure("lifecycle.state",
@@ -89,7 +89,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	defer boundary.close(ctx, log)
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
 	warnings := &warningCollector{}
-	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, block, material, proved, applyProved, preparations, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
+	result, runErr := s.invoke(ctx, run, block, invokeRecords{proved: proved, applyProved: applyProved, preparations: preparations, log: log, attempt: number}, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
 			execution.RetiredWithHosts = retired[block.ID]
 			if reread {
@@ -117,8 +117,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	// What the attempt produced is in custody before its record says done.
 	outcome, runErr = s.capturedAttempt(ctx, tx, boundary, log, operation.Verb, block, outcome, result.Produced, runErr)
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "outcome", Block: block.ID, Detail: string(outcome)})
-	// A typed failure proves less than completion, so an attempt whose log
-	// failed before its outcome was logged records it unknown.
+	// A typed failure proves less than completion, so an attempt whose log failed before its outcome was logged records it unknown.
 	if log.Failed() && outcome == reconciliation.OutcomeFailed {
 		outcome = reconciliation.OutcomeUnknown
 	}
@@ -206,14 +205,16 @@ func (s Service) ranUnder(block reconciliation.Block) operationstore.Build {
 // (D119), and the resolution is still recorded against the apply's block, as
 // removalEffect maps it. A block it leaves unknown names command, the exact
 // command that observes it again.
-func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, position, total int, removal bool, removalPlan reconciliation.Plan, retired map[string]bool, command string, retry bool) (reconciliation.BlockState, error) {
+func (s Service) resolveUnknown(ctx context.Context, run invocation, block reconciliation.Block, position, total int, reading removalReading, command string, retry bool) (reconciliation.BlockState, error) {
+	tx, store, boundary, operation, plan := run.tx, run.store, run.boundary, run.operation, run.plan
+	removal := reading.plan != nil
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return "", failure("lifecycle.state",
 			"this executable cannot observe the implementation this block froze",
 			"install the executable that registered this operation")
 	}
-	observed, verb, err := observedAs(tx.Identity().Name, operation, block, removal, removalPlan)
+	observed, verb, err := observedAs(tx.Identity().Name, operation, block, reading.plan)
 	if err != nil {
 		return "", err
 	}
@@ -239,11 +240,11 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Detail: "resolving the unknown outcome from live evidence", Status: "running", Position: position, Total: total})
 	read := func(target reconciliation.Block, as reconciliation.Verb) (Observation, error) {
 		var observation Observation
-		_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, target, material, nil, applyProved, preparations, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
+		_, runErr := s.invoke(ctx, run, target, invokeRecords{applyProved: applyProved, preparations: preparations, log: log, attempt: attemptNumber, resolution: number}, position, total, func(inner context.Context, execution Execution) (Result, error) {
 			observe := capability.Observe
 			if as == reconciliation.Destroy {
 				observe = capability.ObserveRemoval
-				execution.RetiredWithHosts = retired[target.ID]
+				execution.RetiredWithHosts = reading.retired[target.ID]
 			}
 			value, err := observe(inner, execution)
 			observation = value
@@ -347,8 +348,8 @@ func resolutionReading(ctx context.Context, boundary *logBoundary, log *operatio
 // block itself, for the verb its operation froze, or, where a fresh removal
 // resolves an apply's block, the removal block that takes it back, read for
 // the removal.
-func observedAs(contextName string, operation operationstore.Operation, block reconciliation.Block, removal bool, removalPlan reconciliation.Plan) (reconciliation.Block, reconciliation.Verb, error) {
-	if !removal {
+func observedAs(contextName string, operation operationstore.Operation, block reconciliation.Block, removalPlan *reconciliation.Plan) (reconciliation.Block, reconciliation.Verb, error) {
+	if removalPlan == nil {
 		return block, operation.Verb, nil
 	}
 	taken, found := removalPlan.Block(block.ID)
@@ -436,18 +437,18 @@ func acknowledgedReleases(contextName string, plan reconciliation.Plan, preStop 
 
 // invoke runs the capability inside the controller runtime. The approved
 // runtime is the operation's own, located once before its first effect.
-func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, proved, applyProved []BlockEvidence, preparations []json.RawMessage, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
+func (s Service) invoke(ctx context.Context, run invocation, block reconciliation.Block, records invokeRecords, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
+	tx, store, boundary, operation, plan := run.tx, run.store, run.boundary, run.operation, run.plan
+	log, attempt, resolution := records.log, records.attempt, records.resolution
 	view := tx.Controller()
 	result := Result{Outcome: reconciliation.OutcomeUnknown}
-	// Completion is counted in proved groups, not in elapsed time: the adapter
-	// reports each group once it settles and the frozen block declares them all.
+	// Completion is counted in proved groups, not elapsed time: the adapter reports each group once it settles and the frozen block declares them all.
 	settled := map[string]struct{}{}
 	target, err := operationstore.AdapterOutputPath(log.Path())
 	if err != nil {
 		return Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
-	// Retention is not a precondition of the run: what the adapter prints is
-	// recorded beside this attempt whatever it proves, and never changes it.
+	// Retention is not a precondition of the run: what the adapter prints is recorded beside this attempt whatever it proves, and never changes it.
 	output := store.OpenAdapterOutput(ctx, target)
 	defer func() {
 		_ = output.Close(ctx)
@@ -459,7 +460,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 			_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "adapter-output", Block: block.ID, Detail: detail})
 		}
 	}()
-	err = s.withPython(ctx, approved, func(launch prerequisites.PythonLaunch) error {
+	err = s.withPython(ctx, run.approved, func(launch prerequisites.PythonLaunch) error {
 		// Only a block the plan froze into the controller stage receives that
 		// stage's publication boundary. The stage is declared domain
 		// vocabulary, so no implementation identity is read here.
@@ -500,8 +501,8 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		}
 		execution := Execution{
 			Operation: operation.ID, Context: tx.Identity().Name, Incarnation: tx.Identity().Incarnation, Continuation: continuation, Attempt: attempt, Resolution: resolution, Block: block,
-			ApplyOperation: owner, ApplyProved: applyProved, ApplyPreparations: clonedPreparations(preparations), Prepare: prepare, Released: s.released(ctx, block),
-			Launch: launch, Material: material, Proved: proved,
+			ApplyOperation: owner, ApplyProved: records.applyProved, ApplyPreparations: clonedPreparations(records.preparations), Prepare: prepare, Released: s.released(ctx, block),
+			Launch: launch, Material: run.material, Proved: records.proved,
 			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 				return s.locateTool(inner, store, view, tx.Identity().Name, operation, plan, tool)
 			},
@@ -535,6 +536,13 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		return callErr
 	})
 	return result, err
+}
+
+type invokeRecords struct {
+	proved, applyProved []BlockEvidence
+	preparations        []json.RawMessage
+	log                 *operationstore.Log
+	attempt, resolution int
 }
 
 // stageReading names the controller stage command that settles a failure the

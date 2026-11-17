@@ -35,7 +35,7 @@ func TestReadyWorkAdvancesTheLongestSelectedChain(t *testing.T) {
 			for _, block := range current.Blocks {
 				states[block.ID] = reconciliation.BlockPending
 			}
-			run := Service{}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, current, states, nil, reconciliation.Selection{}, removalPhases{}, removalPhases{})
+			run := Service{}.newScheduler(invocation{plan: current}, states, reconciliation.Selection{}, removalPhases{}, removalPhases{})
 			next, _, ok := run.next()
 			if !ok || next.ID != want {
 				t.Fatalf("first admitted %q, want chain head %q", next.ID, want)
@@ -161,7 +161,7 @@ func TestChainPriorityShortensABoundedSchedule(t *testing.T) {
 			for _, block := range plan.Blocks {
 				states[block.ID] = reconciliation.BlockPending
 			}
-			run := Service{}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, reconciliation.Selection{}, removalPhases{}, removalPhases{})
+			run := Service{}.newScheduler(invocation{plan: plan}, states, reconciliation.Selection{}, removalPhases{}, removalPhases{})
 			rounds, completed := 0, 0
 			for completed < len(plan.Blocks) {
 				var admitted []string
@@ -209,7 +209,7 @@ func TestReadyPrioritySkipsAChainWhoseClaimOrThrottleIsBusy(t *testing.T) {
 	for _, busy := range []string{"claim", "throttle"} {
 		t.Run(busy, func(t *testing.T) {
 			states := map[string]reconciliation.BlockState{"alpha": reconciliation.BlockPending, "zulu": reconciliation.BlockPending, "tail": reconciliation.BlockPending}
-			run := Service{}.newScheduler(nil, nil, approved{}, nil, operationstore.Operation{}, plan, states, nil, reconciliation.Selection{}, removalPhases{}, removalPhases{})
+			run := Service{}.newScheduler(invocation{plan: plan}, states, reconciliation.Selection{}, removalPhases{}, removalPhases{})
 			if busy == "claim" {
 				run.held["shared"] = "holder"
 			} else {

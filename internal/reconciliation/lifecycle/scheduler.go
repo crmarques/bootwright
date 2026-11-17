@@ -35,18 +35,10 @@ type step struct {
 // re-evaluates as each one settles. It owns no durable state: the block
 // records remain the truth, and this decides only what runs next.
 type scheduler struct {
-	service   Service
-	tx        Transaction
-	store     OperationStore
-	approved  approved
-	operation operationstore.Operation
-	plan      reconciliation.Plan
-	material  map[string]secrets.Material
+	service Service
+	invocation
 	selection reconciliation.Selection
 	bound     int
-	// logging is the invocation's required logging boundary. Once it latches
-	// a fault, nothing further is admitted.
-	logging *logBoundary
 
 	states    map[string]reconciliation.BlockState
 	readiness readiness
@@ -71,16 +63,32 @@ type scheduler struct {
 	observeOnly bool
 	// removal marks the observation a fresh removal makes of the apply it
 	// supersedes: each unproved block is read by the check of the block of
-	// removalPlan that takes it back (D119), unless the apply's own observation
+	// its plan that takes it back (D119), unless the apply's own observation
 	// proves it completed (D123).
-	removal           bool
-	removalPlan       reconciliation.Plan
+	removal           *reconciliation.Plan
 	phases            removalPhases
 	removalPlanPhases removalPhases
 	onlineProved      bool
 	onlineBlocked     bool
 	preStopProved     bool
 	warned            []positionedWarning
+}
+
+// invocation is what each attempt and resolution runs under; once boundary latches a fault, nothing further is admitted.
+type invocation struct {
+	tx        Transaction
+	store     OperationStore
+	approved  approved
+	boundary  *logBoundary
+	operation operationstore.Operation
+	plan      reconciliation.Plan
+	material  map[string]secrets.Material
+}
+
+// removalReading reads a block by the block of plan that takes it back, when plan is set.
+type removalReading struct {
+	plan    *reconciliation.Plan
+	retired map[string]bool
 }
 
 type positionedWarning struct {
@@ -91,8 +99,8 @@ type positionedWarning struct {
 // converge runs the operation's blocks until nothing more may start, and
 // reports whether it stopped at a stage or operator-stop boundary and what any
 // block that did not complete reported.
-func (s Service) converge(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, phases removalPhases, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.Selection) (bool, []diagnostics.Diagnostic, error) {
-	run := s.newScheduler(tx, store, approved, logging, operation, plan, states, material, selection, phases, removalPhases{})
+func (s Service) converge(ctx context.Context, work invocation, phases removalPhases, states map[string]reconciliation.BlockState, selection reconciliation.Selection) (bool, []diagnostics.Diagnostic, error) {
+	run := s.newScheduler(work, states, selection, phases, removalPhases{})
 	boundary, err := run.converge(ctx)
 	slices.SortStableFunc(run.warned, func(first, second positionedWarning) int { return first.position - second.position })
 	var warned []diagnostics.Diagnostic
@@ -104,12 +112,12 @@ func (s Service) converge(ctx context.Context, tx Transaction, store OperationSt
 
 // observe resolves every unproved effect of an operation and starts nothing
 // else, leaving the block states it was given holding what each one proved.
-// removal says a fresh removal resolves an apply's blocks, by the check of the
-// block of removalPlan that takes each one back.
-func (s Service) observe(ctx context.Context, tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, phases removalPhases, states map[string]reconciliation.BlockState, material map[string]secrets.Material, removal bool, removalPlan reconciliation.Plan, removalPlanPhases removalPhases) error {
-	run := s.newScheduler(tx, store, approved, logging, operation, plan, states, material, reconciliation.Selection{}, phases, removalPlanPhases)
+// removal, when set, says a fresh removal resolves an apply's blocks, by the
+// check of the block of that plan that takes each one back.
+func (s Service) observe(ctx context.Context, work invocation, phases removalPhases, states map[string]reconciliation.BlockState, removal *reconciliation.Plan, removalPlanPhases removalPhases) error {
+	run := s.newScheduler(work, states, reconciliation.Selection{}, phases, removalPlanPhases)
 	run.observeOnly = true
-	run.removal, run.removalPlan = removal, removalPlan
+	run.removal = removal
 	_, err := run.converge(ctx)
 	return err
 }
@@ -131,10 +139,10 @@ func (s Service) Throttle() int {
 	return s.options.Throttle
 }
 
-func (s Service) newScheduler(tx Transaction, store OperationStore, approved approved, logging *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, material map[string]secrets.Material, selection reconciliation.Selection, phases, removalPlanPhases removalPhases) *scheduler {
+func (s Service) newScheduler(work invocation, states map[string]reconciliation.BlockState, selection reconciliation.Selection, phases, removalPlanPhases removalPhases) *scheduler {
+	plan := work.plan
 	return &scheduler{
-		service: s, tx: tx, store: store, approved: approved, operation: operation,
-		plan: plan, material: material, selection: selection, bound: s.Concurrency(), logging: logging,
+		service: s, invocation: work, selection: selection, bound: s.Concurrency(),
 		states: states, readiness: newReadiness(plan, states), running: map[string]bool{}, observed: map[string]bool{}, worked: map[string]bool{},
 		unstarted: map[string]bool{}, announced: map[string]int{},
 		held: map[string]string{}, throttled: map[string]int{}, throttle: s.Throttle(), causes: map[string]error{},
@@ -143,11 +151,11 @@ func (s Service) newScheduler(tx Transaction, store OperationStore, approved app
 	}
 }
 
-func (c *scheduler) retired() map[string]bool {
-	if c.removal {
-		return c.removalPlanPhases.retired
+func (c *scheduler) reading() removalReading {
+	if c.removal != nil {
+		return removalReading{plan: c.removal, retired: c.removalPlanPhases.retired}
 	}
-	return c.phases.retired
+	return removalReading{retired: c.phases.retired}
 }
 
 func (c *scheduler) converge(ctx context.Context) (bool, error) {
@@ -168,7 +176,7 @@ func (c *scheduler) converge(ctx context.Context) (bool, error) {
 	// whether or not that request has reached this context yet. Nor is one an
 	// attempt that could not start caused: its block was startable, and only
 	// the failure stopped it.
-	if ctx.Err() != nil || c.logging.faulted() || len(c.unstarted) != 0 {
+	if ctx.Err() != nil || c.boundary.faulted() || len(c.unstarted) != 0 {
 		return false, c.cause()
 	}
 	// A stop that leaves an effect unproved is not a pause: a block still
@@ -182,7 +190,7 @@ func (c *scheduler) converge(ctx context.Context) (bool, error) {
 // reached so far, and neither does an attempt that could not start; what is
 // already in flight is waited for either way.
 func (c *scheduler) admit(ctx context.Context) {
-	for len(c.running) < c.bound && !c.logging.faulted() && len(c.unstarted) == 0 && !c.onlineBlocked {
+	for len(c.running) < c.bound && !c.boundary.faulted() && len(c.unstarted) == 0 && !c.onlineBlocked {
 		block, position, ok := c.next()
 		if !ok {
 			return
@@ -339,7 +347,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 			// The observation's durable transition is authoritative even when it
 			// reports a refusal, so the operation state matches the record; one
 			// that never started recorded nothing, and the block keeps its state.
-			state, err = c.service.resolveUnknown(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, position+1, len(c.plan.Blocks), c.removal, c.removalPlan, c.retired(), command, retry)
+			state, err = c.service.resolveUnknown(ctx, c.invocation, block, position+1, len(c.plan.Blocks), c.reading(), command, retry)
 			if state == "" {
 				state = c.durable(ctx, block.ID, prior)
 			}
@@ -347,7 +355,7 @@ func (c *scheduler) start(ctx context.Context, block reconciliation.Block, posit
 		} else {
 			// An attempt that never started performed no effect; its block
 			// holds what its record reads, running when the start landed.
-			state, err = c.service.attempt(ctx, c.tx, c.store, c.approved, c.logging, c.operation, c.plan, block, c.material, c.phases.retired, position+1, len(c.plan.Blocks),
+			state, err = c.service.attempt(ctx, c.invocation, block, c.phases.retired, position+1, len(c.plan.Blocks),
 				func(reported []operationstore.Warning) { warnings = reported })
 			if state == "" {
 				state, unstarted = c.durable(ctx, block.ID, prior), true
@@ -376,8 +384,8 @@ func (c *scheduler) durable(ctx context.Context, block string, prior reconciliat
 // plan's tokens, or the continuation of this operation.
 func (c *scheduler) observingCommand() string {
 	name := c.tx.Identity().Name
-	if c.removal {
-		return contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(c.removalPlan)...)
+	if c.removal != nil {
+		return contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(*c.removal)...)
 	}
 	if command := continuationCommand(name, c.operation, c.plan, c.states); command != "" {
 		return command
