@@ -639,3 +639,32 @@ def test_observation_before_directory_creation_is_read_only(tmp_path, monkeypatc
     assert not (tmp_path / "hosted").exists()
     instance.close()
     instance.client.return_value.power.assert_not_called()
+
+
+# The controller's account and trust are read from the material the frozen
+# machine port names, never from a name this worker spells itself.
+@pytest.mark.parametrize("ca_variable, ca", [("portCA", "synthetic ca"), ("", "")])
+def test_the_controller_client_reads_the_material_the_machine_port_names(monkeypatch, ca_variable, ca):
+    instance = controller.Controller.__new__(controller.Controller)
+    port = {"userVariable": "portUser", "passwordVariable": "portPassword", "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "verify": True}
+    if ca_variable:
+        port["caVariable"] = ca_variable
+    instance.request = {"controller": {"endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerification": "full"}, "machinePort": port}
+    instance.material = {"portUser": "/lent/user", "portPassword": "/lent/password", "portCA": "/lent/ca"}
+    contents = {"/lent/user": b"synthetic user", "/lent/password": b"synthetic password", "/lent/ca": b"synthetic ca"}
+    monkeypatch.setattr(controller.records, "read", lambda path: contents[str(path)])
+    made = Mock()
+    monkeypatch.setattr(controller.redfish_control, "Client", made)
+    instance.client()
+    made.assert_called_once_with("https://bmc.example.test/redfish/v1/Systems/1", "synthetic user", "synthetic password",
+                                 verify=True, ca_data=ca, verification="full")
+
+
+@pytest.mark.parametrize("port", [{}, {"userVariable": "portUser"}, {"userVariable": "", "passwordVariable": "portPassword"},
+                                  {"userVariable": "portUser", "passwordVariable": "portPassword", "caVariable": 1}, []])
+def test_a_request_whose_machine_port_names_no_account_is_refused(port):
+    request = {key: None for key in ("version", "identity", "bootMedia", "controller", "interfaces", "inventory", "network", "private",
+                                     "deadlineSeconds", "placement", "ssh")}
+    request.update(version=controller.VERSION, machinePort=port)
+    with pytest.raises(ValueError, match="discovery request shape"):
+        controller.validate(request, "a" * 64, {})

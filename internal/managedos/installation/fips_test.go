@@ -276,7 +276,8 @@ func TestGuestAgentHostKeyTypeEntersThePlacementPolicyCheck(t *testing.T) {
 		t.Fatalf("refusal = %#v", reported)
 	}
 	delivered, request := execution(t, "digest")
-	request.Target = Target{Channel: substrate.ChannelDeliveredKey, HostKeyRef: "metal-01-host-key", HostKeyType: "ed25519", Physical: true, Substrate: substrate.ArmBaremetal}
+	request.Target = Target{Channel: substrate.ChannelDeliveredKey, HostKeyRef: "metal-01-host-key", HostKeyType: "ed25519", Physical: true, Substrate: substrate.ArmBaremetal,
+		MachinePort: request.Target.MachinePort}
 	delivered.Material["metal-01-host-key"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.PublicKeyPart: []byte("ssh-ed25519 AAAAHOST\n")})
 	marker, _ := MarkerFor(request, "digest")
 	physical := &fakeRunner{}

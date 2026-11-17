@@ -16,7 +16,7 @@ def options(entry):
 def request(ssh):
     return {
         "bootwright_disk_discovery_request": {
-            "version": "os-disk-discovery-v1", "identity": {}, "bootMedia": {}, "controller": {},
+            "version": "os-disk-discovery-v1", "identity": {}, "bootMedia": {}, "controller": {}, "machinePort": {},
             "interfaces": [], "network": {}, "private": {}, "inventory": "automatic",
             "deadlineSeconds": 1800, "placement": {}, "ssh": ssh,
         },

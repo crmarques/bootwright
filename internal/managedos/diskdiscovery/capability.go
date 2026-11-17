@@ -356,13 +356,17 @@ func (c Capability) run(ctx context.Context, e lifecycle.Execution, operation st
 		return lifecycle.RunResult{}, refusal("lifecycle.state", "disk discovery has no runner", "")
 	}
 	raw, _ := json.Marshal(b)
+	port := r.MachinePort
+	if port.UserVariable == "" || port.PasswordVariable == "" {
+		return lifecycle.RunResult{}, refusal("lifecycle.state", "the frozen machine port names no controller account material", "")
+	}
 	files := []lifecycle.MaterialFile{
-		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: r.Controller.CredentialsRef, Variable: "controllerUser"},
-		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: r.Controller.CredentialsRef, Variable: "controllerPassword"},
+		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: r.Controller.CredentialsRef, Variable: port.UserVariable},
+		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: r.Controller.CredentialsRef, Variable: port.PasswordVariable},
 		{Name: "artifact-ca", Part: secrets.CertificatePart, Secret: r.Private.CertificateRef, Variable: "artifactCertificate"},
 	}
-	if r.Controller.TrustBundleRef != "" {
-		files = append(files, lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: r.Controller.TrustBundleRef, Variable: "controllerCA"})
+	if port.CAVariable != "" {
+		files = append(files, lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: r.Controller.TrustBundleRef, Variable: port.CAVariable})
 	}
 	wire, err := r.Canonical()
 	if err != nil {

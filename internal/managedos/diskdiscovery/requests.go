@@ -45,6 +45,7 @@ type DiscoveryRequest struct {
 	Identity        installation.Identity    `json:"identity"`
 	Interfaces      []installation.Interface `json:"interfaces"`
 	Inventory       string                   `json:"inventory"`
+	MachinePort     substrate.MachinePort    `json:"machinePort"`
 	Network         DiscoveryNetwork         `json:"network"`
 	Placement       machineref.Placement     `json:"placement"`
 	Private         installation.Publication `json:"private"`
@@ -96,7 +97,7 @@ func discoveryRequest(catalog api.Catalog, m api.Object, input lifecycle.PlanInp
 	if err != nil {
 		return DiscoveryRequest{}, needs, err
 	}
-	r := DiscoveryRequest{Version: discoveryVersion, Placement: boot.Placement, Identity: boot.Identity, BootMedia: boot.BootMedia, Controller: boot.Target.Controller, Interfaces: boot.Target.Hardware.Interfaces, Inventory: discoveryInventory(m), Private: *boot.Private, DeadlineSeconds: 1800,
+	r := DiscoveryRequest{Version: discoveryVersion, Placement: boot.Placement, Identity: boot.Identity, BootMedia: boot.BootMedia, Controller: boot.Target.Controller, MachinePort: boot.Target.MachinePort, Interfaces: boot.Target.Hardware.Interfaces, Inventory: discoveryInventory(m), Private: *boot.Private, DeadlineSeconds: 1800,
 		SSH:     DiscoverySSH{Port: discoverySSHPort(m)},
 		Network: DiscoveryNetwork{Address: install.Address, Prefix: install.Prefix, Gateway: install.Gateway, Interface: install.Interface, Nameservers: install.Nameservers, Type: install.InterfaceType, VLANBase: install.VLANBase, VLANID: install.VLANID, BondPorts: install.BondPorts, BondOptions: install.BondOptions}}
 	r.Identity.Block = DiscoveryBlockID(m.Name())

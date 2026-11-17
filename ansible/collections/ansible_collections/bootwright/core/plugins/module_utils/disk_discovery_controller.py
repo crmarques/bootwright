@@ -39,8 +39,14 @@ BOOT_GROUPS = ("prepare-ssh", "build-media", "publish-media", "verify-delivery",
 
 
 def validate(request, digest, binding):
-    keys = {"version", "identity", "bootMedia", "controller", "interfaces", "inventory", "network", "private", "deadlineSeconds", "placement", "ssh"}
+    keys = {"version", "identity", "bootMedia", "controller", "interfaces", "inventory", "machinePort", "network", "private", "deadlineSeconds",
+            "placement", "ssh"}
     if set(request) != keys or request["version"] != VERSION or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        raise ValueError("discovery request shape")
+    port = request["machinePort"]
+    if (not isinstance(port, dict)
+            or not all(isinstance(port.get(key), str) and port[key] for key in ("userVariable", "passwordVariable"))
+            or not isinstance(port.get("caVariable", ""), str)):
         raise ValueError("discovery request shape")
     if request["inventory"] not in ("automatic", "boot"):
         raise ValueError("discovery request shape")
@@ -317,10 +323,11 @@ class Controller:
             os.close(parent)
 
     def client(self):
-        config = self.request["controller"]
-        user = records.read(Path(self.material["controllerUser"])).decode()
-        password = records.read(Path(self.material["controllerPassword"])).decode()
-        ca = records.read(Path(self.material["controllerCA"])).decode() if self.material.get("controllerCA") else ""
+        config, port = self.request["controller"], self.request["machinePort"]
+        user = records.read(Path(self.material[port["userVariable"]])).decode()
+        password = records.read(Path(self.material[port["passwordVariable"]])).decode()
+        ca_variable = port.get("caVariable", "")
+        ca = records.read(Path(self.material[ca_variable])).decode() if ca_variable and self.material.get(ca_variable) else ""
         return redfish_control.Client(config["endpoint"], user, password, verify=True, ca_data=ca, verification=config.get("tlsVerification", ""))
 
     def target(self, client):

@@ -17,11 +17,12 @@ import (
 
 type deadlineRunner struct {
 	inventoryRunner
-	deadline time.Duration
+	deadline  time.Duration
+	materials []lifecycle.MaterialFile
 }
 
 func (r *deadlineRunner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
-	r.deadline = request.Deadline
+	r.deadline, r.materials = request.Deadline, request.Materials
 	return r.inventoryRunner.Run(ctx, request)
 }
 
@@ -56,5 +57,12 @@ func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 	}
 	if want := time.Duration(request.DeadlineSeconds)*time.Second + time.Hour; runner.deadline != want || runner.deadline > lifecycle.MaxDeadline {
 		t.Fatalf("the run states %s, want the frozen %s plus an hour within %s", runner.deadline, time.Duration(request.DeadlineSeconds)*time.Second, lifecycle.MaxDeadline)
+	}
+	named := map[string]string{}
+	for _, file := range runner.materials {
+		named[file.Name] = file.Variable
+	}
+	if port := request.MachinePort; port.UserVariable == "" || named["bmc-user"] != port.UserVariable || named["bmc-password"] != port.PasswordVariable {
+		t.Fatalf("the controller material %v is not named by the frozen machine port %+v", named, port)
 	}
 }

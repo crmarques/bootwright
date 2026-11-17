@@ -38,6 +38,16 @@ request-schema:
   interfaces[].macAddress string
   interfaces[].name string
   inventory string
+  machinePort struct substrate.MachinePort
+  machinePort.caVariable string omitempty
+  machinePort.endpoint string
+  machinePort.mediaVolume string omitempty
+  machinePort.passwordVariable string omitempty
+  machinePort.pinnedSerialVariable string omitempty
+  machinePort.pinnedUUIDVariable string omitempty
+  machinePort.userVariable string
+  machinePort.verification string omitempty
+  machinePort.verify bool
   network struct diskdiscovery.DiscoveryNetwork
   network.address string
   network.bondOptions []string omitempty

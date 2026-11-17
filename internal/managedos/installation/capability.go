@@ -572,14 +572,18 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 			}
 		}
 	}
+	port := request.Target.MachinePort
+	if port.UserVariable == "" || port.PasswordVariable == "" {
+		return lifecycle.RunResult{}, refusal("lifecycle.state", "the frozen machine port names no controller account material", "")
+	}
 	materials := []lifecycle.MaterialFile{
-		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: request.Target.Controller.CredentialsRef, Variable: "controllerUser"},
-		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: request.Target.Controller.CredentialsRef, Variable: "controllerPassword"},
+		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: request.Target.Controller.CredentialsRef, Variable: port.UserVariable},
+		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: request.Target.Controller.CredentialsRef, Variable: port.PasswordVariable},
 		{Name: "fleet-id", Part: secrets.PrivateKeyPart, Secret: request.FleetKeyRef, Variable: "fleetIdentity"},
 	}
-	if request.Target.Controller.TrustBundleRef != "" {
+	if port.CAVariable != "" {
 		materials = append(materials,
-			lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: request.Target.Controller.TrustBundleRef, Variable: "controllerCA"})
+			lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: request.Target.Controller.TrustBundleRef, Variable: port.CAVariable})
 	}
 	// The private publication carries the delivered key pair itself.
 	if request.Target.Channel == substrate.ChannelDeliveredKey {

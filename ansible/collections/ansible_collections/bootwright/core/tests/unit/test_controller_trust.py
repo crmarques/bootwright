@@ -102,6 +102,12 @@ def test_every_redfish_call_passes_the_controller_bundle(role):
 
 # Each lifecycle role renders the bundle's PEM from the material file the
 # capability wrote, and nothing when the controller declares no bundle.
+PORTED = {
+    "managedos_install_anaconda": lambda port: {"bootwright_os_install_request": {"target": {"machinePort": port}}},
+    "machine_power": lambda port: {"bootwright_machine_power_request": {"machinePort": port}},
+}
+
+
 @pytest.mark.parametrize("role, material, variable", [
     ("managedos_install_anaconda", "bootwright_os_install_material", "managedos_install_anaconda_ca_data"),
     ("substrate_baremetal_machine", "bootwright_substrate_physical_material", "substrate_baremetal_machine_ca_data"),
@@ -112,8 +118,17 @@ def test_each_lifecycle_role_reads_the_bundle_it_was_handed(lookups, tmp_path, r
     bundle.write_text("-----BEGIN CERTIFICATE-----\nQ0E=\n-----END CERTIFICATE-----\n")
     pem = "-----BEGIN CERTIFICATE-----\nQ0E=\n-----END CERTIFICATE-----\n"
     for handed, expected in (({"controllerCA": str(bundle)}, pem), ({}, "")):
-        variables = dict(defaults(role), **{material: handed})
+        variables = dict(defaults(role), **{material: dict(handed, controllerUser="/run/user")})
+        port = {"endpoint": "https://bmc.example.test", "verify": True, "userVariable": "controllerUser"}
+        if handed:
+            port["caVariable"] = "controllerCA"
+        # The roles that read the frozen port take the bundle's name from it.
+        variables.update(PORTED[role](port) if role in PORTED else {})
         assert Templar(loader=LOADER, variables=variables).template(variables[variable]) == expected
+    if role in PORTED:
+        port = {"endpoint": "https://bmc.example.test", "verify": True, "userVariable": "portUser", "caVariable": "portCA"}
+        variables = dict(defaults(role), **{material: {"portUser": "/run/user", "portCA": str(bundle)}}, **PORTED[role](port))
+        assert Templar(loader=LOADER, variables=variables).template(variables[variable]) == pem
     for name, _module, arguments, _task in calls(role):
         port = PORT_BUNDLE.get(ENTRY_FILES.get(name[:-len(".yml")], name[:-len(".yml")]))
         generic = "bootwright_machine_port.ca" in str(arguments["ca_data"])

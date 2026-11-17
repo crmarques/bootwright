@@ -266,11 +266,45 @@ func TestAFleetKeyThatWouldLeaveItsKickstartLineRefuses(t *testing.T) {
 // operation: the request binds the bundle and the adapter receives it as its
 // own file. One that declares none is reached through the system trust store,
 // so nothing is bound or written for it.
+// The controller's material is written under the names the frozen machine
+// port gives it, the ones the role reads through machine_port_access.
+func TestInstallationMaterialsTakeTheirNamesFromTheMachinePort(t *testing.T) {
+	call, request := execution(t, "digest")
+	request.Target.Controller.TrustBundleRef = "lab-bmc-ca"
+	request.Target.MachinePort.UserVariable, request.Target.MachinePort.PasswordVariable, request.Target.MachinePort.CAVariable = "portUser", "portPassword", "portCA"
+	canonical, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	call.Block.Request = canonical
+	absent, _ := json.Marshal(Evidence{Absent: true, Postcondition: true, Request: "digest"})
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: absent}}
+	if _, err := New(runner).Destroy(context.Background(), call); err != nil {
+		t.Fatalf("destroy: %v", err)
+	}
+	named := map[string]string{}
+	for _, file := range runner.requests[0].Materials {
+		named[file.Name] = file.Variable
+	}
+	if named["bmc-user"] != "portUser" || named["bmc-password"] != "portPassword" || named["bmc-ca"] != "portCA" {
+		t.Fatalf("the controller material is named %v", named)
+	}
+	request.Target.MachinePort.PasswordVariable = ""
+	if canonical, err = request.Canonical(); err != nil {
+		t.Fatal(err)
+	}
+	call.Block.Request = canonical
+	if _, err := New(runner).Destroy(context.Background(), call); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+		t.Fatalf("a port naming no password material was not refused: %v", err)
+	}
+}
+
 func TestInstallationMaterialsIncludeTheControllerBundle(t *testing.T) {
 	for name, bundle := range map[string]string{"declared": "lab-bmc-ca", "absent": ""} {
 		t.Run(name, func(t *testing.T) {
 			call, request := execution(t, "digest")
 			request.Target.Controller.TrustBundleRef = bundle
+			request.Target.MachinePort.CAVariable = map[bool]string{true: "controllerCA"}[bundle != ""]
 			canonical, err := request.Canonical()
 			if err != nil {
 				t.Fatal(err)

@@ -65,7 +65,7 @@
   },
   "os-disk-discovery-v1": {
     "contentDigest": "3b221fbf4c47753b9c26ee7ef35529319dc69b2e834eede019e150c94cf3c53c",
-    "fingerprint": "caf121ac03205a512f3d6b095c9c637eb575a9ba6589e36b91bda1cde083f9ee"
+    "fingerprint": "c623a7b6d4e51e0fd1f6347e44dd249f969ad7e1d6805a0956646c1a53d03a1e"
   },
   "os-host-firewall-v1": {
     "contentDigest": "ef74fbe8098b01389b0dcef264da682b89702c0bc590db7d5a40412626a3c9cd",

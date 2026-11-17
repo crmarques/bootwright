@@ -21,6 +21,9 @@ argument_specs:
           controller:
             type: dict
             required: true
+          machinePort:
+            type: dict
+            required: true
           interfaces:
             type: list
             required: true

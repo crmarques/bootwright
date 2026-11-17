@@ -11,8 +11,8 @@ machine_power_attempts: 150
 # verified against, or empty when the controller declares none and the system
 # trust store anchors it.
 machine_power_ca_data: >-
-  {{ lookup('ansible.builtin.file', bootwright_machine_power_material.controllerCA, rstrip=false)
-     if bootwright_machine_power_material.controllerCA | default('') | length > 0 else '' }}
+  {{ lookup('ansible.builtin.file', machine_power_access.ca, rstrip=false)
+     if machine_power_access.ca | length > 0 else '' }}
 
 # The identity verdict of what the machine's controller reports, from the one
 # rule module_utils/machine_identity.py owns with the bare-metal target proof.

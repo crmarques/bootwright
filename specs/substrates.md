@@ -50,7 +50,8 @@ reaches a machine port also freezes one `machinePort` object per target from
 the realized target: the controller's endpoint and transport verification, the
 volume a pushed image is written to, and the names of the material variables
 that hold the controller's account, trust bundle and pinned identity, never
-their values. The collection's `machine_port_access` filter resolves it, so a
+their values. The capability writes the controller's material under those
+names, and the collection's `machine_port_access` filter resolves it, so a
 consumer adds only its operation's arguments. A new arm follows
 the [implementation touch set](architecture.md#adding-an-implementation-of-an-existing-capability).
 

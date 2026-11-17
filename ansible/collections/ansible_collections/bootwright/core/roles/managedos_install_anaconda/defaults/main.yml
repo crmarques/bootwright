@@ -78,7 +78,7 @@ managedos_install_anaconda_verify: '{{ bootwright_os_install_request.target.cont
 # The controller's trust bundle, the one anchor its transport is verified
 # against, as the path of its material file and as its PEM; both are empty
 # when the controller declares none and the system trust store anchors it.
-managedos_install_anaconda_controller_ca: "{{ bootwright_os_install_material.controllerCA | default('') }}"
+managedos_install_anaconda_controller_ca: "{{ managedos_install_anaconda_port_access.ca }}"
 managedos_install_anaconda_ca_data: >-
   {{ lookup('ansible.builtin.file', managedos_install_anaconda_controller_ca, rstrip=false)
      if managedos_install_anaconda_controller_ca | length > 0 else '' }}
