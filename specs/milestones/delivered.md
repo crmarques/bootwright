@@ -16772,3 +16772,18 @@ refused. The unregistration bound the spec stated (300 s) is corrected to the
 330 s session the role always ran. A pin test shows the frozen values equal the
 roles' former Jinja over every request golden.
 
+## X541 — Ceph data service helpers
+
+### B1510
+
+Split from B1465 under [D274](backlog.md#d274) (part of audit 005 W4.5). One
+known-hosts builder assembles the fleet key and known-hosts material for the
+host, SMB, replication and export paths, one completed-apply predicate replaces
+eight copies (the cluster retirement scan keeps its own, since it admits a
+pending block), and one boundary refusal list serves the host, SMB, replication
+and cluster tables, all 191 entries unchanged. In the Python executor one
+`recovery_scope` on the resource worker replaces the per-worker copies and
+every bootstrap hold takes one form. The outcome map and a separate hold
+helper the audit named no longer existed. Every request, refusal and golden is
+unchanged; the native bundle's digest moves with its sources.
+
