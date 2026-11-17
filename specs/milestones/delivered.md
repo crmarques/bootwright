@@ -17082,3 +17082,20 @@ preparation scope or overwrites its effect-bearing kinds, and a preparation
 judges unclaimed objects by its own definition. Every plan, journal, refusal
 and golden is unchanged, and the per-decision compile and lending counts hold.
 
+## X555 — Keyring reservations in one record
+
+### B1525
+
+Split from B1468 under [D274](backlog.md#d274) (7), which the owner confirmed
+on 2026-11-17. The local keyring's identity reservations are a closed
+`reserved` member of its encrypted, authenticated metadata, capped at 32768,
+written with the metadata in one compare-and-swap replace under the exclusive
+lock; a missing, disordered, duplicated, incomplete, foreign or oversized
+record refuses before any session, and a keyring an earlier build wrote with
+one file per reservation is refused with its remedy. The Python export worker
+applies the CSI export principals' grants Go already froze instead of
+re-deriving them. One Ceph base request is derived per plan, and each caller
+gets a deep copy that refuses any field kind it cannot copy. An independent
+safety review found no blocking problem; its follow-ups are the deep copy fix
+and [B1528](m1.md#b1528).
+
