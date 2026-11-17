@@ -16689,3 +16689,21 @@ power target refused for its identity rather than its addresses now says so
 as before; its two message fixes are applied. An operator run of an install, a
 power and an erase is owed.
 
+## X528 — Host state read once
+
+### B1497
+
+Split from B1468 under [D274](backlog.md#d274) (audit 005 W7.2). The
+controller's socket check reads the host-wide firewall state, policies and
+direct rules once per check and each zone or service once, and a socket the
+shared 45 s budget never reached says so. The managed OS firewall worker
+answers its zone reads from one `--list-all-zones` snapshot per side, forgotten
+after every change, and falls back to the per-zone reads only when that
+listing is too large or not ASCII. The libvirt NetworkManager provider reads
+the foreign profiles' interfaces in one call and reuses an inspection within a
+settle. The libvirt host role installs its packages in one `dnf` transaction,
+reported changed unless `dnf` did nothing. Each verdict, refusal and recorded
+evidence is unchanged apart from the budget wording. An independent review
+found no wrong verdict; its fixes are applied. An operator libvirt host apply
+is owed.
+
