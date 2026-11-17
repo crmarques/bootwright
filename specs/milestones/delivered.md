@@ -17112,7 +17112,7 @@ timeouts from the request; Go freezes the NVMe-oF unit observer's read bound;
 the installation and disk discovery capabilities name controller material by
 the frozen machine port, which the Anaconda and power roles read; the
 end-to-end cases render once per test binary. The parallel client tool
-downloads and the erase material writer are [B1529](m1.md#b1529).
+downloads and the erase material writer are [B1529](#b1529).
 
 ## X557 — Structure remainders
 
@@ -17157,4 +17157,19 @@ can reach the cap in months while an interactive one cannot. The exclusive
 publish port nothing called since X555 left the secret area, with the tests
 that exercised it, and the crash harness no longer tolerates stages under the
 retired identities directory.
+
+## X562 — Client tools at once, erase material by the port
+
+### B1529
+
+Split from B1526 under [D274](backlog.md#d274). The controller prepares its
+client tools under one `continue` and one `controller_tool` call: every tool is
+checked and the bundle's capacity reserved first, then each missing source is
+acquired by a fixed worker interpreter started through the bounded runner, at
+most four at once and two per host, never by forking inside the Ansible
+worker; after a refusal no new download starts, the running ones are joined
+and the first refusal in input order is reported, worded as before. The
+physical erase capability and its controller name the controller material by
+the frozen machine port, as installation and discovery do. No contract moved.
+A live controller run is owed for the worker's import of the collection.
 
