@@ -990,6 +990,7 @@ type testCapability struct {
 	released    func(string)
 	observeHold func(string)
 	destroyHold func(string)
+	probeHold   func(string)
 	// outcomeFor and errorFor answer per block. Blocks running together finish
 	// in no fixed order, so a queue of scripted outcomes would be handed out by
 	// a race rather than by the test.
@@ -1154,7 +1155,11 @@ func (c *testCapability) Quiescent(_ context.Context, probe Probe) (Quiescence, 
 	c.record(&c.probes, probe.Block.ID)
 	c.mutex.Lock()
 	c.probed = append(c.probed, probe.Execution())
+	hold := c.probeHold
 	c.mutex.Unlock()
+	if hold != nil {
+		hold(probe.Block.ID)
+	}
 	if c.quiescentErr != nil {
 		return Quiescence{}, c.quiescentErr
 	}
@@ -2544,6 +2549,41 @@ func TestFreshDestroyProbesEveryBlockAndNamesEachLiveOne(t *testing.T) {
 	}
 	if len(h.capability.probes) != 2 {
 		t.Fatalf("probed %v, want every block", h.capability.probes)
+	}
+}
+
+// The probes are independent reads, so two slow ones run at once: each waits
+// for the other to start, which a probe-at-a-time gate never lets happen.
+func TestFreshDestroyProbesIndependentBlocksAtOnce(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab", "machine-rhel-01")
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	h.service.options.Concurrency = 2
+	var arrived sync.WaitGroup
+	arrived.Add(2)
+	both := make(chan struct{})
+	go func() {
+		arrived.Wait()
+		close(both)
+	}()
+	var calls atomic.Int64
+	h.capability.probeHold = func(string) {
+		if calls.Add(1) > 2 {
+			return
+		}
+		arrived.Done()
+		select {
+		case <-both:
+		case <-time.After(5 * time.Second):
+			t.Error("a probe waited alone: the quiescence probes ran one at a time")
+		}
+	}
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.capability.probes) != 2 {
+		t.Fatalf("probed %v, want both blocks", h.capability.probes)
 	}
 }
 

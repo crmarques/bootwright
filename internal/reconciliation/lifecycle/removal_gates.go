@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/fanout"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -239,40 +240,25 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 		return err
 	}
 	err := s.withPython(ctx, approved, func(launch prerequisites.PythonLaunch) error {
-		for index, block := range blocks {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
-			if !ok {
-				return failure("lifecycle.state",
-					"this executable does not offer the implementation this block froze",
-					"install the executable that registered this operation")
-			}
-			s.reportCheck(ctx, ProgressEvent{
-				Group: block.ID, Detail: block.Kind + "/" + block.Object, Status: "running",
-				Completed: index, Declared: len(blocks),
-			})
-			applyOperation, err := held.ownerFor(block.ID)
-			if err != nil {
-				return err
-			}
-			applyProved, err := s.applyDependencies(ctx, store, applyOperation, block.ID)
-			if err != nil {
-				return err
-			}
-			lend, release, err := s.producedLender(block, held.lending(plan), true, s.producedInContext(contextName))
-			if err != nil {
-				return err
-			}
-			state, err := capability.Quiescent(ctx, Probe{
-				ApplyOperation: applyOperation, ApplyProved: applyProved, Context: contextName, Block: block, Launch: launch, Material: material,
-				RetiredWithHosts: phases.retired[block.ID], LendProduced: lend,
-			})
-			release()
-			if err != nil {
-				return err
-			}
+		settled := 0
+		outcomes := fanout.Run(ctx, fanout.Options[reconciliation.Block, Quiescence]{
+			Limit: s.Concurrency(), Throttle: s.Throttle(),
+			Key: func(block reconciliation.Block) string { return block.Throttle },
+			Started: func(index int) {
+				s.reportCheck(ctx, ProgressEvent{
+					Group: blocks[index].ID, Detail: blocks[index].Kind + "/" + blocks[index].Object, Status: "running",
+					Completed: settled, Declared: len(blocks),
+				})
+			},
+			Settled: func(int, fanout.Outcome[Quiescence]) { settled++ },
+		}, blocks, func(ctx context.Context, block reconciliation.Block) (Quiescence, error) {
+			return s.probeQuiescent(ctx, store, contextName, plan, phases, material, held, launch, block)
+		})
+		if err := fanout.FirstError(outcomes); err != nil {
+			return err
+		}
+		for index, outcome := range outcomes {
+			state, block := outcome.Value, blocks[index]
 			if state.Settled() {
 				continue
 			}
@@ -313,6 +299,32 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 		remediation = named
 	}
 	return failure("lifecycle.live", "this removal would take back state that is still in use: "+strings.Join(live, ", "), remediation)
+}
+
+func (s Service) probeQuiescent(ctx context.Context, store OperationStore, contextName string, plan reconciliation.Plan, phases removalPhases, material map[string]secrets.Material, held lineage, launch prerequisites.PythonLaunch, block reconciliation.Block) (Quiescence, error) {
+	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
+	if !ok {
+		return Quiescence{}, failure("lifecycle.state",
+			"this executable does not offer the implementation this block froze",
+			"install the executable that registered this operation")
+	}
+	applyOperation, err := held.ownerFor(block.ID)
+	if err != nil {
+		return Quiescence{}, err
+	}
+	applyProved, err := s.applyDependencies(ctx, store, applyOperation, block.ID)
+	if err != nil {
+		return Quiescence{}, err
+	}
+	lend, release, err := s.producedLender(block, held.lending(plan), true, s.producedInContext(contextName))
+	if err != nil {
+		return Quiescence{}, err
+	}
+	defer release()
+	return capability.Quiescent(ctx, Probe{
+		ApplyOperation: applyOperation, ApplyProved: applyProved, Context: contextName, Block: block, Launch: launch, Material: material,
+		RetiredWithHosts: phases.retired[block.ID], LendProduced: lend,
+	})
 }
 
 // reportCheck streams one row of a read-only gate. It belongs to no effect
