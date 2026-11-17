@@ -17173,3 +17173,17 @@ physical erase capability and its controller name the controller material by
 the frozen machine port, as installation and discovery do. No contract moved.
 A live controller run is owed for the worker's import of the collection.
 
+## X563 — Coverage floors after the audit program
+
+### B1538
+
+Gate repair found by the audit 005 program's final `make cover`, under the
+owner's request of 2026-11-17 that the full gates at the end fix every
+failure. Three packages measured below their floors because code moved into
+them by X530 to X557 kept its pin tests elsewhere:
+`internal/infrastructureservices` (84.5% against 92.8%), `internal/managedos`
+(92.8% against 94.5%) and `internal/substrate/libvirt` (87.4% against 87.5%).
+Tests of their own bring them to 96.8%, 97.0% and 91.3%; the floors of the
+packages the program added are recorded and the stale ones raised. No
+production code changed and no floor fell.
+
