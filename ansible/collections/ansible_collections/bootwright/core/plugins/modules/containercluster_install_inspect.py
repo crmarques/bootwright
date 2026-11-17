@@ -29,7 +29,7 @@ description:
     within the bound and names no identity, or its last 8 KiB show a cut
     rewrite past the bound, as a write the installer was
     killed in leaves it, and the kept copy names this installation's identity.
-  - Without O(keep) or O(restore) it performs no change and is safe to repeat.
+  - Without O(keep), O(restore) or O(wait) it performs no change and is safe to repeat.
   - O(registered) reads which declared nodes the assisted service on the
     rendezvous host has registered, in one request over plain HTTP bounded in
     time and size, with the watcher token the installer keeps in its asset
@@ -88,6 +88,33 @@ options:
     description: The absolute path of the located oc executable, for O(cluster).
     type: path
     default: ""
+  wait:
+    description:
+      - Wait for this installer milestone within O(budget) seconds, re-invoking
+        the installer after each give-up it can resume from while the budget
+        lasts, each attempt under timeout with what the budget has left and
+        each after the restore O(restore) describes, then classify the last
+        result and, after a bootstrap stall, timeout or spent budget, read
+        once which declared nodes registered, as O(registered) does.
+      - Exclusive with O(keep), O(restore), O(registered) and O(cluster).
+    type: str
+    choices:
+      - ""
+      - bootstrap-complete
+      - install-complete
+    default: ""
+  budget:
+    description: The seconds the frozen request gives this wait's phase, for O(wait).
+    type: int
+    default: 0
+  installer:
+    description: The absolute path of the located installer executable, for O(wait).
+    type: path
+    default: ""
+  restored:
+    description: Whether an earlier wait of this apply restored the installer's kubeconfig, for O(wait).
+    type: bool
+    default: false
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -113,6 +140,14 @@ EXAMPLES = r"""
     request: '{{ bootwright_cluster_install_request }}'
     cluster: true
     client: '{{ containercluster_install_agent_client }}'
+    identity: '{{ containercluster_install_agent_before.observation.identity }}'
+
+- name: Wait for the installer to report bootstrap completion within its budget
+  bootwright.core.containercluster_install_inspect:
+    request: '{{ bootwright_cluster_install_request }}'
+    wait: bootstrap-complete
+    budget: '{{ bootwright_cluster_install_request.budgets.bootstrapSeconds }}'
+    installer: '{{ containercluster_install_agent_installer }}'
     identity: '{{ containercluster_install_agent_before.observation.identity }}'
 
 - name: Read which declared nodes never registered after a stall
@@ -159,6 +194,25 @@ answered:
   description: With O(cluster), whether the cluster answered both reads.
   returned: when O(cluster) is true
   type: bool
+outcome:
+  description:
+    - With O(wait), C(reached), C(host-error), C(stalled), C(budget-spent),
+      C(timeout), C(unclassified), or C(restore-refused) when the kept copy
+      could not be restored and the installer never ran.
+  returned: when O(wait) is set
+  type: str
+message:
+  description: With O(wait), why the milestone was never reached, leading with its classification.
+  returned: when O(wait) is set and the outcome is not C(reached)
+  type: str
+restored:
+  description: With O(wait), whether this wait or an earlier one of this apply restored the installer's kubeconfig.
+  returned: when O(wait) is set
+  type: bool
+rc:
+  description: With O(wait), the last attempt's exit status, or none when no attempt ran.
+  returned: when O(wait) is set
+  type: int
 """
 
 import base64
@@ -177,6 +231,7 @@ import time
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils import containercluster_cluster_read
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_install_wait as waiting
 from ansible_collections.bootwright.core.plugins.module_utils.containercluster_work_area import (
     MARKER,
     inserted,
@@ -688,6 +743,24 @@ def registration(request):
     return result
 
 
+def installer_wait(module):
+    """Wait for one milestone under the budget the request froze, and say why it was never reached."""
+    params = module.params
+    request, milestone = params["request"], params["wait"]
+    if module.check_mode or not os.path.isabs(params["installer"]):
+        module.fail_json(msg="the installer wait request is malformed")
+    try:
+        result = waiting.wait(request, milestone, params["budget"],
+                              waiting.installer(params["installer"], milestone, request["workRoot"]),
+                              lambda: restore(request, params["identity"]), lambda: registration(request),
+                              params["restored"])
+    except OSError as error:
+        module.fail_json(msg="the installer's kubeconfig could not be restored: %s" % error.strerror)
+    except (KeyError, TypeError, ValueError):
+        module.fail_json(msg="the installer wait request is malformed")
+    return result.pop("changed"), result
+
+
 def main():
     module = AnsibleModule(
         argument_spec={
@@ -698,10 +771,19 @@ def main():
             "registered": {"type": "bool", "default": False},
             "cluster": {"type": "bool", "default": False},
             "client": {"type": "path", "default": ""},
+            "wait": {"type": "str", "default": "", "choices": [""] + list(waiting.MILESTONES)},
+            "budget": {"type": "int", "default": 0},
+            "installer": {"type": "path", "default": ""},
+            "restored": {"type": "bool", "default": False},
         },
         supports_check_mode=True,
     )
     request, changed, result = module.params["request"], False, {}
+    chosen = [name for name in ("keep", "restore", "registered", "cluster", "wait") if module.params[name]]
+    if module.params["wait"] and len(chosen) > 1:
+        module.fail_json(msg="wait runs the installer, so it is exclusive with keep, restore, registered and cluster")
+    if module.params["wait"]:
+        changed, result = installer_wait(module)
     if module.params["keep"] and module.params["restore"]:
         module.fail_json(msg="keep and restore are exclusive")
     if module.params["registered"] and (module.params["keep"] or module.params["restore"]):

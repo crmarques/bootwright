@@ -104,6 +104,7 @@
     vips_not_probed: '{{ containercluster_install_agent_vips_not_probed | default([]) }}'
     placement: '{{ containercluster_install_agent_placement_read }}'
     # Whether a wait of this apply put the kept copy back in place of the
-    # installer's own kubeconfig (wait_attempt.yml).
-    restored: '{{ containercluster_install_agent_restored | default(false) }}'
+    # installer's own kubeconfig: the last wait's result carries the earlier
+    # one's (wait.yml).
+    restored: '{{ (containercluster_install_agent_wait | default({})).restored | default(false) }}'
   no_log: true

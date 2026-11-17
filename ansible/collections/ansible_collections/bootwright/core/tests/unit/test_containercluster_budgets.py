@@ -11,20 +11,18 @@ left, recomputed for each attempt, a stopped one is diagnosed as the budget
 spent, the boot phase gives every node only what is left of one budget, and
 every cluster read gives up on a request after a bounded time.
 
-ansible-core templates a task's arguments once, before its first attempt, and
-retries it with those arguments (ansible/executor/task_executor.py in
-ansible-core 2.21: post_validate before the attempt loop), which is why the
-waits are a looped include rather than an until loop. GNU timeout exits 124
-once it stopped the command, and a kill after --kill-after also ends timeout's
-own process group, which a shell reports as 137 and Python's subprocess, so the
-command module, as -9 (the timeout invocation in the GNU coreutils manual,
+GNU timeout exits 124 once it stopped the command, and a kill after
+--kill-after also ends timeout's own process group, which a shell reports as
+137 and Python's subprocess as -9 (the timeout invocation in the GNU coreutils
+manual,
 https://www.gnu.org/software/coreutils/manual/html_node/timeout-invocation.html,
 and subprocess.Popen.returncode in the Python documentation).
 
-How a wait goes on from one attempt to the next is checked by running wait.yml
+How a wait goes on from one attempt to the next is checked by running the
+inspection's wait (plugins/module_utils/containercluster_install_wait.py)
 against a scripted installer and a simulated clock (Wait below), so the gate,
-the pause, the remaining time and the record step are proved together rather
-than one expression at a time. The same run restores the installer's own
+the pause, the remaining time and the record step are proved together. The
+same run restores the installer's own
 kubeconfig through the inspection's restore before each attempt (B220, D54),
 over a real work area when a test gives it one. A wait diagnosed as a stall
 then reads once which declared nodes registered with the assisted service on
@@ -46,11 +44,13 @@ import json
 import pathlib
 import threading
 import time
+from unittest import mock
 
 import pytest
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.module_utils import containercluster_cluster_read as cluster_read
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_install_wait as waiting
 from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect as inspection
 from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import (
     AGENT_CONFIG, AUTH_CONFIG, KEPT, RESTORED, STATE, UNTOUCHED, registration, restore)
@@ -172,113 +172,111 @@ def test_each_wait_reads_its_own_phases_budget():
         assert int(scope(INSTALL).template(wait["vars"]["containercluster_install_agent_budget"])) == INSTALL_BUDGETS[budget]
 
 
-def attempt():
-    return found(INSTALL, "wait_attempt.yml", lambda task: "wait-for" in argv(task))
+def wait_task():
+    return found(INSTALL, "wait.yml", lambda task: (task.get(INSPECT) or {}).get("wait") is not None)
 
 
-def test_each_installer_wait_runs_every_attempt_under_what_its_budget_has_left():
-    wait = trusted(INSTALL / "tasks" / "wait.yml")
-    # The deadline is set once, before the attempts, and the attempts are a
-    # bounded loop of includes rather than retries of one templated task.
-    assert "containercluster_install_agent_deadline" in wait[0]["ansible.builtin.set_fact"]
-    looped = wait[1]
-    assert looped["ansible.builtin.include_tasks"] == "wait_attempt.yml"
-    assert scope(INSTALL).template(looped["loop"]) == list(range(41))
-    for name in ("wait.yml", "wait_attempt.yml"):
-        for task in role_tasks.flatten(trusted(INSTALL / "tasks" / name)):
-            assert not {"until", "retries"} & set(task), "%s: %s" % (name, task.get("name"))
-    # What is left is taken in the attempt, from the deadline, and nowhere else.
-    tasks = trusted(INSTALL / "tasks" / "wait_attempt.yml")[0]["block"]
-    taking = [index for index, task in enumerate(tasks)
-              if "containercluster_install_agent_remaining" in (task.get("ansible.builtin.set_fact") or {})]
-    running = tasks.index(attempt())
-    assert len(taking) == 1 and taking[0] < running
-    # Every attempt that runs takes it afresh: a condition on it would leave a
-    # later attempt the time an earlier one was given.
-    assert "when" not in tasks[taking[0]]
-    assert "containercluster_install_agent_remaining" not in (INSTALL / "tasks" / "wait.yml").read_text()
-    # The deadline is the wait's, set once in wait.yml: an attempt that set it
-    # again would hand each attempt a fresh budget.
-    assert not [task for task in role_tasks.flatten(trusted(INSTALL / "tasks" / "wait_attempt.yml"))
-                if "containercluster_install_agent_deadline" in (task.get("ansible.builtin.set_fact") or {})]
-    assert "containercluster_install_agent_deadline:" not in (INSTALL / "tasks" / "wait_attempt.yml").read_text()
-    remaining = tasks[taking[0]]["ansible.builtin.set_fact"]["containercluster_install_agent_remaining"]
-    for left in (4703, 17, -5):
-        rendered = int(scope(INSTALL, containercluster_install_agent_deadline=now() + left).template(remaining))
-        assert left - 2 <= rendered <= left
-    command = argv(attempt())
-    assert command[0] == "/usr/bin/timeout"
-    assert command[4:7] == ["agent", "wait-for", "{{ containercluster_install_agent_milestone }}"]
-    rendering = scope(INSTALL, containercluster_install_agent_remaining=17)
-    grace = rendering.template(command[1])
-    assert grace.startswith("--kill-after=") and grace.endswith("s")
-    assert 0 < int(grace[len("--kill-after="):-1]) <= 60
-    assert rendering.template(command[2]) == "17s"
-    assert rendering.template(command[3]) == "/installer"
-    assert not scope(INSTALL, containercluster_install_agent_remaining=0).evaluate_conditional(attempt()["when"])
+# The wait is one task and one failure: the inspection runs every attempt,
+# takes the time each may run from the deadline the budget sets once, and
+# classifies the result; wait.yml binds the frozen budget and reports.
+def test_each_installer_wait_is_one_inspection_bound_to_its_phases_budget_and_one_failure():
+    tasks = trusted(INSTALL / "tasks" / "wait.yml")
+    assert [next(key for key in task if "." in key) for task in tasks] == [INSPECT, "ansible.builtin.fail"]
+    task = wait_task()
+    assert task[INSPECT]["wait"] == "{{ containercluster_install_agent_milestone }}"
+    assert task[INSPECT]["budget"] == "{{ containercluster_install_agent_budget }}"
+    assert task[INSPECT]["installer"] == "{{ containercluster_install_agent_installer }}"
+    assert task["no_log"] is True and "failed_when" not in task
+    for task in role_tasks.flatten(tasks):
+        assert not {"until", "retries", "loop"} & set(task), task.get("name")
+    report = tasks[1]
+    assert report["ansible.builtin.fail"]["msg"] == "{{ containercluster_install_agent_wait.message }}"
+    assert report["when"] == "containercluster_install_agent_wait.outcome != 'reached'"
+    assert not (INSTALL / "tasks" / "wait_attempt.yml").exists()
 
 
-def record(rc, stderr="", skipped=False):
-    """What the attempt records for one result: the wait's result and whether another follows."""
-    task = found(INSTALL, "wait_attempt.yml",
-                 lambda task: "containercluster_install_agent_waiting" in (task.get("ansible.builtin.set_fact") or {}))
-    result = {"skipped": True} if skipped else {"rc": rc, "stderr": stderr, "changed": rc == 0}
-    rendering = scope(INSTALL, containercluster_install_agent_attempted=result,
-                      containercluster_install_agent_wait={"rc": 1, "stderr": "earlier"})
-    facts = task["ansible.builtin.set_fact"]
-    return (rendering.template(facts["containercluster_install_agent_wait"]),
-            rendering.template(facts["containercluster_install_agent_waiting"]))
+def attempted(rc, stderr=""):
+    """The outcome of a wait whose only attempt ended so, and whether another attempt followed it."""
+    runs = []
+
+    def attempt(seconds):
+        runs.append(seconds)
+        return (rc, stderr) if len(runs) == 1 else (0, "")
+
+    clock = Clock()
+    record = waiting.attempts(4703, attempt, lambda: UNTOUCHED, lambda: clock.seconds,
+                              lambda seconds: setattr(clock, "seconds", clock.seconds + seconds))
+    return record, len(runs) > 1
 
 
-def failure(wait, stalled=False):
-    """The message the wait fails with for its last result, or None when it reached the milestone."""
-    task = found(INSTALL, "wait.yml", lambda task: "ansible.builtin.fail" in task)
-    rendering = scope(INSTALL, containercluster_install_agent_wait=wait, containercluster_install_agent_budget=4703,
-                      containercluster_install_agent_milestone="bootstrap-complete",
-                      containercluster_install_agent_stalled=stalled, **(task.get("vars") or {}))
-    if not rendering.evaluate_conditional(task["when"]):
+def failure(rc, stderr, stalled=False):
+    """The message a wait whose last attempt ended so fails with, or None when it reached the milestone."""
+    record = {"rc": rc, "stderr": stderr, "stalled": stalled, "restored": False, "refused": False}
+    outcome = waiting.classify(record)
+    if outcome == "reached":
         return None
-    return rendering.template(task["ansible.builtin.fail"]["msg"])
+    return waiting.message(outcome, record, INSTALL_REQUEST, "bootstrap-complete", 4703)
 
 
 @pytest.mark.parametrize("rc", SPENT)
 def test_an_attempt_the_budget_stopped_is_the_budget_spent_and_never_resumed(rc):
     # Its output carries a give-up the installer could be resumed after, so
     # only the exit status keeps the wait from going on.
-    assert record(rc)[1] is False
-    assert record(rc, TIMED_OUT)[1] is False
-    message = failure({"rc": rc, "stderr": TIMED_OUT})
+    assert attempted(rc)[1] is False
+    assert attempted(rc, TIMED_OUT)[1] is False
+    message = failure(rc, TIMED_OUT)
     assert message.startswith("this wait's budget of 4703 seconds was spent while the installer was still watching")
 
 
 def test_only_a_give_up_the_installer_can_resume_from_is_resumed():
-    assert record(1, TIMED_OUT)[1] is True
-    assert record(1, STALLED)[1] is True
+    assert attempted(1, TIMED_OUT)[1] is True
+    assert attempted(1, STALLED)[1] is True
     # Success ends the wait even when its output recorded an earlier give-up.
-    assert record(0, TIMED_OUT)[1] is False
+    assert attempted(0, TIMED_OUT)[1] is False
     # A host in error ends it although the same output carries a resumable give-up.
-    assert record(1, HOST_ERROR)[1] is False
-    assert record(1, "level=fatal msg=\"failed to fetch the cluster\"")[1] is False
+    assert attempted(1, HOST_ERROR)[1] is False
+    assert attempted(1, "level=fatal msg=\"failed to fetch the cluster\"")[1] is False
 
 
 def test_the_budget_spent_is_told_apart_from_the_installers_own_give_ups():
-    timed_out = TIMED_OUT
-    assert record(1, timed_out)[1] is True
-    assert failure({"rc": 1, "stderr": timed_out}).startswith("the installer stopped watching on its own compiled deadline")
+    assert attempted(1, TIMED_OUT)[1] is True
+    assert failure(1, TIMED_OUT).startswith("the installer stopped watching on its own compiled deadline")
     # No attempt ran because nothing of the budget was left.
-    assert failure({"rc": None, "stderr": ""}).startswith("this wait's budget of 4703 seconds was spent")
+    assert failure(None, "").startswith("this wait's budget of 4703 seconds was spent")
     # A host in error stopped the installation whatever stopped the wait.
     for rc in (1,) + SPENT:
-        assert failure({"rc": rc, "stderr": "cluster has hosts in error"}).startswith(
-            "the assisted service moved a declared host into error")
-    assert failure({"rc": 0, "stderr": ""}) is None
-    assert record(0) == ({"rc": 0, "stderr": "", "changed": True}, False)
-    # An attempt skipped for want of time keeps the one before it as the result.
-    assert record(None, skipped=True) == ({"rc": 1, "stderr": "earlier"}, False)
+        assert failure(rc, "cluster has hosts in error").startswith("the assisted service moved a declared host into error")
+    assert failure(0, "") is None
+    record = attempted(0)[0]
+    assert (record["rc"], record["stderr"], waiting.classify(record)) == (0, "", "reached")
+
+
+# An attempt runs the installer's wait under timeout with what is left,
+# through the bounded runner, whose own bound lies past the kill-after grace.
+def test_an_attempt_runs_the_installer_under_timeout_with_what_is_left(monkeypatch):
+    runs = []
+
+    def run(argv, data, timeout, limit, environment):
+        runs.append((argv, timeout, environment))
+        return 124, b"", "level=fatal msg=\"bootstrap process timed out\"".encode()
+
+    monkeypatch.setattr(waiting.bounded_process, "run", run)
+    assert waiting.installer("/installer", "bootstrap-complete", "/work")(17) == (124, TIMED_OUT)
+    (argv, timeout, environment), = runs
+    assert argv == ["/usr/bin/timeout", "--kill-after=30s", "17s", "/installer", "agent", "wait-for",
+                    "bootstrap-complete", "--dir", "/work", "--log-level", "info"]
+    assert 17 + 30 < timeout <= 17 + 60
+    assert "HTTPS_PROXY" not in environment and "KUBECONFIG" not in environment
+
+    def stalled(argv, data, timeout, limit, environment):
+        raise waiting.bounded_process.Failure("timeout")
+
+    monkeypatch.setattr(waiting.bounded_process, "run", stalled)
+    assert waiting.installer("/installer", "install-complete", "/work")(17)[0] in SPENT
 
 
 class Clock:
-    """The now() the rendered templates read, so a simulated wait takes no time.
+    """The integer seconds a simulated wait reads, and the now() the rendered templates read, so neither takes time.
 
     It answers as ansible-core's own now() does (_now in
     _internal/_templating/_jinja_plugins.py): a naive datetime, in UTC when utc
@@ -297,32 +295,20 @@ class Clock:
         return moment.strftime(fmt) if fmt else moment
 
 
-class Failed(Exception):
-    """A task failed the wait, with its message."""
-
-
-def conditions(task):
-    when = task.get("when")
-    return [] if when is None else list(when) if isinstance(when, list) else [when]
-
-
 class Wait:
-    """Runs wait.yml as ansible-core would, against a scripted installer and a simulated clock.
+    """Runs the inspection's wait against a scripted installer and a simulated clock.
 
-    A block's condition is evaluated again for every task in it, a looped
-    include expands every iteration before the first runs, a skipped task
-    still registers, and every value of one set_fact is templated before any
-    of them is set. Each scripted installer run is (rc, stderr, seconds); one
-    that would run past the time it was given is stopped there, exiting with
-    `stopped`, 124 at the deadline or, for a kill, one grace later.
+    Each scripted installer run is (rc, stderr, seconds); one that would run
+    past the time it was given is stopped there, exiting with `stopped`, 124
+    at the deadline or, for a kill, one grace later.
 
     The restore before each attempt runs the inspection's own restore over
     `work` with the identity the apply recorded, and `seen` keeps the
-    installer's kubeconfig as each run found it. Without a work area it answers
-    as the inspection does over an installer file that parses. The read after
-    a stall runs the inspection's own read over `work`, for a request declaring
-    `nodes`, and `reads` keeps what each read reported; without a work area it
-    answers as a read that failed.
+    installer's kubeconfig as each run found it. Without a work area it
+    answers as the inspection does over an installer file that parses. The
+    read after a stall runs the inspection's own read over `work`, for a
+    request declaring `nodes`, and `reads` keeps what each read reported;
+    without a work area it answers as a read that failed.
     """
 
     def __init__(self, script, budget=4703, stopped=124, work=None, identity="", nodes=None):
@@ -331,9 +317,9 @@ class Wait:
         self.budget = budget
         self.stopped = stopped
         self.work = work
-        self.facts = {"containercluster_install_agent_before": {"observation": {"identity": identity}}}
-        if nodes is not None:
-            self.facts["bootwright_cluster_install_request"] = dict(INSTALL_REQUEST, nodes=nodes)
+        self.identity = identity
+        self.request = dict(INSTALL_REQUEST, nodes=nodes or [])
+        self.result = {}
         self.runs = []
         self.pauses = []
         self.restores = []
@@ -344,84 +330,28 @@ class Wait:
     def run(self, milestone="bootstrap-complete"):
         """Wait for one milestone; the message it failed with, or None when it was reached."""
         self.started = self.clock.seconds
-        local = {"containercluster_install_agent_milestone": milestone, "containercluster_install_agent_budget": self.budget}
-        try:
-            for task in trusted(INSTALL / "tasks" / "wait.yml"):
-                self.task(task, [], local)
-        except Failed as failed:
-            return str(failed)
-        return None
+        self.result = waiting.wait(self.request, milestone, self.budget, self.installer, self.restore, self.read,
+                                   self.result.get("restored", False), lambda: self.clock.seconds, self.pause)
+        return self.result.get("message")
 
-    def rendering(self, local):
-        return scope(INSTALL, now=self.clock, **dict(self.facts, **local))
+    def pause(self, seconds):
+        self.pauses.append(seconds)
+        self.clock.seconds += seconds
 
-    def task(self, task, inherited, local):
-        local = dict(local, **(task.get("vars") or {}))
-        when = inherited + conditions(task)
-        if "block" in task:
-            assert not task.get("rescue") and not task.get("always"), task["name"]
-            for child in task["block"]:
-                self.task(child, when, local)
-            return
-        if "ansible.builtin.include_tasks" in task:
-            self.include(task, when, local)
-            return
-        rendering = self.rendering(local)
-        if not all(rendering.evaluate_conditional(condition) for condition in when):
-            if "register" in task:
-                self.facts[task["register"]] = {"changed": False, "skipped": True}
-            return
-        if "ansible.builtin.set_fact" in task:
-            self.facts.update({name: rendering.template(value) for name, value in task["ansible.builtin.set_fact"].items()})
-        elif "ansible.builtin.wait_for" in task:
-            seconds = int(rendering.template(task["ansible.builtin.wait_for"]["timeout"]))
-            self.pauses.append(seconds)
-            self.clock.seconds += seconds
-        elif "ansible.builtin.command" in task:
-            self.facts[task["register"]] = self.installer(task, rendering)
-        elif INSPECT in task:
-            self.facts[task["register"]] = self.inspect(rendering.template(task[INSPECT]))
-        elif "ansible.builtin.fail" in task:
-            raise Failed(rendering.template(task["ansible.builtin.fail"]["msg"]))
-        else:
-            raise AssertionError("the simulation has no model of task %r" % task.get("name"))
-
-    def include(self, task, when, local):
-        loop_var = task["loop_control"]["loop_var"]
-        rendering = self.rendering(local)
-        items = [item for item in rendering.template(task["loop"])
-                 if all(self.rendering(dict(local, **{loop_var: item})).evaluate_conditional(condition)
-                        for condition in when)]
-        included = trusted(INSTALL / "tasks" / task["ansible.builtin.include_tasks"])
-        for item in items:
-            for child in included:
-                self.task(child, [], dict(local, **{loop_var: item}))
-
-    def inspect(self, arguments):
-        if "registered" in arguments:
-            return self.read(arguments)
-        assert set(arguments) == {"request", "restore", "identity"} and arguments["restore"] is True, arguments
-        if self.work is None:
-            outcome = UNTOUCHED
-        else:
-            outcome = restore(dict(arguments["request"], workRoot=str(self.work)), arguments["identity"])
+    def restore(self):
+        outcome = UNTOUCHED if self.work is None else restore(dict(self.request, workRoot=str(self.work)), self.identity)
         self.restores.append(outcome)
-        return {"changed": outcome == RESTORED, "restore": outcome}
+        return outcome
 
-    def read(self, arguments):
-        assert set(arguments) == {"request", "registered"} and arguments["registered"] is True, arguments
+    def read(self):
         if self.work is None:
             reported = {"read": False, "unregistered": []}
         else:
-            reported = registration(dict(arguments["request"], workRoot=str(self.work)))
+            reported = registration(dict(self.request, workRoot=str(self.work)))
         self.reads.append(reported)
-        return {"changed": False, "registration": reported}
+        return reported
 
-    def installer(self, task, rendering):
-        command = [rendering.template(value) for value in argv(task)]
-        assert command[0] == "/usr/bin/timeout" and command[4:6] == ["agent", "wait-for"], command
-        assert command[1].startswith("--kill-after=") and command[1].endswith("s") and command[2].endswith("s"), command
-        grace, given = int(command[1][len("--kill-after="):-1]), int(command[2][:-1])
+    def installer(self, given):
         assert self.script, "the installer was run more often than the %d times scripted" % len(self.runs)
         rc, stderr, seconds = self.script.pop(0)
         self.runs.append((self.clock.seconds - self.started, given))
@@ -429,15 +359,9 @@ class Wait:
             self.seen.append((self.work / "auth" / "kubeconfig").read_bytes())
         if seconds >= given:
             rc = self.stopped
-            seconds = given if rc == 124 else given + grace
+            seconds = given if rc == 124 else given + waiting.GRACE
         self.clock.seconds += seconds
-        result = {"rc": rc, "stderr": stderr, "changed": rc == 0}
-        failed_when = task.get("failed_when", "rc != 0")
-        checks = conditions({"when": failed_when})
-        failing = scope(INSTALL, **{task["register"]: result})
-        if failed_when is not False and all(failing.evaluate_conditional(check) for check in checks):
-            raise Failed("the installer's own failure failed the task")
-        return result
+        return rc, stderr
 
 
 def test_a_wait_that_reaches_its_milestone_runs_the_installer_once():
@@ -543,7 +467,7 @@ def test_a_wait_over_a_truncated_installer_kubeconfig_restores_it_and_continues(
     wait = Wait([(0, "", 600)], work=work, identity=anchor())
     assert wait.run() is None
     assert wait.restores == [RESTORED] and wait.seen == [whole]
-    assert wait.facts["containercluster_install_agent_restored"] is True
+    assert wait.result["restored"] is True
     assert (work / KEPT).read_bytes() == whole
 
 
@@ -563,7 +487,7 @@ def test_a_wait_whose_kept_copy_names_another_cluster_refuses_before_the_install
     assert "did not wait for bootstrap-complete" in message and "bootwright destroy --context lab" in message
     assert wait.restores == ["refused"] and wait.runs == []
     assert (work / "auth" / "kubeconfig").read_bytes() == cut and (work / KEPT).read_bytes() == kept
-    assert "containercluster_install_agent_restored" not in wait.facts
+    assert wait.result["restored"] is False
 
 
 # A file that parses is the installer's to read, even one naming another
@@ -574,7 +498,7 @@ def test_a_wait_over_an_installer_kubeconfig_that_parses_leaves_it_as_it_is(tmp_
     wait = Wait([(1, TIMED_OUT, 60), (0, "", 600)], work=work, identity=anchor())
     assert wait.run() is None
     assert wait.restores == [UNTOUCHED, UNTOUCHED] and wait.seen == [installer, installer]
-    assert "containercluster_install_agent_restored" not in wait.facts
+    assert wait.result["restored"] is False
 
 
 # B32, D49. The asset state holds the two members the read takes, in the shape
@@ -640,18 +564,13 @@ def service_fixture(request, monkeypatch):
     return server
 
 
-def registered_read():
-    return found(INSTALL, "wait.yml", lambda task: (task.get(INSPECT) or {}).get("registered") is True)
-
-
-# The read carries the watcher token, so it runs under no_log, and it never
-# fails the wait itself: a read that fails leaves the stall's own diagnosis.
-def test_the_read_after_a_stall_runs_under_no_log_and_never_fails_the_wait_itself():
-    task = registered_read()
-    assert task[INSPECT] == {"request": "{{ bootwright_cluster_install_request }}", "registered": True}
-    assert task["no_log"] is True and task["failed_when"] is False
-    tasks = trusted(INSTALL / "tasks" / "wait.yml")
-    assert tasks.index(task) < tasks.index(found(INSTALL, "wait.yml", lambda task: "ansible.builtin.fail" in task))
+# The read carries the watcher token, so it runs inside the inspection's
+# wait, under no_log, and it never fails the wait itself: a read that fails
+# leaves the stall's own diagnosis (below).
+def test_the_read_after_a_stall_runs_inside_the_wait_under_no_log():
+    assert wait_task()["no_log"] is True
+    for path in sorted((INSTALL / "tasks").glob("*.yml")):
+        assert not [task for task in role_tasks.flatten(trusted(path)) if (task.get(INSPECT) or {}).get("registered")], path
 
 
 # The installer's two give-ups that mark a stall name no host. The read names
@@ -736,8 +655,7 @@ def test_success_host_errors_and_unrelated_failures_do_not_read_registered_hosts
 def test_a_host_in_error_after_a_stall_reads_nothing_when_the_budget_stopped_its_attempt(tmp_path, service):
     wait = Wait([(1, STALLED, 60), (1, HOST_ERROR, 10**6)], work=asset_state(tmp_path / "work"), nodes=NODES)
     message = wait.run()
-    assert wait.facts["containercluster_install_agent_stalled"] is True
-    assert wait.facts["containercluster_install_agent_wait"]["rc"] == 124
+    assert wait.result["rc"] == 124 and wait.result["outcome"] == "host-error"
     assert message.startswith("the assisted service moved a declared host into error and stopped installing")
     assert wait.reads == [] and service.seen == []
 
@@ -891,17 +809,13 @@ def test_every_budget_clock_counts_true_seconds_across_a_daylight_saving_change(
     assert lisbon is None
     start = int(datetime.datetime(2026, 10, 25, 0, 30, tzinfo=datetime.timezone.utc).timestamp())
     clock = Clock(start)
-    wait = found(INSTALL, "wait.yml",
-                 lambda task: "containercluster_install_agent_deadline" in (task.get("ansible.builtin.set_fact") or {}))
-    deadline = int(scope(INSTALL, now=clock, containercluster_install_agent_budget=5400).template(
-        wait["ansible.builtin.set_fact"]["containercluster_install_agent_deadline"]))
-    assert deadline == start + 5400
+    # The installer wait counts epoch seconds, which no time zone moves.
+    with mock.patch.object(waiting.time, "time", lambda: start + 0.5):
+        assert waiting.now() == start
     boot = found(INSTALL, "prepare_boot.yml",
                  lambda task: "containercluster_install_agent_boot_deadline" in (task.get("ansible.builtin.set_fact") or {}))
     assert int(scope(INSTALL, now=clock).template(
         boot["ansible.builtin.set_fact"]["containercluster_install_agent_boot_deadline"])) == start + INSTALL_BUDGETS["bootSeconds"]
-    taking = found(INSTALL, "wait_attempt.yml",
-                   lambda task: "containercluster_install_agent_remaining" in (task.get("ansible.builtin.set_fact") or {}))
     stepping = found(INSTALL, "boot.yml", lambda task: "timeout" in task and "block" in task)
     proving = [task["ansible.builtin.wait_for"] for task in role_tasks.flatten(trusted(INSTALL / "tasks" / "readiness.yml"))
                if "ansible.builtin.wait_for" in task]
@@ -914,9 +828,6 @@ def test_every_budget_clock_counts_true_seconds_across_a_daylight_saving_change(
             assert left == max(7200 - elapsed, 1)
     for elapsed in (1799, 1800, 1801, 3600):
         clock.seconds = start + elapsed
-        remaining = int(scope(INSTALL, now=clock, containercluster_install_agent_deadline=deadline).template(
-            taking["ansible.builtin.set_fact"]["containercluster_install_agent_remaining"]))
-        assert remaining == 5400 - elapsed
         step = int(scope(INSTALL, now=clock, containercluster_install_agent_boot_deadline=start + 7200).template(
             stepping["timeout"]))
         assert step == 7200 - elapsed
@@ -953,8 +864,7 @@ def test_the_installers_own_timeout_reads_hosts_and_names_no_stall(tmp_path, ser
     wait = Wait([(1, TIMED_OUT, 4690)], work=asset_state(tmp_path / "work"), nodes=NODES)
     message = wait.run()
     assert wait.runs == [(0, 4703)] and wait.pauses == [13]
-    assert wait.facts["containercluster_install_agent_wait"]["rc"] == 1
-    assert wait.facts["containercluster_install_agent_stalled"] is False
+    assert wait.result["rc"] == 1 and wait.result["outcome"] == "timeout"
     assert len(wait.reads) == 1 and service.seen == [READ]
     assert message.startswith("nodes master-1, master-2 never registered with the assisted service on the "
                               "rendezvous host. The rendezvous node starts installing only once every declared "

@@ -22,6 +22,7 @@ from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import containercluster_install_protocol as protocol
 from ansible_collections.bootwright.core.plugins.module_utils import containercluster_cluster_read as reading
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_install_wait as waiting
 from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import KEPT, KUBECONFIG, keep, observe
 from ansible_collections.bootwright.core.tests.unit.role_tasks import LOADER
 
@@ -295,10 +296,13 @@ def test_after_the_install_complete_rewrite_a_completed_cluster_still_proves_thi
 
 
 # The completion evidence records whether a wait of this apply put the kept
-# copy back in place of the installer's own kubeconfig (wait_attempt.yml); an
-# apply whose waits restored nothing records no restore.
-@pytest.mark.parametrize("facts, expected", [({}, False), ({"containercluster_install_agent_restored": True}, True)],
-                         ids=["nothing restored", "restored"])
+# copy back in place of the installer's own kubeconfig, which the last wait's
+# result carries (wait.yml); an apply whose waits restored nothing, or that
+# waited not at all, records no restore.
+@pytest.mark.parametrize("facts, expected", [
+    ({}, False), ({"containercluster_install_agent_wait": {"outcome": "reached", "restored": False}}, False),
+    ({"containercluster_install_agent_wait": {"outcome": "reached", "restored": True}}, True)],
+    ids=["no wait", "nothing restored", "restored"])
 def test_the_completion_evidence_records_a_restore_of_the_installers_kubeconfig(tmp_path, facts, expected):
     observation = inspected(tmp_path / "work", REWRITTEN)
     scope = dict({
@@ -422,6 +426,8 @@ COMPACT = {
         {"name": "master-1", "address": "192.0.2.11", "machine": "machine-01"}],
     "vips": [{"slot": "api", "address": "192.0.2.5", "bridge": "virbr-lab"},
              {"slot": "ingress", "address": "192.0.2.7", "bridge": "virbr-lab"}]}
+
+
 def reads(nodes="master-0 master-1", nodes_rc=0, cluster_rc=0, history_state="Completed"):
     """What cluster_state.yml registers and resolves from the inspection's two reads, as oc answers them."""
     version = json.dumps({"status": {"conditions": [{"type": "Available", "status": "True"}],
@@ -505,9 +511,7 @@ def test_a_replay_of_a_stranded_rendezvous_fails_the_same_way():
 
 
 def test_the_host_error_hint_names_a_destroy_and_a_fresh_apply_never_a_repeat():
-    defaults = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
-    hint = " ".join(Templar(loader=LOADER, variables=defaults).template(
-        defaults["containercluster_install_agent_host_error_hint"]).split())
+    hint = waiting.HOST_ERROR_HINT
     assert "destroy this context and perform a fresh apply" in hint
     assert "repeat the apply" not in hint.lower()
 

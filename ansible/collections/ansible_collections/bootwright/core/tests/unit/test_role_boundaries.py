@@ -106,7 +106,6 @@ EXECUTABLES = frozenset({
 TIMEOUT = "/usr/bin/timeout"
 WRAPPED = frozenset({
     "/usr/bin/firewall-cmd",
-    "{{ containercluster_install_agent_installer }}",
     "{{ containercluster_media_agent_installer }}",
 })
 
@@ -895,7 +894,7 @@ def command(*argv, **keywords):
 def test_allowlisted_executables_pass_the_executable_rule():
     tasks = [command("/usr/bin/virsh", "version"),
              command(TIMEOUT, "--kill-after=5s", "60s", "{{ containercluster_media_agent_installer }}", "agent"),
-             command(TIMEOUT, "-k", "5s", "60s", "{{ containercluster_install_agent_installer }}", "agent")]
+             command(TIMEOUT, "-k", "5s", "60s", "{{ containercluster_media_agent_installer }}", "agent")]
     assert not executable_problems("sound", tasks, set(), set())
 
 
