@@ -53,6 +53,7 @@ func packageRoles() map[string]packageRole {
 		"internal/controller/firewalllocal":        adapterRole,
 		"internal/controller/bundlelocal":          adapterRole,
 		"internal/acquisition":                     technicalRole,
+		"internal/acquisition/listing":             applicationRole,
 		"internal/vulnerabilityexceptions":         domainRole,
 		"internal/controller/ansiblelocal":         adapterRole,
 		"internal/controller/runtimelock":          domainRole,
@@ -191,6 +192,16 @@ func applicationDependencies() map[string][]string {
 		"internal/reconciliation/lifecycle/workspacecontract": {
 			"internal/controller/prerequisites", "internal/reconciliation/lifecycle", "internal/reconciliation/operationstore",
 			"internal/secrets/secretstore",
+		},
+		// The listing reads the catalog through each owner's published selection:
+		// the controller's client request, the cluster and storage kinds' image and
+		// package choices, the managed services' compiled images, the emulated
+		// BMC's image and the mirror fill sets' value types.
+		"internal/acquisition/listing": {
+			"internal/containercluster/agentinstall", "internal/controller/clients", "internal/infrastructureservices/artifactserver",
+			"internal/infrastructureservices/dnsserver", "internal/infrastructureservices/managedservice", "internal/infrastructureservices/mirrorfill",
+			"internal/infrastructureservices/ntpserver", "internal/infrastructureservices/proxy", "internal/infrastructureservices/registry",
+			"internal/storage/ceph", "internal/substrate/libvirt",
 		},
 		// Each named service is one managed-service definition and consumes only
 		// the package whose capability runs it.

@@ -1,4 +1,4 @@
-package main
+package listing
 
 import (
 	"slices"
@@ -7,10 +7,9 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	addonpackages "github.com/crmarques/bootwright/internal/addons/packages"
-	"github.com/crmarques/bootwright/internal/cli"
 )
 
-const updateServiceURL = "https://api.openshift.com/api/upgrades_info/v1/graph"
+const UpdateServiceURL = "https://api.openshift.com/api/upgrades_info/v1/graph"
 
 var defaultCatalogRepositories = map[string]string{
 	"redhat-operators":    "registry.redhat.io/redhat/redhat-operator-index",
@@ -19,7 +18,9 @@ var defaultCatalogRepositories = map[string]string{
 	"redhat-marketplace":  "registry.redhat.io/redhat/redhat-marketplace-index",
 }
 
-func operatorAcquisitions(catalog api.Catalog) []cli.Acquisition {
+func DefaultCatalogRepository(name string) string { return defaultCatalogRepositories[name] }
+
+func operatorAcquisitions(catalog api.Catalog) []Row {
 	rows := addonCatalogAcquisitions(catalog)
 	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
 		distribution := cluster.Spec().Get("distribution")
@@ -32,18 +33,18 @@ func operatorAcquisitions(catalog api.Catalog) []cli.Acquisition {
 			if repository == "" {
 				continue
 			}
-			rows = append(rows, cli.Acquisition{Kind: "default catalog image", Artifact: repository, Version: releaseTag(distribution.Get("release", "version").Text()), Origin: repository,
+			rows = append(rows, Row{Kind: "default catalog image", Artifact: repository, Version: releaseTag(distribution.Get("release", "version").Text()), Origin: repository,
 				Class: originClass("https://" + repository), Machines: nodes, Consumer: cluster.Identity()})
 		}
-		rows = append(rows, cli.Acquisition{Kind: "update service", Artifact: "the cluster's update graph", Version: distribution.Get("release", "channel").Text(), Origin: updateServiceURL,
-			Class: originClass(updateServiceURL), Machines: nodes, Consumer: cluster.Identity()})
+		rows = append(rows, Row{Kind: "update service", Artifact: "the cluster's update graph", Version: distribution.Get("release", "channel").Text(), Origin: UpdateServiceURL,
+			Class: originClass(UpdateServiceURL), Machines: nodes, Consumer: cluster.Identity()})
 	}
 	return rows
 }
 
-func addonCatalogAcquisitions(catalog api.Catalog) []cli.Acquisition {
+func addonCatalogAcquisitions(catalog api.Catalog) []Row {
 	selected, _ := addons.Instances(catalog, addonpackages.Builtin())
-	var rows []cli.Acquisition
+	var rows []Row
 	for _, member := range selected {
 		image := member.Instance.Config.Get("subscription", "catalogSource", "image").Text()
 		cluster, found := catalog.Find(api.OpenShiftCluster, member.Instance.Cluster)
@@ -51,7 +52,7 @@ func addonCatalogAcquisitions(catalog api.Catalog) []cli.Acquisition {
 			continue
 		}
 		row := imageAcquisition("add-on catalog image", image, clusterNodes(cluster), "ClusterAddonBinding/"+member.Instance.Binding)
-		if !slices.ContainsFunc(rows, func(seen cli.Acquisition) bool {
+		if !slices.ContainsFunc(rows, func(seen Row) bool {
 			return seen.Artifact == row.Artifact && seen.Version == row.Version && seen.Consumer == row.Consumer
 		}) {
 			rows = append(rows, row)

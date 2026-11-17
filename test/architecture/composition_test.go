@@ -39,6 +39,11 @@ func applicationValues() packageSymbols {
 		// The artifact server's own request and evidence, which it binds the
 		// shared managed service lifecycle to.
 		"internal/infrastructureservices/artifactserver": {"Request": true, "Evidence": true},
+		// The controller's frozen client request and the mirror fill's release
+		// value, which the acquisition listing reads and builds as data; they
+		// bind no replaceable service.
+		"internal/controller/clients":                {"Request": true},
+		"internal/infrastructureservices/mirrorfill": {"Release": true},
 		// The removal gate's values, what a capability is asked and what it
 		// answers; they bind no replaceable service.
 		"internal/reconciliation/lifecycle": {"Probe": true, "Quiescence": true},

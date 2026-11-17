@@ -1,25 +1,24 @@
-package main
+package listing
 
 import (
 	"net/url"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/cli"
 )
 
 const (
-	hostedRegistrationHost = "https://subscription.rhsm.redhat.com"
-	hostedContentHost      = "https://cdn.redhat.com"
+	HostedRegistrationHost = "https://subscription.rhsm.redhat.com"
+	HostedContentHost      = "https://cdn.redhat.com"
 )
 
-func machineRepositoryAcquisitions(catalog api.Catalog) []cli.Acquisition {
+func machineRepositoryAcquisitions(catalog api.Catalog) []Row {
 	installed := map[string][]string{}
 	for _, machine := range catalog.OfKind(api.Machine) {
 		if profile := machine.Spec().Get("os", "installProfileRef").Text(); profile != "" {
 			installed[profile] = append(installed[profile], machine.Name())
 		}
 	}
-	var rows []cli.Acquisition
+	var rows []Row
 	for _, profile := range catalog.OfKind(api.MachineInstallProfile) {
 		machines := installed[profile.Name()]
 		if len(machines) == 0 {
@@ -35,25 +34,25 @@ func machineRepositoryAcquisitions(catalog api.Catalog) []cli.Acquisition {
 				continue
 			}
 			id, source := repository.Get("id").Text(), repository.Get("baseURL").Text()
-			rows = append(rows, cli.Acquisition{Kind: "machine repository", Artifact: id, Version: version, Origin: source, Class: originClass(source), Machines: machines, Consumer: profile.Identity()})
+			rows = append(rows, Row{Kind: "machine repository", Artifact: id, Version: version, Origin: source, Class: originClass(source), Machines: machines, Consumer: profile.Identity()})
 			if key := repository.Get("gpgKeyURL").Text(); key != "" && repository.Get("gpgCheck").Bool() && remoteLocation(key) {
-				rows = append(rows, cli.Acquisition{Kind: "machine repository key", Artifact: id, Origin: redactedLocation(key), Class: originClass(key), Machines: machines, Consumer: profile.Identity()})
+				rows = append(rows, Row{Kind: "machine repository key", Artifact: id, Origin: redactedLocation(key), Class: originClass(key), Machines: machines, Consumer: profile.Identity()})
 			}
 		}
 	}
 	return rows
 }
 
-func registrationAcquisitions(entitlement api.Object, version string, machines []string, consumer string) []cli.Acquisition {
+func registrationAcquisitions(entitlement api.Object, version string, machines []string, consumer string) []Row {
 	rhsm := entitlement.Spec().Get("rhsm")
 	if entitlement.Spec().Get("type").Text() != "redhatRhel" || rhsm.Get("management").Text() != "managed" {
 		return nil
 	}
-	registration, content := hostedRegistrationHost, hostedContentHost
+	registration, content := HostedRegistrationHost, HostedContentHost
 	if satellite := rhsm.Get("satellite"); satellite.Present() {
 		registration, content = "https://"+satellite.Get("hostname").Text(), satellite.Get("contentBaseURL").Text()
 	}
-	return []cli.Acquisition{
+	return []Row{
 		{Kind: "machine registration", Artifact: "subscription registration", Origin: registration, Class: originClass(registration), Machines: machines, Consumer: consumer},
 		{Kind: "machine repositories", Artifact: "subscription repositories", Version: version, Origin: content, Class: originClass(content), Machines: machines, Consumer: consumer},
 	}

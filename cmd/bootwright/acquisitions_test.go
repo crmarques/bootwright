@@ -8,11 +8,13 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/acquisition"
+	"github.com/crmarques/bootwright/internal/acquisition/listing"
 	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 )
 
@@ -58,7 +60,7 @@ func TestTheAcquisitionListNamesWhatEachOwnerAcquiresWithItsOrigin(t *testing.T)
 	if row := find("emulated BMC image", "quay.io/metal3-io/sushy-tools"); row.Class != acquisition.ClassPublic {
 		t.Errorf("the emulated BMC image: %+v", row)
 	}
-	for _, repository := range openShiftReleaseRepositories {
+	for _, repository := range []string{infrastructureservices.OpenShiftReleaseRepository, infrastructureservices.OpenShiftComponentRepository} {
 		if row := find("release", repository); row.Class != acquisition.ClassPublic || !slices.Contains(row.Machines, "controller") || len(row.Machines) < 2 {
 			t.Errorf("the release repository %s: %+v", repository, row)
 		}
@@ -74,7 +76,7 @@ func TestTheAcquisitionListNamesWhatEachOwnerAcquiresWithItsOrigin(t *testing.T)
 		t.Errorf("the add-on catalog image: %+v", row)
 	}
 	for _, name := range addons.DefaultCatalogs() {
-		repository := defaultCatalogRepositories[name]
+		repository := listing.DefaultCatalogRepository(name)
 		if repository == "" {
 			t.Fatalf("the default catalog %s names no index repository", name)
 		}
@@ -82,7 +84,7 @@ func TestTheAcquisitionListNamesWhatEachOwnerAcquiresWithItsOrigin(t *testing.T)
 			t.Errorf("the default catalog %s: %+v", repository, row)
 		}
 	}
-	if row := find("update service", "the cluster's update graph"); row.Origin != updateServiceURL || row.Class != acquisition.ClassVendor || row.Version != "stable-4.21" {
+	if row := find("update service", "the cluster's update graph"); row.Origin != listing.UpdateServiceURL || row.Class != acquisition.ClassVendor || row.Version != "stable-4.21" {
 		t.Errorf("the update service: %+v", row)
 	}
 	if row := find("machine repository", "ibm-storage-ceph-9"); row.Class != acquisition.ClassVendor || row.Consumer != "MachineInstallProfile/rhel-9-8" || !slices.Equal(row.Machines, []string{"rhel-01", "rhel-02", "rhel-03"}) {
@@ -147,7 +149,7 @@ func TestAManagedImageMirrorIsFilledFromThePublicOriginsOnItsHostAndReadByItsCon
 	if err != nil {
 		t.Fatal(err)
 	}
-	images, err := mirrorImageArtifacts(state.Effective())
+	images, err := listing.MirrorImages(state.Effective())
 	if err != nil || len(images) == 0 {
 		t.Fatalf("the fill copies %+v (%v)", images, err)
 	}
@@ -170,17 +172,6 @@ func TestAManagedImageMirrorIsFilledFromThePublicOriginsOnItsHostAndReadByItsCon
 	})
 	if own < 0 || acquired[own].Artifact != "docker.io/library/registry" || slices.ContainsFunc(images, func(image mirrorfill.Image) bool { return image.Repository == "docker.io/library/registry" }) {
 		t.Errorf("the mirror's own image is read through itself: %+v", acquired[own])
-	}
-}
-
-func TestAShortImageNameIsClassedByTheRegistryItResolvesTo(t *testing.T) {
-	t.Parallel()
-	row := imageAcquisition("service image", "ubuntu/squid@sha256:"+strings.Repeat("a", 64), []string{"controller"}, "Proxy/egress")
-	if row.Artifact != "docker.io/ubuntu/squid" || row.Class != acquisition.ClassPublic {
-		t.Fatalf("a short name: %+v", row)
-	}
-	if row := imageAcquisition("service image", "registry.example.test:5000/squid@sha256:"+strings.Repeat("a", 64), nil, ""); row.Class != acquisition.ClassDeclared {
-		t.Fatalf("an enterprise registry: %+v", row)
 	}
 }
 
@@ -235,43 +226,9 @@ func TestAMachineRegisteringWithASatelliteNamesTheSatelliteAndItsContentRoot(t *
 		}
 	}
 	if slices.ContainsFunc(acquired, func(item cli.Acquisition) bool {
-		return item.Origin == hostedRegistrationHost || item.Origin == hostedContentHost
+		return item.Origin == listing.HostedRegistrationHost || item.Origin == listing.HostedContentHost
 	}) {
 		t.Error("a Machine registering with a Satellite is listed as reaching the hosted service")
-	}
-}
-
-func TestOnlyARegistryTheListKnowsGetsItsTokenAndDeliveryHosts(t *testing.T) {
-	t.Parallel()
-	rows := withRegistryHosts([]cli.Acquisition{
-		{Kind: "service image", Artifact: "docker.io/ubuntu/squid", Origin: "docker.io/ubuntu/squid", Machines: []string{"b"}, Consumer: "Proxy/two"},
-		{Kind: "service image", Artifact: "docker.io/4km3/dnsmasq", Origin: "docker.io/4km3/dnsmasq", Machines: []string{"a"}, Consumer: "DNSServer/one"},
-		{Kind: "service image", Artifact: "registry.example.test/squid", Origin: "registry.example.test/squid", Machines: []string{"c"}, Consumer: "Proxy/three"},
-		{Kind: "client", Artifact: "helm", Origin: "https://quay.io/helm", Machines: []string{"d"}, Consumer: "Environment/lab"},
-	})
-	got := map[string]cli.Acquisition{}
-	for _, row := range rows[4:] {
-		got[row.Artifact] = row
-	}
-	if len(got) != 3 || len(rows) != 7 {
-		t.Fatalf("only the Docker Hub image names companion hosts: %+v", rows[4:])
-	}
-	if row := got["auth.docker.io"]; row.Kind != "registry token service" || row.Class != acquisition.ClassPublic || row.Consumer != "DNSServer/one, Proxy/two" || !slices.Equal(row.Machines, []string{"b", "a"}) {
-		t.Errorf("the token service merges its consumers: %+v", row)
-	}
-	if got["registry-1.docker.io"].Kind != "registry endpoint" || got["production.cloudfront.docker.com"].Kind != "registry blob host" {
-		t.Errorf("the endpoint and blob host: %+v", got)
-	}
-}
-
-func TestAnImageNamedByTagKeepsTheTagAsItsVersion(t *testing.T) {
-	t.Parallel()
-	row := imageAcquisition("add-on catalog image", "registry.example.test:5000/team/catalog:v1.2", nil, "")
-	if row.Artifact != "registry.example.test:5000/team/catalog" || row.Version != "v1.2" || row.SHA256 != "" {
-		t.Fatalf("a tagged reference: %+v", row)
-	}
-	if row := imageAcquisition("add-on catalog image", "registry.example.test:5000/team/catalog", nil, ""); row.Artifact != "registry.example.test:5000/team/catalog" || row.Version != "" {
-		t.Fatalf("a port is not a tag: %+v", row)
 	}
 }
 
@@ -291,13 +248,6 @@ func TestAnAuthoredAddOnNamesItsCatalogImageAloneOnTheRegistryItsAuthorChose(t *
 	}
 }
 
-func TestARepositoryKeyURLIsListedWithoutItsCredentialOrQuery(t *testing.T) {
-	t.Parallel()
-	if got := redactedLocation("https://user:secret@keys.example.test/RPM-GPG-KEY?token=abc#frag"); got != "https://keys.example.test/RPM-GPG-KEY" {
-		t.Fatalf("a credentialed key URL is listed as %s", got)
-	}
-}
-
 // An image authored by tag and digest is copied by its digest alone into its
 // repository, which a consumer's tagged reference resolves within.
 func TestAMirroredImageNamedByTagAndDigestIsCopiedByItsDigest(t *testing.T) {
@@ -308,7 +258,7 @@ func TestAMirroredImageNamedByTagAndDigestIsCopiedByItsDigest(t *testing.T) {
 	proxy, _ := catalog.Find(api.Proxy, "lab-proxy")
 	tagged := api.NewCatalog(append(slices.DeleteFunc(catalog.Objects(), func(object api.Object) bool { return object.Identity() == proxy.Identity() }),
 		proxy.WithSpec(proxy.Spec().With("image", api.MapValue(api.FieldValue{Name: "public", Value: api.StringValue("quay.io/example/squid:6.1@sha256:" + digest)})))))
-	images, err := mirrorImageArtifacts(tagged)
+	images, err := listing.MirrorImages(tagged)
 	if err != nil || !slices.Contains(images, mirrorfill.Image{Digest: "sha256:" + digest, Repository: "quay.io/example/squid", Source: "quay.io/example/squid@sha256:" + digest}) {
 		t.Fatalf("images = %+v (%v)", images, err)
 	}
@@ -325,7 +275,7 @@ func TestAReleaseCopiedIntoAManagedImageMirrorIsReadFromQuayOnItsHostAlone(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, repository := range openShiftReleaseRepositories {
+	for _, repository := range []string{infrastructureservices.OpenShiftReleaseRepository, infrastructureservices.OpenShiftComponentRepository} {
 		copied := slices.IndexFunc(acquired, func(item cli.Acquisition) bool { return item.Kind == "mirror release" && item.Artifact == repository })
 		if copied < 0 || acquired[copied].Class != acquisition.ClassPublic || !slices.Equal(acquired[copied].Machines, []string{"mirror"}) ||
 			acquired[copied].Consumer != "OpenShiftCluster/sno" || acquired[copied].Version != "4.21.15" {
@@ -358,42 +308,6 @@ func TestAReleaseCopiedIntoAManagedImageMirrorIsReadFromQuayOnItsHostAlone(t *te
 	}
 }
 
-// A shared CDN remains public for public registry pulls; only a vendor
-// registry's delivery edge is an approved fetch-only exception.
-func TestSharedCDNRowsKeepVendorDeliverySeparateFromPublicPulls(t *testing.T) {
-	t.Parallel()
-	rows := withRegistryHosts([]cli.Acquisition{
-		{Kind: "default catalog image", Origin: "registry.redhat.io/redhat/catalog", Machines: []string{"node"}, Consumer: "OpenShiftCluster/vendor"},
-		{Kind: "mirror release", Origin: "quay.io/openshift-release-dev/ocp-release", Machines: []string{"mirror"}, Consumer: "Registry/mirror"},
-	})
-	vendor, public := 0, 0
-	for _, row := range rows[2:] {
-		if row.Kind != "registry blob host" {
-			t.Fatalf("unexpected companion: %+v", row)
-		}
-		switch row.Class {
-		case "vendor delivery":
-			vendor++
-			if !slices.Equal(row.Machines, []string{"node"}) || row.Consumer != "OpenShiftCluster/vendor" {
-				t.Errorf("the vendor edge merged a public pull: %+v", row)
-			}
-		case acquisition.ClassPublic:
-			public++
-			if !slices.Equal(row.Machines, []string{"mirror"}) || row.Consumer != "Registry/mirror" {
-				t.Errorf("the public edge merged a vendor pull: %+v", row)
-			}
-		default:
-			t.Errorf("unexpected shared-host class: %+v", row)
-		}
-		if acquisition.OriginClass(row.Origin) != acquisition.ClassPublic {
-			t.Errorf("the exception reclassified shared host %s globally", row.Origin)
-		}
-	}
-	if vendor != len(quayDeliveryHosts) || public != len(quayDeliveryHosts) {
-		t.Fatalf("got %d vendor and %d public delivery rows, want %d of each", vendor, public, len(quayDeliveryHosts))
-	}
-}
-
 func TestTheReleaseMirrorProfileAdmitsVendorDeliveryAndDeniesPublicRegistries(t *testing.T) {
 	t.Parallel()
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno-release-mirror"))
@@ -413,8 +327,8 @@ func TestTheReleaseMirrorProfileAdmitsVendorDeliveryAndDeniesPublicRegistries(t 
 			want[row.Origin+":443"] = true
 		}
 	}
-	if len(want) != len(quayDeliveryHosts) {
-		t.Fatalf("the profile lists %d vendor delivery hosts, want %d", len(want), len(quayDeliveryHosts))
+	if len(want) != len(listing.CompanionHosts("quay.io")) {
+		t.Fatalf("the profile lists %d vendor delivery hosts, want %d", len(want), len(listing.CompanionHosts("quay.io")))
 	}
 	for destination := range want {
 		if !slices.Contains(allowed, destination) {

@@ -1,0 +1,59 @@
+host package|podman||the controller's dnf repositories|host repositories||0|controller|Environment/lab-sno-release-mirror
+host package|libvirt-client||the controller's dnf repositories|host repositories||0|controller|Environment/lab-sno-release-mirror
+host package|libvirt-daemon||the controller's dnf repositories|host repositories||0|controller|Environment/lab-sno-release-mirror
+host package|libvirt-daemon-driver-network||the controller's dnf repositories|host repositories||0|controller|Environment/lab-sno-release-mirror
+host package|libvirt-daemon-driver-qemu||the controller's dnf repositories|host repositories||0|controller|Environment/lab-sno-release-mirror
+host package|libvirt-daemon-driver-storage-core||the controller's dnf repositories|host repositories||0|controller|Environment/lab-sno-release-mirror
+host package|qemu-img||the controller's dnf repositories|host repositories||0|controller|Environment/lab-sno-release-mirror
+host package|qemu-kvm-core||the controller's dnf repositories|host repositories||0|controller|Environment/lab-sno-release-mirror
+host package|swtpm||the controller's dnf repositories|host repositories||0|controller|Environment/lab-sno-release-mirror
+host package|swtpm-tools||the controller's dnf repositories|host repositories||0|controller|Environment/lab-sno-release-mirror
+host package|nmstate||the controller's dnf repositories|host repositories||0|controller|Environment/lab-sno-release-mirror
+client|helm|4.3.1|https://203.0.113.20/mirror/lab-sno-release-mirror/helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz|declared|0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b|20368240|controller|Environment/lab-sno-release-mirror
+client|openshift-clients|4.21.15|https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.15/openshift-client-linux-4.21.15.tar.gz|vendor||0|controller|Environment/lab-sno-release-mirror
+client release metadata|openshift-clients|4.21.15|mirror.openshift.com|vendor||0|controller|Environment/lab-sno-release-mirror
+client|openshift-install|4.21.15|https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.15/openshift-install-linux-4.21.15.tar.gz|vendor||0|controller|Environment/lab-sno-release-mirror
+client release metadata|openshift-install|4.21.15|mirror.openshift.com|vendor||0|controller|Environment/lab-sno-release-mirror
+mirror file|helm|4.3.1|https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz|public|0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b|20368240|mirror|ArtifactServer/mirror-artifacts
+service image|registry.access.redhat.com/ubi9/nginx-124|sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56|registry.access.redhat.com/ubi9/nginx-124|vendor|bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56|0|controller|ArtifactServer/lab-artifacts
+service image|registry.access.redhat.com/ubi9/nginx-124|sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56|registry.access.redhat.com/ubi9/nginx-124|vendor|bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56|0|mirror|ArtifactServer/mirror-artifacts
+service image|203.0.113.20:5000/docker.io/4km3/dnsmasq|sha256:52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641|203.0.113.20:5000/docker.io/4km3/dnsmasq|declared|52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641|0|controller|DNSServer/lab-dns
+service image|203.0.113.20:5000/docker.io/dockurr/chrony|sha256:f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025|203.0.113.20:5000/docker.io/dockurr/chrony|declared|f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025|0|controller|NTPServer/lab-ntp
+service image|203.0.113.20:5000/docker.io/ubuntu/squid|sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029|203.0.113.20:5000/docker.io/ubuntu/squid|declared|6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029|0|controller|Proxy/lab-proxy
+service image|docker.io/library/registry|sha256:38907510915c3f1604c7e83d6ab602ab3020d092f73bdaed8696773693ff768c|docker.io/library/registry|public|38907510915c3f1604c7e83d6ab602ab3020d092f73bdaed8696773693ff768c|0|mirror|Registry/mirror-registry
+emulated BMC image|203.0.113.20:5000/quay.io/metal3-io/sushy-tools|sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e|203.0.113.20:5000/quay.io/metal3-io/sushy-tools|declared|f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e|0|controller|InfraProvider/lab-libvirt
+mirror image|docker.io/4km3/dnsmasq|sha256:52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641|docker.io/4km3/dnsmasq|public|52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641|0|mirror|Registry/mirror-registry
+mirror image|docker.io/dockurr/chrony|sha256:f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025|docker.io/dockurr/chrony|public|f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025|0|mirror|Registry/mirror-registry
+mirror image|docker.io/ubuntu/squid|sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029|docker.io/ubuntu/squid|public|6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029|0|mirror|Registry/mirror-registry
+mirror image|quay.io/metal3-io/sushy-tools|sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e|quay.io/metal3-io/sushy-tools|public|f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e|0|mirror|Registry/mirror-registry
+mirror release|quay.io/openshift-release-dev/ocp-release|4.21.15|quay.io/openshift-release-dev/ocp-release|public||0|mirror|OpenShiftCluster/sno
+mirror release|quay.io/openshift-release-dev/ocp-v4.0-art-dev|4.21.15|quay.io/openshift-release-dev/ocp-v4.0-art-dev|public||0|mirror|OpenShiftCluster/sno
+mirror release client|openshift-clients|4.21.15|https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.15/openshift-client-linux-4.21.15.tar.gz|vendor||0|mirror|OpenShiftCluster/sno
+mirror release client checksums|openshift-clients|4.21.15|https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.15/sha256sum.txt|vendor||0|mirror|OpenShiftCluster/sno
+mirror release signatures|quay.io/openshift-release-dev/ocp-release|4.21.15|https://storage.googleapis.com/openshift-release/official/signatures/openshift/release|declared||0|mirror|OpenShiftCluster/sno
+mirror release signatures|quay.io/openshift-release-dev/ocp-release|4.21.15|https://mirror.openshift.com/pub/openshift-v4/signatures/openshift/release|vendor||0|mirror|OpenShiftCluster/sno
+release mirror|quay.io/openshift-release-dev/ocp-release||203.0.113.20:5000/quay.io/openshift-release-dev/ocp-release|declared||0|controller,sno-01|OpenShiftCluster/sno
+release mirror|quay.io/openshift-release-dev/ocp-v4.0-art-dev||203.0.113.20:5000/quay.io/openshift-release-dev/ocp-v4.0-art-dev|declared||0|controller,sno-01|OpenShiftCluster/sno
+default catalog image|registry.redhat.io/redhat/redhat-operator-index|v4.21|registry.redhat.io/redhat/redhat-operator-index|vendor||0|sno-01|OpenShiftCluster/sno
+default catalog image|registry.redhat.io/redhat/certified-operator-index|v4.21|registry.redhat.io/redhat/certified-operator-index|vendor||0|sno-01|OpenShiftCluster/sno
+default catalog image|registry.redhat.io/redhat/community-operator-index|v4.21|registry.redhat.io/redhat/community-operator-index|vendor||0|sno-01|OpenShiftCluster/sno
+default catalog image|registry.redhat.io/redhat/redhat-marketplace-index|v4.21|registry.redhat.io/redhat/redhat-marketplace-index|vendor||0|sno-01|OpenShiftCluster/sno
+update service|the cluster's update graph|stable-4.21|https://api.openshift.com/api/upgrades_info/v1/graph|vendor||0|sno-01|OpenShiftCluster/sno
+registry blob host|cdn.quay.io||cdn.quay.io|vendor delivery||0|controller,mirror,sno-01,sno-01,sno-01,sno-01|ArtifactServer/lab-artifacts, ArtifactServer/mirror-artifacts, OpenShiftCluster/sno
+registry blob host|cdn01.quay.io||cdn01.quay.io|vendor delivery||0|controller,mirror,sno-01,sno-01,sno-01,sno-01|ArtifactServer/lab-artifacts, ArtifactServer/mirror-artifacts, OpenShiftCluster/sno
+registry blob host|cdn02.quay.io||cdn02.quay.io|vendor delivery||0|controller,mirror,sno-01,sno-01,sno-01,sno-01|ArtifactServer/lab-artifacts, ArtifactServer/mirror-artifacts, OpenShiftCluster/sno
+registry blob host|cdn03.quay.io||cdn03.quay.io|vendor delivery||0|controller,mirror,sno-01,sno-01,sno-01,sno-01|ArtifactServer/lab-artifacts, ArtifactServer/mirror-artifacts, OpenShiftCluster/sno
+registry blob host|cdn04.quay.io||cdn04.quay.io|vendor delivery||0|controller,mirror,sno-01,sno-01,sno-01,sno-01|ArtifactServer/lab-artifacts, ArtifactServer/mirror-artifacts, OpenShiftCluster/sno
+registry blob host|cdn05.quay.io||cdn05.quay.io|vendor delivery||0|controller,mirror,sno-01,sno-01,sno-01,sno-01|ArtifactServer/lab-artifacts, ArtifactServer/mirror-artifacts, OpenShiftCluster/sno
+registry blob host|cdn06.quay.io||cdn06.quay.io|vendor delivery||0|controller,mirror,sno-01,sno-01,sno-01,sno-01|ArtifactServer/lab-artifacts, ArtifactServer/mirror-artifacts, OpenShiftCluster/sno
+registry signature store|access.redhat.com||access.redhat.com|vendor||0|controller,mirror|ArtifactServer/lab-artifacts, ArtifactServer/mirror-artifacts
+registry endpoint|registry-1.docker.io||registry-1.docker.io|public||0|mirror|Registry/mirror-registry
+registry token service|auth.docker.io||auth.docker.io|public||0|mirror|Registry/mirror-registry
+registry blob host|production.cloudfront.docker.com||production.cloudfront.docker.com|public||0|mirror|Registry/mirror-registry
+registry blob host|cdn.quay.io||cdn.quay.io|public||0|mirror,mirror|OpenShiftCluster/sno
+registry blob host|cdn01.quay.io||cdn01.quay.io|public||0|mirror,mirror|OpenShiftCluster/sno
+registry blob host|cdn02.quay.io||cdn02.quay.io|public||0|mirror,mirror|OpenShiftCluster/sno
+registry blob host|cdn03.quay.io||cdn03.quay.io|public||0|mirror,mirror|OpenShiftCluster/sno
+registry blob host|cdn04.quay.io||cdn04.quay.io|public||0|mirror,mirror|OpenShiftCluster/sno
+registry blob host|cdn05.quay.io||cdn05.quay.io|public||0|mirror,mirror|OpenShiftCluster/sno
+registry blob host|cdn06.quay.io||cdn06.quay.io|public||0|mirror,mirror|OpenShiftCluster/sno

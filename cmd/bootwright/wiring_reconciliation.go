@@ -9,6 +9,7 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/acquisition/listing"
 	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/addons/instance"
 	"github.com/crmarques/bootwright/internal/addons/packages"
@@ -333,18 +334,18 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	})
 	resolver = append(resolver, boundCapability{
 		kind: mirrorfill.Kind, implementation: mirrorfill.FilesImplementation, family: mirrorfill.Family,
-		capability: mirrorfill.NewFiles(runner, mirrorFileArtifacts).WithInstalledHostKeys(installation.ProvedHostKey),
+		capability: mirrorfill.NewFiles(runner, acquisitionTools().MirrorFiles).WithInstalledHostKeys(installation.ProvedHostKey),
 	})
 	resolver = append(resolver, boundCapability{
 		kind: hardware.Kind, implementation: hardware.Implementation, family: hardware.Family, capability: hardware.New(runner),
 	})
 	resolver = append(resolver, boundCapability{
 		kind: mirrorfill.ImagesKind, implementation: mirrorfill.ImagesImplementation, family: mirrorfill.Family,
-		capability: mirrorfill.NewImages(runner, mirrorImageArtifacts).WithInstalledHostKeys(installation.ProvedHostKey),
+		capability: mirrorfill.NewImages(runner, listing.MirrorImages).WithInstalledHostKeys(installation.ProvedHostKey),
 	})
 	resolver = append(resolver, boundCapability{
 		kind: mirrorfill.ReleaseKind, implementation: mirrorfill.ReleaseImplementation, family: mirrorfill.Family,
-		capability: mirrorfill.NewReleases(runner, mirrorReleases, material.RegistryAuth).WithInstalledHostKeys(installation.ProvedHostKey),
+		capability: mirrorfill.NewReleases(runner, acquisitionTools().MirrorReleases, material.RegistryAuth).WithInstalledHostKeys(installation.ProvedHostKey),
 	})
 	return bindInstallations(resolver, runner, records)
 }

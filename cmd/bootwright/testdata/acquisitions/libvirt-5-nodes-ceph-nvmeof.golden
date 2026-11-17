@@ -1,0 +1,44 @@
+host package|podman||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|libvirt-client||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|libvirt-daemon||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|libvirt-daemon-driver-network||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|libvirt-daemon-driver-qemu||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|libvirt-daemon-driver-storage-core||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|qemu-img||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|qemu-kvm-core||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|swtpm||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|swtpm-tools||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|lorax||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|xorriso||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|squashfs-tools||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|e2fsprogs||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+host package|binutils||the controller's dnf repositories|host repositories||0|controller|Environment/libvirt-5-nodes-ceph-nvmeof
+service image|registry.access.redhat.com/ubi9/nginx-124|sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56|registry.access.redhat.com/ubi9/nginx-124|vendor|bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56|0|controller|ArtifactServer/lab-artifacts
+service image|docker.io/4km3/dnsmasq|sha256:52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641|docker.io/4km3/dnsmasq|public|52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641|0|controller|DNSServer/lab-dns
+service image|docker.io/dockurr/chrony|sha256:f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025|docker.io/dockurr/chrony|public|f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025|0|controller|NTPServer/lab-ntp
+service image|docker.io/ubuntu/squid|sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029|docker.io/ubuntu/squid|public|6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029|0|controller|Proxy/lab-proxy
+emulated BMC image|quay.io/metal3-io/sushy-tools|sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e|quay.io/metal3-io/sushy-tools|public|f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e|0|controller|InfraProvider/lab-libvirt
+storage image|cp.icr.io/cp/ibm-ceph/ceph-9-rhel10|v9.9.2-26947|cp.icr.io/cp/ibm-ceph/ceph-9-rhel10|vendor||0|controller,rhel-01,rhel-02,rhel-03,rhel-04,rhel-05|CephCluster/ceph-lab
+storage image|cp.icr.io/cp/ibm-ceph/nvmeof-rhel9|1.6|cp.icr.io/cp/ibm-ceph/nvmeof-rhel9|vendor||0|controller,rhel-01,rhel-02,rhel-03,rhel-04,rhel-05|CephCluster/ceph-lab
+storage packages|cephadm and its packages|20.2.2-349.el9cp|https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64|vendor||0|rhel-01,rhel-02,rhel-03,rhel-04,rhel-05|CephCluster/ceph-lab
+machine repository|ibm-storage-ceph-9|9.8|https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/|vendor||0|initiator,rhel-01,rhel-02,rhel-03,rhel-04,rhel-05|MachineInstallProfile/rhel-9-8
+machine repository key|ibm-storage-ceph-9||https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH|vendor||0|initiator,rhel-01,rhel-02,rhel-03,rhel-04,rhel-05|MachineInstallProfile/rhel-9-8
+installation media|local-media:rhel-9.8-x86_64-boot.iso||the file or URL media add named|media store||0|controller|MachineImage/rhel-9-8-boot
+registry blob host|cdn.quay.io||cdn.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry blob host|cdn01.quay.io||cdn01.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry blob host|cdn02.quay.io||cdn02.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry blob host|cdn03.quay.io||cdn03.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry blob host|cdn04.quay.io||cdn04.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry blob host|cdn05.quay.io||cdn05.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry blob host|cdn06.quay.io||cdn06.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry signature store|access.redhat.com||access.redhat.com|vendor||0|controller|ArtifactServer/lab-artifacts
+registry endpoint|registry-1.docker.io||registry-1.docker.io|public||0|controller,controller,controller|DNSServer/lab-dns, NTPServer/lab-ntp, Proxy/lab-proxy
+registry token service|auth.docker.io||auth.docker.io|public||0|controller,controller,controller|DNSServer/lab-dns, NTPServer/lab-ntp, Proxy/lab-proxy
+registry blob host|production.cloudfront.docker.com||production.cloudfront.docker.com|public||0|controller,controller,controller|DNSServer/lab-dns, NTPServer/lab-ntp, Proxy/lab-proxy
+registry blob host|cdn.quay.io||cdn.quay.io|public||0|controller|InfraProvider/lab-libvirt
+registry blob host|cdn01.quay.io||cdn01.quay.io|public||0|controller|InfraProvider/lab-libvirt
+registry blob host|cdn02.quay.io||cdn02.quay.io|public||0|controller|InfraProvider/lab-libvirt
+registry blob host|cdn03.quay.io||cdn03.quay.io|public||0|controller|InfraProvider/lab-libvirt
+registry blob host|cdn04.quay.io||cdn04.quay.io|public||0|controller|InfraProvider/lab-libvirt
+registry blob host|cdn05.quay.io||cdn05.quay.io|public||0|controller|InfraProvider/lab-libvirt
+registry blob host|cdn06.quay.io||cdn06.quay.io|public||0|controller|InfraProvider/lab-libvirt

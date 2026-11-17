@@ -1,0 +1,52 @@
+package listing
+
+import (
+	"strings"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller"
+	"github.com/crmarques/bootwright/internal/controller/evidence"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
+)
+
+type MirroredClient struct {
+	Tool, Location, Source, SHA256 string
+	Bytes                          int64
+}
+
+func (t Tools) MirroredClients(tools []evidence.ToolRequest) ([]MirroredClient, error) {
+	var clients []MirroredClient
+	for _, tool := range tools {
+		if !controller.PublicOrigin(tool) || tool.Mirror == "" || tool.SHA256 == "" {
+			continue
+		}
+		location, err := t.SourceURL(tool)
+		if err != nil {
+			return nil, err
+		}
+		origin := tool
+		origin.Mirror = ""
+		source, err := t.SourceURL(origin)
+		if err != nil {
+			return nil, err
+		}
+		clients = append(clients, MirroredClient{Tool: tool.Kind + " " + strings.TrimPrefix(tool.Version, "v"), Location: location, Source: source, SHA256: tool.SHA256, Bytes: tool.Bytes})
+	}
+	return clients, nil
+}
+
+func (t Tools) MirrorFiles(catalog api.Catalog) ([]mirrorfill.Artifact, error) {
+	tools, err := controller.SelectTools(catalog)
+	if err != nil {
+		return nil, err
+	}
+	mirrored, err := t.MirroredClients(tools)
+	if err != nil {
+		return nil, err
+	}
+	artifacts := make([]mirrorfill.Artifact, 0, len(mirrored))
+	for _, client := range mirrored {
+		artifacts = append(artifacts, mirrorfill.Artifact{Bytes: client.Bytes, Location: client.Location, SHA256: client.SHA256, Source: client.Source})
+	}
+	return artifacts, nil
+}

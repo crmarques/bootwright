@@ -1,0 +1,21 @@
+host package|podman||the controller's dnf repositories|host repositories||0|controller|Environment/lab-baremetal
+host package|lorax||the controller's dnf repositories|host repositories||0|controller|Environment/lab-baremetal
+host package|xorriso||the controller's dnf repositories|host repositories||0|controller|Environment/lab-baremetal
+host package|squashfs-tools||the controller's dnf repositories|host repositories||0|controller|Environment/lab-baremetal
+host package|e2fsprogs||the controller's dnf repositories|host repositories||0|controller|Environment/lab-baremetal
+host package|binutils||the controller's dnf repositories|host repositories||0|controller|Environment/lab-baremetal
+service image|registry.access.redhat.com/ubi9/nginx-124|sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56|registry.access.redhat.com/ubi9/nginx-124|vendor|bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56|0|controller|ArtifactServer/lab-artifacts
+service image|docker.io/4km3/dnsmasq|sha256:52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641|docker.io/4km3/dnsmasq|public|52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641|0|controller|DNSServer/lab-dns
+service image|docker.io/dockurr/chrony|sha256:f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025|docker.io/dockurr/chrony|public|f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025|0|controller|NTPServer/lab-ntp
+installation media|local-media:rhel-9.8-x86_64-boot.iso||the file or URL media add named|media store||0|controller|MachineImage/rhel-9-8-boot
+registry blob host|cdn.quay.io||cdn.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry blob host|cdn01.quay.io||cdn01.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry blob host|cdn02.quay.io||cdn02.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry blob host|cdn03.quay.io||cdn03.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry blob host|cdn04.quay.io||cdn04.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry blob host|cdn05.quay.io||cdn05.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry blob host|cdn06.quay.io||cdn06.quay.io|vendor delivery||0|controller|ArtifactServer/lab-artifacts
+registry signature store|access.redhat.com||access.redhat.com|vendor||0|controller|ArtifactServer/lab-artifacts
+registry endpoint|registry-1.docker.io||registry-1.docker.io|public||0|controller,controller|DNSServer/lab-dns, NTPServer/lab-ntp
+registry token service|auth.docker.io||auth.docker.io|public||0|controller,controller|DNSServer/lab-dns, NTPServer/lab-ntp
+registry blob host|production.cloudfront.docker.com||production.cloudfront.docker.com|public||0|controller,controller|DNSServer/lab-dns, NTPServer/lab-ntp

@@ -1,11 +1,10 @@
-package main
+package listing
 
 import (
 	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/acquisition"
-	"github.com/crmarques/bootwright/internal/cli"
 )
 
 type registryHost struct{ kind, host string }
@@ -26,9 +25,17 @@ var registryCompanions = map[string][]registryHost{
 
 var imagePullKinds = []string{"service image", "emulated BMC image", "release", "mirror release", "storage image", "add-on catalog image", "default catalog image"}
 
-func withRegistryHosts(rows []cli.Acquisition) []cli.Acquisition {
+func CompanionHosts(registry string) []string {
+	var hosts []string
+	for _, companion := range registryCompanions[registry] {
+		hosts = append(hosts, companion.host)
+	}
+	return hosts
+}
+
+func withRegistryHosts(rows []Row) []Row {
 	type key struct{ kind, host, class string }
-	companions := map[key]*cli.Acquisition{}
+	companions := map[key]*Row{}
 	consumers := map[key][]string{}
 	var order []key
 	for _, row := range rows {
@@ -44,7 +51,7 @@ func withRegistryHosts(rows []cli.Acquisition) []cli.Acquisition {
 			name := key{companion.kind, companion.host, class}
 			existing, seen := companions[name]
 			if !seen {
-				existing = &cli.Acquisition{Kind: companion.kind, Artifact: companion.host, Origin: companion.host, Class: class}
+				existing = &Row{Kind: companion.kind, Artifact: companion.host, Origin: companion.host, Class: class}
 				companions[name] = existing
 				order = append(order, name)
 			}

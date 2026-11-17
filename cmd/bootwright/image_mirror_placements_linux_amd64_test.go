@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/acquisition/listing"
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
@@ -418,7 +419,7 @@ func TestTheAcquisitionListNamesEachEmulatedBMCAndServicePullBesideAnInstalledMi
 	if got := rows("service image", "DNSServer/lab-dns"); len(got) != 1 || got[0] != "docker.io/4km3/dnsmasq" {
 		t.Errorf("the installation's resolver reads %v", got)
 	}
-	images, err := mirrorImageArtifacts(state.Effective())
+	images, err := listing.MirrorImages(state.Effective())
 	if err != nil || !slices.ContainsFunc(images, func(image mirrorfill.Image) bool { return image.Repository == sushy }) {
 		t.Fatalf("the fill copies %+v (%v), not the node's emulated BMC image", images, err)
 	}
@@ -434,20 +435,20 @@ func TestAProvidedMachineBesideTheMirrorHostAddsNoBMCImageToTheMirror(t *testing
 		},
 	})
 	state, _ := compileAcceptance(t, sources)
-	pulls, err := imagePulls(state.Effective())
+	pulls, err := listing.ImagePulls(state.Effective())
 	if err != nil {
 		t.Fatal(err)
 	}
 	var bmcs []string
 	for _, pull := range pulls {
-		if pull.kind == "emulated BMC image" {
-			bmcs = append(bmcs, pull.pulled)
+		if pull.Kind == "emulated BMC image" {
+			bmcs = append(bmcs, pull.Pulled)
 		}
 	}
 	if !slices.Equal(bmcs, []string{libvirt.EmulatorImage()}) {
 		t.Errorf("only the mirror host creates a BMC, but its provider pulls %v", bmcs)
 	}
-	images, err := mirrorImageArtifacts(state.Effective())
+	images, err := listing.MirrorImages(state.Effective())
 	sushy, _, _ := strings.Cut(libvirt.EmulatorImage(), "@")
 	if err != nil || slices.ContainsFunc(images, func(image mirrorfill.Image) bool { return image.Repository == sushy }) {
 		t.Fatalf("the fill includes an image no mirrored BMC pulls: %+v (%v)", images, err)

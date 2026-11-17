@@ -26,6 +26,12 @@ const contextsSpec = "the bounded-context table in specs/architecture.md"
 // explain; it stays until its owner decides.
 func contextDependencies() []contextEdge {
 	return []contextEdge{
+		{"acquisition", "addons", "the list names the catalog images the selected add-on bindings and the default catalogs pull"},
+		{"acquisition", "containercluster", "the list names a cluster's release repositories, mirrors and managed release copies through the installer's published selection"},
+		{"acquisition", "controller", "the list names the controller's host packages and client downloads through the controller's published selection and client request"},
+		{"acquisition", "infrastructureservices", "the list names each managed service's image and the managed mirrors' fill sets through Infrastructure services' published selection"},
+		{"acquisition", "storage", "the list names a managed Ceph cluster's images and package repository through storage's published defaults"},
+		{"acquisition", "substrate", "the list names the emulated BMC image a libvirt provider's Machines pull through the arm's published pulls"},
 		{"addons", "controller", "cluster-object runs consume the controller evidence and host egress the controller publishes (applicationDependencies)"},
 		{"addons", "desiredstate", "admission composes the compiled catalog and the custom-playbook records (Go package structure, Context root)"},
 		{"addons", "machine", "applying objects to a cluster reaches the Machines that host it, through Machine's published target"},
