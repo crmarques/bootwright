@@ -64,4 +64,11 @@
     request: '{{ bootwright_physical_erase_request }}'
     digest: '{{ bootwright_physical_erase_digest }}'
     material: '{{ bootwright_physical_erase_material }}'
+  register: physical_erase_started
   no_log: true
+
+- name: Report a refused start phase outside no_log
+  ansible.builtin.include_tasks: refused.yml
+  vars:
+    physical_erase_refused: '{{ physical_erase_started }}'
+  when: physical_erase_started.refused is defined

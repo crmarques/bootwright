@@ -177,3 +177,76 @@ class ControllerTests(unittest.TestCase):
                 self.assertEqual({path.name for path in instance.root.iterdir()}, {"finalizing.json", "completed.json", "publication"})
             finally:
                 os.close(instance.lock)
+
+
+class UnreachableWorkerTests(unittest.TestCase):
+    """An await that no session answers refuses within its bound, never after the four-hour deadline."""
+
+    def awaiting(self, answers):
+        import json
+
+        now = [0.0]
+        clock = SimpleNamespace(monotonic=lambda: now[0], sleep=lambda seconds: now.__setitem__(0, now[0] + seconds))
+        instance = controller.Controller.__new__(controller.Controller)
+        instance.digest = "a" * 64
+        instance.worker_request = {"originalAttempt": "remove/erase/1"}
+        instance.request = {"deadlineSeconds": 14400}
+        instance.root = Path("/nonexistent")
+        instance.lock = -1
+        instance.load = lambda: None
+        instance.receipt = lambda: None
+        stream = iter(answers)
+
+        def session(command):
+            state = next(stream, None)
+            if state is None:
+                return controller.ssh.Outcome(255, b"", False, False, "refused")
+            return controller.ssh.Outcome(0, json.dumps({"state": state, "request": instance.digest, "originalAttempt": "remove/erase/1"}).encode(),
+                                          False, False, None)
+
+        instance.session = session
+        return instance, clock, now
+
+    def test_a_worker_that_never_answers_refuses_after_the_startup_allowance(self):
+        instance, clock, now = self.awaiting([])
+        with patch.object(controller, "time", clock), self.assertRaises(controller.redfish.Refused) as caught:
+            instance.await_receipt()
+        self.assertEqual((str(caught.exception), caught.exception.detail), ("worker-unreachable", "refused:20min"))
+        self.assertGreaterEqual(now[0], controller.FIRST_ANSWER_SECONDS)
+        self.assertLess(now[0], controller.FIRST_ANSWER_SECONDS + 10)
+
+    def test_a_worker_that_answered_and_went_silent_refuses_after_ten_minutes(self):
+        instance, clock, now = self.awaiting(["partial"] * 3)
+        with patch.object(controller, "time", clock), self.assertRaises(controller.redfish.Refused) as caught:
+            instance.await_receipt()
+        self.assertEqual((str(caught.exception), caught.exception.detail), ("worker-unreachable", "refused:10min"))
+        self.assertGreaterEqual(now[0], 10 + controller.SILENCE_SECONDS)
+        self.assertLess(now[0], 10 + controller.SILENCE_SECONDS + 10)
+
+    def test_a_transient_failure_between_answers_does_not_refuse(self):
+        instance, clock, _now = self.awaiting(["partial", None, "partial", "complete"])
+        with (
+            patch.object(controller, "time", clock),
+            patch.object(controller.worker, "validate_receipt"),
+            patch.object(controller, "write"),
+            patch.object(controller.os, "fsync"),
+        ):
+            self.assertEqual(instance.await_receipt()["state"], "complete")
+
+    def test_an_unanswered_session_is_classified_without_its_output(self):
+        refused = b"ssh: connect to host 192.0.2.10 port 22: Connection refused\r\n"
+        cases = (
+            ((255, b"", refused), (255, "refused")),
+            ((255, b"", b"Host key verification failed.\r\n"), (255, "host-key")),
+            ((255, b"", b"root@192.0.2.10: Permission denied (publickey).\r\n"), (255, "auth")),
+            ((255, b"", b"ssh: connect to host 192.0.2.10 port 22: No route to host\r\n"), (255, "no-route")),
+            ((255, b"", b"something else\r\n"), (255, "exit")),
+            ((1, b"", b""), (1, None)),
+        )
+        for answer, expected in cases:
+            with self.subTest(answer=answer), patch.object(controller.bounded_process, "run", return_value=answer):
+                outcome = controller.contact(["/usr/bin/ssh"])
+                self.assertEqual((outcome.code, outcome.cause), expected)
+                self.assertNotIn(b"192.0.2.10", outcome.stdout)
+        with patch.object(controller.bounded_process, "run", side_effect=controller.bounded_process.Failure("timeout")):
+            self.assertEqual(controller.contact(["/usr/bin/ssh"]).cause, "timeout")

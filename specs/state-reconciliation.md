@@ -2683,10 +2683,16 @@ the 900-second build and 900-second RAM startup allowance they fit within the
 two-hour controller margin, keeping the invocation within six hours. Exhaustion
 leaves a partial or unknown result and retains the claim.
 
+#### Erase cancellation and refusals
+
 Cancellation never means erase finished. An authenticated partial status resumes
 only while the independent RAM worker service is active. A stopped or failed
-worker refuses promptly; the operator powers off the Machine before continuing
-the same destroy, whose fresh boot repeats every target's frozen method and
+worker refuses promptly. A worker no session reaches refuses
+`worker-unreachable` once none has answered within the 900-second RAM startup
+allowance plus 300 seconds of the wait's start, or once an answering worker
+stays unanswered for 600 seconds; both are timed within one wait, so a repeated
+wait starts its own bound. The operator powers off the Machine before
+running the destroy again, whose fresh boot repeats every target's frozen method and
 readback after rechecking every identity. A completed durable receipt is replayed.
 Without a receipt, another boot must
 reprove all identities and repeat every target's whole write and readback. A powered-off
@@ -2695,6 +2701,22 @@ short writes, failed readback and unavailable probes refuse without selecting
 another disk. B70 remains subject to failure-injection and real-hardware
 qualification; firmware identity, hotplug and cache semantics are not inferred
 from passing unit tests.
+
+An erase phase that refuses names its refusal to the runner instead of failing
+under `no_log`: `machine-running`, `identity-mismatch`, `hardware-mismatch` and
+`target-unanswered` from the controller's target proof; `controller-refused`
+and `controller-deadline` from a media, boot, power or eject step;
+`poweroff-unproved`, `worker-failed`, `worker-unreachable`, `foreign-worker`
+and `receipt-timeout` from the RAM worker; `foreign-custody` and
+`custody-drift` from custody. Its detail carries only what the controller or
+the session observed, such as a power state, the answering system UUID, how
+many hardware addresses differ, an HTTP status or an unanswered session's class
+and minutes, never a value derived from the private material; the play then
+stops outside `no_log` naming the code and the controller's own printable
+line. Each diagnostic is a `lifecycle.state` failure of the Machine whose
+remedy names the destroy to run; a foreign worker, an unreachable worker and
+a custody refusal also name releasing the Machine without erasing through
+`--authorize erase=<machine>:retain`.
 
 #### Erase methods and coverage
 

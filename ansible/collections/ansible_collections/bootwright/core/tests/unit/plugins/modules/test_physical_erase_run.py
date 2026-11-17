@@ -136,8 +136,50 @@ def test_a_custody_that_was_never_prepared_observes_as_unprepared_and_fails_ever
     assert failed["failed"] is True and failed["msg"] == "physical erase custody is incomplete"
 
 
-def test_a_worker_that_stopped_without_a_receipt_tells_the_operator_to_power_off_and_repeat(controller, run_module):
+def test_a_worker_that_stopped_without_a_receipt_returns_its_named_refusal(controller, run_module):
     controller["await_error"] = worker.Refusal("worker-failed")
     result = run_module(module, arguments("await"))
-    assert result["failed"] is True and "power off this Machine" in result["msg"] and "repeat the full frozen overwrite" in result["msg"]
+    assert "failed" not in result and result["refused"] == "worker-failed" and result["detail"] == "" and result["controller"] == ""
     assert controller["closed"] == 1
+
+
+def test_an_effect_phase_returns_each_named_refusal_with_only_its_observed_detail(controller, run_module, monkeypatch):
+    material = {"pinnedUUIDBase64": "ZXhhbXBsZS1zeXN0ZW0=", "controllerUser": "/run/bootwright/job/bmc-user", "originalAttempt": "op-remove/erase/1"}
+    image = "https://artifact.example.test/private/" + "f" * 64 + "/erase.iso"
+    cases = (
+        (custody.redfish.Refused("machine-running", "power:On"), ("machine-running", "power:On", "")),
+        (custody.redfish.Refused("identity-mismatch", "uuid:another-system"), ("identity-mismatch", "uuid:another-system", "")),
+        (custody.redfish.Refused("controller-refused", "insert:http:409", "attaching /redfish/v1/Managers/1/VirtualMedia/CD: HTTP 409"),
+         ("controller-refused", "insert:http:409", "attaching /redfish/v1/Managers/1/VirtualMedia/CD: HTTP 409")),
+        (custody.redfish.redfish_control.ControllerError("reading /redfish/v1/Systems/1: HTTP 0"),
+         ("target-unanswered", "", "reading /redfish/v1/Systems/1: HTTP 0")),
+        (worker.Refusal("custody-image-drift"), ("custody-drift", "", "")),
+        (worker.Refusal("foreign-target"), ("foreign-custody", "", "")),
+    )
+    for raised, expected in cases:
+        def control(self, phase, raised=raised):
+            raise raised
+        monkeypatch.setattr(custody.Controller, "control", control)
+        result = run_module(module, dict(arguments("start"), material=material))
+        assert "failed" not in result and (result["refused"], result["detail"], result["controller"]) == expected
+        assert image not in json.dumps(result) and "f" * 64 not in json.dumps(result)
+
+
+def test_an_observation_or_an_unnamed_refusal_still_fails_with_the_generic_message(controller, run_module, monkeypatch):
+    controller["receipt"] = worker.Refusal("foreign-custody")
+    observed = run_module(module, arguments("observe"))
+    assert observed["failed"] is True and observed["msg"] == REFUSED and "refused" not in observed
+
+    def control(self, phase):
+        raise worker.Refusal("receipt-missing")
+    monkeypatch.setattr(custody.Controller, "control", control)
+    unnamed = run_module(module, arguments("stop-proof"))
+    assert unnamed["failed"] is True and unnamed["msg"] == REFUSED
+
+
+def test_the_module_names_exactly_the_refusals_its_protocol_and_go_remedy():
+    from ansible_collections.bootwright.core.plugins.action import physical_erase_protocol as protocol
+
+    # Go's eraseRefusals gives each of these thirteen a diagnostic (TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy).
+    assert set(module.NAMED.values()) == set(protocol.REFUSALS) and len(protocol.REFUSALS) == 13
+    assert "refused" in protocol.CAPABILITY.phases and protocol.CAPABILITY.detail is True

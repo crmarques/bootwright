@@ -1,0 +1,21 @@
+---
+# An erase phase returns its named refusal instead of failing, because a
+# failure under no_log keeps nothing of its cause. The runner hears the closed
+# code and the bounded value the controller or the worker reported, and
+# reports the erase's own diagnostic for it; the message here, outside no_log,
+# names only that code and the management controller's own printable line,
+# never the request, its material or the private image.
+- name: Name the refused physical erase phase to its runner
+  bootwright.core.physical_erase_protocol:
+    phase: refused
+    reason: '{{ physical_erase_refused.refused }}'
+    detail: '{{ physical_erase_refused.detail | default("") }}'
+  no_log: true
+
+- name: Stop at the refused physical erase phase
+  ansible.builtin.fail:
+    msg: >-
+      the physical erase of Machine {{ bootwright_physical_erase_request.install.identity.object }}
+      refused: {{ physical_erase_refused.refused | bootwright.core.printable }}{{
+      (': ' ~ (physical_erase_refused.controller | bootwright.core.printable)[:512])
+      if physical_erase_refused.controller | default('') else '' }}

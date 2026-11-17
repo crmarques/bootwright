@@ -13,6 +13,7 @@ import secrets
 import stat
 import time
 
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 from ansible_collections.bootwright.core.plugins.module_utils import private_records
 from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
 from ansible_collections.bootwright.core.plugins.module_utils import managedos_guest_ssh as ssh
@@ -24,6 +25,40 @@ from ansible_collections.bootwright.core.plugins.module_utils import ssh_key_pol
 ROOT = Path(hosted_area.ROOT)
 REQUEST_VERSION = "physical-erase-v1"
 MEDIA = Path("/var/lib/bootwright/media")
+
+
+# A worker that never answers is unreachable once the RAM startup allowance
+# and a margin have passed since this await began, and one that answered is
+# once it then stays silent this long; ssh's exit 255 is a session that
+# reached no worker, any other exit an answer. Both are timed within this
+# call, which follows start: nothing is persisted, so a repeated await opens
+# a fresh bounded window and never inherits a stale clock.
+FIRST_ANSWER_SECONDS = 900 + 300
+SILENCE_SECONDS = 600
+# The closed failure classes of an unanswered session, read from ssh's own
+# standard error, which never leaves this function.
+SESSION_CAUSES = (
+    (b"Connection timed out", "timeout"),
+    (b"Operation timed out", "timeout"),
+    (b"Connection refused", "refused"),
+    (b"No route to host", "no-route"),
+    (b"Network is unreachable", "no-route"),
+    (b"Host key verification failed", "host-key"),
+    (b"REMOTE HOST IDENTIFICATION HAS CHANGED", "host-key"),
+    (b"Permission denied", "auth"),
+)
+
+
+def contact(argv, data=b""):
+    """One bounded receipt session: its code and output, and the closed class of a failure."""
+    try:
+        code, output, errors = bounded_process.run(argv, data, 30, 32768 + 65536, environment=dict(worker.ENV), cwd="/", umask=0o077)
+    except bounded_process.Failure as failure:
+        return ssh.Outcome(None, b"", False, failure.kind == "timeout", "timeout" if failure.kind == "timeout" else "exit")
+    if len(output) > 32768:
+        return ssh.Outcome(None, b"", False, False, "exit")
+    cause = None if code != 255 else next((name for marker, name in SESSION_CAUSES if marker in errors), "exit")
+    return ssh.Outcome(code, output, False, False, cause)
 
 
 def native(argv, timeout=60):
@@ -282,17 +317,26 @@ class Controller:
             address=self.request["install"]["address"],
             remote_argv=[command],
         )
-        code, output = worker.native(argv, data, timeout=30, limit=32768)
-        return ssh.Outcome(code, output, False, False)
+        return contact(argv, data)
 
     def await_receipt(self):
         self.load()
         existing = self.receipt()
         if existing:
             return existing
-        deadline = time.monotonic() + self.request["deadlineSeconds"] + 900
+        began = time.monotonic()
+        deadline = began + self.request["deadlineSeconds"] + 900
+        answered, cause = None, "exit"
         while time.monotonic() < deadline:
             result = self.session("receipt")
+            now = time.monotonic()
+            if result.code is not None and result.code != 255:
+                answered = now
+            else:
+                cause = result.cause or cause
+                silent = now - (began if answered is None else answered)
+                if silent >= (FIRST_ANSWER_SECONDS if answered is None else SILENCE_SECONDS):
+                    raise redfish.Refused("worker-unreachable", "%s:%dmin" % (cause, silent // 60))
             if result.code == 0 and result.stdout:
                 receipt = json.loads(result.stdout)
                 if receipt.get("state") == "complete":

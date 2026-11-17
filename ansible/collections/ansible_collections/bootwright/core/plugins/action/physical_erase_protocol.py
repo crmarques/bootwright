@@ -15,11 +15,22 @@ def completion(arguments):
     return evidence, "offline erase has not proved its complete receipt and cleanup"
 
 
+# The refusals an erase phase names to its runner before the run fails, each
+# one the runner reports as the erase's own diagnostic for its Machine
+# (internal/managedos/installation, erase_refusals.go); the detail is the
+# bounded value the controller or the worker reported.
+REFUSALS = (
+    "machine-running", "identity-mismatch", "hardware-mismatch", "target-unanswered", "controller-refused", "controller-deadline",
+    "poweroff-unproved", "worker-failed", "worker-unreachable", "foreign-worker", "receipt-timeout", "foreign-custody", "custody-drift",
+)
+
 CAPABILITY = adapter_protocol.Capability(
     "physical erase",
     "physical erase evidence could not be published",
     completion,
-    phases=("loaded", "prepared", "completed"),
+    phases=("loaded", "prepared", "refused", "completed"),
+    refusals=REFUSALS,
+    detail=True,
     preparation=lambda args: args["receipt"],
 )
 

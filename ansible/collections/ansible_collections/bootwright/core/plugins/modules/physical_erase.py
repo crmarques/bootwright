@@ -54,12 +54,47 @@ evidence:
   description: Bounded erase evidence.
   returned: when observed or finished
   type: dict
+refused:
+  description: The closed code of a refused effect phase.
+  returned: when an effect phase refused
+  type: str
+detail:
+  description: The bounded value the controller or worker reported for the refusal, or empty.
+  returned: when an effect phase refused
+  type: str
+controller:
+  description: The management controller's own printable failure line, or empty.
+  returned: when an effect phase refused
+  type: str
 """
 
 import json
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_controller as custody
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_worker as worker
+
+UNPROVED = "physical erase did not prove its bounded custody or receipt contract"
+# The phases that act on custody, the RAM worker or the management controller,
+# and of them those that reach the controller.
+EFFECT_PHASES = ("prepare", "start", "await", "ack", "stop-proof", "finish")
+CONTROLLED = ("start", "stop-proof")
+# Each internal refusal the runner names, by the closed code its diagnostic
+# carries; the custody drift codes share one code and one remedy.
+NAMED = {
+    code: code
+    for code in (
+        "machine-running", "identity-mismatch", "hardware-mismatch", "target-unanswered", "controller-refused",
+        "controller-deadline", "poweroff-unproved", "worker-failed", "worker-unreachable", "foreign-worker", "receipt-timeout",
+        "foreign-custody",
+    )
+}
+NAMED.update({
+    "foreign-target": "foreign-custody",
+    "custody-policy-drift": "custody-drift",
+    "custody-image-drift": "custody-drift",
+    "custody-token": "custody-drift",
+    "completion-drift": "custody-drift",
+})
 
 
 def main():
@@ -116,19 +151,28 @@ def main():
             )
         module.fail_json(msg="physical erase custody is incomplete")
     except worker.Refusal as refusal:
-        if str(refusal) == "worker-failed":
-            module.fail_json(
-                msg=(
-                    "the RAM erase worker stopped without a complete receipt; power off this Machine "
-                    "and continue the same destroy to repeat the full frozen overwrite"
-                )
-            )
-        module.fail_json(msg="physical erase did not prove its bounded custody or receipt contract")
-    except (OSError, ValueError, KeyError, custody.redfish.redfish_control.ControllerError):
-        module.fail_json(msg="physical erase did not prove its bounded custody or receipt contract")
+        refuse(module, NAMED.get(str(refusal)), getattr(refusal, "detail", ""), getattr(refusal, "line", ""))
+    except custody.redfish.redfish_control.ControllerError as failure:
+        refuse(module, "target-unanswered" if module.params["phase"] in CONTROLLED else None, "", str(failure))
+    except (OSError, ValueError, KeyError):
+        module.fail_json(msg=UNPROVED)
     finally:
         if controller is not None:
             controller.close()
+
+
+def refuse(module, code, detail, line):
+    """Return a named refusal for its role to report, or fail with the generic message.
+
+    An effect phase returns its refusal instead of failing, because a failure
+    under no_log keeps nothing of its cause: the role names the closed code to
+    the runner and stops outside no_log with the code and the controller's own
+    printable line. An observation, and any refusal outside this vocabulary,
+    fails as before.
+    """
+    if code is None or module.params["phase"] not in EFFECT_PHASES:
+        module.fail_json(msg=UNPROVED)
+    module.exit_json(changed=True, refused=code, detail=detail, controller=line)
 
 
 if __name__ == "__main__":
