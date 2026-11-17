@@ -126,7 +126,7 @@ The three `media` commands follow the host-wide
 | --- | --- | --- | --- |
 | `bootwright validate` | repeatable `-f, --file <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
 | `bootwright preflight` | `--stage <list>` default every stage but `add-ons`; `--clusters <list>` default all; `--dry-run` false; `--observe-host-keys=<bool>` default `true` | [one report](output.md#preflight) of the checks of each selected stage: `controller` the controller host and this context's controller-stage prerequisites, `infrastructure-services` the firewall admission of the controller's managed service sockets, `substrates` the capacity of the hosts that hold its Machines, `machines` none, `clusters` the selected OpenShiftClusters and CephClusters | observe unless `--dry-run`, which is local-only |
-| `bootwright plan` | `--stage <list>` default all stages; `--until <cluster>.<package>` | next legal full-context plan, the additive plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks it starts at a time, and the blocks a stage or `--until` selection would start | none |
+| `bootwright plan` | repeatable `--authorize erase=<machine>:<method>[,erase=<machine>:<method>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>` | next legal full-context plan, the additive plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks it starts at a time, and the blocks a stage or `--until` selection would start; with `erase=`, the destroy plan that relaxes those Machines' [removal erase](../state-reconciliation.md#opt-in-physical-logical-overwrite) and marks each relaxed step, so its `data-loss` digest is reviewed before `destroy --yes` | none |
 | `bootwright status` | `--paths` false | controller setup readiness, lifecycle state of the lineage, each running block's newest output and the bytes it holds, and next safe commands; with `--paths`, each root that holds the context's data on this host and whether it is present; beside no operation it also names each declared Secret whose material is missing or stale and each named installer image the media store lacks, with the remedy command ahead of `plan`, from keyring metadata and media records alone; it checks neither Secret material nor image bytes, which `secret check` and `media list --checksums` report | read local state; keyring metadata and media records use shared locks; with `--paths`, inspect each root entry's existence without reading it |
 | `bootwright logs` | `--operation <op-id>` default the current operation; `--block <block-id>`; `--raw` false; `--attempt <N>`; `--follow` false; `--run <run-NNNNNN>`; `--install` the newest controller install, or `--install=<install-NNNNNN>` | an operation's events as lines, one block's newest retained adapter output with `--raw`, a bounded run's or setup's output, or, with `--follow`, those lines streamed until the operation, run or setup ends, as [reading and following logs](output.md#reading-and-following-logs) states | read local state under short shared root locks and the log root through no-follow handles, `--install` under no root lock; never a lease, never a write |
 | `bootwright diff` | `--observe`, `--exit-code` false; `--output-dir <dir>` or `--tool <program>` | desired files beside what the apply lineage realized, from records or, with `--observe`, read live, as a [comparison](../cli.md#desired-and-realized-state-comparison) | read local state; `--output-dir`, `--tool` write files outside the store; `--observe` reads each block the lineage realized, read-only, on the host it froze, after the [cache-only rebuild](../controller.md#the-controller-runtime) of a missing runtime |
@@ -135,7 +135,7 @@ The three `media` commands follow the host-wide
 | `bootwright render installer` | `--clusters <list>` default all OpenShiftClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all CephClusters | storage artifact manifest | local native files or scripts only; never execution |
 | `bootwright apply` | repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>`; `--parallelism <n>` default 8; `--yes` false | completed full apply or additive apply of instances, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is realized | complete planned mutation, including automatic disk-inventory preparation before separately authorized installation, or none when it settles, beyond completing an operation's interrupted finalization |
-| `bootwright destroy` | repeatable `--authorize <token>[=<digest>][,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--parallelism <n>` default 8; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond the same interrupted finalization or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
+| `bootwright destroy` | repeatable `--authorize <token>[=<digest>][,<token>...]`, which also takes `erase=<machine>:<method>` to relax one Machine's declared removal erase for this destroy; repeatable `--unregistered <machine>[,<machine>...]`; `--parallelism <n>` default 8; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond the same interrupted finalization or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
 
 Not yet met: `render installer` and `render storage` run no use case
 and answer `cli.not-implemented`; their contracts are intent, tracked as
@@ -421,9 +421,21 @@ throttle still apply, so a larger value need not increase concurrency. Use
 sixteen independent steps. Higher values can increase controller and target load.
 
 `--authorize` accepts only `data-loss`, `data-loss=<digest>` with the 16
-lowercase hexadecimal digits a plan prints for the steps it authorizes, and
-`rebind=<secret>`, and only on `apply` and `destroy`; `--yes`, or input that
-cannot answer a prompt, requires the `data-loss=<digest>` form.
+lowercase hexadecimal digits a plan prints for the steps it authorizes,
+`rebind=<secret>` and `erase=<machine>:<method>`; the first three only on
+`apply` and `destroy`, `erase=` only on `destroy` and `plan`; `--yes`, or input
+that cannot answer a prompt, requires the `data-loss=<digest>` form.
+`erase=<machine>:<method>` relaxes the declared
+[removal erase](../state-reconciliation.md#opt-in-physical-logical-overwrite) of
+one Machine, every target of it, for that invocation: `<machine>` is the
+Machine's name, a lowercase DNS label, and `<method>` is `metadataClear` or
+`retain`. It is repeatable, once per Machine, and each occurrence may also
+contain commas. A `logicalOverwrite` method, an unknown method, a name that is
+not a Machine name, an empty `erase=`, a missing `:` side and a Machine named
+twice are usage errors, and `logicalOverwrite` is refused because a relaxation
+never strengthens or restates the declared method. `plan` refuses any other
+token. Whether a Machine can be relaxed, and what the relaxation changes, is
+owned by [state reconciliation](../state-reconciliation.md#confirmation-and-authorization).
 `rebind=<secret>` names one Secret by its API name and
 presents a rotated access credential at its current version through the
 [access-credential rebind](../state-reconciliation.md#access-credential-rebind).

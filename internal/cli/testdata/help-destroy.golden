@@ -8,11 +8,15 @@
       data-loss; with --yes or without a terminal it must be --authorize data-loss=<digest>,
       the digest bootwright plan prints for those steps. A rotated management controller or
       registry login credential is presented at its current version only with --authorize
-      rebind=<secret>, which records a new binding version. A Machine whose subscription
-      registration cannot be read and that you unregistered with the subscription service's own
-      tools is named with --unregistered. --parallelism limits running steps (default 8);
-      dependencies, exclusive resources and group throttles still apply. Review the plan before
-      confirming; --yes skips ordinary confirmation.
+      rebind=<secret>, which records a new binding version. A Machine whose declared removal
+      erase you know to be more than you need is relaxed for this destroy only with --authorize
+      erase=<machine>:metadataClear, which clears only metadata, or --authorize
+      erase=<machine>:retain, which erases nothing and leaves its data and installed system in
+      place; each Machine is named once, and the plan and its digest show the relaxation. A
+      Machine whose subscription registration cannot be read and that you unregistered with the
+      subscription service's own tools is named with --unregistered. --parallelism limits
+      running steps (default 8); dependencies, exclusive resources and group throttles still
+      apply. Review the plan before confirming; --yes skips ordinary confirmation.
 
   Usage
     bootwright destroy [flags]
@@ -20,8 +24,10 @@
   Command flags
       --authorize     Acknowledge a planned risk (data-loss, or data-loss=<digest> of the steps
                       the plan shows, required with --yes or without a terminal), or present a
-                      rotated access credential at its current version (rebind=<secret>)
-                      (values: data-loss)
+                      rotated access credential at its current version (rebind=<secret>), or
+                      relax one Machine's declared removal erase for this destroy
+                      (erase=<machine>:metadataClear or erase=<machine>:retain) (values:
+                      data-loss)
       --parallelism   Set the maximum number of running steps (positive integer) · default 8
       --unregistered  Name a Machine whose subscription registration you removed with the
                       subscription service's own tools

@@ -122,6 +122,9 @@ func (s Service) store(view View) OperationStore {
 }
 
 func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, error) {
+	if err := refuseUnrealizedRelaxations(request.Relaxations); err != nil {
+		return nil, err
+	}
 	return s.planWithin(ctx, request, nil)
 }
 

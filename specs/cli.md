@@ -145,7 +145,8 @@ the scalar comma-list flags `--clusters`, `--replace`, `--stage`,
 the `--name` that names several Machines and the `--name` and `--node` that name
 several clusters and nodes.
 Collection flags aggregate in command-line order only where this contract says
-they are repeatable. `validate -f` is repeatable. `--authorize` and
+they are repeatable. `validate -f` is repeatable. `--authorize` (with
+`erase=<machine>:<method>`, once per Machine, on `destroy` and `plan`) and
 `destroy --unregistered` are repeatable and each occurrence may also contain
 commas. Supplying an empty required value
 is a usage error.
@@ -267,8 +268,8 @@ confirming command's own code (`controller.install`, `controller.uninstall`, `me
 `secret.store.conflict`), with the reason in its message and the command
 repeated with `--yes` in `next:`; a cancellation names no command. The
 repeated command is the invocation's own: its command path and every flag it
-set, so a stage, Machine or source selection, an authorization and every other
-choice stay. It runs the verb afresh, so its plan is the one the records then
+set, so a stage, Machine or source selection, an authorization, every
+`erase=<machine>:<method>` relaxation and every other choice stay. It runs the verb afresh, so its plan is the one the records then
 current freeze; a bare authorization names no plan, and under that `--yes` an
 `apply` or `destroy` refuses a `data-loss` authorization that does not carry
 the digest of the steps it authorizes
@@ -758,8 +759,12 @@ interrupted registration left, the line says it did only that, so a table of
 completed blocks is never read as work this invocation performed.
 
 `apply` and `destroy` present the frozen plan, which marks each step that
-consumes an authorization and closes with the tokens it requires, then check
-the authorizations, then ask the ordinary confirmation. A required token not
+consumes an authorization and closes with the tokens it requires; a `destroy`,
+and a `plan --authorize erase=<machine>:<method>` that previews it, also marks
+each step an erase relaxation changes, naming the Machine and the method in the
+step's description, so the relaxation is reviewed in the plan and bound by its
+`data-loss` digest. Then they check the authorizations, then ask the ordinary
+confirmation. A required token not
 supplied, or a supplied one the whole frozen plan does not require, then
 refuses `lifecycle.authorization`, naming the consuming steps by their number
 in that plan and their description and the exact command that passes, before

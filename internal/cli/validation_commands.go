@@ -57,18 +57,52 @@ func validateUninstall(command *cobra.Command) string {
 }
 
 func validateLifecycleFlags(command *cobra.Command) string {
+	return validateAuthorizations(command, false)
+}
+
+func validateDestroyFlags(command *cobra.Command) string {
+	return validateAuthorizations(command, true)
+}
+
+func validatePlanFlags(command *cobra.Command) string {
+	tokens, refusal := authorizationTokens(command)
+	if refusal != "" {
+		return refusal
+	}
+	for _, token := range tokens {
+		if !lifecycle.IsEraseAuthorization(token) {
+			return "plan accepts only --authorize erase=<machine>:metadataClear or erase=<machine>:retain; data-loss and rebind=<secret> are consumed by apply and destroy"
+		}
+	}
+	_, err := lifecycle.ParseEraseRelaxations(tokens)
+	return refusalText(err)
+}
+
+func validateAuthorizations(command *cobra.Command, erase bool) string {
 	flags := command.Flags()
 	parallelism, err := strconv.Atoi(stringValue(flags, "parallelism"))
 	if err != nil || parallelism < 1 {
 		return "--parallelism must be a positive integer"
 	}
-	var authorizations []string
-	for _, occurrence := range arrayValue(flags, "authorize") {
-		for _, token := range strings.Split(occurrence, ",") {
-			authorizations = append(authorizations, strings.TrimSpace(token))
+	tokens, refusal := authorizationTokens(command)
+	if refusal != "" {
+		return refusal
+	}
+	var relaxing, others []string
+	for _, token := range tokens {
+		if lifecycle.IsEraseAuthorization(token) {
+			relaxing = append(relaxing, token)
+		} else {
+			others = append(others, token)
 		}
 	}
-	if !lifecycle.ValidAuthorizations(authorizations) {
+	if len(relaxing) != 0 && !erase {
+		return "--authorize erase=<machine>:<method> relaxes a removal and applies only to destroy and plan, not " + command.Name()
+	}
+	if _, err := lifecycle.ParseEraseRelaxations(relaxing); err != nil {
+		return err.Error()
+	}
+	if !lifecycle.ValidAuthorizations(others) {
 		return "--authorize accepts data-loss or data-loss=<digest> and rebind=<secret>, each at most once"
 	}
 	for _, occurrence := range arrayValue(flags, "unregistered") {
@@ -79,6 +113,26 @@ func validateLifecycleFlags(command *cobra.Command) string {
 		}
 	}
 	return ""
+}
+
+func authorizationTokens(command *cobra.Command) ([]string, string) {
+	var tokens []string
+	for _, occurrence := range arrayValue(command.Flags(), "authorize") {
+		for _, token := range strings.Split(occurrence, ",") {
+			if token = strings.TrimSpace(token); token == "" {
+				return nil, "--authorize must not contain an empty member"
+			}
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens, ""
+}
+
+func refusalText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func validateSecretSet(command *cobra.Command) string {

@@ -12,6 +12,7 @@ type PlanRequest struct {
 	ContextName string
 	Stages      []string
 	Until       string
+	Relaxations map[string]string
 }
 
 type StatusRequest struct {
@@ -97,6 +98,7 @@ type DestroyRequest struct {
 	Parallelism      int
 	ContextName      string
 	Authorizations   []string
+	Relaxations      map[string]string
 	Unregistered     []string
 	SkipConfirmation bool
 	Unattended       bool

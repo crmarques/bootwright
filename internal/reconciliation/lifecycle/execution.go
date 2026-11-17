@@ -32,6 +32,9 @@ func (s Service) applyWithin(ctx context.Context, request ApplyRequest, scope *r
 // Destroy removes what an apply recorded as owned. It accepts no stage
 // selection: a removal covers exactly the effects that exist.
 func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*OperationResult, error) {
+	if err := refuseUnrealizedRelaxations(request.Relaxations); err != nil {
+		return nil, err
+	}
 	s, err := s.withParallelism(request.Parallelism)
 	if err != nil {
 		return nil, err

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/spf13/pflag"
 )
@@ -96,6 +97,28 @@ func (v *requestValues) validationContext() string {
 }
 
 func (v *requestValues) authorizations() []string {
+	var tokens []string
+	for _, token := range v.authorizeTokens() {
+		if !lifecycle.IsEraseAuthorization(token) {
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens
+}
+
+func (v *requestValues) relaxations() map[string]string {
+	var tokens []string
+	for _, token := range v.authorizeTokens() {
+		if lifecycle.IsEraseAuthorization(token) {
+			tokens = append(tokens, token)
+		}
+	}
+	relaxations, err := lifecycle.ParseEraseRelaxations(tokens)
+	v.recordFirstError(err)
+	return relaxations
+}
+
+func (v *requestValues) authorizeTokens() []string {
 	var tokens []string
 	for _, value := range v.strings("authorize") {
 		for token := range strings.SplitSeq(value, ",") {

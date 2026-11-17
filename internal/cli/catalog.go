@@ -258,6 +258,18 @@ func authorizationFlag() flagSpec {
 	return flag
 }
 
+func destroyAuthorizationFlag() flagSpec {
+	flag := authorizationFlag()
+	flag.help += ", or relax one Machine's declared removal erase for this destroy (erase=<machine>:metadataClear or erase=<machine>:retain)"
+	return flag
+}
+
+func eraseAuthorizationFlag() flagSpec {
+	flag := stringFlag("authorize", "Preview a destroy that relaxes one Machine's declared removal erase (erase=<machine>:metadataClear or erase=<machine>:retain)")
+	flag.kind = "stringArray"
+	return flag
+}
+
 func unregisteredFlag() flagSpec {
 	flag := stringFlag("unregistered", "Name a Machine whose subscription registration you removed with the subscription service's own tools")
 	flag.kind = "stringArray"
