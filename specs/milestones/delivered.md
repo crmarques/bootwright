@@ -16448,3 +16448,18 @@ keeps the bundle within 75% of the input cap. Measured at `-p 4`:
 its two timing fixes are applied, and its lock finding is
 [B1490](m1.md#b1490).
 
+## X520 — Every module runs under test
+
+### B1489
+
+Split from B1467 under [D274](backlog.md#d274) (audit 005 W6.3 and W6.4). The
+29 collection modules whose `main` no test ran, among them physical erase and
+both administrator-credential modules, each have a stubbed-run test with a
+success and a refusal path through one shared `run_module` fixture, and a
+fitness test fails a module with `main` that no test runs or a shim without an
+action plugin. The unit suite's guard fails any test that forks, arms a timer
+or signals its own process unless it is marked `serial`; the plain lane runs
+those 101 tests alone instead of the whole tree again, so the suite takes about
+150 s instead of 350 s. The test that signalled its own process signals a
+child. No module changed.
+
