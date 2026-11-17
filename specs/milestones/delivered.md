@@ -17037,3 +17037,18 @@ the frozen request fields and the hot arm functions, encoding to the same
 JSON. Machine and CephCluster have typed catalog views built once per compile,
 and 17 readers use them. Every plan, refusal and golden is unchanged.
 
+## X553 — Managed OS capability packages
+
+### B1523
+
+Split from B1469 under [D274](backlog.md#d274) (part of audit 005 W8.6). The
+host firewall, physical erase and disk discovery are the
+`internal/managedos/hostfirewall`, `physicalerase` and `diskdiscovery`
+packages, each declaring one capability; the package tree stays with
+installation, whose request it shares. The siblings import `installation`,
+which keeps the request model and its derivation, in place of a separate
+common request package that would have held most of it; a bound discovered-root
+proof replaces installation's direct read of discovery evidence. Implementation
+identities, requests, digests and request goldens are unchanged; the contract
+goldens moved only in their struct labels.
+
