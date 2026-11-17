@@ -16614,3 +16614,20 @@ import controller setup for it, four context edges left
 (B464's duplicate) is gone. Every plan, digest, stored record, refusal and
 golden is unchanged.
 
+## X531 — Controller evidence in its own package
+
+### B1501
+
+Split from B1469 under [D274](backlog.md#d274) (the rest of audit 005 W8.2).
+`internal/controller/evidence` holds the published controller evidence
+(`ToolRequest`, `InstalledTool`, `InstalledHostIdentity`), so networking, the
+add-on instance and the cluster-object driver no longer import controller
+selection. Managed OS publishes which hosts build installer media, and
+Infrastructure services publish the managed mirrors with their addresses and
+refusals and whether a host serves a managed service; selection reads those
+facts instead of the raw fields, and one function judges both mirrors' shapes.
+Two `contextDependencies` rows are no longer questionable; three still are,
+for the reads that remain. Pin tests of the mirror bridge refusals and the
+installer media conditions pass on the earlier and the moved code; selection
+results and goldens are unchanged.
+
