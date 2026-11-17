@@ -16669,3 +16669,23 @@ codes in the runtime, with a test that every emitted code has one. An
 independent review found no leak; its two fixes are applied. An operator run of
 an erase and an install is owed.
 
+## X534 — One guest session builder and one identity verdict
+
+### B1504
+
+Split from B1466 under [D274](backlog.md#d274) (part of audit 005 W5.1). The
+ten task files that wrote the pinned guest SSH session out (three with their
+own copy of the 21 options) use `managedos_guest_session`, which writes the
+one-key known_hosts and reduced configuration privately from the effective
+host-key policy, and `managedos_guest_command`, which runs the Python builder's
+argument vector with a clean environment, bounded input and output, the remote
+command quoted once and a timeout, so a hung command fails at its own step and
+a run with no exit status fails closed. A test fails any task file that builds
+an SSH argument vector. One `machine_identity` verdict serves machine power,
+the bare-metal target proof and the apply presence proof; where the copies
+differed it refuses, no correct machine reaches those cases, and an unpinned
+power target refused for its identity rather than its addresses now says so
+(`identity-unproved`). An independent review found the sessions pinned exactly
+as before; its two message fixes are applied. An operator run of an install, a
+power and an erase is owed.
+
