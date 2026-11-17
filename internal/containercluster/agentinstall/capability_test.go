@@ -282,18 +282,34 @@ func TestTheProbeVerifiesTheListenerAgainstTheBoundServingCertificate(t *testing
 	if err := yaml.Unmarshal(ansible.Assets()[path], &tasks); err != nil {
 		t.Fatalf("%s: %v", path, err)
 	}
-	var probes []map[string]any
+	var proofs []map[string]any
 	for _, task := range tasks {
-		if uri, ok := task["ansible.builtin.uri"].(map[string]any); ok {
-			probes = append(probes, uri)
+		include, ok := task["ansible.builtin.include_role"].(map[string]any)
+		if ok && include["name"] == "bootwright.core.infrastructureservices_artifact_listener" && include["tasks_from"] == "proof" {
+			vars, _ := task["vars"].(map[string]any)
+			proofs = append(proofs, vars)
 		}
 	}
-	if len(probes) != 1 {
-		t.Fatalf("publish.yml holds %d fetches through the listener", len(probes))
+	if len(proofs) != 1 {
+		t.Fatalf("publish.yml proves the listener %d times", len(proofs))
 	}
 	authority := "{{ " + mediaVariablePrefix + "_material." + want.Variable + " }}"
-	if probes[0]["ca_path"] != authority || probes[0]["validate_certs"] != true {
-		t.Fatalf("the probe verifies against %v (validate_certs %v), not %s", probes[0]["ca_path"], probes[0]["validate_certs"], authority)
+	if proofs[0]["infrastructureservices_artifact_listener_ca"] != authority {
+		t.Fatalf("the proof verifies against %v, not %s", proofs[0]["infrastructureservices_artifact_listener_ca"], authority)
+	}
+	const proof = "collections/ansible_collections/bootwright/core/roles/infrastructureservices_artifact_listener/tasks/proof.yml"
+	var steps []map[string]any
+	if err := yaml.Unmarshal(ansible.Assets()[proof], &steps); err != nil {
+		t.Fatalf("%s: %v", proof, err)
+	}
+	var fetches []map[string]any
+	for _, step := range steps {
+		if uri, ok := step["ansible.builtin.uri"].(map[string]any); ok {
+			fetches = append(fetches, uri)
+		}
+	}
+	if len(fetches) != 1 || fetches[0]["validate_certs"] != true || !strings.Contains(stringOf(fetches[0]["ca_path"]), "infrastructureservices_artifact_listener_ca") {
+		t.Fatalf("the shared proof does not verify the listener against its caller's certificate: %v", fetches)
 	}
 }
 
@@ -574,4 +590,9 @@ func TestMalformedAdministrationKeyRefusesBeforeAdapter(t *testing.T) {
 			t.Fatalf("refusal = %#v, runs = %d", got, len(runner.requests))
 		}
 	}
+}
+
+func stringOf(value any) string {
+	text, _ := value.(string)
+	return text
 }
