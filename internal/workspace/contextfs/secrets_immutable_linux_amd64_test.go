@@ -24,6 +24,8 @@ const immutableCrashRootEnvironment = "BOOTWRIGHT_TEST_IMMUTABLE_CRASH_ROOT"
 
 var immutableIdentityPath = "identities/ver-00000000000000000000000000000000.json"
 
+const immutableKeyringPath = "parts/blob-00000000000000000000000000000000.enc"
+
 func TestSecretImmutableWritePublishesOnlyCompleteFinalName(t *testing.T) {
 	t.Parallel()
 	store, sources := fixture(t)
@@ -71,15 +73,15 @@ func TestReadOnlySecretScanToleratesCompletedPendingRename(t *testing.T) {
 	token := secretToken(record)
 	initializeImmutableTestStore(t, store, token)
 	const pending = "pending-00000000000000000000000000000000"
-	const final = "ver-00000000000000000000000000000000.json"
+	const final = "blob-00000000000000000000000000000000.enc"
 	if err := store.MutateSecrets(context.Background(), token, func(area secretstore.Area) error {
-		return area.WriteExclusive(context.Background(), "identities/"+pending, []byte("staged"))
+		return area.WriteExclusive(context.Background(), "parts/"+pending, []byte("staged"))
 	}); err != nil {
 		t.Fatal(err)
 	}
 	err := store.ReadSecrets(context.Background(), token, func(area secretstore.Area) error {
 		concrete := area.(*secretArea)
-		directory, err := kernel.OpenDirectory(concrete.secrets, "identities")
+		directory, err := kernel.OpenDirectory(concrete.secrets, "parts")
 		if err != nil {
 			return err
 		}
@@ -195,8 +197,8 @@ func TestSecretImmutableWriteSurvivesSubprocessDeathMidWrite(t *testing.T) {
 	if !errors.As(err, &exit) || exit.ExitCode() != 86 {
 		t.Fatalf("subprocess did not stop at the mid-write boundary: %v %s", err, output)
 	}
-	directory := filepath.Join(store.options.Root, "contexts", record.Name, "secrets", "identities")
-	if _, err := os.Stat(filepath.Join(store.options.Root, "contexts", record.Name, "secrets", immutableIdentityPath)); !errors.Is(err, os.ErrNotExist) {
+	directory := filepath.Join(store.options.Root, "contexts", record.Name, "secrets", filepath.Dir(immutableKeyringPath))
+	if _, err := os.Stat(filepath.Join(store.options.Root, "contexts", record.Name, "secrets", immutableKeyringPath)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("subprocess exposed a partial final immutable artifact")
 	}
 	entries, err := os.ReadDir(directory)
@@ -248,7 +250,7 @@ func TestSecretImmutableWriteSubprocessHelper(t *testing.T) {
 		return nil
 	}
 	err = store.MutateSecrets(context.Background(), snapshot.Context, func(area secretstore.Area) error {
-		return area.PublishExclusive(context.Background(), immutableIdentityPath, []byte(strings.Repeat("partial", 16384)))
+		return area.PublishExclusive(context.Background(), immutableKeyringPath, []byte(strings.Repeat("partial", 16384)))
 	})
 	if err != nil {
 		t.Fatal(err)
