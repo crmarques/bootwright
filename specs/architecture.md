@@ -997,7 +997,7 @@ They accept these phases:
 | `prepared` | controller | adapter → runner | `phase`, `preparation`: exactly `addedSources`, the sorted source identities of the frozen request's tools | after the runner matches these sources to the frozen request and publishes them durably | once, after `loaded` and before any `continue` | Unmatched, with any other member, or unpublished, it is never acknowledged, so no tool is installed. |
 | `prepared` | lifecycle | adapter → runner | `phase`, `preparation`: an object the run's capability validates | after the capability validates it and the runner records it durably as the running attempt's preparation | once, after `loaded`, only on an apply's own attempt | It is never acknowledged unless validated and recorded, so the effect it precedes never runs: out of bounds or on a read-only run it breaks the protocol; refused by the capability, the run fails with the capability's diagnostic; unrecorded, it fails with the store's diagnostic, or with `lifecycle.unknown` `the attempt's preparation could not be recorded` when the store names none. |
 | `continue` | controller | adapter → runner | `phase` | before each tool installation | one per frozen tool, in order, after `prepared`; at most 128 | Acknowledgement EOF fails the adapter before that tool. |
-| `group` | lifecycle | adapter → runner | `phase`, `group`, `status`; optionally `progress`: exactly `completed` and `total`, JSON integers from 0 to 2^63-1 with `completed` at most `total` | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. A malformed `progress` breaks the protocol like any malformed member. |
+| `group` | lifecycle | adapter → runner | `phase`, `group`, `status`; optionally [`progress` and `detail`](#adapter-warnings-and-group-progress) | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
 | `completed` | both | adapter → runner | `phase`, `outcome`, `evidence`: an object of at least one member; for a lifecycle run optionally `warnings` | none | last, once | Absent when the channel closes, the run has no result. |
 | `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp`, an acquisition class with `source`, or `internal` | none | last, once, in place of `completed`: `release-stamp` while an `openshift-clients` tool is being installed; an acquisition class (`dns`, `certificate`, `timeout`, `unreachable`, `proxy`, `status`, `redirect`, `integrity`, `trust`, `storage`) naming the tool being installed; `internal`, with no `source`, after `loaded` | The run fails with the [release-stamp refusal](controller.md#the-controller-stage), or the diagnostic Go gives the [class](controller.md#the-controller-stage), naming the source's host, instead of the generic adapter failure, even when the adapter's failed exit is read first; `internal` keeps the generic failure. |
 | `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply; optionally `detail`: at most 160 letters, digits and `_.:@-` naming a closed cause, optionally with the code site that refused, or an exception type and code site, never a value | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason, its message followed by any `detail`, instead of the generic adapter failure, even when the adapter's failed exit is read first; the runner closes the acknowledgement channel and kills nothing, so the adapter is left to end on its own. |
@@ -1118,8 +1118,9 @@ its own.
 
 #### Adapter warnings and group progress
 
-A lifecycle `group` record may carry `progress`, the bytes its group has proved
-out of the bytes it must prove. It is presentation: the lifecycle runner hands
+A lifecycle `group` record may carry `progress`, exactly `completed` and
+`total`, integers from 0 to 2^63-1 with `completed` at most `total`: the bytes
+its group has proved out of those it must prove. It is presentation: the lifecycle runner hands
 it, with the group and status, to the attempt's progress, which the CLI shows
 as the [long-running progress](cli/output.md#long-running-progress) measure,
 and writes it into the group's log record only as that measure's text, at most
@@ -1134,8 +1135,7 @@ once a minute. The member
 is additive and moves no capability's request, evidence or effect pin.
 
 A `running` `group` record may also carry `detail`, a note in the closed
-detail grammar, such as `unanswered:refused:3min`; the decoder refuses one on
-any other status. Only a capability that words
+detail grammar; the decoder refuses one on any other status. Only a capability that words
 it receives it: the runner hands the capability's wording of it to the
 attempt's progress, which shows that sentence in place of the group's
 description, and refuses a detail the capability does not word, or any detail
