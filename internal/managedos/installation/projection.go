@@ -27,11 +27,11 @@ func (Capability) Project(applied api.Catalog, block reconciliation.Block, evide
 		return nil, err
 	}
 	name := request.Identity.Object
-	machine, found := applied.Find(api.Machine, name)
+	machine, found := applied.Machine(name)
 	if !found {
 		return nil, nil
 	}
-	profile := machine.Spec().Get("os", "installProfileRef").Text()
+	profile := machine.InstallProfileRef
 	if profile == "" || observed.OS == (OSEvidence{}) {
 		return nil, nil
 	}

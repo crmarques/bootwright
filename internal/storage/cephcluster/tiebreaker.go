@@ -14,8 +14,8 @@ func ProvidedTiebreakerUser(catalog api.Catalog, cluster api.Object, machineName
 	if !found || textOf(node, "machineRef") != machineName {
 		return "", false
 	}
-	host, found := catalog.Find(api.Machine, machineName)
-	if !found || !host.Spec().Get("os", "provided").Bool() {
+	host, found := catalog.Machine(machineName)
+	if !found || !host.Provided {
 		return "", false
 	}
 	return textOf(spec, "cephadm", "clusterSSH", "user"), true

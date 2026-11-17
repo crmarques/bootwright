@@ -89,10 +89,11 @@ type Catalog struct {
 	byKind      map[Kind][]Object
 	byIdentity  map[string][]Object
 	undecodable map[string]bool
+	memo        *catalogViews
 }
 
 func NewCatalog(objects []Object) Catalog {
-	c := Catalog{objects: slices.Clone(objects), byKind: map[Kind][]Object{}, byIdentity: map[string][]Object{}}
+	c := Catalog{objects: slices.Clone(objects), byKind: map[Kind][]Object{}, byIdentity: map[string][]Object{}, memo: &catalogViews{}}
 	for _, o := range objects {
 		c.byKind[o.Kind()] = append(c.byKind[o.Kind()], o)
 		c.byIdentity[o.Identity()] = append(c.byIdentity[o.Identity()], o)

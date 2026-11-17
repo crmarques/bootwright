@@ -41,11 +41,11 @@ func (PhysicalRetirementCapability) Claimed(catalog api.Catalog) []string {
 
 func physicalCluster(catalog api.Catalog, cluster api.Object) bool {
 	return slices.ContainsFunc(cluster.Spec().Get("topology", "nodes").Items(), func(node api.Value) bool {
-		machine, found := catalog.Find(api.Machine, node.Get("machineRef").Text())
+		machine, found := catalog.Machine(node.Get("machineRef").Text())
 		if !found {
 			return false
 		}
-		provider, found := catalog.Find(api.InfraProvider, machine.Spec().Get("substrate", "providerRef").Text())
+		provider, found := catalog.Find(api.InfraProvider, machine.ProviderRef)
 		return found && substrate.RealizesPhysicalNICs(provider)
 	})
 }

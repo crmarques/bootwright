@@ -66,8 +66,8 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]e
 		}
 	}
 	providers := map[string]bool{}
-	for _, machine := range catalog.OfKind(api.Machine) {
-		if name := machine.Spec().Get("substrate", "providerRef").Text(); name != "" {
+	for _, machine := range catalog.Machines() {
+		if name := machine.ProviderRef; name != "" {
 			providers[name] = true
 		}
 	}

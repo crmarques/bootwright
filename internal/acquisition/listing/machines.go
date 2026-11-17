@@ -13,9 +13,9 @@ const (
 
 func machineRepositoryAcquisitions(catalog api.Catalog) []Row {
 	installed := map[string][]string{}
-	for _, machine := range catalog.OfKind(api.Machine) {
-		if profile := machine.Spec().Get("os", "installProfileRef").Text(); profile != "" {
-			installed[profile] = append(installed[profile], machine.Name())
+	for _, machine := range catalog.Machines() {
+		if profile := machine.InstallProfileRef; profile != "" {
+			installed[profile] = append(installed[profile], machine.Object.Name())
 		}
 	}
 	var rows []Row

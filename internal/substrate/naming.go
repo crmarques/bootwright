@@ -108,14 +108,11 @@ func ControllerSocket(address string, port int) string {
 // it is derived once and never re-derived per Machine.
 func HostedMachines(catalog api.Catalog, provider string) []api.Object {
 	var found []api.Object
-	for _, machine := range catalog.OfKind(api.Machine) {
-		if machine.Spec().Get("substrate", "providerRef").Text() != provider {
+	for _, machine := range catalog.Machines() {
+		if machine.ProviderRef != provider || machine.ProvidedDeclared && machine.Provided {
 			continue
 		}
-		if provided := machine.Spec().Get("os", "provided"); provided.Type() == api.Boolean && provided.Bool() {
-			continue
-		}
-		found = append(found, machine)
+		found = append(found, machine.Object)
 	}
 	slices.SortFunc(found, func(x, y api.Object) int { return strings.Compare(x.Name(), y.Name()) })
 	return found

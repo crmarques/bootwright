@@ -208,8 +208,8 @@ func placementOf(c api.Catalog, pool api.Object) (rule, class string, width, pgs
 		return cephcluster.PoolName(pool), s.Get("erasure", "crushDeviceClass").Text(), positiveOr(s.Get("erasure", "dataChunks"), 0) + positiveOr(s.Get("erasure", "codingChunks"), 0), pgs, true
 	}
 	rule, width = defaultRule, positiveOr(s.Get("replicated", "size"), 0)
-	if cluster, found := c.Find(api.CephCluster, s.Get("clusterRef").Text()); found && cluster.Spec().Has("topology", "stretch") {
-		return poolRule(cluster), "", 4, pgs, true
+	if cluster, found := c.CephCluster(s.Get("clusterRef").Text()); found && cluster.Stretched {
+		return poolRule(cluster.Object), "", 4, pgs, true
 	}
 	if ref := s.Get("placementPolicyRef").Text(); ref != "" {
 		policy, found := c.Find(api.CephPlacementPolicy, ref)

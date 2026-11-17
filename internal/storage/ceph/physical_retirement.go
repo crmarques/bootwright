@@ -131,15 +131,15 @@ const PhysicalRetirementFamily = "storage-physical-retirement"
 
 func (PhysicalRetirementCapability) PhysicalRetirement(catalog api.Catalog, machineName string) ([]reconciliation.ObjectRef, error) {
 	references := []reconciliation.ObjectRef{}
-	machine, found := catalog.Find(api.Machine, machineName)
-	provider, _ := catalog.Find(api.InfraProvider, machine.Spec().Get("substrate", "providerRef").Text())
+	machine, found := catalog.Machine(machineName)
+	provider, _ := catalog.Find(api.InfraProvider, machine.ProviderRef)
 	if !found || !substrate.RealizesPhysicalNICs(provider) {
 		return references, nil
 	}
-	for _, cluster := range catalog.OfKind(api.CephCluster) {
-		for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
-			if node.Get("machineRef").Text() == machineName {
-				references = append(references, reconciliation.ObjectRef{Kind: string(api.CephCluster), Object: cluster.Name(), Family: PhysicalRetirementFamily})
+	for _, cluster := range catalog.CephClusters() {
+		for _, node := range cluster.Nodes {
+			if node.MachineRef == machineName {
+				references = append(references, reconciliation.ObjectRef{Kind: string(api.CephCluster), Object: cluster.Object.Name(), Family: PhysicalRetirementFamily})
 				break
 			}
 		}

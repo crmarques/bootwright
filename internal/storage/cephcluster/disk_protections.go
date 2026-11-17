@@ -13,20 +13,22 @@ import (
 
 func RootDiskProtections(catalog api.Catalog, m api.Object) ([]diskselection.DiskIdentity, error) {
 	var protected []diskselection.DiskIdentity
-	for _, cluster := range catalog.OfKind(api.CephCluster) {
+	for _, view := range catalog.CephClusters() {
+		cluster := view.Object
 		var nodes []string
-		for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
-			if node.Get("machineRef").Text() == m.Name() {
-				nodes = append(nodes, node.Get("name").Text())
+		for _, node := range view.Nodes {
+			if node.MachineRef == m.Name() {
+				nodes = append(nodes, node.Name)
 			}
 		}
 		if len(nodes) == 0 {
 			continue
 		}
-		for _, service := range cluster.Spec().Get("services").Items() {
-			if service.Get("service_type").Text() != "osd" {
+		for _, osd := range view.Services {
+			if osd.Type != "osd" {
 				continue
 			}
+			service := osd.Spec
 			placed, issues := ResolveServicePlacement(cluster, service)
 			if len(issues) != 0 {
 				return nil, fmt.Errorf("Ceph OSD placement cannot be resolved before root discovery")

@@ -9,14 +9,14 @@ import (
 
 func storageAcquisitions(catalog api.Catalog, controllerMachine string) []Row {
 	var rows []Row
-	for _, cluster := range catalog.OfKind(api.CephCluster) {
-		spec := cluster.Spec()
+	for _, view := range catalog.CephClusters() {
+		cluster, spec := view.Object, view.Object.Spec()
 		if spec.Get("management").Text() != "managed" {
 			continue
 		}
 		hosts := []string{}
-		for _, node := range spec.Get("topology", "nodes").Items() {
-			if machine := node.Get("machineRef").Text(); machine != "" {
+		for _, node := range view.Nodes {
+			if machine := node.MachineRef; machine != "" {
 				hosts = append(hosts, machine)
 			}
 		}

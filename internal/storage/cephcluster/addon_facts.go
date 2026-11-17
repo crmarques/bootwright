@@ -13,12 +13,12 @@ func AddonExportFacts(catalog api.Catalog) []ConsumerFacts {
 		gateway, ref := attachedGateway(catalog, export)
 		tls := false
 		if gateway.Name() != "" {
-			cluster, _ := catalog.Find(api.CephCluster, gateway.Spec().Get("clusterRef").Text())
-			service, _ := NativeService(cluster, gateway.Spec().Get("serviceRef").Text())
+			cluster, _ := catalog.CephCluster(gateway.Spec().Get("clusterRef").Text())
+			service, _ := NativeService(cluster.Object, gateway.Spec().Get("serviceRef").Text())
 			tls = service.Get("spec", "ssl").Bool()
-			for _, front := range cluster.Spec().Get("services").Items() {
-				if front.Get("service_type").Text() == "ingress" && front.Get("spec", "backend_service").Text() == NativeServiceName(service) {
-					tls = front.Get("spec", "ssl").Bool()
+			for _, front := range cluster.Services {
+				if front.Type == "ingress" && front.Spec.Get("spec", "backend_service").Text() == NativeServiceName(service) {
+					tls = front.Spec.Get("spec", "ssl").Bool()
 				}
 			}
 		}

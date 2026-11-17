@@ -475,22 +475,22 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 	spec := cluster.Spec()
 	tiebreaker := spec.Get("topology", "stretch", "tiebreaker", "node").Text()
 	for _, node := range spec.Get("topology", "nodes").Items() {
-		m, _ := c.Find(api.Machine, node.Get("machineRef").Text())
-		provided := m.Spec().Get("os", "provided").Bool()
-		if provided {
+		view, _ := c.Machine(node.Get("machineRef").Text())
+		m := view.Object
+		if view.Provided {
 			if err := bindProvidedHost(r, c, m, node, tiebreaker, spec.Get("cephadm", "bootstrap", "nodeRef").Text(), spec.Get("cephadm", "addressRef").Text()); err != nil {
 				return err
 			}
 			continue
 		}
 		if r.Security != nil && r.Security.FIPS {
-			profile, found := c.Find(api.MachineInstallProfile, m.Spec().Get("os", "installProfileRef").Text())
+			profile, found := c.Find(api.MachineInstallProfile, view.InstallProfileRef)
 			if !found || !machine.Installed(m) || !profile.Spec().Get("customizations", "security", "fips", "enabled").Bool() {
 				return failure("api.invariant", "FIPS Ceph requires an installed FIPS profile on Machine/"+m.Name(), "enable customizations.security.fips.enabled on every Ceph Machine's install profile")
 			}
 		}
 		ssh, ok := machine.SSH(m)
-		provider, _ := c.Find(api.InfraProvider, m.Spec().Get("substrate", "providerRef").Text())
+		provider, _ := c.Find(api.InfraProvider, view.ProviderRef)
 		if !ok || !machine.Installed(m) || !substrate.IsRealized(provider) || ssh.PrivateKeyRef == "" || ssh.PasswordRef != "" || ssh.OperatorIdentity || ssh.User != r.ClusterSSHUser || ssh.PrivateKeyRef == r.ClusterKeyRef {
 			return failure("lifecycle.unsupported", "core Ceph requires installed managed hosts and separate fleet and cluster SSH keys", "use the three-node libvirt Ceph example and distinct fleet and orchestration identities")
 		}

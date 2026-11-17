@@ -206,11 +206,11 @@ func (r *retention) hostClosure(catalog api.Catalog, machines []string) map[stri
 			continue
 		}
 		reached[string(api.Machine)+"/"+name] = true
-		machine, found := catalog.Find(api.Machine, name)
+		machine, found := catalog.Machine(name)
 		if !found {
 			continue
 		}
-		provider := machine.Spec().Get("substrate", "providerRef").Text()
+		provider := machine.ProviderRef
 		if provider == "" || reached[string(api.InfraProvider)+"/"+provider] {
 			continue
 		}

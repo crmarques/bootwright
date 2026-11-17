@@ -178,8 +178,8 @@ func requiresLibvirtClient(catalog api.Catalog, controllerMachine api.Object) bo
 	if requiresHypervisor(catalog, controllerMachine) {
 		return true
 	}
-	for _, machine := range catalog.OfKind(api.Machine) {
-		provider, found := catalog.Find(api.InfraProvider, machine.Spec().Get("substrate", "providerRef").Text())
+	for _, machine := range catalog.Machines() {
+		provider, found := catalog.Find(api.InfraProvider, machine.ProviderRef)
 		if found && substrate.NeedsHypervisorClient(provider) {
 			return true
 		}

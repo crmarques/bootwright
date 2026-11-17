@@ -9,12 +9,11 @@ import (
 
 func InstallerMediaHosts(catalog api.Catalog) []string {
 	var hosts []string
-	for _, machine := range catalog.OfKind(api.Machine) {
-		provided := machine.Spec().Get("os", "provided")
-		if provided.Type() != api.Boolean || provided.Bool() {
+	for _, machine := range catalog.Machines() {
+		if !machine.Installed() {
 			continue
 		}
-		profile, found := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
+		profile, found := catalog.Find(api.MachineInstallProfile, machine.InstallProfileRef)
 		if !found || !profile.Spec().Has("installer", "anaconda") {
 			continue
 		}

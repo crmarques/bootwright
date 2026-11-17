@@ -702,16 +702,16 @@ func enforcedArms(catalog api.Catalog, cluster api.Object) []substrate.Arm {
 
 func nodeArms(catalog api.Catalog, cluster api.Object) (arms, enforced []substrate.Arm) {
 	for _, node := range cluster.Spec().Get("nodes").Items() {
-		bound, ok := catalog.Find(api.Machine, node.Get("machineRef").Text())
+		bound, ok := catalog.Machine(node.Get("machineRef").Text())
 		if !ok {
 			continue
 		}
-		provider, ok := catalog.Find(api.InfraProvider, bound.Spec().Get("substrate", "providerRef").Text())
+		provider, ok := catalog.Find(api.InfraProvider, bound.ProviderRef)
 		if !ok {
 			continue
 		}
 		arms = append(arms, substrate.Variant(provider))
-		if nodeFirmware(substrate.MachineFirmware(bound)).enforced() {
+		if nodeFirmware(substrate.MachineFirmware(bound.Object)).enforced() {
 			enforced = append(enforced, substrate.Variant(provider))
 		}
 	}

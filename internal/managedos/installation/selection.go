@@ -142,15 +142,11 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 // installs, in canonical name order.
 func InstalledMachines(catalog api.Catalog) []api.Object {
 	var found []api.Object
-	for _, machine := range catalog.OfKind(api.Machine) {
-		provided := machine.Spec().Get("os", "provided")
-		if provided.Type() != api.Boolean || provided.Bool() {
+	for _, machine := range catalog.Machines() {
+		if !machine.Installed() || machine.InstallProfileRef == "" {
 			continue
 		}
-		if machine.Spec().Get("os", "installProfileRef").Text() == "" {
-			continue
-		}
-		found = append(found, machine)
+		found = append(found, machine.Object)
 	}
 	slices.SortFunc(found, func(x, y api.Object) int { return strings.Compare(x.Name(), y.Name()) })
 	return found
