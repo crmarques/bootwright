@@ -16787,3 +16787,22 @@ every bootstrap hold takes one form. The outcome map and a separate hold
 helper the audit named no longer existed. Every request, refusal and golden is
 unchanged; the native bundle's digest moves with its sources.
 
+## X540 — Machine ports and worker values frozen by Go
+
+### B1509
+
+Split from B1464 under [D274](backlog.md#d274) (the rest of audit 005 W3.2).
+`substrate.MachinePort` is frozen once per target into the power, power-read,
+OS install and cluster node requests: the endpoint, TLS verification, the
+KubeVirt media volume and the names of the material variables that hold the
+credentials, which stay in material. One filter resolves it, so the 21 Jinja
+access dictionaries and the per-node credential bindings are gone, and the
+KubeVirt worker uses the frozen media volume and one timestamp parser. The Ceph
+host request carries its image pull budget, which every reader takes from it.
+The registry request carries its SELinux label level, and the service
+inspection reports whether the running registry accepts the credential. The
+machine, cluster install, OS install, erase, Ceph host and managed service
+contracts moved. An independent review found credentials kept in material,
+verification unchanged in every role and each node bound to its own
+controller.
+
