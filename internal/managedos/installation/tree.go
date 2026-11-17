@@ -64,7 +64,7 @@ func (c TreeCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "package tree planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
-	requests, _, err := intentRequests(catalog, input.Controller, input.Context.Name)
+	requests, _, err := plannedRequests(input, nil, false)
 	if err != nil {
 		return lifecycle.CapabilityPlan{}, err
 	}

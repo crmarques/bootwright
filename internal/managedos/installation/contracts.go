@@ -2,6 +2,9 @@ package installation
 
 import (
 	"context"
+	"fmt"
+	"slices"
+	"strconv"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	machineref "github.com/crmarques/bootwright/internal/machine"
@@ -74,5 +77,22 @@ func resolvedRequests(ctx context.Context, input lifecycle.PlanInput, roots Disc
 			return nil, nil, err
 		}
 	}
-	return requestsFor(input.State.Effective(), input.Controller, input.Context.Name, proofs, true)
+	return plannedRequests(input, proofs, true)
+}
+
+type derivedRequests struct {
+	requests     []Request
+	requirements []Requirements
+}
+
+func plannedRequests(input lifecycle.PlanInput, proofs map[string]diskselection.Proof, complete bool) ([]Request, []Requirements, error) {
+	key := "managedos/installation.requests\x00" + strconv.FormatBool(complete) + "\x00" + fmt.Sprintf("%#v", proofs)
+	derived, err := lifecycle.Derived(input, key, func() (derivedRequests, error) {
+		requests, requirements, err := requestsFor(input.State.Effective(), input.Controller, input.Context.Name, proofs, complete)
+		return derivedRequests{requests: requests, requirements: requirements}, err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return slices.Clone(derived.requests), slices.Clone(derived.requirements), nil
 }

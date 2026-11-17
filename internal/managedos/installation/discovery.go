@@ -66,6 +66,8 @@ func discoveryMachine(m api.Object) bool {
 func (c DiscoveryCapability) requests(ctx context.Context, input lifecycle.PlanInput) ([]DiscoveryRequest, []Requirements, error) {
 	var requests []DiscoveryRequest
 	var requirements []Requirements
+	var records map[string]MediaRecord
+	read := false
 	if input.State == nil {
 		return nil, nil, refusal("lifecycle.state", "disk discovery requires compiled state", "")
 	}
@@ -79,9 +81,12 @@ func (c DiscoveryCapability) requests(ctx context.Context, input lifecycle.PlanI
 		if c.media == nil {
 			return nil, nil, refusal("lifecycle.state", "disk discovery has no media reader", "")
 		}
-		records, err := c.media.MediaRecords(ctx)
-		if err != nil {
-			return nil, nil, err
+		if !read {
+			found, err := c.media.MediaRecords(ctx)
+			if err != nil {
+				return nil, nil, err
+			}
+			records, read = found, true
 		}
 		r, needs, err := discoveryRequest(input.State.Effective(), m, input, records)
 		if err != nil {
