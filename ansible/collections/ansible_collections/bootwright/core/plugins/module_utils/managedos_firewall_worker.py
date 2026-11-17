@@ -245,6 +245,7 @@ class Guest:
     def __init__(self, run=run_command, directory=SERVICES_DIRECTORY, owner=0, preserve_runtime=False):
         self.preserve_runtime = preserve_runtime
         self.owned_names = set()
+        self.snapshots = {True: None, False: None}
         self.run = run
         self.directory = directory
         self.owner = owner
@@ -356,14 +357,20 @@ class Guest:
         loaded = set(output.split())
         return all(name.encode("ascii") in loaded for name in names)
 
+    def snapshot(self, permanent):
+        """Every zone's listed services on one side, read once until a change of that side forgets it."""
+        if self.snapshots[permanent] is None:
+            code, output = self.command(*((["--permanent"] if permanent else []) + ["--list-all-zones"]))
+            if code != 0:
+                raise failed("tooling")
+            self.snapshots[permanent] = zone_services(output)
+        return self.snapshots[permanent]
+
     def lists(self, zone, name, permanent):
-        arguments = (["--permanent"] if permanent else []) + ["--zone=" + zone, "--query-service=" + name]
-        code, _output = self.command(*arguments)
-        if code == 0:
-            return True
-        if code in NOT_LISTED:
-            return False
-        raise failed("tooling")
+        services = self.snapshot(permanent)
+        if zone not in services:
+            raise failed("tooling")
+        return name in services[zone]
 
     def path(self, name):
         return os.path.join(self.directory, name + ".xml")
@@ -439,6 +446,7 @@ class Guest:
         if self.preserve_runtime:
             self.require_reload_safe()
         code, _output = self.command("--reload")
+        self.snapshots = {True: None, False: None}
         if code != 0:
             raise failed("reload")
 
@@ -474,6 +482,7 @@ class Guest:
 
     def alter(self, zone, name, verb):
         code, _output = self.command("--permanent", "--zone=" + zone, "--" + verb + "-service=" + name)
+        self.snapshots[True] = None
         if code != 0:
             raise failed("zone")
 
@@ -527,6 +536,38 @@ class Guest:
         return any(self.lists(zone, service["name"], False) for service in payload["services"] for zone in live)
 
 
+ZONE_HEADER = re.compile(r"([A-Za-z0-9_-]{1,17})(?: \((?:default|active|disabled)(?:, (?:default|active|disabled))*\))?")
+
+
+def zone_services(output):
+    """{zone: services it lists} from one --list-all-zones; a shape outside the closed one is a tooling failure."""
+    try:
+        text = output.decode("ascii")
+    except UnicodeError:
+        raise failed("tooling") from None
+    zones = {}
+    current = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if not line.startswith((" ", "\t")):
+            header = ZONE_HEADER.fullmatch(stripped)
+            if not header or header[1] in zones or len(zones) >= MAX_ZONES:
+                raise failed("tooling")
+            current = header[1]
+            zones[current] = None
+        elif current is None:
+            raise failed("tooling")
+        elif stripped.startswith("services:"):
+            if zones[current] is not None:
+                raise failed("tooling")
+            zones[current] = frozenset(stripped.split()[1:])
+    if any(services is None for services in zones.values()):
+        raise failed("tooling")
+    return zones
+
+
 def zone_snapshot(output, owned):
     """Reload preserves interface bindings; all other foreign zone intent must match."""
     try:
@@ -560,12 +601,11 @@ def apply_operation(guest, payload):
     if changed or not guest.known([service["name"] for service in payload["services"]]):
         guest.reload()
         changed = True
-    added = False
-    for service, (_state, _data, zones) in zip(payload["services"], planned):
-        for zone in zones:
-            if not guest.lists(zone, service["name"], True):
-                guest.alter(zone, service["name"], "add")
-                added = True
+    missing = [(zone, service["name"]) for service, (_state, _data, zones) in zip(payload["services"], planned)
+               for zone in zones if not guest.lists(zone, service["name"], True)]
+    for zone, name in missing:
+        guest.alter(zone, name, "add")
+    added = bool(missing)
     reloaded = False
     if added or guest.missing_at_runtime(payload, planned):
         guest.reload()
@@ -583,14 +623,14 @@ def remove_operation(guest, payload):
             raise Refused("host-firewall-foreign", detail=service["name"])
         states.append(state)
     zones = guest.zones()
+    listed = {service["name"]: [zone for zone in zones if guest.lists(zone, service["name"], True)]
+              for service, state in zip(payload["services"], states) if state == "owned"}
     changed = False
     for service, state in zip(payload["services"], states):
         if state != "owned":
             continue
-        for zone in zones:
-            if guest.lists(zone, service["name"], True):
-                guest.alter(zone, service["name"], "remove")
-                changed = True
+        for zone in listed[service["name"]]:
+            guest.alter(zone, service["name"], "remove")
         guest.delete(service["name"])
         changed = True
     if changed or guest.listed_at_runtime(payload):

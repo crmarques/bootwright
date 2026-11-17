@@ -94,6 +94,10 @@ class FakeFirewalld:
         if verb == "--get-services":
             assert "--permanent" in arguments
             return 0, " ".join(["ssh"] + sorted(self.known)).encode() + b"\n"
+        if verb == "--list-all-zones":
+            table = self.permanent if "--permanent" in arguments else self.runtime
+            return 0, "\n".join("%s\n  target: default\n  services: %s\n  ports:" % (zone, " ".join(sorted(names & self.known)))
+                                for zone, names in sorted(table.items())).encode()
         if verb == "--reload":
             self.runtime = {zone: set(names) for zone, names in self.permanent.items()}
             self.known = {path.stem for path in self.directory.glob("*.xml")}
@@ -428,7 +432,7 @@ def test_a_tool_that_answers_outside_the_closed_vocabulary_is_a_tooling_failure(
     host.zones["eth0"] = "public zone\nwith text"
     assert ask(host, "inspect", [service()]) == {"ok": False, "reason": "host-firewall-failed", "cause": "tooling"}
     host.zones["eth0"] = "public"
-    host.fail["--query-service"] = 2
+    host.fail["--list-all-zones"] = 2
     assert ask(host, "inspect", [service()])["cause"] == "tooling"
 
 
@@ -938,7 +942,7 @@ class ProvidedFirewalld(FakeFirewalld):
             permanent = "--permanent" in argv
             table = self.permanent if permanent else self.runtime
             ports = self.permanent_ports if permanent else self.runtime_ports
-            return 0, "\n".join("%s\n  services: %s\n  ports: %s" % (self.header(zone, permanent), " ".join(sorted(names)), ports)
+            return 0, "\n".join("%s\n  services: %s\n  ports: %s" % (self.header(zone, permanent), " ".join(sorted(names & self.known)), ports)
                                 for zone, names in sorted(table.items())).encode()
         if "--get-all-rules" in argv or "--get-all-passthroughs" in argv or "--get-all-chains" in argv or "--list-all-policies" in argv:
             self.calls.append(list(argv))
@@ -1122,3 +1126,61 @@ def test_runtime_zone_status_annotations_are_not_configuration_drift():
         b"internal\n  services: ssh\n", set())
     assert worker.zone_snapshot(runtime.replace(b"services: ssh", b"services: https"), set()) != worker.zone_snapshot(permanent, set())
     assert worker.zone_snapshot(b"public (unqualified)\n", set()) != worker.zone_snapshot(b"public\n", set())
+
+
+def zone_reads(host):
+    """(per-zone service queries, whole-zone listings) the worker started."""
+    queries = [call for call in host.calls if any(word.startswith("--query-service=") for word in call)]
+    listings = [call for call in host.calls if "--list-all-zones" in call]
+    return len(queries), len(listings)
+
+
+def test_an_inspection_reads_each_side_of_the_zones_once_whatever_the_services_and_zones(host):
+    wanted = [service(RGW), service(NFS, port=2049)]
+    ask(host, "apply", wanted)
+    host.addresses["eth3"] = ["192.0.2.77/24"]
+    host.zones["eth3"] = "drop"
+    host.permanent["drop"].add(RGW)
+    host.runtime["drop"].add(NFS)
+    host.calls.clear()
+    reply = ask(host, "inspect", wanted)
+    assert reply["ok"] and zone_reads(host) == (0, 2)
+    assert reply["result"]["services"][0]["memberships"] == [{"interface": "eth3", "zone": "drop"}, {"interface": "eth0", "zone": "public"}]
+    assert reply["result"]["services"][1]["memberships"] == [{"interface": "eth3", "zone": "drop"}, {"interface": "eth0", "zone": "public"}]
+
+
+def test_a_replay_reads_each_side_once_and_a_change_reads_the_changed_side_again_before_its_proof(host):
+    wanted = [service(RGW), service(NFS, port=2049)]
+    host.calls.clear()
+    first = ask(host, "apply", wanted)
+    assert first["result"]["changed"] is True and zone_reads(host)[0] == 0
+    host.calls.clear()
+    replay = ask(host, "apply", wanted)
+    assert replay["result"]["changed"] is False and zone_reads(host) == (0, 2)
+
+
+def test_a_removal_never_reads_a_zone_for_each_service(host, directory):
+    wanted = [service(RGW), service(NFS, port=2049)]
+    ask(host, "apply", wanted)
+    host.calls.clear()
+    reply = ask(host, "remove", wanted)
+    assert reply["ok"] and zone_reads(host)[0] == 0 and zone_reads(host)[1] <= 4
+    assert reply["result"]["services"] == [entry(RGW, "absent", False, ()), entry(NFS, "absent", False, ())]
+
+
+def test_a_zone_the_listing_lacks_or_a_listing_that_cannot_be_read_is_a_tooling_failure(host):
+    wanted = service()
+    host.zones["eth0"] = "drop"
+    del host.permanent["drop"]
+    assert ask(host, "inspect", [wanted]) == {"ok": False, "reason": "host-firewall-failed", "cause": "tooling"}
+    host.permanent["drop"] = set()
+    host.fail["--list-all-zones"] = 2
+    assert ask(host, "inspect", [wanted])["cause"] == "tooling"
+
+
+@pytest.mark.parametrize("listing", [b"public\n  ports: 1/tcp\n", b"  services: ssh\n", b"public\n  services: ssh\n  services: ssh\n",
+                                     b"public\n  services: ssh\npublic\n  services: ssh\n", b"bad zone\n  services: ssh\n", b"public\n  services: \xff\n"])
+def test_a_zone_listing_outside_the_closed_shape_is_a_tooling_failure(listing):
+    with pytest.raises(worker.Refused) as refused:
+        worker.zone_services(listing)
+    assert refused.value.cause == "tooling"
