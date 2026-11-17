@@ -310,16 +310,18 @@ func (c HostCapability) Removal(ctx context.Context, block reconciliation.Block)
 }
 
 func (c HostCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "apply")
+	return lifecycle.MutateBlock(ctx, c.mutation("apply"), execution, "apply")
 }
 
 func (c HostCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "destroy")
+	return lifecycle.MutateBlock(ctx, c.mutation("destroy"), execution, "destroy")
 }
 
-func (c HostCapability) mutation() lifecycle.Mutation[HostRequest] {
+func (c HostCapability) mutation(operation string) lifecycle.Mutation[HostRequest] {
 	return lifecycle.Mutation[HostRequest]{
-		Prepare: c.prepare, Run: c.run, Reading: hostReading,
+		Prepare: c.prepare, Run: func(ctx context.Context, execution lifecycle.Execution, _ string, request HostRequest) (lifecycle.RunResult, error) {
+			return c.run(ctx, execution, operation, request)
+		}, Reading: hostReading,
 		Unusable: refusal("lifecycle.state", "the provider host adapter reported no usable outcome", ""),
 	}
 }
@@ -332,7 +334,7 @@ func (c HostCapability) mutation() lifecycle.Mutation[HostRequest] {
 // storage driver that does not answer reports no network and no pool, so it
 // proves nothing: silence with nothing else of this context's is unknown.
 func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return lifecycle.ObserveBlock(ctx, c.mutation(), execution, reconciliation.Apply)
+	return lifecycle.ObserveBlock(ctx, c.mutation("observe"), execution, reconciliation.Apply)
 }
 
 // ObserveRemoval reads the same observation for what a removal takes back, not
@@ -345,7 +347,7 @@ func (c HostCapability) Observe(ctx context.Context, execution lifecycle.Executi
 // connection or driver that does not answer proves none of them absent, so it
 // stays unknown.
 func (c HostCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return lifecycle.ObserveBlock(ctx, c.mutation(), execution, reconciliation.Destroy)
+	return lifecycle.ObserveBlock(ctx, c.mutation("observe"), execution, reconciliation.Destroy)
 }
 
 // hostReading reads a provider host observation for the verb the block was
@@ -398,16 +400,18 @@ func (c MachineCapability) Removal(ctx context.Context, block reconciliation.Blo
 }
 
 func (c MachineCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "apply")
+	return lifecycle.MutateBlock(ctx, c.mutation("apply"), execution, "apply")
 }
 
 func (c MachineCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "destroy")
+	return lifecycle.MutateBlock(ctx, c.mutation("destroy"), execution, "destroy")
 }
 
-func (c MachineCapability) mutation() lifecycle.Mutation[MachineRequest] {
+func (c MachineCapability) mutation(operation string) lifecycle.Mutation[MachineRequest] {
 	return lifecycle.Mutation[MachineRequest]{
-		Prepare: c.prepare, Run: c.run, Reading: machineReading,
+		Prepare: c.prepare, Run: func(ctx context.Context, execution lifecycle.Execution, _ string, request MachineRequest) (lifecycle.RunResult, error) {
+			return c.run(ctx, execution, operation, request)
+		}, Reading: machineReading,
 		Unusable: refusal("lifecycle.state", "the machine adapter reported no usable outcome", ""),
 	}
 }
@@ -416,7 +420,7 @@ func (c MachineCapability) mutation() lifecycle.Mutation[MachineRequest] {
 // positive no effect; this context's own domain, controller or disks part way
 // realized is positive partial; a foreign domain stays unknown.
 func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return lifecycle.ObserveBlock(ctx, c.mutation(), execution, reconciliation.Apply)
+	return lifecycle.ObserveBlock(ctx, c.mutation("observe"), execution, reconciliation.Apply)
 }
 
 // ObserveRemoval reads the same observation for what a removal takes back, not
@@ -429,7 +433,7 @@ func (c MachineCapability) Observe(ctx context.Context, execution lifecycle.Exec
 // converges, whatever the apply's postcondition says. A listener alone is not
 // proved to be this Machine's, so it stays unknown.
 func (c MachineCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
-	return lifecycle.ObserveBlock(ctx, c.mutation(), execution, reconciliation.Destroy)
+	return lifecycle.ObserveBlock(ctx, c.mutation("observe"), execution, reconciliation.Destroy)
 }
 
 // machineReading reads a machine observation for the verb the block was frozen

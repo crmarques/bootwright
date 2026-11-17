@@ -122,16 +122,18 @@ func (c MachineCapability) Removal(ctx context.Context, block reconciliation.Blo
 }
 
 func (c MachineCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "apply")
+	return lifecycle.MutateBlock(ctx, c.mutation("apply"), execution, "apply")
 }
 
 func (c MachineCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "destroy")
+	return lifecycle.MutateBlock(ctx, c.mutation("destroy"), execution, "destroy")
 }
 
-func (c MachineCapability) mutation() lifecycle.Mutation[Request] {
+func (c MachineCapability) mutation(operation string) lifecycle.Mutation[Request] {
 	return lifecycle.Mutation[Request]{
-		Prepare: c.prepare, Run: c.run,
+		Prepare: c.prepare, Run: func(ctx context.Context, execution lifecycle.Execution, _ string, request Request) (lifecycle.RunResult, error) {
+			return c.run(ctx, execution, operation, request)
+		},
 		Reading: func(request Request, digest string) lifecycle.EffectReading {
 			return lifecycle.EffectReading{
 				Presence: func(evidence []byte) error { return ValidatePresence(evidence, request, digest) },

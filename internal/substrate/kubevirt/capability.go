@@ -156,18 +156,20 @@ func (c HostCapability) Removal(_ context.Context, block reconciliation.Block) (
 // Apply runs the proof. It changes nothing on the host, so a proof that holds
 // is unchanged and one that does not fails before any Machine is touched.
 func (c HostCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "apply")
+	return lifecycle.MutateBlock(ctx, c.mutation("apply"), execution, "apply")
 }
 
 // Destroy publishes the proof released: it reads nothing on the host and is
 // lent no access, because the proof created nothing there to take back.
 func (c HostCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "destroy")
+	return lifecycle.MutateBlock(ctx, c.mutation("destroy"), execution, "destroy")
 }
 
-func (c HostCapability) mutation() lifecycle.Mutation[HostRequest] {
+func (c HostCapability) mutation(operation string) lifecycle.Mutation[HostRequest] {
 	return lifecycle.Mutation[HostRequest]{
-		Prepare: c.prepare, Run: c.prove,
+		Prepare: c.prepare, Run: func(ctx context.Context, execution lifecycle.Execution, _ string, request HostRequest) (lifecycle.RunResult, error) {
+			return c.prove(ctx, execution, operation, request)
+		},
 		Reading: func(request HostRequest, digest string) lifecycle.EffectReading {
 			return lifecycle.EffectReading{
 				Presence: func(evidence []byte) error { return ValidateHostPresence(evidence, request, digest) },
@@ -435,16 +437,18 @@ func (c MachineCapability) Removal(_ context.Context, block reconciliation.Block
 }
 
 func (c MachineCapability) Apply(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "apply")
+	return lifecycle.MutateBlock(ctx, c.mutation("apply"), execution, "apply")
 }
 
 func (c MachineCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
-	return lifecycle.MutateBlock(ctx, c.mutation(), execution, "destroy")
+	return lifecycle.MutateBlock(ctx, c.mutation("destroy"), execution, "destroy")
 }
 
-func (c MachineCapability) mutation() lifecycle.Mutation[MachineRequest] {
+func (c MachineCapability) mutation(operation string) lifecycle.Mutation[MachineRequest] {
 	return lifecycle.Mutation[MachineRequest]{
-		Prepare: c.prepare, Run: c.run, Reading: machineReading,
+		Prepare: c.prepare, Run: func(ctx context.Context, execution lifecycle.Execution, _ string, request MachineRequest) (lifecycle.RunResult, error) {
+			return c.run(ctx, execution, operation, request)
+		}, Reading: machineReading,
 		Unusable: refusal("lifecycle.state", "the KubeVirt machine adapter reported no usable outcome", ""),
 		Proved: func(execution lifecycle.Execution, request MachineRequest, result lifecycle.RunResult) error {
 			return samePin(result.Evidence, execution.Block.RequestDigest, execution.ApplyProved, request.Provider)
@@ -492,7 +496,7 @@ func machineReading(request MachineRequest, digest string) lifecycle.EffectReadi
 }
 
 func (c MachineCapability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
-	observation, err := lifecycle.ObserveBlock(ctx, c.mutation(), execution, verb)
+	observation, err := lifecycle.ObserveBlock(ctx, c.mutation("observe"), execution, verb)
 	if err == nil && observation.Effect == reconciliation.EffectCompleted && verb == reconciliation.Apply {
 		observation.Outcome = reconciliation.OutcomeUnchanged
 	}
