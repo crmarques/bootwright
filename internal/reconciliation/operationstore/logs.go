@@ -343,9 +343,11 @@ func (s *Store) LogPaths(ctx context.Context, id string, plan reconciliation.Pla
 		return nil, nil
 	}
 	var paths []string
-	if _, found, err := s.logs.Read(ctx, OperationLogPath(id), 0); err != nil {
+	operation, err := s.logs.Entries(ctx, id)
+	if err != nil {
 		return nil, err
-	} else if found {
+	}
+	if slices.ContainsFunc(operation, func(entry Entry) bool { return !entry.Directory && entry.Name == path.Base(OperationLogPath(id)) }) {
 		paths = append(paths, path.Join(reference, OperationLogPath(id)))
 	}
 	for _, block := range plan.Blocks {

@@ -197,6 +197,31 @@ func TestLogPathsFollowFrozenPlanOrder(t *testing.T) {
 	}
 }
 
+// Listing the logs tests that the operation log exists from its directory's
+// entries rather than by reading up to its whole bound and discarding it.
+func TestLogPathsReadNoLog(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	area.logs.reference = "contexts/lab/operations"
+	plan := testPlan(t, "alpha")
+	id := "op-" + strings.Repeat("ab", 16)
+	log, err := store.OpenLog(ctx, OperationLogPath(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := log.Append(ctx, LogRecord{Event: "group", Detail: strings.Repeat("x", maxLogDetail)}); err != nil {
+		t.Fatal(err)
+	}
+	reads := area.logs.reads
+	paths, err := store.LogPaths(ctx, id, plan)
+	if err != nil || len(paths) != 1 || paths[0] != "contexts/lab/operations/"+OperationLogPath(id) {
+		t.Fatalf("log paths = %v (%v), want the operation log", paths, err)
+	}
+	if read := area.logs.reads - reads; read != 0 {
+		t.Fatalf("listing the logs read %d logs, want none", read)
+	}
+}
+
 func TestAdapterOutputIsRetainedBesideItsAttemptLog(t *testing.T) {
 	id := "op-" + strings.Repeat("ab", 16)
 	attempt, err := AttemptLogPath(id, "alpha", 1, 0)
