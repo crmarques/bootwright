@@ -17099,3 +17099,18 @@ gets a deep copy that refuses any field kind it cannot copy. An independent
 safety review found no blocking problem; its follow-ups are the deep copy fix
 and [B1528](m1.md#b1528).
 
+## X556 — Automation remainders frozen by Go
+
+### B1526
+
+Split from B1464 under [D274](backlog.md#d274) with the automation remainders
+the W items named. The agent install role observes and destroys its nodes in
+bounded node plays as it applies them, with one collection and one resolution
+of its own media; the installation and firewall requests freeze their
+inspection sessions, and the registration and update modules take their
+timeouts from the request; Go freezes the NVMe-oF unit observer's read bound;
+the installation and disk discovery capabilities name controller material by
+the frozen machine port, which the Anaconda and power roles read; the
+end-to-end cases render once per test binary. The parallel client tool
+downloads and the erase material writer are [B1529](m1.md#b1529).
+
