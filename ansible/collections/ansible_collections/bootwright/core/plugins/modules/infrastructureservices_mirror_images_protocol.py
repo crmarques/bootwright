@@ -11,19 +11,11 @@ description:
   - Runs only through the paired action on the controller, which owns the
     inherited result channel the invoking Bootwright process reads.
   - The frozen Go request and that channel own authorization and evidence.
+extends_documentation_fragment:
+  - bootwright.core.protocol.completion
+  - bootwright.core.protocol.phase
+  - bootwright.core.protocol.observed
 options:
-  phase:
-    description: The capability phase being published.
-    type: str
-    required: true
-  group:
-    description: The presentation group a progress phase reports.
-    type: str
-    required: false
-  status:
-    description: The status a progress phase reports for its group.
-    type: str
-    required: false
   reason:
     description:
       - The refusal a refused phase names to the runner before the run fails,
@@ -32,14 +24,6 @@ options:
         C(image-digest-mismatch) for a mirror holding another digest than the
         pinned one, C(image-unreachable) for an origin the mirror host could
         not copy from, or C(mirror-unreadable) for a mirror it could not read.
-    type: str
-    required: false
-  outcome:
-    description: The terminal outcome a completion phase publishes.
-    type: str
-    required: false
-  digest:
-    description: The frozen request digest the evidence must name.
     type: str
     required: false
   images:
@@ -56,12 +40,6 @@ options:
     description: Whether the completion releases the fill rather than proving presence.
     type: bool
     required: false
-  observed:
-    description:
-      - Whether this publication is a read-only observation, which may report
-        evidence that proves no postcondition rather than failing.
-    type: bool
-    required: false
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -74,8 +52,5 @@ EXAMPLES = r"""
 """
 
 RETURN = r"""
-changed:
-  description: Always false; publication performs no host effect.
-  returned: always
-  type: bool
+extends_documentation_fragment: bootwright.core.protocol
 """

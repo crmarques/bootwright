@@ -10,6 +10,9 @@ version_added: "0.1.0"
 description:
   - Publishes the shared adapter handshake, progress and terminal evidence.
   - Runs on the controller and never exposes private provider output.
+extends_documentation_fragment:
+  - bootwright.core.protocol.ceph_completion
+  - bootwright.core.protocol.detail
 options:
   phase:
     description: Shared protocol phase.
@@ -144,12 +147,6 @@ options:
       - device-serial-mismatch
       - device-alias
       - device-root
-  detail:
-    description: Non-secret refusal cause, a refusal name or an exception type and code site.
-    type: str
-  native_error:
-    description: Bounded redacted native cause and selected public coordinate.
-    type: dict
   group:
     description: Frozen progress group identifier.
     type: str
@@ -161,26 +158,9 @@ options:
       - ok
       - failed
       - skipped
-  outcome:
-    description: Completed native outcome.
-    type: str
-    choices:
-      - changed
-      - unchanged
-  digest:
-    description: Frozen lifecycle request digest.
-    type: str
   evidence:
     description: Closed non-sensitive evidence record.
     type: dict
-  observed:
-    description: Whether this is a read-only observation.
-    type: bool
-    default: false
-  removed:
-    description: Whether this completion must prove removal.
-    type: bool
-    default: false
   pending:
     description: The checks that kept a read-only observation from ready, reported as warnings only.
     type: list

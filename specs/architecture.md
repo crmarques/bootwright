@@ -831,7 +831,7 @@ needed paths:
 | `ansible/collections/` | The embedded collection; the controller runtime's exact lock is `internal/controller/runtimelock/lock.json`. |
 | Collection `playbooks/<domain>/<capability>_<operation>.yml` | One fixed application-port entrypoint, named for its capability and the Go port operation it binds; a substrate arm's capability carries the arm (`libvirt_machine`), and a capability with one operation, `controller/setup.yml` and `machine/power.yml`, is named for the capability alone; private fragments under its `tasks/`. |
 | Collection `roles/<domain>_[<implementation>_]<capability>/` | One local or remote capability adapter with only applicable standard role directories. |
-| Collection `plugins/` | Capability adapters, named for the implementation whose vocabulary they speak, effect-free product translation/evidence normalization, or the adapter's output callback, which [prints nothing a `no_log` result raised](security.md#logs-output-and-diagnostics). |
+| Collection `plugins/` | Capability adapters, named for the implementation whose vocabulary they speak, effect-free product translation/evidence normalization, or the adapter's output callback, which [prints nothing a `no_log` result raised](security.md#logs-output-and-diagnostics); `plugins/doc_fragments/` holds only documentation that several modules repeat word for word. |
 | Collection `tests/unit/` | Collection-owned tests following `ansible-test` discovery. Their `conftest.py` installs the collection loader `ansible-test` would when no runner has, so plain pytest runs the same tests; the `units` suite of `scripts/ansible-check` runs them both ways. |
 
 The first consumer selects package-native or standard lock formats; Bootwright

@@ -10,15 +10,10 @@ version_added: "0.1.0"
 description:
   - Publishes the shared handshake, a named refusal and the closed resolution.
   - Exposes no credentials, registry diagnostics or mutable tag adoption.
+extends_documentation_fragment:
+  - bootwright.core.protocol.ceph_phase
+  - bootwright.core.protocol.detail
 options:
-  phase:
-    description: Shared protocol phase.
-    type: str
-    required: true
-    choices:
-      - loaded
-      - refused
-      - completed
   reason:
     description: Fixed resolution refusal name.
     type: str
@@ -31,12 +26,6 @@ options:
       - unknown
       - adapter-exception
       - image-digest-mismatch
-  detail:
-    description: Non-secret refusal cause, a refusal name or an exception type and code site.
-    type: str
-  native_error:
-    description: Bounded redacted native cause and selected public coordinate.
-    type: dict
   digest:
     description: Digest of the frozen lifecycle request.
     type: str

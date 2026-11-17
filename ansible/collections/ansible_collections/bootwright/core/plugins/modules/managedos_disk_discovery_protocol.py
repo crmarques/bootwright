@@ -54,8 +54,5 @@ EXAMPLES = r"""
     phase: loaded
 """
 RETURN = r"""
-changed:
-  description: Always false; publication performs no host effect.
-  returned: always
-  type: bool
+extends_documentation_fragment: bootwright.core.protocol
 """
