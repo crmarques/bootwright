@@ -29,6 +29,12 @@
     "reboot": {
       "attempts": 60,
       "delaySeconds": 10
+    },
+    "sessions": {
+      "registration": 0,
+      "unregistration": 0,
+      "update": 0,
+      "updateCompletion": 0
     }
   },
   "fleetKeyRef": "bootwright-machine-key",
@@ -95,6 +101,14 @@
     "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/os/metal-01",
     "url": "https://192.0.2.1:8443/private/os/metal-01"
   },
+  "requires": {
+    "fips": false,
+    "registration": false,
+    "rootEncryption": false,
+    "rootWWN": false,
+    "update": false
+  },
+  "servedRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public",
   "target": {
     "channel": "delivered-key",
     "controller": {

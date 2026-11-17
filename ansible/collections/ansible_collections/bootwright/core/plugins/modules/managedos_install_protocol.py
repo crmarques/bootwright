@@ -122,23 +122,11 @@ options:
         converged.
     type: bool
     required: false
-  fipsRequired:
-    description:
-      - Whether the frozen installer arguments enable FIPS mode, so a
-        completion proves it.
-    type: bool
-    required: false
   rootEncryption:
     description:
       - Whether the installed system proved its root filesystem on a crypt
         device whose LUKS backing device carries a clevis tpm2 slot, after its
         network converged.
-    type: bool
-    required: false
-  rootEncryptionRequired:
-    description:
-      - Whether the frozen request encrypts the root disk, so a completion
-        proves it.
     type: bool
     required: false
   rootWWN:
@@ -153,12 +141,6 @@ options:
       - Whether that record was read over the pinned fleet connection.
     type: bool
     required: false
-  rootWWNRequired:
-    description:
-      - Whether the frozen request declares its physical root disk by serial
-        number, so a completion proves the record read and well formed.
-    type: bool
-    required: false
   registration:
     description:
       - The consumer UUID and the ownership state the registration worker
@@ -166,15 +148,6 @@ options:
         C(unregistered) or C(retained); a consumer is named only for an owned,
         a pending or an unregistered registration.
     type: dict
-    required: false
-  registrationRequired:
-    description:
-      - Whether the frozen request registers the installed system, so a
-        completion proves an owned registration, or a removal that
-        unregisters proves one C(unregistered), C(absent) or C(retained). A
-        removal that does not unregister reads no registration and sets it
-        false.
-    type: bool
     required: false
   os:
     description:
@@ -192,11 +165,25 @@ options:
         C(rebooted) and C(kernel) set only for a record's states.
     type: dict
     required: false
-  updateRequired:
+  requires:
     description:
-      - Whether the frozen request updates within its release, so a
-        completion proves a complete update; any other completion proves
-        state C(none).
+      - The proofs a completion requires, the frozen request's C(requires)
+        block passed through unchanged, C(fips), C(registration),
+        C(rootEncryption), C(rootWWN) and C(update), each a boolean Go
+        derived. A completion without exactly these five booleans is refused.
+    type: dict
+    required: false
+  observesRemoval:
+    description:
+      - Whether this observation is a removal's resolution, which proves a
+        registration only when it unregisters.
+    type: bool
+    required: false
+  unregisters:
+    description:
+      - Whether a removal reads and unregisters the installed system, so it
+        proves the registration C(unregistered), C(absent) or C(retained); a
+        removal that does not unregister proves none.
     type: bool
     required: false
   privateDelivery:

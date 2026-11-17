@@ -147,12 +147,28 @@ func (b Budget) duration() time.Duration {
 // through its identity channel, and for its fleet account to accept the key
 // that channel reported.
 type Budgets struct {
-	Identity         Budget `json:"identity"`
-	Installer        Budget `json:"installer"`
-	NetworkApply     Budget `json:"networkApply"`
-	NetworkReconnect Budget `json:"networkReconnect"`
-	Reachability     Budget `json:"reachability"`
-	Reboot           Budget `json:"reboot"`
+	Identity         Budget   `json:"identity"`
+	Installer        Budget   `json:"installer"`
+	NetworkApply     Budget   `json:"networkApply"`
+	NetworkReconnect Budget   `json:"networkReconnect"`
+	Reachability     Budget   `json:"reachability"`
+	Reboot           Budget   `json:"reboot"`
+	Sessions         Sessions `json:"sessions"`
+}
+
+type Sessions struct {
+	Registration     int `json:"registration"`
+	Unregistration   int `json:"unregistration"`
+	Update           int `json:"update"`
+	UpdateCompletion int `json:"updateCompletion"`
+}
+
+type Requires struct {
+	FIPS           bool `json:"fips"`
+	Registration   bool `json:"registration"`
+	RootEncryption bool `json:"rootEncryption"`
+	RootWWN        bool `json:"rootWWN"`
+	Update         bool `json:"update"`
 }
 
 // total is every pause the budgets allow, back to back.
@@ -211,6 +227,8 @@ type Request struct {
 	// it owns and never the path itself.
 	Private      *Publication  `json:"private,omitempty"`
 	Registration *Registration `json:"registration,omitempty"`
+	Requires     Requires      `json:"requires"`
+	ServedRoot   string        `json:"servedRoot"`
 	Target       Target        `json:"target"`
 	// TLSCertificateRef names the serving certificate the installing machine
 	// verifies the private fetch against. Only its public half is used, and it
@@ -256,7 +274,40 @@ type SubscriptionRepositories struct {
 
 const fipsArgument = "fips=1"
 
-func (r Request) fips() bool { return slices.Contains(r.InstallerArguments, fipsArgument) }
+func (r Request) fips() bool { return r.Requires.FIPS }
+
+func (r Request) requirements() Requires {
+	return Requires{
+		FIPS: slices.Contains(r.InstallerArguments, fipsArgument), Registration: r.Registration != nil,
+		RootEncryption: r.DiskEncryption != nil, RootWWN: r.serialRoot(), Update: r.Update != nil,
+	}
+}
+
+func (r Request) sessions() Sessions {
+	var sessions Sessions
+	if r.Registration != nil {
+		sessions.Registration, sessions.Unregistration = seconds(registrationSession), seconds(unregistrationSession)
+		if r.Update != nil {
+			sessions.Registration += seconds(releasePinSession)
+		}
+		if r.Registration.Satellite != nil {
+			sessions.Registration += seconds(satelliteSession)
+			if r.Registration.Satellite.ContentView != "" {
+				sessions.Registration += seconds(contentViewSession)
+			}
+		}
+	}
+	if r.Update != nil {
+		sessions.Update, sessions.UpdateCompletion = seconds(updateSession), seconds(updateCompletionSession)
+	}
+	return sessions
+}
+
+func seconds(d time.Duration) int { return int(d / time.Second) }
+
+func (r *Request) freezeDerived() {
+	r.Requires, r.Budgets.Sessions = r.requirements(), r.sessions()
+}
 
 // Deadline bounds every run of this request: its budgets back to back, and
 // the margin for everything else an apply does.
@@ -281,6 +332,9 @@ func DecodeRequest(data []byte) (Request, error) {
 	r, err := reconciliation.ThawVersion[Request](data, "installation", requestVersion)
 	if err != nil {
 		return Request{}, err
+	}
+	if r.Requires != r.requirements() || r.Budgets.Sessions != r.sessions() {
+		return Request{}, refusal("lifecycle.state", "the frozen request's required proofs or session budgets are not those its own fields derive", "")
 	}
 	if p := r.DiscoveryProof; p != nil {
 		h := r.Target.Hardware

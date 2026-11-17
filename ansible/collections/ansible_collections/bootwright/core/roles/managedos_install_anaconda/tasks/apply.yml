@@ -576,8 +576,8 @@
         group: verify-security
         status: running
       when: >-
-        bootwright_os_install_request.diskEncryption is defined
-        or 'fips=1' in (bootwright_os_install_request.installerArguments)
+        bootwright_os_install_request.requires.rootEncryption
+        or bootwright_os_install_request.requires.fips
       no_log: true
 
     - name: Read whether the root disk is encrypted after its network converged
@@ -629,8 +629,8 @@
         group: verify-security
         status: ok
       when: >-
-        bootwright_os_install_request.diskEncryption is defined
-        or 'fips=1' in (bootwright_os_install_request.installerArguments)
+        bootwright_os_install_request.requires.rootEncryption
+        or bootwright_os_install_request.requires.fips
       no_log: true
 
     - name: Read the WWN the root disk reported to the installer after its network converged
@@ -783,18 +783,10 @@
     networkReboot: '{{ managedos_install_anaconda_network_result.networkReboot | default(false) }}'
     networkDifferences: '{{ managedos_install_anaconda_network_result.networkDifferences | default([]) }}'
     fips: '{{ managedos_install_anaconda_fips | default(false) }}'
-    fipsRequired: "{{ 'fips=1' in (bootwright_os_install_request.installerArguments) }}"
     rootEncryption: '{{ managedos_install_anaconda_root_encryption | default(false) }}'
-    rootEncryptionRequired: "{{ bootwright_os_install_request.diskEncryption is defined }}"
     rootWWN: '{{ managedos_install_anaconda_root_wwn | default("") }}'
     rootWWNRead: '{{ managedos_install_anaconda_root_wwn_read | default(false) }}'
-    rootWWNRequired: >-
-      {{ (bootwright_os_install_request.target.physical | default(false) | bool)
-         and (bootwright_os_install_request.target.hardware.serialNumber | default('') | length > 0)
-         and (bootwright_os_install_request.target.hardware.rootDevice | default('') | length == 0)
-         and bootwright_os_install_request.target.hardware.rootVolumeRef is not defined }}
     registration: '{{ managedos_install_anaconda_registration | default({}) }}'
-    registrationRequired: "{{ bootwright_os_install_request.registration is defined }}"
     update: '{{ managedos_install_anaconda_update | default({}) }}'
-    updateRequired: "{{ 'update' in bootwright_os_install_request }}"
+    requires: '{{ bootwright_os_install_request.requires }}'
   no_log: true

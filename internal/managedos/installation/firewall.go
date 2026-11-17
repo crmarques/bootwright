@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
-	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -336,7 +335,7 @@ func (c FirewallCapability) run(ctx context.Context, execution lifecycle.Executi
 		Implementation: FirewallImplementation, Operation: operation, Variable: firewallVariable, Canonical: canonical, Placement: request.Placement,
 		Materials: materials,
 		Values:    values,
-		Refusals:  firewallRefusals(execution.Context, request, removal), Deadline: 10 * time.Minute,
+		Refusals:  firewallRefusals(execution.Context, request, removal), Deadline: firewallDeadline,
 	}))
 	return result, request, digests, err
 }

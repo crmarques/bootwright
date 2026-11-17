@@ -32,7 +32,9 @@
       {{ 'variable' if bootwright_os_install_request.registration is not defined
          else {'set': 'release', 'unset': 'contentView'}.get(
            managedos_install_anaconda_registration_result.registration.release | default(''), '') }}
-    timeout: "{{ 1800 if managedos_install_anaconda_update_operation == 'apply' else 120 }}"
+    timeout: >-
+      {{ bootwright_os_install_request.budgets.sessions[
+           'update' if managedos_install_anaconda_update_operation == 'apply' else 'updateCompletion'] | int }}
   register: managedos_install_anaconda_update_answer
   failed_when: false
   changed_when: false

@@ -55,11 +55,12 @@ READ = (
     "then echo tpm2=yes; else echo tpm2=no; fi"
 )
 COMMAND = ["/usr/bin/sudo", "-n", "/usr/bin/sh", "-c", READ, "bootwright-root-encryption"]
+NONE = {"fips": False, "registration": False, "rootEncryption": False, "rootWWN": False, "update": False}
 SHAPES = {
     "encrypting": {"private": dict(PRIVATE), "diskEncryption": {"recoveryPassphraseRef": "rhel-luks-recovery"},
-                   "target": {"channel": "guest-agent", "physical": False}},
-    "delivered-key": {"private": dict(PRIVATE), "target": {"channel": "delivered-key", "physical": True}},
-    "public": {"image": dict(PUBLIC), "target": {"channel": "guest-agent", "physical": False}},
+                   "requires": dict(NONE, rootEncryption=True), "target": {"channel": "guest-agent", "physical": False}},
+    "delivered-key": {"private": dict(PRIVATE), "requires": dict(NONE), "target": {"channel": "delivered-key", "physical": True}},
+    "public": {"image": dict(PUBLIC), "requires": dict(NONE), "target": {"channel": "guest-agent", "physical": False}},
 }
 ADDRESS = PRIVATE["url"] + "/" + TOKEN + "/recovery"
 OUTCOMES = [
@@ -312,6 +313,8 @@ def test_the_root_encryption_intent_is_the_frozen_request():
     requested = flattened("root_encryption.yml")[0]["ansible.builtin.set_fact"]["managedos_install_anaconda_root_encryption_requested"]
     for shape, expected in (("encrypting", True), ("delivered-key", False), ("public", False)):
         assert render(requested, shape) is expected
+    unrequired = dict(scope()["bootwright_os_install_request"], requires=dict(NONE))
+    assert render(requested, bootwright_os_install_request=unrequired) is False
 
 
 # An observation runs this read too, so it writes nothing and changes no key
@@ -330,9 +333,11 @@ def test_completion_evidence_carries_the_proved_root_encryption(name):
     tasks = flattened(name)
     arguments = tasks[only(tasks, lambda task: (task.get(PROTOCOL) or {}).get("phase") == "completed", "publish completion")][PROTOCOL]
     assert arguments["rootEncryption"] == "{{ managedos_install_anaconda_root_encryption | default(false) }}"
-    assert render(arguments["rootEncryptionRequired"]) is True
-    assert render(arguments["rootEncryptionRequired"], "delivered-key") is False
-    assert render(arguments["rootEncryptionRequired"], "public") is False
+    assert not [key for key in arguments if key.endswith("Required")]
+    assert arguments["requires"] == "{{ bootwright_os_install_request.requires }}"
+    assert render(arguments["requires"])["rootEncryption"] is True
+    assert render(arguments["requires"], "delivered-key")["rootEncryption"] is False
+    assert render(arguments["requires"], "public")["rootEncryption"] is False
     templar = Templar(loader=LOADER, variables={})
     assert templar.template(arguments["rootEncryption"]) is False
     for proved in (True, False):

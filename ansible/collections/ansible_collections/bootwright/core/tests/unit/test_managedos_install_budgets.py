@@ -143,8 +143,15 @@ def test_every_entry_point_requires_every_budget():
     for entry, spec in specs.items():
         budgets = spec["options"]["bootwright_os_install_request"]["options"]["budgets"]
         assert budgets["type"] == "dict" and budgets["required"] is True, entry
-        assert set(budgets["options"]) == set(BUDGETS), entry
+        assert set(budgets["options"]) == set(BUDGETS) | {"sessions"}, entry
+        sessions = budgets["options"]["sessions"]
+        assert sessions["type"] == "dict" and sessions["required"] is True, entry
+        assert {field: (option["type"], option["required"]) for field, option in sessions["options"].items()} == {
+            "registration": ("int", True), "unregistration": ("int", True), "update": ("int", True),
+            "updateCompletion": ("int", True)}, entry
         for name, budget in budgets["options"].items():
+            if name == "sessions":
+                continue
             assert budget["required"] is True, (entry, name)
             assert {field: (option["type"], option["required"]) for field, option in budget["options"].items()} == {
                 "attempts": ("int", True), "delaySeconds": ("int", True)}, (entry, name)

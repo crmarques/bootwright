@@ -6,6 +6,10 @@ argument_specs:
         type: dict
         required: true
         options:
+          area:
+            type: list
+            elements: str
+            required: true
           identity:
             type: dict
             required: true
@@ -17,6 +21,12 @@ argument_specs:
             required: true
           publication:
             type: dict
+            required: true
+          servedRoot:
+            type: str
+            required: true
+          server:
+            type: str
             required: true
           version:
             type: str

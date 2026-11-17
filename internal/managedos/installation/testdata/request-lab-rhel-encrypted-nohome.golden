@@ -29,6 +29,12 @@
     "reboot": {
       "attempts": 60,
       "delaySeconds": 10
+    },
+    "sessions": {
+      "registration": 0,
+      "unregistration": 0,
+      "update": 0,
+      "updateCompletion": 0
     }
   },
   "diskEncryption": {
@@ -98,6 +104,14 @@
     "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/os/rhel-01",
     "url": "https://192.0.2.1:8443/private/os/rhel-01"
   },
+  "requires": {
+    "fips": false,
+    "registration": false,
+    "rootEncryption": true,
+    "rootWWN": false,
+    "update": false
+  },
+  "servedRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public",
   "target": {
     "channel": "guest-agent",
     "controller": {

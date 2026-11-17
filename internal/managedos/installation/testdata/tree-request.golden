@@ -1,4 +1,8 @@
 {
+  "area": [
+    "services",
+    "artifact-server"
+  ],
   "identity": {
     "context": "lab",
     "profile": "rhel-9-8"
@@ -16,5 +20,7 @@
     "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
     "url": "http://192.0.2.1:8080/os/rhel-9-8/tree"
   },
+  "servedRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public",
+  "server": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts",
   "version": "os-package-tree-v1"
 }

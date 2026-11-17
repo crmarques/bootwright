@@ -136,16 +136,16 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	if !evidence.Network || !evidence.NetworkReboot || len(evidence.NetworkDifferences) != 0 {
 		return refusal("lifecycle.state", "the installed machine's network does not match its declaration after a reboot", "")
 	}
-	if request.fips() && !evidence.FIPS {
+	if request.Requires.FIPS && !evidence.FIPS {
 		return refusal("lifecycle.state", "the installed machine does not report the FIPS mode its installation enabled", "")
 	}
-	if request.DiskEncryption != nil && !evidence.RootEncryption {
+	if request.Requires.RootEncryption && !evidence.RootEncryption {
 		return refusal("lifecycle.state", "the installed machine's root filesystem is not on the LUKS device with a TPM2 binding its installation encrypted", "")
 	}
-	if evidence.RootWWN != "" && !request.serialRoot() {
+	if evidence.RootWWN != "" && !request.Requires.RootWWN {
 		return refusal("lifecycle.state", "the installation evidence records a root disk WWN for a root not declared by serial number", "")
 	}
-	if request.Registration != nil && evidence.Registration.State != registrationOwned {
+	if request.Requires.Registration && evidence.Registration.State != registrationOwned {
 		return refusal("lifecycle.state", "the installed machine is not registered with a subscription consumer this installation created", "")
 	}
 	if err := updatePresence(evidence.Update, request); err != nil {
@@ -311,7 +311,7 @@ func ValidatePartial(data []byte, digest, marker string) error {
 }
 
 func updatePresence(update UpdateEvidence, request Request) error {
-	if request.Update == nil {
+	if !request.Requires.Update {
 		if update.State != updateNone {
 			return refusal("lifecycle.state", "the installation evidence reports an update its request does not perform", "")
 		}
@@ -434,7 +434,7 @@ func (r Request) serialRoot() bool {
 }
 
 func RecordedRootWWN(proof lifecycle.BlockEvidence, request Request, digest string) (string, error) {
-	if !request.serialRoot() || proof.State != reconciliation.BlockDone {
+	if !request.Requires.RootWWN || proof.State != reconciliation.BlockDone {
 		return "", nil
 	}
 	evidence, err := decodeEvidence(proof.Evidence, digest)

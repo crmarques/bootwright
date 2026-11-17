@@ -61,10 +61,16 @@ def included(name, **variables):
     return lambda task: task.get(INCLUDE) == name and all((task.get("vars") or {}).get(key) == value for key, value in variables.items())
 
 
+# Distinct worker session timeouts, so each session is proved to read the one
+# the request froze; Go derives them (internal/managedos/installation).
+FROZEN_SESSIONS = {"registration": 611, "unregistration": 322, "update": 1777, "updateCompletion": 133}
+
+
 def scope(updating=True, **extra):
     values = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
     request = {"identity": {"context": "lab", "object": "rhel-01"}, "address": "192.0.2.10", "user": "fleet",
-               "budgets": {"reboot": {"attempts": 60, "delaySeconds": 10}}}
+               "budgets": {"reboot": {"attempts": 60, "delaySeconds": 10}, "sessions": dict(FROZEN_SESSIONS)},
+               "requires": {"fips": False, "registration": False, "rootEncryption": False, "rootWWN": False, "update": updating}}
     if updating:
         request["update"] = {"policy": "withinRelease", "release": "9.8"}
     values.update({
@@ -183,7 +189,7 @@ def test_observe_only_inspects_the_update():
     observe = module("update_observe.yml")
     assert observe[UPDATE]["operation"] == "inspect" and observe[UPDATE]["timeout"] == 120
     applied = module("update_session.yml")[UPDATE]
-    for operation, timeout in (("apply", 1800), ("complete", 120)):
+    for operation, timeout in (("apply", FROZEN_SESSIONS["update"]), ("complete", FROZEN_SESSIONS["updateCompletion"])):
         assert render(applied["operation"], managedos_install_anaconda_update_operation=operation) == operation
         assert int(render(applied["timeout"], managedos_install_anaconda_update_operation=operation)) == timeout
     observed = flattened("observe.yml")
@@ -233,7 +239,9 @@ def completion(name):
 @pytest.mark.parametrize("name", ["apply.yml", "observe.yml"])
 def test_completion_evidence_carries_the_update(name):
     arguments = completion(name)
-    assert render(arguments["updateRequired"]) is True and render(arguments["updateRequired"], False) is False
+    assert not [key for key in arguments if key.endswith("Required")]
+    assert arguments["requires"] == "{{ bootwright_os_install_request.requires }}"
+    assert render(arguments["requires"])["update"] is True and render(arguments["requires"], False)["update"] is False
     assert Templar(loader=LOADER, variables={}).template(arguments["update"]) == {}
     complete = {"kernel": KERNEL, "packages": 4, "rebooted": True, "release": "9.8", "state": "complete", "transaction": 7}
     assert render(arguments["update"], managedos_install_anaconda_update=complete) == complete
@@ -253,10 +261,10 @@ def test_the_registration_sets_the_release_before_the_repositories():
     registering = {"registration": {"repositories": {"enable": [], "disable": []}}}
     request = dict(scope()["bootwright_os_install_request"], **registering)
     assert render(arguments["release"], bootwright_os_install_request=request) == "9.8"
-    assert int(render(arguments["timeout"], bootwright_os_install_request=request)) == 750
+    assert int(render(arguments["timeout"], bootwright_os_install_request=request)) == FROZEN_SESSIONS["registration"]
     plain = dict(scope(False)["bootwright_os_install_request"], **registering)
     assert render(arguments["release"], bootwright_os_install_request=plain) == ""
-    assert int(render(arguments["timeout"], bootwright_os_install_request=plain)) == 630
+    assert int(render(arguments["timeout"], bootwright_os_install_request=plain)) == FROZEN_SESSIONS["registration"]
 
 
 @pytest.mark.parametrize("registration, answered, pin", [

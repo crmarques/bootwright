@@ -50,6 +50,10 @@ SECRET_NAMES = ("managedos_install_anaconda_private_url", "managedos_install_ana
 REDACTION = "replace(managedos_install_anaconda_token.stdout | trim, '<token>')"
 
 
+# A request requiring none of the proofs Go freezes in its requires block.
+NO_PROOFS = {"fips": False, "registration": False, "rootEncryption": False, "rootWWN": False, "update": False}
+
+
 def flattened(name):
     """A task file's tasks in the order a play reaches them, each block opened."""
     return [task for task in role_tasks.flatten(role_tasks.role_tasks(ROLE, name)) if "block" not in task]
@@ -69,7 +73,7 @@ def scope(private=True, **extra):
     """The variables an apply sees: the role defaults, the frozen request of
     one arm, the material files the runner wrote and the minted token."""
     values = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
-    request = {"identity": {"context": "lab", "object": "metal-01"}, "tlsCertificateRef": "lab-artifacts-tls"}
+    request = {"identity": {"context": "lab", "object": "metal-01"}, "servedRoot": SERVED, "tlsCertificateRef": "lab-artifacts-tls"}
     request.update({"private": dict(PRIVATE), "target": {"channel": "delivered-key", "physical": True}} if private
                    else {"image": dict(PUBLIC), "target": {"channel": "guest-agent", "physical": False}})
     values.update({
@@ -322,7 +326,7 @@ def test_observation_evidence_redacts_a_token_in_the_media_the_controller_report
 def presence(private_delivery, image):
     arguments = {"observation": {"image": image, "private": False}, "marker": "{}", "hostKey": "ssh-ed25519 AAAA",
                  "address": "198.51.100.41", "media": "", "power": "On", "reachable": True, "digest": DIGEST,
-                 "network": True, "networkReboot": True}
+                 "network": True, "networkReboot": True, "requires": NO_PROOFS}
     if private_delivery is not None:
         arguments["privateDelivery"] = private_delivery
     return arguments

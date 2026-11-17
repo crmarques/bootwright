@@ -6,11 +6,7 @@
 # installation reads nothing.
 - name: Name whether this installation records its root disk's WWN
   ansible.builtin.set_fact:
-    managedos_install_anaconda_root_wwn_required: >-
-      {{ (bootwright_os_install_request.target.physical | default(false) | bool)
-         and (bootwright_os_install_request.target.hardware.serialNumber | default('') | length > 0)
-         and (bootwright_os_install_request.target.hardware.rootDevice | default('') | length == 0)
-         and bootwright_os_install_request.target.hardware.rootVolumeRef is not defined }}
+    managedos_install_anaconda_root_wwn_required: '{{ bootwright_os_install_request.requires.rootWWN }}'
 
 - name: Read the WWN the root disk reported to the installer
   ansible.builtin.include_tasks: guest.yml

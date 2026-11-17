@@ -6,16 +6,19 @@
       - bootwright_os_tree_request.identity.context is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
       - bootwright_os_tree_request.identity.profile is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
       - bootwright_os_tree_request.publication.path is string
-      - bootwright_os_tree_request.publication.path.startswith('/var/lib/bootwright-hosted/')
-      - bootwright_os_tree_request.publication.path.split('/') | length == 12
-      - bootwright_os_tree_request.publication.path.split('/')[3] == 'bootwright-hosted'
-      - bootwright_os_tree_request.publication.path.split('/')[4] == bootwright_os_tree_request.identity.context
-      - bootwright_os_tree_request.publication.path.split('/')[5] == 'services'
-      - bootwright_os_tree_request.publication.path.split('/')[6] == 'artifact-server'
-      - bootwright_os_tree_request.publication.path.split('/')[7] is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_os_tree_request.area | length > 0
+      - bootwright_os_tree_request.area | reject('match', '^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)') | list | length == 0
+      - bootwright_os_tree_request.server is string
+      - bootwright_os_tree_request.servedRoot is string
       - >-
-        bootwright_os_tree_request.publication.path.split('/')[8:]
-        == ['public', 'os', bootwright_os_tree_request.identity.profile, 'tree']
+        bootwright_os_tree_request.server | dirname
+        == (['/var/lib/bootwright-hosted', bootwright_os_tree_request.identity.context] + bootwright_os_tree_request.area) | join('/')
+      - bootwright_os_tree_request.server | basename is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_os_tree_request.servedRoot | dirname == bootwright_os_tree_request.server
+      - bootwright_os_tree_request.servedRoot | basename is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - >-
+        bootwright_os_tree_request.publication.path
+        == bootwright_os_tree_request.servedRoot ~ '/os/' ~ bootwright_os_tree_request.identity.profile ~ '/tree'
       - >-
         bootwright_os_tree_request.publication.path.split('/')[1:]
         | select('in', ['', '.', '..']) | list | length == 0

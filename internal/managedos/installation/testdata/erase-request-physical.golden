@@ -31,6 +31,12 @@
       "reboot": {
         "attempts": 60,
         "delaySeconds": 10
+      },
+      "sessions": {
+        "registration": 0,
+        "unregistration": 0,
+        "update": 0,
+        "updateCompletion": 0
       }
     },
     "eraseOnRemoval": true,
@@ -98,6 +104,14 @@
       "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/os/metal-01-erase",
       "url": "https://192.0.2.1:8443/private/os/metal-01-erase"
     },
+    "requires": {
+      "fips": false,
+      "registration": false,
+      "rootEncryption": false,
+      "rootWWN": false,
+      "update": false
+    },
+    "servedRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public",
     "target": {
       "channel": "delivered-key",
       "controller": {
@@ -139,7 +153,7 @@
     "user": "bootwright",
     "version": "os-install-anaconda-v1"
   },
-  "installDigest": "8e3ed4bda0b5c250e3b30c1f68bf5baa66e442ef9ec3c8ba5579c52564ddf968",
+  "installDigest": "3a967e0d2e5eb9ff5b59467f7b4dba011dacb319c700fa585901f900f3a52cd4",
   "network": "network --bootproto=static --device=enp1s0 --ip=198.51.100.41 --netmask=255.255.255.0 --hostname=metal-01.lab.example.test --onboot=on --activate --gateway=198.51.100.1 --nameserver=192.0.2.1\n",
   "targets": [
     {

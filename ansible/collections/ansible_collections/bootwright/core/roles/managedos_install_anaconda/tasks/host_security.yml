@@ -5,7 +5,7 @@
 # installation reads nothing.
 - name: Name whether this installation enables FIPS mode
   ansible.builtin.set_fact:
-    managedos_install_anaconda_fips_requested: "{{ 'fips=1' in bootwright_os_install_request.installerArguments }}"
+    managedos_install_anaconda_fips_requested: '{{ bootwright_os_install_request.requires.fips }}'
 
 - name: Read the installed machine's FIPS state
   ansible.builtin.include_tasks: guest.yml

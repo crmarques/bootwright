@@ -760,9 +760,15 @@ def calls(name, fqcn):
     return [task for task in flattened(tasks(name)) if fqcn in task]
 
 
+# A distinct worker session timeout, so the session is proved to read the one
+# the request froze; Go derives it and the run's deadline from one constant.
+SESSION = 277
+
+
 def variables(**extra):
     services = [service(), service(NFS, port=2049)]
     request = {"version": "os-host-firewall-v1", "direct": False, "preparation": False, "address": "192.0.2.10", "user": "fleet", "fleetKeyRef": "fleet-key",
+               "budgets": {"session": SESSION},
                "identity": {"block": "os-firewall-ceph-01", "context": "lab", "object": "ceph-01"},
                "placement": {"connection": "ssh"}, "services": [{"name": RGW}, {"name": NFS}]}
     values = dict(DEFAULTS, bootwright_run_scratch="/var/tmp/bootwright-scratch-1-1", bootwright_os_firewall_request=request,
@@ -806,7 +812,8 @@ def test_the_argument_specification_declares_the_same_request_for_every_entry_po
     options = declared["apply"]["options"]
     assert all(declared[name]["options"] == options for name in declared)
     request = options["bootwright_os_firewall_request"]["options"]
-    assert sorted(request) == ["address", "direct", "fleetKeyRef", "identity", "placement", "preparation", "services", "user", "version"]
+    assert sorted(request) == ["address", "budgets", "direct", "fleetKeyRef", "identity", "placement", "preparation", "services", "user", "version"]
+    assert request["budgets"]["required"] is True and request["budgets"]["options"] == {"session": {"type": "int", "required": True}}
     assert request["version"]["choices"] == ["os-host-firewall-v1"]
     assert options["bootwright_os_firewall_digest"]["type"] == "str" and options["bootwright_os_firewall_material"]["type"] == "dict"
 
@@ -1255,3 +1262,9 @@ def test_output_beyond_the_bound_is_a_tooling_failure_the_caller_can_tell_apart(
     with pytest.raises(worker.Oversized) as refused:
         worker.run_command(["/usr/bin/true"])
     assert (refused.value.reason, refused.value.cause) == ("host-firewall-failed", "tooling")
+
+
+def test_the_worker_session_runs_for_the_budget_the_request_froze():
+    worker = [task for task in flattened(tasks("session.yml")) if "bootwright.core.managedos_firewall" in task]
+    assert len(worker) == 1
+    assert int(render(worker[0]["bootwright.core.managedos_firewall"]["timeout"])) == SESSION

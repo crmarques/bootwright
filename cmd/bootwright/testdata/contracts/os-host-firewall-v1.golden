@@ -19,6 +19,8 @@ request-identity:
   placement.machine
 request-schema:
   address string
+  budgets struct installation.FirewallBudgets
+  budgets.session int
   direct bool
   fleetKeyRef string
   identity struct installation.FirewallIdentity

@@ -85,25 +85,30 @@ IDENTITY = "fedcba9876543210" * 4
 
 def test_presence_carries_the_tree_identity_the_inspection_read():
     for observed, carried in ((IDENTITY, IDENTITY), ("", ""), (None, "")):
-        evidence = protocol.presence({"power": "On", "observation": {"tree": True, "treeIdentity": observed}}, DIGEST)
+        evidence = protocol.presence({"power": "On", "observation": {"tree": True, "treeIdentity": observed}, "requires": need()}, DIGEST)
         assert evidence["treeIdentity"] == carried
 
 
 @pytest.mark.parametrize("identity", ["abc", IDENTITY.upper(), IDENTITY + "0", 7], ids=repr)
 def test_a_malformed_tree_identity_is_never_published(identity):
     with pytest.raises(ValueError, match="tree identity"):
-        protocol.presence({"power": "On", "observation": {"treeIdentity": identity}}, DIGEST)
+        protocol.presence({"power": "On", "observation": {"treeIdentity": identity}, "requires": need()}, DIGEST)
 
 
 def test_a_removal_reports_no_tree_identity():
-    evidence = protocol.absence({"observation": {"treeIdentity": IDENTITY}}, DIGEST)
+    evidence = protocol.absence({"observation": {"treeIdentity": IDENTITY}, "requires": need()}, DIGEST)
     assert evidence["treeIdentity"] == ""
+
+
+def need(**required):
+    """The frozen requires block of a request requiring exactly these proofs."""
+    return dict(dict.fromkeys(sorted(protocol.REQUIRES), False), **required)
 
 
 def proved(**extra):
     """A completion's arguments that prove every other postcondition."""
     arguments = {"digest": DIGEST, "power": "On", "marker": "{}", "hostKey": "ssh-ed25519 AAAA", "address": "192.0.2.10",
-                 "reachable": True, "network": True, "networkReboot": True, "observation": {"image": True}}
+                 "reachable": True, "network": True, "networkReboot": True, "observation": {"image": True}, "requires": need()}
     arguments.update(extra)
     return arguments
 
@@ -111,30 +116,30 @@ def proved(**extra):
 # A FIPS installation completes only when the installed system proved FIPS
 # mode; any other installation is unaffected by what it reports.
 def test_a_fips_installation_completes_only_with_the_fips_proof():
-    evidence, refused = protocol.completion(proved(fipsRequired=True, fips=False))
+    evidence, refused = protocol.completion(proved(requires=need(fips=True), fips=False))
     assert evidence["fips"] is False and evidence["postcondition"] is False
     assert refused is not None and refused.endswith("not proved: fips")
-    evidence, refused = protocol.completion(proved(fipsRequired="True", fips="True"))
+    evidence, refused = protocol.completion(proved(requires=need(fips=True), fips="True"))
     assert evidence["fips"] is True and evidence["postcondition"] is True and refused is None
-    for arguments in (proved(), proved(fips=False), proved(fipsRequired=False)):
+    for arguments in (proved(), proved(fips=False), proved(requires=need(fips=False))):
         evidence, refused = protocol.completion(arguments)
         assert evidence["fips"] is False and evidence["postcondition"] is True and refused is None
-    assert protocol.absence({"observation": {}}, DIGEST)["fips"] is False
+    assert protocol.absence({"observation": {}, "requires": need()}, DIGEST)["fips"] is False
 
 
 # An encrypting installation completes only when the installed system proved
 # its root filesystem on a TPM2-bound LUKS device; any other installation is
 # unaffected by what it reports.
 def test_an_encrypting_installation_completes_only_with_the_root_encryption_proof():
-    evidence, refused = protocol.completion(proved(rootEncryptionRequired=True, rootEncryption=False))
+    evidence, refused = protocol.completion(proved(requires=need(rootEncryption=True), rootEncryption=False))
     assert evidence["rootEncryption"] is False and evidence["postcondition"] is False
     assert refused is not None and refused.endswith("not proved: rootEncryption")
-    evidence, refused = protocol.completion(proved(rootEncryptionRequired="True", rootEncryption="True"))
+    evidence, refused = protocol.completion(proved(requires=need(rootEncryption=True), rootEncryption="True"))
     assert evidence["rootEncryption"] is True and evidence["postcondition"] is True and refused is None
-    for arguments in (proved(), proved(rootEncryption=False), proved(rootEncryptionRequired=False)):
+    for arguments in (proved(), proved(rootEncryption=False), proved(requires=need(rootEncryption=False))):
         evidence, refused = protocol.completion(arguments)
         assert evidence["rootEncryption"] is False and evidence["postcondition"] is True and refused is None
-    assert protocol.absence({"observation": {}}, DIGEST)["rootEncryption"] is False
+    assert protocol.absence({"observation": {}, "requires": need()}, DIGEST)["rootEncryption"] is False
 
 
 # A root disk declared by serial number records the WWN it reported to the
@@ -143,20 +148,20 @@ def test_an_encrypting_installation_completes_only_with_the_root_encryption_proo
 # records none, whatever it is given.
 def test_a_serial_declared_root_records_the_wwn_it_reported_to_the_installer():
     for value, recorded in (("naa.5000c500a1b2c3d4\n", "naa.5000c500a1b2c3d4"), ("eui.0025388b91c0a2f1", "eui.0025388b91c0a2f1"), ("\n", ""), ("", "")):
-        evidence, refused = protocol.completion(proved(rootWWNRequired=True, rootWWNRead=True, rootWWN=value))
+        evidence, refused = protocol.completion(proved(requires=need(rootWWN=True), rootWWNRead=True, rootWWN=value))
         assert evidence["rootWWN"] == recorded and evidence["postcondition"] is True and refused is None
-    for arguments in (proved(rootWWNRequired=True, rootWWNRead=False, rootWWN="naa.5000c500a1b2c3d4"),
-                      proved(rootWWNRequired="True", rootWWN="naa.5000c500a1b2c3d4"),
-                      proved(rootWWNRequired=True, rootWWNRead=True, rootWWN=" naa.5000c500a1b2c3d4"),
-                      proved(rootWWNRequired=True, rootWWNRead=True, rootWWN="naa.\u00e9"),
-                      proved(rootWWNRequired=True, rootWWNRead=True, rootWWN="x" * 257)):
+    for arguments in (proved(requires=need(rootWWN=True), rootWWNRead=False, rootWWN="naa.5000c500a1b2c3d4"),
+                      proved(requires=need(rootWWN=True), rootWWN="naa.5000c500a1b2c3d4"),
+                      proved(requires=need(rootWWN=True), rootWWNRead=True, rootWWN=" naa.5000c500a1b2c3d4"),
+                      proved(requires=need(rootWWN=True), rootWWNRead=True, rootWWN="naa.\u00e9"),
+                      proved(requires=need(rootWWN=True), rootWWNRead=True, rootWWN="x" * 257)):
         evidence, refused = protocol.completion(arguments)
         assert evidence["rootWWN"] == "" and evidence["postcondition"] is False
         assert refused is not None and refused.endswith("not proved: rootWWN")
-    for arguments in (proved(), proved(rootWWNRead=True, rootWWN="naa.5000c500a1b2c3d4"), proved(rootWWNRequired=False, rootWWN="naa.1")):
+    for arguments in (proved(), proved(rootWWNRead=True, rootWWN="naa.5000c500a1b2c3d4"), proved(requires=need(rootWWN=False), rootWWN="naa.1")):
         evidence, refused = protocol.completion(arguments)
         assert evidence["rootWWN"] == "" and evidence["postcondition"] is True and refused is None
-    assert protocol.absence({"observation": {}}, DIGEST)["rootWWN"] == ""
+    assert protocol.absence({"observation": {}, "requires": need()}, DIGEST)["rootWWN"] == ""
 
 
 CONSUMER = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
@@ -167,17 +172,17 @@ CONSUMER = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
 def test_a_registering_installation_completes_only_with_an_owned_registration():
     for read in ({"consumer": "", "state": "absent"}, {"consumer": CONSUMER, "state": "pending"},
                  {"consumer": "", "state": "foreign"}, {}, None):
-        evidence, refused = protocol.completion(proved(registrationRequired=True, registration=read))
+        evidence, refused = protocol.completion(proved(requires=need(registration=True), registration=read))
         assert evidence["postcondition"] is False
         assert refused is not None and refused.endswith("not proved: registration")
-    evidence, refused = protocol.completion(proved(registrationRequired="True", registration={"consumer": CONSUMER, "state": "owned"}))
+    evidence, refused = protocol.completion(proved(requires=need(registration=True), registration={"consumer": CONSUMER, "state": "owned"}))
     assert evidence["registration"] == {"consumer": CONSUMER, "state": "owned"}
     assert evidence["postcondition"] is True and refused is None
-    for arguments in (proved(), proved(registration={"consumer": "", "state": "absent"}), proved(registrationRequired=False)):
+    for arguments in (proved(), proved(registration={"consumer": "", "state": "absent"}), proved(requires=need(registration=False))):
         evidence, refused = protocol.completion(arguments)
         assert evidence["postcondition"] is True and refused is None
     assert protocol.completion(proved())[0]["registration"] == {"consumer": "", "state": ""}
-    assert protocol.absence({"observation": {}}, DIGEST)["registration"] == {"consumer": "", "state": ""}
+    assert protocol.absence({"observation": {}, "requires": need()}, DIGEST)["registration"] == {"consumer": "", "state": ""}
 
 
 @pytest.mark.parametrize("read", [
@@ -206,20 +211,21 @@ def test_a_registering_removal_publishes_only_a_released_registration(monkeypatc
     for read in ({"consumer": CONSUMER, "state": "unregistered"}, {"consumer": "", "state": "absent"},
                  {"consumer": "", "state": "retained"}):
         evidence, refused = protocol.completion({"digest": DIGEST, "removed": True, "observation": {},
-                                                 "registrationRequired": "True", "registration": read})
+                                                 "requires": need(registration=True), "unregisters": True, "registration": read})
         assert evidence["registration"] == read and evidence["postcondition"] is True and refused is None
         result, published = run({"phase": "completed", "outcome": "changed", "digest": DIGEST, "removed": True,
-                                 "observation": {}, "registrationRequired": True, "registration": read}, monkeypatch)
+                                 "observation": {}, "requires": need(registration=True), "unregisters": True, "registration": read}, monkeypatch)
         assert result == {"changed": False} and published[0]["evidence"]["registration"] == read
     for read in ({"consumer": CONSUMER, "state": "owned"}, {"consumer": CONSUMER, "state": "pending"}, {}, None):
         evidence, refused = protocol.completion({"digest": DIGEST, "removed": True, "observation": {},
-                                                 "registrationRequired": True, "registration": read})
+                                                 "requires": need(registration=True), "unregisters": True, "registration": read})
         assert evidence["postcondition"] is False
         assert refused is not None and refused.endswith("still present: registration")
     evidence, refused = protocol.completion({"digest": DIGEST, "removed": True, "observation": {"image": True},
-                                             "registrationRequired": True, "registration": {}})
+                                             "requires": need(registration=True), "unregisters": True, "registration": {}})
     assert refused is not None and refused.endswith("still present: image, registration")
-    for arguments in ({}, {"registrationRequired": False, "registration": {"consumer": CONSUMER, "state": "owned"}}):
+    for arguments in ({"requires": need()}, {"requires": need(registration=True), "registration": {"consumer": CONSUMER, "state": "owned"}},
+                      {"requires": need(), "unregisters": True, "registration": {"consumer": CONSUMER, "state": "owned"}}):
         evidence, refused = protocol.completion(dict(arguments, digest=DIGEST, removed=True, observation={}))
         assert evidence["postcondition"] is True and refused is None
     for read in ({"consumer": "", "state": "unregistered"}, {"consumer": CONSUMER, "state": "retained"}):
@@ -237,26 +243,26 @@ NONE = {"kernel": "", "packages": 0, "pin": "", "rebooted": False, "release": ""
 def test_an_updating_installation_completes_only_with_a_complete_update():
     for read in (dict(COMPLETE, state="upgraded", rebooted=False), dict(COMPLETE, state="pending", rebooted=False, transaction=0),
                  dict(NONE, state="absent"), dict(NONE, state="foreign"), {}, None):
-        evidence, refused = protocol.completion(proved(updateRequired=True, update=read))
+        evidence, refused = protocol.completion(proved(requires=need(update=True), update=read))
         assert evidence["postcondition"] is False
         assert refused is not None and refused.endswith("not proved: update")
-    evidence, refused = protocol.completion(proved(updateRequired="True", update=COMPLETE))
+    evidence, refused = protocol.completion(proved(requires=need(update=True), update=COMPLETE))
     assert evidence["update"] == COMPLETE and evidence["postcondition"] is True and refused is None
     unchanged = dict(COMPLETE, packages=0, rebooted=False, transaction=0)
-    assert protocol.completion(proved(updateRequired=True, update=unchanged))[0]["postcondition"] is True
+    assert protocol.completion(proved(requires=need(update=True), update=unchanged))[0]["postcondition"] is True
     for pin in protocol.UPDATE_PINS:
-        assert protocol.completion(proved(updateRequired=True, update=dict(COMPLETE, pin=pin)))[0]["update"]["pin"] == pin
-    for arguments in (proved(), proved(updateRequired=False), proved(update=NONE)):
+        assert protocol.completion(proved(requires=need(update=True), update=dict(COMPLETE, pin=pin)))[0]["update"]["pin"] == pin
+    for arguments in (proved(), proved(requires=need(update=False)), proved(update=NONE)):
         evidence, refused = protocol.completion(arguments)
         assert evidence["update"] == NONE and evidence["postcondition"] is True and refused is None
     evidence, refused = protocol.completion(proved(update=COMPLETE))
     assert evidence["postcondition"] is False and refused.endswith("not proved: update")
-    assert protocol.absence({"observation": {}}, DIGEST)["update"] == dict(NONE, state="")
+    assert protocol.absence({"observation": {}, "requires": need()}, DIGEST)["update"] == dict(NONE, state="")
 
 
 def test_an_observation_publishes_an_unfinished_update(monkeypatch):
     for read in (dict(COMPLETE, state="upgraded", rebooted=False), dict(NONE, state="foreign"), {}):
-        result, published = run(dict(proved(updateRequired=True, update=read), phase="completed", outcome="unchanged", observed=True),
+        result, published = run(dict(proved(requires=need(update=True), update=read), phase="completed", outcome="unchanged", observed=True),
                                 monkeypatch)
         assert result == {"changed": False}
         assert published[0]["evidence"]["update"] == (read or dict(NONE, state="")) and published[0]["evidence"]["postcondition"] is False
@@ -276,7 +282,7 @@ def test_an_inspection_without_an_owned_update_publishes_neutral_evidence(monkey
     wire = SimpleNamespace(timed_out=False, cause=None, code=0,
                            stdout=(json.dumps({"ok": True, "result": native}) + "\n").encode())
     outcome = update_module.interpret("inspect", "9.8", wire)
-    result, published = run(dict(proved(updateRequired=True, update=outcome["evidence"]),
+    result, published = run(dict(proved(requires=need(update=True), update=outcome["evidence"]),
                                  phase="completed", outcome="unchanged", observed=True), monkeypatch)
     assert outcome == {"changed": False, "evidence": neutral, "ok": True, "updated": False}
     assert result == {"changed": False} and len(published) == 1
@@ -308,8 +314,8 @@ def test_an_inspection_without_an_owned_update_publishes_neutral_evidence(monkey
 ], ids=repr)
 def test_a_malformed_update_is_never_published(read, monkeypatch):
     with pytest.raises(ValueError, match="update"):
-        protocol.presence(proved(update=read, updateRequired=True), DIGEST)
-    result, published = run(dict(proved(update=read, updateRequired=True), phase="completed", outcome="changed"), monkeypatch)
+        protocol.presence(proved(update=read, requires=need(update=True)), DIGEST)
+    result, published = run(dict(proved(update=read, requires=need(update=True)), phase="completed", outcome="changed"), monkeypatch)
     assert result.get("failed") is True and not published
 
 
@@ -344,7 +350,7 @@ def test_presence_carries_the_release_the_observation_read():
     for unread in (None, "", {}):
         evidence, refused = protocol.completion(proved(os=unread))
         assert evidence["os"] == {"id": "", "kernel": "", "versionId": ""} and refused is None
-    assert protocol.absence({"observation": {}, "os": RELEASE}, DIGEST)["os"] == {"id": "", "kernel": "", "versionId": ""}
+    assert protocol.absence({"observation": {}, "os": RELEASE, "requires": need()}, DIGEST)["os"] == {"id": "", "kernel": "", "versionId": ""}
 
 
 @pytest.mark.parametrize("read", [
@@ -364,3 +370,23 @@ def test_a_malformed_release_is_never_published(read, monkeypatch):
         protocol.presence(proved(os=read), DIGEST)
     result, published = run(dict(proved(os=read), phase="completed", outcome="unchanged", observed=True), monkeypatch)
     assert result.get("failed") is True and not published
+
+
+# Which proofs a completion requires is Go's to derive: the plugin reads the
+# frozen requires block as passed through, exactly five booleans, and refuses
+# to publish anything for a request lacking it or carrying any other shape.
+@pytest.mark.parametrize("required", [
+    None, {}, "True", need(fips="True"), dict(need(), extra=False),
+    {key: False for key in sorted(protocol.REQUIRES) if key != "rootWWN"}, need(update=1),
+], ids=repr)
+def test_a_completion_without_the_frozen_requires_block_is_never_published(required, monkeypatch):
+    arguments = proved()
+    if required is None:
+        del arguments["requires"]
+    else:
+        arguments["requires"] = required
+    for removed in (False, True):
+        with pytest.raises(ValueError, match="requires"):
+            protocol.completion(dict(arguments, removed=removed))
+        result, published = run(dict(arguments, removed=removed, phase="completed", outcome="changed"), monkeypatch)
+        assert result.get("failed") is True and not published

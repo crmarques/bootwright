@@ -36,6 +36,10 @@ READ = (
 )
 
 
+# A request requiring none of the proofs Go freezes in its requires block.
+NO_PROOFS = {"fips": False, "registration": False, "rootEncryption": False, "rootWWN": False, "update": False}
+
+
 def flattened(name):
     """A task file's tasks in play order, each block opened and its conditions carried onto every task inside it."""
     return [dict(visit.task, when=list(visit.conditions))
@@ -106,11 +110,15 @@ def test_fips_state_reader_accepts_only_kernel_1_and_policy_FIPS(guest, requeste
     assert proves(**variables) is expected
 
 
-def test_the_fips_intent_is_the_frozen_installer_argument():
+# Which installation enables FIPS mode is Go's to derive: the role reads the
+# frozen requires block, never the installer arguments it was derived from.
+def test_the_fips_intent_is_the_frozen_requirement():
     requested = flattened("host_security.yml")[0]["ansible.builtin.set_fact"]["managedos_install_anaconda_fips_requested"]
-    for arguments, expected in ((["inst.ks=hd:LABEL=x", "fips=1"], True), (["inst.ks=hd:LABEL=x"], False), (["fips=0"], False)):
-        templar = Templar(loader=LOADER, variables={"bootwright_os_install_request": {"installerArguments": arguments}})
-        assert templar.template(requested) is expected
+    for arguments, frozen in ((["inst.ks=hd:LABEL=x", "fips=1"], True), (["inst.ks=hd:LABEL=x"], False),
+                              (["inst.ks=hd:LABEL=x", "fips=1"], False), (["inst.ks=hd:LABEL=x"], True)):
+        request = {"installerArguments": arguments, "requires": dict(NO_PROOFS, fips=frozen)}
+        templar = Templar(loader=LOADER, variables={"bootwright_os_install_request": request})
+        assert templar.template(requested) is frozen
 
 
 # An observation runs this read too, so it writes nothing, needs no privilege
@@ -131,12 +139,12 @@ def test_completion_evidence_carries_the_proved_fips_state(name):
     completed = only(tasks, lambda task: (task.get(PROTOCOL) or {}).get("phase") == "completed", "publish completion")
     arguments = tasks[completed][PROTOCOL]
     assert arguments["fips"] == "{{ managedos_install_anaconda_fips | default(false) }}"
-    request = {"installerArguments": ["inst.ks=hd:LABEL=x", "fips=1"]}
+    request = {"installerArguments": ["inst.ks=hd:LABEL=x", "fips=1"], "requires": dict(NO_PROOFS, fips=True)}
     templar = Templar(loader=LOADER, variables={"bootwright_os_install_request": request})
-    assert templar.template(arguments["fipsRequired"]) is True
+    assert not [key for key in arguments if key.endswith("Required")]
+    assert arguments["requires"] == "{{ bootwright_os_install_request.requires }}"
+    assert templar.template(arguments["requires"])["fips"] is True
     assert templar.template(arguments["fips"]) is False
-    templar = Templar(loader=LOADER, variables={"bootwright_os_install_request": {"installerArguments": ["inst.ks=hd:LABEL=x"]}})
-    assert templar.template(arguments["fipsRequired"]) is False
     for proved in (True, False):
         templar = Templar(loader=LOADER, variables={"bootwright_os_install_request": request, "managedos_install_anaconda_fips": proved})
         assert templar.template(arguments["fips"]) is proved

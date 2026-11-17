@@ -56,22 +56,28 @@ def included(name):
     return lambda task: task.get(INCLUDE) == name
 
 
-def render(value, shape, **variables):
-    request = {"identity": {"context": "lab", "object": "metal-01"}}
+def render(value, shape, frozen, **variables):
+    request = {"identity": {"context": "lab", "object": "metal-01"},
+               "requires": {"fips": False, "registration": False, "rootEncryption": False, "rootWWN": frozen, "update": False}}
     if SHAPES[shape] is not None:
         request["target"] = SHAPES[shape]
     return Templar(loader=LOADER, variables=dict(variables, bootwright_os_install_request=request)).template(value)
 
 
-@pytest.mark.parametrize("shape, expected", [("serial", True), ("wwn", False), ("volume", False), ("virtual", False), ("unframed", False)])
-def test_only_a_physical_root_declared_by_serial_number_reads_its_wwn(shape, expected):
+# Which root reads its WWN is Go's to derive (a physical root declared by
+# serial number, Request.serialRoot): the role reads the frozen requirement and
+# never the target it was derived from, whatever shape that target has.
+@pytest.mark.parametrize("shape", sorted(SHAPES))
+@pytest.mark.parametrize("frozen", [True, False])
+def test_the_wwn_is_read_exactly_when_the_frozen_request_requires_it(shape, frozen):
     tasks = flattened("root_wwn.yml")
     required = tasks[0]["ansible.builtin.set_fact"]["managedos_install_anaconda_root_wwn_required"]
-    assert render(required, shape) is expected
+    assert render(required, shape, frozen) is frozen
     for name in ("apply.yml", "observe.yml"):
         completion = flattened(name)
         arguments = completion[only(completion, lambda task: (task.get(PROTOCOL) or {}).get("phase") == "completed", "publish")][PROTOCOL]
-        assert render(arguments["rootWWNRequired"], shape) is expected
+        assert not [key for key in arguments if key.endswith("Required")]
+        assert render(arguments["requires"], shape, frozen)["rootWWN"] is frozen
 
 
 def test_the_record_is_read_through_the_pinned_connection_and_writes_nothing():

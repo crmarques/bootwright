@@ -29,6 +29,12 @@
     "reboot": {
       "attempts": 60,
       "delaySeconds": 10
+    },
+    "sessions": {
+      "registration": 630,
+      "unregistration": 330,
+      "update": 0,
+      "updateCompletion": 0
     }
   },
   "diskEncryption": {
@@ -113,6 +119,14 @@
       ]
     }
   },
+  "requires": {
+    "fips": true,
+    "registration": true,
+    "rootEncryption": true,
+    "rootWWN": false,
+    "update": false
+  },
+  "servedRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public",
   "target": {
     "channel": "delivered-key",
     "controller": {

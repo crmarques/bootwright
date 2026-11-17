@@ -66,8 +66,11 @@ class Host:
         self.values.update({"bootwright_os_tree_digest": "1" * 64, "bootwright_os_tree_material": {},
                             "bootwright_os_tree_request": {
                                 "version": "os-package-tree-v1",
+                                "area": ["services", "artifact-server"],
                                 "identity": {"context": context, "profile": "rhel-9-8"},
                                 "publication": {"path": publication, "url": "https://artifacts.example.test/os/rhel-9-8/tree"},
+                                "servedRoot": publication.split("/os/", maxsplit=1)[0],
+                                "server": publication.split("/public/", maxsplit=1)[0],
                                 "media": {"name": MEDIA, "sha256": SHA, "size": len(SOURCE)}}})
         monkeypatch.setattr(protocol, "emit", lambda value, **kwargs: self.evidence.append(value))
 
@@ -319,7 +322,7 @@ def test_the_tree_proves_exactly_the_area_the_artifact_server_proves():
     tree = role_tasks.role_defaults(ROLE)
     content_root = PUBLICATION.split("/public/", maxsplit=1)[0]
     values = {"bootwright_artifact_server_request": {"contentRoot": content_root},
-              "bootwright_os_tree_request": {"publication": {"path": PUBLICATION}}}
+              "bootwright_os_tree_request": {"area": ["services", "artifact-server"], "publication": {"path": PUBLICATION}}}
     proved = [Templar(loader=LOADER, variables=dict(values, **source)).template(source[name])
               for source, name in ((server, "infra_artifact_server_nginx_area"), (tree, "managedos_package_tree_area"))]
     assert proved[0] == proved[1] == ["services", "artifact-server"]
@@ -420,6 +423,18 @@ _MALFORMED = {
     "a dot in place of the consumer": PUBLICATION.replace("/os/", "/./"),
     "a relative path": PUBLICATION.lstrip("/"),
 }
+# The hosted roots the request froze are proved against each other and the
+# context before any of them is used.
+_MALFORMED_ROOTS = {
+    "an area of another service": {"area": ["services", "dns"]},
+    "an empty area": {"area": []},
+    "a dot-dot area": {"area": ["services", ".."]},
+    "a server in another context": {"server": _ROOT.replace("/lab/", "/other/")},
+    "a server beneath another area": {"server": _ROOT.replace("/services/", "/machines/")},
+    "a nested server": {"server": _ROOT + "/nested"},
+    "a served root outside its server": {"servedRoot": _ROOT.replace("/artifacts", "/other") + "/public"},
+    "a dot-dot served root": {"servedRoot": _ROOT + "/.."},
+}
 
 
 @pytest.mark.parametrize("operation", ["apply.yml", "destroy.yml", "observe.yml"])
@@ -434,10 +449,24 @@ def test_every_entry_point_refuses_a_publication_path_not_in_the_servers_normal_
     assert not host.evidence and host.extracts == 0 and not host.proofs
 
 
+@pytest.mark.parametrize("operation", ["apply.yml", "destroy.yml", "observe.yml"])
+@pytest.mark.parametrize("name", sorted(_MALFORMED_ROOTS))
+def test_every_entry_point_refuses_hosted_roots_not_in_the_servers_normal_form(tmp_path, monkeypatch, operation, name):
+    host = Host(tmp_path, monkeypatch)
+    host.values["bootwright_os_tree_request"].update(_MALFORMED_ROOTS[name])
+    before = hosted(host)
+    with pytest.raises(TaskFailed, match="Validate the frozen package tree request"):
+        host.run(operation)
+    assert hosted(host) == before
+    assert not host.evidence and host.extracts == 0 and not host.proofs
+
+
 def test_a_server_of_another_name_publishes_in_normal_form(tmp_path, monkeypatch):
     host = Host(tmp_path, monkeypatch)
     publication = "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts.v2/public/os/rhel-9-8/tree"
     host.values["bootwright_os_tree_request"]["publication"]["path"] = publication
+    host.values["bootwright_os_tree_request"]["servedRoot"] = publication.split("/os/", maxsplit=1)[0]
+    host.values["bootwright_os_tree_request"]["server"] = publication.split("/public/", maxsplit=1)[0]
     host.tree = host.local(publication)
     host.stage = pathlib.Path(str(host.tree) + ".staging")
     host.tree.parents[3].mkdir()

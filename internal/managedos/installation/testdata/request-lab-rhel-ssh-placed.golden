@@ -29,6 +29,12 @@
     "reboot": {
       "attempts": 60,
       "delaySeconds": 10
+    },
+    "sessions": {
+      "registration": 0,
+      "unregistration": 0,
+      "update": 0,
+      "updateCompletion": 0
     }
   },
   "fleetKeyRef": "bootwright-machine-key",
@@ -101,6 +107,14 @@
     "privateKeyRef": "services-ssh-key",
     "user": "root"
   },
+  "requires": {
+    "fips": false,
+    "registration": false,
+    "rootEncryption": false,
+    "rootWWN": false,
+    "update": false
+  },
+  "servedRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public",
   "target": {
     "channel": "guest-agent",
     "controller": {

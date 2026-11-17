@@ -63,13 +63,19 @@ def test_progress_covers_post_network_work_and_success_follows_refusals():
     assert previous < completed
 
 
+def need(**required):
+    return dict(dict.fromkeys(("fips", "registration", "rootEncryption", "rootWWN", "update"), False), **required)
+
+
 @pytest.mark.parametrize("frozen,expected", [
-    ({}, set()),
-    ({"diskEncryption": {}}, {"verify-security"}),
-    ({"installerArguments": ["fips=1"]}, {"verify-security"}),
-    ({"registration": {}}, {"register-subscription"}),
-    ({"update": {}}, {"update-packages"}),
-    ({"diskEncryption": {}, "installerArguments": ["fips=1"], "registration": {}, "update": {}},
+    ({"requires": need()}, set()),
+    ({"diskEncryption": {}, "requires": need(rootEncryption=True)}, {"verify-security"}),
+    ({"installerArguments": ["fips=1"], "requires": need(fips=True)}, {"verify-security"}),
+    ({"installerArguments": ["fips=1"], "requires": need()}, set()),
+    ({"registration": {}, "requires": need(registration=True)}, {"register-subscription"}),
+    ({"update": {}, "requires": need(update=True)}, {"update-packages"}),
+    ({"diskEncryption": {}, "installerArguments": ["fips=1"], "registration": {}, "update": {},
+      "requires": need(fips=True, registration=True, rootEncryption=True, update=True)},
      {"verify-security", "register-subscription", "update-packages"}),
 ])
 def test_progress_conditions_match_the_frozen_request(frozen, expected):

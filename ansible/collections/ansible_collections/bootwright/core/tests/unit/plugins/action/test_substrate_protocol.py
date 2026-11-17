@@ -286,8 +286,12 @@ def test_evidence_must_name_a_well_formed_digest():
             substrate_host_protocol.digest(value)
 
 
+INSTALL_REQUIRES = {"fips": False, "registration": False, "rootEncryption": False, "rootWWN": False, "update": False}
+
+
 def install_arguments(**overrides):
     arguments = {
+        "requires": dict(INSTALL_REQUIRES),
         "observation": {"image": True, "tree": True},
         "marker": '{"context":"lab"}',
         "hostKey": "ssh-ed25519 AAAA",
@@ -324,15 +328,15 @@ def test_an_installation_postcondition_needs_every_proof():
 
 
 def test_an_installation_removal_proves_the_published_content_is_gone():
-    gone = managedos_install_protocol.absence({"observation": {"image": False, "tree": False}}, DIGEST)
+    gone = managedos_install_protocol.absence({"observation": {"image": False, "tree": False}, "requires": INSTALL_REQUIRES}, DIGEST)
     assert gone["postcondition"] and gone["absent"]
-    remaining = managedos_install_protocol.absence({"observation": {"image": True, "tree": False}}, DIGEST)
+    remaining = managedos_install_protocol.absence({"observation": {"image": True, "tree": False}, "requires": INSTALL_REQUIRES}, DIGEST)
     assert not remaining["postcondition"]
 
 
 @pytest.mark.parametrize("shared", ["tree", "treeContent", "treeStaging"])
 def test_shared_tree_presence_never_prevents_machine_withdrawal(shared):
-    left = {"observation": {"image": False, shared: True}}
+    left = {"observation": {"image": False, shared: True}, "requires": INSTALL_REQUIRES}
     assert managedos_install_protocol.presence(dict(install_arguments(), **left), DIGEST)[shared] is True
     evidence = managedos_install_protocol.absence(left, DIGEST)
     assert evidence["postcondition"]
@@ -345,14 +349,14 @@ def test_shared_tree_presence_never_prevents_machine_withdrawal(shared):
 # unproved and is named, so a removal that did not take one back fails.
 @pytest.mark.parametrize("remnant", ["work"])
 def test_what_a_killed_apply_leaves_is_content_a_removal_still_takes_back(remnant):
-    left = {"observation": {"image": False, "tree": False, remnant: True}}
+    left = {"observation": {"image": False, "tree": False, remnant: True}, "requires": INSTALL_REQUIRES}
     assert managedos_install_protocol.presence(dict(install_arguments(), **left), DIGEST)[remnant] is True
     assert managedos_install_protocol.presence(install_arguments(), DIGEST)[remnant] is False
     evidence = managedos_install_protocol.absence(left, DIGEST)
     assert not evidence["postcondition"]
     assert evidence[remnant] is False
     assert managedos_install_protocol.remaining(left) == [remnant]
-    assert managedos_install_protocol.absence({"observation": {remnant: False}}, DIGEST)["postcondition"]
+    assert managedos_install_protocol.absence({"observation": {remnant: False}, "requires": INSTALL_REQUIRES}, DIGEST)["postcondition"]
 
 
 def test_an_unmet_installation_names_what_is_unproved():

@@ -57,6 +57,7 @@ func TestPhysicalFIPSRefusesBoundIncompatibleHostKeyBeforeRunner(t *testing.T) {
 	for _, keyType := range []string{"ed25519", "rsa"} {
 		call, request := execution(t, "digest")
 		request.InstallerArguments = append(request.InstallerArguments, "fips=1")
+		request.freezeDerived()
 		request.Target.Channel = substrate.ChannelDeliveredKey
 		request.Target.HostKeyType = keyType
 		request.Target.HostKeyRef = "metal-01-host-key"

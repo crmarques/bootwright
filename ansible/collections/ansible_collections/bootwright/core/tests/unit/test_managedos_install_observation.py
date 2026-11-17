@@ -34,6 +34,11 @@ READ = "bootwright.core.redfish_system_read"
 NOTHING = {"image": False, "private": False, "tree": False, "treeContent": False}
 
 
+def need(**required):
+    """The frozen requires block of a request requiring exactly these proofs."""
+    return dict(dict.fromkeys(("fips", "registration", "rootEncryption", "rootWWN", "update"), False), **required)
+
+
 def tasks():
     """observe.yml's tasks in the order a play reaches them, each block opened
     and its condition carried onto every task inside it, as a play applies it."""
@@ -57,7 +62,7 @@ def scope(observes, unregister="guest", **registered):
     variables = {
         "bootwright_os_install_digest": DIGEST,
         "bootwright_os_install_material": material,
-        "bootwright_os_install_request": {"address": "198.51.100.11", "installerArguments": []},
+        "bootwright_os_install_request": {"address": "198.51.100.11", "installerArguments": [], "requires": need()},
         "managedos_install_anaconda_observes_removal": defaults()["managedos_install_anaconda_observes_removal"],
         "managedos_install_anaconda_unregisters": defaults()["managedos_install_anaconda_unregisters"],
     }
@@ -91,7 +96,8 @@ def machine_reads(scoped="not (managedos_install_anaconda_observes_removal | boo
 def test_an_apply_observation_reads_the_machine(observes):
     variables = scope(observes, managedos_install_anaconda_host_key="ssh-ed25519 AAAAHOST",
                       managedos_install_anaconda_reachable={"rc": 0},
-                      bootwright_os_install_request={"address": "198.51.100.11", "installerArguments": [], "registration": {}})
+                      bootwright_os_install_request={"address": "198.51.100.11", "installerArguments": [], "registration": {},
+                                                     "requires": need(registration=True)})
     assert all(runs(task, variables) for task in machine_reads())
 
 
@@ -111,7 +117,8 @@ def test_a_registering_removal_observation_reads_the_guest_registration_alone():
     marker = '{"request":"%s"}' % DIGEST
     variables = scope("removal", managedos_install_anaconda_host_key="ssh-ed25519 AAAAHOST",
                       managedos_install_anaconda_answered=True, managedos_install_anaconda_marker=marker,
-                      bootwright_os_install_request={"address": "198.51.100.11", "installerArguments": [], "registration": {}})
+                      bootwright_os_install_request={"address": "198.51.100.11", "installerArguments": [], "registration": {},
+                                                     "requires": need(registration=True)})
     variables["bootwright_os_install_material"]["marker"] = marker
     variables.update(next(task for task in LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True)
                           if task.get("name") == "Read the registration a removal takes back")["vars"])
@@ -209,7 +216,8 @@ def test_a_removal_observation_never_reads_an_unanswered_machine_as_released(ans
                       managedos_install_anaconda_marker=marker,
                       managedos_install_anaconda_observed={"observation": NOTHING},
                       managedos_install_anaconda_controller={"changed": False, "skipped": True},
-                      bootwright_os_install_request={"address": "198.51.100.11", "installerArguments": [], "registration": {}})
+                      bootwright_os_install_request={"address": "198.51.100.11", "installerArguments": [], "registration": {},
+                                                     "requires": need(registration=True)})
     variables["bootwright_os_install_material"]["marker"] = '{"request":"%s"}' % DIGEST
     variables.update(next(task for task in LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True)
                           if task.get("name") == "Read the registration a removal takes back")["vars"])
@@ -241,12 +249,13 @@ def test_removal_observation_reads_the_guest_only_when_told_to_unregister(unregi
                       managedos_install_anaconda_answered=True, managedos_install_anaconda_marker=marker,
                       managedos_install_anaconda_observed={"observation": NOTHING},
                       managedos_install_anaconda_controller={"changed": False, "skipped": True},
-                      bootwright_os_install_request={"address": "198.51.100.11", "installerArguments": [], "registration": {}})
+                      bootwright_os_install_request={"address": "198.51.100.11", "installerArguments": [], "registration": {},
+                                                     "requires": need(registration=True)})
     variables["bootwright_os_install_material"]["marker"] = marker
     variables.update(next(task for task in LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True)
                           if task.get("name") == "Read the registration a removal takes back")["vars"])
     assert validated(variables) is (unregister is not None)
-    assert validated(scope(None, None, bootwright_os_install_request={"installerArguments": [], "registration": {}}))
+    assert validated(scope(None, None, bootwright_os_install_request={"installerArguments": [], "registration": {}, "requires": need(registration=True)}))
     assert validated(scope("removal", None))
     unregisters = Templar(loader=LOADER, variables=variables).template(variables["managedos_install_anaconda_unregisters"])
     assert unregisters is (unregister == "guest")
@@ -256,7 +265,8 @@ def test_removal_observation_reads_the_guest_only_when_told_to_unregister(unregi
     assert all(reads) if unregister == "guest" else not any(reads)
     assert not any(runs(task, variables) for task in machine_reads())
     completion = tasks()[-1][PUBLISH]
-    required = Templar(loader=LOADER, variables=variables).template(completion["registrationRequired"])
+    rendered = {key: Templar(loader=LOADER, variables=variables).template(completion[key]) for key in ("requires", "observesRemoval", "unregisters")}
+    required = protocol.registration_required(rendered, rendered["requires"])
     assert required is (unregister == "guest")
     if unregister == "skip":
         assert published(variables, monkeypatch)["registration"] == {"consumer": "", "state": ""}

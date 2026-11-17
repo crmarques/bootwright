@@ -569,6 +569,9 @@ of the reads that hour allows for.
 
 A physical installation whose deadline passes `MaxDeadline` runs to it.
 
+The request freezes each worker session's timeout in `budgets.sessions`, from
+the constants of the registration and update bounds.
+
 Not yet met: the update's reboot return does not count each attempt's
 10-second SSH connect timeout; tracked as [B878](milestones/m1.md#b878).
 
@@ -602,6 +605,9 @@ resolves an interrupted apply: an observation that proves the marker and the
 host key without proving the connection reports a partial installation, never a
 complete one. A Machine that holds the marker and has not accepted the
 connection yet is converging rather than failed.
+
+Go derives which of these proofs a completion requires and freezes them in
+`requires`, which the adapter passes through and Go judges against.
 
 ### Replay
 
@@ -1218,7 +1224,7 @@ requires, as [the command contract](cli/commands.md) states.
 **Bound.** Registration adds 15 minutes to the request deadline. Its worker
 session is 630 seconds, plus 120 for release pinning, 60 for Satellite
 configuration and 60 for explicit content selection's identity proof.
-Unregistration is bounded at 300 seconds.
+Unregistration's session is 330 seconds.
 
 ### Physical removal
 
@@ -2031,7 +2037,8 @@ An installation uses the request version `requestVersion` in
 a URL package source contribute no publication block.
 
 The request freezes only context and profile identity, artifact-server
-placement, publication path and URL, serving certificate reference, and the
+placement, publication path and URL, serving certificate reference, the
+artifact server's hosted area, content root and served root, and the
 source media name, exact SHA-256 and size. It carries no machine identity,
 Kickstart, completion marker or machine key. Conflicting source pins for the
 same publication path refuse. This block alone owns and exclusively claims
@@ -2134,6 +2141,8 @@ a daemon-preparation block per explicitly managed provided host, including
 one with no listener, and a grant block `os-firewall-<machine>` per host
 holding requirements. Each publisher
 becomes one owned firewalld service with exactly its protocols and ports.
+The request freezes its worker session's timeout as `budgets.session`, from
+the constant its run deadline is derived from.
 Infrastructure services wait for that block. The installed-host block runs
 in the machines stage after OS installation and before consumers. Provided-host blocks run in infrastructure-services. The controller stage
 requires daemon preparation and grants for already-existing interfaces, so a

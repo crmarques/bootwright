@@ -57,7 +57,7 @@ func TestTheUpdateFreezesItsReleaseUnlessThePolicyIsNone(t *testing.T) {
 		t.Fatalf("the canonical request carries no update: %s", canonical)
 	}
 	none := pinnedRequest(t, labCatalog(registeringProfile(), rhelEntitlement()))
-	if canonical, _ := none.Canonical(); strings.Contains(string(canonical), `"update"`) {
+	if canonical, _ := none.Canonical(); strings.Contains(string(canonical), `"update":{"policy"`) {
 		t.Fatalf("a none request freezes an update: %s", canonical)
 	}
 }
@@ -103,11 +103,13 @@ func TestTheUpdateBoundCoversItsSessionsAndItsReboot(t *testing.T) {
 	updating := pinnedRequest(t, labCatalog(updatingProfile(), rhelEntitlement()))
 	registered := updating
 	registered.Update = nil
+	registered.freezeDerived()
 	if got := updating.Deadline() - registered.Deadline(); got != updateBound+substrate.LibvirtBootDiskBound {
 		t.Fatalf("an update adds %s, want the bound and the disk boot's %s", got, substrate.LibvirtBootDiskBound)
 	}
 	unregistered := updating
 	unregistered.Registration = nil
+	unregistered.freezeDerived()
 	for name, test := range map[string]struct {
 		request Request
 		want    time.Duration

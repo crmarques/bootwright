@@ -14,6 +14,7 @@ request-identity:
   publication.path
   placement.machine
 request-schema:
+  area []string
   identity struct installation.TreeIdentity
   identity.context string
   identity.profile string
@@ -33,6 +34,8 @@ request-schema:
   publication.certificateRef string omitempty
   publication.path string
   publication.url string
+  servedRoot string
+  server string
   version string
 evidence-schema:
   absent bool

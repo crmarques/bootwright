@@ -104,12 +104,27 @@ const networkCheckpointSeconds = 300
 
 const networkRollbackGrace = 30 * time.Second
 
-// registrationBound covers the worker's 630 s session, up to 750 s with Satellite content selection, or its 300 s unregistration, its policy read and inspection.
-const registrationBound = 15 * time.Minute
+const (
+	registrationSession     = 630 * time.Second
+	releasePinSession       = 120 * time.Second
+	satelliteSession        = 60 * time.Second
+	contentViewSession      = 60 * time.Second
+	unregistrationSession   = 330 * time.Second
+	registrationInspection  = 30 * time.Second
+	updateSession           = 1800 * time.Second
+	updateGuestRead         = 120 * time.Second
+	updateCompletionSession = 120 * time.Second
+	updateMarkerRead        = 60 * time.Second
+)
 
-// updateBound covers the 1800 s update session, the 600 s reboot, the 120 s release set, the
-// 120 s completion session and the 60 s second marker read; the disk boot has its own bound.
-const updateBound = 45 * time.Minute
+const (
+	firewallSession  = 300 * time.Second
+	firewallDeadline = firewallSession + 5*time.Minute
+)
+
+const registrationBound = max(registrationSession+releasePinSession+satelliteSession+contentViewSession, unregistrationSession) + registrationInspection
+
+const updateBound = updateSession + updateRebootBound + updateGuestRead + updateCompletionSession + updateMarkerRead
 
 const updateRebootBound = 600 * time.Second
 

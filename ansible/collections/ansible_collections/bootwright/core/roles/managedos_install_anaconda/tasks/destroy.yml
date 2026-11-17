@@ -237,5 +237,6 @@
     observation: '{{ managedos_install_anaconda_after.observation }}'
     removed: true
     registration: '{{ managedos_install_anaconda_registration | default({}) }}'
-    registrationRequired: "{{ bootwright_os_install_request.registration is defined and managedos_install_anaconda_unregisters | bool }}"
+    requires: '{{ bootwright_os_install_request.requires }}'
+    unregisters: '{{ managedos_install_anaconda_unregisters | bool }}'
   no_log: true

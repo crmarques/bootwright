@@ -44,6 +44,11 @@ request-schema:
   install.budgets.reboot struct installation.Budget
   install.budgets.reboot.attempts int
   install.budgets.reboot.delaySeconds int
+  install.budgets.sessions struct installation.Sessions
+  install.budgets.sessions.registration int
+  install.budgets.sessions.unregistration int
+  install.budgets.sessions.update int
+  install.budgets.sessions.updateCompletion int
   install.discoveryProof *struct diskselection.Proof omitempty
   install.discoveryProof.inventoried []string omitempty
   install.discoveryProof.reportDigest string
@@ -100,6 +105,13 @@ request-schema:
   install.registration.satellite.hostname string
   install.registration.satellite.lifecycleEnvironment string omitempty
   install.registration.satellite.trustBundleRef string
+  install.requires struct installation.Requires
+  install.requires.fips bool
+  install.requires.registration bool
+  install.requires.rootEncryption bool
+  install.requires.rootWWN bool
+  install.requires.update bool
+  install.servedRoot string
   install.target struct installation.Target
   install.target.channel string
   install.target.controller struct installation.Controller

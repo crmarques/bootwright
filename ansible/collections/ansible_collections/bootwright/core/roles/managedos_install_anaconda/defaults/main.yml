@@ -30,12 +30,9 @@ managedos_install_anaconda_boot_media: >-
 managedos_install_anaconda_image_dir: >-
   {{ (bootwright_os_install_request.image.path | dirname)
      if bootwright_os_install_request.image is defined else '' }}
-# The server's served root, <content root>/public, which every publication of
-# this block is beneath and whose label the serving process reads.
-managedos_install_anaconda_served_root: >-
-  {{ (bootwright_os_install_request.image.path | dirname | dirname | dirname)
-     if bootwright_os_install_request.image is defined
-     else (bootwright_os_install_request.private.path | dirname | dirname | dirname) }}
+# The server's served root, which every publication of this block is beneath
+# and whose label the serving process reads, as the request froze it.
+managedos_install_anaconda_served_root: '{{ bootwright_os_install_request.servedRoot }}'
 # Shared publication staging is observed, never changed by this role.
 managedos_install_anaconda_staged_tree: >-
   {{ (bootwright_os_install_request.tree.path ~ '.staging')

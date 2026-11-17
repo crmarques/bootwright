@@ -7,7 +7,7 @@
 # nothing; any other installation reads nothing.
 - name: Name whether this installation encrypts its root disk
   ansible.builtin.set_fact:
-    managedos_install_anaconda_root_encryption_requested: "{{ bootwright_os_install_request.diskEncryption is defined }}"
+    managedos_install_anaconda_root_encryption_requested: '{{ bootwright_os_install_request.requires.rootEncryption }}'
 
 - name: Read whether the root filesystem is on a TPM2-bound LUKS device
   ansible.builtin.include_tasks: guest.yml

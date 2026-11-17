@@ -84,8 +84,12 @@ func PrivatePath(catalog api.Catalog, server api.Object, selection api.Value, co
 // consumer publishes beneath the root that server created, so the layout has
 // one owner rather than one copy per consumer.
 func ContentRoot(contextName, server string) string {
-	return managedservice.ContentRoot(contextName, "artifact-server", server)
+	return managedservice.ContentRoot(contextName, serviceSlug, server)
 }
+
+const serviceSlug = "artifact-server"
+
+func HostedArea() []string { return []string{managedservice.ServicesArea, serviceSlug} }
 
 func ServedRoot(contextName, server string) string {
 	return ContentRoot(contextName, server) + "/" + servedRoot

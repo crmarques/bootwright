@@ -1,11 +1,11 @@
 ---
-# The artifact server's own private directories, services/artifact-server: the
+# The artifact server's own private directories, as the request froze them: the
 # server's content root beneath them is its own 0755 directory, which only root
 # can create or change inside the private parent.
-managedos_package_tree_area: "{{ bootwright_os_tree_request.publication.path.split('/')[5:7] }}"
-# The server's own content root, the publication path's first eight components:
-# the artifact server creates it, so a tree never does.
-managedos_package_tree_server: "{{ bootwright_os_tree_request.publication.path.split('/')[:8] | join('/') }}"
+managedos_package_tree_area: '{{ bootwright_os_tree_request.area }}'
+# The server's own content root, as the request froze it: the artifact server
+# creates it, so a tree never does.
+managedos_package_tree_server: '{{ bootwright_os_tree_request.server }}'
 # Whether the artifact server is applied on the host: its private directories
 # exist and its content root is a root-owned directory that is not a link and
 # that neither group nor others can write.
@@ -19,7 +19,7 @@ managedos_package_tree_server_applied: >-
      and not (managedos_package_tree_server_root.stat.woth | default(true)) }}
 managedos_package_tree_staging: '{{ bootwright_os_tree_request.publication.path }}.staging'
 managedos_package_tree_media: '/var/lib/bootwright/media/{{ bootwright_os_tree_request.media.name }}'
-managedos_package_tree_served_root: '{{ bootwright_os_tree_request.publication.path | dirname | dirname | dirname }}'
+managedos_package_tree_served_root: '{{ bootwright_os_tree_request.servedRoot }}'
 # Whether the source image is still the regular file of the size and SHA-256
 # the operation froze, read from the stat taken before extraction.
 managedos_package_tree_media_unchanged: >-

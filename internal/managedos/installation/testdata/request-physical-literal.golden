@@ -29,6 +29,12 @@
     "reboot": {
       "attempts": 60,
       "delaySeconds": 10
+    },
+    "sessions": {
+      "registration": 0,
+      "unregistration": 0,
+      "update": 0,
+      "updateCompletion": 0
     }
   },
   "fleetKeyRef": "bootwright-machine-key",
@@ -78,6 +84,14 @@
     "path": "/srv/private/os/metal-01",
     "url": "https://artifacts.lab.example.test/private/os/metal-01"
   },
+  "requires": {
+    "fips": false,
+    "registration": false,
+    "rootEncryption": false,
+    "rootWWN": false,
+    "update": false
+  },
+  "servedRoot": "/srv",
   "target": {
     "channel": "delivered-key",
     "controller": {

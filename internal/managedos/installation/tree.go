@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"path"
 	"slices"
+	"strings"
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -28,10 +30,13 @@ type TreeIdentity struct {
 }
 
 type TreeRequest struct {
+	Area        []string             `json:"area"`
 	Identity    TreeIdentity         `json:"identity"`
 	Media       Media                `json:"media"`
 	Placement   machineref.Placement `json:"placement"`
 	Publication Publication          `json:"publication"`
+	ServedRoot  string               `json:"servedRoot"`
+	Server      string               `json:"server"`
 	Version     string               `json:"version"`
 }
 
@@ -41,7 +46,16 @@ func (r TreeRequest) SecretReferences() []string {
 	return lifecycle.SecretNames(append(r.Placement.SecretReferences(), r.Publication.CertificateRef)...)
 }
 func DecodeTreeRequest(data []byte) (TreeRequest, error) {
-	return reconciliation.ThawVersion[TreeRequest](data, "package tree", TreeImplementation)
+	r, err := reconciliation.ThawVersion[TreeRequest](data, "package tree", TreeImplementation)
+	if err != nil {
+		return TreeRequest{}, err
+	}
+	server := path.Base(r.Server)
+	if !slices.Equal(r.Area, artifactserver.HostedArea()) || r.Server != artifactserver.ContentRoot(r.Identity.Context, server) ||
+		r.ServedRoot != artifactserver.ServedRoot(r.Identity.Context, server) || !strings.HasPrefix(r.Publication.Path, r.ServedRoot+"/") {
+		return TreeRequest{}, refusal("lifecycle.state", "the frozen package tree request's hosted roots are not its artifact server's", "")
+	}
+	return r, nil
 }
 func TreeContentDigest() string {
 	digest := sha256.Sum256([]byte(TreeImplementation + "\x00" + TreeEvidenceVersion))
@@ -102,7 +116,10 @@ func (c TreeCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		if err != nil {
 			return plan, err
 		}
-		request := TreeRequest{Identity: TreeIdentity{Context: input.Context.Name, Profile: profile.Name()}, Media: media, Placement: placement, Publication: *install.Tree, Version: TreeImplementation}
+		request := TreeRequest{
+			Area: artifactserver.HostedArea(), Identity: TreeIdentity{Context: input.Context.Name, Profile: profile.Name()}, Media: media, Placement: placement, Publication: *install.Tree,
+			ServedRoot: artifactserver.ServedRoot(input.Context.Name, server.Name()), Server: artifactserver.ContentRoot(input.Context.Name, server.Name()), Version: TreeImplementation,
+		}
 		if other, exists := paths[request.Publication.Path]; exists && other != media {
 			return plan, refusal("lifecycle.state", "one package tree path names conflicting source pins", "select one source per publication path")
 		}

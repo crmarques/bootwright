@@ -32,6 +32,17 @@ argument_specs:
               networkReconnect: *budget
               reachability: *budget
               reboot: *budget
+              # The worker sessions' timeouts in seconds, zero where none runs.
+              sessions:
+                type: dict
+                required: true
+                options:
+                  registration: &seconds
+                    type: int
+                    required: true
+                  unregistration: *seconds
+                  update: *seconds
+                  updateCompletion: *seconds
           discoveryProof:
             type: dict
             required: false
@@ -140,6 +151,21 @@ argument_specs:
                   trustBundleRef:
                     type: str
                     required: true
+          # The proofs a completion requires, which Go derives and judges.
+          requires:
+            type: dict
+            required: true
+            options:
+              fips: &required
+                type: bool
+                required: true
+              registration: *required
+              rootEncryption: *required
+              rootWWN: *required
+              update: *required
+          servedRoot:
+            type: str
+            required: true
           target:
             type: dict
             required: true

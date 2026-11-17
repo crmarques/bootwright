@@ -53,6 +53,10 @@ DOCUMENT = {"interfaces": [{"name": "bond0", "type": "bond", "state": "up", "des
 SHARED = ("reboot.yml",)
 
 
+# A request requiring none of the proofs Go freezes in its requires block.
+NO_PROOFS = {"fips": False, "registration": False, "rootEncryption": False, "rootWWN": False, "update": False}
+
+
 def flattened(name):
     """A task file's tasks in the order a play reaches them, each block and shared include opened."""
     return role_tasks.flatten(role_tasks.role_tasks(ROLE, name), role_tasks.opens(ROLE, only=SHARED))
@@ -159,6 +163,7 @@ def failing_scope(**overrides):
         "bootwright_os_install_digest": DIGEST,
         "bootwright_os_install_request": {
             "identity": {"object": MACHINE}, "address": ADDRESS, "installerArguments": [], "placement": {"machine": "controller"},
+            "requires": NO_PROOFS,
             "target": {"substrate": "libvirt", "physical": False},
             "network": {"checkpointSeconds": 300, "document": DOCUMENT, "documentPath": "/etc/bootwright/network.yml",
                         "markerPath": "/etc/bootwright/network-marker.json"},
@@ -323,7 +328,7 @@ def install(**fields):
     arguments = {"phase": "completed", "outcome": "changed", "digest": DIGEST,
                  "observation": {"image": True, "tree": True}, "marker": '{"context":"lab"}',
                  "hostKey": "ssh-ed25519 AAAA", "address": ADDRESS, "media": "", "power": "On", "reachable": True,
-                 "network": True, "networkReboot": True}
+                 "network": True, "networkReboot": True, "requires": NO_PROOFS}
     arguments.update(fields)
     return arguments
 
@@ -356,7 +361,7 @@ def test_protocol_bounds_network_evidence():
         assert evidence["postcondition"] is False, unproved
         assert protocol.unproved(evidence) == list(unproved), unproved
     assert protocol.presence(install(networkDifferences=None), DIGEST)["networkDifferences"] == []
-    absent = protocol.absence({"observation": {}}, DIGEST)
+    absent = protocol.absence({"observation": {}, "requires": install()["requires"]}, DIGEST)
     assert (absent["network"], absent["networkDifferences"], absent["networkReboot"]) == (False, [], False)
 
 
@@ -483,7 +488,7 @@ class Guest:
             "bootwright_os_install_digest": DIGEST,
             "bootwright_os_install_request": {
                 "identity": {"object": MACHINE}, "address": ADDRESS, "placement": {"machine": "controller"},
-                "target": {"substrate": "libvirt", "physical": False}, "network": NETWORK,
+                "target": {"substrate": "libvirt", "physical": False}, "network": NETWORK, "requires": NO_PROOFS,
                 "budgets": {"networkApply": {"attempts": 24, "delaySeconds": 5},
                             "networkReconnect": {"attempts": 12, "delaySeconds": 5},
                             "reboot": {"attempts": 60, "delaySeconds": 10}},
@@ -725,7 +730,7 @@ def publication(name, **scope):
     task = next(task for task in flattened(name) if (task.get(PROTOCOL) or {}).get("phase") == "completed")
     variables = dict(defaults(), **{
         "bootwright_os_install_digest": DIGEST,
-        "bootwright_os_install_request": {"address": ADDRESS, "installerArguments": []},
+        "bootwright_os_install_request": {"address": ADDRESS, "installerArguments": [], "requires": NO_PROOFS},
         "managedos_install_anaconda_was_installed": True,
         "managedos_install_anaconda_after": {"observation": {"image": True, "tree": True}},
         "managedos_install_anaconda_observed": {"observation": {"image": True, "tree": True}},

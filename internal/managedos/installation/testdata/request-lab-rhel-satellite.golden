@@ -29,6 +29,12 @@
     "reboot": {
       "attempts": 60,
       "delaySeconds": 10
+    },
+    "sessions": {
+      "registration": 810,
+      "unregistration": 330,
+      "update": 1800,
+      "updateCompletion": 120
     }
   },
   "fleetKeyRef": "bootwright-machine-key",
@@ -115,6 +121,14 @@
       "trustBundleRef": "satellite-ca"
     }
   },
+  "requires": {
+    "fips": false,
+    "registration": true,
+    "rootEncryption": false,
+    "rootWWN": false,
+    "update": true
+  },
+  "servedRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public",
   "target": {
     "channel": "guest-agent",
     "controller": {

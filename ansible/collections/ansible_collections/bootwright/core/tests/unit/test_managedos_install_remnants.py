@@ -89,6 +89,8 @@ class Host:
                 "bootMedia": dict(BOOT),
                 "image": {"path": str(self.image)},
                 "installerArguments": ["ifname=enp1s0:52:54:00:00:00:01", "ifname=enp2s0:52:54:00:00:00:02"],
+                "requires": {"fips": False, "registration": False, "rootEncryption": False, "rootWWN": False, "update": False},
+                "servedRoot": str(root / "public"),
                 "tree": {"path": str(self.tree)},
                 "treeMedia": dict(DVD),
             },

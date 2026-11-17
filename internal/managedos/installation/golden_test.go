@@ -168,8 +168,9 @@ func TestAPhysicalLiteralRequestReadsBackFromItsGolden(t *testing.T) {
 			DocumentPath: NetworkDocumentPath,
 			MarkerPath:   NetworkMarkerPath,
 		},
-		Placement: machineref.Placement{Connection: machineref.ConnectionLocal, Machine: "controller"},
-		Private:   &Publication{Path: "/srv/private/os/metal-01", URL: "https://artifacts.lab.example.test/private/os/metal-01"},
+		Placement:  machineref.Placement{Connection: machineref.ConnectionLocal, Machine: "controller"},
+		Private:    &Publication{Path: "/srv/private/os/metal-01", URL: "https://artifacts.lab.example.test/private/os/metal-01"},
+		ServedRoot: "/srv",
 		Target: Target{
 			Channel: substrate.ChannelDeliveredKey,
 			Controller: Controller{

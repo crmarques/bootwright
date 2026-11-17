@@ -247,6 +247,7 @@ func deriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, c
 		MarkerPath:        MarkerPath,
 		Placement:         placement,
 		Private:           private,
+		ServedRoot:        artifactserver.ServedRoot(contextName, imageServer.Name()),
 		Target:            target,
 		TLSCertificateRef: certificate,
 		User:              installUser,
@@ -280,15 +281,13 @@ func deriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, c
 		return Request{}, Requirements{}, err
 	}
 	request.Address, request.Hostname = install.Address, install.Hostname
-	if request.InstallerArguments, err = installerArguments(catalog, machine, request); err != nil {
+	if request.InstallerArguments, err = profileArguments(catalog, machine, profile, request); err != nil {
 		return Request{}, Requirements{}, err
-	}
-	if fipsEnabled(profile) {
-		request.InstallerArguments = append(request.InstallerArguments, fipsArgument)
 	}
 	if request.Network, err = networkFor(catalog, machine, install); err != nil {
 		return Request{}, Requirements{}, err
 	}
+	request.freezeDerived()
 	if !complete {
 		return request, needs, nil
 	}
@@ -297,6 +296,14 @@ func deriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, c
 		install.InventoriedSerials = slices.Clone(proof.Inventoried)
 	}
 	return finishInstallationRequest(request, needs, install)
+}
+
+func profileArguments(catalog api.Catalog, machine, profile api.Object, request Request) ([]string, error) {
+	arguments, err := installerArguments(catalog, machine, request)
+	if err != nil || !fipsEnabled(profile) {
+		return arguments, err
+	}
+	return append(arguments, fipsArgument), nil
 }
 
 func installationHostKey(catalog api.Catalog, machine, profile api.Object, target Target) (string, error) {

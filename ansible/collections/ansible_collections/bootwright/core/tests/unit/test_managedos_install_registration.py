@@ -72,11 +72,18 @@ def module(name):
     return tasks[only(tasks, lambda task: REGISTRATION in task, "run the registration worker")]
 
 
+# Distinct worker session timeouts, so each session is proved to read the one
+# the request froze; Go derives them (internal/managedos/installation).
+FROZEN_SESSIONS = {"registration": 611, "unregistration": 322, "update": 1777, "updateCompletion": 133}
+
+
 def scope(registering=True, **extra):
     """The variables an apply or an observation sees for a registering request
     or for one that registers nothing."""
     values = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
-    request = {"identity": {"context": "lab", "object": "rhel-01"}, "address": "192.0.2.10", "user": "fleet"}
+    request = {"identity": {"context": "lab", "object": "rhel-01"}, "address": "192.0.2.10", "user": "fleet",
+               "budgets": {"sessions": dict(FROZEN_SESSIONS)},
+               "requires": {"fips": False, "registration": registering, "rootEncryption": False, "rootWWN": False, "update": False}}
     if registering:
         request["registration"] = {
             "entitlementRef": "rhel", "organizationRef": "rhsm-org", "activationKeyRef": "rhsm-key",
@@ -266,8 +273,10 @@ def completion(name):
 @pytest.mark.parametrize("name", ["apply.yml", "observe.yml", "destroy.yml"])
 def test_completion_evidence_carries_the_registration(name):
     arguments = completion(name)
-    assert render(arguments["registrationRequired"]) is True
-    assert render(arguments["registrationRequired"], False) is False
+    assert not [key for key in arguments if key.endswith("Required")]
+    assert arguments["requires"] == "{{ bootwright_os_install_request.requires }}"
+    assert render(arguments["requires"])["registration"] is True
+    assert render(arguments["requires"], False)["registration"] is False
     assert Templar(loader=LOADER, variables={}).template(arguments["registration"]) == {}
     owned = {"consumer": CONSUMER, "state": "owned"}
     assert render(arguments["registration"], managedos_install_anaconda_registration=owned) == owned
@@ -349,7 +358,7 @@ def test_destroy_session_uses_the_reduced_policy_config():
     assert scratch.startswith("/var/tmp/bootwright-scratch-1-1/")
     opened = role_tasks.guest_session(role_tasks.role_tasks(ROLE, "unregister.yml"), REGISTRATION)[0]
     assert render(opened[role_tasks.GUEST_SESSION]["directory"]) == scratch
-    assert render(arguments["request"]) == DIGEST and arguments["timeout"] == 330
+    assert render(arguments["request"]) == DIGEST and int(render(arguments["timeout"])) == FROZEN_SESSIONS["unregistration"]
     assert task["register"] == UNREGISTRATION and task["no_log"] is True and task["failed_when"] is False
     assert not [other for other in flattened("unregister.yml") if FACT in other]
 
@@ -368,7 +377,7 @@ def test_destroy_leaves_a_foreign_registration():
     evidence, refused = protocol.completion({
         "digest": DIGEST, "removed": True, "observation": {},
         "registration": render(arguments["registration"], managedos_install_anaconda_registration=registration),
-        "registrationRequired": render(arguments["registrationRequired"]),
+        "requires": render(arguments["requires"]), "unregisters": render(arguments["unregisters"]),
     })
     assert refused is None and evidence["postcondition"] is True and evidence["registration"] == registration
     answered = guest(marker='{"request":"another"}')
@@ -470,12 +479,13 @@ def test_destroy_skips_the_guest_unless_told_to_unregister(unregister):
     for task in guest_reads:
         assert holds(task["when"], **variables) is (unregister == "guest"), task["name"]
     arguments = completion("destroy.yml")
-    assert render(arguments["registrationRequired"], **variables) is (unregister == "guest")
+    removal = {"removed": True, "unregisters": render(arguments["unregisters"], **variables)}
+    assert protocol.registration_required(removal, render(arguments["requires"], **variables)) is (unregister == "guest")
     if unregister == "skip":
         evidence, refused = protocol.completion({
             "digest": DIGEST, "removed": True, "observation": {},
             "registration": Templar(loader=LOADER, variables={}).template(arguments["registration"]),
-            "registrationRequired": render(arguments["registrationRequired"], **variables),
+            "requires": render(arguments["requires"], **variables), "unregisters": render(arguments["unregisters"], **variables),
         })
         assert refused is None and evidence["postcondition"] is True and evidence["registration"] == {"consumer": "", "state": ""}
 
@@ -492,28 +502,26 @@ def satellite_scope(updating):
     return {"bootwright_os_install_request": request}
 
 
-@pytest.mark.parametrize("satellite, updating, timeout", [
-    (False, False, 630), (False, True, 750), (True, False, 690), (True, True, 810),
-])
-def test_a_satellite_registration_lends_its_bundle_and_gains_its_configuration_time(satellite, updating, timeout):
+@pytest.mark.parametrize("satellite, updating", [(False, False), (False, True), (True, False), (True, True)])
+def test_a_satellite_registration_lends_its_bundle_and_runs_its_frozen_session(satellite, updating):
     arguments = module("register.yml")[REGISTRATION]
     variables = satellite_scope(updating) if satellite else {}
     if updating and not satellite:
         request = scope()["bootwright_os_install_request"]
         variables = {"bootwright_os_install_request": dict(request, update={"policy": "withinRelease", "release": "9.8"})}
-    assert int(render(arguments["timeout"], **variables)) == timeout
+    assert int(render(arguments["timeout"], **variables)) == FROZEN_SESSIONS["registration"]
     if satellite:
         assert render(arguments["satellite_hostname"], **variables) == "satellite.example.test"
         assert render(arguments["satellite_content_base_url"], **variables) == "https://capsule.example.test/pulp/content"
         assert render(arguments["satellite_ca_file"], **variables) == "/run/material/rhsm-satellite-ca"
 
 
-@pytest.mark.parametrize("updating, timeout", [(False, 750), (True, 870)])
-def test_explicit_satellite_selection_lends_labels_and_has_time_for_its_proof(updating, timeout):
+@pytest.mark.parametrize("updating", [False, True])
+def test_explicit_satellite_selection_lends_labels_and_runs_its_frozen_session(updating):
     arguments = module("register.yml")[REGISTRATION]
     variables = satellite_scope(updating)
     variables["bootwright_os_install_request"]["registration"]["satellite"].update(
         contentView="composite_rhel9_ceph", lifecycleEnvironment="Production")
     assert render(arguments["satellite_content_view"], **variables) == "composite_rhel9_ceph"
     assert render(arguments["satellite_lifecycle_environment"], **variables) == "Production"
-    assert int(render(arguments["timeout"], **variables)) == timeout
+    assert int(render(arguments["timeout"], **variables)) == FROZEN_SESSIONS["registration"]

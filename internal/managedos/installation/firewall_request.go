@@ -61,8 +61,13 @@ type FirewallService struct {
 	Publisher string         `json:"publisher"`
 }
 
+type FirewallBudgets struct {
+	Session int `json:"session"`
+}
+
 type FirewallRequest struct {
 	Address     string               `json:"address"`
+	Budgets     FirewallBudgets      `json:"budgets"`
 	Direct      bool                 `json:"direct"`
 	FleetKeyRef string               `json:"fleetKeyRef"`
 	Identity    FirewallIdentity     `json:"identity"`
@@ -228,7 +233,7 @@ func firewallRequestFor(install Request, contextName string, requirements []Host
 	}
 	slices.SortFunc(requirements, func(a, b HostPortRequirement) int { return strings.Compare(a.Publisher, b.Publisher) })
 	request := FirewallRequest{
-		Address: install.Address, FleetKeyRef: install.FleetKeyRef, Placement: install.Placement, User: install.User, Version: FirewallImplementation,
+		Address: install.Address, Budgets: FirewallBudgets{Session: seconds(firewallSession)}, FleetKeyRef: install.FleetKeyRef, Placement: install.Placement, User: install.User, Version: FirewallImplementation,
 		Identity: FirewallIdentity{Block: FirewallBlockID(machine), Context: contextName, Object: machine},
 		Services: []FirewallService{},
 	}
@@ -271,6 +276,9 @@ func validFirewallRequest(request FirewallRequest) error {
 	}
 	if request.Version != FirewallImplementation || request.Identity.Block != firewallRequestBlockID(request) || !api.ValidLexical("name", request.Identity.Context) {
 		return invalid("names another block or version")
+	}
+	if request.Budgets != (FirewallBudgets{Session: seconds(firewallSession)}) {
+		return invalid("freezes another worker session budget")
 	}
 	if request.Preparation && (!request.Direct || len(request.Services) != 0) {
 		return invalid("has an invalid daemon preparation")

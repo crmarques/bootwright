@@ -38,7 +38,7 @@
     argv:
       - /usr/bin/chcon
       - --reference
-      - '{{ bootwright_physical_erase_request.install.private.path | dirname | dirname | dirname }}'
+      - '{{ bootwright_physical_erase_request.install.servedRoot }}'
       - --recursive
       - '{{ bootwright_physical_erase_request.install.private.path }}'
     expand_argument_vars: false

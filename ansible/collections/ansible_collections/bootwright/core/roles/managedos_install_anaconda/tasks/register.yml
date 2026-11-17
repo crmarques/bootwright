@@ -38,10 +38,7 @@
     satellite_hostname: "{{ bootwright_os_install_request.registration.satellite.hostname | default(omit) }}"
     satellite_content_base_url: "{{ bootwright_os_install_request.registration.satellite.contentBaseURL | default(omit) }}"
     satellite_ca_file: "{{ bootwright_os_install_material.rhsmSatelliteCA if 'satellite' in bootwright_os_install_request.registration else omit }}"
-    timeout: >-
-      {{ (750 if 'update' in bootwright_os_install_request else 630)
-         + (60 if 'satellite' in bootwright_os_install_request.registration else 0)
-         + (60 if bootwright_os_install_request.registration.satellite.contentView | default('') else 0) }}
+    timeout: '{{ bootwright_os_install_request.budgets.sessions.registration | int }}'
   register: managedos_install_anaconda_registration_result
   failed_when: false
   changed_when: false

@@ -68,16 +68,33 @@ MAX_DIFFERENCES = 16
 MAX_DIFFERENCE_BYTES = 200
 # Shared package tree presence does not belong to a machine installation.
 CONTENT = ("image", "private", "work")
+# The proofs a completion requires, which Go derives and freezes in the
+# request's requires block; this plugin only reads them.
+REQUIRES = frozenset(("fips", "registration", "rootEncryption", "rootWWN", "update"))
 
 
-def root_wwn(arguments):
+def requires(arguments):
+    """The frozen requires block, exactly five booleans, or ValueError."""
+    value = arguments.get("requires")
+    if not isinstance(value, dict) or set(value) != REQUIRES or not all(isinstance(value[key], bool) for key in REQUIRES):
+        raise ValueError("requires")
+    return dict(value)
+
+
+def registration_required(arguments, required):
+    """Whether this run proves a registration: the frozen one, unless a removal does not unregister."""
+    removal = bool(arguments.get("removed")) or flag(arguments.get("observesRemoval"))
+    return required["registration"] and (not removal or flag(arguments.get("unregisters")))
+
+
+def root_wwn(arguments, required):
     """The WWN a serial-declared root disk reported to the installer, '' when none, or None when unproved.
 
     The record holds the identity the %pre read, printable ASCII of at most 256
     characters without surrounding white space, or nothing; the same rules as
     Go's decode. Any other installation records none.
     """
-    if not flag(arguments.get("rootWWNRequired")):
+    if not required["rootWWN"]:
         return ""
     value = arguments.get("rootWWN")
     if not flag(arguments.get("rootWWNRead")) or not isinstance(value, str):
@@ -170,9 +187,9 @@ def system(value):
     return {key: value[key] for key in sorted(OS_KEYS)}
 
 
-def update_proved(evidence, arguments):
+def update_proved(evidence, required):
     """A complete update for a request updating within its release, none for any other."""
-    if flag(arguments.get("updateRequired")):
+    if required["update"]:
         return evidence["update"]["state"] == "complete"
     return evidence["update"]["state"] == "none"
 
@@ -187,6 +204,7 @@ def presence(arguments, request_digest):
     """
     observation = arguments.get("observation") or {}
     private_delivery = flag(arguments.get("privateDelivery"))
+    required = requires(arguments)
     power = arguments.get("power")
     if power not in POWER_STATES:
         raise ValueError("power state")
@@ -209,12 +227,12 @@ def presence(arguments, request_digest):
         "registration": registration(arguments.get("registration")),
         "request": adapter_protocol.request_digest(request_digest),
         "rootEncryption": flag(arguments.get("rootEncryption")),
-        "rootWWN": root_wwn(arguments) or "",
+        "rootWWN": root_wwn(arguments, required) or "",
         "tree": bool(observation.get("tree")),
         "treeContent": bool(observation.get("treeContent")),
         "treeIdentity": tree_identity(observation.get("treeIdentity")),
         "treeStaging": bool(observation.get("treeStaging")),
-        "update": update(arguments.get("update"), flag(arguments.get("updateRequired"))),
+        "update": update(arguments.get("update"), required["update"]),
         "work": bool(observation.get("work")),
     }
     evidence["postcondition"] = bool(
@@ -223,11 +241,11 @@ def presence(arguments, request_digest):
         and ((not evidence["image"]) if private_delivery else evidence["image"])
         and not evidence["private"] and evidence["reachable"]
         and evidence["network"] and evidence["networkReboot"]
-        and (evidence["fips"] or not flag(arguments.get("fipsRequired")))
-        and (evidence["rootEncryption"] or not flag(arguments.get("rootEncryptionRequired")))
-        and root_wwn(arguments) is not None
-        and (evidence["registration"]["state"] == "owned" or not flag(arguments.get("registrationRequired")))
-        and update_proved(evidence, arguments)
+        and (evidence["fips"] or not required["fips"])
+        and (evidence["rootEncryption"] or not required["rootEncryption"])
+        and root_wwn(arguments, required) is not None
+        and (evidence["registration"]["state"] == "owned" or not registration_required(arguments, required))
+        and update_proved(evidence, required)
     )
     return evidence
 
@@ -244,7 +262,7 @@ def remaining(arguments):
 
 def released(evidence, arguments):
     """Whether a removal proved its machine holds no registration it created."""
-    return evidence["registration"]["state"] in RELEASED_STATES or not flag(arguments.get("registrationRequired"))
+    return evidence["registration"]["state"] in RELEASED_STATES or not registration_required(arguments, requires(arguments))
 
 
 def unproved(evidence, private_delivery=False, fips_required=False, encryption_required=False, registration_required=False,
@@ -321,10 +339,10 @@ def completion(arguments):
             unmet.append("registration")
     else:
         evidence = presence(arguments, request_digest)
+        required = requires(arguments)
         unmet = unproved(
-            evidence, flag(arguments.get("privateDelivery")), flag(arguments.get("fipsRequired")),
-            flag(arguments.get("rootEncryptionRequired")), flag(arguments.get("registrationRequired")),
-            flag(arguments.get("updateRequired")), root_wwn(arguments) is None,
+            evidence, flag(arguments.get("privateDelivery")), required["fips"], required["rootEncryption"],
+            registration_required(arguments, required), required["update"], root_wwn(arguments, required) is None,
         )
         verb = "not proved"
     if publishes(evidence, arguments.get("observed")):

@@ -9,6 +9,13 @@ argument_specs:
           address:
             type: str
             required: true
+          budgets:
+            type: dict
+            required: true
+            options:
+              session:
+                type: int
+                required: true
           direct:
             type: bool
             required: true

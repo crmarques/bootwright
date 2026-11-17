@@ -89,7 +89,7 @@ MACHINE_GONE = {"answered": True, "controller": "", "disks": [], "domain": "", "
                 "state": "", "unit": ""}
 INSTALL = {"observation": {"image": True, "tree": True}, "marker": '{"context":"lab"}', "hostKey": "ssh-ed25519 AAAA",
            "address": "198.51.100.11", "media": "", "power": "On", "reachable": True, "network": True,
-           "networkReboot": True}
+           "networkReboot": True, "requires": {"fips": False, "registration": False, "rootEncryption": False, "rootWWN": False, "update": False}}
 CLUSTER = {"cluster": "c" * 64, "completed": True, "media": [], "missing": [], "ownMedia": [], "powered": ["sno-01"],
            "release": "4.21.15"}
 PHYSICAL = {"addresses": ["aa:bb:cc:dd:ee:01"], "failures": [], "manufacturer": "Acme", "model": "R740", "power": "Off",
@@ -205,8 +205,8 @@ CASES = {
     ]) + completions(
         INSTALL,
         dict(INSTALL, marker="", power="Off", media="http://s/install.iso"),
-        {"observation": {}},
-        {"observation": {"image": True, "treeStaging": True}},
+        {"observation": {}, "requires": INSTALL["requires"]},
+        {"observation": {"image": True, "treeStaging": True}, "requires": INSTALL["requires"]},
         dict(INSTALL, power="Spinning"),
     ),
     "containercluster_install_protocol": common([
