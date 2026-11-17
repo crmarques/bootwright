@@ -12,6 +12,7 @@ import (
 	"path"
 	"slices"
 	"sync"
+	"syscall"
 
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -81,11 +82,13 @@ func (a *AutomationStager) Stage(ctx context.Context) (prerequisites.StagedAutom
 	return prerequisites.StagedAutomation{Path: path.Join(parent.path, made.name, automationTree), Digest: ansible.Digest(), Lock: made.lock, Release: release}, nil
 }
 
-// releaseAutomation lets this invocation's lock go and then removes the tree
-// only if no descendant still holds it through an inherited descriptor, which
+// releaseAutomation lets this invocation's lock go, waits out any fork that
+// copied it, and removes the tree only if no descendant still holds it, which
 // leaves it to the first sweep after the last holder ends.
 func (p *stagingParent) releaseAutomation(made created) {
+	syscall.ForkLock.RLock()
 	made.lock.Close()
+	syscall.ForkLock.RUnlock()
 	root, err := os.OpenRoot(p.path)
 	if err != nil {
 		return

@@ -304,6 +304,7 @@ type created struct {
 // remove whole is left for the next sweep.
 func (p *stagingParent) release(name string, lock *os.File, held os.FileInfo) {
 	defer lock.Close()
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 	root, err := os.OpenRoot(p.path)
 	if err != nil {
 		return

@@ -145,8 +145,8 @@ func publishRecord(job string, record jobRecord) error {
 // go only once no process holds the lock: an adapter descendant that still runs
 // keeps them, with the material in them, the next run of this context refuses,
 // and the first run after the last holder ends removes them. The holder goes
-// after the lock, so no sweep advises ending the processes that hold a job
-// while this invocation is still one of them.
+// after the lock and any fork that copied it, so no sweep advises ending the
+// processes that hold a job while this invocation is still one of them.
 func (r Runner) release(job, scratch string, lock, holder *os.File) {
 	if r.invocation != nil {
 		r.invocation.mu.Lock()
@@ -154,7 +154,7 @@ func (r Runner) release(job, scratch string, lock, holder *os.File) {
 		delete(r.invocation.jobs, job)
 	}
 	held, statErr := lock.Stat()
-	_ = lock.Close()
+	closeOutsideForks(lock)
 	unlockAndClose(holder)
 	dirs, err := r.openRunDirectories()
 	if statErr != nil || err != nil {
@@ -432,6 +432,12 @@ func lockDirectory(dir *os.Root) (*os.File, bool, error) {
 func unlockAndClose(file *os.File) {
 	syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
 	file.Close()
+}
+
+func closeOutsideForks(file *os.File) {
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+	_ = file.Close()
 }
 
 // lockShared takes a job lock shared, which succeeds once no process of the
