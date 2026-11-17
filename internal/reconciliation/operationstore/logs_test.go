@@ -328,34 +328,63 @@ func TestAttemptOutputIsCutAtTheContextLogBound(t *testing.T) {
 }
 
 // Output has to reach disk while the run is still going, or the file an
-// operator was told to follow stays empty until the work is already over.
-// Every write is published before the adapter can wedge without another write.
-func TestAdapterOutputPublishesEachWriteWithoutWaitingForAnother(t *testing.T) {
+// operator was told to follow stays empty until the work is already over. The
+// first byte still pending starts the delay that publishes it, so the final
+// line reaches disk even when the adapter wedges without another write.
+func TestAdapterOutputPublishesItsFinalLineWithoutWaitingForAnother(t *testing.T) {
 	ctx := context.Background()
 	area := newArea()
 	store := New(area, area.logs, time.Now)
 	target := "op-" + strings.Repeat("ab", 16) + "/blocks/one/attempt-000001.output"
 	output := store.OpenAdapterOutput(ctx, target)
-	if _, err := output.Write([]byte("TASK [boot the machine]\n")); err != nil {
+	output.delay = time.Millisecond
+	for _, line := range []string{"TASK [boot the machine]\n", "ok: [rhel-01]\n"} {
+		if _, err := output.Write([]byte(line)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for published(area.logs, target) != "TASK [boot the machine]\nok: [rhel-01]\n" {
+		if time.Now().After(deadline) {
+			t.Fatalf("the final line is buffered until another write: %q", published(area.logs, target))
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := output.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if string(area.logs.files[target]) != "TASK [boot the machine]\n" {
-		t.Fatalf("the first line was not published: %q", area.logs.files[target])
-	}
+}
+
+// An adapter prints roughly a line per pipe read, and each publication is an
+// fsync of the log area, so the lines a delay collects publish as one append,
+// and the attempt's end publishes what is still pending before it records the
+// file.
+func TestAdapterOutputPublishesTheWritesOfOneDelayAsOneAppend(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	target := "op-" + strings.Repeat("ab", 16) + "/blocks/one/attempt-000001.output"
+	output := store.OpenAdapterOutput(ctx, target)
+	output.delay = time.Hour
 	for range 50 {
 		if _, err := output.Write([]byte("ok: [rhel-01]\n")); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if !strings.HasSuffix(string(area.logs.files[target]), "ok: [rhel-01]\n") {
-		t.Fatal("the final line is buffered until another write")
+	if appends := area.logs.appends; appends != 0 {
+		t.Fatalf("50 lines within one delay published %d appends, want none before it ends", appends)
 	}
-	if _, err := output.Write([]byte("TASK [eject the media]\n")); err != nil {
+	if err := output.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasSuffix(string(area.logs.files[target]), "TASK [eject the media]\n") {
-		t.Fatalf("the final write was not published: %d writes, %q", area.logs.appends, area.logs.files[target])
+	if appends, kept := area.logs.appends, published(area.logs, target); appends != 1 || kept != strings.Repeat("ok: [rhel-01]\n", 50) {
+		t.Fatalf("closing published %d appends holding %q, want one holding every line", appends, kept)
 	}
+}
+
+func published(area *memoryArea, target string) string {
+	area.mutex.Lock()
+	defer area.mutex.Unlock()
+	return string(area.files[target])
 }
 
 // An attempt's or resolution's log keeps, with its truncation marker, at most

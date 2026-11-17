@@ -1279,8 +1279,11 @@ within a bounded delay, so a run that wedges is readable before it ends rather
 than only once it stops. That
 requires the adapter process to be launched so that it does not withhold its own
 output, because a tool that buffers until it exits defeats the retention
-whatever this side does. Each write publishes before returning, so its final bytes remain visible
-even when the adapter produces nothing more. The file is bounded and truncated at its limit without an inline
+whatever this side does. Output is published once 8 KiB is pending or one
+second after the first byte still pending, whichever comes first, so its final
+bytes are visible within that second even when the adapter produces nothing
+more, and the run's end publishes what remains before its attempt log records
+the file. The file is bounded and truncated at its limit without an inline
 marker, or sooner where the context's operation log area holds
 `operationstore.MaxContextLogBytes`, which leaves no file once nothing fits
 beneath it. It is troubleshooting material only: nothing reads it back for a

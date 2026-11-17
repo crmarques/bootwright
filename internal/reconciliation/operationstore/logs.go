@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/canonicaljson"
@@ -112,19 +113,26 @@ type AdapterOutput struct {
 	limit     int
 	truncated bool
 	closed    bool
+	delay     time.Duration
+	timer     *time.Timer
 }
+
+const (
+	adapterOutputBatch = 8 << 10
+	adapterOutputDelay = time.Second
+)
 
 // OpenAdapterOutput prepares the retained output beside an already open attempt
 // log, whose own directory it shares. It cannot fail, because retention is not
 // a precondition of the effect it records, and it is cut short once the log
 // area holds MaxContextLogBytes.
 func (s *Store) OpenAdapterOutput(ctx context.Context, target string) *AdapterOutput {
-	return &AdapterOutput{ctx: ctx, area: s.logs, path: target, limit: MaxAdapterOutputBytes, store: s}
+	return &AdapterOutput{ctx: ctx, area: s.logs, path: target, limit: MaxAdapterOutputBytes, store: s, delay: adapterOutputDelay}
 }
 
 // OpenRunOutput prepares a bounded run's output in the file its run area made.
 func OpenRunOutput(ctx context.Context, area Area, target string) *AdapterOutput {
-	return &AdapterOutput{ctx: ctx, area: area, path: target, limit: MaxAdapterOutputBytes}
+	return &AdapterOutput{ctx: ctx, area: area, path: target, limit: MaxAdapterOutputBytes, delay: adapterOutputDelay}
 }
 
 func (o *AdapterOutput) Write(value []byte) (int, error) {
@@ -142,8 +150,30 @@ func (o *AdapterOutput) Write(value []byte) (int, error) {
 		value = value[:max(room, 0)]
 	}
 	o.pending = append(o.pending, value...)
-	_ = o.flush(o.ctx)
+	switch {
+	case len(o.pending) >= adapterOutputBatch:
+		o.stop()
+		_ = o.flush(o.ctx)
+	case len(o.pending) > 0 && o.timer == nil:
+		o.timer = time.AfterFunc(o.delay, o.flushPending)
+	}
 	return size, nil
+}
+
+func (o *AdapterOutput) flushPending() {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	o.timer = nil
+	if !o.closed {
+		_ = o.flush(o.ctx)
+	}
+}
+
+func (o *AdapterOutput) stop() {
+	if o.timer != nil {
+		o.timer.Stop()
+		o.timer = nil
+	}
 }
 
 // Close publishes whatever the run left buffered under the caller's own live
@@ -158,6 +188,7 @@ func (o *AdapterOutput) Close(ctx context.Context) error {
 		return nil
 	}
 	o.closed = true
+	o.stop()
 	return o.flush(ctx)
 }
 
