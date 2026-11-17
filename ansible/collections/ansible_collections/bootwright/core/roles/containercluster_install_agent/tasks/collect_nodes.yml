@@ -1,0 +1,28 @@
+---
+# Every node play leaves its own answer on its node; the controller gathers them
+# in declared node order. A node whose read failed proved no image identity.
+- name: Start the ordered node observations
+  ansible.builtin.set_fact:
+    containercluster_install_agent_controllers:
+      results: []
+    containercluster_install_agent_media_identity:
+      results: []
+  no_log: true
+
+- name: Collect observations in declared node order
+  ansible.builtin.set_fact:
+    containercluster_install_agent_controllers:
+      results: >-
+        {{ containercluster_install_agent_controllers.results +
+           [hostvars['bootwright_node_%03d' | format(node_index)].containercluster_install_agent_node_read
+            | combine({'item': node})] }}
+    containercluster_install_agent_media_identity:
+      results: >-
+        {{ containercluster_install_agent_media_identity.results +
+           [hostvars['bootwright_node_%03d' | format(node_index)].containercluster_install_agent_node_identity
+            | default({'skipped': true}) | combine({'item': {'item': node}})] }}
+  loop: '{{ bootwright_cluster_install_request.nodes }}'
+  loop_control:
+    loop_var: node
+    index_var: node_index
+  no_log: true

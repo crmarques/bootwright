@@ -95,13 +95,13 @@ def test_apply_sweeps_once_every_node_released_its_media():
 
 
 def test_destroy_sweeps_after_its_ejects_keeping_only_unejected_media():
-    destroy = tasks('destroy.yml')
+    destroy = tasks('destroy_release.yml')
     block = next(t for t in destroy if 'always' in t)
     always = block['always']
     sweep = always[-2]
     assert sweep in sweeps(always) and sweep['no_log'] is True
     assert reports_its_refusal(always, len(always) - 2) is always[-1]
-    assert position(always, lambda t: t.get(MODULE, {}).get('operation') == 'remove') < len(always) - 2
+    assert position(tasks('node_eject.yml'), lambda t: t.get(MODULE, {}).get('operation') == 'remove') > 0
     ejects = [{'containercluster_install_agent_node': {'machine': 'sno-00'}},
               {'containercluster_install_agent_node': {'machine': 'sno-01'}, 'msg': 'HTTP 503'}]
     scope = {'containercluster_install_agent_controllers': controllers(BASE + TOKEN + '/agent.iso', BASE + OTHER + '/agent.iso'),
@@ -171,7 +171,8 @@ def test_the_read_after_a_failed_insert_takes_its_own_timeout_not_what_the_boot_
 
 
 def test_observation_never_sweeps_or_removes_a_link():
-    for file in ['observe.yml', 'state.yml', 'cluster_state.yml']:
+    files = ['observe.yml', 'observed.yml', 'state.yml', 'cluster_state.yml', 'node_state.yml', 'collect_nodes.yml', 'resolve_state.yml']
+    for file in files:
         for task in walk(tasks(file)):
             assert task.get(MODULE, {}).get('operation', 'inspect') == 'inspect', (file, task.get('name'))
-            assert task.get('ansible.builtin.import_tasks') in (None, 'state.yml', 'cluster_state.yml'), file
+            assert task.get('ansible.builtin.import_tasks') in [None] + files, file

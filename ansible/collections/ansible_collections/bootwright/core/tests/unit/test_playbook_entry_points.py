@@ -54,6 +54,14 @@ LATER_PLAY_TASK_FILES = {
         "containercluster_install_agent",
         frozenset(("after_release", "finish", "node_boot", "node_release", "node_state", "phase_failures", "prepare_boot", "waits")),
     ),
+    "containercluster/install_observe.yml": (
+        "containercluster_install_agent",
+        frozenset(("node_state", "observed")),
+    ),
+    "containercluster/install_destroy.yml": (
+        "containercluster_install_agent",
+        frozenset(("destroy_eject", "destroy_finish", "destroy_release", "node_eject", "node_state")),
+    ),
 }
 
 # Every playbook the collection ships. Finding fewer means the walk stopped

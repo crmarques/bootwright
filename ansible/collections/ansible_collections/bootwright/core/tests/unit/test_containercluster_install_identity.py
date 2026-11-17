@@ -205,7 +205,7 @@ def completion(name):
 # identity answers "foreign", and publishing that as the identity would make
 # identity and cluster agree on a cluster no anchor proves. The scope holds only
 # the registers the task files set, so a reference to any other one fails.
-@pytest.mark.parametrize("name", ["apply.yml", "observe.yml", "destroy.yml"])
+@pytest.mark.parametrize("name", ["apply.yml", "observed.yml", "destroy_finish.yml"])
 @pytest.mark.parametrize("before, cluster", [("", "foreign"), (IDENTITY, "")],
                          ids=["no anchor answered foreign", "an anchor nothing answered"])
 def test_the_evidence_publishes_the_identity_the_inspection_named(name, before, cluster):

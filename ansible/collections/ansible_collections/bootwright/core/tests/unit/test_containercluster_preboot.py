@@ -285,15 +285,16 @@ def test_arp_precedes_boot_mark_and_readiness_precedes_bootstrap():
 
 
 def test_partial_destroy_retires_only_successfully_ejected_tokens():
-    release = next(t for t in tasks('destroy.yml') if 'always' in t)
-    assert release['block'][1]['ansible.builtin.include_tasks'] == 'eject_node_serial.yml'
-    assert tasks('eject_node_serial.yml')[0]['vars']['containercluster_install_agent_port_operation'] == 'media_eject'
-    assert 'ansible.builtin.fail' in release['block'][2]
-    task = release['always'][0]
+    eject = tasks('node_eject.yml')
+    assert eject[0]['vars']['containercluster_install_agent_port_operation'] == 'media_eject'
+    task = next(t for t in eject if 'bootwright.core.containercluster_media_token' in t)
+    assert task['bootwright.core.containercluster_media_token']['operation'] == 'remove'
     for result, expected in [({'changed': True}, True), ({'msg': 'unknown eject'}, False)]:
-        scope = {'containercluster_install_agent_cleanup_index': 0,
-                 'containercluster_install_agent_ejected': {'results': [result]}}
-        assert Templar(loader=LOADER, variables=scope).evaluate_expression(task['when'][2]) is expected
+        scope = {'containercluster_install_agent_node_ejected': result}
+        assert Templar(loader=LOADER, variables=scope).evaluate_expression(task['when'][1]) is expected
+    release = next(t for t in tasks('destroy_release.yml') if 'always' in t)
+    assert 'ansible.builtin.fail' in release['block'][2]
+    assert release['always'][0]['bootwright.core.containercluster_media_token']['operation'] == 'sweep'
 
 
 def test_readiness_ports_share_one_deadline_and_a_spent_budget_still_tries_once(monkeypatch):

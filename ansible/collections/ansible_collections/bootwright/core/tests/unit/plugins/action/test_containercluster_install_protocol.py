@@ -298,7 +298,7 @@ def controller(machine, media, power="On"):
 
 def resolved_media(results, published=PUBLISHED):
     """Resolve real module inode observations through the role's final state fact."""
-    task = one("state.yml", lambda t: "containercluster_install_agent_state" in t.get("ansible.builtin.set_fact", {}))
+    task = one("resolve_state.yml", lambda t: "containercluster_install_agent_state" in t.get("ansible.builtin.set_fact", {}))
     scope = dict(task.get("vars") or {})
     scope["containercluster_install_agent_controllers"] = {"results": results}
     scope["containercluster_install_agent_before"] = {"observation": {"identity": IDENTITY, "url": published}}
@@ -479,11 +479,15 @@ def reads(observes):
     """Which of the state read's reads run under one observation scope."""
     templar = Templar(loader=LOADER, variables=scoped(observes))
     result = {task["register"]: templar.evaluate_conditional(task["when"]) if "when" in task else True
-              for task in tasks("cluster_state.yml") + tasks("state.yml") if "register" in task and
-              task.get("register") != "containercluster_install_agent_media_identity"}
-    node_read = one("state.yml", lambda task: task.get("ansible.builtin.include_tasks") == "state_node_serial.yml")
-    assert node_read["loop"] == "{{ bootwright_cluster_install_request.nodes }}"
-    assert "when" not in node_read
+              for task in tasks("cluster_state.yml") + one("node_state.yml", lambda task: "block" in task)["block"] if "register" in task and
+              task.get("register") != "containercluster_install_agent_node_identity"}
+    plays = LOADER.load_from_file(str(ROLE.parents[1] / "playbooks/containercluster/install_observe.yml"), trusted_as_template=True)
+    node_plays = [play for play in plays if play["hosts"] == "bootwright_nodes"]
+    assert [play["tasks"][0]["ansible.builtin.import_role"]["tasks_from"] for play in node_plays] == ["node_state"]
+    assert all("when" not in play["tasks"][0] for play in node_plays)
+    block = one("node_state.yml", lambda task: "block" in task)
+    read = [task for task in block["block"] if task.get("ansible.builtin.include_tasks") == "port.yml"]
+    assert len(read) == 1 and "when" not in read[0] and "when" not in block
     result["containercluster_install_agent_controllers"] = True
     return result
 
@@ -521,7 +525,7 @@ def test_a_removal_observation_of_a_foreign_image_publishes_the_media_alone():
     variables["containercluster_install_agent_before"] = {"observation": {"identity": IDENTITY, "url": PUBLISHED}}
     resolved = Templar(loader=LOADER, variables=variables).template(
         task["ansible.builtin.set_fact"]["containercluster_install_agent_state"])
-    media_task = one("state.yml", lambda t: "containercluster_install_agent_state" in t.get("ansible.builtin.set_fact", {}))
+    media_task = one("resolve_state.yml", lambda t: "containercluster_install_agent_state" in t.get("ansible.builtin.set_fact", {}))
     variables.update(media_task.get("vars") or {})
     variables["containercluster_install_agent_state"] = resolved
     variables["containercluster_install_agent_media_identity"] = {"results": []}
@@ -619,7 +623,7 @@ def test_a_placement_read_that_did_not_run_proves_no_node_placed():
 
 
 def test_the_observation_reads_the_placement_and_never_places():
-    task = one("observe.yml", lambda task: PLACEMENT_MODULE in task)
+    task = one("observed.yml", lambda task: PLACEMENT_MODULE in task)
     assert task[PLACEMENT_MODULE]["operation"] == "observe"
     templar = Templar(loader=LOADER, variables=placement_variables())
     assert all(templar.evaluate_conditional(condition) for condition in task["when"])
@@ -686,12 +690,12 @@ def test_each_publication_names_the_boot_mark():
         return one(name, lambda task: (task.get("bootwright.core.containercluster_install_protocol") or {}).get(
             "phase") == "completed")["bootwright.core.containercluster_install_protocol"]
     read = "{{ containercluster_install_agent_before.observation.booted }}"
-    assert published("observe.yml")["booted"] == read
-    assert published("destroy.yml")["booted"] == read
+    assert published("observed.yml")["booted"] == read
+    assert published("destroy_finish.yml")["booted"] == read
     assert published("finish.yml")["booted"] is True
     inserted = "{{ containercluster_install_agent_before.observation.inserted }}"
-    assert published("observe.yml")["inserted"] == inserted
-    assert published("destroy.yml")["inserted"] == inserted
+    assert published("observed.yml")["inserted"] == inserted
+    assert published("destroy_finish.yml")["inserted"] == inserted
     assert published("finish.yml")["inserted"] is True
 
 

@@ -294,17 +294,16 @@ def test_the_ownership_read_calls_an_insert_link_own_and_any_other_file_foreign(
     published = base + '/abcdef/agent.iso'
     presented = ['', published, base + '/insert-own/agent.iso', base + '/insert-foreign/agent.iso']
     controllers = [{'item': {'machine': 'sno-%02d' % number}, 'media': image, 'power': 'On'} for number, image in enumerate(presented)]
-    state = tasks('state.yml')
-    inspect = only(state, lambda t: t.get(MODULE, {}).get('operation') == 'inspect')
+    inspect = only(list(flat(tasks('node_state.yml'))), lambda t: t.get(MODULE, {}).get('operation') == 'inspect')
     results = []
     for controller in controllers:
-        scope = {'bootwright_cluster_install_request': request, 'item': controller,
+        scope = {'bootwright_cluster_install_request': request, 'containercluster_install_agent_node_read': controller,
                  'containercluster_install_agent_before': {'observation': {'url': published}}}
         arguments = dict(render(inspect[MODULE], scope))
         assert set(arguments) == {'request', 'source', 'image', 'operation'}
         results.append(dict(token.operate(**arguments), item=controller))
     assert [result['own'] for result in results] == [False, True, True, False]
-    resolve = only(state, lambda t: 'containercluster_install_agent_state' in t.get('ansible.builtin.set_fact', {}))
+    resolve = only(tasks('resolve_state.yml'), lambda t: 'containercluster_install_agent_state' in t.get('ansible.builtin.set_fact', {}))
     facts = resolve['ansible.builtin.set_fact']['containercluster_install_agent_state']
     scope = {'bootwright_cluster_install_request': request,
              'containercluster_install_agent_media_identity': {'results': results},
@@ -317,7 +316,7 @@ def test_the_ownership_read_calls_an_insert_link_own_and_any_other_file_foreign(
 
 def sweep_refusals():
     found = []
-    for file in ('apply.yml', 'destroy.yml'):
+    for file in ('apply.yml', 'destroy_release.yml'):
         steps = list(flat(tasks(file)))
         for position, task in enumerate(steps):
             if task.get(MODULE, {}).get('operation') == 'sweep':

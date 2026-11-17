@@ -1,0 +1,23 @@
+---
+- name: Prove no node presents this cluster's media
+  ansible.builtin.import_tasks: state.yml
+
+- name: Report absence verification completion
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: verify-absence
+    status: ok
+  no_log: true
+
+- name: Publish bounded installation removal evidence
+  bootwright.core.containercluster_install_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'changed' if containercluster_install_agent_inserted | bool else 'unchanged' }}
+    digest: '{{ bootwright_cluster_install_digest }}'
+    identity: '{{ containercluster_install_agent_before.observation.identity }}'
+    booted: '{{ containercluster_install_agent_before.observation.booted }}'
+    inserted: '{{ containercluster_install_agent_before.observation.inserted }}'
+    state: '{{ containercluster_install_agent_state }}'
+    removed: true
+  no_log: true

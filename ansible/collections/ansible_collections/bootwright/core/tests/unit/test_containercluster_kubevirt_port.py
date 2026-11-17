@@ -170,12 +170,18 @@ def test_a_pushed_node_presents_its_own_image_only_by_the_ports_answer():
 
 
 def test_a_pushed_cluster_reads_own_media_from_the_ports_answer_in_every_state_read():
-    resolve = next(task for task in loaded("state.yml") if task.get("name") == "Resolve what the cluster and its nodes answered")
+    pushed = next(task for task in role_tasks.flatten(loaded("node_state.yml")) if task.get("name") == "Prove the presented pushed image identity")
+    resolve = next(task for task in loaded("resolve_state.yml") if task.get("name") == "Resolve what the cluster and its nodes answered")
     expression = resolve["ansible.builtin.set_fact"]["containercluster_install_agent_state"]["ownMedia"]
     answers = {"results": [{"item": {"machine": "kubevirt-01"}, "media": "a", "media_state": "own"},
                            {"item": {"machine": "kubevirt-02"}, "media": "b", "media_state": "foreign"},
                            {"item": {"machine": "kubevirt-03"}, "media": "", "media_state": "none"}]}
-    variables = dict(scope(), containercluster_install_agent_controllers=answers)
+    identities = {"results": []}
+    for answer in answers["results"]:
+        proved = Templar(loader=LOADER, variables=dict(scope(), containercluster_install_agent_node_read=answer)).template(
+            pushed["ansible.builtin.set_fact"]["containercluster_install_agent_node_identity"])
+        identities["results"].append(dict(proved, item={"item": answer["item"]}))
+    variables = dict(scope(), containercluster_install_agent_controllers=answers, containercluster_install_agent_media_identity=identities)
     assert Templar(loader=LOADER, variables=variables).template(expression) == ["kubevirt-01"]
 
 

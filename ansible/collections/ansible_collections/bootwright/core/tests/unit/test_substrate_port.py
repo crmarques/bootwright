@@ -450,7 +450,9 @@ def test_the_disk_boot_selects_the_disk_and_powers_on_only_when_asked(arm, power
 # A removal takes back only the media, so a destroy selects no boot device and
 # reaches no substrate entry point.
 def test_a_cluster_removal_dispatches_nothing():
-    pending, seen, operations = ["destroy.yml"], set(), set()
+    plays = loaded(ROLES.parent / "playbooks" / "containercluster" / "install_destroy.yml")
+    pending = [play["tasks"][0]["ansible.builtin.import_role"]["tasks_from"] + ".yml" for play in plays]
+    seen, operations = set(), set()
     while pending:
         name = pending.pop()
         if name in seen:

@@ -11,3 +11,101 @@
       ansible.builtin.import_role:
         name: bootwright.core.containercluster_install_agent
         tasks_from: destroy
+
+- name: Read what every node presents
+  hosts: bootwright_nodes
+  gather_facts: false
+  any_errors_fatal: true
+  serial: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+  strategy: ansible.builtin.linear
+  throttle: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+
+  vars:
+    containercluster_install_agent_index: '{{ bootwright_node_index }}'
+    containercluster_install_agent_node: '{{ bootwright_cluster_install_request.nodes[bootwright_node_index | int] }}'
+    containercluster_install_agent_before: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_before }}'
+
+  tasks:
+    - name: Execute read what every node presents
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: node_state
+
+- name: Decide the release
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute decide the release
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: destroy_eject
+
+# A failed eject leaves its refusal in the node's answer and the siblings
+# finish theirs; the next play reports every refusal and sweeps the links.
+- name: Eject every node's media
+  hosts: bootwright_nodes
+  gather_facts: false
+  any_errors_fatal: false
+  serial: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+  strategy: ansible.builtin.linear
+  throttle: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+
+  vars:
+    containercluster_install_agent_index: '{{ bootwright_node_index }}'
+    containercluster_install_agent_node: '{{ bootwright_cluster_install_request.nodes[bootwright_node_index | int] }}'
+    containercluster_install_agent_before: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_before }}'
+
+  tasks:
+    - name: Execute eject every node's media
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: node_eject
+
+- name: Release the boot media
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute release the boot media
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: destroy_release
+
+- name: Read every node again
+  hosts: bootwright_nodes
+  gather_facts: false
+  any_errors_fatal: true
+  serial: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+  strategy: ansible.builtin.linear
+  throttle: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+
+  vars:
+    containercluster_install_agent_index: '{{ bootwright_node_index }}'
+    containercluster_install_agent_node: '{{ bootwright_cluster_install_request.nodes[bootwright_node_index | int] }}'
+    containercluster_install_agent_before: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_before }}'
+
+  tasks:
+    - name: Execute read every node again
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: node_state
+
+- name: Prove the release
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute prove the release
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: destroy_finish

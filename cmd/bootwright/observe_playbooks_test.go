@@ -29,7 +29,9 @@ type observeAllowance struct {
 var (
 	observeCustodyWhen = regexp.MustCompile(`^bootwright_[a-z_]+_output is defined$`)
 	observePlayKeys    = []string{"any_errors_fatal", "gather_facts", "hosts", "name", "serial", "strategy", "tasks"}
-	observeTaskKeys    = []string{
+	// A later play reads every node at once within the frozen fan-out.
+	observeLaterPlayKeys = []string{"throttle", "vars"}
+	observeTaskKeys      = []string{
 		"always", "any_errors_fatal", "args", "become", "become_user", "block", "changed_when", "check_mode",
 		"delay", "delegate_to", "diff", "environment", "failed_when", "ignore_errors", "loop", "loop_control",
 		"name", "no_log", "notify", "register", "rescue", "retries", "run_once", "tags", "throttle", "timeout",
@@ -117,7 +119,8 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		add("substrate_kubevirt_machine", "state_read.yml", module, "validates the port input and retains answers in memory", read)
 	}
 	add("substrate_kubevirt_machine", "identity_read.yml", "ansible.builtin.set_fact", "answers that the arm has no identity channel", read)
-	add("containercluster_install_agent", "state_node_serial.yml", "ansible.builtin.set_fact", "retains a node read in memory", read)
+	add("containercluster_install_agent", "node_state.yml", "ansible.builtin.set_fact", "retains a node read in memory", read)
+	add("containercluster_install_agent", "node_state.yml", "ansible.builtin.assert", "names a controller that did not answer", read)
 	add("containercluster_install_agent", "port.yml", "ansible.builtin.assert", "validates the fixed substrate binding", read)
 	add("containercluster_install_agent", "port.yml", "ansible.builtin.set_fact", "retains the port answer in memory", read)
 	addObserveReads(add, read)
@@ -139,17 +142,21 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 
 func addObserveReads(add func(string, string, string, string, func(map[string]any, map[string]any) bool), read func(map[string]any, map[string]any) bool) {
 	add("containercluster_install_agent", "observe.yml", observeCollection+"containercluster_install_inspect", "reads what the installation recorded", read)
-	add("containercluster_install_agent", "observe.yml", "ansible.builtin.copy", "hands the kept kubeconfig to custody through the declared output", observeCustodyCopy)
-	add("containercluster_install_agent", "observe.yml", observeCollection+"containercluster_install_placement", "reads the declared node labels and taints without patching a node", func(params, _ map[string]any) bool {
+	add("containercluster_install_agent", "observed.yml", "ansible.builtin.copy", "hands the kept kubeconfig to custody through the declared output", observeCustodyCopy)
+	add("containercluster_install_agent", "observed.yml", observeCollection+"containercluster_install_protocol", "publishes the read-only evidence on the runner's own channel", func(params, _ map[string]any) bool {
+		return params["phase"] == "completed" && params["observed"] == true
+	})
+	add("containercluster_install_agent", "observed.yml", observeCollection+"containercluster_install_placement", "reads the declared node labels and taints without patching a node", func(params, _ map[string]any) bool {
 		return params["operation"] == "observe"
 	})
 	add("containercluster_install_agent", "cluster_state.yml", observeCollection+"containercluster_install_inspect", "reads the cluster's version and nodes through oc with a request timeout", func(params, _ map[string]any) bool {
 		return params["cluster"] == true && params["keep"] == nil && params["restore"] == nil
 	})
 	add("containercluster_install_agent", "cluster_state.yml", "ansible.builtin.set_fact", "resolves the cluster answers in memory", read)
-	add("containercluster_install_agent", "state.yml", observeCollection+"containercluster_media_token", "compares image device and inode without changing publication", observeRegistrationInspect)
+	add("containercluster_install_agent", "node_state.yml", observeCollection+"containercluster_media_token", "compares image device and inode without changing publication", observeRegistrationInspect)
 	add("containercluster_install_agent", "state.yml", "ansible.builtin.fail", "names a controller that did not answer", read)
-	add("containercluster_install_agent", "state.yml", "ansible.builtin.set_fact", "resolves the answers in memory", read)
+	add("containercluster_install_agent", "collect_nodes.yml", "ansible.builtin.set_fact", "gathers the node answers in memory", read)
+	add("containercluster_install_agent", "resolve_state.yml", "ansible.builtin.set_fact", "resolves the answers in memory", read)
 	add("containercluster_media_agent", "observe.yml", observeCollection+"containercluster_media_inspect", "reads what the media block published", read)
 	add("containercluster_media_agent", "observe.yml", "ansible.builtin.stat", "reads the kept kubeconfig's metadata without following links", read)
 	add("containercluster_media_agent", "observe.yml", "ansible.builtin.slurp", "reads which context incarnation the build receipt records", read)
@@ -283,28 +290,37 @@ func (w *observeWalk) reportf(format string, args ...any) {
 
 func (w *observeWalk) playbook(key, playbook string) {
 	var plays []map[string]any
-	if err := yaml.Unmarshal(w.assets[playbookRoot+playbook], &plays); err != nil || len(plays) != 1 {
-		w.reportf("%s: %s is not one play (%v)", key, playbook, err)
+	if err := yaml.Unmarshal(w.assets[playbookRoot+playbook], &plays); err != nil || len(plays) == 0 {
+		w.reportf("%s: %s holds no play (%v)", key, playbook, err)
 		return
 	}
-	for field := range plays[0] {
-		if !slices.Contains(observePlayKeys, field) {
-			w.reportf("%s: %s carries play keyword %q", key, playbook, field)
+	first := ""
+	for index, play := range plays {
+		allowed := observePlayKeys
+		if index > 0 {
+			allowed = append(slices.Clone(observePlayKeys), observeLaterPlayKeys...)
 		}
+		for field := range play {
+			if !slices.Contains(allowed, field) {
+				w.reportf("%s: %s carries play keyword %q", key, playbook, field)
+			}
+		}
+		tasks, _ := play["tasks"].([]any)
+		if len(tasks) != 1 {
+			w.reportf("%s: %s runs %d tasks, not one import_role", key, playbook, len(tasks))
+			return
+		}
+		task, _ := tasks[0].(map[string]any)
+		params := observeParams(task, "ansible.builtin.import_role")
+		role, ok := params["name"].(string)
+		entry, literal := params["tasks_from"].(string)
+		if !ok || !literal || strings.Contains(entry, "{{") || len(params) != 2 || index == 0 && entry != "observe" || index > 0 && role != first {
+			w.reportf("%s: %s play %d is not a single import_role of its role's observe phases", key, playbook, index+1)
+			return
+		}
+		first = role
+		w.role(key, role, entry)
 	}
-	tasks, _ := plays[0]["tasks"].([]any)
-	if len(tasks) != 1 {
-		w.reportf("%s: %s runs %d tasks, not one import_role", key, playbook, len(tasks))
-		return
-	}
-	task, _ := tasks[0].(map[string]any)
-	params := observeParams(task, "ansible.builtin.import_role")
-	role, ok := params["name"].(string)
-	if !ok || params["tasks_from"] != "observe" || len(params) != 2 {
-		w.reportf("%s: %s is not a single import_role with tasks_from: observe", key, playbook)
-		return
-	}
-	w.role(key, role, "observe")
 }
 
 func (w *observeWalk) role(key, role, entry string) {
@@ -472,7 +488,7 @@ func TestEveryObservePlaybookRunsOnlyAllowedTasks(t *testing.T) {
 
 	t.Run("a token mutation is reported", func(t *testing.T) {
 		planted := "\n- name: Publish a token\n  bootwright.core.containercluster_media_token:\n    operation: publish\n"
-		problems := walkObservePlaybooks(observeAssetsWith(observeRoleRoot+"containercluster_install_agent/tasks/state.yml", planted))
+		problems := walkObservePlaybooks(observeAssetsWith(observeRoleRoot+"containercluster_install_agent/tasks/node_state.yml", planted))
 		if !slices.ContainsFunc(problems, func(problem string) bool {
 			return strings.Contains(problem, `containercluster_media_token ("Publish a token") outside its constraint`)
 		}) {
@@ -482,7 +498,7 @@ func TestEveryObservePlaybookRunsOnlyAllowedTasks(t *testing.T) {
 
 	t.Run("a token sweep is reported", func(t *testing.T) {
 		planted := "\n- name: Sweep the tokens\n  bootwright.core.containercluster_media_token:\n    presented: []\n    operation: sweep\n"
-		problems := walkObservePlaybooks(observeAssetsWith(observeRoleRoot+"containercluster_install_agent/tasks/state.yml", planted))
+		problems := walkObservePlaybooks(observeAssetsWith(observeRoleRoot+"containercluster_install_agent/tasks/node_state.yml", planted))
 		if !slices.ContainsFunc(problems, func(problem string) bool {
 			return strings.Contains(problem, `containercluster_media_token ("Sweep the tokens") outside its constraint`)
 		}) {
@@ -562,7 +578,7 @@ func (w *observeWalk) fixedReadRoles(key, role, name, entry string) {
 func TestObserveDispatchRefusesMutationAndUnresolvedBindings(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct{ path, before, after string }{
-		{"containercluster_install_agent/tasks/state_node_serial.yml", "containercluster_install_agent_port_operation: state_read", "containercluster_install_agent_port_operation: media_insert"},
+		{"containercluster_install_agent/tasks/node_state.yml", "containercluster_install_agent_port_operation: state_read", "containercluster_install_agent_port_operation: media_insert"},
 		{"substrate_machine/defaults/main.yml", "bootwright.core.substrate_libvirt_machine", "{{ untrusted_role }}"},
 		{"substrate_baremetal_machine/tasks/state_read.yml", "bootwright.core.redfish_system_read:", "bootwright.core.redfish_power:"},
 	} {

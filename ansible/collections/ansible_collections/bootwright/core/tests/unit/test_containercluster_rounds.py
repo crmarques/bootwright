@@ -115,7 +115,7 @@ def test_node_collection_uses_the_ordered_inventory_aliases():
     from ansible.template import Templar
 
     loader = LOADER
-    collect = loader.load_from_file(str(TASKS / 'collect_state.yml'), trusted_as_template=True)[2]
+    collect = loader.load_from_file(str(TASKS / 'collect_nodes.yml'), trusted_as_template=True)[1]
     for index in (0, 9, 10, 27):
         scope = {
             'node_index': index, 'node': {'machine': 'fixture-node'},

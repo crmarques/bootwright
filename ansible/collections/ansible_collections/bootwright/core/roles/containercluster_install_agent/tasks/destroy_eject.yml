@@ -1,0 +1,11 @@
+---
+- name: Gather what each node still presents
+  ansible.builtin.import_tasks: state.yml
+
+# A removal that finds nothing inserted took nothing back, which is what an
+# already-removed block reports rather than a change it did not make.
+- name: Decide whether this removal has anything to take back
+  ansible.builtin.set_fact:
+    containercluster_install_agent_inserted: >-
+      {{ containercluster_install_agent_state.media | length > 0 }}
+  changed_when: false

@@ -11,3 +11,35 @@
       ansible.builtin.import_role:
         name: bootwright.core.containercluster_install_agent
         tasks_from: observe
+
+- name: Read every node
+  hosts: bootwright_nodes
+  gather_facts: false
+  any_errors_fatal: true
+  serial: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+  strategy: ansible.builtin.linear
+  throttle: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+
+  vars:
+    containercluster_install_agent_index: '{{ bootwright_node_index }}'
+    containercluster_install_agent_node: '{{ bootwright_cluster_install_request.nodes[bootwright_node_index | int] }}'
+    containercluster_install_agent_before: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_before }}'
+
+  tasks:
+    - name: Execute read every node
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: node_state
+
+- name: Publish the observation
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute publish the observation
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: observed

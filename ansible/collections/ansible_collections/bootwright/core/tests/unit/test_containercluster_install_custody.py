@@ -39,7 +39,7 @@ def custody_copy(entries):
 
 
 def test_apply_and_observe_copy_the_kubeconfig_privately_once_completion_is_proved():
-    for name in ("finish.yml", "observe.yml"):
+    for name in ("finish.yml", "observed.yml"):
         entries = tasks(name)
         index = custody_copy(entries)
         task = entries[index]
@@ -70,7 +70,7 @@ def test_the_role_declares_the_output_as_an_optional_dict_for_every_entry_point(
 
 
 def test_console_password_is_offered_only_after_proved_completion():
-    for name in ("finish.yml", "observe.yml"):
+    for name in ("finish.yml", "observed.yml"):
         entries = tasks(name)
         password = next(task for task in entries if "console-password" in yaml.safe_dump(task))
         assert password["when"] == GATE and password["no_log"] is True

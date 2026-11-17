@@ -900,10 +900,12 @@ freezes is either mirrored as a choice or named as checked only by an
 assertion. A later play of a multi-play playbook may import a role's internal
 task file only when its first play validated the request and material through
 a declared entry point and the later play reads only values derived from
-them; `containercluster/install_apply.yml` is the one such playbook, and
+them; `containercluster/install_apply.yml`, `install_observe.yml` and
+`install_destroy.yml` are the only such playbooks, reading and ejecting their
+nodes in node plays at the frozen fan-out, and
 `test_a_later_play_imports_only_declared_entry_points_or_allowed_task_files`
-holds every later play to a declared entry point or the eight task files its
-allowance names. `test_entry_point_reads.py` refuses an entry point whose task
+holds every later play to a declared entry point or the task files its
+playbook's allowance names. `test_entry_point_reads.py` refuses an entry point whose task
 files read a `bootwright_*` variable that its specification, the role's defaults
 and the task files do not define.
 
