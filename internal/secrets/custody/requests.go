@@ -21,7 +21,10 @@ type GenerateRequest struct {
 
 type CheckRequest struct{ ContextName string }
 
-type ListRequest struct{ ContextName string }
+type ListRequest struct {
+	ContextName string
+	Names       []string
+}
 
 type ShowRequest struct {
 	ContextName string

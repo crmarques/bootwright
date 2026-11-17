@@ -92,17 +92,8 @@ func (s Services) invokeMachineInventory(ctx context.Context, path string, value
 		}, s.MachineInventory.List)
 		return commandResult{machines: result}, err
 	case "machine info":
-		names := selectedInfoNames(values)
-		result, err := invokeResult(ctx, values, inventory.ListRequest{ContextName: values.text("context")}, s.MachineInventory.List)
-		if err != nil {
-			return commandResult{}, err
-		}
-		if result != nil {
-			if err := refuseUnknownInfo("Machine", result.Context, names, machineInfoNames(result)); err != nil {
-				return commandResult{}, err
-			}
-		}
-		return commandResult{machines: selectMachineInfo(result, names)}, nil
+		result, err := invokeResult(ctx, values, inventory.ListRequest{ContextName: values.text("context"), Names: selectedInfoNames(values)}, s.MachineInventory.List)
+		return commandResult{machines: result}, err
 	default:
 		return commandResult{}, errors.New("command has no application dispatch")
 	}

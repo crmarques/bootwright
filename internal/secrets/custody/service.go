@@ -456,7 +456,24 @@ func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, er
 	if err != nil {
 		return nil, err
 	}
+	if request.Names != nil {
+		if err := selectListed(result, request.Names); err != nil {
+			return nil, err
+		}
+	}
 	return result, nil
+}
+
+func selectListed(result *ListResult, names []string) error {
+	present := make([]string, 0, len(result.Secrets))
+	for _, row := range result.Secrets {
+		present = append(present, row.Name)
+	}
+	if err := diagnostics.UnknownNames("Secret", result.Context.Name, names, present); err != nil {
+		return err
+	}
+	result.Secrets = slices.DeleteFunc(result.Secrets, func(row ListRow) bool { return !slices.Contains(names, row.Name) })
+	return nil
 }
 
 func (s Service) Show(ctx context.Context, request ShowRequest) (*RevealResult, error) {

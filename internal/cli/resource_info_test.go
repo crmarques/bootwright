@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
@@ -60,78 +61,57 @@ func TestResourceInfoDispatchUsesOnlyMetadataAndLocalInventory(t *testing.T) {
 	}
 }
 
-func TestResourceInfoNameSelectionIsOptionalExactAndNormalized(t *testing.T) {
+func TestResourceInfoPassesTheNormalizedNamesToItsService(t *testing.T) {
 	for _, test := range []struct {
 		selector string
 		supplied bool
 		want     []string
 	}{
-		{want: []string{"alpha", "alpha-two"}},
+		{want: nil},
 		{selector: " alpha , alpha , ", supplied: true, want: []string{"alpha"}},
-		{selector: "alpha-two", supplied: true, want: []string{"alpha-two"}},
+		{selector: "alpha-two,alpha", supplied: true, want: []string{"alpha-two", "alpha"}},
 	} {
 		for _, kind := range []string{"machine", "secret"} {
 			t.Run(kind+"/"+test.selector, func(t *testing.T) {
-				machines := &inventory.ListResult{Context: "example", Machines: []inventory.MachineRow{{Name: "alpha", Lifecycle: "applied"}, {Name: "alpha-two", Lifecycle: "not-applied"}}}
-				originalMachines, originalSecrets := selectMachineInfo(machines, nil), selectSecretInfo(infoSecrets(), nil)
-				record := &dispatchRecord{result: commandResult{machines: machines, secretList: infoSecrets()}}
+				record := &dispatchRecord{result: commandResult{machines: machineList(), secretList: infoSecrets()}}
 				args := []string{kind, "info", "--output", "json"}
 				if test.supplied {
 					args = append(args, "--name", test.selector)
 				}
 				code, stdout, stderr := runSecretResult(args, record)
-				var envelope struct {
-					Result struct {
-						Machines []struct{ Name string }
-						Secrets  []struct{ Name string }
-					}
+				if code != 0 || stderr != "" || record.calls != 1 {
+					t.Fatalf("code=%d calls=%d stdout=%q stderr=%q", code, record.calls, stdout, stderr)
 				}
-				if err := json.Unmarshal([]byte(stdout), &envelope); code != 0 || stderr != "" || err != nil {
-					t.Fatalf("code=%d stdout=%q stderr=%q error=%v", code, stdout, stderr, err)
+				var got []string
+				if request, ok := record.request.(inventory.ListRequest); ok {
+					got = request.Names
+				} else if request, ok := record.request.(custody.ListRequest); ok {
+					got = request.Names
+				} else {
+					t.Fatalf("request = %#v", record.request)
 				}
-				got := []string{}
-				for _, row := range envelope.Result.Machines {
-					got = append(got, row.Name)
-				}
-				for _, row := range envelope.Result.Secrets {
-					got = append(got, row.Name)
-				}
-				if !slices.Equal(got, test.want) {
-					t.Fatalf("names=%q want=%q", got, test.want)
-				}
-				if !reflect.DeepEqual(machines, originalMachines) || !reflect.DeepEqual(record.result.secretList, originalSecrets) {
-					t.Fatal("selection changed service-owned results")
+				if !slices.Equal(got, test.want) || (got == nil) != (test.want == nil) {
+					t.Fatalf("names=%#v want=%#v", got, test.want)
 				}
 			})
 		}
 	}
 }
 
-func TestResourceInfoRefusesAnExplicitlyNamedUnknownResource(t *testing.T) {
-	for _, test := range []struct {
-		kind, selector, subject string
-	}{
-		{"machine", "alp", "no Machine named alp"},
-		{"secret", "alpha, typo , alp", "no Secrets named typo, alp"},
-		{"machine", "alpha,alp", "no Machine named alp"},
-	} {
-		t.Run(test.kind+"/"+test.selector, func(t *testing.T) {
-			machines := &inventory.ListResult{Context: "example", Machines: []inventory.MachineRow{{Name: "alpha", Lifecycle: "applied"}, {Name: "alpha-two", Lifecycle: "not-applied"}}}
-			record := &dispatchRecord{result: commandResult{machines: machines, secretList: infoSecrets()}}
-			code, stdout, stderr := runSecretResult([]string{test.kind, "info", "--name", test.selector}, record)
-			text := strings.Join(strings.Fields(stdout+stderr), " ")
-			if code != 1 || record.calls != 1 {
-				t.Fatalf("code=%d calls=%d stdout=%q stderr=%q", code, record.calls, stdout, stderr)
+func TestResourceInfoRendersAServiceRefusalOfAnUnknownName(t *testing.T) {
+	for _, kind := range []string{"machine", "secret"} {
+		refusal := diagnostics.UnknownNames(strings.ToUpper(kind[:1])+kind[1:], "example", []string{"alp"}, []string{"alpha"})
+		record := &dispatchRecord{err: refusal}
+		code, stdout, stderr := runSecretResult([]string{kind, "info", "--name", "alp"}, record)
+		text := strings.Join(strings.Fields(stdout+stderr), " ")
+		if code != 1 || record.calls != 1 {
+			t.Fatalf("%s: code=%d calls=%d stdout=%q stderr=%q", kind, code, record.calls, stdout, stderr)
+		}
+		for _, want := range []string{"access.target", "the context example selects no " + strings.ToUpper(kind[:1]) + kind[1:] + " named alp", "bootwright " + kind + " list --context example"} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s: missing %q in stdout=%q stderr=%q", kind, want, stdout, stderr)
 			}
-			for _, want := range []string{"access.target", "the context example selects " + test.subject, "bootwright " + test.kind + " list --context example"} {
-				if !strings.Contains(text, want) {
-					t.Fatalf("missing %q in stdout=%q stderr=%q", want, stdout, stderr)
-				}
-			}
-			if strings.Contains(text, "alpha-two") {
-				t.Fatalf("a refusal listed a resource: %q", text)
-			}
-		})
+		}
 	}
 }
 
@@ -141,27 +121,6 @@ func TestResourceInfoSeparatorOnlyNamesAreAUsageError(t *testing.T) {
 		if code != 2 || record.calls != 0 || !strings.Contains(stderr, "--name must name at least one "+kind) {
 			t.Fatalf("%s: code=%d calls=%d stderr=%q", kind, code, record.calls, stderr)
 		}
-	}
-}
-
-func TestResourceInfoSelectionOwnsReachableMutableValues(t *testing.T) {
-	machines := machineList()
-	selected := selectMachineInfo(machines, []string{"guest"})
-	selected.Machines[0].IPs[0] = "changed"
-	selected.Machines[0].Clusters = append(selected.Machines[0].Clusters, "new")
-	selected.Machines[0].Name = "changed"
-	if machines.Machines[0].Name != "guest" || machines.Machines[0].IPs[0] != "198.51.100.20" || len(machines.Machines[0].Clusters) != 0 {
-		t.Fatal("machine copy aliases the inventory")
-	}
-	stored := infoSecrets()
-	selectedSecrets := selectSecretInfo(stored, []string{"alpha"})
-	selectedSecrets.Secrets[0].Parts[0] = secrets.PasswordPart
-	*selectedSecrets.Secrets[0].CurrentVersion = "changed"
-	if stored.Secrets[0].Parts[0] != secrets.ValuePart || *stored.Secrets[0].CurrentVersion != "version-opaque-id" {
-		t.Fatal("secret copy aliases custody metadata")
-	}
-	if selectMachineInfo(nil, nil) != nil || selectSecretInfo(nil, nil) != nil {
-		t.Fatal("a missing result became presentable")
 	}
 }
 

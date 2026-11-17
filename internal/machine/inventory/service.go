@@ -2,9 +2,11 @@ package inventory
 
 import (
 	"context"
+	"slices"
 
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
@@ -49,6 +51,12 @@ func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, er
 	rows, err := Rows(effective.Effective, request.Clusters, owned)
 	if err != nil {
 		return nil, err
+	}
+	if request.Names != nil {
+		if err := diagnostics.UnknownNames("Machine", name, request.Names, Names(rows)); err != nil {
+			return nil, err
+		}
+		rows = slices.DeleteFunc(rows, func(row MachineRow) bool { return !slices.Contains(request.Names, row.Name) })
 	}
 	if !request.Power {
 		return &ListResult{Context: name, Machines: rows}, nil
