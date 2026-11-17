@@ -4,8 +4,6 @@ package contextfs
 
 import (
 	"context"
-	"errors"
-	"syscall"
 
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -44,19 +42,5 @@ func (t *lifecycleTransaction) Secrets(ctx context.Context, callback func(secret
 	}
 	selected := secretContext(record)
 	area := &secretArea{store: t.base.store, root: t.base.root, context: t.context, expected: t.base.expected, token: selected, active: true, mutable: make(map[string]secretExpectation)}
-	defer func() {
-		area.close()
-		if area.secrets != nil {
-			area.secrets.file.Close()
-		}
-	}()
-	if secrets, openErr := openDirectory(t.context, "secrets"); openErr == nil {
-		area.secrets = secrets
-	} else if !errors.Is(openErr, syscall.ENOENT) {
-		return secretCorrupt("secret storage directory is unsafe")
-	}
-	if _, _, err := area.scan(ctx); err != nil {
-		return safeError(err)
-	}
-	return safeError(callback(selected, area))
+	return lendSecretArea(ctx, area, t.context, func() error { return callback(selected, area) })
 }

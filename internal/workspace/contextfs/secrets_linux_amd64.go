@@ -127,65 +127,60 @@ func (s *Store) ReadSecrets(ctx context.Context, expected secretstore.Context, c
 	if callback == nil {
 		return secretstore.Failure("store.implementation", "secret storage callback is missing")
 	}
-	root, err := s.openRoot(ctx, false, nil)
-	if err != nil {
-		return safeError(err)
-	}
-	defer root.file.Close()
-	if err := lockShared(root); err != nil {
-		return err
-	}
-	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
-	registry, _, err := readRegistry(ctx, root)
-	if err == nil {
-		err = verifyMappings(ctx, root, registry)
-	}
-	if err != nil {
-		return safeError(err)
-	}
-	record, err := exactSecretRecord(registry, expected)
-	if err != nil {
-		return err
-	}
-	if record.Mode != contexts.Ready {
-		return contexts.NotReady(record)
-	}
-	container, dir, err := openSecretContext(ctx, root, record)
-	if err != nil {
-		return safeError(err)
-	}
-	defer container.file.Close()
-	defer dir.file.Close()
-	area := &secretArea{store: s, root: root, context: dir, readOnly: true, active: true, mutable: make(map[string]secretExpectation)}
-	defer func() {
-		if area.secrets != nil {
-			area.secrets.file.Close()
+	return s.withSecretRecord(ctx, expected, false, func(root *directory, _ contexts.Registry, record contexts.Record) error {
+		container, dir, err := openSecretContext(ctx, root, record)
+		if err != nil {
+			return safeError(err)
 		}
-	}()
-	defer area.close()
-	if secrets, openErr := openDirectory(dir, "secrets"); openErr == nil {
-		area.secrets = secrets
-	} else if !errors.Is(openErr, syscall.ENOENT) {
-		return secretCorrupt("secret storage directory is unsafe")
-	}
-	if _, _, err := area.scan(ctx); err != nil {
-		return safeError(err)
-	}
-	err = callback(area)
-	return safeError(err)
+		defer container.file.Close()
+		defer dir.file.Close()
+		area := &secretArea{store: s, root: root, context: dir, readOnly: true, active: true, mutable: make(map[string]secretExpectation)}
+		return lendSecretArea(ctx, area, dir, func() error { return callback(area) })
+	})
 }
 
 func (s *Store) MutateSecrets(ctx context.Context, expected secretstore.Context, callback func(secretstore.Area) error) error {
 	if callback == nil {
 		return secretstore.Failure("store.implementation", "secret storage callback is missing")
 	}
+	return s.withSecretRecord(ctx, expected, true, func(root *directory, registry contexts.Registry, record contexts.Record) error {
+		registryExpected, err := registryExpectation(ctx, root, registry)
+		if err != nil {
+			return safeError(err)
+		}
+		container, dir, err := openSecretContext(ctx, root, record)
+		if err != nil {
+			return safeError(err)
+		}
+		defer container.file.Close()
+		defer dir.file.Close()
+		if err := lock(dir); err != nil {
+			return secretLockFailure(ctx, "secret context is held by another mutator", err)
+		}
+		defer syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
+		if err := s.collectContextStages(ctx, dir, false); err != nil {
+			return safeError(err)
+		}
+		if err := verifySecretContextLayout(ctx, dir); err != nil {
+			return safeError(err)
+		}
+		area := &secretArea{store: s, root: root, context: dir, expected: registryExpected, token: expected, active: true, mutable: make(map[string]secretExpectation)}
+		return lendSecretArea(ctx, area, dir, func() error { return callback(area) })
+	})
+}
+
+func (s *Store) withSecretRecord(ctx context.Context, expected secretstore.Context, mutation bool, callback func(*directory, contexts.Registry, contexts.Record) error) error {
 	root, err := s.openRoot(ctx, false, nil)
 	if err != nil {
 		return safeError(err)
 	}
 	defer root.file.Close()
-	if err := awaitRoot(ctx, s, root, syscall.LOCK_EX); err != nil {
-		return secretLockFailure(ctx, "secret storage is held by another mutator", err)
+	if mutation {
+		if err := awaitRoot(ctx, s, root, syscall.LOCK_EX); err != nil {
+			return secretLockFailure(ctx, "secret storage is held by another mutator", err)
+		}
+	} else if err := lockShared(root); err != nil {
+		return err
 	}
 	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
 	registry, _, err := readRegistry(ctx, root)
@@ -202,33 +197,16 @@ func (s *Store) MutateSecrets(ctx context.Context, expected secretstore.Context,
 	if record.Mode != contexts.Ready {
 		return contexts.NotReady(record)
 	}
-	registryExpected, err := registryExpectation(ctx, root, registry)
-	if err != nil {
-		return safeError(err)
-	}
-	container, dir, err := openSecretContext(ctx, root, record)
-	if err != nil {
-		return safeError(err)
-	}
-	defer container.file.Close()
-	defer dir.file.Close()
-	if err := lock(dir); err != nil {
-		return secretLockFailure(ctx, "secret context is held by another mutator", err)
-	}
-	defer syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
-	if err := s.collectContextStages(ctx, dir, false); err != nil {
-		return safeError(err)
-	}
-	if err := verifySecretContextLayout(ctx, dir); err != nil {
-		return safeError(err)
-	}
-	area := &secretArea{store: s, root: root, context: dir, expected: registryExpected, token: expected, active: true, mutable: make(map[string]secretExpectation)}
+	return callback(root, registry, record)
+}
+
+func lendSecretArea(ctx context.Context, area *secretArea, dir *directory, callback func() error) error {
 	defer func() {
+		area.close()
 		if area.secrets != nil {
 			area.secrets.file.Close()
 		}
 	}()
-	defer area.close()
 	if secrets, openErr := openDirectory(dir, "secrets"); openErr == nil {
 		area.secrets = secrets
 	} else if !errors.Is(openErr, syscall.ENOENT) {
@@ -237,8 +215,7 @@ func (s *Store) MutateSecrets(ctx context.Context, expected secretstore.Context,
 	if _, _, err := area.scan(ctx); err != nil {
 		return safeError(err)
 	}
-	err = callback(area)
-	return safeError(err)
+	return safeError(callback())
 }
 
 func secretContext(record contexts.Record) secretstore.Context {
