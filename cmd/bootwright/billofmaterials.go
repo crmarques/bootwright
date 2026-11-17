@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/internal/acquisition"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
@@ -184,9 +185,10 @@ func imageComponents(acquired cli.BOMProperty) ([]cli.BOMComponent, error) {
 			}
 		}
 	}) {
-		repository, digest, found := strings.Cut(reference, "@sha256:")
+		parsed := acquisition.ParseImageReference(reference)
+		repository, digest := parsed.Repository, parsed.Digest
 		name := repository[strings.LastIndex(repository, "/")+1:]
-		if !found || len(digest) != 64 || strings.Contains(name, ":") {
+		if len(digest) != 64 || parsed.Tag != "" {
 			return nil, errors.New("the image " + reference + " is not pinned by digest alone")
 		}
 		image, known := imageLicenses[repository]

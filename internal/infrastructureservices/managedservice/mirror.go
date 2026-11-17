@@ -47,13 +47,11 @@ func EmulatedBMCConsumer(machine api.Object, host string) ImageConsumer {
 
 func MirroredImage(catalog api.Catalog, reference string, consumer ImageConsumer) (string, *ImageSource) {
 	mirror, found := infrastructureservices.ImageMirrorOf(catalog)
-	qualified := reference
-	if first, _, _ := strings.Cut(reference, "/"); !strings.ContainsAny(first, ".:") && first != "localhost" {
-		qualified = "docker.io/" + reference
+	image := acquisition.ParseImageReference(reference).Qualified()
+	if rest, ok := strings.CutPrefix(image.Repository, "registry-1.docker.io/"); ok {
+		image.Repository = "docker.io/" + rest
 	}
-	if rest, ok := strings.CutPrefix(qualified, "registry-1.docker.io/"); ok {
-		qualified = "docker.io/" + rest
-	}
+	qualified := image.String()
 	if origin, _, _ := strings.Cut(qualified, "/"); !found || acquisition.OriginClass(origin) != acquisition.ClassPublic {
 		return reference, nil
 	}

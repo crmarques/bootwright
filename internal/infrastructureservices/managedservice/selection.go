@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/acquisition"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
@@ -51,8 +52,8 @@ func ImageFor(spec api.Value, identity, compiled string) (string, error) {
 }
 
 func DigestPinned(reference string) bool {
-	_, digest, found := strings.Cut(reference, "@sha256:")
-	if !found || len(digest) != 64 {
+	digest := acquisition.ParseImageReference(reference).Digest
+	if len(digest) != 64 {
 		return false
 	}
 	return !strings.ContainsFunc(digest, func(c rune) bool {

@@ -203,15 +203,12 @@ func mirrorImageArtifacts(catalog api.Catalog) ([]mirrorfill.Image, error) {
 	var images []mirrorfill.Image
 	for _, pull := range pulls {
 		mirrored, beneath := strings.CutPrefix(pull.pulled, mirror.Location+"/")
-		repository, digest, pinned := strings.Cut(mirrored, "@sha256:")
-		if tag := strings.LastIndex(repository, ":"); tag > strings.LastIndex(repository, "/") {
-			repository = repository[:tag]
-		}
-		source := repository + "@sha256:" + digest
-		if !beneath || !pinned || slices.ContainsFunc(images, func(image mirrorfill.Image) bool { return image.Source == source }) {
+		image := acquisition.ParseImageReference(mirrored)
+		source := image.Pinned()
+		if !beneath || image.Digest == "" || slices.ContainsFunc(images, func(known mirrorfill.Image) bool { return known.Source == source }) {
 			continue
 		}
-		images = append(images, mirrorfill.Image{Digest: "sha256:" + digest, Repository: repository, Source: source})
+		images = append(images, mirrorfill.Image{Digest: "sha256:" + image.Digest, Repository: image.Repository, Source: source})
 	}
 	return images, nil
 }
@@ -358,18 +355,12 @@ func clusterNodes(cluster api.Object) []string {
 }
 
 func imageAcquisition(kind, reference string, machines []string, consumer string) cli.Acquisition {
-	repository, digest, _ := strings.Cut(reference, "@sha256:")
-	if first, _, _ := strings.Cut(repository, "/"); !strings.ContainsAny(first, ".:") && first != "localhost" {
-		repository = "docker.io/" + repository
+	image := acquisition.ParseImageReference(reference).Qualified()
+	version := image.Tag
+	if image.Digest != "" {
+		version = "sha256:" + image.Digest
 	}
-	version := ""
-	if separator := strings.LastIndex(repository, ":"); separator > strings.LastIndex(repository, "/") {
-		repository, version = repository[:separator], repository[separator+1:]
-	}
-	if digest != "" {
-		version = "sha256:" + digest
-	}
-	return cli.Acquisition{Kind: kind, Artifact: repository, Version: version, Origin: repository, Class: originClass("https://" + repository), SHA256: digest, Machines: machines, Consumer: consumer}
+	return cli.Acquisition{Kind: kind, Artifact: image.Repository, Version: version, Origin: image.Repository, Class: originClass("https://" + image.Repository), SHA256: image.Digest, Machines: machines, Consumer: consumer}
 }
 
 func originClass(location string) string {
