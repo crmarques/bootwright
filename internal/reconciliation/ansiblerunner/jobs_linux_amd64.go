@@ -111,17 +111,17 @@ func claim(job string, request lifecycle.RunRequest) (*os.File, *os.File, error)
 	}
 	holder, err := os.OpenFile(filepath.Join(job, holderName), os.O_RDWR|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0600)
 	if err != nil {
-		lock.Close()
+		unlockAndClose(lock)
 		return nil, nil, failure("lifecycle.state", "the adapter job holder could not be created", "")
 	}
 	if syscall.Flock(int(holder.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
 		holder.Close()
-		lock.Close()
+		unlockAndClose(lock)
 		return nil, nil, failure("lifecycle.state", "the adapter job holder could not be taken", "")
 	}
 	if err := publishRecord(job, recordFor(request)); err != nil {
-		holder.Close()
-		lock.Close()
+		unlockAndClose(holder)
+		unlockAndClose(lock)
 		return nil, nil, err
 	}
 	return lock, holder, nil
@@ -155,7 +155,7 @@ func (r Runner) release(job, scratch string, lock, holder *os.File) {
 	}
 	held, statErr := lock.Stat()
 	_ = lock.Close()
-	_ = holder.Close()
+	unlockAndClose(holder)
 	dirs, err := r.openRunDirectories()
 	if statErr != nil || err != nil {
 		return
@@ -337,7 +337,7 @@ type seizedJob struct {
 
 func (s *seizedJob) close() {
 	for _, handle := range s.handles {
-		handle.Close()
+		unlockAndClose(handle)
 	}
 	s.job.Close()
 }
@@ -429,6 +429,11 @@ func lockDirectory(dir *os.Root) (*os.File, bool, error) {
 	return handle, true, nil
 }
 
+func unlockAndClose(file *os.File) {
+	syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	file.Close()
+}
+
 // lockShared takes a job lock shared, which succeeds once no process of the
 // job holds it.
 func lockShared(lock *os.File) (bool, error) {
@@ -496,6 +501,9 @@ func (d runDirectories) attribute(job *os.Root, file *os.File) holding {
 	}
 	defer holder.Close()
 	alive := syscall.Flock(int(holder.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil
+	if !alive {
+		syscall.Flock(int(holder.Fd()), syscall.LOCK_UN)
+	}
 	return holding{record: record, attributed: true, alive: alive, holder: identity}
 }
 
@@ -528,7 +536,7 @@ func (d runDirectories) removeDirectory(parent *os.Root, name string) error {
 	if !locked {
 		return err
 	}
-	defer lock.Close()
+	defer unlockAndClose(lock)
 	listed, err := parent.Lstat(name)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil

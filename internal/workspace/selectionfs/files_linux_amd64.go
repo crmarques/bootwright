@@ -51,6 +51,7 @@ func (s *Store) local(ctx context.Context, action string, value contexts.Selecti
 	if err := syscall.Flock(int(dir.Fd()), lock|syscall.LOCK_NB); err != nil {
 		return contexts.Selection{}, state("selection is held by another invocation")
 	}
+	defer syscall.Flock(int(dir.Fd()), syscall.LOCK_UN)
 	// The opened directory is also the lock object; replacement is detected
 	// again immediately before publishing or unlinking an entry.
 	if err := s.verifyDirectory(dir); err != nil {

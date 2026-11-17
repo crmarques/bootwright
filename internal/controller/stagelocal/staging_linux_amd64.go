@@ -267,6 +267,7 @@ func (p *stagingParent) create(kind string) (created, error) {
 		if nativefs.RemoveTree(stage, p.tree(stat.Dev, &remaining), stageOwner, stageLock) == nil {
 			_ = p.root.Remove(name)
 		}
+		syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 		lock.Close()
 		return created{}, unavailable
 	}
@@ -352,6 +353,7 @@ func (p *stagingParent) reap(name string, held os.FileInfo) (stageState, error) 
 		case err != nil:
 			return stageSkipped, err
 		}
+		defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 	}
 	remaining := p.entries
 	if err := nativefs.RemoveTree(stage, p.tree(stat.Dev, &remaining), stageOwner, stageLock); err != nil {

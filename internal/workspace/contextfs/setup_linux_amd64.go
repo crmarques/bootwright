@@ -218,7 +218,7 @@ func lockSetup(ctx context.Context, dir *directory, wait bool) (*os.File, error)
 		}
 	}
 	if err := dir.verify(); err != nil {
-		file.Close()
+		unlockAndClose(file)
 		return nil, err
 	}
 	return file, nil
@@ -361,7 +361,7 @@ func (t *setupTransaction) DiscardForeign(ctx context.Context) error {
 	held, err := t.claimRuntimes()
 	defer func() {
 		for _, file := range held {
-			file.Close()
+			unlockAndClose(file)
 		}
 	}()
 	if err != nil {
@@ -683,7 +683,7 @@ func (t *setupTransaction) RetireRuntime(ctx context.Context, digest string) (bo
 	case err != nil:
 		return false, err
 	default:
-		defer held.Close()
+		defer unlockAndClose(held)
 	}
 	withdrawn, err := t.store.candidate(runtimeStagePrefix)
 	if err != nil {
@@ -724,7 +724,7 @@ func holdRuntimeLock(runtimes *directory, digest string, how int) (*os.File, err
 		return nil, err
 	}
 	if err := dir.verify(); err != nil {
-		file.Close()
+		unlockAndClose(file)
 		return nil, syscall.EWOULDBLOCK
 	}
 	return file, nil
@@ -738,7 +738,7 @@ type runtimeHold struct {
 
 func (h *runtimeHold) Path() string { return h.path }
 
-func (h *runtimeHold) Release() { h.once.Do(func() { h.file.Close() }) }
+func (h *runtimeHold) Release() { h.once.Do(func() { unlockAndClose(h.file) }) }
 
 func (s *Store) HoldRuntime(ctx context.Context, digest string) (prerequisites.RuntimeHold, error) {
 	if !validControllerDigest(digest) {
@@ -764,7 +764,7 @@ func (s *Store) HoldRuntime(ctx context.Context, digest string) (prerequisites.R
 		return nil, runtimeUnavailable(err)
 	}
 	if err := runtimeNamed(runtimes, digest); err != nil {
-		file.Close()
+		unlockAndClose(file)
 		return nil, err
 	}
 	return &runtimeHold{file: file, path: filepath.Join(runtimes.path, digest)}, nil

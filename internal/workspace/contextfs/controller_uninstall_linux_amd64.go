@@ -347,7 +347,7 @@ func (s *Store) inspectRootForUninstall(ctx context.Context, parent, root *direc
 		return release, err
 	}
 	release = func() {
-		held.Close()
+		unlockAndClose(held)
 		dir.close()
 	}
 	if view.Unreadable != nil {

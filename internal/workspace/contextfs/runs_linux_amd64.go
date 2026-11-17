@@ -160,6 +160,7 @@ func retireRun(runs *directory, name string) bool {
 	if syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
 		return false
 	}
+	defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
 	return unlinkVerified(runs, name, stat, false) == nil
 }
 

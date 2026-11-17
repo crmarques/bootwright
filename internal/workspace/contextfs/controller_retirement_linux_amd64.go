@@ -115,6 +115,7 @@ func (t *transaction) removeRetiringAreas(ctx context.Context, areas []controlle
 		if err := lock(held); err != nil {
 			return err
 		}
+		defer syscall.Flock(int(held.file.Fd()), syscall.LOCK_UN)
 		remaining := maxBundleEntries
 		if err := emptySetupTree(ctx, parent, area.ID, stat, parent.identity, 0, &remaining); err != nil {
 			return err

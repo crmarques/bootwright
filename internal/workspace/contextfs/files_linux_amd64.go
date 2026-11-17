@@ -113,9 +113,9 @@ type directory struct {
 }
 
 func (d *directory) close() {
-	d.file.Close()
+	unlockAndClose(d.file)
 	if d.ownsParent {
-		d.parent.file.Close()
+		unlockAndClose(d.parent.file)
 	}
 }
 
@@ -891,7 +891,11 @@ func lock(dir *directory) error {
 	} else if err != nil {
 		return state("context state is held by another mutator")
 	}
-	return dir.verify()
+	if err := dir.verify(); err != nil {
+		syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
+		return err
+	}
+	return nil
 }
 
 func rootWait(s *Store) time.Duration {

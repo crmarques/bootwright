@@ -81,8 +81,8 @@ func (r Runner) claimRun(request lifecycle.RunRequest) (string, *os.File, *os.Fi
 		lockIdentity, lockErr := lock.Stat()
 		holderIdentity, holderErr := holder.Stat()
 		if lockErr != nil || holderErr != nil {
-			lock.Close()
-			holder.Close()
+			unlockAndClose(lock)
+			unlockAndClose(holder)
 			_ = os.RemoveAll(job)
 			return "", nil, nil, failure("lifecycle.state", "the adapter job ownership could not be verified", "")
 		}

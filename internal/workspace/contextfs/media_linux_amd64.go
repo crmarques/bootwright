@@ -592,9 +592,9 @@ func (a *mediaArea) stageHeld(name string) (bool, syscall.Stat_t, error) {
 	return false, opened, nil
 }
 
-// unlockAndClose releases a stage lock before closing its descriptor. The lock
+// unlockAndClose releases a lock before closing its descriptor. The lock
 // belongs to the open file description, which a child forked meanwhile shares
-// until it execs, so closing the descriptor alone can leave the stage held.
+// until it execs, so closing the descriptor alone can leave it held.
 func unlockAndClose(file *os.File) {
 	syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
 	file.Close()
