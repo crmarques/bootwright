@@ -132,7 +132,7 @@ func TestDiffUnmanagedObjectsCountAsDifferingForExitCode(t *testing.T) {
 	if err := json.Unmarshal([]byte(run.out), &envelope); err != nil {
 		t.Fatal(err)
 	}
-	if run.code != 3 || envelope.Result.Objects[0].Difference != differenceUnmanaged || envelope.Result.Summary.Unmanaged != 1 {
+	if run.code != 3 || envelope.Result.Objects[0].Difference != string(lifecycle.DifferenceUnmanaged) || envelope.Result.Summary.Unmanaged != 1 {
 		t.Fatalf("exit %d, envelope %+v", run.code, envelope)
 	}
 }
@@ -345,13 +345,14 @@ func TestDiffFallbackPathIsOneCleanElement(t *testing.T) {
 		{Kind: api.CephClient, Name: "a/b", Real: lifecycle.RealSide{Source: "applied", State: "present", Object: diffClient("x")}},
 		{Kind: api.CephClient, Name: "..", Real: lifecycle.RealSide{Source: "applied", State: "absent"}},
 	} {
-		files, err := diffFiles(context.Background(), []diffRow{{object: object, difference: differenceUnmanaged}}, "applied", stateencoding.YAML)
+		object.Difference = lifecycle.DifferenceUnmanaged
+		files, err := diffFiles(context.Background(), []diffRow{{object: object}}, "applied", stateencoding.YAML)
 		var failure *resultFailure
 		if !errors.As(err, &failure) || failure.code != "runtime.internal" || files != nil {
 			t.Errorf("%q: files %v, error %v", object.Name, files, err)
 		}
 	}
-	files, err := diffFiles(context.Background(), []diffRow{{object: lifecycle.ObjectDiff{Kind: api.CephClient, Name: "rbd-x", Desired: diffClient("rbd-x"), Real: lifecycle.RealSide{Source: "applied", State: "absent"}}, difference: differenceAdded}}, "applied", stateencoding.YAML)
+	files, err := diffFiles(context.Background(), []diffRow{{object: lifecycle.ObjectDiff{Kind: api.CephClient, Name: "rbd-x", Desired: diffClient("rbd-x"), Real: lifecycle.RealSide{Source: "applied", State: "absent"}, Difference: lifecycle.DifferenceAdded}}}, "applied", stateencoding.YAML)
 	if err != nil || len(files) != 1 || files[0].path != "CephClient-rbd-x.yaml" {
 		t.Fatalf("files %v, error %v", files, err)
 	}

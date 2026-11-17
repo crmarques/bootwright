@@ -25,7 +25,7 @@ type diffSides struct {
 }
 
 func diffListed(row diffRow) bool {
-	return row.difference != differenceNone || row.object.Real.State == sidePartial
+	return row.object.Difference != lifecycle.DifferenceNone || row.object.Real.State == sidePartial
 }
 
 func diffFallback(object lifecycle.ObjectDiff) string {

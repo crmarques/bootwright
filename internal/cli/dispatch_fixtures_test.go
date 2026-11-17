@@ -229,7 +229,11 @@ func (s lifecycleSpy) Status(ctx context.Context, request lifecycle.StatusReques
 }
 
 func (s lifecycleSpy) Diff(ctx context.Context, request lifecycle.DiffRequest) (*lifecycle.DiffResult, error) {
-	return s.record.result.lifecycleDiff, s.record.called(ctx, "diff", request)
+	result := s.record.result.lifecycleDiff
+	if result != nil {
+		lifecycle.Judge(result)
+	}
+	return result, s.record.called(ctx, "diff", request)
 }
 
 func (s lifecycleSpy) Apply(ctx context.Context, request lifecycle.ApplyRequest) (*lifecycle.OperationResult, error) {

@@ -34,6 +34,7 @@ type DiffResult struct {
 	Observed        bool
 	Blocks          DiffBlocks
 	Objects         []ObjectDiff
+	Summary         DiffSummary
 	Markers         DiffMarkers
 	OutdatedClients []OutdatedClient
 	Warnings        []diagnostics.Diagnostic
@@ -62,6 +63,7 @@ type ObjectDiff struct {
 	Blocks      []string
 	Realization RealizationStatus
 	Path        string
+	Difference  Difference
 	Desired     *api.Object
 	Real        RealSide
 }

@@ -37,7 +37,7 @@ func diffText(result *lifecycle.DiffResult, rows []diffRow, files []diffFile, so
 			partial++
 		}
 	}
-	text.WriteString("\n" + escapeDisplayLine(diffSummaryLine(result, diffSummaryOf(rows, result.Observed), len(rows), partial)) + "\n")
+	text.WriteString("\n" + escapeDisplayLine(diffSummaryLine(result, len(rows), partial)) + "\n")
 	return text.String()
 }
 
@@ -169,10 +169,11 @@ func diffNotCompared(paths []string) string {
 	return strings.Join(paths[:diffNotComparedLimit], ", ") + " and " + strconv.Itoa(len(paths)-diffNotComparedLimit) + " more"
 }
 
-func diffSummaryLine(result *lifecycle.DiffResult, summary diffSummary, objects, partial int) string {
+func diffSummaryLine(result *lifecycle.DiffResult, objects, partial int) string {
+	summary := diffSummary(result.Summary)
 	differing := summary.Changed + summary.Added + summary.Removed + summary.Unmanaged + summary.Unknown
 	var line string
-	if !diffDiffers(summary) {
+	if !lifecycle.SummaryDiffers(result.Summary) {
 		line = "No differences"
 		if partial > 0 {
 			line += " in compared fields"

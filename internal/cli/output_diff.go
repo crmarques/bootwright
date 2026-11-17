@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"io"
@@ -13,12 +12,6 @@ import (
 )
 
 const (
-	differenceNone       = "none"
-	differenceChanged    = "changed"
-	differenceAdded      = "added"
-	differenceRemoved    = "removed"
-	differenceUnmanaged  = "unmanaged"
-	differenceUnknown    = "unknown"
 	sideObserved         = "observed"
 	sideApplied          = "applied"
 	sideAbsent           = "absent"
@@ -121,10 +114,9 @@ type diffSummary struct {
 }
 
 type diffRow struct {
-	object     lifecycle.ObjectDiff
-	difference string
-	real       json.RawMessage
-	desired    json.RawMessage
+	object  lifecycle.ObjectDiff
+	real    json.RawMessage
+	desired json.RawMessage
 }
 
 type diffOptions struct {
@@ -136,11 +128,6 @@ type diffOptions struct {
 }
 
 type catalogEncoder func(context.Context, api.Catalog) ([]byte, error)
-
-func writeDiff(ctx context.Context, out io.Writer, result *lifecycle.DiffResult, jsonMode bool, yamlEncode, jsonEncode catalogEncoder) error {
-	_, err := writeDiffStatus(ctx, out, result, diffOptions{json: jsonMode, yamlEncode: yamlEncode, jsonEncode: jsonEncode})
-	return err
-}
 
 func writeDiffStatus(ctx context.Context, out io.Writer, result *lifecycle.DiffResult, options diffOptions) (int, error) {
 	if err := ctx.Err(); err != nil {
@@ -162,7 +149,7 @@ func writeDiffStatus(ctx context.Context, out io.Writer, result *lifecycle.DiffR
 		return 0, encodingFailure(ctx, err)
 	}
 	status := 0
-	if options.exitCode && diffDiffers(diffSummaryOf(rows, result.Observed)) {
+	if options.exitCode && lifecycle.SummaryDiffers(result.Summary) {
 		status = diffDiffersStatus
 	}
 	var directory string
@@ -197,20 +184,15 @@ func diffSource(result *lifecycle.DiffResult) string {
 	return "applied"
 }
 
-func diffDiffers(summary diffSummary) bool {
-	return summary.Changed+summary.Added+summary.Removed+summary.Unmanaged+summary.Unknown != 0
-}
-
 func diffRows(ctx context.Context, result *lifecycle.DiffResult, jsonMode bool, yamlEncode, jsonEncode catalogEncoder) ([]diffRow, error) {
 	rows := make([]diffRow, 0, len(result.Objects))
 	for _, object := range result.Objects {
-		object.Real = documented(object.Real)
-		real, desired, err := objectDocuments(ctx, object, yamlEncode)
-		if err != nil {
+		if _, _, err := objectDocuments(ctx, object, yamlEncode); err != nil {
 			return nil, encodingFailure(ctx, err)
 		}
-		row := diffRow{object: object, difference: difference(object, real, desired)}
-		if jsonMode && differs(row.difference) {
+		row := diffRow{object: object}
+		if jsonMode && lifecycle.DifferenceDiffers(object.Difference) {
+			var err error
 			if row.real, row.desired, err = jsonDocuments(ctx, object, jsonEncode); err != nil {
 				return nil, encodingFailure(ctx, err)
 			}
@@ -218,18 +200,6 @@ func diffRows(ctx context.Context, result *lifecycle.DiffResult, jsonMode bool, 
 		rows = append(rows, row)
 	}
 	return rows, nil
-}
-
-func documented(side lifecycle.RealSide) lifecycle.RealSide {
-	if (side.State != sidePresent && side.State != sidePartial) || side.Object != nil {
-		return side
-	}
-	side.State, side.Reason = sideUnknown, cmp.Or(side.Reason, "the real side holds no document to show")
-	return side
-}
-
-func differs(difference string) bool {
-	return difference != differenceNone && difference != differenceUnknown
 }
 
 func objectDocuments(ctx context.Context, object lifecycle.ObjectDiff, encode catalogEncoder) (real, desired []byte, err error) {
@@ -276,51 +246,11 @@ func jsonDocuments(ctx context.Context, object lifecycle.ObjectDiff, encode cata
 	return real, desired, nil
 }
 
-func difference(object lifecycle.ObjectDiff, real, desired []byte) string {
-	switch {
-	case object.Real.State == sideUnknown:
-		return differenceUnknown
-	case object.Real.State == sideAbsent && object.Desired != nil:
-		return differenceAdded
-	case object.Desired == nil && object.Real.State != sideAbsent && object.Real.Discovered:
-		return differenceUnmanaged
-	case object.Desired == nil && object.Real.State != sideAbsent:
-		return differenceRemoved
-	case bytes.Equal(real, desired):
-		return differenceNone
-	}
-	return differenceChanged
-}
-
 func splitLines(data []byte) []string {
 	if len(data) == 0 {
 		return nil
 	}
 	return strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
-}
-
-func diffSummaryOf(rows []diffRow, observed bool) diffSummary {
-	var summary diffSummary
-	for _, row := range rows {
-		switch row.difference {
-		case differenceChanged:
-			summary.Changed++
-		case differenceAdded:
-			summary.Added++
-		case differenceRemoved:
-			summary.Removed++
-		case differenceUnmanaged:
-			summary.Unmanaged++
-		case differenceUnknown:
-			summary.Unknown++
-		default:
-			summary.None++
-		}
-		if observed && row.object.Real.Source == sideApplied && (row.object.Real.State == sidePresent || row.object.Real.State == sidePartial) {
-			summary.Applied++
-		}
-	}
-	return summary
 }
 
 func displayDiff(result *lifecycle.DiffResult, rows []diffRow, files []diffFile) diffResult {
@@ -329,7 +259,7 @@ func displayDiff(result *lifecycle.DiffResult, rows []diffRow, files []diffFile)
 		object, side := row.object, row.object.Real
 		objects = append(objects, diffObject{
 			Kind: escapeDisplayLine(string(object.Kind)), Name: escapeDisplayLine(object.Name), Path: escapeDisplayLine(diffDesiredPath(object)),
-			Difference: row.difference, Plan: escapeDisplayLine(object.Plan), Blocks: displayLines(object.Blocks),
+			Difference: string(object.Difference), Plan: escapeDisplayLine(object.Plan), Blocks: displayLines(object.Blocks),
 			Realization: escapeDisplayLine(string(object.Realization)),
 			Real: diffReal{
 				Source: escapeDisplayLine(side.Source), State: escapeDisplayLine(side.State), Path: escapeDisplayLine(diffRealPath(object)), Document: row.real,
@@ -355,7 +285,7 @@ func displayDiff(result *lifecycle.DiffResult, rows []diffRow, files []diffFile)
 		Blocks:   diffBlocks{Observed: result.Blocks.Observed, Unknown: result.Blocks.Unknown, Unprojected: result.Blocks.Unprojected},
 		Objects:  objects,
 		Files:    diffFileResults(files, rows),
-		Summary:  diffSummaryOf(rows, result.Observed),
+		Summary:  diffSummary(result.Summary),
 		Outdated: displayOutdatedClients(result.OutdatedClients),
 	}
 }

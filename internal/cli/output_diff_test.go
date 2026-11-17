@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -13,6 +14,12 @@ import (
 	stateencoding "github.com/crmarques/bootwright/internal/desiredstate/encoding"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
+
+func writeDiff(ctx context.Context, out io.Writer, result *lifecycle.DiffResult, jsonMode bool, yamlEncode, jsonEncode catalogEncoder) error {
+	lifecycle.Judge(result)
+	_, err := writeDiffStatus(ctx, out, result, diffOptions{json: jsonMode, yamlEncode: yamlEncode, jsonEncode: jsonEncode})
+	return err
+}
 
 func writeDiffText(t *testing.T, result *lifecycle.DiffResult) string {
 	t.Helper()
@@ -99,32 +106,6 @@ func TestDiffEscapesHostileNamesAndReasons(t *testing.T) {
 	t.Fatalf("no JSON file lists storage/pools.yaml: %+v", envelope.Result.Files)
 }
 
-func TestDiffDecidesDifferenceFromEncodedBytes(t *testing.T) {
-	pool := diffPool("rbd-data", "2")
-	other := diffPool("rbd-data", "3")
-	same := *diffPool("rbd-data", "2")
-	cases := []struct {
-		name          string
-		object        lifecycle.ObjectDiff
-		real, desired string
-		want          string
-	}{
-		{"unknown wins", lifecycle.ObjectDiff{Desired: pool, Real: lifecycle.RealSide{State: "unknown"}}, "", "d", differenceUnknown},
-		{"absent and declared", lifecycle.ObjectDiff{Desired: pool, Real: lifecycle.RealSide{State: "absent"}}, "", "d", differenceAdded},
-		{"present and undeclared", lifecycle.ObjectDiff{Real: lifecycle.RealSide{State: "present", Object: pool}}, "r", "", differenceRemoved},
-		{"present, undeclared and discovered", lifecycle.ObjectDiff{Real: lifecycle.RealSide{State: "present", Discovered: true, Object: pool}}, "r", "", differenceUnmanaged},
-		{"equal bytes", lifecycle.ObjectDiff{Desired: pool, Real: lifecycle.RealSide{State: "present", Object: &same}}, "x", "x", differenceNone},
-		{"other bytes", lifecycle.ObjectDiff{Desired: other, Real: lifecycle.RealSide{State: "present", Object: pool}}, "x", "y", differenceChanged},
-	}
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			if got := difference(test.object, []byte(test.real), []byte(test.desired)); got != test.want {
-				t.Fatalf("difference = %q, want %q", got, test.want)
-			}
-		})
-	}
-}
-
 func TestDiffTreatsObjectsWithEqualEncodingsAsUnchangedWhateverTheirValueOrder(t *testing.T) {
 	first := api.NewObject(api.CephClient, "c", api.Value{}, api.MapValue(
 		api.FieldValue{Name: "access", Value: api.StringValue("readWrite")},
@@ -197,7 +178,7 @@ func TestDiffReportsPartialRealizationWithoutComparedFieldDifferences(t *testing
 				t.Fatalf("JSON comparison changed: %+v", comparison)
 			}
 			object := comparison.Objects[0]
-			if object.Difference != differenceNone || object.Real.State != state || len(comparison.Files) != wantFiles || string(object.Real.Document) != "null" || string(object.Desired.Document) != "null" {
+			if object.Difference != string(lifecycle.DifferenceNone) || object.Real.State != state || len(comparison.Files) != wantFiles || string(object.Real.Document) != "null" || string(object.Desired.Document) != "null" {
 				t.Fatalf("JSON object changed: %+v", object)
 			}
 		})
@@ -271,23 +252,22 @@ func TestDiffSaysNothingIsRealizedWhenTheContextHoldsNoOperation(t *testing.T) {
 }
 
 func TestDiffSummaryNamesOneObjectInTheSingular(t *testing.T) {
-	result := &lifecycle.DiffResult{}
 	for _, test := range []struct {
 		name    string
-		summary diffSummary
+		summary lifecycle.DiffSummary
 		objects int
 		want    string
 	}{
-		{"none, one", diffSummary{None: 1}, 1, "No differences: 1 object compared."},
-		{"none, several", diffSummary{None: 2}, 2, "No differences: 2 objects compared."},
-		{"none, zero", diffSummary{}, 0, "No differences: 0 objects compared."},
-		{"one differs", diffSummary{Changed: 1}, 1, "1 object differs: 1 changed, 0 added, 0 removed, 0 unmanaged, 0 unknown; 0 unchanged"},
-		{"one differs of several", diffSummary{Unknown: 1, None: 2}, 3, "1 object differs: 0 changed, 0 added, 0 removed, 0 unmanaged, 1 unknown; 2 unchanged"},
-		{"an unmanaged object differs", diffSummary{Unmanaged: 1}, 1, "1 object differs: 0 changed, 0 added, 0 removed, 1 unmanaged, 0 unknown; 0 unchanged"},
-		{"several differ", diffSummary{Changed: 1, Added: 1}, 2, "2 objects differ: 1 changed, 1 added, 0 removed, 0 unmanaged, 0 unknown; 0 unchanged"},
+		{"none, one", lifecycle.DiffSummary{None: 1}, 1, "No differences: 1 object compared."},
+		{"none, several", lifecycle.DiffSummary{None: 2}, 2, "No differences: 2 objects compared."},
+		{"none, zero", lifecycle.DiffSummary{}, 0, "No differences: 0 objects compared."},
+		{"one differs", lifecycle.DiffSummary{Changed: 1}, 1, "1 object differs: 1 changed, 0 added, 0 removed, 0 unmanaged, 0 unknown; 0 unchanged"},
+		{"one differs of several", lifecycle.DiffSummary{Unknown: 1, None: 2}, 3, "1 object differs: 0 changed, 0 added, 0 removed, 0 unmanaged, 1 unknown; 2 unchanged"},
+		{"an unmanaged object differs", lifecycle.DiffSummary{Unmanaged: 1}, 1, "1 object differs: 0 changed, 0 added, 0 removed, 1 unmanaged, 0 unknown; 0 unchanged"},
+		{"several differ", lifecycle.DiffSummary{Changed: 1, Added: 1}, 2, "2 objects differ: 1 changed, 1 added, 0 removed, 0 unmanaged, 0 unknown; 0 unchanged"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if got := diffSummaryLine(result, test.summary, test.objects, 0); got != test.want {
+			if got := diffSummaryLine(&lifecycle.DiffResult{Summary: test.summary}, test.objects, 0); got != test.want {
 				t.Fatalf("summary line = %q, want %q", got, test.want)
 			}
 		})

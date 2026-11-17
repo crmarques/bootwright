@@ -321,8 +321,10 @@ func (r diffRead) result() *DiffResult {
 	if r.owning.ID != "" {
 		operation.Applied = cmp.Or(r.appliedReason, diffReadable)
 	}
-	return &DiffResult{Context: r.context, Operation: operation, Input: r.input, Adds: r.adds, Plan: plan, Observed: r.observed, Blocks: r.blocks, Objects: joinObjects(r), Markers: r.markers,
+	result := &DiffResult{Context: r.context, Operation: operation, Input: r.input, Adds: r.adds, Plan: plan, Observed: r.observed, Blocks: r.blocks, Objects: joinObjects(r), Markers: r.markers,
 		OutdatedClients: r.outdated, Warnings: r.warnings}
+	Judge(result)
+	return result
 }
 
 type objectPlan struct {
