@@ -7,6 +7,18 @@ from ansible_collections.bootwright.core.plugins.module_utils import bounded_pro
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_worker as worker
 
 
+def erase_runtime():
+    """The shipped runtime source run as a script would see the worker, with no __main__ entrypoint."""
+    import sys
+    from unittest.mock import patch
+    from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_runtime as runtime
+
+    with patch.dict(sys.modules, {"physical_erase_worker": worker}):
+        namespace = {"__name__": "test_runtime"}
+        exec(compile(Path(runtime.__file__).read_text(), runtime.__file__, "exec"), namespace)
+    return namespace
+
+
 class MemoryDisk:
     def __init__(self, identity, content):
         self.identity = identity
@@ -164,14 +176,8 @@ class EraseBoundaryTests(unittest.TestCase):
 
     def test_bootstrap_isolation_failure_never_starts_writer(self):
         from unittest.mock import Mock, patch
-        from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_boot as boot
 
-        # The actual embedded runtime is loaded, with no __main__ entrypoint.
-        import sys
-
-        with patch.dict(sys.modules, {"physical_erase_worker": worker}):
-            namespace = {"__name__": "test_runtime"}
-            exec(compile(boot.RUNTIME, "erase-runtime", "exec"), namespace)
+        namespace = erase_runtime()
         namespace["isolate"] = Mock(side_effect=worker.Refusal("installer-running"))
         with patch.object(worker, "execute") as execute, self.assertRaises(worker.Refusal):
             namespace["run"]()
@@ -242,14 +248,10 @@ class WorkerLivenessTests(unittest.TestCase):
     def test_stale_partial_from_a_stopped_service_is_not_live_work(self):
         import json
         from pathlib import Path
-        import sys
         import tempfile
-        from unittest.mock import Mock, patch
-        from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_boot as boot
+        from unittest.mock import Mock
 
-        with patch.dict(sys.modules, {"physical_erase_worker": worker}):
-            namespace = {"__name__": "test_runtime"}
-            exec(compile(boot.RUNTIME, "erase-runtime", "exec"), namespace)
+        namespace = erase_runtime()
         with tempfile.TemporaryDirectory() as temporary:
             namespace["ROOT"] = Path(temporary)
             (Path(temporary) / "status.json").write_text(json.dumps({"state": "partial", "request": "a" * 64, "originalAttempt": "remove/erase/1"}))
@@ -709,14 +711,10 @@ class UsagePassTests(unittest.TestCase):
 def isolation_runtime(tmp_path, damage):
     """Execute the shipped isolation function against synthetic proc and native replies."""
     import json
-    import sys
     from pathlib import Path
-    from unittest.mock import Mock, patch
-    from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_boot as boot
+    from unittest.mock import Mock
 
-    with patch.dict(sys.modules, {"physical_erase_worker": worker}):
-        namespace = {"__name__": "test_runtime"}
-        exec(compile(boot.RUNTIME, "erase-runtime", "exec"), namespace)
+    namespace = erase_runtime()
     flags = ["bootwright.erase=1", "rd.live.ram=1", "rd.live.overlay.overlayfs=1", "inst.zram=0"]
     if damage in flags:
         flags.remove(damage)
@@ -775,3 +773,69 @@ def test_actual_isolation_accepts_only_a_ram_overlay_without_installer(tmp_path)
     namespace = isolation_runtime(tmp_path, "valid")
     with patch.object(worker, "native", return_value=(0, b"")):
         namespace["isolate"]()
+
+
+class ReceiptServerTests(unittest.TestCase):
+    """serve() is the forced command; its acknowledgement is the only step that authorizes poweroff."""
+
+    def setUp(self):
+        import json
+
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.request = EraseBoundaryTests().request()
+        self.receipt = worker.receipt_for(self.request, [{"written": 8192, "verified": 8192}])
+        (self.root / "request.json").write_text(json.dumps(self.request))
+        (self.root / "status.json").write_text(json.dumps(self.receipt))
+        self.namespace = erase_runtime()
+        self.namespace["ROOT"] = self.root
+
+    def serve(self, original, stdin=b""):
+        import io
+        import os
+        from unittest.mock import patch
+
+        class Stdin:
+            buffer = io.BytesIO(stdin)
+
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": original}), patch.object(self.namespace["sys"], "stdin", Stdin):
+            self.namespace["serve"]()
+
+    def digest(self, receipt=None):
+        import hashlib
+
+        return hashlib.sha256(worker.canonical(receipt or self.receipt)).hexdigest().encode()
+
+    def test_the_digest_of_the_validated_receipt_writes_the_acknowledgement(self):
+        import json
+
+        self.serve("ack", self.digest())
+        self.assertEqual(json.loads((self.root / "ack.json").read_text()), {"acknowledged": True})
+
+    def test_a_wrong_digest_refuses_and_writes_no_acknowledgement(self):
+        for stdin in (b"0" * 64, self.digest().upper(), b"", self.digest()[:-1], b"\xff" * 64):
+            with self.subTest(stdin=stdin), self.assertRaises((worker.Refusal, UnicodeDecodeError)):
+                self.serve("ack", stdin)
+            self.assertFalse((self.root / "ack.json").exists())
+
+    def test_a_missing_receipt_refuses_and_writes_no_acknowledgement(self):
+        (self.root / "status.json").unlink()
+        with self.assertRaises(FileNotFoundError):
+            self.serve("ack", self.digest())
+        self.assertFalse((self.root / "ack.json").exists())
+
+    def test_a_receipt_the_request_does_not_cover_is_never_acknowledged(self):
+        import json
+
+        partial = dict(self.receipt, state="partial")
+        (self.root / "status.json").write_text(json.dumps(partial))
+        with self.assertRaisesRegex(worker.Refusal, "^receipt$"):
+            self.serve("ack", self.digest(partial))
+        self.assertFalse((self.root / "ack.json").exists())
+
+    def test_any_other_forced_command_is_refused(self):
+        for original in ("", "shell", "ack ", "receipt;id"):
+            with self.subTest(original=original), self.assertRaisesRegex(worker.Refusal, "^command$"):
+                self.serve(original)
+        self.assertFalse((self.root / "ack.json").exists())

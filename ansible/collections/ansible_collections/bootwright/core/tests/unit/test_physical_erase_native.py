@@ -35,18 +35,22 @@ class ProcessTests(unittest.TestCase):
         import pathlib
         import subprocess
         import tempfile
+        import inspect
         from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_boot as boot
+        from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_runtime as runtime
 
         lines = boot.kickstart("network --bootproto=dhcp", {}, "PRIVATE", "ssh-key PUBLIC").splitlines()
         prefix = "base64 --decode > " + boot.RAM + "/"
         shipped = {line[len(prefix):].split(" ", 1)[0]: base64.b64decode(lines[index + 1]) for index, line in enumerate(lines) if line.startswith(prefix)}
         self.assertIn("bounded_process.py", shipped)
         self.assertNotIn("physical_erase_process.py", shipped)
+        self.assertEqual(shipped["runtime.py"], inspect.getsource(runtime).encode())
+        compile(shipped["runtime.py"], "runtime.py", "exec")
         with tempfile.TemporaryDirectory() as ram:
-            for name in ("physical_erase_worker.py", "bounded_process.py", "physical_machine_identity.py"):
+            for name in ("physical_erase_worker.py", "bounded_process.py", "physical_machine_identity.py", "runtime.py"):
                 pathlib.Path(ram, name).write_bytes(shipped[name])
             probe = ("import sys; sys.path.insert(0, sys.argv[1]); import physical_erase_worker as worker; "
-                     "print(worker.native([sys.executable, '-I', '-c', 'print(7)'], timeout=5))")
+                     "import runtime; print(runtime.worker is worker, worker.native([sys.executable, '-I', '-c', 'print(7)'], timeout=5))")
             # pylint: disable-next=ansible-bad-function
             answer = subprocess.run([sys.executable, "-I", "-c", probe, ram], capture_output=True, timeout=30, check=False)
-        self.assertEqual((answer.returncode, answer.stdout), (0, b"(0, b'7\\n')\n"), answer.stderr)
+        self.assertEqual((answer.returncode, answer.stdout), (0, b"True (0, b'7\\n')\n"), answer.stderr)
