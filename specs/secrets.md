@@ -661,7 +661,22 @@ fails authentication, and a record sealed for another context or copied from
 another keyring is refused (`TestATamperedOrMissingReservationRecordRefuses`,
 `TestAForeignReservationRecordRefuses`). A publication that would exceed the
 cap refuses with `secret.store.limit` before any effect, so the cap bounds the
-identities one keyring can ever issue. The reservations publish with
+identities one keyring can ever issue: reservations are never retired and
+rekeying does not reset them. The refusal's remedy is the only exit, because a
+keyring cannot be emptied in place: remove what the context owns with
+`bootwright destroy --context <context>`, run
+`bootwright context delete --name <context> --purge` (with `--allow-orphans` to
+abandon what it owns instead) and create the context again, which starts a
+keyring with no reservations
+(`TestAFullReservationRecordRefusesNewIdentitiesBeforeEffects`). Only a
+publication issues identities: one version per secret value written (set,
+generate, renew) and one binding per fresh operation registration or
+rebind, so an apply issues about one binding plus the versions of the
+declarations it newly materializes, and a registration retried after an
+interruption issues another. An interactive context issues a few dozen a day at
+most and cannot reach the cap in practice; a context driven by automation at
+hundreds of registrations a day reaches it in a few months, and the refusal
+above is its only warning. The reservations publish with
 `store.json` under the exclusive lock (staged, synced, renamed, then the
 directory synced); a publication killed between stage and rename leaves the
 earlier record and its reservations in force, and the stage is collected

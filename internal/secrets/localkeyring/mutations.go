@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
@@ -388,7 +389,7 @@ func (s *session) publish(ctx context.Context, next *indexRecord, plain []plainP
 		return secretstore.Failure("store.limit", "secret publication seal budget exceeds its key limit")
 	}
 
-	if err := reserve(next, identities); err != nil {
+	if err := reserve(next, s.context.Name, identities); err != nil {
 		return err
 	}
 	required := uint64(len(plain)) + 1
@@ -501,9 +502,9 @@ func publicationFits(next indexRecord, plain []plainPart, keyID string) error {
 	return nil
 }
 
-func reserve(next *indexRecord, identities []string) error {
+func reserve(next *indexRecord, contextName string, identities []string) error {
 	if len(identities) > maxReservations-len(next.Reserved) {
-		return secretstore.Failure("store.limit", "secret identity reservations reached their limit")
+		return reservationLimitFailure(contextName)
 	}
 	for _, id := range identities {
 		if !validID(id, "ver-") && !validID(id, "bind-") || reservedID(*next, id) {
@@ -749,4 +750,10 @@ func clearBound(values []secretstore.BoundMaterial) {
 	for i := range values {
 		values[i].Material.Clear()
 	}
+}
+
+func reservationLimitFailure(contextName string) error {
+	return diagnostics.NewFailureWithRemediation("secret.store.limit", "secret identity reservations reached their limit: this keyring has issued every identity it can hold and never retires one", "",
+		"remove what the context owns with bootwright destroy --context "+contextName+", then run bootwright context delete --name "+contextName+
+			" --purge and create the context again; to abandon what it owns instead, add --allow-orphans to the delete")
 }

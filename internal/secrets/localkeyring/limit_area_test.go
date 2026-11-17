@@ -234,10 +234,6 @@ func (a *limitArea) WriteExclusive(ctx context.Context, path string, data []byte
 	return nil
 }
 
-func (a *limitArea) PublishExclusive(ctx context.Context, path string, data []byte) error {
-	return a.WriteExclusive(ctx, path, data)
-}
-
 func (a *limitArea) publish(path string, data []byte) {
 	a.files[path] = bytes.Clone(data)
 	a.expected[path] = limitExpectation{exists: true, data: bytes.Clone(data)}

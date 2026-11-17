@@ -737,14 +737,6 @@ func (a *secretArea) EnsureDirectory(ctx context.Context, path string) error {
 }
 
 func (a *secretArea) WriteExclusive(ctx context.Context, path string, data []byte) error {
-	return a.writeExclusive(ctx, path, data, false)
-}
-
-func (a *secretArea) PublishExclusive(ctx context.Context, path string, data []byte) error {
-	return a.writeExclusive(ctx, path, data, true)
-}
-
-func (a *secretArea) writeExclusive(ctx context.Context, path string, data []byte, atomic bool) error {
 	if err := a.available(ctx, true); err != nil {
 		return err
 	}
@@ -769,11 +761,7 @@ func (a *secretArea) writeExclusive(ctx context.Context, path string, data []byt
 	defer close()
 	// The backend attributes and recovers what an interrupted write leaves, so
 	// this area retains it rather than removing it.
-	if atomic {
-		err = a.store.writeExclusiveAtomic(ctx, parent, name, data, true)
-	} else {
-		_, err = a.store.writeExclusiveIdentity(ctx, parent, name, data, true)
-	}
+	_, err = a.store.writeExclusiveIdentity(ctx, parent, name, data, true)
 	a.counted(1, int64(len(data)), err)
 	if err != nil {
 		return secretEffectFailure(ctx, "exclusive secret state could not be published safely", err)

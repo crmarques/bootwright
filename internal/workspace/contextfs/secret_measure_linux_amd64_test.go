@@ -37,7 +37,7 @@ func TestTheSecretAreaScansItsStorageOncePerMutation(t *testing.T) {
 				return err
 			}
 		}
-		if err := area.PublishExclusive(ctx, "intent.json", []byte("intent")); err != nil {
+		if err := area.WriteExclusive(ctx, "intent.json", []byte("intent")); err != nil {
 			return err
 		}
 		if _, _, err := area.ReadMutable(ctx, "intent.json", 4096); err != nil {

@@ -90,18 +90,12 @@ func exclusiveWritesNeverReplace(t *testing.T, open Open) {
 		for _, target := range []string{"r", "parts/p"} {
 			succeeds(t, area.WriteExclusive(ctx, target, []byte("first\n")), "the first exclusive write of "+target)
 			refuses(t, area.WriteExclusive(ctx, target, []byte("second\n")), "a second exclusive write of "+target)
-			refuses(t, area.PublishExclusive(ctx, target, []byte("second\n")), "an exclusive publication over "+target)
 			holds(t, area, target, "first\n")
 		}
-		succeeds(t, area.PublishExclusive(ctx, "parts/q", []byte("published\n")), "the first exclusive publication")
-		refuses(t, area.PublishExclusive(ctx, "parts/q", []byte("second\n")), "a second exclusive publication")
-		refuses(t, area.WriteExclusive(ctx, "parts/q", []byte("second\n")), "an exclusive write over a publication")
-		holds(t, area, "parts/q", "published\n")
 	})
 	open(true, func(area secretstore.Area) {
 		holds(t, area, "r", "first\n")
 		holds(t, area, "parts/p", "first\n")
-		holds(t, area, "parts/q", "published\n")
 	})
 }
 
@@ -156,7 +150,7 @@ func entriesListEachNameOnceInOrder(t *testing.T, open Open) {
 		succeeds(t, area.EnsureDirectory(ctx, "keys"), "a second directory")
 		succeeds(t, area.EnsureDirectory(ctx, "parts"), "an existing directory")
 		succeeds(t, area.WriteExclusive(ctx, "parts/b", []byte("bb")), "a nested file")
-		succeeds(t, area.PublishExclusive(ctx, "parts/a", []byte("a")), "a nested publication")
+		succeeds(t, area.WriteExclusive(ctx, "parts/a", []byte("a")), "a second nested file")
 		succeeds(t, area.WriteExclusive(ctx, "r", []byte("rrr")), "a file")
 	})
 	for _, readOnly := range []bool{false, true} {
@@ -178,7 +172,6 @@ func filesAndDirectoriesNeverShareAPath(t *testing.T, open Open) {
 		succeeds(t, area.EnsureDirectory(ctx, "parts"), "a directory")
 		succeeds(t, area.WriteExclusive(ctx, "r", []byte("r\n")), "a file")
 		refuses(t, area.WriteExclusive(ctx, "parts", []byte("x\n")), "an exclusive write at a directory")
-		refuses(t, area.PublishExclusive(ctx, "parts", []byte("x\n")), "an exclusive publication at a directory")
 		refuses(t, area.EnsureDirectory(ctx, "r"), "a directory at a file")
 		refuses(t, area.WriteExclusive(ctx, "r/x", []byte("x\n")), "a write beneath a file")
 		refuses(t, area.WriteExclusive(ctx, "absent/x", []byte("x\n")), "a write beneath an absent directory")
@@ -251,7 +244,6 @@ func readOnlyAreaRefusesEveryMutation(t *testing.T, open Open) {
 		lists(t, area, "parts", secretstore.Entry{Name: "p", Size: 2})
 		refuses(t, area.EnsureDirectory(ctx, "keys"), "a read-only directory creation")
 		refuses(t, area.WriteExclusive(ctx, "parts/q", []byte("q\n")), "a read-only exclusive write")
-		refuses(t, area.PublishExclusive(ctx, "parts/q", []byte("q\n")), "a read-only exclusive publication")
 		notCommitted(t, area, record, []byte("next\n"), []byte("store\n"), "a read-only replacement")
 		refuses(t, area.Sync(ctx, ""), "a read-only sync")
 		for _, refused := range cleanupCalls(ctx, area, "parts/p") {
@@ -276,7 +268,6 @@ func committedStoreRecordEndsEveryGeneralWrite(t *testing.T, open Open) {
 		committed(t, area, record, []byte("store\n"), nil, "the store record")
 		refuses(t, area.EnsureDirectory(ctx, "keys"), "a directory after the store record")
 		refuses(t, area.WriteExclusive(ctx, "parts/p", []byte("p\n")), "an exclusive write after the store record")
-		refuses(t, area.PublishExclusive(ctx, "parts/p", []byte("p\n")), "an exclusive publication after the store record")
 		notCommitted(t, area, "r", []byte("next\n"), []byte("r\n"), "a replacement after the store record")
 		refuses(t, area.Sync(ctx, ""), "a sync after the store record")
 		refuses(t, area.SyncFile(ctx, "r"), "a file sync after the store record")
@@ -413,7 +404,6 @@ func fileCalls(ctx context.Context, area secretstore.Area, target string) []outc
 		{"Read", read},
 		{"ReadMutable", mutable},
 		{"WriteExclusive", area.WriteExclusive(ctx, target, []byte("x\n"))},
-		{"PublishExclusive", area.PublishExclusive(ctx, target, []byte("x\n"))},
 		{"Replace", replace},
 	}
 }

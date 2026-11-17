@@ -231,7 +231,6 @@ func TestSecretMetadataCommitGuardsNewArtifactsAndReplacements(t *testing.T) {
 	}{
 		{name: "key", path: "keys/new.key", writer: "exclusive", data: bytes.Repeat([]byte{7}, 32)},
 		{name: "part", path: "parts/new.enc", writer: "exclusive", data: []byte("new encrypted part")},
-		{name: "identity", path: "identities/new.json", writer: "atomic", data: []byte("new immutable reservation")},
 		{name: "usage", path: "keys/new.usage.json", writer: "replace", data: []byte("reserved encryption budget")},
 		{name: "intent", path: "intent.json", writer: "replace", data: []byte("new publication intent")},
 	} {
@@ -263,8 +262,6 @@ func TestSecretMetadataCommitGuardsNewArtifactsAndReplacements(t *testing.T) {
 					switch artifact.writer {
 					case "exclusive":
 						err = area.WriteExclusive(ctx, artifact.path, artifact.data)
-					case "atomic":
-						err = area.PublishExclusive(ctx, artifact.path, artifact.data)
 					case "replace":
 						previous, _, readErr := area.ReadMutable(ctx, artifact.path, 4096)
 						if readErr != nil {

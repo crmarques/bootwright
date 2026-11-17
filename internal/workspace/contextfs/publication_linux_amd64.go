@@ -37,14 +37,11 @@ type stagedPublication struct {
 	// immutable is the read flag of the published file's read-backs.
 	immutable bool
 	bound     int
-	// retain keeps what a failed write or an unrenamed stage leaves, for a
-	// caller whose retry attributes it.
-	retain bool
 }
 
 // publishStage stages data beside name and renames it there, so name appears
 // only with complete, synchronized content. A failure before the rename is
-// uncommitted and removes the stage unless retain is set; the removal takes no
+// uncommitted and removes the stage; the removal takes no
 // context, so a cancelled command still cleans up. Any failure after the
 // rename is an unknown outcome.
 func (s *Store) publishStage(ctx context.Context, parent *directory, name string, data []byte, p stagedPublication, before, after checkpoint) (publicationOutcome, error) {
@@ -54,7 +51,7 @@ func (s *Store) publishStage(ctx context.Context, parent *directory, name string
 	}
 	renamed := false
 	defer func() {
-		if !renamed && !p.retain {
+		if !renamed {
 			discardCreated(parent, pending, created)
 		}
 	}()
@@ -107,7 +104,7 @@ func (s *Store) createStage(ctx context.Context, parent *directory, data []byte,
 			return "", syscall.Stat_t{}, err
 		}
 		pending := candidate + p.suffix
-		created, err := s.writeExclusiveIdentity(ctx, parent, pending, data, p.retain)
+		created, err := s.writeExclusiveIdentity(ctx, parent, pending, data, false)
 		if errors.Is(err, syscall.EEXIST) {
 			continue
 		}

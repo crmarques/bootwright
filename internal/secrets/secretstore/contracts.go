@@ -28,9 +28,6 @@ type Area interface {
 	// only for artifacts whose names are attributable during crash recovery and
 	// remain hidden until a later selector publication.
 	WriteExclusive(context.Context, string, []byte) error
-	// PublishExclusive exposes a fully written immutable artifact atomically and
-	// never replaces an existing final path. A crash may retain an unselected temporary file.
-	PublishExclusive(context.Context, string, []byte) error
 	Replace(ctx context.Context, path string, replacement, expected []byte) (Outcome, error)
 	// Prune removes only previously observed files or empty directories after
 	// verifying and synchronizing the exact current store.json. It may run

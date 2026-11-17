@@ -436,10 +436,10 @@ func discardCreated(parent *directory, name string, identity syscall.Stat_t) {
 
 // writeExclusiveAtomic stages the bytes and renames them to name without
 // replacing it, so name appears only with complete, synchronized content. A
-// failure before the rename removes the stage unless retain is set.
-func (s *Store) writeExclusiveAtomic(ctx context.Context, parent *directory, name string, data []byte, retain bool) error {
+// failure before the rename removes the stage.
+func (s *Store) writeExclusiveAtomic(ctx context.Context, parent *directory, name string, data []byte) error {
 	_, err := s.publishStage(ctx, parent, name, data, stagedPublication{
-		subject: "immutable state", immutable: true, bound: len(data), retain: retain,
+		subject: "immutable state", immutable: true, bound: len(data),
 	}, checkpointBeforeSecretImmutableRename, checkpointAfterSecretImmutableRename)
 	return err
 }

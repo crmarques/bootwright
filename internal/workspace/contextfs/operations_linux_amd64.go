@@ -616,7 +616,7 @@ func (a *operationArea) WriteExclusive(ctx context.Context, target string, data 
 	if err != nil {
 		return err
 	}
-	if err := a.store.writeExclusiveAtomic(ctx, parent, name, data, false); err != nil {
+	if err := a.store.writeExclusiveAtomic(ctx, parent, name, data); err != nil {
 		return err
 	}
 	a.settle(generation, 1, int64(len(data)))
@@ -652,7 +652,7 @@ func (a *operationArea) Replace(ctx context.Context, target string, data, expect
 		return err
 	}
 	if expected == nil {
-		if err := a.store.writeExclusiveAtomic(ctx, parent, name, data, false); err != nil {
+		if err := a.store.writeExclusiveAtomic(ctx, parent, name, data); err != nil {
 			return err
 		}
 		a.settle(generation, 1, int64(len(data)))

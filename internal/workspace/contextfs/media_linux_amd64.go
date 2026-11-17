@@ -1059,7 +1059,7 @@ func (a *mediaArea) Publish(ctx context.Context, name string, published media.St
 	if err := a.store.checkpoint(ctx, checkpointBeforeMediaRecord); err != nil {
 		return err
 	}
-	if err := a.store.writeExclusiveAtomic(ctx, a.dir, name+".json", record, false); err != nil {
+	if err := a.store.writeExclusiveAtomic(ctx, a.dir, name+".json", record); err != nil {
 		return safeError(err)
 	}
 	if stage.adopted != nil {

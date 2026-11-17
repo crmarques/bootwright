@@ -357,8 +357,15 @@ func TestAFullReservationRecordRefusesNewIdentitiesBeforeEffects(t *testing.T) {
 			return err
 		},
 	} {
-		if err := h.mutate(publish); failureCode(err) != "secret.store.limit" {
+		err := h.mutate(publish)
+		if failureCode(err) != "secret.store.limit" {
 			t.Fatalf("%s at the cap = %v, want secret.store.limit", name, err)
+		}
+		reported := diagnostics.Of(err)[0]
+		for _, want := range []string{"bootwright destroy --context " + h.context.Name, "bootwright context delete --name " + h.context.Name + " --purge", "--allow-orphans", "create the context again"} {
+			if !strings.Contains(reported.Remediation, want) {
+				t.Fatalf("%s at the cap names no %q in its remedy: %q", name, want, reported.Remediation)
+			}
 		}
 		if !reflect.DeepEqual(before, artifactTree(t, h.secretsRoot())) {
 			t.Fatalf("%s at the cap changed the store", name)

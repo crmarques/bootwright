@@ -475,10 +475,9 @@ func checkpointUsable(t *testing.T, ctx context.Context, scenario checkpointScen
 
 // checkpointStaleEntries lists every pending or staging entry beneath the root
 // that no component may keep. Once the retry has settled, nothing may remain.
-// Before it, specs/contexts.md lets five things wait for that retry: init's
+// Before it, specs/contexts.md lets four things wait for that retry: init's
 // recovery artifact, the root's only entry holding exactly the canonical empty
-// registry; what the secret store's exclusive writes keep under
-// secrets/identities/; after a kill, any stage beneath a context's secrets/,
+// registry; after a kill, any stage beneath a context's secrets/,
 // which Local keyring resolves; a media stage a pinned add retained beside
 // its record, which the repeated add publishes; and, after a kill, a stage
 // beneath a controller bundle area, which the area's next writer removes
@@ -512,7 +511,6 @@ func checkpointStaleEntries(root string, mode checkpointMode, retried bool) ([]s
 			stale = append(stale, relative)
 		case len(parts) == 2 && parts[0] == "contexts" && strings.HasPrefix(name, ".init-"):
 		case len(parts) == 1 && relative == recovery:
-		case secrets && len(parts) == 5 && parts[3] == "identities":
 		case secrets && mode == checkpointKilled:
 		case bundle && mode == checkpointKilled:
 		case len(parts) == 2 && parts[0] == mediaContainer && checkpointRetainedMediaPair(root, parts[1]):
