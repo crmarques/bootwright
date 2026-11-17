@@ -112,6 +112,19 @@ NAMED.update({
     "custody-token": "custody-drift",
     "completion-drift": "custody-drift",
 })
+# What the image build alone refuses: a boot media that no longer matches its
+# pin, and an image mkksiso did not build or that was not copied in full.
+BUILT = {
+    "media-identity": "boot-media-mismatch",
+    "native-command": "image-build-failed",
+    "native-timeout": "image-build-failed",
+    "native-output": "image-build-failed",
+    "image-copy": "image-build-failed",
+}
+# The phases that name a refusal instead of failing: every effect phase, the
+# image build and the read-only observation.
+NAMING_PHASES = EFFECT_PHASES + ("build", "observe")
+UNPREPARED = {"prepared": False, "removed": False}
 
 
 def main():
@@ -140,6 +153,10 @@ def main():
             module.exit_json(changed=True, **controller.poll())
         if phase == "ack":
             module.exit_json(changed=controller.acknowledge())
+        if phase == "observe" and controller.earlier():
+            # Another removal's custody is never this removal's evidence; its
+            # prepare sets that custody aside before erasing again.
+            module.exit_json(changed=False, evidence=dict(UNPREPARED, version=worker.VERSION, request=module.params["digest"]), finalizing=False)
         receipt = controller.receipt()
         evidence = {"version": worker.VERSION, "request": module.params["digest"], "prepared": True, "removed": False}
         if receipt:
@@ -168,7 +185,8 @@ def main():
             )
         module.fail_json(msg="physical erase custody is incomplete")
     except worker.Refusal as refusal:
-        refuse(module, NAMED.get(str(refusal)), getattr(refusal, "detail", ""), getattr(refusal, "line", ""))
+        code = BUILT.get(str(refusal)) if module.params["phase"] == "build" else None
+        refuse(module, code or NAMED.get(str(refusal)), getattr(refusal, "detail", ""), getattr(refusal, "line", ""))
     except custody.redfish.redfish_control.ControllerError as failure:
         refuse(module, "target-unanswered" if module.params["phase"] in CONTROLLED else None, "", str(failure))
     except (OSError, ValueError, KeyError):
@@ -184,12 +202,11 @@ def refuse(module, code, detail, line):
     An effect phase returns its refusal instead of failing, because a failure
     under no_log keeps nothing of its cause: the role names the closed code to
     the runner and stops outside no_log with the code and the controller's own
-    printable line. An observation, and any refusal outside this vocabulary,
-    fails as before.
+    printable line. A refusal outside this vocabulary fails as before.
     """
-    if code is None or module.params["phase"] not in EFFECT_PHASES:
+    if code is None or module.params["phase"] not in NAMING_PHASES:
         module.fail_json(msg=UNPROVED)
-    module.exit_json(changed=True, refused=code, detail=detail, controller=line)
+    module.exit_json(changed=module.params["phase"] != "observe", refused=code, detail=detail, controller=line)
 
 
 if __name__ == "__main__":

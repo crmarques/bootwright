@@ -23,6 +23,8 @@ const (
 	eraseReceiptTimeout     = "receipt-timeout"
 	eraseForeignCustody     = "foreign-custody"
 	eraseCustodyDrift       = "custody-drift"
+	eraseBootMediaMismatch  = "boot-media-mismatch"
+	eraseImageBuildFailed   = "image-build-failed"
 )
 
 func eraseRefusals(contextName, continuation, machine, endpoint, address string) map[string]error {
@@ -73,5 +75,9 @@ func eraseRefusals(contextName, continuation, machine, endpoint, address string)
 			"restore the original apply and removal records, "+again+retain),
 		eraseCustodyDrift: refused("the private erase custody of "+identity+" on the execution host differs from what its removal recorded, so it was not used",
 			"restore the original apply and removal records, "+again+retain),
+		eraseBootMediaMismatch: refused("the installer image the apply of "+identity+" pinned is missing from the controller's media store or no longer matches its size and SHA-256, so no erase image was built and the machine was not booted",
+			"restore that image with bootwright media add and check it with bootwright media list --checksums, "+again),
+		eraseImageBuildFailed: refused("the erase image of "+identity+" could not be built from its pinned installer image within its time bound, so the machine was not booted",
+			"check the execution host's free space and its mkksiso and xorriso installation, "+again),
 	}
 }

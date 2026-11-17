@@ -147,15 +147,20 @@ class Controller:
             raise worker.Refusal("foreign-target")
         return state
 
-    def supersede(self):
-        """Withdraw an earlier removal's unfinished custody before this removal writes its own.
+    def earlier(self):
+        """Whether custody names another removal's attempt than this removal's material."""
+        state = json.loads(read(self.root / "custody.json"))
+        return removal(state.get("originalAttempt")) != removal(self.material["originalAttempt"])
 
-        Custody belongs to one removal attempt lineage. One a failed or
-        replaced removal left, with no finalizing or completed record, is
-        withdrawn: its private image, its boot-private key and files, and its
-        receipt, kept aside as superseded-<operation>.json and never adopted.
-        A finalizing or completed custody is kept as it is, and a retry of
-        the same removal keeps its custody unchanged.
+    def supersede(self):
+        """Set an earlier removal's custody aside before this removal writes its own.
+
+        Custody belongs to one removal attempt lineage, so a fresh removal
+        always erases under its own: an earlier removal's receipt and its
+        finalizing and completed records, whether it failed, was replaced or
+        finished, are kept as superseded-<operation>-<record>.json and never
+        adopted, and its private image and boot-private key and files are
+        withdrawn. A retry of the same removal keeps its custody unchanged.
         """
         path = self.root / "custody.json"
         if not path.exists():
@@ -163,8 +168,6 @@ class Controller:
         state = json.loads(read(path))
         earlier = removal(state.get("originalAttempt"))
         if earlier == removal(self.material["originalAttempt"]):
-            return
-        if (self.root / "finalizing.json").exists() or (self.root / "completed.json").exists():
             return
         if state.get("request") != self.digest or state.get("applyOperation") != self.material["applyOperation"]:
             raise worker.Refusal("foreign-custody")
@@ -187,9 +190,12 @@ class Controller:
                 os.close(descriptor)
         for name in ("host-key", "host-key.pub", "ks.cfg", "ssh_config", "known_hosts", "erase.iso"):
             (self.root / name).unlink(missing_ok=True)
-        receipt = self.root / "receipt.json"
-        if receipt.exists():
-            os.replace(receipt, self.root / ("superseded-" + earlier + ".json"))
+        # The completion record goes last, so an interrupted supersession is
+        # never read as this removal's completed or finalizing custody.
+        for record in ("receipt", "finalizing", "completed"):
+            kept = self.root / (record + ".json")
+            if kept.exists():
+                os.replace(kept, self.root / ("superseded-" + earlier + "-" + record + ".json"))
         os.fsync(self.lock)
         path.unlink()
         os.fsync(self.lock)

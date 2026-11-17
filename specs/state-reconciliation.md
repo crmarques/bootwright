@@ -2652,11 +2652,12 @@ of the context's [hosted directory](contexts.md#hosted-root), beneath the
 immutable original apply operation identity so reuse of a context name cannot
 adopt an old receipt. Custody belongs to one removal: initial private custody is
 atomically committed before boot, and its first erase attempt remains frozen across
-retries of that removal. A fresh removal that finds custody naming another
-removal's attempt, with no finalizing or completed record, withdraws that
-custody's private publication and boot-private files, sets its receipt aside as
-`superseded-<operation>.json` without adopting it, and then writes its own; a
-finalizing or completed custody of an earlier removal is kept, never adopted.
+retries of that removal. A fresh removal always erases under its own custody:
+finding custody naming another removal's attempt, whether that removal failed,
+was replaced or finished, it withdraws that custody's private publication and
+boot-private files, sets its receipt and any finalizing or completed record
+aside as `superseded-<operation>-<record>.json` without adopting them, and then
+writes its own, and an observation of it reads unprepared for this removal.
 The path is unchanged. The installed OS's existing host key is never the erase
 receipt identity. The RAM service accepts only receipt reads and receipt-hash
 acknowledgement through pinned SSH. A complete receipt binds request, original
@@ -2718,7 +2719,8 @@ under `no_log`: `machine-running`, `identity-mismatch`, `hardware-mismatch` and
 and `controller-deadline` from a media, boot, power or eject step;
 `poweroff-unproved`, `worker-failed`, `worker-unreachable`, `foreign-worker`
 and `receipt-timeout` from the RAM worker; `foreign-custody` and
-`custody-drift` from custody. Its detail carries only what the controller or
+`custody-drift` from custody; `boot-media-mismatch` and
+`image-build-failed` from the image build. Its detail carries only what the controller or
 the session observed, such as a power state, the answering system UUID, how
 many hardware addresses differ, an HTTP status or an unanswered session's class
 and minutes, never a value derived from the private material; the play then

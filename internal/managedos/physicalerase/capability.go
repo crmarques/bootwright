@@ -387,7 +387,12 @@ func eraseLineage(data json.RawMessage, request EraseRequest, execution lifecycl
 	attempt, parsed := strconv.Atoi(number)
 	// Attempt starts are durable and consecutive within this exact removal.
 	if !found || parsed != nil || attempt < 1 || attempt > execution.Attempt || strconv.Itoa(attempt) != number {
-		return refusal("lifecycle.state", "physical erase receipt has another removal attempt lineage", "continue the original destroy operation")
+		next := execution.Continuation
+		if next == "" {
+			next = "bootwright destroy --context " + execution.Context
+		}
+		return refusal("lifecycle.state", "physical erase receipt has another removal attempt lineage",
+			"run "+next+" again; a removal erases under its own attempt lineage and sets an earlier removal's receipt aside without adopting it")
 	}
 	if err := validateEraseReceipt(&proof, request, execution.Block.RequestDigest); err != nil {
 		return err

@@ -26,6 +26,12 @@
   register: physical_erase_before
   no_log: true
 
+- name: Report a refused prior completion read outside no_log
+  ansible.builtin.include_tasks: refused.yml
+  vars:
+    physical_erase_refused: '{{ physical_erase_before }}'
+  when: physical_erase_before.refused is defined
+
 - name: Complete an unfinished offline erase
   when: not (physical_erase_before.evidence.removed | bool)
   block:

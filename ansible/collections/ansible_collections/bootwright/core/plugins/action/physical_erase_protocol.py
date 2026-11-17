@@ -22,6 +22,7 @@ def completion(arguments):
 REFUSALS = (
     "machine-running", "identity-mismatch", "hardware-mismatch", "target-unanswered", "controller-refused", "controller-deadline",
     "poweroff-unproved", "worker-failed", "worker-unreachable", "foreign-worker", "receipt-timeout", "foreign-custody", "custody-drift",
+    "boot-media-mismatch", "image-build-failed",
 )
 
 CAPABILITY = adapter_protocol.Capability(

@@ -336,17 +336,43 @@ class RemovalCustodyTests(unittest.TestCase):
             self.assertIsNone(fresh["receipt"])
             self.assertEqual((root / "host-key").read_text(), "private host key op-remove-2/erase-metal-01/1")
             self.assertEqual((root / "ks.cfg").read_text(), "kickstart op-remove-2/erase-metal-01/1")
-            superseded = json.loads((root / "superseded-op-remove-1.json").read_text())
+            superseded = json.loads((root / "superseded-op-remove-1-receipt.json").read_text())
             self.assertEqual(superseded["originalAttempt"], earlier["originalAttempt"])
             self.assertFalse((root / "receipt.json").exists())
 
-    def test_a_completed_earlier_removal_keeps_its_custody(self):
+    def test_a_completed_earlier_removal_is_set_aside_and_a_fresh_removal_boots_under_its_own_attempt(self):
         import json
 
-        with tempfile.TemporaryDirectory() as temporary:
-            _first, root, _publication = self.prepared(temporary, "op-remove-1/erase-metal-01/1")
-            earlier = (root / "custody.json").read_bytes()
-            (root / "completed.json").write_text(json.dumps({"removed": True}))
-            self.prepared(temporary, "op-remove-2/erase-metal-01/1")
-            self.assertEqual((root / "custody.json").read_bytes(), earlier)
-            self.assertTrue((root / "completed.json").exists())
+        for marker in ("completed", "finalizing"):
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as temporary:
+                _first, root, publication = self.prepared(temporary, "op-remove-1/erase-metal-01/1")
+                earlier = json.loads((root / "custody.json").read_text())
+                receipt = {"state": "complete", "originalAttempt": earlier["originalAttempt"]}
+                evidence = {"removed": True, "receipt": receipt}
+                (root / "receipt.json").write_text(json.dumps(receipt))
+                (root / "finalizing.json").write_text(json.dumps(evidence))
+                if marker == "completed":
+                    (root / "completed.json").write_text(json.dumps(evidence))
+                (publication / earlier["token"]).mkdir()
+                for name in ("host-key", "host-key.pub", "ks.cfg", "ssh_config", "known_hosts"):
+                    (root / name).unlink()
+                instance = controller.Controller.__new__(controller.Controller)
+                instance.root, instance.material = root, {"originalAttempt": "op-remove-2/erase-metal-01/1"}
+                with patch.object(controller, "read", lambda path, limit=32768: Path(path).read_bytes()):
+                    self.assertTrue(instance.earlier(), "an earlier removal's completed custody read as this removal's")
+
+                fresh, _root, _publication = self.prepared(temporary, "op-remove-2/erase-metal-01/1")
+                custody = json.loads((root / "custody.json").read_text())
+                self.assertEqual((custody["originalAttempt"], custody["worker"]["originalAttempt"]), ("op-remove-2/erase-metal-01/1",) * 2)
+                self.assertNotEqual(custody["token"], earlier["token"])
+                self.assertIsNone(fresh["receipt"], "the fresh removal adopted the earlier receipt")
+                self.assertEqual((root / "ks.cfg").read_text(), "kickstart op-remove-2/erase-metal-01/1")
+                self.assertFalse((publication / earlier["token"]).exists())
+                for name in ("receipt.json", "finalizing.json", "completed.json"):
+                    self.assertFalse((root / name).exists(), name)
+                self.assertEqual(json.loads((root / "superseded-op-remove-1-receipt.json").read_text()), receipt)
+                self.assertEqual(json.loads((root / "superseded-op-remove-1-finalizing.json").read_text()), evidence)
+                self.assertEqual((root / "superseded-op-remove-1-completed.json").exists(), marker == "completed")
+                instance.material = {"originalAttempt": "op-remove-2/erase-metal-01/2"}
+                with patch.object(controller, "read", lambda path, limit=32768: Path(path).read_bytes()):
+                    self.assertFalse(instance.earlier(), "a retry of the fresh removal is its own")

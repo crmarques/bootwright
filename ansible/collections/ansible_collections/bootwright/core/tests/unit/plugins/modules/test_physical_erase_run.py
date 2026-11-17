@@ -28,7 +28,7 @@ def stubbed_controller(tmp_path, monkeypatch):
     demands root's ownership. `receipt` is what receipt() returns, or the exception it raises, and
     `await_error` is the exception poll() raises.
     """
-    state = {"calls": [], "closed": 0, "root": tmp_path, "receipt": None, "await_error": None, "created": None}
+    state = {"calls": [], "closed": 0, "root": tmp_path, "receipt": None, "await_error": None, "created": None, "earlier": False}
 
     class Controller:
         root = tmp_path
@@ -53,6 +53,9 @@ def stubbed_controller(tmp_path, monkeypatch):
                 raise state["await_error"]  # pylint: disable=raising-bad-type
             return {"answer": "complete", "receipt": RECEIPT}
 
+        def earlier(self):
+            return state["earlier"]
+
         def acknowledge(self):
             state["calls"].append("ack")
             return True
@@ -71,6 +74,10 @@ def stubbed_controller(tmp_path, monkeypatch):
     monkeypatch.setattr(custody, "Controller", Controller)
     monkeypatch.setattr(custody, "read", lambda path, limit=32768: path.read_bytes())
     return state
+
+
+def controller_class():
+    return custody.Controller
 
 
 def arguments(phase):
@@ -116,7 +123,7 @@ def test_an_observation_of_a_finished_erase_reports_removed_and_one_that_drifted
     assert completed["evidence"] == evidence(receipt=RECEIPT, removed=True) and completed["changed"] is False
     record(tmp_path / "completed.json", evidence(receipt={"wiped": "some"}, removed=True))
     drifted = run_module(module, arguments("observe"))
-    assert drifted["failed"] is True and drifted["msg"] == REFUSED
+    assert "failed" not in drifted and drifted["refused"] == "custody-drift"
 
 
 def test_an_interrupted_finish_is_checked_against_its_finalizing_record(controller, tmp_path, run_module):
@@ -125,7 +132,7 @@ def test_an_interrupted_finish_is_checked_against_its_finalizing_record(controll
     finalizing = run_module(module, arguments("observe"))
     assert finalizing["finalizing"] is True and finalizing["evidence"] == evidence(receipt=RECEIPT)
     record(tmp_path / "finalizing.json", evidence(receipt={"wiped": "some"}, removed=True))
-    assert run_module(module, arguments("observe"))["msg"] == REFUSED
+    assert run_module(module, arguments("observe"))["refused"] == "custody-drift"
 
 
 def test_a_custody_that_was_never_prepared_observes_as_unprepared_and_fails_every_other_phase(controller, run_module):
@@ -166,10 +173,35 @@ def test_an_effect_phase_returns_each_named_refusal_with_only_its_observed_detai
         assert image not in json.dumps(result) and "f" * 64 not in json.dumps(result)
 
 
-def test_an_observation_or_an_unnamed_refusal_still_fails_with_the_generic_message(controller, run_module, monkeypatch):
-    controller["receipt"] = worker.Refusal("foreign-custody")
+def test_an_observation_and_a_build_name_their_custody_and_media_refusals(controller, run_module, monkeypatch):
+    for raised, code in ((worker.Refusal("foreign-custody"), "foreign-custody"), (worker.Refusal("completion-drift"), "custody-drift")):
+        controller["receipt"] = raised
+        observed = run_module(module, arguments("observe"))
+        assert "failed" not in observed and observed["refused"] == code and observed["changed"] is False
+    controller["receipt"] = worker.Refusal("receipt")
+    assert run_module(module, arguments("observe"))["msg"] == REFUSED
+    for raised, code in (("media-identity", "boot-media-mismatch"), ("native-timeout", "image-build-failed"), ("image-copy", "image-build-failed"),
+                         ("foreign-target", "foreign-custody")):
+        def build(self, raised=raised):
+            raise worker.Refusal(raised)
+        monkeypatch.setattr(controller_class(), "build", build)
+        built = run_module(module, arguments("build"))
+        assert "failed" not in built and (built["refused"], built["detail"], built["controller"]) == (code, "", "")
+
+    def keygen(self):
+        raise worker.Refusal("native-command")
+    monkeypatch.setattr(controller_class(), "prepare", keygen)
+    assert run_module(module, arguments("prepare"))["msg"] == REFUSED, "a build code is named only by the build"
+
+
+def test_an_observation_of_another_removals_custody_reads_unprepared_for_this_removal(controller, tmp_path, run_module):
+    controller["receipt"], controller["earlier"] = RECEIPT, True
+    record(tmp_path / "completed.json", evidence(receipt=RECEIPT, removed=True))
     observed = run_module(module, arguments("observe"))
-    assert observed["failed"] is True and observed["msg"] == REFUSED and "refused" not in observed
+    assert observed["changed"] is False and observed["finalizing"] is False and observed["evidence"] == evidence(prepared=False)
+
+
+def test_an_unnamed_refusal_still_fails_with_the_generic_message(controller, run_module, monkeypatch):
 
     def control(self, phase):
         raise worker.Refusal("receipt-missing")
@@ -181,6 +213,6 @@ def test_an_observation_or_an_unnamed_refusal_still_fails_with_the_generic_messa
 def test_the_module_names_exactly_the_refusals_its_protocol_and_go_remedy():
     from ansible_collections.bootwright.core.plugins.action import physical_erase_protocol as protocol
 
-    # Go's eraseRefusals gives each of these thirteen a diagnostic (TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy).
-    assert set(module.NAMED.values()) == set(protocol.REFUSALS) and len(protocol.REFUSALS) == 13
+    # Go's eraseRefusals gives each of these fifteen a diagnostic (TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy).
+    assert set(module.NAMED.values()) | set(module.BUILT.values()) == set(protocol.REFUSALS) and len(protocol.REFUSALS) == 15
     assert "refused" in protocol.CAPABILITY.phases and protocol.CAPABILITY.detail is True

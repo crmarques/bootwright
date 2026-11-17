@@ -196,13 +196,13 @@ def test_a_read_after_its_definition_inside_a_block_and_a_task_reading_its_own_f
 def test_every_physical_erase_effect_phase_is_followed_by_its_named_refusal():
     """A refused erase phase returns its code under no_log; the very next step names it and stops outside no_log."""
     seen = set()
-    for name in ("destroy.yml", "boot.yml"):
+    for name in ("destroy.yml", "boot.yml", "observe.yml"):
         tasks = role_tasks.flatten(load(ROLES / "physical_erase/tasks" / name))
         for index, task in enumerate(tasks):
             arguments = task.get("bootwright.core.physical_erase")
             if isinstance(task.get("bootwright.core.physical_erase_await"), dict):
                 arguments = dict(task["bootwright.core.physical_erase_await"], phase="poll")
-            if not isinstance(arguments, dict) or arguments["phase"] in ("observe", "build"):
+            if not isinstance(arguments, dict):
                 continue
             register = task.get("register")
             following = tasks[index + 1]
@@ -211,7 +211,7 @@ def test_every_physical_erase_effect_phase_is_followed_by_its_named_refusal():
             assert following["vars"] == {"physical_erase_refused": "{{ " + register + " }}"}
             assert following["when"] == register + ".refused is defined"
             seen.add(arguments["phase"])
-    assert seen == {"prepare", "start", "poll", "ack", "stop-proof", "finish"}
+    assert seen == {"observe", "prepare", "build", "start", "poll", "ack", "stop-proof", "finish"}
     named, stop = load(ROLES / "physical_erase/tasks/refused.yml")
     assert named["bootwright.core.physical_erase_protocol"]["phase"] == "refused" and named["no_log"] is True
     assert "no_log" not in stop and set(REFERENCE.findall(stop["ansible.builtin.fail"]["msg"])) & {"material", "detail", "private", "url"} == set()

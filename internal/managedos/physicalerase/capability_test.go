@@ -523,8 +523,9 @@ func TestPhysicalEraseFreshRemovalBootsUnderItsOwnLineageAndRefusesASupersededRe
 	proof, _ := json.Marshal(EraseEvidence{Version: EraseImplementation, Request: execution.Block.RequestDigest, Prepared: true, Removed: true, Receipt: &superseded})
 	runner.result = lifecycle.RunResult{Outcome: "changed", Evidence: proof}
 	_, err := capability.Destroy(context.Background(), execution)
-	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "another removal attempt lineage") {
-		t.Fatalf("a superseded removal's receipt = %v, want the lineage refusal", found)
+	if found := diagnostics.Of(err); len(found) != 1 || !strings.Contains(found[0].Message, "another removal attempt lineage") ||
+		!strings.HasPrefix(found[0].Remediation, "run bootwright destroy --context lab again") || strings.Contains(found[0].Remediation, "continue the original") {
+		t.Fatalf("a superseded removal's receipt = %v, want the lineage refusal naming the destroy to run", found)
 	}
 	if got, want := runner.requests[0].MaterialValues["originalAttempt"], "remove-2/"+execution.Block.ID+"/1"; got != want {
 		t.Fatalf("the fresh removal's original attempt = %q, want %q", got, want)

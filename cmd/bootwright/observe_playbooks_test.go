@@ -104,6 +104,10 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 	add("physical_erase", "observe.yml", observeCollection+"physical_erase_protocol", "publishes loaded or read-only completion, never a durable effect preparation", func(params, _ map[string]any) bool {
 		return params["phase"] == "loaded" || params["phase"] == "completed" && params["observed"] == true
 	})
+	add("physical_erase", "refused.yml", observeCollection+"physical_erase_protocol", "names a refused read-only observation on the runner channel", func(params, _ map[string]any) bool {
+		return params["phase"] == "refused"
+	})
+	add("physical_erase", "refused.yml", "ansible.builtin.fail", "stops at a refused observation without touching the host", read)
 	for _, role := range []string{"substrate_libvirt_machine", "substrate_baremetal_machine"} {
 		for _, module := range []string{"ansible.builtin.set_fact", observeCollection + "redfish_system_read", observeCollection + "redfish_system_inspect"} {
 			add(role, "state_read.yml", module, "reads controller state and retains answers in memory", read)

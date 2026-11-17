@@ -13,6 +13,12 @@
   register: physical_erase_observed
   no_log: true
 
+- name: Report a refused observation outside no_log
+  ansible.builtin.include_tasks: refused.yml
+  vars:
+    physical_erase_refused: '{{ physical_erase_observed }}'
+  when: physical_erase_observed.refused is defined
+
 - name: Publish physical erase observation
   bootwright.core.physical_erase_protocol:
     phase: completed

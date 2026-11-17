@@ -23,7 +23,14 @@
     request: '{{ bootwright_physical_erase_request }}'
     digest: '{{ bootwright_physical_erase_digest }}'
     material: '{{ bootwright_physical_erase_material }}'
+  register: physical_erase_built
   no_log: true
+
+- name: Report a refused image build phase outside no_log
+  ansible.builtin.include_tasks: refused.yml
+  vars:
+    physical_erase_refused: '{{ physical_erase_built }}'
+  when: physical_erase_built.refused is defined
 
 - name: Keep the private image readable only by its serving group
   ansible.builtin.file:
