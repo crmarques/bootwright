@@ -16849,3 +16849,18 @@ now reads its evidence by the one rule the spec states: a claimed
 postcondition without a start after the files is unknown, and absence evidence
 that reports such a start proves no absence. No contract golden moved.
 
+## X544 — The installer wait and cluster read in Python
+
+### B1513
+
+Split from B1466 under [D274](backlog.md#d274) (the rest of audit 005 W5.1).
+The agent installer's wait (attempt loop, deadline from the frozen budget,
+restore, stderr classification, registered-host read, message) is one module
+behind the installation inspection with a typed outcome, leaving one task and
+one fail; it runs the installer through `bounded_process` with a clean
+environment and the account's own home. A cluster read is one cluster-version
+read and one node read through the cluster-object runner, returning one state.
+One `installer_config` filter composes the install configuration from the
+frozen document and the bound files. Every pinned message, verdict and
+install-config is byte-identical. An operator cluster install is owed.
+
