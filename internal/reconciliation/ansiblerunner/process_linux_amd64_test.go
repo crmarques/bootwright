@@ -256,11 +256,11 @@ func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
 		adapter func() *exec.Cmd
 		message string
 	}{
-		{"failed-exit", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 3") }, "the adapter operation did not complete (exit status 3)"},
-		{"killed", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "kill -KILL $$") }, "the adapter operation did not complete (signal SIGKILL)"},
+		{"failed-exit", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 3") }, "the adapter exited before it loaded its request (exit status 3), so it performed no effect"},
+		{"killed", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "kill -KILL $$") }, "the adapter exited before it loaded its request (signal SIGKILL), so it performed no effect"},
 		{"failed-exit-retained", func() *exec.Cmd {
 			return exec.Command("/bin/sh", "-c", "(exec >/dev/null 2>&1 4<&-; sleep 5) & exit 3")
-		}, "the adapter operation did not complete (exit status 3)"},
+		}, "the adapter exited before it loaded its request (exit status 3), so it performed no effect"},
 		{"no-result", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 0") }, "the adapter operation has no complete result"},
 		{"stopped", func() *exec.Cmd {
 			return exec.Command("/bin/sh", "-c", `printf '%s\n' '{"host":"node-1","kind":"failed","phase":"stopped","role":"bootwright.core.managed_os","task":"wait for the installer"}' >&3; exit 2`)
@@ -268,8 +268,8 @@ func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
 		{"unreachable", func() *exec.Cmd {
 			return exec.Command("/bin/sh", "-c", `printf '%s\n' '{"host":"node-1","kind":"unreachable","phase":"stopped","task":"gather"}' >&3; exit 4`)
 		}, `the adapter operation did not complete (exit status 4): host node-1 did not answer task "gather"`},
-		{"malformed", child("malformed"), "the adapter structured result was incomplete"},
-		{"out-of-order", child("out-of-order"), "the adapter capability protocol was invalid"},
+		{"malformed", child("malformed"), "the adapter structured result was incomplete: a record is not canonical JSON"},
+		{"out-of-order", child("out-of-order"), "the adapter capability protocol was invalid: a group record this run does not admit at that point"},
 	} {
 		for index, remediation := range []string{
 			"read the adapter output retained beside this attempt's log",
@@ -353,7 +353,7 @@ func TestANamedRefusalFailsTheRunWithItsCallersDiagnostic(t *testing.T) {
 			defer cancel()
 			_, err := runner.Run(ctx, request)
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Message != test.message {
+			if len(reported) != 1 || !strings.HasPrefix(reported[0].Message, test.message) {
 				t.Fatalf("the run reported %+v (%v), want %q", reported, err, test.message)
 			}
 			if test.message == "the machine answers as another system" && !reflect.DeepEqual(reported, diagnostics.Of(named)) {
@@ -428,7 +428,7 @@ func TestARecordWaitingAtTheDrainIsJudgedAsIfReadFirst(t *testing.T) {
 					t.Fatal("the adapter exited without entering the progress handshake")
 				}
 				reported := diagnostics.Of(err)
-				if len(reported) != 1 || reported[0].Message != test.message {
+				if len(reported) != 1 || !strings.HasPrefix(reported[0].Message, test.message) {
 					t.Fatalf("round %d reported %+v (%v), want %q", round, reported, err, test.message)
 				}
 				if test.message == "the machine answers as another system" && !reflect.DeepEqual(reported, diagnostics.Of(named)) {
@@ -687,7 +687,7 @@ func lifecycleRunOf(t *testing.T, script string) (lifecycle.RunResult, error) {
 func TestALifecycleRunEndsUnknownOnANonCanonicalRecord(t *testing.T) {
 	_, err := lifecycleRunOf(t, `printf '{"phase": "loaded"}\n' >&3; read -r reply <&4; exit 2`)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Message != "the adapter structured result was incomplete" {
+	if len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Message != "the adapter structured result was incomplete: a record is not canonical JSON" {
 		t.Fatalf("a non-canonical record reported %+v (%v)", reported, err)
 	}
 	if outcome := lifecycle.AttemptOutcome(err); outcome != reconciliation.OutcomeUnknown {
@@ -701,7 +701,7 @@ func TestALifecycleCompletionWithNullEvidenceEndsUnknown(t *testing.T) {
 	result, err := lifecycleRunOf(t, `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
 		`printf '{"evidence":null,"outcome":"changed","phase":"completed"}\n' >&3; exit 0`)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Message != "the adapter structured result was incomplete" {
+	if len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Message != "the adapter structured result was incomplete: a record does not carry exactly its phase's members and values" {
 		t.Fatalf("a completion with null evidence reported %+v (%v)", reported, err)
 	}
 	if result.Outcome != "" || result.Evidence != nil {

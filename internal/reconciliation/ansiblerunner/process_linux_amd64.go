@@ -516,15 +516,25 @@ func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Endi
 	case adapterprotocol.RetainedOutput:
 		return lifecycle.RunResult{}, failure("lifecycle.unknown", "adapter descendants retained the adapter's output after it exited", remediation)
 	case adapterprotocol.FailedExit:
+		if !j.loaded && j.stop == nil {
+			return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter exited before it loaded its request"+exitDetail(ending.Exit)+", so it performed no effect", remediation)
+		}
 		return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter operation did not complete"+exitDetail(ending.Exit)+j.stopped(), remediation)
 	case adapterprotocol.Incomplete:
-		return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter structured result was incomplete", remediation)
+		return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter structured result was incomplete"+reasonDetail(ending.Reason), remediation)
 	case adapterprotocol.Invalid:
-		return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter capability protocol was invalid", remediation)
+		return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter capability protocol was invalid"+reasonDetail(ending.Reason), remediation)
 	case adapterprotocol.Uncertain:
 		return lifecycle.RunResult{}, failure("lifecycle.unknown", "adapter authorization delivery was uncertain", remediation)
 	}
 	return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter operation has no complete result", remediation)
+}
+
+func reasonDetail(reason string) string {
+	if reason == "" {
+		return ""
+	}
+	return ": " + reason
 }
 
 func exitDetail(exit string) string {

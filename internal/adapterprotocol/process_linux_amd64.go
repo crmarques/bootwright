@@ -3,6 +3,7 @@
 package adapterprotocol
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"io"
@@ -324,6 +325,7 @@ func (s *session) readEnded(err error) {
 	// adapter wrote, so it leaves the failed exit.
 	if !s.ended || s.exited && !errors.Is(err, os.ErrClosed) {
 		s.end(Incomplete, nil)
+		s.ending.Reason = readFault(err)
 		s.exited = false
 	}
 	s.breach()
@@ -340,6 +342,7 @@ func (s *session) receive(ctx context.Context, record Record) {
 		// failed exit is read first, so it replaces that failure.
 		if !s.ended || s.exited {
 			s.end(Invalid, nil)
+			s.ending.Reason = "a " + record.Phase + " record this run does not admit at that point"
 		}
 		s.exited = false
 	case verdict.Failure != nil:
@@ -385,6 +388,22 @@ func (s *session) acknowledge(record Record) {
 	default:
 		s.end(Uncertain, nil)
 	}
+}
+
+func readFault(err error) string {
+	switch {
+	case errors.Is(err, errCanonical):
+		return "a record is not canonical JSON"
+	case errors.Is(err, errPhase):
+		return "a record names a phase this run does not admit"
+	case errors.Is(err, errRecord):
+		return "a record does not carry exactly its phase's members and values"
+	case errors.Is(err, errLimit):
+		return "the adapter wrote more records than a run admits"
+	case errors.Is(err, bufio.ErrTooLong):
+		return "a record is longer than its line bound"
+	}
+	return ""
 }
 
 func exitOf(err error) string {

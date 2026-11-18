@@ -17417,3 +17417,17 @@ adapter ([attempt outcomes](../state-reconciliation.md#attempt-outcomes)).
 Guarded by the runner's `failed-exit`, `killed`, `stopped` and `unreachable`
 endings. A death before the request was loaded and a protocol breach's reason
 stay with B1562.
+
+## X590 — An adapter run says why it ended early
+
+### B1580
+
+Under [D276](backlog.md#d276) (audit 006 W1.3, findings E10-02, E06-03 and
+their duplicates), split from [B1562](m1.md#b1562). An adapter that exited
+before it loaded its request read like any failed operation, and a broken
+protocol said only that the result was incomplete or the protocol invalid. The
+first now reads `the adapter exited before it loaded its request (...), so it
+performed no effect`, and the second names what broke it
+([attempt outcomes](../state-reconciliation.md#attempt-outcomes)). Guarded by
+the runner's failed-exit, killed, malformed, out-of-order, non-canonical and
+null-evidence tests.
