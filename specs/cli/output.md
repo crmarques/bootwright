@@ -495,7 +495,10 @@ exit status.
 `source`, `object`, `field`, and `remediation` are omitted when unavailable and
 are never `null`, except that every `error` diagnostic other than `cli.usage`
 carries `remediation`. When the remedy is a Bootwright command, `remediation` is
-exactly that command, with `--context` for a context-backed one. A present source orders `path`, `document`, `line`, and
+exactly that command, with `--context` for a context-backed one. A diagnostic
+raised from a [stop](stops.md) also carries, after `remediation`, `cause` and
+`recovery`, its row's classes, so a script acts on them without parsing the
+code; any other diagnostic omits both. A present source orders `path`, `document`, `line`, and
 `column`; positive coordinates are one-based and `0` means unavailable.
 Sensitive explicit-result bytes never appear in this structure.
 

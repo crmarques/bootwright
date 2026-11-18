@@ -205,7 +205,7 @@ func TestAnAdapterStillRunningRefusesTheNextRun(t *testing.T) {
 	_, err = runner.Run(ctx, request)
 	lock := filepath.Join(job, lockName)
 	want := []diagnostics.Diagnostic{{
-		Severity: "error", Code: "runner.adapter-running", Certainty: diagnostics.CertaintyNone,
+		Severity: "error", Code: "runner.adapter-running", Certainty: diagnostics.CertaintyNone, Cause: diagnostics.CauseConcurrency, Recovery: diagnostics.RecoveryWait,
 		Message:     "context alpha's Serve ArtifactServer/artifact-server-lab ended, but processes it started still hold its adapter job lock",
 		Remediation: "end the processes that hold " + lock + ", then repeat the command",
 	}}

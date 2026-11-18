@@ -80,7 +80,7 @@ func (s Stop) Fail(message, remediation string) error {
 	if remediation == "" {
 		remediation = s.Remedy
 	}
-	return &Failure{Diagnostics: []Diagnostic{{Severity: "error", Code: s.Code, Message: message, Remediation: remediation, Certainty: s.Certainty}}}
+	return &Failure{Diagnostics: []Diagnostic{{Severity: "error", Code: s.Code, Message: message, Remediation: remediation, Cause: s.Cause, Recovery: s.Recovery, Certainty: s.Certainty}}}
 }
 
 func Unproved(err error) bool {

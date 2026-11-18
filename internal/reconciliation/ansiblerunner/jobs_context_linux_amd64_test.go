@@ -128,7 +128,7 @@ func TestASameContextRunRefusesNamingTheHeldJob(t *testing.T) {
 	runner.command = func(string, ...string) *exec.Cmd { started = true; return completing() }
 	_, err := runner.Run(context.Background(), adapterRequest(t, &bytes.Buffer{}))
 	want := []diagnostics.Diagnostic{{
-		Severity: "error", Code: "runner.adapter-running", Certainty: diagnostics.CertaintyNone,
+		Severity: "error", Code: "runner.adapter-running", Certainty: diagnostics.CertaintyNone, Cause: diagnostics.CauseConcurrency, Recovery: diagnostics.RecoveryWait,
 		Message:     "context alpha is still running Serve ArtifactServer/artifact-server-lab (adapter operation apply on Machine controller)",
 		Remediation: "wait for it to end, then repeat the command",
 	}}
@@ -482,7 +482,7 @@ func TestAHeldJobWithoutAnAttributableRecordRefusesEveryContext(t *testing.T) {
 			lock := filepath.Join(job, lockName)
 			release := holdLock(t, lock)
 			want := []diagnostics.Diagnostic{{
-				Severity: "error", Code: "runner.adapter-running", Certainty: diagnostics.CertaintyNone,
+				Severity: "error", Code: "runner.adapter-running", Certainty: diagnostics.CertaintyNone, Cause: diagnostics.CauseConcurrency, Recovery: diagnostics.RecoveryWait,
 				Message:     "a lifecycle adapter of no known context still runs and holds its job lock",
 				Remediation: "wait for it to end, or end the processes that hold " + lock + ", then repeat the command",
 			}}

@@ -17656,3 +17656,16 @@ The composition root joins the runner's and the engine's stops. Guarded by
 `TestEveryCatalogedStopIsComposedAndExplained`, which holds the composed
 catalog equal to the spec's rows and explains each, `TestExplainRefusesAnUnknownCode` and its siblings
 and the `help-explain` golden.
+
+## X606 — A stop's diagnostic carries its cause and recovery
+
+### B1596
+
+Under [D276](backlog.md#d276) (audit 006 W2.1, first half of the structured
+output sub-slice; D276 clause (1)), split from [B1563](m1.md#b1563). A
+diagnostic raised from a [stop](../cli/stops.md) now carries its row's `cause`
+and `recovery` after `remediation` in structured output, so a script acts on the
+class of a failure without parsing its code; any other diagnostic omits both
+([JSON output](../cli/output.md#json-output)). Guarded by
+`TestAStopFiresWithItsClassesAndRemedy`. The receipt's stop line and the human
+heading stay with the next sub-slice.

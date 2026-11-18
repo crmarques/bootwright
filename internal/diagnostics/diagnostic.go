@@ -26,6 +26,8 @@ type Diagnostic struct {
 	Object      *ObjectIdentity `json:"object,omitempty"`
 	Field       string          `json:"field,omitempty"`
 	Remediation string          `json:"remediation,omitempty"`
+	Cause       Cause           `json:"cause,omitempty"`
+	Recovery    Recovery        `json:"recovery,omitempty"`
 	Certainty   Certainty       `json:"-"`
 }
 
