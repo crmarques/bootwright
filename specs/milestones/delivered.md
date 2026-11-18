@@ -17758,3 +17758,15 @@ parsing diagnostics; the first four lines are unchanged
 ([the receipt's stop](../cli.md#the-receipts-stop)). Guarded by
 `TestAFailedOperationsReceiptNamesItsStop`. The human heading of a stop stays
 for a later slice.
+
+## X615 — The host firewall's failures are stops
+
+### B1606
+
+Under [D276](backlog.md#d276) (audit 006 W2.3, the first capability), split
+from [B1563](m1.md#b1563). The host firewall capability's 20 lifecycle sites
+raise five [host firewall stops](../cli/stops.md#host-firewall-stops), and
+the composed catalog test now holds every package's stop to its row field by
+field, so a capability's stops need no test of their own. The host firewall
+leaves the ledger. Guarded by `TestEveryCatalogedStopIsComposedAndExplained`
+and the package's tests.

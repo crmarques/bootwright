@@ -62,7 +62,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return plan, err
 	}
 	if input.State == nil {
-		return plan, refusal("lifecycle.state", "host firewall planning requires compiled state", "")
+		return plan, firewallRequestInvalid.Fail("host firewall planning requires compiled state", "")
 	}
 	if c.ports == nil {
 		return plan, nil
@@ -274,7 +274,7 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 	outcome, usable := result.Outcome, result.Outcome.Settled()
 	evidence, err := decodeFirewallEvidence(result.Evidence, execution.Block.RequestDigest)
 	if !usable || err != nil || evidence.Absent != removal || !evidence.Postcondition || firewallEffect(evidence, request, digests, removal) != reconciliation.EffectCompleted {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, refusal("lifecycle.state", "the host firewall adapter did not prove its postcondition on Machine/"+request.Identity.Object, "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, firewallUnproved.Fail("the host firewall adapter did not prove its postcondition on Machine/"+request.Identity.Object, "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
@@ -303,10 +303,10 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		return lifecycle.RunResult{}, request, nil, err
 	}
 	if c.runner == nil {
-		return lifecycle.RunResult{}, request, nil, refusal("lifecycle.state", "the host firewall adapter is not configured", "")
+		return lifecycle.RunResult{}, request, nil, firewallUnconfigured.Fail("the host firewall adapter is not configured", "")
 	}
 	if execution.ApplyOperation == "" {
-		return lifecycle.RunResult{}, request, nil, refusal("lifecycle.state", "the host firewall of Machine/"+request.Identity.Object+" has no original apply operation", "")
+		return lifecycle.RunResult{}, request, nil, firewallRecordsMissing.Fail("the host firewall of Machine/"+request.Identity.Object+" has no original apply operation", "")
 	}
 	values := map[string]string{}
 	var materials []lifecycle.MaterialFile
@@ -358,7 +358,7 @@ func firewallContents(request FirewallRequest, mark string) (string, map[string]
 	}
 	data, err := json.Marshal(contents)
 	if err != nil {
-		return "", nil, refusal("lifecycle.state", "the host firewall services cannot be encoded", "")
+		return "", nil, firewallRequestInvalid.Fail("the host firewall services cannot be encoded", "")
 	}
 	return string(data), digests, nil
 }
@@ -369,7 +369,7 @@ func decodeFirewallEvidence(data []byte, digest string) (FirewallEvidence, error
 		return FirewallEvidence{}, err
 	}
 	if evidence.Request != digest || evidence.Version != FirewallEvidenceVersion || evidence.Retired {
-		return FirewallEvidence{}, refusal("lifecycle.state", "host firewall evidence names another request or version", "")
+		return FirewallEvidence{}, firewallEvidenceMismatch.Fail("host firewall evidence names another request or version", "")
 	}
 	return evidence, nil
 }

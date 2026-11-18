@@ -26,7 +26,6 @@ func stopLedger() map[string]int {
 		"internal/machine/hardware":                      11,
 		"internal/machine/power":                         17,
 		"internal/managedos/diskdiscovery":               31,
-		"internal/managedos/hostfirewall":                20,
 		"internal/managedos/installation":                120,
 		"internal/managedos/media":                       1,
 		"internal/managedos/physicalerase":               29,

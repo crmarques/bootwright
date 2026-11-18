@@ -147,3 +147,15 @@ refusals of a decision and its plan before any effect.
 | `prepare.unsupported` | operation | none | build | - | none | this executable registers no preparation for the requested owner | use a build that registers the preparation |
 | `authorize.relaxation-changed` | operation | none | input | - | fix-then-repeat | an operation continues only under the erase relaxations its plan froze, and the invocation names others | continue it naming the relaxations its plan froze, or replace it with a fresh destroy |
 | `diff.context-moved` | context | none | concurrency | - | repeat | the context changed while diff read it | repeat the diff |
+
+### Host firewall stops
+
+The managed OS host firewall capability's stops (`internal/managedos/hostfirewall`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `firewall.request-invalid` | block | none | defect | - | none | the host firewall request a plan composed breaks its bounds or its shape, so no adapter ran | report the message as a defect |
+| `firewall.unconfigured` | block | none | defect | - | none | the host firewall capability runs without its adapter | report the message as a defect |
+| `firewall.records-missing` | block | none | records | - | abandon-context | the host firewall block names no apply its evidence came from | restore the context store from a backup |
+| `firewall.evidence-mismatch` | block | possible | records | - | repeat | the host firewall evidence names another request or version than the block froze | repeat the operation, which observes the firewall again |
+| `firewall.unproved` | block | unproved | target | - | repeat | the host firewall adapter ended without proving its postcondition | repeat the operation, which observes the firewall before anything else starts |

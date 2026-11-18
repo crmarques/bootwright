@@ -175,7 +175,7 @@ func FirewallRequests(catalog api.Catalog, controllerMachine, contextName string
 			return nil, err
 		}
 		if slices.ContainsFunc(byMachine[requirement.Machine], func(other HostPortRequirement) bool { return other.Publisher == requirement.Publisher }) {
-			return nil, refusal("lifecycle.state", "two host port requirements of "+requirement.Publisher+" name Machine/"+requirement.Machine, "")
+			return nil, firewallRequestInvalid.Fail("two host port requirements of "+requirement.Publisher+" name Machine/"+requirement.Machine, "")
 		}
 		byMachine[requirement.Machine] = append(byMachine[requirement.Machine], requirement)
 	}
@@ -237,7 +237,7 @@ func FirewallRequests(catalog api.Catalog, controllerMachine, contextName string
 func firewallRequestFor(install installation.Request, contextName string, requirements []HostPortRequirement) (FirewallRequest, error) {
 	machine := install.Identity.Object
 	if len(requirements) > maxFirewallServices {
-		return FirewallRequest{}, refusal("lifecycle.state", "Machine/"+machine+" holds more than "+strconv.Itoa(maxFirewallServices)+" host port requirements", "")
+		return FirewallRequest{}, firewallRequestInvalid.Fail("Machine/"+machine+" holds more than "+strconv.Itoa(maxFirewallServices)+" host port requirements", "")
 	}
 	slices.SortFunc(requirements, func(a, b HostPortRequirement) int { return strings.Compare(a.Publisher, b.Publisher) })
 	request := FirewallRequest{
@@ -267,20 +267,20 @@ func validRequirement(requirement HostPortRequirement) error {
 	subject := "the host port requirement of " + requirement.Publisher + " on Machine/" + requirement.Machine
 	switch {
 	case requirement.Machine == "" || !firewallPublisher.MatchString(requirement.Publisher):
-		return refusal("lifecycle.state", "a host port requirement names no Machine or publishing block", "")
+		return firewallRequestInvalid.Fail("a host port requirement names no Machine or publishing block", "")
 	case len(requirement.Addresses) == 0 && len(requirement.Networks) == 0 || len(requirement.Networks) > maxFirewallNetworks || len(requirement.Addresses) > maxFirewallAddresses:
-		return refusal("lifecycle.state", subject+" names no network or more than "+strconv.Itoa(maxFirewallNetworks), "")
+		return firewallRequestInvalid.Fail(subject+" names no network or more than "+strconv.Itoa(maxFirewallNetworks), "")
 	case len(requirement.Networks) != 0 && !singleHost(requirement.Networks[0]):
-		return refusal("lifecycle.state", subject+" does not name its virtual address as a single-host prefix first", "")
+		return firewallRequestInvalid.Fail(subject+" does not name its virtual address as a single-host prefix first", "")
 	case len(requirement.Ports)+len(requirement.Protocols) == 0 || len(requirement.Ports) > maxFirewallPorts || len(requirement.Protocols) > maxFirewallProtocols:
-		return refusal("lifecycle.state", subject+" admits nothing or more than its bound", "")
+		return firewallRequestInvalid.Fail(subject+" admits nothing or more than its bound", "")
 	}
 	return nil
 }
 
 func validFirewallRequest(request FirewallRequest) error {
 	invalid := func(message string) error {
-		return refusal("lifecycle.state", "the host firewall request of Machine/"+request.Identity.Object+" "+message, "")
+		return firewallRequestInvalid.Fail("the host firewall request of Machine/"+request.Identity.Object+" "+message, "")
 	}
 	if request.Version != FirewallImplementation || request.Identity.Block != firewallRequestBlockID(request) || !api.ValidLexical(api.LexicalName, request.Identity.Context) {
 		return invalid("names another block or version")
@@ -331,36 +331,36 @@ func validFirewallRequest(request FirewallRequest) error {
 func validService(service FirewallService) error {
 	if len(service.Networks) == 0 && len(service.Addresses) == 0 || len(service.Networks) > maxFirewallNetworks || len(service.Addresses) > maxFirewallAddresses || len(service.Ports)+len(service.Protocols) == 0 ||
 		len(service.Ports) > maxFirewallPorts || len(service.Protocols) > maxFirewallProtocols {
-		return refusal("lifecycle.state", "holds a service outside its bounds", "")
+		return firewallRequestInvalid.Fail("holds a service outside its bounds", "")
 	}
 	if len(service.Networks) > 0 && !singleHost(service.Networks[0]) {
-		return refusal("lifecycle.state", "does not name its virtual address as a single-host prefix first", "")
+		return firewallRequestInvalid.Fail("does not name its virtual address as a single-host prefix first", "")
 	}
 	if len(service.Addresses) != 0 && len(service.Networks) != 0 {
-		return refusal("lifecycle.state", "a firewall service mixes exact addresses and interface networks", "")
+		return firewallRequestInvalid.Fail("a firewall service mixes exact addresses and interface networks", "")
 	}
 	for _, address := range service.Addresses {
 		if !api.ValidLexical(api.LexicalHost, address) {
-			return refusal("lifecycle.state", "a firewall service names an invalid listener address", "")
+			return firewallRequestInvalid.Fail("a firewall service names an invalid listener address", "")
 		}
 	}
 	seen := map[string]bool{}
 	for _, network := range service.Networks {
 		prefix, err := netip.ParsePrefix(network)
 		if err != nil || prefix.Masked() != prefix || prefix.String() != network || seen[network] {
-			return refusal("lifecycle.state", "names a network that is not one canonical CIDR", "")
+			return firewallRequestInvalid.Fail("names a network that is not one canonical CIDR", "")
 		}
 		seen[network] = true
 	}
 	for index, port := range service.Ports {
 		if port.Number < 1 || port.Number > 65535 || port.Transport != "tcp" && port.Transport != "udp" ||
 			index > 0 && cmp.Or(strings.Compare(service.Ports[index-1].Transport, port.Transport), cmp.Compare(service.Ports[index-1].Number, port.Number)) >= 0 {
-			return refusal("lifecycle.state", "names a port that is not a sorted TCP or UDP port", "")
+			return firewallRequestInvalid.Fail("names a port that is not a sorted TCP or UDP port", "")
 		}
 	}
 	for index, protocol := range service.Protocols {
 		if !firewallProtocol.MatchString(protocol) || index > 0 && service.Protocols[index-1] >= protocol {
-			return refusal("lifecycle.state", "names a protocol that is not a sorted IP protocol name", "")
+			return firewallRequestInvalid.Fail("names a protocol that is not a sorted IP protocol name", "")
 		}
 	}
 	return nil
