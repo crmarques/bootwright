@@ -195,7 +195,7 @@ func requireRefusal(t *testing.T, journey *lifecycle.CapabilityJourney, adapter 
 		{Severity: "error", Code: "lifecycle.unknown", Message: "this removal cannot prove what these effects left behind, so it registered nothing: " + lostMachine,
 			Remediation: "do what the diagnostic of each reports, then repeat bootwright destroy --context lab --authorize data-loss=<digest bootwright plan prints>"},
 	}
-	if got := diagnostics.Of(err); !slices.Equal(got, want) {
+	if got := withoutObjects(diagnostics.Of(err)); !slices.Equal(got, want) {
 		t.Fatalf("the refusal reported %+v, want %+v", got, want)
 	}
 	if calls := adapter.took(); !slices.Equal(calls, []string{"observe", "observe"}) {
@@ -322,4 +322,13 @@ func TestADriftedLibvirtMachineWhoseApplyIsUnknownIsRemovedByItsDestroy(t *testi
 	}
 	adapter.set(func(h *hypervisor) { h.stopped = true })
 	requireRemoved(t, journey, adapter)
+}
+
+// withoutObjects drops the block object every cause names, for comparisons
+// that pin only the text.
+func withoutObjects(reported []diagnostics.Diagnostic) []diagnostics.Diagnostic {
+	for index := range reported {
+		reported[index].Object = nil
+	}
+	return reported
 }

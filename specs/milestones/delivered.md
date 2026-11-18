@@ -17316,3 +17316,17 @@ record that carries `failure`, as for every optional member.
 Moved from the backlog's parked items, 2026-11-18, and delivered by the same
 change: a block's attempt log records why its attempt did not complete, as
 `cause`, `<code>: <message>`.
+
+## X581 — A block's cause names its object
+
+### B1571
+
+Under [D276](backlog.md#d276) (audit 006 W1.2, findings E05-03, O01-05 and
+their duplicates), split from [B1562](m1.md#b1562). A block's failure
+diagnostics carried no object, although its warnings did, so with several
+failed blocks an operator could not pair a cause with its row. Each diagnostic
+a block's cause reports that names no object now names the block's own
+([lifecycle and status results](../cli/output.md#lifecycle-and-status-results)).
+Guarded by `TestAFailedAttemptsCauseIsKeptAndShown`. The rest of W1.2 (engine
+order, the step that was running, pending reasons, the receipt of an early
+stop, the paused destroy) stays with B1562.

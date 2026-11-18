@@ -2830,8 +2830,9 @@ func TestAFailedAttemptsCauseIsKeptAndShown(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	h.capability.errorFor = map[string]error{"artifact-server-lab": diagnostics.NewFailureWithRemediation("lifecycle.state", "the adapter operation did not complete", "", "read its output")}
-	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
-		t.Fatal("a failed block reported success")
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Object == nil || reported[0].Object.Name != h.capability.definitions[0].Object {
+		t.Fatalf("the failed block's cause names no block object: %+v", reported)
 	}
 	operation, states := durableOperation(t, h)
 	if states["artifact-server-lab"] != reconciliation.BlockFailed {

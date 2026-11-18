@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -461,7 +462,7 @@ func (c *scheduler) reported(block string) []diagnostics.Diagnostic {
 		return nil
 	}
 	if reported := diagnostics.Of(err); len(reported) != 0 {
-		return reported
+		return c.named(block, reported)
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return nil
@@ -470,7 +471,20 @@ func (c *scheduler) reported(block string) []diagnostics.Diagnostic {
 	if c.unstarted[block] {
 		message = "the attempt of the block " + block + " could not record its start, so it performed no effect"
 	}
-	return diagnostics.Of(failure("runtime.internal", message, ""))
+	return c.named(block, diagnostics.Of(failure("runtime.internal", message, "")))
+}
+
+func (c *scheduler) named(id string, reported []diagnostics.Diagnostic) []diagnostics.Diagnostic {
+	block, ok := c.plan.Block(id)
+	if !ok || block.Kind == "" || block.Object == "" {
+		return reported
+	}
+	for index := range reported {
+		if reported[index].Object == nil {
+			reported[index].Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: block.Kind, Name: block.Object}
+		}
+	}
+	return reported
 }
 
 func (c *scheduler) warn(finished step) {

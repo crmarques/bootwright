@@ -31,9 +31,18 @@ func requireUnresolvedRefusal(t *testing.T, err error, why Unresolved) {
 		{Severity: "error", Code: "lifecycle.unknown", Message: "this removal cannot prove what these effects left behind, so it registered nothing: b",
 			Remediation: "do what the diagnostic of each reports, then repeat bootwright destroy --context lab"},
 	}
-	if got := diagnostics.Of(err); !slices.Equal(got, want) {
+	if got := withoutObjects(diagnostics.Of(err)); !slices.Equal(got, want) {
 		t.Fatalf("the removal reported %+v, want %+v", got, want)
 	}
+}
+
+// withoutObjects drops the block object the scheduler names on every cause,
+// for comparisons that pin only the text.
+func withoutObjects(reported []diagnostics.Diagnostic) []diagnostics.Diagnostic {
+	for index := range reported {
+		reported[index].Object = nil
+	}
+	return reported
 }
 
 // unresolvedStatus is what status names about b: the operation holding it and

@@ -36,7 +36,7 @@ func TestAnObservationThatCouldNotRunIsRecordedAndStatusNamesIt(t *testing.T) {
 	}
 	t.Run("a diagnosed failure", func(t *testing.T) {
 		h, err := resolve(t, unreachable)
-		if got := diagnostics.Of(err); len(got) != 2 || got[0] != diagnostics.Of(unreachable)[0] || !unresolvedOutcome(got[1]) {
+		if got := withoutObjects(diagnostics.Of(err)); len(got) != 2 || got[0] != diagnostics.Of(unreachable)[0] || !unresolvedOutcome(got[1]) {
 			t.Fatalf("the apply refused with %+v, want the observation's failure", got)
 		}
 		want := operationstore.ObservationFailure{Code: "lifecycle.state", Message: "the adapter could not reach Machine controller",
@@ -57,7 +57,7 @@ func TestAnObservationThatCouldNotRunIsRecordedAndStatusNamesIt(t *testing.T) {
 	})
 	t.Run("an undiagnosed failure", func(t *testing.T) {
 		h, err := resolve(t, errors.New("lost"))
-		if got := diagnostics.Of(err); len(got) != 2 || got[0] != diagnostics.Of(unresolvedFailure(block, unexplained, "bootwright apply --context lab"))[0] || !unresolvedOutcome(got[1]) {
+		if got := withoutObjects(diagnostics.Of(err)); len(got) != 2 || got[0] != diagnostics.Of(unresolvedFailure(block, unexplained, "bootwright apply --context lab"))[0] || !unresolvedOutcome(got[1]) {
 			t.Fatalf("the apply refused with %+v, want the unresolved diagnosis", got)
 		}
 		if recorded := settlingResolution(t, h, block).Failure; recorded != nil {

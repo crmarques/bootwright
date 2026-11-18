@@ -354,7 +354,9 @@ what an `apply` or `destroy` reached for those blocks: `id`, `description`,
 `stage`, `state`, `outcome`, `attempts`, for an unproved block `unresolved`, and
 for a block that is not `done` whose latest attempt recorded a cause `failure`,
 `{code, reason, remedy}`, the first diagnostic that attempt reported, its remedy
-omitted when it had none.
+omitted when it had none. Each diagnostic a block's cause reports that names no
+object names the block's own, so the causes of several failed blocks pair with
+their rows.
 For these results and `status`, `outcome` is the latest attempt or resolution
 outcome: `unknown` while unfinished, or the block state when never attempted.
 `stages` names the stages the plan holds; `until` is the `--until` add-on
