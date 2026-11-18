@@ -861,6 +861,36 @@ func cliGoldens() []cliGolden {
 				"    the apply did not complete\n" +
 				"    Next: continue it with bootwright apply --context lab\n",
 		},
+		{
+			// The engine reports each block's cause in frozen plan order, then
+			// the operation's own; the output keeps that order, not the sort.
+			golden: "cli-apply-failed-in-engine-order", args: "apply --yes", code: 1,
+			record: func(r *dispatchRecord) {
+				r.result.lifecycleOperation = operation("failed")
+				r.err = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{
+					{Severity: "error", Code: "lifecycle.unknown", Message: "the adapter run of block machine-rhel-01 reached its deadline of 2h0m0s before it ended, so its effect is unproved",
+						Remediation: "run bootwright apply --context lab, which observes the effect before anything else",
+						Object:      &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "Machine", Name: "rhel-01"}},
+					{Severity: "error", Code: "lifecycle.state", Message: "the apply did not complete", Remediation: "continue it with bootwright apply --context lab"},
+				}}
+			},
+			stderr: "  error  Machine/rhel-01\n    lifecycle.unknown\n" +
+				"    the adapter run of block machine-rhel-01 reached its deadline of 2h0m0s before it ended, so\n    its effect is unproved\n" +
+				"    Next: run bootwright apply --context lab, which observes the effect before anything else\n\n" +
+				"  error  lifecycle.state\n    the apply did not complete\n    Next: continue it with bootwright apply --context lab\n",
+		},
+		{
+			golden: "cli-apply-failed-in-engine-order-json", args: "apply --yes --output json", code: 1,
+			record: func(r *dispatchRecord) {
+				r.result.lifecycleOperation = operation("failed")
+				r.err = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{
+					{Severity: "error", Code: "lifecycle.unknown", Message: "the adapter run of block machine-rhel-01 reached its deadline of 2h0m0s before it ended, so its effect is unproved",
+						Remediation: "run bootwright apply --context lab, which observes the effect before anything else",
+						Object:      &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "Machine", Name: "rhel-01"}},
+					{Severity: "error", Code: "lifecycle.state", Message: "the apply did not complete", Remediation: "continue it with bootwright apply --context lab"},
+				}}
+			},
+		},
 		{golden: "cli-apply-paused", args: "apply --yes --stage infrastructure-services,substrates", record: func(r *dispatchRecord) { r.result.lifecycleOperation = operation("paused") }},
 		{
 			golden: "cli-apply-unknown", args: "apply --yes", code: 1,

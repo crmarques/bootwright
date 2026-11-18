@@ -128,5 +128,6 @@ func displayOperation(result *lifecycle.OperationResult) operationPresentation {
 }
 
 func writeStructuredOperation(out io.Writer, path string, operation *lifecycle.OperationResult, reported []diagnostic, exitCode int) error {
-	return writeStructuredResult(out, path, displayOperation(operation), append(slices.Clone(operation.Warnings), reported...), operation.Logs, exitCode)
+	return writeEnvelope(out, commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(path), OK: exitCode == 0, ExitCode: exitCode, Result: displayOperation(operation),
+		Diagnostics: displayDiagnosticsInOrder(append(slices.Clone(operation.Warnings), reported...)), Logs: displayLines(operation.Logs)})
 }

@@ -51,7 +51,7 @@ func (r *Runner) writeExecutedLifecycle(path string, result commandResult, diagn
 	if err := writeLifecycleOperation(r.config.Out, result.lifecycleOperation); err != nil {
 		return true, err
 	}
-	return true, writeDiagnostics(r.config.Out, r.config.ErrOut, path, append(slices.Clone(result.lifecycleOperation.Warnings), diagnostics...), 1, false, nil)
+	return true, writeHumanDiagnostics(r.config.ErrOut, displayDiagnosticsInOrder(append(slices.Clone(result.lifecycleOperation.Warnings), diagnostics...)))
 }
 
 // interruptedLifecycle reports an interrupt of an apply or destroy that

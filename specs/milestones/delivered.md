@@ -17377,3 +17377,18 @@ prints that output, with its context, operation, block and attempt
 ([private operation logs](../cli/output.md#private-operation-logs)). Guarded by
 `TestAFailedAttemptNamesItsBlockAndOutputFile` and the
 `cli-status-unresolved` goldens.
+
+## X585 — A failed operation's causes keep the engine's order
+
+### B1575
+
+Under [D276](backlog.md#d276) (audit 006 W1.2, finding O02-01 and its
+duplicates), split from [B1562](m1.md#b1562). The CLI sorted a failed apply's
+or destroy's diagnostics by code and object, so the operation's own summary
+could print before the block causes it follows from. An operation that
+registered and failed now prints its warnings, its blocks' causes in frozen plan
+order and its own diagnostic last, in both modes
+([diagnostic taxonomy and order](../cli/output.md#diagnostic-taxonomy-and-order)).
+Guarded by the `cli-apply-failed-in-engine-order` goldens. Still with B1562 from
+W1.2: the step that was running, the pending reasons, the receipt of an early
+stop and the paused destroy.

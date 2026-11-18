@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "apply",
+  "ok": false,
+  "exitCode": 1,
+  "result": {
+    "context": {
+      "name": "lab",
+      "mode": ""
+    },
+    "verb": "apply",
+    "steps": [],
+    "blocks": [
+      {
+        "id": "artifact-server-lab-artifacts",
+        "description": "serve artifacts for lab-artifacts on controller",
+        "stage": "infrastructure-services",
+        "state": "done",
+        "outcome": "",
+        "attempts": 0
+      },
+      {
+        "id": "substrate-host-lab-libvirt",
+        "description": "realize the libvirt host of lab-libvirt on controller",
+        "stage": "substrates",
+        "state": "done",
+        "outcome": "",
+        "attempts": 0
+      },
+      {
+        "id": "machine-rhel-01",
+        "description": "realize the virtual machine rhel-01 and its emulated BMC",
+        "stage": "machines",
+        "state": "failed",
+        "outcome": "",
+        "attempts": 0
+      },
+      {
+        "id": "os-install-rhel-01",
+        "description": "install the operating system of rhel-01",
+        "stage": "machines",
+        "state": "pending",
+        "outcome": "",
+        "attempts": 0
+      }
+    ],
+    "settled": false,
+    "recovered": "",
+    "next": "bootwright apply --context lab",
+    "receipt": {
+      "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+      "verb": "apply",
+      "state": "failed",
+      "next": "continue-apply"
+    }
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "lifecycle.unknown",
+      "message": "the adapter run of block machine-rhel-01 reached its deadline of 2h0m0s before it ended, so its effect is unproved",
+      "object": {
+        "apiVersion": "bootwright.io/v1alpha1",
+        "kind": "Machine",
+        "name": "rhel-01"
+      },
+      "remediation": "run bootwright apply --context lab, which observes the effect before anything else"
+    },
+    {
+      "severity": "error",
+      "code": "lifecycle.state",
+      "message": "the apply did not complete",
+      "remediation": "continue it with bootwright apply --context lab"
+    }
+  ],
+  "logs": [
+    "contexts/lab/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/operation.jsonl"
+  ]
+}

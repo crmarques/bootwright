@@ -1250,8 +1250,11 @@ Diagnostics are sorted by:
 8. message.
 
 Within a sort key, unavailable values sort first. Unsourced diagnostics follow
-sourced ones in the same remaining order. JSON and human modes share
-membership and order. Two diagnostics are
+sourced ones in the same remaining order. An `apply` or `destroy` that
+registered its operation and then failed is the exception: its diagnostics keep
+the engine's order, its warnings, then each block's causes in frozen plan
+order, then the operation's own, so the last one reads as the consequence of
+those before it. JSON and human modes share membership and order. Two diagnostics are
 duplicates only when every present or absent member is equal.
 
 ## Private operation logs
