@@ -17498,3 +17498,16 @@ commands now run in the token's directory with relative paths
 ([private consumer publication](../infrastructure-services.md#private-consumer-publication)).
 A role rule fails any command whose argv names the token or a default built
 from it; it flagged all seven old commands.
+
+## X596 — A local firewall start keeps SSH reachable
+
+### B1586
+
+Under [D276](backlog.md#d276) (audit 006 W6.4, finding C06-03), split from
+[B1567](m1.md#b1567). Starting firewalld on a provided host proved its SSH
+admission only when Bootwright reached the host over SSH; a local start, on the
+controller itself, could refuse new logins when sshd listened on another port
+or a zone admitted no SSH. A local start now proves every port a running sshd
+listens on in the zone of every connected interface, and refuses with
+`ssh-admission` otherwise ([managed OS implementations](../managed-os.md#implementations)).
+Guarded by `test_managedos_host_firewall_admission.py`.

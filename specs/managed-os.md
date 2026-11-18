@@ -2157,8 +2157,10 @@ still proves its own substrate can do so.
 On an explicitly managed provided host, apply installs firewalld and enables
 and starts its daemon. It refuses to start alongside another active firewall
 service. Before starting over SSH, it proves the connection's port admitted
-in its interface's configured NetworkManager zone; ambiguous or unproved
-access refuses. Destroy retains the shared package and daemon enablement.
+in its interface's configured NetworkManager zone. Before starting locally,
+where an operator may still be logged in over SSH, it proves every port a
+running sshd listens on (`sshd -T`) admitted in the zone of every connected
+interface. Ambiguous or unproved access refuses with `ssh-admission`. Destroy retains the shared package and daemon enablement.
 Preflight, plan and observation never prepare a daemon or change a rule.
 
 The frozen `installation.FirewallRequest` carries either direct local or

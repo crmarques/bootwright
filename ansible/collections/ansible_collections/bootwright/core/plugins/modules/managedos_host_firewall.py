@@ -10,6 +10,8 @@ description:
   - Runs the shared host firewall worker on the selected lifecycle placement.
   - Apply enables and starts firewalld. Removal retains daemon enablement.
   - Refuses a reload that would discard unrelated runtime configuration.
+  - Before starting firewalld locally, proves that every zone a connected
+    interface uses admits every port a running sshd listens on.
 options:
   operation:
     description: The selected operation.
@@ -80,6 +82,8 @@ from ansible_collections.bootwright.core.plugins.module_utils import managedos_f
 
 SYSTEMCTL = "/usr/bin/systemctl"
 OFFLINE = "/usr/bin/firewall-offline-cmd"
+NMCLI = "/usr/bin/nmcli"
+SSHD = "/usr/sbin/sshd"
 ZONE_HEADER = re.compile(worker.ZONE.pattern + r"(?: \((?:default|active)(?:, (?:default|active))?\))?")
 
 
@@ -160,18 +164,13 @@ def service_ssh_port(guest, port):
     return "%d/tcp" % port in fields["ports"].split()
 
 
-def ssh_admitted(guest, address, port):
-    """Before remote startup, prove SSH in the interface's configured NM zone."""
-    offline_ssh_shape(guest)
-    found = guest.addresses()
-    interfaces, complete = guest.service_interfaces({"addresses": [address]}, found)
-    if not complete:
-        raise worker.failed("ssh-admission")
-    code, output = guest.run(["/usr/bin/nmcli", "--get-values", "GENERAL.CONNECTION", "device", "show", interfaces[0]])
+def zone_of(guest, interface):
+    """The firewalld zone an interface's NetworkManager connection configures."""
+    code, output = guest.run([NMCLI, "--get-values", "GENERAL.CONNECTION", "device", "show", interface])
     connection = output.decode("utf-8").strip() if code == 0 else ""
     if not connection or "\n" in connection or len(connection) > 256:
         raise worker.failed("ssh-admission")
-    code, output = guest.run(["/usr/bin/nmcli", "--get-values", "connection.zone", "connection", "show", connection])
+    code, output = guest.run([NMCLI, "--get-values", "connection.zone", "connection", "show", connection])
     if code != 0:
         raise worker.failed("ssh-admission")
     zone = output.strip()
@@ -179,15 +178,69 @@ def ssh_admitted(guest, address, port):
         code, zone = guest.run([OFFLINE, "--get-default-zone"])
         if code != 0:
             raise worker.failed("ssh-admission")
-    zone = worker.token(zone, worker.ZONE)
+    return worker.token(zone, worker.ZONE)
+
+
+def admits(guest, zone, port):
     code, _output = guest.run([OFFLINE, "--zone=" + zone, "--query-port=%d/tcp" % port])
     if code == 0:
-        return
+        return True
     if port == 22:
         code, _output = guest.run([OFFLINE, "--zone=" + zone, "--query-service=ssh"])
-        if code == 0 and service_ssh_port(guest, port):
-            return
-    raise worker.failed("ssh-admission")
+        return code == 0 and service_ssh_port(guest, port)
+    return False
+
+
+def ssh_admitted(guest, address, port):
+    """Before remote startup, prove SSH in the interface's configured NM zone."""
+    offline_ssh_shape(guest)
+    found = guest.addresses()
+    interfaces, complete = guest.service_interfaces({"addresses": [address]}, found)
+    if not complete:
+        raise worker.failed("ssh-admission")
+    if not admits(guest, zone_of(guest, interfaces[0]), port):
+        raise worker.failed("ssh-admission")
+
+
+def listening_ports(guest):
+    """The ports a running sshd listens on, as its effective configuration says."""
+    code, _output = guest.run([SYSTEMCTL, "is-active", "sshd.service"])
+    if code != 0:
+        return []
+    code, output = guest.run([SSHD, "-T"])
+    if code != 0:
+        raise worker.failed("ssh-admission")
+    ports = set()
+    for line in output.decode("ascii", "replace").splitlines():
+        key, _separator, value = line.partition(" ")
+        if key == "port":
+            if not value.strip().isdigit() or not 0 < int(value) < 65536:
+                raise worker.failed("ssh-admission")
+            ports.add(int(value))
+    if not ports:
+        raise worker.failed("ssh-admission")
+    return sorted(ports)
+
+
+def local_ssh_admitted(guest):
+    """Before a local startup, prove every port sshd listens on in every zone a connected interface uses."""
+    ports = listening_ports(guest)
+    if not ports:
+        return
+    offline_ssh_shape(guest)
+    code, output = guest.run([NMCLI, "--get-values", "DEVICE,STATE", "device"])
+    if code != 0:
+        raise worker.failed("ssh-admission")
+    devices = []
+    for line in output.decode("utf-8", "replace").splitlines():
+        device, _separator, state = line.rpartition(":")
+        if state == "connected" and device and device != "lo":
+            devices.append(device)
+    if not devices:
+        raise worker.failed("ssh-admission")
+    for zone in sorted({zone_of(guest, device) for device in devices}):
+        if not all(admits(guest, zone, port) for port in ports):
+            raise worker.failed("ssh-admission")
 
 
 def prepare(guest, params):
@@ -203,6 +256,8 @@ def prepare(guest, params):
     changed = not running or not enabled
     if changed and params["ssh_port"]:
         ssh_admitted(guest, params["ssh_address"], params["ssh_port"])
+    elif changed:
+        local_ssh_admitted(guest)
     if changed:
         code, _output = guest.run([SYSTEMCTL, "enable", "--now", "firewalld.service"])
         if code != 0:
