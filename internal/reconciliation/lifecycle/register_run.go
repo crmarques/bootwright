@@ -30,7 +30,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		if err != nil {
 			return fail(err)
 		}
-		record.outcome = registered
+		record.outcome, record.operation = registered, operation.ID
 		return operation, plan, log, nil
 	}
 	identity := decided.basis.claimed

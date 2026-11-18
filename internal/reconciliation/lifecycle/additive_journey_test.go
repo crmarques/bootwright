@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"path"
 	"slices"
 	"strings"
 	"testing"
@@ -240,6 +241,48 @@ func TestAnAdditiveRegistrationCrashedBeforeItsIndexWriteLeavesThePredecessorCur
 	}
 	if head, _ := durableOperation(t, f.harness); head.Predecessor != root.ID {
 		t.Fatalf("the repeated apply registered %+v", head)
+	}
+}
+
+func TestAnAdditiveApplyStoppedAfterItRegisteredKeepsItsLineagesBindings(t *testing.T) {
+	t.Parallel()
+	head := "op-" + strings.Repeat("02", 16)
+	for name, fault := range map[string]struct {
+		target string
+		cause  error
+	}{
+		"its operation log cannot be opened": {"append " + path.Join(head, "operation.jsonl"), errors.New("no space")},
+		"its block records cannot be read":   {"read " + path.Join(head, "blocks", "addon-nmstate", "state.json"), errors.New("input/output error")},
+		"it is interrupted":                  {"read " + path.Join(head, "blocks", "addon-nmstate", "state.json"), context.Canceled},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newAdditiveFixture(t)
+			root := f.root(t)
+			f.publish("rev-2", addonBinding("cluster", "nmstate"))
+			if strings.HasPrefix(fault.target, "append ") {
+				f.workspace.logArea.fail[fault.target] = fault.cause
+			} else {
+				f.workspace.area.fail[fault.target] = fault.cause
+			}
+			if _, err := apply(f.harness); err == nil {
+				t.Fatal("an additive apply stopped after its registration reported success")
+			}
+			delete(f.workspace.logArea.fail, fault.target)
+			delete(f.workspace.area.fail, fault.target)
+			registered, _ := durableOperation(t, f.harness)
+			if registered.ID != head || registered.Predecessor != root.ID {
+				t.Fatalf("the fault did not land after the registration: the current operation is %s", registered.ID)
+			}
+			if len(f.capability.applies) != 1 {
+				t.Fatalf("the stopped apply ran %v", f.capability.applies)
+			}
+			for _, binding := range slices.Concat(root.Bindings, registered.Bindings) {
+				if slices.Contains(f.binder.released, binding) {
+					t.Fatalf("released %v, which holds %s, a binding of the lineage", f.binder.released, binding)
+				}
+			}
+		})
 	}
 }
 

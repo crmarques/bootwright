@@ -53,8 +53,8 @@ func (s Service) execute(ctx context.Context, name string, decided operationPlan
 	var keptErr error
 	err = s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
 		result, err = s.run(ctx, tx, decided, binding, material, record)
-		if decided.fresh && decided.verb == reconciliation.Apply && result != nil && result.Receipt.Operation != "" {
-			kept, keptErr = lineageBindings(recordingContext(ctx), s.store(tx), result.Receipt.Operation)
+		if decided.fresh && decided.verb == reconciliation.Apply && record.outcome == registered {
+			kept, keptErr = lineageBindings(recordingContext(ctx), s.store(tx), record.operation)
 		}
 		// The state a completed removal's record left is captured here, after
 		// finish wrote it, because the pristine publication re-proves exactly

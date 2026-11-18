@@ -33,7 +33,8 @@ const (
 // outcome that provably registered nothing gives back exactly what it raised
 // and nothing a newer invocation raised since.
 type registering struct {
-	outcome registration
+	outcome   registration
+	operation string
 	// raised reports that the running evidence is this invocation's to give
 	// back: a running projection it attempted may have landed, whether or not
 	// its publication reported success, or it claimed a directory under
@@ -187,7 +188,7 @@ func (s Service) verifyFreshApply(ctx context.Context, tx Transaction, store Ope
 func (s Service) publish(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, record *registering) error {
 	err := store.Register(ctx, operation, plan)
 	if err == nil {
-		record.outcome = registered
+		record.outcome, record.operation = registered, operation.ID
 		_, _ = store.Reclaim(ctx)
 		return nil
 	}
