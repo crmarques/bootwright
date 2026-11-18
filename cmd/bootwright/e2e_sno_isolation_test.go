@@ -26,8 +26,6 @@ import (
 func TestSNOIsolationFixtures(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join("..", "..", "e2e", "lab-sno-fips-controller")
-	image := "registry.example.test/python@sha256:" + strings.Repeat("a", 64)
-	args := []string{"template", "isolation", filepath.Join(root, "isolation"), "-f", filepath.Join(root, "values.yaml"), "--set", "isolation.image=" + image}
 	for _, test := range []struct {
 		name    string
 		sets    []string
@@ -40,11 +38,7 @@ func TestSNOIsolationFixtures(t *testing.T) {
 		{name: "mutable image", sets: []string{"isolation.image=registry.example.test/python:latest"}, refusal: "image pinned"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			argv := append([]string{}, args...)
-			for _, value := range test.sets {
-				argv = append(argv, "--set", value)
-			}
-			out, err := exec.Command(pinnedHelm(t), argv...).CombinedOutput()
+			out, err := renderSNOIsolation(t, test.sets)
 			if test.refusal != "" {
 				if err == nil || !bytes.Contains(out, []byte(test.refusal)) {
 					t.Fatalf("expected refusal %q: %v %s", test.refusal, err, out)
@@ -54,25 +48,7 @@ func TestSNOIsolationFixtures(t *testing.T) {
 			if err != nil {
 				t.Fatalf("render: %v: %s", err, out)
 			}
-			decoder := yaml.NewDecoder(bytes.NewReader(out))
-			objects := map[string]map[string]any{}
-			for {
-				var object map[string]any
-				if err := decoder.Decode(&object); err == io.EOF {
-					break
-				} else if err != nil {
-					t.Fatal(err)
-				}
-				if len(object) == 0 {
-					continue
-				}
-				meta := object["metadata"].(map[string]any)
-				key := object["kind"].(string) + "/" + stringValue(meta["namespace"]) + "/" + meta["name"].(string)
-				if objects[key] != nil {
-					t.Fatalf("duplicate object %s", key)
-				}
-				objects[key] = object
-			}
+			objects, _ := parseSNOObjects(t, out)
 			configMap := objects["ConfigMap/staging/e2e-isolation-config"]
 			configPath := filepath.Join(t.TempDir(), "config.json")
 			if err := os.WriteFile(configPath, []byte(configMap["data"].(map[string]any)["config.json"].(string)), 0600); err != nil {
@@ -130,6 +106,325 @@ func TestSNOIsolationFixtures(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func renderSNOIsolation(t *testing.T, sets []string) ([]byte, error) {
+	t.Helper()
+	root := filepath.Join("..", "..", "e2e", "lab-sno-fips-controller")
+	argv := []string{"template", "isolation", filepath.Join(root, "isolation"), "-f", filepath.Join(root, "values.yaml"), "--set", "isolation.image=registry.example.test/python@sha256:" + strings.Repeat("a", 64)}
+	for _, value := range sets {
+		argv = append(argv, "--set", value)
+	}
+	return exec.Command(pinnedHelm(t), argv...).CombinedOutput()
+}
+
+func parseSNOObjects(t *testing.T, out []byte) (map[string]map[string]any, map[string]string) {
+	t.Helper()
+	objects := map[string]map[string]any{}
+	sources := map[string]string{}
+	for _, document := range strings.Split(string(out), "---\n# Source: ")[1:] {
+		source, body, _ := strings.Cut(document, "\n")
+		decoder := yaml.NewDecoder(strings.NewReader(body))
+		for {
+			var object map[string]any
+			if err := decoder.Decode(&object); err == io.EOF {
+				break
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if len(object) == 0 {
+				continue
+			}
+			meta := object["metadata"].(map[string]any)
+			key := object["kind"].(string) + "/" + stringValue(meta["namespace"]) + "/" + meta["name"].(string)
+			if objects[key] != nil {
+				t.Fatalf("duplicate object %s", key)
+			}
+			objects[key] = object
+			sources[key] = filepath.Base(source)
+		}
+	}
+	return objects, sources
+}
+
+type snoDrillEnvironment struct {
+	CIDR       string `yaml:"cidr"`
+	AppAddress string `yaml:"appAddress"`
+	Pool       string `yaml:"pool"`
+}
+
+type snoBaseObject struct {
+	Metadata struct {
+		Labels      map[string]string `yaml:"labels"`
+		Annotations map[string]string `yaml:"annotations"`
+	} `yaml:"metadata"`
+	Data map[string]string `yaml:"data"`
+	Spec struct {
+		Domain   string `yaml:"domain"`
+		Host     string `yaml:"host"`
+		Template struct {
+			Metadata struct {
+				Annotations map[string]string `yaml:"annotations"`
+			} `yaml:"metadata"`
+		} `yaml:"template"`
+		EndpointPublishingStrategy struct {
+			LoadBalancer map[string]any `yaml:"loadBalancer"`
+		} `yaml:"endpointPublishingStrategy"`
+		NamespaceSelector struct {
+			MatchLabels map[string]string `yaml:"matchLabels"`
+		} `yaml:"namespaceSelector"`
+		Ingress []struct {
+			From []struct {
+				NamespaceSelector struct {
+					MatchLabels map[string]string `yaml:"matchLabels"`
+				} `yaml:"namespaceSelector"`
+			} `yaml:"from"`
+			Ports []any `yaml:"ports"`
+		} `yaml:"ingress"`
+	} `yaml:"spec"`
+}
+
+func snoBaseFirewall(t *testing.T, object map[string]any) (string, string) {
+	t.Helper()
+	data, err := yaml.Marshal(object)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var firewall struct {
+		Spec struct {
+			Egress []struct {
+				Type string `yaml:"type"`
+				To   struct {
+					CIDRSelector string `yaml:"cidrSelector"`
+				} `yaml:"to"`
+			} `yaml:"egress"`
+		} `yaml:"spec"`
+	}
+	if err := yaml.Unmarshal(data, &firewall); err != nil {
+		t.Fatal(err)
+	}
+	if len(firewall.Spec.Egress) != 1 {
+		t.Fatalf("egress firewall has %d rules, want one Deny", len(firewall.Spec.Egress))
+	}
+	return firewall.Spec.Egress[0].Type, firewall.Spec.Egress[0].To.CIDRSelector
+}
+
+func snoBasePolicyExceptions(t *testing.T, object map[string]any) ([]string, int) {
+	t.Helper()
+	data, err := yaml.Marshal(object)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var policy struct {
+		Spec struct {
+			Egress []struct {
+				To []struct {
+					IPBlock struct {
+						CIDR   string   `yaml:"cidr"`
+						Except []string `yaml:"except"`
+					} `yaml:"ipBlock"`
+				} `yaml:"to"`
+				Ports []any `yaml:"ports"`
+			} `yaml:"egress"`
+		} `yaml:"spec"`
+	}
+	if err := yaml.Unmarshal(data, &policy); err != nil {
+		t.Fatal(err)
+	}
+	if len(policy.Spec.Egress) != 1 {
+		t.Fatalf("egress policy has %d rules, want the drills' single rule", len(policy.Spec.Egress))
+	}
+	var except []string
+	for _, to := range policy.Spec.Egress[0].To {
+		except = append(except, to.IPBlock.Except...)
+	}
+	return except, len(policy.Spec.Egress[0].Ports)
+}
+
+func decodeSNOBase(t *testing.T, object map[string]any) snoBaseObject {
+	t.Helper()
+	data, err := yaml.Marshal(object)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded snoBaseObject
+	if err := yaml.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	return decoded
+}
+
+// The parent runbook's environment drills apply namespaces.yaml,
+// networking.yaml and applications.yaml of the isolation chart rendered in
+// its base profile. The objects are what the drills assert: pods attached to
+// their environment network, the answers "<env>-openshift", each
+// environment's own ingress controller, a firewall that denies the other
+// environment and an egress policy that keeps pods off every other network.
+func TestSNOIsolationBaseProfileRendersTheEnvironmentDrills(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join("..", "..", "e2e", "lab-sno-fips-controller")
+	var values struct {
+		Host struct {
+			Domain string `yaml:"domain"`
+			CIDR   string `yaml:"cidr"`
+		} `yaml:"host"`
+		Guest struct {
+			Address string `yaml:"address"`
+		} `yaml:"guest"`
+		Environments struct {
+			Staging    snoDrillEnvironment `yaml:"staging"`
+			Production snoDrillEnvironment `yaml:"production"`
+		} `yaml:"environments"`
+	}
+	environments := map[string]snoDrillEnvironment{}
+	data, err := os.ReadFile(filepath.Join(root, "values.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(data, &values); err != nil {
+		t.Fatal(err)
+	}
+	environments["staging"], environments["production"] = values.Environments.Staging, values.Environments.Production
+	for _, test := range []struct {
+		name    string
+		sets    []string
+		domain  string
+		host    string
+		cidrs   map[string]string
+		drilled bool
+	}{
+		{name: "default", sets: []string{"isolation.profile=base"}, domain: values.Host.Domain, host: values.Host.CIDR, cidrs: map[string]string{"staging": environments["staging"].CIDR, "production": environments["production"].CIDR}, drilled: true},
+		{name: "no TPM and custom values", sets: []string{"isolation.profile=base", "security.tpm2=false", "host.domain=alternate.example.test", "host.cidr=198.51.100.0/25", "environments.staging.cidr=192.0.2.0/25", "environments.production.cidr=203.0.113.0/25"}, domain: "alternate.example.test", host: "198.51.100.0/25", cidrs: map[string]string{"staging": "192.0.2.0/25", "production": "203.0.113.0/25"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			out, err := renderSNOIsolation(t, test.sets)
+			if err != nil {
+				t.Fatalf("render: %v: %s", err, out)
+			}
+			objects, sources := parseSNOObjects(t, out)
+			for key := range objects {
+				if strings.HasPrefix(key, "EgressIP/") || strings.HasPrefix(key, "MachineConfig/") || key == "ConfigMap/staging/e2e-isolation-config" {
+					t.Errorf("the base profile renders the hardened object %s", key)
+				}
+			}
+			for _, env := range []string{"staging", "production"} {
+				requireSNOBaseEnvironment(t, objects, env, test.domain, test.host, test.cidrs)
+			}
+			if test.drilled {
+				requireSNORunbookNamesTheDefaults(t, filepath.Join(root, "runbook.md"), sources, values.Host.Domain, values.Guest.Address, func(env string) (string, string) {
+					return environments[env].AppAddress, environments[env].Pool
+				})
+			}
+		})
+	}
+	for _, refusal := range []struct {
+		name string
+		sets []string
+		want string
+	}{
+		{name: "unknown profile", sets: []string{"isolation.profile=loose"}, want: "hardened or base"},
+		{name: "no VLANs", sets: []string{"isolation.profile=base", "environments.enabled=false"}, want: "requires environments.enabled=true"},
+		{name: "mutable image", sets: []string{"isolation.profile=base", "isolation.image=registry.example.test/python:latest"}, want: "image pinned"},
+	} {
+		t.Run(refusal.name, func(t *testing.T) {
+			if out, err := renderSNOIsolation(t, refusal.sets); err == nil || !bytes.Contains(out, []byte(refusal.want)) {
+				t.Fatalf("expected refusal %q: %v %s", refusal.want, err, out)
+			}
+		})
+	}
+}
+
+func requireSNOBaseEnvironment(t *testing.T, objects map[string]map[string]any, env, domain, hostCIDR string, cidrs map[string]string) {
+	t.Helper()
+	other := map[string]string{"staging": "production", "production": "staging"}[env]
+	get := func(kind, namespace, name string) snoBaseObject {
+		object := objects[kind+"/"+namespace+"/"+name]
+		if object == nil {
+			t.Fatalf("missing %s/%s in %q", kind, name, namespace)
+		}
+		return decodeSNOBase(t, object)
+	}
+	if labels := get("Namespace", "", env).Metadata.Labels; labels["lab.example.test/environment"] != env {
+		t.Errorf("namespace %s labels = %v", env, labels)
+	}
+	get("Service", env, "app")
+	if got := get("ConfigMap", env, "app").Data["index.html"]; got != env+"-openshift\n" {
+		t.Errorf("%s app answers %q, want %q", env, got, env+"-openshift\n")
+	}
+	if got := get("Deployment", env, "app").Spec.Template.Metadata.Annotations["k8s.v1.cni.cncf.io/networks"]; got != env {
+		t.Errorf("%s app attaches %q, want its environment network", env, got)
+	}
+	if got := get("Pod", env, "probe").Metadata.Annotations["k8s.v1.cni.cncf.io/networks"]; got != env {
+		t.Errorf("%s probe attaches %q, want its environment network", env, got)
+	}
+	if got := get("Route", env, "app").Spec.Host; got != "app."+env+".apps.sno."+domain {
+		t.Errorf("%s route host = %q", env, got)
+	}
+	ingress := get("IngressController", "openshift-ingress-operator", env)
+	if ingress.Spec.Domain != env+".apps.sno."+domain || ingress.Spec.NamespaceSelector.MatchLabels["lab.example.test/environment"] != env {
+		t.Errorf("%s ingress controller = %q selecting %v", env, ingress.Spec.Domain, ingress.Spec.NamespaceSelector.MatchLabels)
+	}
+	if _, limited := ingress.Spec.EndpointPublishingStrategy.LoadBalancer["allowedSourceRanges"]; limited {
+		t.Errorf("%s ingress controller limits source ranges, which the drills do not", env)
+	}
+	isolate := get("NetworkPolicy", env, "isolate")
+	if len(isolate.Spec.Ingress) != 1 || len(isolate.Spec.Ingress[0].Ports) != 0 || len(isolate.Spec.Ingress[0].From) != 2 || isolate.Spec.Ingress[0].From[1].NamespaceSelector.MatchLabels["policy-group.network.openshift.io/ingress"] != "" {
+		t.Errorf("%s isolate policy = %+v, want its own pods and any ingress router on any port", env, isolate.Spec.Ingress)
+	}
+	if kind, cidr := snoBaseFirewall(t, objects["EgressFirewall/"+env+"/default"]); kind != "Deny" || cidr != cidrs[other] {
+		t.Errorf("%s egress firewall = %s %s, want Deny %s", env, kind, cidr, cidrs[other])
+	}
+	except, ports := snoBasePolicyExceptions(t, objects["NetworkPolicy/"+env+"/egress"])
+	if ports != 0 {
+		t.Errorf("%s egress policy limits ports, which the drills do not", env)
+	}
+	for _, want := range []string{"10.128.0.0/14", "172.30.0.0/16", hostCIDR, cidrs[other]} {
+		if !slices.Contains(except, want) {
+			t.Errorf("%s egress policy excepts %v, want it to hold %s", env, except, want)
+		}
+	}
+	if slices.Contains(except, cidrs[env]) {
+		t.Errorf("%s egress policy excepts its own network %s", env, cidrs[env])
+	}
+}
+
+func requireSNORunbookNamesTheDefaults(t *testing.T, runbookPath string, sources map[string]string, domain, nodeAddress string, environment func(string) (string, string)) {
+	t.Helper()
+	data, err := os.ReadFile(runbookPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runbook := string(data)
+	for _, file := range []string{"namespaces", "networking", "applications"} {
+		if !strings.Contains(runbook, "$MANIFESTS/"+file+".yaml") {
+			t.Errorf("runbook drills do not apply %s.yaml", file)
+		}
+		found := false
+		for _, source := range sources {
+			found = found || source == file+".yaml"
+		}
+		if !found {
+			t.Errorf("the base profile renders nothing in %s.yaml", file)
+		}
+	}
+	for _, source := range sources {
+		if !slices.Contains([]string{"namespaces.yaml", "networking.yaml", "applications.yaml"}, source) {
+			t.Errorf("the base profile renders %s, which the drills do not apply", source)
+		}
+	}
+	if !strings.Contains(runbook, "isolation.profile=base") {
+		t.Error("runbook drills do not render the base profile")
+	}
+	wantNamed := []string{nodeAddress}
+	for _, env := range []string{"staging", "production"} {
+		appAddress, pool := environment(env)
+		wantNamed = append(wantNamed, appAddress, strings.Split(pool, "/")[0], "app."+env+".apps.sno."+domain, env+"-openshift")
+	}
+	for _, want := range wantNamed {
+		if !strings.Contains(runbook, want) {
+			t.Errorf("runbook drills no longer name %q, which the rendered defaults use", want)
+		}
 	}
 }
 

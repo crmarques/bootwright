@@ -1,3 +1,5 @@
+{{- $base := eq (include "isolation.profile" .) "base" }}
+{{- $other := dict "staging" .Values.environments.production "production" .Values.environments.staging }}
 {{- range $name, $env := dict "staging" .Values.environments.staging "production" .Values.environments.production }}
 ---
 apiVersion: operator.openshift.io/v1
@@ -16,13 +18,16 @@ spec:
     loadBalancer:
       scope: External
       dnsManagementPolicy: Unmanaged
+{{- if not $base }}
 
       allowedSourceRanges:
         - {{ $env.cidr }}
+{{- end }}
 
   namespaceSelector:
     matchLabels:
       lab.example.test/environment: {{ $name }}
+{{- if not $base }}
 
 ---
 apiVersion: k8s.ovn.org/v1
@@ -37,6 +42,7 @@ spec:
   namespaceSelector:
     matchLabels:
       lab.example.test/environment: {{ $name }}
+{{- end }}
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -52,6 +58,14 @@ spec:
     - Ingress
 
   ingress:
+{{- if $base }}
+    - from:
+        - podSelector: {}
+
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+{{- else }}
     - from:
         - podSelector: {}
 
@@ -66,6 +80,7 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+{{- end }}
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -81,6 +96,31 @@ spec:
     - Egress
 
   egress:
+{{- if $base }}
+    - to:
+        - podSelector: {}
+
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-ingress
+
+          podSelector:
+            matchLabels:
+              ingresscontroller.operator.openshift.io/deployment-ingresscontroller: {{ $name }}
+
+        - ipBlock:
+            cidr: 0.0.0.0/0
+
+            except:
+              - 10.128.0.0/14
+              - 172.30.0.0/16
+              - {{ $.Values.host.cidr }}
+              - {{ (get $other $name).cidr }}
+{{- else }}
     - to:
         - podSelector: {}
 
@@ -127,6 +167,7 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+{{- end }}
 
 ---
 apiVersion: k8s.ovn.org/v1
@@ -137,6 +178,12 @@ metadata:
 
 spec:
   egress:
+{{- if $base }}
+    - type: Deny
+
+      to:
+        cidrSelector: {{ (get $other $name).cidr }}
+{{- else }}
     - type: Allow
 
       to:
@@ -146,4 +193,5 @@ spec:
 
       to:
         cidrSelector: 0.0.0.0/0
+{{- end }}
 {{ end }}

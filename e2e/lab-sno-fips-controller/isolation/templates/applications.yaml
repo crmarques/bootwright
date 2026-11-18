@@ -1,3 +1,4 @@
+{{- $base := eq (include "isolation.profile" .) "base" }}
 {{- range $name := list "staging" "production" }}
 ---
 apiVersion: v1
@@ -7,6 +8,10 @@ metadata:
   namespace: {{ $name }}
 
 data:
+{{- if $base }}
+  index.html: |
+    {{ $name }}-openshift
+{{- else }}
   server.py: |
     """Return the environment and the peer address observed by the server."""
 
@@ -29,6 +34,7 @@ data:
 
 
     ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+{{- end }}
 
 ---
 apiVersion: apps/v1
@@ -48,6 +54,11 @@ spec:
     metadata:
       labels:
         app: app
+{{- if $base }}
+
+      annotations:
+        k8s.v1.cni.cncf.io/networks: {{ $name }}
+{{- end }}
 
     spec:
       automountServiceAccountToken: false
@@ -67,11 +78,19 @@ spec:
             - python3
             - -I
             - -u
+{{- if $base }}
+            - -m
+            - http.server
+            - "8080"
+            - --directory
+            - /opt/app
+{{- else }}
             - /opt/app/server.py
 
           env:
             - name: CASE_ENVIRONMENT
               value: {{ $name }}
+{{- end }}
 
           ports:
             - name: http
@@ -129,6 +148,11 @@ metadata:
 
   labels:
     app: probe
+{{- if $base }}
+
+  annotations:
+    k8s.v1.cni.cncf.io/networks: {{ $name }}
+{{- end }}
 
 spec:
   automountServiceAccountToken: false

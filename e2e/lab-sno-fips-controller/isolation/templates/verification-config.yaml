@@ -1,3 +1,4 @@
+{{- if eq (include "isolation.profile" .) "hardened" }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,3 +8,4 @@ metadata:
 data:
   config.json: |
     {{ dict "nodeName" "master-0" "nodeAddress" .Values.guest.address "domain" .Values.host.domain "environments" (dict "staging" .Values.environments.staging "production" .Values.environments.production) "trunk" .Values.environments.trunk "image" .Values.isolation.image | toJson }}
+{{- end }}

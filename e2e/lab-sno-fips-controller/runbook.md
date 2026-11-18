@@ -2,8 +2,9 @@
 
 For enforced staging/production isolation, dedicated egress addresses and
 automated traffic assertions, use the [strict profile](isolation/runbook.md).
-It reuses this case's two VMs and provisioning steps, then replaces its
-original environment workload checks. It requires a new live qualification.
+It reuses this case's two VMs, provisioning steps and the workload its chart
+renders, then replaces the environment drills with a node filter and a
+verifier. It requires a new live qualification.
 
 A FIPS single-node OpenShift cluster built from a FIPS-mode controller that is
 not the libvirt host. Two contexts run on two controllers:
@@ -48,9 +49,10 @@ whose `serviceAllocation` ties each pool to its IngressController
 [B757](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node)). Bootwright creates the host trunk and VLAN legs through managed `Network`
 objects. The runbook creates only the external app containers and their Podman
 attachment networks on this host, and applies with `oc` the
-namespaces, workloads, IngressControllers, EgressFirewalls and NetworkPolicies under
-`workloads/`, which are outside Bootwright's
-[scope](../../specs/project.md#product-scope). One ledger row per item run.
+namespaces, workloads, IngressControllers, EgressFirewalls and
+NetworkPolicies that the [isolation chart](isolation/Chart.yaml) renders in its
+`base` profile, which
+are outside Bootwright's [scope](../../specs/project.md#product-scope). One ledger row per item run.
 
 MetalLB on a secondary network needs IP forwarding on its interface, and
 Bootwright enables IPv4 forwarding on `br-stg` and `br-prd` alone
@@ -64,8 +66,9 @@ Steps marked **host** run in one Bash session in the checkout being tested on
 this host. Steps marked **FIPS controller** run in an interactive session on
 `fips-controller` opened in step 4. Stop on any unexpected failure; that
 attempt is not a successful run. Use Bash with `set -euo pipefail` in both
-sessions. The base `workloads/` checks use the default addresses and names;
-use the strict profile's rendered fixtures when overriding that topology.
+sessions. The environment drills below name the default addresses and hosts;
+use the strict profile's verifier, which reads its rendered configuration, when
+overriding that topology.
 
 ## Inputs
 
@@ -600,12 +603,24 @@ oc get co                                                                  # eve
 
 ### Environments (with `environments.enabled`)
 
-Hand the workload manifests to this session from the host, then apply them
-here. In the second host terminal:
+The drills apply the objects of the [isolation chart](isolation/Chart.yaml)
+rendered with its `base` profile and the case defaults: pods attached to their
+environment network and the policies these drills assert, with none of the
+hardened profile's EgressIPs, source ranges or node filter, and no TPM2
+requirement. The chart needs a digest-pinned image. In the second host
+terminal, render it and hand the rendered manifests to the FIPS controller:
 
 ```sh
-tar -C e2e/lab-sno-fips-controller -cf - workloads | \
-    bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- tar -xf -
+PROFILE="${PROFILE:-$RUN_DIR/isolation}"
+if ! grep -q '^isolation:' "$VALUES"; then
+    IMAGE=registry.access.redhat.com/ubi9/python-312:latest
+    DIGEST=$(oc image info "$IMAGE" --filter-by-os=linux/amd64 -o json | jq -er '.digest | select(test("^sha256:[a-f0-9]{64}$"))')
+    printf '\nisolation:\n  image: %s@%s\n' "$IMAGE" "$DIGEST" >> "$VALUES"
+fi
+helm template isolation "$CASE/isolation" \
+    -f "$CASE/values.yaml" -f "$VALUES" -f "$PIN_VALUES" \
+    --set isolation.profile=base --output-dir "$PROFILE/rendered"
+bootwright machine cp --context "$CTX_BOOT" --name fips-controller "local:$PROFILE" remote:isolation
 ```
 
 On the FIPS controller, keep the default ingress off both environments, then
@@ -614,17 +629,17 @@ apply each environment and its ingress:
 ```sh
 oc patch ingresscontroller/default -n openshift-ingress-operator --type=merge \
     -p '{"spec":{"namespaceSelector":{"matchExpressions":[{"key":"lab.example.test/environment","operator":"DoesNotExist"}]}}}'
+oc apply -f "$MANIFESTS/namespaces.yaml"
 for env in staging production; do
-    oc apply -f ~/workloads/$env/namespace.yaml
     deadline=$((SECONDS + 600))
     until oc get network-attachment-definitions -n "$env" "$env" --request-timeout=30s > /dev/null 2>&1; do
         if ((SECONDS >= deadline)); then echo 'NAD did not appear within 10 minutes'; exit 1; fi
         sleep 5
     done
     oc get network-attachment-definitions -n "$env"                       # exactly one, named $env
-    oc apply -f ~/workloads/$env/
-    oc apply -f ~/workloads/ingress/$env.yaml
 done
+oc apply -f "$MANIFESTS/networking.yaml"
+oc apply -f "$MANIFESTS/applications.yaml"
 lb_ip() { oc get svc -n openshift-ingress "router-$1" --request-timeout=30s -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null; }
 for env in staging production; do
     oc wait -n "$env" deployment/app --for=condition=Available --timeout=10m
@@ -793,16 +808,14 @@ Record the exact answers of the first run.
 
 ## 10. Destroy the FIPS context (FIPS controller)
 
-For the original environment fixtures, first remove their ingress controllers
-and namespaces in the **FIPS controller** session. Skip this block when
-environments are disabled; the strict profile uses its own final fixture
+For the environment drills' objects, first remove their ingress controllers
+and namespaces in the **FIPS controller** session. Skip this block
+when environments are disabled; the strict profile uses its own final fixture
 cleanup. No LoadBalancer Service may outlive its pool.
 
 ```sh
-for env in staging production; do
-    oc delete -f ~/workloads/ingress/$env.yaml --wait=true
-    oc delete namespace "$env" --wait=true
-done
+oc delete ingresscontroller staging production -n openshift-ingress-operator --wait=true --timeout=5m
+oc delete namespace staging production --wait=true --timeout=10m
 ```
 
 First, with `environments.enabled`, remove the external peers and their

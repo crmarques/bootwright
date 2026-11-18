@@ -29,7 +29,9 @@ NetworkPolicy governs, so pods still reach their own ingress, apps and host
 containers there. The EgressFirewall that denied the other environment's
 network did not stop a pod reaching that environment's MetalLB address
 (`routingViaHost: true`); the reason was not read. The
-case's policies are `workloads/<env>/egress-networkpolicy.yaml`, and its
+case's policies (retired static manifests, since replaced by the `egress`
+NetworkPolicy of its isolation chart,
+`e2e/lab-sno-fips-controller/isolation/templates/networking.yaml`), and its
 runbook's matrix probes each leaked path.
 
 Applies to the case's workloads, which Bootwright does not apply

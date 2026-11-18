@@ -2,8 +2,8 @@
 
 Reuse [lab-sno-fips-controller](../runbook.md): one FIPS RHEL controller VM
 and one FIPS SNO VM with TPM2-bound LUKS, both on the local libvirt host.
-This profile replaces the original environment workloads with primary OVN
-pods, two ingress controllers, two egress identities and explicit transit
+This profile owns the case's one description of the environment workloads:
+primary OVN pods, two ingress controllers, two egress identities and explicit transit
 filtering. It is an IPv4 laboratory case awaiting [B1400](../../../specs/milestones/m3.md#b1400)'s
 live qualification. A shared node is not a boundary against a cluster or host
 administrator; workloads have no host networking or privileged capabilities.
@@ -45,8 +45,7 @@ shared infrastructure; applications cannot connect across environments.
 
 ## Prepare and render on the host
 
-Use a fresh disposable case. Do not apply the original `workloads/` tree.
-Keep the parent's fixed release, FIPS and TPM2 enabled. Complete parent step 1
+Use a fresh disposable case. Keep the parent's fixed release, FIPS and TPM2 enabled. Complete parent step 1
 for the local KVM/capacity checks, media and credentials, then step 2 through
 writing `PIN_VALUES`. Pause before its **Render and provision** subsection.
 Render this profile below, then finish parent steps 2–5 with the same private
@@ -140,7 +139,7 @@ done < <(jq -r '.environments | to_entries[] | [.key,.value.vlan,.value.cidr] | 
 The trunk itself has no host address. Neither peer receives a management NIC
 or an Internet route. Complete parent step 7's system-resolver and preflight
 checks, then
-steps 8–9 through the initial FIPS and LUKS checks, skipping the original
+steps 8–9 through the initial FIPS and LUKS checks, skipping the parent's
 **Environments** subsection. Both VMs remain on the separate management
 network for installation and administration.
 
@@ -368,7 +367,7 @@ These are fresh-case fixtures; do not use their names to delete another
 operator's pre-existing objects. The
 filter remains installed until the disposable VM is destroyed; deleting it
 while apps are present would reopen transit. In parent step 10, skip the
-original workload cleanup and continue with context destroy and evidence
+fixture cleanup block and continue with context destroy and evidence
 preservation. Parent step 10 removes
 the external peer containers and attachment networks before Bootwright removes
 its managed trunk, VLAN legs and host routing rules. Never delete those links

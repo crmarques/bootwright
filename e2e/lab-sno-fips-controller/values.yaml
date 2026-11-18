@@ -69,8 +69,9 @@ security:
 # bridge, which carries the node's address there, so that environment's MetalLB
 # pool announces on it and its IngressController takes its address from it.
 # Pods draw from the environment's cidr less the node, app and pool
-# addresses. The workload manifests under workloads/ assume these defaults;
-# TestSNOStaticWorkloadsFollowTheCaseDefaults holds them to it.
+# addresses. The isolation chart renders the workload from these values, and
+# the parent runbook's drills name these defaults; TestSNOIsolationFixtures
+# holds them to it.
 environments:
   enabled: true
 
@@ -112,7 +113,12 @@ addons:
       channel: ""
       startingCSV: ""
 
-# The stricter acceptance profile uses native OpenShift objects after provisioning.
-# Resolve an approved Python 3 UBI image to its digest before rendering it.
+# The isolation chart renders the case's native OpenShift objects after
+# provisioning. Resolve an approved Python 3 UBI image to its digest before
+# rendering it. The hardened profile is the strict acceptance profile; the
+# base profile is what the parent runbook's environment drills apply: pods
+# attached to their environment network, the drills' own network policies,
+# and no EgressIP, source ranges, node filter or TPM2 requirement.
 isolation:
+  profile: hardened
   image: ""

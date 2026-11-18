@@ -1,3 +1,4 @@
+{{- if eq (include "isolation.profile" .) "hardened" }}
 {{- $rules := "add table inet sno_e2e_isolation\nflush table inet sno_e2e_isolation\ntable inet sno_e2e_isolation {\n" -}}
 {{- range $name, $env := dict "staging" .Values.environments.staging "production" .Values.environments.production -}}
 {{- $rules = printf "%s  chain %s {\n    meta nfproto ipv6 counter drop\n    ip saddr != %s counter drop\n    ip daddr %s ct direction reply ct state established,related counter accept\n    ip daddr %s tcp dport { 80, 443 } counter accept\n    counter drop\n  }\n" $rules $name $env.cidr $env.egressAddress $env.pool -}}
@@ -83,3 +84,4 @@ spec:
                 [Unit]
                 Requires=sno-e2e-isolation.service
                 After=sno-e2e-isolation.service
+{{- end }}

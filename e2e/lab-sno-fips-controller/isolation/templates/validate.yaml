@@ -1,4 +1,5 @@
-{{- if not .Values.security.tpm2 }}
+{{- $profile := include "isolation.profile" . }}
+{{- if and (eq $profile "hardened") (not .Values.security.tpm2) }}
 {{- fail "the isolation case requires security.tpm2=true" }}
 {{- end }}
 {{- if not .Values.environments.enabled }}
@@ -9,6 +10,8 @@
 {{- if not (regexMatch "^[^[:space:]@]+@sha256:[a-f0-9]{64}$" $image) }}
 {{- fail "isolation.image must name an image pinned with @sha256:<64 lowercase hexadecimal digits>" }}
 {{- end }}
+{{- if eq $profile "hardened" }}
 {{- range $name, $env := dict "staging" .Values.environments.staging "production" .Values.environments.production }}
 {{- $_ := required (printf "set environments.%s.egressAddress" $name) $env.egressAddress }}
+{{- end }}
 {{- end }}
