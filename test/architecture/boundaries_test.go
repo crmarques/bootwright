@@ -651,9 +651,13 @@ func effectGrants() map[string][]string {
 		"internal/secrets/material":             {"crypto/rand", "io", "net.IP", "os", "syscall"},
 		"internal/secrets/localkeyring":         {"crypto/rand", "io"},
 		"internal/reconciliation/ansiblerunner": {"io", "os", "os/exec", "syscall"},
-		"internal/adapterprotocol":              {"io", "os", "os/exec", "syscall"},
-		"internal/controller/privilege":         {"io", "os", "os/exec", "os/signal", "syscall"},
-		"internal/controller/hostlinux":         {"golang.org/x/sys/unix", "io", "os"},
+		// The engine names a host fault an untyped failure carries by its errno
+		// alone; these are constants and the errno type, no effect.
+		"internal/reconciliation/lifecycle": {"syscall.Errno", "syscall.ENOSPC", "syscall.EDQUOT", "syscall.EFBIG",
+			"syscall.EROFS", "syscall.EACCES", "syscall.EPERM", "syscall.EIO"},
+		"internal/adapterprotocol":      {"io", "os", "os/exec", "syscall"},
+		"internal/controller/privilege": {"io", "os", "os/exec", "os/signal", "syscall"},
+		"internal/controller/hostlinux": {"golang.org/x/sys/unix", "io", "os"},
 		"internal/storage/preflightlocal": {
 			"golang.org/x/sys/unix.CPUSet", "golang.org/x/sys/unix.Fstat", "golang.org/x/sys/unix.Fstatfs",
 			"golang.org/x/sys/unix.O_NONBLOCK", "golang.org/x/sys/unix.O_PATH", "golang.org/x/sys/unix.O_RDONLY",

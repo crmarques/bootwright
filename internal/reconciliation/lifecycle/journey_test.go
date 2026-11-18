@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"path"
 	"reflect"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -2887,6 +2889,20 @@ func TestAPendingBlockNamesWhatItWaitsFor(t *testing.T) {
 	waitsFor(removed, plan, reconciliation.Destroy)
 	if !slices.Equal(removed[1].WaitsFor, []string{"cluster"}) {
 		t.Fatalf("a removal's pending node waits for %v, want its dependent", removed[1].WaitsFor)
+	}
+}
+
+// A block that stops on an untyped failure of its host names the fault by its
+// errno, never by the error's text, which may hold a private path.
+func TestABlockStoppedByAFullDiskNamesTheFault(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, "artifact-server-lab")
+	h.capability.errorFor = map[string]error{"artifact-server-lab": &os.PathError{Op: "write", Path: "/var/lib/private-path", Err: syscall.ENOSPC}}
+	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+	reported := diagnostics.Of(err)
+	if len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "had no room (no space left on device)") ||
+		strings.Contains(reported[0].Message, "private-path") || !strings.Contains(reported[0].Remediation, "free space") {
+		t.Fatalf("a full disk reported %+v", reported)
 	}
 }
 

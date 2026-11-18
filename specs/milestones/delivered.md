@@ -17469,3 +17469,18 @@ duplicates), split from [B1562](m1.md#b1562). A failed exit or a deadline did
 not say how far the run got. Both now name the last group still running, `,
 during step <group>` ([attempt outcomes](../state-reconciliation.md#attempt-outcomes)).
 Guarded by `TestAFailedRunNamesTheStepThatWasRunning`.
+
+## X594 — A block stopped by its host names the fault
+
+### B1584
+
+Under [D276](backlog.md#d276) (audit 006 W1.7), split from
+[B1562](m1.md#b1562). A block that stopped on an untyped failure read `stopped
+on a failure that escaped a typed boundary`, even when the host had simply run
+out of space. A failure whose errno names a full, read-only or denied
+filesystem, or a device error, now reads as that fault with its remedy
+([block transitions](../state-reconciliation.md#block-transitions)).
+Guarded by `TestABlockStoppedByAFullDiskNamesTheFault`, which also asserts no
+path of the failure's text is shown. The architecture's effect grants admit
+the errno constants alone for the engine. The network and trust faults of the
+adapters stay with B1562.

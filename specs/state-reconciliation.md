@@ -894,7 +894,10 @@ running. Its operation then takes the state its block records give it under
 [precedence](#operation-state-precedence), and the stop is never a pause. The
 result names that failure as its block's cause, as `runtime.internal` naming
 the block when the failure carries no diagnostic of its own, and never in the
-failure's own words.
+failure's own words. One whose errno says the host refused, a filesystem with
+no room (`ENOSPC`, `EDQUOT`, `EFBIG`), a read-only one, a denied access or a
+device error, is `lifecycle.state` naming that fault and the filesystems that
+hold `/var/lib/bootwright` and `/var/log/bootwright` instead.
 
 A block that an invocation finds `running` lost its executor mid-attempt.
 Nothing recorded its outcome, so it is unproved exactly as an `unknown` block
