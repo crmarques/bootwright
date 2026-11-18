@@ -93,7 +93,11 @@ def invoke(runner, argv, limit=MAX_OUTPUT):
 
 
 def virsh(runner, uri, *arguments):
-    return invoke(runner, [VIRSH, "--connect", uri] + [str(value) for value in arguments])
+    """Run virsh; a host without the libvirt client is a hypervisor that does not answer."""
+    try:
+        return invoke(runner, [VIRSH, "--connect", uri] + [str(value) for value in arguments])
+    except FileNotFoundError:
+        return 127, ""
 
 
 def virsh_reason(runner, uri, *arguments):
@@ -103,7 +107,10 @@ def virsh_reason(runner, uri, *arguments):
     else to report with, because the refusal is never on standard output.
     """
     argv = [VIRSH, "--connect", uri] + [str(value) for value in arguments]
-    code, out, err = runner(argv, check_rc=False, environ_update=ENVIRONMENT)
+    try:
+        code, out, err = runner(argv, check_rc=False, environ_update=ENVIRONMENT)
+    except FileNotFoundError:
+        return 127, "", "virsh is not installed"
     return code, out[:MAX_OUTPUT], err[:MAX_OUTPUT]
 
 

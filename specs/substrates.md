@@ -472,7 +472,9 @@ and pool through a `uri` that answers and the driver that owns each, and the
 directory by its path. It also removes the owned readiness unit and enablement
 link and proves their absence. It leaves packages, foreign networks and external
 bridges untouched. Observation is read-only against the frozen request and
-reports whether the `uri` answered and, for each managed network and the pool,
+reports whether the `uri` answered, which a host without the libvirt client,
+as a freshly installed one is until the apply installs its closure, reads as
+not answering, and, for each managed network and the pool,
 whether the driver that owns it answered for it: returned it, or completed a
 listing that does not name it. The `uri` answering proves only that the
 hypervisor driver did, and virsh reports a lookup a silent driver failed

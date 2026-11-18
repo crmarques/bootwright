@@ -17548,3 +17548,18 @@ managed host runs on to its own limit after a lost channel. The comment now
 says what it covers, and the security spec states the remote window, its
 fence and the item that will close it
 ([process boundary](../security.md#process-boundary)).
+
+## X599 — A provider host without the libvirt client can be applied
+
+### B1589
+
+Under [D276](backlog.md#d276) (audit 006 W5, finding C01-01, High), split from
+[B1566](m1.md#b1566). A provider host reached over SSH that had no `virsh`, as
+a freshly installed one does, could never be applied: the first observation
+crashed on the missing program before the task that installs the libvirt
+client, and every repeat failed the same way with a Python exception name. A
+missing client now reads as a hypervisor that does not answer, so the apply
+installs the closure and goes on, and a removal refuses as it does for a silent
+hypervisor ([provider host realization](../substrates.md#provider-host-realization)).
+Guarded by `test_a_host_without_the_libvirt_client_reads_as_a_silent_hypervisor`.
+No SSH provider host has run live.

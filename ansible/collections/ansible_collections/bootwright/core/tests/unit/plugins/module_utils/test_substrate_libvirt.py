@@ -488,6 +488,20 @@ def drift_request(tmp_path):
     }
 
 
+def test_a_host_without_the_libvirt_client_reads_as_a_silent_hypervisor(tmp_path):
+    # A freshly installed host has no virsh until the apply installs its
+    # closure, which the observation gates; the observation must not crash.
+    def run(argv, check_rc=False, environ_update=None):
+        del check_rc, environ_update
+        if argv[0].endswith("/virsh"):
+            raise FileNotFoundError(2, "No such file or directory", argv[0])
+        return 1, "", ""
+
+    observation = observe_host(run, drift_request(tmp_path))
+    assert observation["uri"] is False
+    assert observation["networks"][0]["answered"] is False and observation["networkGuests"] == []
+
+
 def test_the_observation_names_what_runs_on_each_owned_active_network(tmp_path):
     answers = guests_answers(**{
         "version": (0, "", ""),
