@@ -17532,7 +17532,10 @@ is observation only and never reaches evidence. Guarded by
 `test_libvirt_host_destroy_guard.py` and the evidence-fields test. Open:
 [Q129](backlog.md#audit-remediation-decisions), whether a stopped foreign domain refuses
 too; this guard, like the trunk and restart guards, reads running domains only.
-B568's interim orphan warning stays parked.
+B568's interim orphan warning stays parked. An independent Opus review found
+that an owned network whose state read failed read as inactive and escaped the
+guard; such a network is now unanswered, which the removal refuses before any
+effect.
 
 ## X598 — The remote worker window is stated
 

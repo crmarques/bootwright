@@ -506,6 +506,10 @@ def test_the_observation_names_what_runs_on_each_owned_active_network(tmp_path):
     ]
     stopped = dict(answers, **{"net-info bootwright-lab-guests": (0, "Active:         no\n", "")})
     assert observe_host(runner_for(stopped), drift_request(tmp_path))["networkGuests"] == []
+    # A state the driver did not return may be a running network: it is
+    # unanswered, which refuses the removal, never inactive.
+    unread = observe_host(runner_for(dict(answers, **{"net-info bootwright-lab-guests": (1, "", "error\n")})), drift_request(tmp_path))
+    assert unread["networks"][0]["answered"] is False and unread["networkGuests"] == []
 
 
 def test_the_observation_names_what_runs_on_each_drifted_network_alone(tmp_path):

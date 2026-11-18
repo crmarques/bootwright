@@ -273,8 +273,9 @@ def network_state(runner, uri, name, frozen=None, context=""):
     A network is read through the network driver, a daemon of its own that may
     be silent while the hypervisor the uri names answers, and virsh reports a
     lookup it failed the same way whatever the cause. `answered` is therefore
-    true only when the driver returned the definition, or completed a listing
-    that does not name the network, because only that proves it absent.
+    true only when the driver returned the definition and its state, or
+    completed a listing that does not name the network, because only that
+    proves it absent; a state it did not return may be a running network.
     """
     unanswered = {
         "answered": False, "autostart": False, "definition": False, "drifted": False, "state": "",
@@ -296,8 +297,10 @@ def network_state(runner, uri, name, frozen=None, context=""):
     if element is not None:
         uuid = (element.text or "").strip()
     code, active = virsh(runner, uri, "net-info", name)
-    state = "active" if code == 0 and "Active:         yes" in active else "inactive"
-    autostart = code == 0 and info_field(active, "Autostart") == "yes"
+    if code != 0:
+        return unanswered
+    state = "active" if "Active:         yes" in active else "inactive"
+    autostart = info_field(active, "Autostart") == "yes"
     runs = frozen is not None and carries_definition(root, frozen, context)
     definition = runs and keeps_definition(runner, uri, name, frozen, context)
     drifted = frozen is not None and owned and state == "active" and not runs
