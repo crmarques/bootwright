@@ -328,6 +328,7 @@ Alias cell.
 | [B1551](#b1551) | new, 2026-11-17 (X571 review) | defect | Storage | A Ceph package decision resolved from a subscription names its cause and recovery when the host's repositories later select other URLs | Found by X571's safety review, unconfirmed; it fails closed with the generic packages refusal |
 | [B1552](#b1552) | new, 2026-11-17 (X572) | defect | Storage | A hosted-DVD Ceph host updated within its release from the CDN or a configured repository prepares without a downgrade refusal | No such update source can be read back as a package source yet; no owner run has met it |
 | [B1555](#b1555) | new, 2026-11-17 (X573 review) | product | Substrate, with CLI | `machine eject-media` releases every virtual-media device a management controller exposes, not only the one Bootwright inserts through | Bootwright inserts through one device, so only that one has refused an insert; no owner run has met another |
+| [B1557](#b1557) | new, 2026-11-17 (X576) | enabling | Verification tooling, with each owning context | The role families that call fixed executables, fixed host roots or remote endpoints run their entry points through ansible-core in the gate | Each needs an executable, root or endpoint override in the role, a custody change the owner has not asked for |
 
 ### B82
 
@@ -3765,6 +3766,23 @@ VirtualMachine definition. **Exit evidence:** a Redfish discovery test of a
 controller exposing two presenting devices. Parked because only the device
 Bootwright inserts through has refused an insert.
 
+
+### B1557
+
+**Owner:** Verification tooling, with each owning context. **Kind:** enabling.
+**Requires:** an owner decision on the overrides. **Definition:** Candidate.
+**Outcome:** the families [X576](delivered.md#x576--role-entry-points-run-through-ansible-core)
+could not run through ansible-core run as its targets do: libvirt (absolute
+`virsh`, `nmcli`, `firewall-cmd`, `qemu-img`, root-owned staging), KubeVirt
+(its API over TLS), bare metal, power and physical erase (Redfish over HTTPS,
+boot media), the managed OS package tree, install, firewall and disk
+discovery (fixed hosted and scratch roots, guest SSH, package installation),
+infrastructure services (absolute `podman`, `systemctl`, `skopeo`, fixed
+roots, downloads) and Ceph beyond the image release (absolute `cephadm`,
+`ceph`, `rbd`, `radosgw-admin`, SSH, a TLS registry). **Exit evidence:** one
+integration target per family in the `integration` lane. Parked because each
+needs a test-only executable, root or endpoint override inside the role, a
+custody change no owner decision asks for.
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its

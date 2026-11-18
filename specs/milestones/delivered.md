@@ -17230,3 +17230,25 @@ object; it adds restricted pod security, resource bounds and a digest-pinned
 image. The parent runbook renders the base profile, and a test holds both
 profiles to the objects their runbooks drill. The drills await a live run.
 
+## X576 — Role entry points run through ansible-core
+
+### B1467
+
+The owner's answer of 2026-11-17 under [D274](backlog.md#d274) (audit 005
+W6.1, finding PT1-01): the `integration` lane of `make check` runs one entry
+point per role family through `ansible-playbook`, with a local connection,
+an isolated inventory, a temporary root and standard-library stubs first on
+`PATH`, speaking the runner protocol. Each run happens twice; the first
+publishes `completed` with a proved postcondition, the replay `unchanged`
+with `changed=0` and the same evidence. The families are the controller
+prerequisites (now in the gate; its opt-in environment variable is gone),
+machine hardware, add-on instances and the container cluster network on a
+stub `oc`, and the Ceph image release. The machine hardware target reads the
+gate host's network devices, read-only. Failure injection confirmed both a
+refused request and a changed replay fail the target. No role defect
+surfaced. The families that call fixed executables, roots or remote
+endpoints are [B1557](backlog.md#b1557). The lane takes about 25 seconds.
+W6.2 to W6.4 were delivered by
+[X520](#x520--every-module-runs-under-test) and
+[X522](#x522--one-walker-for-the-role-tests).
+
