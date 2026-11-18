@@ -4,7 +4,8 @@ Keep each audit and its follow-ups under `audits/<NNN>-<topic>/`. Number
 audits across topics, starting at `001`; use a short topic name. The
 specification audit is `001-spec`, the add-ons audit is `002-addons`, the
 code audit is `003-code`, the specification and user API audit is
-`004-spec-api`, and the code quality audit is `005-code-quality`.
+`004-spec-api`, the code quality audit is `005-code-quality`, and the
+lifecycle flows audit is `006-lifecycle-flows`.
 
 ## Directory format
 
@@ -74,3 +75,4 @@ or effects.
 - [Code audit 003](003-code/README.md)
 - [Specification and user API audit 004](004-spec-api/README.md)
 - [Code quality audit 005](005-code-quality/README.md)
+- [Lifecycle flows audit 006](006-lifecycle-flows/README.md)
