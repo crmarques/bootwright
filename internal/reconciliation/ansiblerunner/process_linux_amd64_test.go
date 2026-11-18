@@ -256,17 +256,18 @@ func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
 		adapter func() *exec.Cmd
 		message string
 	}{
-		{"failed-exit", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 3") }, "the adapter operation did not complete"},
+		{"failed-exit", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 3") }, "the adapter operation did not complete (exit status 3)"},
+		{"killed", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "kill -KILL $$") }, "the adapter operation did not complete (signal SIGKILL)"},
 		{"failed-exit-retained", func() *exec.Cmd {
 			return exec.Command("/bin/sh", "-c", "(exec >/dev/null 2>&1 4<&-; sleep 5) & exit 3")
-		}, "the adapter operation did not complete"},
+		}, "the adapter operation did not complete (exit status 3)"},
 		{"no-result", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 0") }, "the adapter operation has no complete result"},
 		{"stopped", func() *exec.Cmd {
 			return exec.Command("/bin/sh", "-c", `printf '%s\n' '{"host":"node-1","kind":"failed","phase":"stopped","role":"bootwright.core.managed_os","task":"wait for the installer"}' >&3; exit 2`)
-		}, `the adapter operation did not complete: task "wait for the installer" of role bootwright.core.managed_os failed on host node-1`},
+		}, `the adapter operation did not complete (exit status 2): task "wait for the installer" of role bootwright.core.managed_os failed on host node-1`},
 		{"unreachable", func() *exec.Cmd {
 			return exec.Command("/bin/sh", "-c", `printf '%s\n' '{"host":"node-1","kind":"unreachable","phase":"stopped","task":"gather"}' >&3; exit 4`)
-		}, `the adapter operation did not complete: host node-1 did not answer task "gather"`},
+		}, `the adapter operation did not complete (exit status 4): host node-1 did not answer task "gather"`},
 		{"malformed", child("malformed"), "the adapter structured result was incomplete"},
 		{"out-of-order", child("out-of-order"), "the adapter capability protocol was invalid"},
 	} {
@@ -923,7 +924,7 @@ func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
 				t.Fatalf("an undelivered acknowledgement left the adapter running for %s", elapsed)
 			}
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != "the adapter operation did not complete" {
+			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.HasPrefix(reported[0].Message, "the adapter operation did not complete") {
 				t.Fatalf("an acknowledgement nothing could receive reported %+v (%v)", reported, err)
 			}
 		})

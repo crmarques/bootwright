@@ -309,6 +309,9 @@ func (s *session) reaped(waitErr error) {
 		s.end(RetainedOutput, nil)
 	case waitErr != nil:
 		s.end(FailedExit, nil)
+		if !s.stopping {
+			s.ending.Exit = exitOf(waitErr)
+		}
 		s.exited = true
 	}
 }
@@ -382,6 +385,26 @@ func (s *session) acknowledge(record Record) {
 	default:
 		s.end(Uncertain, nil)
 	}
+}
+
+func exitOf(err error) string {
+	var exited *exec.ExitError
+	if !errors.As(err, &exited) {
+		return ""
+	}
+	if status, ok := exited.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+		return "signal " + signalName(status.Signal())
+	}
+	return "exit status " + strconv.Itoa(exited.ExitCode())
+}
+
+func signalName(signal syscall.Signal) string {
+	names := map[syscall.Signal]string{syscall.SIGHUP: "SIGHUP", syscall.SIGINT: "SIGINT", syscall.SIGABRT: "SIGABRT",
+		syscall.SIGKILL: "SIGKILL", syscall.SIGSEGV: "SIGSEGV", syscall.SIGPIPE: "SIGPIPE", syscall.SIGTERM: "SIGTERM"}
+	if name, known := names[signal]; known {
+		return name
+	}
+	return strconv.Itoa(int(signal))
 }
 
 func (s *session) outcome() Ending {

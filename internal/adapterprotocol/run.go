@@ -111,4 +111,5 @@ type Ending struct {
 	Outcome  string
 	Evidence json.RawMessage
 	Warnings []Warning
+	Exit     string
 }

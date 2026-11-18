@@ -516,7 +516,7 @@ func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Endi
 	case adapterprotocol.RetainedOutput:
 		return lifecycle.RunResult{}, failure("lifecycle.unknown", "adapter descendants retained the adapter's output after it exited", remediation)
 	case adapterprotocol.FailedExit:
-		return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter operation did not complete"+j.stopped(), remediation)
+		return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter operation did not complete"+exitDetail(ending.Exit)+j.stopped(), remediation)
 	case adapterprotocol.Incomplete:
 		return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter structured result was incomplete", remediation)
 	case adapterprotocol.Invalid:
@@ -525,6 +525,13 @@ func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Endi
 		return lifecycle.RunResult{}, failure("lifecycle.unknown", "adapter authorization delivery was uncertain", remediation)
 	}
 	return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter operation has no complete result", remediation)
+}
+
+func exitDetail(exit string) string {
+	if exit == "" {
+		return ""
+	}
+	return " (" + exit + ")"
 }
 
 // keep holds the first stopped record read before completed; any other is ignored.

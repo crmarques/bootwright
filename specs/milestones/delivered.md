@@ -17404,3 +17404,16 @@ it offered could not be run as printed. It now names the context the lifecycle
 result resolved ([diagnostic taxonomy and order](../cli/output.md#diagnostic-taxonomy-and-order)).
 Guarded by `TestADefaultRemediationNamesTheResolvedContext` and
 `TestFailedOperationKeepsItsResultLogAndReceipt`.
+
+## X587 — A failed exit says how the adapter ended
+
+### B1577
+
+Under [D276](backlog.md#d276) (audit 006 W1.3, finding E10-02 and its
+duplicates), split from [B1562](m1.md#b1562). A failed exit read the same
+whether the adapter exited with a status or died on a signal. It now names
+`(exit status N)` or `(signal NAME)`, unless the runner itself stopped the
+adapter ([attempt outcomes](../state-reconciliation.md#attempt-outcomes)).
+Guarded by the runner's `failed-exit`, `killed`, `stopped` and `unreachable`
+endings. A death before the request was loaded and a protocol breach's reason
+stay with B1562.
