@@ -750,16 +750,19 @@ func terminalFailure(contextName string, operation operationstore.Operation, pla
 	command := continuationCommand(contextName, operation, plan, states)
 	switch {
 	case operation.State == reconciliation.OperationUnknown && operation.Verb == reconciliation.Apply:
-		return failure("lifecycle.unknown", "an effect has an unresolved outcome",
+		return applyUnresolved.Fail("an effect has an unresolved outcome",
 			"resolve it with "+command+", which observes that effect before anything else starts, or take back what it started with "+
 				contextCommand(contextName, string(reconciliation.Destroy)))
 	case operation.State == reconciliation.OperationUnknown:
-		return failure("lifecycle.unknown", "an effect has an unresolved outcome", "resolve it with "+command)
+		return destroyUnresolved.Fail("an effect has an unresolved outcome", "resolve it with "+command)
 	case nextAction(operation, plan, states) == string(reconciliation.Destroy):
-		return failure("lifecycle.state", "the destroy did not complete",
+		return destroyIncomplete.Fail("the destroy did not complete",
 			"repeat "+command+", which replaces it with a fresh removal of what it has not proved gone")
 	}
-	return failure("lifecycle.state", "the "+string(operation.Verb)+" did not complete", "continue it with "+command)
+	if operation.Verb == reconciliation.Destroy {
+		return destroyIncomplete.Fail("the destroy did not complete", "continue it with "+command)
+	}
+	return applyIncomplete.Fail("the "+string(operation.Verb)+" did not complete", "continue it with "+command)
 }
 
 // nextAction names what an operation's own records call for, which is nothing

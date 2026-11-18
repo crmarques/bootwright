@@ -39,7 +39,7 @@ func TestPreStopRemovalRunsBeforeTheStopProof(t *testing.T) {
 		}
 	}
 	result, err := destroy(h)
-	if firstCode(err) != "lifecycle.live" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) {
+	if firstCode(err) != "destroy.in-use" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) {
 		t.Fatalf("pre-stop boundary = %+v (%v)", result, err)
 	}
 	if !slices.Equal(h.capability.destroys, []string{"installation"}) || blockState(t, h, "storage") != reconciliation.BlockPending || blockState(t, h, "machine") != reconciliation.BlockPending {
@@ -75,7 +75,7 @@ func TestPreStopRemovalKeepsHostBoundRetirement(t *testing.T) {
 		t.Fatalf("retiring pre-stop preview = %+v (%v)", preview, err)
 	}
 	result, err := destroy(h)
-	if firstCode(err) != "lifecycle.live" || result.Receipt.State != string(reconciliation.OperationPaused) || strings.Contains(diagnostics.Of(err)[0].Message, "its hosts outlive this removal") {
+	if firstCode(err) != "destroy.in-use" || result.Receipt.State != string(reconciliation.OperationPaused) || strings.Contains(diagnostics.Of(err)[0].Message, "its hosts outlive this removal") {
 		t.Fatalf("pre-stop retirement boundary = %+v (%v)", result, err)
 	}
 	if !slices.Equal(h.capability.destroys, []string{"installation"}) || !retiredProbes(capability)["storage"] {
@@ -109,7 +109,7 @@ func TestPreStopRemovalCrashOnBothSidesOfTheStopBoundary(t *testing.T) {
 		}
 		h.capability.outcomes, h.capability.observations = nil, []Observation{{Effect: reconciliation.EffectCompleted}}
 		result, err = destroy(h)
-		if firstCode(err) != "lifecycle.live" || result.Receipt.State != string(reconciliation.OperationPaused) || !slices.Contains(h.capability.calls, "observe-removal:installation") || !slices.Equal(h.capability.destroys, []string{"installation"}) {
+		if firstCode(err) != "destroy.in-use" || result.Receipt.State != string(reconciliation.OperationPaused) || !slices.Contains(h.capability.calls, "observe-removal:installation") || !slices.Equal(h.capability.destroys, []string{"installation"}) {
 			t.Fatalf("resolved pre-stop = %+v, removed %v (%v)", result, h.capability.destroys, err)
 		}
 		h.capability.quiescence["machine"] = Quiescence{State: Quiescent}
@@ -150,7 +150,7 @@ func TestPreStopRemovalKeepsUnrelatedMachinesStopFirst(t *testing.T) {
 	}
 	_, err = destroy(h)
 	after, _ := durableOperation(t, h)
-	if firstCode(err) != "lifecycle.live" || len(h.capability.destroys) != 0 || after.ID != before.ID {
+	if firstCode(err) != "destroy.in-use" || len(h.capability.destroys) != 0 || after.ID != before.ID {
 		t.Fatalf("live unrelated Machine admitted removal: %v (%v)", h.capability.destroys, err)
 	}
 }
@@ -177,7 +177,7 @@ func TestPreStopRemovalRetriesAResolvedFailedInverse(t *testing.T) {
 	}
 	h.capability.outcomes, h.capability.observations = nil, []Observation{{Effect: reconciliation.EffectNoEffect}}
 	result, err := destroy(h)
-	if firstCode(err) != "lifecycle.live" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) || !slices.Equal(h.capability.destroys, []string{"installation", "installation"}) {
+	if firstCode(err) != "destroy.in-use" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) || !slices.Equal(h.capability.destroys, []string{"installation", "installation"}) {
 		t.Fatalf("resolved failed pre-stop = %+v, removed %v (%v)", result, h.capability.destroys, err)
 	}
 	if blockState(t, h, "storage") != reconciliation.BlockPending || blockState(t, h, "machine") != reconciliation.BlockPending {
@@ -197,7 +197,7 @@ func TestPreStopRemovalLeavesOnlineDeferredMachinesToTheOnlineBoundary(t *testin
 		t.Fatalf("pre-stop online preview = %+v (%v)", preview, err)
 	}
 	result, err := destroy(h)
-	if firstCode(err) != "lifecycle.live" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) {
+	if firstCode(err) != "destroy.in-use" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) {
 		t.Fatalf("pre-stop online boundary = %+v (%v)", result, err)
 	}
 	if !slices.Equal(h.capability.destroys, []string{"installation", "storage"}) || blockState(t, h, "machine") != reconciliation.BlockPending {
@@ -237,7 +237,7 @@ func TestPreStopRemovalNeverRepeatsACompletedInverseBesideARetriedOne(t *testing
 	}
 	h.capability.outcomes, h.capability.observations = nil, []Observation{{Effect: reconciliation.EffectNoEffect}}
 	result, err = destroy(h)
-	if firstCode(err) != "lifecycle.live" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) || !slices.Contains(h.capability.calls, "observe-removal:installation") {
+	if firstCode(err) != "destroy.in-use" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) || !slices.Contains(h.capability.calls, "observe-removal:installation") {
 		t.Fatalf("resolved pair = %+v, removed %v (%v)", result, h.capability.destroys, err)
 	}
 	if !slices.Equal(h.capability.destroys, []string{"installation-b", "installation", "installation"}) {

@@ -72,7 +72,7 @@ func TestAnObservationThatCouldNotRunIsRecordedAndStatusNamesIt(t *testing.T) {
 // unresolvedOutcome reports whether a diagnostic is the one an operation adds
 // after the reason its block stayed unknown.
 func unresolvedOutcome(reported diagnostics.Diagnostic) bool {
-	return reported.Code == "lifecycle.unknown" && reported.Message == "an effect has an unresolved outcome"
+	return (reported.Code == "apply.unresolved" || reported.Code == "destroy.unresolved") && reported.Message == "an effect has an unresolved outcome"
 }
 
 // blockUnresolved is why status says one block of the current operation is

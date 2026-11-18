@@ -149,7 +149,7 @@ func TestLiveRemovalNamesTheStopCommandWithItsContext(t *testing.T) {
 	_, err := h.service.Destroy(ctx, DestroyRequest{ContextName: "lab-b", Authorizations: []string{reconciliation.AuthorizationDataLoss}, SkipConfirmation: true})
 	reported := diagnostics.Of(err)
 	want := "stop it with bootwright machine stop --context lab-b --name rhel-01, then repeat bootwright destroy --context lab-b --authorize " + unfixed
-	if len(reported) != 1 || reported[0].Code != "lifecycle.live" || reported[0].Remediation != want {
+	if len(reported) != 1 || reported[0].Code != "destroy.in-use" || reported[0].Remediation != want {
 		t.Fatalf("the removal over a running machine reported %+v, want the remedy %q", reported, want)
 	}
 	if len(h.capability.destroys) != 0 {
@@ -167,7 +167,7 @@ func TestEveryExecutionCarriesTheContextItRunsIn(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	renamed(h, "lab-b")
 	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
-	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab-b", SkipConfirmation: true}); firstCode(err) != "lifecycle.unknown" {
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab-b", SkipConfirmation: true}); firstCode(err) != "apply.unresolved" {
 		t.Fatalf("the seeded unknown apply = %v", err)
 	}
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}

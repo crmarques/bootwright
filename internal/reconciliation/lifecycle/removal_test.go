@@ -334,7 +334,7 @@ func TestDestroyConfirmsBeforeItsLockHoldingProofsAndRefusesBeforeRegistration(t
 	recorder = &orderRecorder{}
 	live.service.options.Presenter, live.service.options.Confirmer, live.service.options.Progress = recorder, recorder, recorder
 	_, err := live.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab"})
-	if code := firstCode(err); code != "lifecycle.live" {
+	if code := firstCode(err); code != "destroy.in-use" {
 		t.Fatalf("destroy over a running machine = %q (%v)", code, err)
 	}
 	if want := []string{"present", "confirm", quiescenceCheck}; recorder.prompts != 1 || !slices.Equal(recorder.steps, want) {

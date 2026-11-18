@@ -181,7 +181,7 @@ func TestRegisteredInstallationUnregistersBeforeItsMachineStops(t *testing.T) {
 		}
 		_, err = journey.Service.Destroy(context.Background(), destroy)
 		reported := diagnostics.Of(err)
-		if len(reported) == 0 || reported[0].Code != "lifecycle.live" || !strings.Contains(reported[0].Remediation, stop) {
+		if len(reported) == 0 || reported[0].Code != "destroy.in-use" || !strings.Contains(reported[0].Remediation, stop) {
 			t.Fatalf("the first destroy = %+v (%v), want lifecycle.live naming the stop", reported, err)
 		}
 		if runs := runner.took(); !slices.Equal(runs, []string{"destroy:running:guest"}) || len(machines.removed) != 0 {
@@ -204,7 +204,7 @@ func TestRegisteredInstallationUnregistersBeforeItsMachineStops(t *testing.T) {
 			t.Fatalf("the preview stops %v first and %v after (%v)", preview.Stops, preview.StopsAfterOnline, err)
 		}
 		_, err = journey.Service.Destroy(context.Background(), destroy)
-		if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "lifecycle.live" || !strings.Contains(reported[0].Remediation, stop) {
+		if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "destroy.in-use" || !strings.Contains(reported[0].Remediation, stop) {
 			t.Fatalf("the destroy = %+v (%v), want lifecycle.live naming the stop", reported, err)
 		}
 		if runs := runner.took(); len(runs) != 0 || len(machines.removed) != 0 {

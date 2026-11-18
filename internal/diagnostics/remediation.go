@@ -77,7 +77,6 @@ var defaultRemediations = map[string]string{
 	"lifecycle.authorization": "repeat the command with the authorization the frozen plan requires",
 	"lifecycle.lease":         "repeat the command once the other operation on the context has finished",
 	"lifecycle.unknown":       "resolve the unknown effect with the command bootwright status --context <context> names",
-	"lifecycle.live":          "stop what still uses the state and repeat the removal",
 	"logs.not-found":          "run bootwright status --context <context> to see the operation records that remain",
 
 	"trust.identity":     "review the SSH identity the message names and enroll it with bootwright machine trust --context <context>",

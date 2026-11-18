@@ -407,7 +407,7 @@ func TestAnUnresolvedAddedInstanceNamesTheContinuationBeforeTheDestroy(t *testin
 	f.capability.outcomeFor["addon-nmstate"] = Result{Outcome: reconciliation.OutcomeUnknown}
 	_, err := apply(f.harness)
 	reported := diagnostics.Of(err)
-	if len(reported) == 0 || reported[0].Code != "lifecycle.unknown" {
+	if len(reported) == 0 || reported[0].Code != "apply.unresolved" {
 		t.Fatalf("the unknown outcome reported %+v (%v)", reported, err)
 	}
 	f.capability.observations = []Observation{{Effect: reconciliation.EffectUnknown}}

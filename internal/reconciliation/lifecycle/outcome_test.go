@@ -183,14 +183,14 @@ func TestTerminalRemediesNameTheExactCommand(t *testing.T) {
 		want    []string
 	}{
 		"a failed apply": {
-			arrange: func(*testing.T, *harness) {}, verb: reconciliation.Apply, code: "lifecycle.state", message: "the apply did not complete",
+			arrange: func(*testing.T, *harness) {}, verb: reconciliation.Apply, code: "apply.incomplete", message: "the apply did not complete",
 			want: []string{"continue it with bootwright apply --context lab"},
 		},
 		"an unknown apply": {
 			arrange: func(t *testing.T, h *harness) {
 				h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
 			},
-			verb: reconciliation.Apply, code: "lifecycle.unknown", message: "an effect has an unresolved outcome",
+			verb: reconciliation.Apply, code: "apply.unresolved", message: "an effect has an unresolved outcome",
 			want: []string{"resolve it with bootwright apply --context lab, which observes", "take back what it started with bootwright destroy --context lab"},
 		},
 		"a failed destroy": {
@@ -199,7 +199,7 @@ func TestTerminalRemediesNameTheExactCommand(t *testing.T) {
 					t.Fatal(err)
 				}
 			},
-			verb: reconciliation.Destroy, code: "lifecycle.state", message: "the destroy did not complete",
+			verb: reconciliation.Destroy, code: "destroy.incomplete", message: "the destroy did not complete",
 			want: []string{"repeat bootwright destroy --context lab, which replaces it with a fresh removal of what it has not proved gone"},
 		},
 	} {
@@ -275,7 +275,7 @@ func TestAResolutionRemedyNamesTheCommandThatTakesItOn(t *testing.T) {
 				}
 			}
 			h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
-			if err := run(ctx); firstCode(err) != "lifecycle.unknown" {
+			if err := run(ctx); firstCode(err) != string(test.verb)+".unresolved" {
 				t.Fatalf("the seeded unknown %s = %v", test.verb, err)
 			}
 			h.capability.observations = []Observation{{Effect: test.effect}}

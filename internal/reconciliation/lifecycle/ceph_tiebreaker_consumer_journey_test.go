@@ -334,7 +334,7 @@ func TestASurvivingInstalledHostStillRefusesTheConsumerAndReplication(t *testing
 			_, err := journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, Authorizations: []string{reconciliation.AuthorizationDataLoss}, SkipConfirmation: true})
 			reported := diagnostics.Of(err)
 			dependent := map[bool]string{false: "CephConsumer/consumer (", true: "CephReplication/replica ("}[replication]
-			if len(reported) == 0 || reported[0].Code != "lifecycle.live" || !strings.Contains(reported[0].Message, "B491") || !strings.Contains(reported[0].Message, dependent) {
+			if len(reported) == 0 || reported[0].Code != "destroy.in-use" || !strings.Contains(reported[0].Message, "B491") || !strings.Contains(reported[0].Message, dependent) {
 				t.Fatalf("the destroy with node-4 surviving = %+v (%v), want lifecycle.live naming %s and B491", reported, err, dependent)
 			}
 			if runs, unwanted := runner.took(); len(runs) != 0 || len(unwanted) != 0 || len(machines.removed) != 0 {

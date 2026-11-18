@@ -148,7 +148,7 @@ func TestRetirementRefusesBeforeRegistrationWhileAConsumerSurvives(t *testing.T)
 			capability.admitted = true
 			_, err = destroy(h)
 			after, _ := durableOperation(t, h)
-			if firstCode(err) != "lifecycle.live" || len(h.capability.destroys) != 0 || after.ID != before.ID {
+			if firstCode(err) != "destroy.consumer-survives" || len(h.capability.destroys) != 0 || after.ID != before.ID {
 				t.Fatalf("surviving consumer admitted retirement: %v (%v)", h.capability.destroys, err)
 			}
 			reported := diagnostics.Of(err)[0]
@@ -196,7 +196,7 @@ func TestALeavingConsumerWhoseNodesWaitUnretiresItsProvider(t *testing.T) {
 	consumed(capability)
 	capability.online["cluster"] = true
 	_, err := destroy(h)
-	if firstCode(err) != "lifecycle.live" || len(h.capability.destroys) != 0 {
+	if firstCode(err) != "destroy.in-use" || len(h.capability.destroys) != 0 {
 		t.Fatalf("deferred consumer nodes admitted retirement: %v (%v)", h.capability.destroys, err)
 	}
 	if reported := diagnostics.Of(err)[0]; !strings.Contains(reported.Message, "ArtifactServer/storage (its hosts outlive this removal)") || strings.Contains(reported.Message, "survives this destroy") {
@@ -220,7 +220,7 @@ func TestAConsumerThatNeverCompletedStillRefusesRetirement(t *testing.T) {
 	machines.deletes["node"] = false
 	capability.admitted = true
 	_, err := destroy(h)
-	if firstCode(err) != "lifecycle.live" || !strings.Contains(diagnostics.Of(err)[0].Message, "ArtifactServer/cluster consumes ArtifactServer/storage and survives this destroy") || len(h.capability.destroys) != 0 {
+	if firstCode(err) != "destroy.consumer-survives" || !strings.Contains(diagnostics.Of(err)[0].Message, "ArtifactServer/cluster consumes ArtifactServer/storage and survives this destroy") || len(h.capability.destroys) != 0 {
 		t.Fatalf("a failed surviving consumer admitted retirement: %v (%v)", h.capability.destroys, diagnostics.Of(err))
 	}
 }

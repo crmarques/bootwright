@@ -40,7 +40,7 @@ func TestCompactRemovalNamesEveryMachineToStopBeforeRemovingAnyEffect(t *testing
 		t.Fatal("compact removal does not name every Machine under Stop first", preview, err)
 	}
 	request := DestroyRequest{ContextName: "lab", SkipConfirmation: true}
-	if _, err := h.service.Destroy(context.Background(), request); firstCode(err) != "lifecycle.live" || len(h.capability.destroys) != 0 {
+	if _, err := h.service.Destroy(context.Background(), request); firstCode(err) != "destroy.in-use" || len(h.capability.destroys) != 0 {
 		t.Fatal("running masters did not refuse before removal", err, h.capability.destroys)
 	}
 	for _, name := range names {

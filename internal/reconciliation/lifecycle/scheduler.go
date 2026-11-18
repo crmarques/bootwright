@@ -468,14 +468,13 @@ func (c *scheduler) reported(block string) []diagnostics.Diagnostic {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return nil
 	}
-	if fault, remedy, found := environmentFault(err); found {
-		return c.named(block, diagnostics.Of(failure("lifecycle.state", "the block "+block+" stopped because "+fault, remedy)))
+	if stop, fault, found := environmentFault(err); found {
+		return c.named(block, diagnostics.Of(stop.Fail("the block "+block+" stopped because "+fault, "")))
 	}
-	message := "the block " + block + " stopped on a failure that escaped a typed boundary"
 	if c.unstarted[block] {
-		message = "the attempt of the block " + block + " could not record its start, so it performed no effect"
+		return c.named(block, diagnostics.Of(engineStartUnrecorded.Fail("the attempt of the block "+block+" could not record its start, so it performed no effect", "")))
 	}
-	return c.named(block, diagnostics.Of(failure("runtime.internal", message, "")))
+	return c.named(block, diagnostics.Of(engineEscaped.Fail("the block "+block+" stopped on a failure that escaped a typed boundary", "")))
 }
 
 func (c *scheduler) named(id string, reported []diagnostics.Diagnostic) []diagnostics.Diagnostic {
@@ -503,21 +502,20 @@ func (c *scheduler) warn(finished step) {
 	}
 }
 
-func environmentFault(err error) (string, string, bool) {
+func environmentFault(err error) (diagnostics.Stop, string, bool) {
 	var errno syscall.Errno
 	if !errors.As(err, &errno) {
-		return "", "", false
+		return diagnostics.Stop{}, "", false
 	}
-	const where = "the filesystems that hold /var/lib/bootwright and /var/log/bootwright"
 	switch errno {
 	case syscall.ENOSPC, syscall.EDQUOT, syscall.EFBIG:
-		return "a filesystem holding its records or logs had no room (" + errno.Error() + ")", "free space, or raise the quota, on " + where + ", then repeat the operation", true
+		return engineRecordsFull, "a filesystem holding its records or logs had no room (" + errno.Error() + ")", true
 	case syscall.EROFS:
-		return "a filesystem holding its records or logs is read-only", "make " + where + " writable, then repeat the operation", true
+		return engineRecordsReadOnly, "a filesystem holding its records or logs is read-only", true
 	case syscall.EACCES, syscall.EPERM:
-		return "a record or log could not be accessed (" + errno.Error() + ")", "run the command as the invoking user through its elevation, and check the ownership of " + where + ", then repeat the operation", true
+		return engineRecordsDenied, "a record or log could not be accessed (" + errno.Error() + ")", true
 	case syscall.EIO:
-		return "a record or log write met a device error (" + errno.Error() + ")", "inspect " + where + " (the kernel log names the device), then repeat the operation", true
+		return engineRecordsDevice, "a record or log write met a device error (" + errno.Error() + ")", true
 	}
-	return "", "", false
+	return diagnostics.Stop{}, "", false
 }

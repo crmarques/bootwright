@@ -302,7 +302,7 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 		}
 		remediation = named
 	}
-	return failure("lifecycle.live", "this removal would take back state that is still in use: "+strings.Join(live, ", "), remediation)
+	return destroyInUse.Fail("this removal would take back state that is still in use: "+strings.Join(live, ", "), remediation)
 }
 
 func (s Service) probeQuiescent(ctx context.Context, store OperationStore, contextName string, plan reconciliation.Plan, phases removalPhases, material map[string]secrets.Material, held lineage, launch prerequisites.PythonLaunch, block reconciliation.Block) (Quiescence, error) {

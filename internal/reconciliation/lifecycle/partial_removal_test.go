@@ -34,7 +34,7 @@ func TestADestroyPausedAtTheOnlineBoundaryReadsAPartlyRemovedObjectUnknown(t *te
 	h.capability.quiescence = map[string]Quiescence{
 		"machine": {State: Live, Reason: "its domain is running", Stop: "bootwright machine stop --context lab --name machine"},
 	}
-	if result, err := destroy(h); firstCode(err) != "lifecycle.live" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) {
+	if result, err := destroy(h); firstCode(err) != "destroy.in-use" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) {
 		t.Fatalf("online boundary = %+v (%v)", result, err)
 	}
 	ctx := context.Background()

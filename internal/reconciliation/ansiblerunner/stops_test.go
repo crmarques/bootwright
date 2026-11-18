@@ -23,6 +23,7 @@ func TestTheRunnersStopsAreTheCatalogsAdapterRunStops(t *testing.T) {
 	}
 	_, section, _ := strings.Cut(string(data), "\n### Adapter run stops\n")
 	section, _, _ = strings.Cut(section, "\n## ")
+	section, _, _ = strings.Cut(section, "\n### ")
 	rows := map[string][]string{}
 	for _, line := range strings.Split(section, "\n") {
 		if !strings.HasPrefix(line, "| `") {

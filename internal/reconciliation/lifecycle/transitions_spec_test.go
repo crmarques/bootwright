@@ -270,7 +270,7 @@ func stateMachineRows() map[string]stateMachineRow {
 						h.service.capabilities = testResolver{capability: &onlineTestCapability{testCapability: h.capability, online: map[string]bool{"storage": true}}}
 						completeApply(t, h)
 						h.capability.quiescence = map[string]Quiescence{"machine": {State: Live, Reason: "its domain is running"}}
-						if result, err := destroy(h); firstCode(err) != "lifecycle.live" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) {
+						if result, err := destroy(h); firstCode(err) != "destroy.in-use" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) {
 							t.Fatalf("online boundary = %+v (%v)", result, err)
 						}
 					},

@@ -32,7 +32,7 @@ func stopLedger() map[string]int {
 		"internal/managedos/physicalerase":               29,
 		"internal/reconciliation":                        6,
 		"internal/reconciliation/ansiblerunner":          6,
-		"internal/reconciliation/lifecycle":              218,
+		"internal/reconciliation/lifecycle":              210,
 		"internal/reconciliation/logview":                7,
 		"internal/reconciliation/operationstore":         4,
 		"internal/storage/ceph":                          332,
@@ -130,7 +130,7 @@ func stopDeclarations(t *testing.T, sources []sourceFile) map[codePlace]bool {
 			function, isFunction := node.(*ast.FuncDecl)
 			if isFunction {
 				ast.Inspect(function, func(inner ast.Node) bool {
-					if literal, ok := inner.(*ast.CompositeLit); ok && isStopType(source, literal.Type) {
+					if literal, ok := inner.(*ast.CompositeLit); ok && isStopType(source, literal.Type) && len(literal.Elts) != 0 {
 						t.Errorf("%s declares a stop inside a function; declare it as a package-level variable", codePlace{source, literal.Pos()})
 					}
 					return true

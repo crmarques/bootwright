@@ -17622,3 +17622,22 @@ keeps its words and gains a code, a certainty and a remedy. The code
 ledger falls from 48 to 6, the six being Secret, trust and controller codes
 other families own. Guarded by `TestTheRunnersStopsAreTheCatalogsAdapterRunStops`
 and the runner's refusal tests.
+
+## X604 — The engine's execution stops
+
+### B1594
+
+Under [D276](backlog.md#d276) (audit 006 W2.1, third sub-slice), split from
+[B1563](m1.md#b1563). The lifecycle engine's execution failures become twelve
+[engine stops](../cli/stops.md#engine-stops): a block that stopped on a full,
+read-only, denied or failing records filesystem, or on a failure that escaped
+a typed boundary; an attempt that recorded no start; the end of an apply or a
+destroy that did not complete or left an outcome unproved, which reads as the
+consequence of the causes before it; and a removal that would take back state
+in use (`destroy.in-use`, formerly `lifecycle.live`, which also covers the
+destroy that pauses for its Machines to stop, under D276 clause (7)) or that a
+surviving consumer still uses (`destroy.consumer-survives`). The engine's
+ledger falls from 218 to 210. Guarded by
+`TestTheEnginesStopsAreTheCatalogsEngineStops`, the engine's journey and
+outcome tests and its race run. The engine's decision and registration
+refusals are the next sub-slice.

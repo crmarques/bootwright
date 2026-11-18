@@ -67,7 +67,7 @@ func TestOnlineRemovalPausesBeforeMachinesAndContinuesAfterOperatorStop(t *testi
 		t.Fatalf("online removal preview = %+v (%v)", preview, err)
 	}
 	result, err := destroy(h)
-	if firstCode(err) != "lifecycle.live" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) {
+	if firstCode(err) != "destroy.in-use" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) {
 		t.Fatalf("online boundary = %+v (%v)", result, err)
 	}
 	if !slices.Equal(h.capability.destroys, []string{"storage", "installation"}) || blockState(t, h, "machine") != reconciliation.BlockPending {
@@ -106,7 +106,7 @@ func TestOnlineRemovalKeepsUnrelatedMachineAndClientUseAtInitialGate(t *testing.
 			h.capability.quiescence = map[string]Quiescence{live: {State: Live, Reason: "in use"}}
 			_, err := destroy(h)
 			after, _ := durableOperation(t, h)
-			if firstCode(err) != "lifecycle.live" || len(h.capability.destroys) != 0 || after.ID != before.ID {
+			if firstCode(err) != "destroy.in-use" || len(h.capability.destroys) != 0 || after.ID != before.ID {
 				t.Fatalf("live %s admitted removal: %v (%v)", live, h.capability.destroys, err)
 			}
 		})
@@ -120,7 +120,7 @@ func TestOnlineRemovalReprovesUnknownMachineStateAtEveryContinuation(t *testing.
 	h.capability.quiescence = map[string]Quiescence{"machine": {State: Unproved, Reason: "unreachable"}}
 	for range 2 {
 		result, err := destroy(h)
-		if firstCode(err) != "lifecycle.live" || result.Receipt.State != string(reconciliation.OperationPaused) || slices.Contains(h.capability.destroys, "machine") {
+		if firstCode(err) != "destroy.in-use" || result.Receipt.State != string(reconciliation.OperationPaused) || slices.Contains(h.capability.destroys, "machine") {
 			t.Fatalf("unproved Machine passed: %+v (%v)", result, err)
 		}
 	}
@@ -160,7 +160,7 @@ func TestUnknownOnlineRemovalCannotReachMachineBoundaryBeforeResolution(t *testi
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
 	h.capability.quiescence = map[string]Quiescence{"machine": {State: Live, Reason: "running"}}
 	result, err = destroy(h)
-	if firstCode(err) != "lifecycle.live" || result.Receipt.State != string(reconciliation.OperationPaused) || !slices.Equal(h.capability.destroys, []string{"storage", "installation"}) {
+	if firstCode(err) != "destroy.in-use" || result.Receipt.State != string(reconciliation.OperationPaused) || !slices.Equal(h.capability.destroys, []string{"storage", "installation"}) {
 		t.Fatalf("resolved cleanup = %+v, removed %v (%v)", result, h.capability.destroys, err)
 	}
 }
@@ -299,7 +299,7 @@ func TestHostBoundEffectRetiresWithItsHostsWhichStopFirst(t *testing.T) {
 	}
 	_, err = destroy(h)
 	after, _ := durableOperation(t, h)
-	if firstCode(err) != "lifecycle.live" || len(h.capability.destroys) != 0 || after.ID != before.ID {
+	if firstCode(err) != "destroy.in-use" || len(h.capability.destroys) != 0 || after.ID != before.ID {
 		t.Fatalf("running hosts admitted retirement: %v (%v)", h.capability.destroys, err)
 	}
 	if reported := diagnostics.Of(err)[0]; strings.Contains(reported.Message, "storage") || !strings.Contains(reported.Remediation, stop) {
@@ -348,7 +348,7 @@ func TestHostBoundEffectStaysOnlineWhileAnyHostSurvives(t *testing.T) {
 			}
 			completeApply(t, h)
 			_, err := destroy(h)
-			if firstCode(err) != "lifecycle.live" || len(h.capability.destroys) != 0 || !strings.Contains(diagnostics.Of(err)[0].Message, "its hosts outlive this removal") {
+			if firstCode(err) != "destroy.in-use" || len(h.capability.destroys) != 0 || !strings.Contains(diagnostics.Of(err)[0].Message, "its hosts outlive this removal") {
 				t.Fatalf("surviving host admitted retirement: %v (%v)", h.capability.destroys, err)
 			}
 			if remedy := diagnostics.Of(err)[0].Remediation; remedy != survivingHostRemedy {
@@ -418,7 +418,7 @@ func TestAnOwnRemedyIsPrintedBesideTheGenericStopOfOtherLiveBlocks(t *testing.T)
 	completeApply(t, h)
 	h.capability.quiescence = map[string]Quiescence{"other": {State: Live, Reason: "it serves a client", Stop: "bootwright other stop"}}
 	_, err := destroy(h)
-	if firstCode(err) != "lifecycle.live" || len(h.capability.destroys) != 0 {
+	if firstCode(err) != "destroy.in-use" || len(h.capability.destroys) != 0 {
 		t.Fatalf("live blocks admitted the removal: %v (%v)", h.capability.destroys, err)
 	}
 	reported := diagnostics.Of(err)[0]

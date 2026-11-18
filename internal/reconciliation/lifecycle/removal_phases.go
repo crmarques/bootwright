@@ -274,7 +274,7 @@ func survivorRefusal(blocks []reconciliation.Block, survivors map[string][]Survi
 	for index, named := range consumers {
 		consumers[index] = named + " and survives this destroy, which takes back " + strings.Join(retired[named], ", ")
 	}
-	return failure("lifecycle.live", "this removal would take back state that is still in use: "+strings.Join(consumers, "; "), survivingConsumerRemedy)
+	return destroyConsumerSurvives.Fail("this removal would take back state that is still in use: "+strings.Join(consumers, "; "), "")
 }
 
 func consumption(survivors []SurvivingConsumer) string {

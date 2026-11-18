@@ -460,7 +460,7 @@ func TestANestedClusterIsAppliedOnAHostThisContextBuildsAndDestroyedFirst(t *tes
 	destroy := lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, Authorizations: []string{reconciliation.AuthorizationDataLoss}, SkipConfirmation: true}
 	holdNestedSecrets(journey)
 	_, err = journey.Service.Destroy(context.Background(), destroy)
-	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "lifecycle.live" || !strings.Contains(reported[0].Message, "Machine/"+kubevirtNodes[0]) ||
+	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "destroy.in-use" || !strings.Contains(reported[0].Message, "Machine/"+kubevirtNodes[0]) ||
 		strings.Contains(reported[0].Message, "Machine/host-01") || slices.ContainsFunc(host.calls, func(call string) bool { return strings.HasSuffix(call, " destroy") }) {
 		t.Fatalf("a removal registered while the child runs: %+v (calls %v)", reported, host.calls)
 	}
@@ -472,7 +472,7 @@ func TestANestedClusterIsAppliedOnAHostThisContextBuildsAndDestroyedFirst(t *tes
 	beforeRemoval := host.minted
 	holdNestedSecrets(journey)
 	_, err = journey.Service.Destroy(context.Background(), destroy)
-	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "lifecycle.live" || !strings.Contains(reported[0].Message, "Machine/host-01") {
+	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "destroy.in-use" || !strings.Contains(reported[0].Message, "Machine/host-01") {
 		t.Fatalf("the removal did not pause for the running host: %+v (calls %v)", reported, host.calls)
 	}
 	if host.minted <= beforeRemoval || len(host.lendRefused) != 0 || len(host.machines) != 0 || len(host.bound) != 0 {

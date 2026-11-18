@@ -2585,7 +2585,7 @@ func TestFreshDestroyRefusesLiveStateBeforeRegistering(t *testing.T) {
 		"machine-rhel-01": {State: Live, Reason: "its domain is running", Stop: "bootwright machine stop --name rhel-01"},
 	}
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.live" {
+	if code := firstCode(err); code != "destroy.in-use" {
 		t.Fatalf("destroy over a running machine = %q (%v)", code, err)
 	}
 	reported := diagnostics.Of(err)[0]
@@ -2726,7 +2726,7 @@ func TestUnprovedActivityCountsAsLive(t *testing.T) {
 		"artifact-server-lab": {State: Unproved, Reason: "its state could not be read"},
 	}
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.live" {
+	if code := firstCode(err); code != "destroy.in-use" {
 		t.Fatalf("destroy over an unprovable target = %q", code)
 	}
 }
@@ -2744,7 +2744,7 @@ func TestASupersedingRemovalIsGatedToo(t *testing.T) {
 		"machine-rhel-01": {State: Live, Reason: "its domain is running"},
 	}
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.live" {
+	if code := firstCode(err); code != "destroy.in-use" {
 		t.Fatalf("a superseding removal over a running machine = %q", code)
 	}
 }
@@ -2900,7 +2900,7 @@ func TestABlockStoppedByAFullDiskNamesTheFault(t *testing.T) {
 	h.capability.errorFor = map[string]error{"artifact-server-lab": &os.PathError{Op: "write", Path: "/var/lib/private-path", Err: syscall.ENOSPC}}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "had no room (no space left on device)") ||
+	if len(reported) == 0 || reported[0].Code != "engine.records-full" || !strings.Contains(reported[0].Message, "had no room (no space left on device)") ||
 		strings.Contains(reported[0].Message, "private-path") || !strings.Contains(reported[0].Remediation, "free space") {
 		t.Fatalf("a full disk reported %+v", reported)
 	}
@@ -4238,7 +4238,7 @@ func TestDestroyOverAnInterruptedApplyIsStillGated(t *testing.T) {
 		"artifact-server-lab": {State: Live, Reason: "rhel-01 is running", Stop: "bootwright machine stop --name rhel-01"},
 	}
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.live" {
+	if code := firstCode(err); code != "destroy.in-use" {
 		t.Fatalf("refusal = %q", code)
 	}
 	if len(h.capability.destroys) != 0 {
@@ -4818,7 +4818,7 @@ func TestFailedBlockReportsItsOwnCauseBesideTheTerminalState(t *testing.T) {
 	for _, reported := range diagnostics.Of(err) {
 		codes[reported.Code] = reported.Remediation
 	}
-	if _, ok := codes["lifecycle.state"]; !ok {
+	if _, ok := codes["apply.incomplete"]; !ok {
 		t.Fatalf("the terminal state was dropped: %v", diagnostics.Of(err))
 	}
 	if codes["secret.part"] != "add 192.0.2.1 to the certificate's subject alternative names and regenerate it" {

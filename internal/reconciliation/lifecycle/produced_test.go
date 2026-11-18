@@ -195,7 +195,7 @@ func TestAResolutionProvingCompletionPublishesAndAFailedPublicationStaysUnknown(
 		refused := reports(err, diagnosed)
 		if refusal == undiagnosed {
 			got := diagnostics.Of(err)
-			refused = len(got) > 0 && got[0].Code == "runtime.internal"
+			refused = len(got) > 0 && got[0].Code == "engine.escaped"
 		}
 		if !refused || blockState(t, h, "install") != reconciliation.BlockUnknown || len(kept(h)) != 0 || result.Receipt.State != string(reconciliation.OperationUnknown) {
 			t.Fatalf("a failed publication resolved %+v, %+v with custody %v", result, diagnostics.Of(err), kept(h))

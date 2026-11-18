@@ -121,7 +121,7 @@ func messages(t *testing.T, err error) []string {
 	return said
 }
 
-const alphaNeverStarted = "runtime.internal: the attempt of the block alpha could not record its start, so it performed no effect"
+const alphaNeverStarted = "engine.start-unrecorded: the attempt of the block alpha could not record its start, so it performed no effect"
 
 // An attempt whose start the store keeps refusing performed nothing, so the
 // invocation admits nothing further, never admits that block again, waits for
@@ -343,9 +343,9 @@ func TestTheCauseKeepsAFailureThatCarriesNoDiagnostic(t *testing.T) {
 	run.settle(step{block: "alpha", state: reconciliation.BlockUnknown, err: errors.New(refusedWrite)})
 	said := messages(t, run.cause())
 	want := []string{
-		"runtime.internal: the block alpha stopped on a failure that escaped a typed boundary",
+		"engine.escaped: the block alpha stopped on a failure that escaped a typed boundary",
 		"lifecycle.state: bravo could not be served",
-		"runtime.internal: the attempt of the block delta could not record its start, so it performed no effect",
+		"engine.start-unrecorded: the attempt of the block delta could not record its start, so it performed no effect",
 	}
 	if !slices.Equal(said, want) {
 		t.Fatalf("cause = %q, want %q", said, want)

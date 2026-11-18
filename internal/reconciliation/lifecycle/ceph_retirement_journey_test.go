@@ -326,7 +326,7 @@ func TestACephClusterRetiresWithEveryHostItRunsOnWithoutContactingThem(t *testin
 	}
 	_, err = journey.Service.Destroy(context.Background(), destroy)
 	reported := diagnostics.Of(err)
-	if len(reported) == 0 || reported[0].Code != "lifecycle.live" {
+	if len(reported) == 0 || reported[0].Code != "destroy.in-use" {
 		t.Fatalf("the destroy while the hosts run = %+v (%v), want lifecycle.live", reported, err)
 	}
 	for _, host := range fleetHosts {
@@ -372,7 +372,7 @@ func TestACephClusterWhoseHostsSurviveNamesItsOwnRemedy(t *testing.T) {
 		machines.mutex.Unlock()
 		_, err := journey.Service.Destroy(context.Background(), destroy)
 		reported := diagnostics.Of(err)
-		if len(reported) == 0 || reported[0].Code != "lifecycle.live" || !strings.Contains(reported[0].Message, "B491") {
+		if len(reported) == 0 || reported[0].Code != "destroy.in-use" || !strings.Contains(reported[0].Message, "B491") {
 			t.Fatalf("the destroy with surviving hosts (running %t) = %+v (%v), want lifecycle.live naming B491", running, reported, err)
 		}
 		remedy := reported[0].Remediation
