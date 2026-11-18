@@ -391,6 +391,9 @@ func writeReceipt(out io.Writer, receipt lifecycle.Receipt) error {
 	_, err := fmt.Fprintf(out, "operation: %s\nverb: %s\nstate: %s\nnext: %s\n",
 		escapeDisplayLine(receipt.Operation), escapeDisplayLine(receipt.Verb),
 		escapeDisplayLine(receipt.State), escapeDisplayLine(receipt.Next))
+	if err == nil && receipt.Stop != "" {
+		_, err = fmt.Fprintf(out, "stop: %s\n", escapeDisplayLine(receipt.Stop))
+	}
 	return err
 }
 

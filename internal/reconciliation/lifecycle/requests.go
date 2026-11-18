@@ -113,6 +113,7 @@ type Receipt struct {
 	Verb      string
 	State     string
 	Next      string
+	Stop      string
 }
 
 // PlanStep is one frozen block as a preview presents it. Selection is empty

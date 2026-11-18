@@ -50,6 +50,24 @@ func (r commandResult) createdLogs() []string {
 	return powerLogs(r.power)
 }
 
+func (r *Runner) stopOf(reported []diagnostic) string {
+	if r.config.Stops == nil {
+		return ""
+	}
+	for _, entry := range reported {
+		if entry.Severity != "error" {
+			continue
+		}
+		for _, stop := range r.config.Stops() {
+			if stop.Code == entry.Code {
+				return stop.Code
+			}
+		}
+		return ""
+	}
+	return ""
+}
+
 // An executed failure keeps its result, logs and receipt for continuation.
 // Human diagnostics use stderr; structured diagnostics share its envelope.
 // A refusal registers no operation and has no result.
@@ -57,6 +75,9 @@ func (r *Runner) writeExecutedLifecycle(path string, result commandResult, diagn
 	if result.lifecycleOperation == nil {
 		return false, nil
 	}
+	stopped := *result.lifecycleOperation
+	stopped.Receipt.Stop = r.stopOf(diagnostics)
+	result.lifecycleOperation = &stopped
 	if structuredFormat(presentationFor(r.config.Out).Format) {
 		return true, writeStructuredOperation(r.config.Out, path, result.lifecycleOperation, diagnostics, 1)
 	}

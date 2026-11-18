@@ -17744,3 +17744,17 @@ relaxations that differ from the frozen ones, and a context that moved while
 through helpers other than the engine's `failure` and other families' codes.
 Guarded by `TestTheEnginesStopsAreTheCatalogsEngineStops`, the engine's
 resolution, finalization, preview and journey tests and their race run.
+
+## X614 — A failed operation's receipt names its stop
+
+### B1605
+
+Under [D276](backlog.md#d276) (audit 006 W2.1, second half of the structured
+output sub-slice), split from [B1563](m1.md#b1563). An `apply` or `destroy`
+that registered and failed ends its receipt with `stop: <code>`, and its
+structured receipt carries `stop`, when its first error is a catalogued stop,
+so a script that reads the receipt learns which stop ended the run without
+parsing diagnostics; the first four lines are unchanged
+([the receipt's stop](../cli.md#the-receipts-stop)). Guarded by
+`TestAFailedOperationsReceiptNamesItsStop`. The human heading of a stop stays
+for a later slice.

@@ -996,6 +996,15 @@ continuing. A completed apply is the exception, for the reason above. These are
 next steps only; the receipt's `next` still names what the operation's own
 records call for.
 
+### The receipt's stop
+
+An `apply` or `destroy` that registered its operation and then failed ends its
+receipt with a fifth line, `stop: <code>`, when its first error diagnostic is a
+[stop](cli/stops.md) of the catalog the executable composes, and the structured
+receipt carries it as `stop`; any other result writes no such line. A script
+reads the first four lines as before, and `bootwright explain --code <code>`
+prints the stop's meaning and recovery.
+
 ### Outdated clients
 
 Over an apply, `status` and [`diff`](#desired-and-realized-state-comparison)

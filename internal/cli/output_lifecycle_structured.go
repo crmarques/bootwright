@@ -12,10 +12,11 @@ type receiptPresentation struct {
 	Verb      string `json:"verb"`
 	State     string `json:"state"`
 	Next      string `json:"next"`
+	Stop      string `json:"stop,omitempty"`
 }
 
 func displayReceipt(receipt lifecycle.Receipt) receiptPresentation {
-	return receiptPresentation{Operation: escapeDisplayLine(receipt.Operation), Verb: escapeDisplayLine(receipt.Verb), State: escapeDisplayLine(receipt.State), Next: escapeDisplayLine(receipt.Next)}
+	return receiptPresentation{Operation: escapeDisplayLine(receipt.Operation), Verb: escapeDisplayLine(receipt.Verb), State: escapeDisplayLine(receipt.State), Next: escapeDisplayLine(receipt.Next), Stop: escapeDisplayLine(receipt.Stop)}
 }
 
 type planStepPresentation struct {
