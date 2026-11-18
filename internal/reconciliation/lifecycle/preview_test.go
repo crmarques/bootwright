@@ -56,7 +56,7 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 			name: "an unclaimed kind", definitions: nestedDefinitions(), refusal: "lifecycle.unsupported",
 			prepare: func(h *harness) { h.service.compiler = testCompiler{state: withEnabledPlaybook()} },
 		},
-		{name: "a zero-block plan", refusal: "lifecycle.state"},
+		{name: "a zero-block plan", refusal: "engine.request-defect"},
 		{name: "a stage boundary", definitions: controlled, stages: []string{"infrastructure-services"}, refusal: "apply.stage-empty"},
 		{
 			name: "its own sockets in conflict", definitions: nestedDefinitions(), refusal: "api.invariant",
@@ -877,7 +877,7 @@ func TestADestroyPreviewRefusesAStageSelection(t *testing.T) {
 			records, evidence, mutations := h.workspace.area.clone(), slices.Clone(h.workspace.evidence), h.workspace.mutations
 			_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName, Stages: []string{"infrastructure-services"}})
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != "repeat bootwright plan --context lab without --stage" {
+			if len(reported) != 1 || reported[0].Code != "destroy.stage-selected" || reported[0].Remediation != "repeat bootwright plan --context lab without --stage" {
 				t.Fatalf("preview = %+v (%v)", reported, err)
 			}
 			if !sameFiles(h.workspace.area, records) || !bytes.Equal(h.workspace.evidence, evidence) || h.workspace.mutations != mutations {
@@ -892,7 +892,7 @@ func TestADestroyPreviewRefusesAStageSelection(t *testing.T) {
 func agreeOnRefusal(t *testing.T, h *harness, code string, previewErr, applyErr error) {
 	t.Helper()
 	if firstCode(applyErr) != code {
-		t.Fatalf("apply refusal = %q (%v)", firstCode(applyErr), applyErr)
+		t.Fatalf("apply refusal = %q (%+v)", firstCode(applyErr), diagnostics.Of(applyErr))
 	}
 	if !reflect.DeepEqual(diagnostics.Of(previewErr), diagnostics.Of(applyErr)) {
 		t.Fatalf("preview reported %+v (%v), apply reported %+v", diagnostics.Of(previewErr), previewErr, diagnostics.Of(applyErr))

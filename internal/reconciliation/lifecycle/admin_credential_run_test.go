@@ -27,7 +27,7 @@ func TestAnAdminCredentialRunPlacedOffTheControllerRefusesAfterReleasingItsBindi
 				return e, Invocation{Placement: placement}, func() { released++ }, nil
 			}}
 			err := UpdateAdminCredential(context.Background(), call, Execution{}, secrets.Material{})
-			if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" || d[0].Message != "the frozen administrator credential request is placed off the controller" || runner.calls != 0 || released != 1 {
+			if d := diagnostics.Of(err); len(d) != 1 || !refusedBeforeEffect(d[0].Code) || d[0].Message != "the frozen administrator credential request is placed off the controller" || runner.calls != 0 || released != 1 {
 				t.Fatalf("an off-controller run returned %+v after %d runs and %d releases", d, runner.calls, released)
 			}
 		})

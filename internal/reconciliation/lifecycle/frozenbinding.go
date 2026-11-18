@@ -106,7 +106,7 @@ func (s Service) lostBinding(ctx context.Context, name string, decided operation
 	if !decided.fresh {
 		objects = objectsOf(coveredBy(decided.operation, decided.plan, decided.states))
 	}
-	return failure("lifecycle.state",
+	return engineBindingLost.Fail(
 		lostBindingMessage(decided.basis.record, binding, why, objects),
 		"restore the context's keyring from a complete backup and repeat "+contextCommand(name, string(decided.verb))+
 			", or run "+lostBindingExit(name)+" and then remove the objects named here by hand")

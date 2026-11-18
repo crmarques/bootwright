@@ -38,7 +38,7 @@ func TestACapabilityThatBindsASecretNoBlockNamesRefusesToPlan(t *testing.T) {
 				t.Fatal(err)
 			}
 			issues := diagnostics.Of(refuseUnnamedSecrets("artifact-server-nginx-v1", tc.capability, plan))
-			if len(issues) != 1 || issues[0].Code != "lifecycle.state" || !strings.Contains(issues[0].Message, "the artifact-server-nginx-v1 capability "+tc.want) || !strings.Contains(issues[0].Remediation, "this build is defective") {
+			if len(issues) != 1 || issues[0].Code != "engine.request-defect" || !strings.Contains(issues[0].Message, "the artifact-server-nginx-v1 capability "+tc.want) || !strings.Contains(issues[0].Remediation, "this build is defective") {
 				t.Fatalf("refusal = %+v", issues)
 			}
 		})

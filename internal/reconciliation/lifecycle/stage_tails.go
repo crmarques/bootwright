@@ -25,7 +25,7 @@ func (s Service) dependOnStageTails(definitions []reconciliation.BlockDefinition
 			continue
 		}
 		if reference.Kind == "" || reference.Object == "" || !slices.Contains(definition.Requires, reference) {
-			return nil, failure("lifecycle.state", "block "+definition.ID+" has an invalid stage tail reference", "make the tail depend on the object whose consumers it follows")
+			return nil, engineRequestDefect.Fail("block "+definition.ID+" has an invalid stage tail reference", "make the tail depend on the object whose consumers it follows")
 		}
 		for _, other := range definitions {
 			if other.ID != definition.ID && other.Stage == definition.Stage && slices.Contains(other.Requires, reference) {

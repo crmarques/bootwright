@@ -206,7 +206,7 @@ func (s Service) preview(ctx context.Context, decision decider, view View, selec
 		if selection.Until != "" {
 			given = append(given, "--until")
 		}
-		return nil, operationPlan{}, basis{}, failure("lifecycle.stage",
+		return nil, operationPlan{}, basis{}, destroyStageSelected.Fail(
 			"the next operation is a destroy, which accepts no stage selection",
 			"repeat "+contextCommand(view.Identity().Name, "plan")+" without "+strings.Join(given, " and "))
 	}

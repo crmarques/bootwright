@@ -49,7 +49,7 @@ func TestAPlanThatConsumesAnAuthorizationRefusesWithoutIt(t *testing.T) {
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("artifacts")})
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab"})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.authorization" ||
+	if len(reported) != 1 || reported[0].Code != "authorize.missing" ||
 		reported[0].Message != "this plan has data-loss consequences that are not authorized: step 1 (serve artifacts)" ||
 		reported[0].Remediation != "repeat it with the authorization: bootwright apply --context lab --authorize data-loss" {
 		t.Fatalf("missing authorization refusal = %+v (%v)", reported, err)
@@ -128,7 +128,7 @@ func TestEachMutationOfADestructivePlanIsAuthorizedOnItsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); firstCode(err) != "lifecycle.authorization" {
+	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); !authorizationRefusal(firstCode(err)) {
 		t.Fatalf("unauthorized destroy = %v", err)
 	}
 	result, err := h.service.Destroy(context.Background(), DestroyRequest{
@@ -202,7 +202,7 @@ func TestAnUnattendedAuthorizationIsBoundToTheStepsItAuthorizes(t *testing.T) {
 		t.Helper()
 		_, err := h.service.Apply(ctx, request)
 		reported := diagnostics.Of(err)
-		if len(reported) != 1 || reported[0].Code != "lifecycle.authorization" || reported[0].Message != message || reported[0].Remediation != remedy {
+		if len(reported) != 1 || reported[0].Code != "authorize.stale" || reported[0].Message != message || reported[0].Remediation != remedy {
 			t.Fatalf("%+v = %+v (%v)", request, reported, err)
 		}
 		if h.confirmer.asked != 0 || h.workspace.mutations != 0 || len(h.capability.applies) != 0 {

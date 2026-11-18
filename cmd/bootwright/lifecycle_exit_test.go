@@ -154,7 +154,7 @@ func TestAPlainDeleteClearsTheRefusedRecordStatesBesidePristineEvidence(t *testi
 			}
 			for _, verb := range []string{"apply", "destroy"} {
 				_, stderr := contextRun(t, services, 1, verb, "--context", "alpha", "--yes")
-				if !strings.Contains(stderr, "records-missing") && !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(stderr, "bootwright context delete --name alpha --purge") ||
+				if !strings.Contains(stderr, "records-missing") && !strings.Contains(stderr, "engine.unindexed-records") || !strings.Contains(stderr, "bootwright context delete --name alpha --purge") ||
 					strings.Contains(stderr, "--allow-orphans") {
 					t.Fatalf("the %s refused with %s", verb, stderr)
 				}
@@ -206,7 +206,7 @@ func TestTheDeletionARefusalNamesOverUnrecognizedEvidenceRuns(t *testing.T) {
 				if found := namedDeletion.FindStringSubmatch(strings.Join(strings.Fields(stderr), " ")); found != nil {
 					named = strings.Fields(found[1])
 				}
-				if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(humanContent(stderr), humanContent(test.entry)) ||
+				if !strings.Contains(stderr, "engine.unindexed-records") || !strings.Contains(humanContent(stderr), humanContent(test.entry)) ||
 					!slices.Equal(named, test.named) || strings.Contains(stderr, "restore the whole store") {
 					t.Fatalf("the %s refused with %s", verb, stderr)
 				}

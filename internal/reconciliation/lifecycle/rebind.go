@@ -24,7 +24,7 @@ func splitRebinds(contextName string, verb reconciliation.Verb, authorizations [
 			continue
 		}
 		if !api.ValidLexical(api.LexicalName, secret) || slices.Contains(rebinds, secret) {
-			return nil, nil, failure("lifecycle.authorization",
+			return nil, nil, authorizeRebindInvalid.Fail(
 				"--authorize "+token+" must name one Secret once",
 				"repeat "+contextCommand(contextName, string(verb))+" naming each rotated access credential once as --authorize rebind=<secret>")
 		}
@@ -41,7 +41,7 @@ func (s Service) admitRebinds(ctx context.Context, name string, decided operatio
 	without := "repeat " + contextCommand(name, string(decided.verb)) + " without --authorize " + RebindAuthorization
 	binding := frozenBinding(decided)
 	if binding == "" {
-		return operationPlan{}, failure("lifecycle.authorization",
+		return operationPlan{}, authorizeRebindInvalid.Fail(
 			"this "+string(decided.verb)+" reopens no Secret binding, so no Secret is rebound", without+rebinds[0])
 	}
 	bound, err := s.pinnedVersions(ctx, name, binding)
@@ -61,10 +61,10 @@ func (s Service) admitRebinds(ctx context.Context, name string, decided operatio
 		pinned, held := bound[secret]
 		switch {
 		case !held:
-			return operationPlan{}, failure("lifecycle.authorization",
+			return operationPlan{}, authorizeRebindInvalid.Fail(
 				"the Secret binding "+binding+" this "+string(decided.verb)+" reopens pins no version of Secret "+secret, without+secret)
 		case pinned == currentVersions[secret]:
-			return operationPlan{}, failure("lifecycle.authorization",
+			return operationPlan{}, authorizeRebindInvalid.Fail(
 				"Secret "+secret+" is already presented at its current version, so there is nothing to rebind", without+secret)
 		}
 		if err := s.presentedOnly(decided, secret, without+secret); err != nil {
@@ -114,12 +114,12 @@ func (s Service) presentedOnly(decided operationPlan, secret, remedy string) err
 		}
 	}
 	if len(refused) != 0 {
-		return failure("lifecycle.authorization",
+		return authorizeRebindInvalid.Fail(
 			"Secret "+secret+" is not only an access credential this "+string(decided.verb)+" presents: "+strings.Join(refused, ", ")+
 				" rest on the version its operation bound, which alone proves what they created", remedy)
 	}
 	if len(presented) == 0 {
-		return failure("lifecycle.authorization",
+		return authorizeRebindInvalid.Fail(
 			"no step of this "+string(decided.verb)+" presents Secret "+secret, remedy)
 	}
 	return nil
@@ -129,7 +129,7 @@ func (s Service) referencing(block reconciliation.Block, step, secret, remedy st
 	capability, found := s.capabilities.Resolve(block.Kind, block.Implementation)
 	referencer, named := capability.(SecretReferencer)
 	if !found || !named {
-		return nil, false, failure("lifecycle.authorization",
+		return nil, false, authorizeRebindInvalid.Fail(
 			step+" has a capability that cannot name the Secrets it references, so no Secret is rebound", remedy)
 	}
 	references, err := referencer.SecretReferences(block)

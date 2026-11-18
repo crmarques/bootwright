@@ -399,7 +399,7 @@ func TestARemovalWhoseBindingReleaseFailsReportsIncompleteFinalization(t *testin
 // removal reports when it could not give back everything it owned.
 func requireIncompleteRemoval(t *testing.T, reported []diagnostics.Diagnostic, err error) {
 	t.Helper()
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) ||
 		reported[0].Message != "the removal completed, but releasing what it owned is incomplete" ||
 		reported[0].Remediation != "repeat bootwright destroy --context lab to finish it" {
 		t.Fatalf("the removal failed with %+v (%v)", reported, err)
@@ -513,7 +513,7 @@ func TestARunningOperationWhoseBlocksAreAllDoneIsFinalized(t *testing.T) {
 		records, evidence, mutations := w.area.clone(), slices.Clone(w.evidence), w.mutations
 		before := killStateOf(w, run.snapshot.binder, run.snapshot.host)
 		_, err := service.Destroy(ctx, DestroyRequest{ContextName: testContextName})
-		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.authorization" {
+		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "authorize.missing" {
 			t.Fatalf("the unauthorized destroy = %+v (%v)", reported, err)
 		}
 		if !sameFiles(w.area, records) || !bytes.Equal(w.evidence, evidence) || w.mutations != mutations ||
@@ -582,7 +582,7 @@ func TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb(t *testi
 		h.service.options.Confirmer = nil
 		records, evidence, mutations, presented := h.workspace.area.clone(), slices.Clone(h.workspace.evidence), h.workspace.mutations, len(h.presenter.presented)
 		_, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName})
-		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.authorization" {
+		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "authorize.missing" {
 			t.Fatalf("the unauthorized destroy = %+v (%v)", reported, err)
 		}
 		if !sameFiles(h.workspace.area, records) || !bytes.Equal(h.workspace.evidence, evidence) || h.workspace.mutations != mutations ||
@@ -762,7 +762,7 @@ func TestAFinalizationThatLeavesAnotherBehindRefuses(t *testing.T) {
 	applies, presented, mutations := len(h.capability.applies), len(h.presenter.presented), h.workspace.mutations
 	result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if result != nil || len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if result != nil || len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) ||
 		reported[0].Message != "the operation's finalization did not complete" || reported[0].Remediation != "repeat bootwright apply --context lab" {
 		t.Fatalf("the apply = %+v, %+v (%v)", result, reported, err)
 	}

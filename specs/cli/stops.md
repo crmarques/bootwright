@@ -75,6 +75,8 @@ removal that would take back state in use, the end of an operation that did
 not complete, which reads as the consequence of the causes before it, and the
 refusals of a decision and its plan before any effect.
 
+#### Execution and removal
+
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `engine.records-full` | block | possible | environment | `storage` | fix-then-repeat | a block stopped because a filesystem holding the context's records or logs had no room | free space, or raise the quota, on the filesystems that hold /var/lib/bootwright and /var/log/bootwright, then repeat the operation |
@@ -89,6 +91,11 @@ refusals of a decision and its plan before any effect.
 | `destroy.incomplete` | operation | possible | unclassified | - | repeat | the destroy ended with blocks not proved gone; the diagnostics before it say why | repeat the destroy once each cause is fixed |
 | `destroy.in-use` | removal-phase | none | target | - | fix-then-repeat | a removal would take back state that is still in use, so it takes back nothing at that boundary | stop what the message names, then repeat the destroy |
 | `destroy.consumer-survives` | removal-phase | none | target | - | fix-then-repeat | a removal would retire what a consumer that outlives it still uses | keep this context while the consumer runs; a destroy takes back what a consumer uses only when the consumer leaves with owned virtual node Machines the same destroy deletes |
+
+#### Decisions
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | `engine.finalization-due` | operation | owed | defect | - | repeat | an operation is due its finalization, which no decision may skip | repeat the command, which finalizes that operation before it decides |
 | `engine.records-contradict` | operation | none | records | - | fix-then-repeat | an incomplete operation holds records that contradict what it started | read the records with bootwright status, then restore them from a backup or delete the context |
 | `engine.other-verb-incomplete` | operation | none | input | - | other-verb | an incomplete operation of the other verb must be continued before another operation | continue or replace the incomplete operation the message names |
@@ -101,8 +108,25 @@ refusals of a decision and its plan before any effect.
 | `apply.stage-empty` | operation | none | input | - | fix-then-repeat | the selected stages or the --until instance have nothing to start | repeat the apply with a wider selection |
 | `apply.stage-excludes-retry` | operation | none | input | - | fix-then-repeat | the block the operation must retry first is outside the selected stages | repeat the apply with a selection that holds that block |
 | `apply.until-unknown` | operation | none | input | - | fix-then-repeat | --until names no add-on instance of the plan | name an add-on instance the plan holds, or repeat without --until |
+| `engine.unindexed-records` | context | none | records | - | abandon-context | the context holds operation records or evidence its index names no operation for | restore the context's records, or delete the context with what it may still own |
+| `engine.request-defect` | operation | none | defect | - | none | a capability declared or requested something the engine refuses to compose | report the message as a defect |
+| `engine.other-build` | operation | none | build | - | registering-build | this executable cannot prove it would continue or remove the operation as the build that registered it | repeat the command with the build that registered the operation |
+| `engine.plan-moved` | operation | none | concurrency | - | repeat | the context changed between the plan and the transition, so nothing was registered | repeat the command to plan from what the context holds now |
+| `engine.input-moved` | operation | none | input | - | fix-then-repeat | the context's input is no longer the revision the operation froze | restore the exact input revision the operation froze |
+| `engine.binding-lost` | operation | none | records | - | abandon-context | a Secret binding the operation froze is lost, so its material cannot be lent again | restore the context's keyring from a complete backup, or delete the context and remove what it named by hand |
+| `destroy.stage-selected` | operation | none | input | - | fix-then-repeat | the next operation is a destroy, which accepts no stage selection | repeat the command without --stage and --until |
+| `apply.until-before-preparation` | operation | none | input | - | other-verb | the add-on boundary --until names cannot be planned before preparation completes | run apply to complete preparation, then select --until |
+
+#### Plans and authorizations
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | `plan.input-uncompilable` | context | none | input | - | change-input | the context's frozen desired state could not be compiled | repair the input with validate and import it again |
 | `plan.capability-missing` | context | none | build | - | none | no lifecycle capability of this build plans the selected state | use a build that carries the capability; report it if this build should |
 | `plan.capability-defect` | context | none | defect | - | none | a capability planned a block it may not plan | report the message as a defect |
 | `plan.host-key-unbound` | context | none | input | - | change-input | an SSH placement binds no host key, or reaches the controller where its pinned key does not apply | author access.ssh.knownHostsRef on the Machine the message names |
 | `plan.environment-invalid` | context | none | input | - | change-input | the selected state holds no single Environment naming its controller Machine | repair the input with validate |
+| `authorize.unneeded` | operation | none | input | - | fix-then-repeat | --authorize names a token the plan does not require | repeat the command without that --authorize |
+| `authorize.missing` | operation | none | input | - | authorize | the plan has consequences no --authorize grants | review the plan, then repeat the command with the authorization it names |
+| `authorize.stale` | operation | none | input | - | authorize | an --authorize digest names steps the plan no longer holds, or an unattended run binds none | review the plan, then repeat the command with the digest it prints |
+| `authorize.rebind-invalid` | operation | none | input | - | fix-then-repeat | an --authorize rebind names a Secret the operation cannot rebind | repeat the command naming each rotated access credential once as --authorize rebind=<secret> |

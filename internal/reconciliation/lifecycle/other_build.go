@@ -19,7 +19,7 @@ func (s Service) otherBuild(operation operationstore.Operation) bool {
 
 func (s Service) proveExecution(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) executionProof {
 	if err := s.proveContracts(frozen, operation.Contracts); err != nil {
-		return executionProof{refusal: failure("lifecycle.state", contractMessage(err), remediationFor(view, operation, s.canTakeBack(ctx, operation, frozen, states)))}
+		return executionProof{refusal: engineOtherBuild.Fail(contractMessage(err), remediationFor(view, operation, s.canTakeBack(ctx, operation, frozen, states)))}
 	}
 	// Removal strictly reads every frozen request through its owning capability.
 	// For a continued destroy it also proves the saved authorization and inverse.
@@ -31,7 +31,7 @@ func (s Service) proveExecution(ctx context.Context, view View, operation operat
 		for _, block := range frozen.Blocks {
 			capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 			if !ok {
-				err = failure("lifecycle.state", "this executable provides no "+block.Implementation+" to read block "+block.ID, removeWith(operation.Executable))
+				err = engineOtherBuild.Fail("this executable provides no "+block.Implementation+" to read block "+block.ID, removeWith(operation.Executable))
 				break
 			}
 			if _, why := capability.Removal(ctx, block); why != nil {
@@ -45,13 +45,13 @@ func (s Service) proveExecution(ctx context.Context, view View, operation operat
 	}
 	if err != nil {
 		if s.canTakeBack(ctx, operation, frozen, states) {
-			err = failure("lifecycle.state", firstMessage(err), remediationFor(view, operation, true))
+			err = engineOtherBuild.Fail(firstMessage(err), remediationFor(view, operation, true))
 		}
 		return executionProof{refusal: err}
 	}
 	if operation.Verb == reconciliation.Destroy {
 		if change, differs := reconciliation.Compare(frozen, fresh).First(); differs {
-			return executionProof{refusal: failure("lifecycle.state", "this executable would remove block "+change.Block+" differently from its frozen removal", remediationFor(view, operation, false))}
+			return executionProof{refusal: engineOtherBuild.Fail("this executable would remove block "+change.Block+" differently from its frozen removal", remediationFor(view, operation, false))}
 		}
 	}
 	return executionProof{proved: true}

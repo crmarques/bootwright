@@ -413,7 +413,7 @@ func refuseUnindexed(ctx context.Context, view View, store decisionRecords) erro
 	if err != nil || len(entries) == 0 {
 		return err
 	}
-	return failure("lifecycle.state",
+	return engineUnindexedRecords.Fail(
 		"the context holds operation records or evidence that no index names: "+strings.Join(entries, ", "),
 		deletionExit(view))
 }

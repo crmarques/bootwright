@@ -15,7 +15,7 @@ func canonicalReservations(claims []infrastructureservices.HostReservation) ([]i
 	for i := range ordered {
 		ordered[i].Keys = slices.Sorted(slices.Values(ordered[i].Keys))
 		if len(slices.Compact(slices.Clone(ordered[i].Keys))) != len(ordered[i].Keys) {
-			return nil, failure("lifecycle.state", "a capability declared duplicate host reservation keys", "")
+			return nil, engineRequestDefect.Fail("a capability declared duplicate host reservation keys", "")
 		}
 	}
 	compare := func(a, b infrastructureservices.HostReservation) int {
@@ -29,14 +29,14 @@ func canonicalReservations(claims []infrastructureservices.HostReservation) ([]i
 		} else {
 			previous := &combined[len(combined)-1]
 			if !previous.Shared || !claim.Shared || previous.ObjectKind != claim.ObjectKind || previous.Releasing != claim.Releasing {
-				return nil, failure("lifecycle.state", "capabilities declared incompatible host reservations for "+claim.Kind+"/"+claim.Service, "")
+				return nil, engineRequestDefect.Fail("capabilities declared incompatible host reservations for "+claim.Kind+"/"+claim.Service, "")
 			}
 			previous.Keys = append(previous.Keys, claim.Keys...)
 			slices.Sort(previous.Keys)
 			previous.Keys = slices.Compact(previous.Keys)
 		}
 		if len(combined[len(combined)-1].Keys) > infrastructureservices.MaxPublishedReservationKeys {
-			return nil, failure("lifecycle.state", "the composed host reservation exceeds its key bound", "")
+			return nil, engineRequestDefect.Fail("the composed host reservation exceeds its key bound", "")
 		}
 	}
 	return combined, nil

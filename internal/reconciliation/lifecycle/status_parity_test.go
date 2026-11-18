@@ -55,7 +55,7 @@ func passesTheRecords(err error) bool {
 	}
 	reported := diagnostics.Of(err)
 	return len(reported) != 0 && !slices.ContainsFunc(reported, func(item diagnostics.Diagnostic) bool {
-		return item.Code != "lifecycle.authorization" && !diagnostics.Unproved(&diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{item}})
+		return !authorizationRefusal(item.Code) && !strings.HasPrefix(item.Code, "authorize.") && !diagnostics.Unproved(&diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{item}})
 	})
 }
 

@@ -83,7 +83,7 @@ func TestAutomaticPreparationPreviewAndControllerStageHaveNoInventoryEffects(t *
 	if err == nil || result == nil || !slices.Equal(h.capability.applies, []string{"setup", "inventory"}) {
 		t.Fatalf("inventory did not stop at authorization: %v %+v", err, result)
 	}
-	if reports := diagnostics.Of(err); len(reports) == 0 || reports[0].Code != "lifecycle.authorization" {
+	if reports := diagnostics.Of(err); len(reports) == 0 || !authorizationRefusal(reports[0].Code) {
 		t.Fatal(reports)
 	}
 	plan, err := h.service.Plan(ctx, PlanRequest{ContextName: testContextName})

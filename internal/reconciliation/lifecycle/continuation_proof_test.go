@@ -68,22 +68,22 @@ func refusedContinuations() []refusedContinuation {
 		{
 			name: "a failed apply another build freezes differently", arrange: failedApplyUnder(movedApply),
 			steps: []string{}, verb: reconciliation.Apply,
-			code: "lifecycle.state", message: "this executable does not support the execution contract of block alpha",
+			code: "engine.other-build", message: "this executable does not support the execution contract of block alpha",
 		},
 		{
 			name: "an unknown removal another build freezes differently", arrange: unknownRemovalUnder(movedRemoval),
 			steps: []string{}, verb: reconciliation.Destroy,
-			code: "lifecycle.state", message: "this executable would remove block alpha differently from its frozen removal",
+			code: "engine.other-build", message: "this executable would remove block alpha differently from its frozen removal",
 		},
 		{
 			name: "a failed apply under a moved closure", arrange: failedApplyUnder(closure),
 			steps: []string{"bootwright destroy --context lab"}, verb: reconciliation.Apply,
-			code: "lifecycle.state", message: movedClosure,
+			code: "engine.other-build", message: movedClosure,
 		},
 		{
 			name: "an unknown removal under a moved closure", arrange: unknownRemovalUnder(closure),
 			steps: []string{}, verb: reconciliation.Destroy,
-			code: "lifecycle.state", message: movedClosure,
+			code: "engine.other-build", message: movedClosure,
 		},
 	}
 }

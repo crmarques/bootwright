@@ -67,7 +67,7 @@ func TestNegativeParallelismRefusesBeforeLifecycleAccess(t *testing.T) {
 	_, destroyErr := service.Destroy(t.Context(), DestroyRequest{Parallelism: -1})
 	for _, err := range []error{applyErr, destroyErr} {
 		found := diagnostics.Of(err)
-		if len(found) != 1 || found[0].Code != "lifecycle.state" || found[0].Message != "parallelism must not be negative" {
+		if len(found) != 1 || !refusedBeforeEffect(found[0].Code) || found[0].Message != "parallelism must not be negative" {
 			t.Fatalf("negative parallelism: %v", err)
 		}
 	}

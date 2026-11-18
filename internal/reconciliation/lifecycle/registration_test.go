@@ -1031,7 +1031,7 @@ func TestAFreshApplyRefusesAtItsClaimWhenTheAreaCannotHoldItsFirstPass(t *testin
 	}
 	_, err = h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
 	refused := diagnostics.Of(err)
-	if len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations") {
+	if len(refused) != 1 || !refusedBeforeEffect(refused[0].Code) || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations") {
 		t.Fatalf("an apply the area cannot hold reported %+v (%v), want the lifecycle.state retained-operation refusal", refused, err)
 	}
 	if current, directories := operations(t, h.workspace); current != "" || !slices.Equal(directories, []string{"retained"}) {
@@ -1115,7 +1115,7 @@ func TestTheRemovalOfTheLargestApplyRegistersAtTheLine(t *testing.T) {
 		h.workspace.area.files[fmt.Sprintf("filled/record-%d", index)] = []byte("{}\n")
 	}
 	_, err = h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations") {
+	if refused := diagnostics.Of(err); len(refused) != 1 || !refusedBeforeEffect(refused[0].Code) || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations") {
 		t.Fatalf("an apply one entry past its line reported %+v (%v), want the lifecycle.state retained-operation refusal", refused, err)
 	}
 	delete(h.workspace.area.files, "filled/record-0")
@@ -1173,7 +1173,7 @@ func TestApplyRetriesNeverTakeTheRemovalReserve(t *testing.T) {
 		_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
 		refused := diagnostics.Of(err)
 		if len(refused) == 1 && strings.Contains(refused[0].Message, "for the removal that takes this apply back") {
-			if refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Remediation, "bootwright destroy --context "+testContextName) {
+			if !refusedBeforeEffect(refused[0].Code) || !strings.Contains(refused[0].Remediation, "bootwright destroy --context "+testContextName) {
 				t.Fatalf("the retry refused with %+v, want lifecycle.state naming the destroy", refused[0])
 			}
 			if len(h.capability.applies) != applied {
@@ -1449,7 +1449,7 @@ func TestARemovalTheAreaCannotHoldRefusesAtItsRegistration(t *testing.T) {
 	}
 	_, err = h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
 	refused := diagnostics.Of(err)
-	if len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "this removal needs 8 more") {
+	if len(refused) != 1 || !refusedBeforeEffect(refused[0].Code) || !strings.Contains(refused[0].Message, "this removal needs 8 more") {
 		t.Fatalf("a removal the area cannot hold reported %+v (%v), want the lifecycle.state retained-operation refusal", refused, err)
 	}
 	if now, after := operations(t, h.workspace); now != current || !slices.Equal(slices.DeleteFunc(after, func(name string) bool { return name == "filled" }), directories) {
@@ -1478,7 +1478,7 @@ func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheDirectoryBound(t *testing
 		h.workspace.area.directories[fmt.Sprintf("retained-%d", index)] = true
 	}
 	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+	if refused := diagnostics.Of(err); len(refused) != 1 || !refusedBeforeEffect(refused[0].Code) ||
 		!strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations: it retains 1023 of its 1024, and this apply needs room for 2") {
 		t.Fatalf("an apply one directory short of the bound reported %+v (%v), want the lifecycle.state retained-operation refusal", refused, err)
 	}
@@ -1529,7 +1529,7 @@ func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheByteBound(t *testing.T) {
 	h.capability.verbose = func() int { return operationstore.MaxAdapterOutputBytes }
 	area.files["filled/output"] = make([]byte, operationstore.MaxBytes-operationstore.ReservedBytes+1)
 	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+	if refused := diagnostics.Of(err); len(refused) != 1 || !refusedBeforeEffect(refused[0].Code) ||
 		!strings.Contains(refused[0].Message, "its operation area holds 50331649 of its 67108864 bytes, and this apply needs the 16777216 it keeps") {
 		t.Fatalf("an apply one byte past the line reported %+v (%v), want the lifecycle.state retained-operation refusal", refused, err)
 	}
@@ -1780,7 +1780,7 @@ func TestADestroyOverUnindexedRecordsRefuses(t *testing.T) {
 			reservations := slices.Clone(h.workspace.reservations)
 			_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+			if len(reported) != 1 || reported[0].Code != "engine.unindexed-records" ||
 				reported[0].Message != "the context holds operation records or evidence that no index names: "+test.named ||
 				reported[0].Remediation != test.remedy {
 				t.Fatalf("the destroy = %+v (%v)", reported, err)

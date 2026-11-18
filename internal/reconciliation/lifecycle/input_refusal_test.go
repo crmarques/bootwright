@@ -163,7 +163,7 @@ func requireContinuationRefusal(t *testing.T, h *harness, message string) {
 	const remedy = "restore the exact input revision this operation froze"
 	applied, recorded := continuationRefusal(t, h)
 	for path, reported := range map[string][]diagnostics.Diagnostic{"apply": applied, "status": recorded} {
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != message || reported[0].Remediation != remedy {
+		if len(reported) != 1 || reported[0].Code != "engine.input-moved" || reported[0].Message != message || reported[0].Remediation != remedy {
 			t.Errorf("the %s path reported %+v, want %q", path, reported, message)
 		}
 	}

@@ -518,7 +518,7 @@ func TestMissingEvidenceIsRefusedAndAbandonedAsCorruptEvidenceIs(t *testing.T) {
 				!strings.Contains(out, "Contradictions\n    "+test.entry+"\n") {
 				t.Fatalf("status named no orphan acknowledgement or not %q:\n%s", test.entry, out)
 			}
-			if _, stderr := contextRun(t, services, 1, "apply", "--context", "alpha", "--yes"); !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(humanContent(stderr), humanContent(test.entry)) {
+			if _, stderr := contextRun(t, services, 1, "apply", "--context", "alpha", "--yes"); !strings.Contains(stderr, "engine.unindexed-records") || !strings.Contains(humanContent(stderr), humanContent(test.entry)) {
 				t.Fatalf("the apply refused with %q, want it to name %q", stderr, test.entry)
 			}
 			if _, stderr := contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", input, "--yes"); humanContent(stderr) != humanContent("  error  context.state"+refusal) {

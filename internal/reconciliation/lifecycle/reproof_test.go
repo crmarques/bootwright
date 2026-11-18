@@ -121,7 +121,7 @@ func beforeItsTransaction(h *harness, moved func()) *untouched {
 func requireReplacedOperationMoved(t *testing.T, err error) {
 	t.Helper()
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) ||
 		reported[0].Message != "the operation this removal was planned from is no longer the one the context holds" ||
 		reported[0].Remediation != "repeat bootwright destroy --context lab to plan it from the operation the context holds now" {
 		t.Fatalf("refusal = %+v (%v)", reported, err)
@@ -364,7 +364,7 @@ func TestAFrozenPlanItsOperationDidNotRecordRefusesEveryReader(t *testing.T) {
 		t.Run(reader, func(t *testing.T) {
 			err := read()
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+			if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) ||
 				reported[0].Message != "the frozen plan is not the plan its operation recorded" {
 				t.Fatalf("%s = %+v (%v)", reader, reported, err)
 			}

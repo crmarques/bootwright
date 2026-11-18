@@ -103,12 +103,50 @@ var (
 	planEnvironmentInvalid = diagnostics.Stop{Code: "plan.environment-invalid", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
 		Meaning: "the selected state holds no single Environment naming its controller Machine", Remedy: "repair the input with validate"}
+	engineUnindexedRecords = diagnostics.Stop{Code: "engine.unindexed-records", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
+		Meaning: "the context holds operation records or evidence its index names no operation for", Remedy: "restore the context's records, or delete the context with what it may still own"}
+	engineRequestDefect = diagnostics.Stop{Code: "engine.request-defect", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryNone,
+		Meaning: "a capability declared or requested something the engine refuses to compose", Remedy: "report the message as a defect"}
+	engineOtherBuild = diagnostics.Stop{Code: "engine.other-build", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryRegisteringBuild,
+		Meaning: "this executable cannot prove it would continue or remove the operation as the build that registered it", Remedy: "repeat the command with the build that registered the operation"}
+	enginePlanMoved = diagnostics.Stop{Code: "engine.plan-moved", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseConcurrency, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "the context changed between the plan and the transition, so nothing was registered", Remedy: "repeat the command to plan from what the context holds now"}
+	engineInputMoved = diagnostics.Stop{Code: "engine.input-moved", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "the context's input is no longer the revision the operation froze", Remedy: "restore the exact input revision the operation froze"}
+	engineBindingLost = diagnostics.Stop{Code: "engine.binding-lost", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
+		Meaning: "a Secret binding the operation froze is lost, so its material cannot be lent again", Remedy: "restore the context's keyring from a complete backup, or delete the context and remove what it named by hand"}
+	authorizeUnneeded = diagnostics.Stop{Code: "authorize.unneeded", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "--authorize names a token the plan does not require", Remedy: "repeat the command without that --authorize"}
+	authorizeMissing = diagnostics.Stop{Code: "authorize.missing", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryAuthorize,
+		Meaning: "the plan has consequences no --authorize grants", Remedy: "review the plan, then repeat the command with the authorization it names"}
+	authorizeStale = diagnostics.Stop{Code: "authorize.stale", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryAuthorize,
+		Meaning: "an --authorize digest names steps the plan no longer holds, or an unattended run binds none", Remedy: "review the plan, then repeat the command with the digest it prints"}
+	authorizeRebindInvalid = diagnostics.Stop{Code: "authorize.rebind-invalid", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "an --authorize rebind names a Secret the operation cannot rebind", Remedy: "repeat the command naming each rotated access credential once as --authorize rebind=<secret>"}
+	destroyStageSelected = diagnostics.Stop{Code: "destroy.stage-selected", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "the next operation is a destroy, which accepts no stage selection", Remedy: "repeat the command without --stage and --until"}
+	applyUntilBeforePreparation = diagnostics.Stop{Code: "apply.until-before-preparation", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "the add-on boundary --until names cannot be planned before preparation completes", Remedy: "run apply to complete preparation, then select --until"}
 )
 
 var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineRecordsDenied, engineRecordsDevice, engineEscaped, engineStartUnrecorded,
 	applyUnresolved, destroyUnresolved, applyIncomplete, destroyIncomplete, destroyInUse, destroyConsumerSurvives,
 	engineFinalizationDue, engineRecordsContradict, engineOtherVerbIncomplete, applyRecordsMissing, destroyRecordsMissing, applyInputChanged,
 	applyNotAnAddition, applyPrerequisiteLost, applyNothingDeclared, applyStageEmpty, applyStageExcludesRetry, applyUntilUnknown,
-	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid}
+	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid,
+	engineUnindexedRecords, engineRequestDefect, engineOtherBuild, enginePlanMoved, engineInputMoved, engineBindingLost, authorizeUnneeded,
+	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected, applyUntilBeforePreparation}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }

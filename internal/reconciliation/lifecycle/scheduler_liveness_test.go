@@ -293,7 +293,7 @@ func TestAnAttemptWithoutItsCapabilityMovesNothing(t *testing.T) {
 	allowStart(h)
 	h.service.capabilities = testResolver{missing: true}
 	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.state" || result != nil {
+	if code := firstCode(err); !refusedBeforeEffect(code) || result != nil {
 		t.Fatalf("continuation = %+v (%q, %v)", result, code, err)
 	}
 	record, states := durableOperation(t, h)

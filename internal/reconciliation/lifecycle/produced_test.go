@@ -578,7 +578,7 @@ func TestARecaptureOfAnotherIdentityRefusesBetweenAttempts(t *testing.T) {
 	}
 	h.capability.observations = observed("authority-b\nsecond")
 	_, err := apply(h)
-	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "another identity (authority-b)") {
+	if reported := diagnostics.Of(err); len(reported) == 0 || !refusedBeforeEffect(reported[0].Code) || !strings.Contains(reported[0].Message, "another identity (authority-b)") {
 		t.Fatalf("a recapture of another identity = %v", err)
 	}
 	if !slices.Equal(kept(h), []string{"install/kubeconfig=authority-a\nfirst"}) || blockState(t, h, "install") == reconciliation.BlockDone {
@@ -612,7 +612,7 @@ func TestARecaptureThroughAWrappedBinderStillChecksItsIdentity(t *testing.T) {
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"ok":true}`),
 		Produced: []Produced{{Name: "kubeconfig", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("authority-b\nsecond")})}}}}
 	_, err := apply(h)
-	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "another identity (authority-b)") {
+	if reported := diagnostics.Of(err); len(reported) == 0 || !refusedBeforeEffect(reported[0].Code) || !strings.Contains(reported[0].Message, "another identity (authority-b)") {
 		t.Fatalf("a recapture of another identity through a wrapped binder = %v", err)
 	}
 	if !slices.Equal(kept(h), []string{"install/kubeconfig=authority-a\nfirst"}) {
@@ -644,7 +644,7 @@ func TestARecordedRecaptureIdentityRefusesAnotherBetweenAttempts(t *testing.T) {
 	h := pending("cluster fsid a as client.lab")
 	h.capability.observations = observed("other cluster", "cluster fsid b as client.lab")
 	_, err := apply(h)
-	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "another identity (cluster fsid b as client.lab)") {
+	if reported := diagnostics.Of(err); len(reported) == 0 || !refusedBeforeEffect(reported[0].Code) || !strings.Contains(reported[0].Message, "another identity (cluster fsid b as client.lab)") {
 		t.Fatalf("a recapture of another identity = %v", err)
 	}
 	if !slices.Equal(kept(h), []string{"install/client=first"}) || h.binder.identities["install/client"] != "cluster fsid a as client.lab" || blockState(t, h, "install") == reconciliation.BlockDone {

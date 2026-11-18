@@ -295,7 +295,7 @@ func TestARebindDuringALineageRemovalNamesOnlyWhatTheRootBindingHolds(t *testing
 	}
 	_, err = h.service.admitRebinds(ctx, testContextName, decided, []string{"head-only"})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.authorization" {
+	if len(reported) != 1 || reported[0].Code != "authorize.rebind-invalid" {
 		t.Fatalf("a rebind of a Secret only the head's binding holds = %+v (%v)", reported, err)
 	}
 }

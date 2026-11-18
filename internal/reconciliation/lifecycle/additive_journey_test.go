@@ -112,11 +112,11 @@ func TestAPlanOverACompletedApplyPreviewsTheAdditiveApplyOnlyForAnAddedInstance(
 	}
 	for name, want := range map[string]preview{
 		"unchanged input":                          {verb: "destroy"},
-		"unchanged input under a stage selection":  {stages: []string{"add-ons"}, code: "lifecycle.stage"},
+		"unchanged input under a stage selection":  {stages: []string{"add-ons"}, code: "destroy.stage-selected"},
 		"an added instance":                        {next: []api.Object{addonBinding("cluster", "nmstate")}, verb: "apply", adds: true},
 		"an added instance under --stage add-ons":  {next: []api.Object{addonBinding("cluster", "nmstate")}, stages: []string{"add-ons"}, verb: "apply", adds: true},
 		"a changed object":                         {initial: []api.Object{serverObject("s", "v1")}, next: []api.Object{serverObject("s", "v2")}, verb: "destroy"},
-		"a changed object under a stage selection": {initial: []api.Object{serverObject("s", "v1")}, next: []api.Object{serverObject("s", "v2")}, stages: []string{"add-ons"}, code: "lifecycle.stage"},
+		"a changed object under a stage selection": {initial: []api.Object{serverObject("s", "v1")}, next: []api.Object{serverObject("s", "v2")}, stages: []string{"add-ons"}, code: "destroy.stage-selected"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newAdditiveFixture(t, want.initial...)

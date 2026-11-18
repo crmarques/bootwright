@@ -81,7 +81,7 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 		return err
 	}
 	if call == nil {
-		return failure("lifecycle.state", "a bounded runtime request carries no operation", "")
+		return engineRequestDefect.Fail("a bounded runtime request carries no operation", "")
 	}
 	name, err := s.resolve(ctx, request.ContextName)
 	if err != nil {
@@ -165,7 +165,7 @@ func (s Service) WithMaterial(ctx context.Context, request MaterialRequest, use 
 		return err
 	}
 	if use == nil {
-		return failure("lifecycle.state", "a bounded material request carries no consumer", "")
+		return engineRequestDefect.Fail("a bounded material request carries no consumer", "")
 	}
 	name, err := s.resolve(ctx, request.ContextName)
 	if err != nil {

@@ -64,7 +64,7 @@ func TestSharedReservationsRefuseConflictingIdentityMetadataBeforeEffects(t *tes
 			before := previewEffects(h)
 			for range 2 {
 				_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName})
-				if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "lifecycle.state" {
+				if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "engine.request-defect" {
 					t.Fatalf("conflicting reservation metadata did not refuse preview: %+v", found)
 				}
 			}

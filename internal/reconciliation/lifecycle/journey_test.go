@@ -2110,14 +2110,14 @@ func TestAuthorizationTokenAndBorrowedCredentialsRefuseBeforeAnyRead(t *testing.
 	t.Parallel()
 	h := newHarness(t, "artifact-server-lab")
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", Authorizations: []string{"data-loss"}, SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.authorization" {
+	if code := firstCode(err); !authorizationRefusal(code) {
 		t.Fatalf("authorization refusal = %q", code)
 	}
 	if len(h.presenter.presented) != 1 || h.workspace.mutations != 0 {
 		t.Fatal("a superfluous token refused before presenting its plan, or mutated")
 	}
 	_, err = h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true, SSH: borrowedOptions()})
-	if code := firstCode(err); code != "lifecycle.state" {
+	if code := firstCode(err); !refusedBeforeEffect(code) {
 		t.Fatalf("borrowed credential refusal = %q", code)
 	}
 	if len(h.presenter.presented) != 1 || h.workspace.mutations != 0 {
@@ -3489,7 +3489,7 @@ func TestARemovalOverRecordsThatContradictThemselvesRefuses(t *testing.T) {
 			h.capability.destroys, h.capability.probes, h.capability.observes = nil, nil, nil
 			_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 			reported := diagnostics.Of(err)
-			if len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "records no block") {
+			if len(reported) == 0 || !refusedBeforeEffect(reported[0].Code) || !strings.Contains(reported[0].Message, "records no block") {
 				t.Fatalf("destroy = %+v (%v)", reported, err)
 			}
 			if currentOperation(t, h) != current || len(h.binder.released) != 0 {
@@ -4273,7 +4273,7 @@ func TestDestroyRefusesWhenTheOperationItReplacesMoved(t *testing.T) {
 	}
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+	if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) {
 		t.Fatalf("refusal = %+v", reported)
 	}
 	if !strings.Contains(reported[0].Message, "no longer the one the context holds") {
@@ -4464,7 +4464,7 @@ func TestApplyOverAnIncompleteDestroyStillRefuses(t *testing.T) {
 func requireContextChanged(t *testing.T, err error, verb, moved string) {
 	t.Helper()
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) ||
 		reported[0].Remediation != "repeat bootwright "+verb+" --context lab to plan from what the context holds now" {
 		t.Fatalf("refusal = %+v", reported)
 	}

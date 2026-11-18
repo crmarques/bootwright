@@ -73,7 +73,6 @@ var defaultRemediations = map[string]string{
 
 	"lifecycle.state":         "run bootwright status --context <context> to see the records and the next step",
 	"lifecycle.unsupported":   "remove the object this executable cannot realize, or use a build that supports it",
-	"lifecycle.stage":         "select a stage that has a startable block",
 	"lifecycle.authorization": "repeat the command with the authorization the frozen plan requires",
 	"lifecycle.lease":         "repeat the command once the other operation on the context has finished",
 	"lifecycle.unknown":       "resolve the unknown effect with the command bootwright status --context <context> names",

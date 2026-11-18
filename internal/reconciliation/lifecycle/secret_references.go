@@ -20,13 +20,13 @@ func refuseUnnamedSecrets(implementation string, capability Capability, contribu
 	}
 	referencer, names := capability.(SecretReferencer)
 	if !names {
-		return failure("lifecycle.state", "the "+implementation+" capability binds Secret "+SecretNames(contribution.Secrets...)[0]+" but cannot name the Secrets its blocks reference", unnamedSecretRemedy)
+		return engineRequestDefect.Fail("the "+implementation+" capability binds Secret "+SecretNames(contribution.Secrets...)[0]+" but cannot name the Secrets its blocks reference", unnamedSecretRemedy)
 	}
 	named := map[string]bool{}
 	for _, definition := range contribution.Definitions {
 		references, err := referencer.SecretReferences(reconciliation.Block{BlockDefinition: definition})
 		if err != nil {
-			return failure("lifecycle.state", "the "+implementation+" capability cannot name the Secrets block "+definition.ID+" references", unnamedSecretRemedy)
+			return engineRequestDefect.Fail("the "+implementation+" capability cannot name the Secrets block "+definition.ID+" references", unnamedSecretRemedy)
 		}
 		for _, reference := range references {
 			named[reference] = true
@@ -34,7 +34,7 @@ func refuseUnnamedSecrets(implementation string, capability Capability, contribu
 	}
 	for _, reference := range SecretNames(contribution.Secrets...) {
 		if !named[reference] {
-			return failure("lifecycle.state", "the "+implementation+" capability binds Secret "+reference+", which none of its "+blockCount(contribution.Definitions)+" names", unnamedSecretRemedy)
+			return engineRequestDefect.Fail("the "+implementation+" capability binds Secret "+reference+", which none of its "+blockCount(contribution.Definitions)+" names", unnamedSecretRemedy)
 		}
 	}
 	return nil

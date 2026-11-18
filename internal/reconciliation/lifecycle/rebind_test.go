@@ -176,7 +176,7 @@ func TestTheRebindExitRefusesAnythingButARotatedAccessCredential(t *testing.T) {
 			issued, executions := h.binder.issued, len(h.capability.executions)
 			err := destroyWith(h, tc.authorizations...)
 			reported := diagnostics.Of(err)
-			if len(reported) == 0 || reported[0].Code != "lifecycle.authorization" || !strings.Contains(reported[0].Message, tc.message) {
+			if len(reported) == 0 || reported[0].Code != "authorize.rebind-invalid" || !strings.Contains(reported[0].Message, tc.message) {
 				t.Fatalf("refusal = %+v (%v), want lifecycle.authorization containing %q", reported, err, tc.message)
 			}
 			after, _ := durableOperation(t, h)
@@ -190,7 +190,7 @@ func TestTheRebindExitRefusesAnythingButARotatedAccessCredential(t *testing.T) {
 		h := newHarness(t, "alpha")
 		_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, Authorizations: []string{RebindAuthorization + "artifact-server-tls"}, SkipConfirmation: true})
 		reported := diagnostics.Of(err)
-		if len(reported) == 0 || reported[0].Code != "lifecycle.authorization" || !strings.Contains(reported[0].Message, "reopens no Secret binding") {
+		if len(reported) == 0 || reported[0].Code != "authorize.rebind-invalid" || !strings.Contains(reported[0].Message, "reopens no Secret binding") {
 			t.Fatalf("refusal = %+v (%v)", reported, err)
 		}
 		if h.binder.issued != 0 {
@@ -218,7 +218,7 @@ func TestAnUnreportedRequestStringIsNoUseOfTheSecret(t *testing.T) {
 	h.binder.versions["bmc"] = "ver-2"
 	err := destroyWith(h, RebindAuthorization+"bmc")
 	reported := diagnostics.Of(err)
-	if len(reported) == 0 || reported[0].Code != "lifecycle.authorization" || !strings.Contains(reported[0].Message, "no step of this destroy presents Secret bmc") {
+	if len(reported) == 0 || reported[0].Code != "authorize.rebind-invalid" || !strings.Contains(reported[0].Message, "no step of this destroy presents Secret bmc") {
 		t.Fatalf("refusal = %+v (%v), want no step presenting Secret bmc", reported, err)
 	}
 	if len(h.binder.rebinds) != 0 {
@@ -238,7 +238,7 @@ func TestARebindRefusesABlockWhoseCapabilityCannotNameItsSecrets(t *testing.T) {
 	err := destroyWith(h, RebindAuthorization+"bmc")
 	reported := diagnostics.Of(err)
 	want := "step 1 (remove alpha) has a capability that cannot name the Secrets it references, so no Secret is rebound"
-	if len(reported) == 0 || reported[0].Code != "lifecycle.authorization" || !strings.Contains(reported[0].Message, want) {
+	if len(reported) == 0 || reported[0].Code != "authorize.rebind-invalid" || !strings.Contains(reported[0].Message, want) {
 		t.Fatalf("refusal = %+v (%v), want lifecycle.authorization containing %q", reported, err, want)
 	}
 	if len(h.binder.rebinds) != 0 || h.confirmer.asked != 0 {

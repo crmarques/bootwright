@@ -17688,3 +17688,22 @@ controller. Their messages and remedies are unchanged. The engine's ledger
 falls from 210 to 173. Guarded by `TestTheEnginesStopsAreTheCatalogsEngineStops`,
 the engine's refusal, preview, transition-table and journey tests, its
 goldens and its race run.
+
+## X610 — Authorization, build and binding refusals are stops
+
+### B1599
+
+Under [D276](backlog.md#d276) (audit 006 W2.1, second chunk of the engine
+refusals), split from [B1563](m1.md#b1563). Thirty-four more refusals before
+any effect become twelve [engine stops](../cli/stops.md#engine-stops): the
+`authorize.*` family (an authorization the plan does not need, one it lacks,
+a stale or unbound digest, an invalid rebind), a build that cannot prove it
+continues or removes as the registering one (`engine.other-build`), a context
+that moved since the plan or input that moved since registration, records an
+index does not name, a lost Secret binding, a destroy given a stage selection,
+an `--until` before preparation, and capability contract defects. The code
+`lifecycle.stage` leaves the registry; `lifecycle.authorization` stays only for
+the erase relaxation. The engine section of the catalog splits into three
+leaves, and the engine's ledger falls from 173 to 139. Guarded by
+`TestTheEnginesStopsAreTheCatalogsEngineStops` and the engine's refusal,
+authorization, continuation and journey tests and their race run.

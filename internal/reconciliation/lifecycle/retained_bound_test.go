@@ -108,7 +108,7 @@ func refusedAtTheBound(t *testing.T, h *harness, verb reconciliation.Verb, remed
 	records, before := h.workspace.area.clone(), held()
 	err := killInvoke(context.Background(), h.service, verb)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) ||
 		!strings.Contains(reported[0].Message, "the context has retained the maximum number of lifecycle operations") || reported[0].Remediation != remedy {
 		t.Fatalf("the %s = %+v (%v), want the retained-operation refusal naming %q", verb, reported, err, remedy)
 	}

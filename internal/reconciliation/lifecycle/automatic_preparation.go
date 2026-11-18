@@ -59,7 +59,7 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 				continue
 			}
 			if scope != nil {
-				return failure("lifecycle.state", "multiple preparations compete for the next apply phase", "run each owner's explicit preparation command")
+				return engineRequestDefect.Fail("multiple preparations compete for the next apply phase", "run each owner's explicit preparation command")
 			}
 			targets = slices.Clone(targets)
 			slices.Sort(targets)
@@ -71,7 +71,7 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 		return nil, false, err
 	}
 	if selection.Until != "" {
-		return nil, false, failure("lifecycle.stage", "the add-on boundary cannot be planned before preparation completes", "run "+contextCommand(name, "apply")+" to complete preparation and review the resolved installation plan before selecting --until")
+		return nil, false, applyUntilBeforePreparation.Fail("the add-on boundary cannot be planned before preparation completes", "run "+contextCommand(name, "apply")+" to complete preparation and review the resolved installation plan before selecting --until")
 	}
 	prepared, err := s.admitPreparation(*scope)
 	return prepared, err == nil, err

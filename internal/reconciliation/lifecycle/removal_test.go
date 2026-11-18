@@ -166,7 +166,7 @@ func TestARemovalRefusesAFrozenRequestNoCapabilityCanRead(t *testing.T) {
 	registered := h.workspace.area.clone()
 	h.capability.removalErr = failure("lifecycle.state", "the frozen request has an unsupported version", "")
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.state" {
+	if code := firstCode(err); !refusedBeforeEffect(code) {
 		t.Fatalf("destroy of an unreadable block = %q (%v)", code, err)
 	}
 	reported := diagnostics.Of(err)[0]
@@ -199,7 +199,7 @@ func TestARemovalRefusesAnImplementationThisExecutableNoLongerProvides(t *testin
 		{Kind: "ArtifactServer", Implementation: "artifact-server-caddy-v1"}: h.capability,
 	}
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.state" {
+	if code := firstCode(err); !refusedBeforeEffect(code) {
 		t.Fatalf("destroy of an unprovided implementation = %q (%v)", code, err)
 	}
 	reported := diagnostics.Of(err)[0]

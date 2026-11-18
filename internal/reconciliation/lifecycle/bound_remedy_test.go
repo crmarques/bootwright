@@ -73,7 +73,7 @@ func TestAMissingConfirmerNamesTheBoundRepeat(t *testing.T) {
 	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", Authorizations: []string{"data-loss"}})
 	reported := diagnostics.Of(err)
 	want := "review the plan, then repeat bootwright apply --context lab --authorize " + shown + " with --yes"
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Remediation != want {
+	if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) || reported[0].Remediation != want {
 		t.Fatalf("the unconfirmed apply reported %+v (%v), want the remedy %q", reported, err, want)
 	}
 	result, err := h.service.Apply(ctx, ApplyRequest{ContextName: "lab", Authorizations: authorizeTokens(reported[0].Remediation), SkipConfirmation: true, Unattended: true})

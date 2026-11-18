@@ -145,7 +145,7 @@ func TestAnErasePreviewShowsTheRelaxedRemovalAndTheDigestThatBindsIt(t *testing.
 		t.Fatal("the data-loss digest does not cover the relaxation")
 	}
 	result, err := destroyRelaxed(h, map[string]string{"bravo": EraseRetain}, reconciliation.AuthorizationDataLoss+"="+previewDigest(t, declared))
-	if firstCode(err) != "lifecycle.authorization" || result != nil {
+	if !authorizationRefusal(firstCode(err)) || result != nil {
 		t.Fatalf("a destroy bound to the declared removal's digest ran relaxed: %v", err)
 	}
 	if _, err := destroyRelaxed(h, map[string]string{"bravo": EraseRetain}, reconciliation.AuthorizationDataLoss+"="+previewDigest(t, relaxed)); err != nil {
@@ -213,7 +213,7 @@ func TestAnInapplicableRelaxationRefusesBeforeAnythingRuns(t *testing.T) {
 			before := untouchedOf(h)
 			_, err := destroyRelaxed(h, test.relaxations, reconciliation.AuthorizationDataLoss)
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.authorization" || reported[0].Message != test.message || reported[0].Remediation != test.remedy {
+			if len(reported) != 1 || !authorizationRefusal(reported[0].Code) || reported[0].Message != test.message || reported[0].Remediation != test.remedy {
 				t.Fatalf("the destroy refused %+v (%v)", reported, err)
 			}
 			_, err = h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName, Relaxations: test.relaxations})
@@ -231,7 +231,7 @@ func TestAnInapplicableRelaxationRefusesBeforeAnythingRuns(t *testing.T) {
 func TestARelaxationOverASettledContextRefuses(t *testing.T) {
 	t.Parallel()
 	h, _ := relaxingHarness(t)
-	if _, err := destroyRelaxed(h, map[string]string{"bravo": EraseRetain}); firstCode(err) != "lifecycle.authorization" {
+	if _, err := destroyRelaxed(h, map[string]string{"bravo": EraseRetain}); !authorizationRefusal(firstCode(err)) {
 		t.Fatalf("a destroy that settles accepted a relaxation: %v", err)
 	}
 }
@@ -286,13 +286,13 @@ func TestAContinuationKeepsExactlyTheRelaxationsItsRemovalFroze(t *testing.T) {
 		"a preview of the identical set": {relaxingPlan, frozen, "continue"},
 	} {
 		got, err := decisionUnder(t, h, test.command, test.relaxations)
-		if got != test.want || got == "refuse" && firstCode(err) != "lifecycle.authorization" {
+		if got != test.want || got == "refuse" && !authorizationRefusal(firstCode(err)) {
 			t.Errorf("%s: the %s decides %q (%v), want %q", name, test.command, got, err, test.want)
 		}
 	}
 	_, err := destroyRelaxed(h, nil, reconciliation.AuthorizationDataLoss)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.authorization" ||
+	if len(reported) != 1 || !authorizationRefusal(reported[0].Code) ||
 		!strings.Contains(reported[0].Message, "continues only under the erase relaxations its plan froze (erase=bravo:retain)") ||
 		!strings.Contains(reported[0].Remediation, "--authorize erase=bravo:retain") {
 		t.Fatalf("a continuation without its relaxation refused %+v (%v)", reported, err)

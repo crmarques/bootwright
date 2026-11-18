@@ -118,7 +118,7 @@ func TestAnotherBuildRefusesUnsupportedFrozenExecution(t *testing.T) {
 			h.capability.consumes = map[string][]string{"artifact-server-lab": {reconciliation.AuthorizationDataLoss}}
 		}, "this executable would remove block artifact-server-lab differently from its frozen removal", install},
 		{"unreadable request", reconciliation.Destroy, unknownRemoval, func(h *harness) {
-			h.capability.removalErr = failure("lifecycle.state", "the frozen request has an unsupported version", "")
+			h.capability.removalErr = failure("engine.other-build", "the frozen request has an unsupported version", "")
 		}, unreadable, "remove it with bootwright devel (abcdef1)"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -249,7 +249,7 @@ func TestAContinuationWithNoSameBlocksProofRefusesUnderAnotherBuild(t *testing.T
 			failedApply(t, h)
 			build.switchTo(h)
 			reported := diagnostics.Of(verify(t, h))
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != message || reported[0].Remediation != take {
+			if len(reported) != 1 || reported[0].Code != "engine.other-build" || reported[0].Message != message || reported[0].Remediation != take {
 				t.Fatalf("an unproved continuation under %s reported %+v", build.name, reported)
 			}
 		})
@@ -439,7 +439,7 @@ func TestTheTakeBackIsOfferedWhenOnlyAnUnstartedBlockIsUnreadable(t *testing.T) 
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("first"), second})
 	failedApply(t, h)
 	h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
-	h.capability.removalErrs = map[string]error{"second": failure("lifecycle.state", "the frozen request has an unsupported version", "")}
+	h.capability.removalErrs = map[string]error{"second": failure("engine.other-build", "the frozen request has an unsupported version", "")}
 	refusedUnchanged(t, h, reconciliation.Apply, differently, "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it")
 	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
 		t.Fatalf("an unreadable unstarted block prevented removal of owned work: %v", err)

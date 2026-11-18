@@ -246,7 +246,7 @@ func requireAuthorizedIn(t *testing.T, h *harness, contextName string, verb reco
 	switch {
 	case code == "" && (err == nil || err.Error() != "declined"):
 		t.Fatalf("the offered %s with %q = %v, want it to ask", verb, tokens, err)
-	case code != "" && firstCode(err) != code:
+	case code != "" && firstCode(err) != code && !(code == "lifecycle.authorization" && authorizationRefusal(firstCode(err))):
 		t.Fatalf("the offered %s with %q = %v, want %s", verb, tokens, err, code)
 	}
 }

@@ -144,7 +144,7 @@ func contextChanged(verb reconciliation.Verb, planned, current basis) error {
 	case !slices.Equal(current.claims, planned.claims):
 		message += " with an operation claimed since it was read"
 	}
-	return failure("lifecycle.state", message, "repeat "+contextCommand(planned.context, string(verb))+" to plan from what the context holds now")
+	return enginePlanMoved.Fail(message, "repeat "+contextCommand(planned.context, string(verb))+" to plan from what the context holds now")
 }
 
 // verifyContinuation re-proves everything a continuation depends on before it
@@ -183,15 +183,15 @@ func (s Service) verifyRemovalHost(ctx context.Context, view View) error {
 func (s Service) recordedRefusal(view View, operation operationstore.Operation, proof executionProof) error {
 	switch inputDrift(view, operation) {
 	case driftRevision:
-		return failure("lifecycle.state", "the context input changed after this operation registered", "restore the exact input revision this operation froze")
+		return engineInputMoved.Fail("the context input changed after this operation registered", "restore the exact input revision this operation froze")
 	case driftBytes:
-		return failure("lifecycle.state", "the frozen input no longer matches this operation", "restore the exact input revision this operation froze")
+		return engineInputMoved.Fail("the frozen input no longer matches this operation", "restore the exact input revision this operation froze")
 	}
 	if !proof.proved {
 		if proof.refusal != nil {
 			return proof.refusal
 		}
-		return failure("lifecycle.state", "this executable has not proved the recorded execution contracts", otherBuildRemediation(view, operation))
+		return engineOtherBuild.Fail("this executable has not proved the recorded execution contracts", otherBuildRemediation(view, operation))
 	}
 	return nil
 }
@@ -215,7 +215,7 @@ func (s Service) closureRefusal(ctx context.Context, view View, operation operat
 		if supersedable(operation) {
 			remediation += ", or take back what it owns with " + contextCommand(view.Identity().Name, string(reconciliation.Destroy))
 		}
-		return failure("lifecycle.state", "this build's controller runtime carries another Python and Ansible closure (Python "+
+		return engineOtherBuild.Fail("this build's controller runtime carries another Python and Ansible closure (Python "+
 			current.Python+", ansible-core "+current.Ansible+") than the one this operation registered with", remediation)
 	}
 	return nil

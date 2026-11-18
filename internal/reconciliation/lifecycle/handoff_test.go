@@ -48,7 +48,7 @@ func TestSettledLogRestorationReprovesItsRecords(t *testing.T) {
 	before := beforeItsTransaction(h, func() {
 		changeOperation(t, h, id, func(record *operationstore.Operation) { record.LogFault = false })
 	})
-	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName}); firstCode(err) != "lifecycle.state" {
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName}); !refusedBeforeEffect(firstCode(err)) {
 		t.Fatalf("restoration after the record moved = %v", err)
 	}
 	before.require(t, h)

@@ -53,25 +53,25 @@ func authorize(contextName string, verb reconciliation.Verb, selection reconcili
 	supplied := slices.Compact(slices.Sorted(slices.Values(authorizations)))
 	for _, token := range supplied {
 		if !slices.Contains(required, token) {
-			return failure("lifecycle.authorization",
+			return authorizeUnneeded.Fail(
 				"this plan requires no "+token+" authorization",
 				"repeat "+passing+" without --authorize "+token)
 		}
 	}
 	for _, token := range required {
 		if !slices.Contains(supplied, token) {
-			return failure("lifecycle.authorization",
+			return authorizeMissing.Fail(
 				"this plan has "+token+" consequences that are not authorized: "+strings.Join(consumers[token], ", "),
 				"repeat it with the authorization: "+passing)
 		}
 		expected := AuthorizationDigest(plan, token)
 		switch digest := digests[token]; {
 		case digest != "" && digest != expected:
-			return failure("lifecycle.authorization",
+			return authorizeStale.Fail(
 				"--authorize "+token+"="+digest+" names steps this plan no longer holds: its "+token+" steps are now "+strings.Join(consumers[token], ", "),
 				"review them with "+contextCommand(contextName, "plan")+", then repeat "+passing)
 		case digest == "" && unattended:
-			return failure("lifecycle.authorization",
+			return authorizeStale.Fail(
 				"an unattended "+string(verb)+" must bind --authorize "+token+" to the steps it authorizes: "+strings.Join(consumers[token], ", "),
 				"review them with "+contextCommand(contextName, "plan")+", then repeat "+passing)
 		}

@@ -15,17 +15,17 @@
       ]
     },
     "plan": {
-      "code": "lifecycle.state",
+      "code": "engine.unindexed-records",
       "message": "the context holds operation records or evidence that no index names: the operation directory operation-1 lists block records, the operation directory operation-2 lists block records",
       "remediation": "delete the context with bootwright context delete --name lab --purge"
     },
     "apply": {
-      "code": "lifecycle.state",
+      "code": "engine.unindexed-records",
       "message": "the context holds operation records or evidence that no index names: the operation directory operation-1 lists block records, the operation directory operation-2 lists block records",
       "remediation": "delete the context with bootwright context delete --name lab --purge"
     },
     "destroy": {
-      "code": "lifecycle.state",
+      "code": "engine.unindexed-records",
       "message": "the context holds operation records or evidence that no index names: the operation directory operation-1 lists block records, the operation directory operation-2 lists block records",
       "remediation": "delete the context with bootwright context delete --name lab --purge"
     }
@@ -46,17 +46,17 @@
       ]
     },
     "plan": {
-      "code": "lifecycle.state",
+      "code": "engine.unindexed-records",
       "message": "the context holds operation records or evidence that no index names: the mutation evidence reads applied and retained, the operation directory operation-1 lists block records",
       "remediation": "delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
     },
     "apply": {
-      "code": "lifecycle.state",
+      "code": "engine.unindexed-records",
       "message": "the context holds operation records or evidence that no index names: the mutation evidence reads applied and retained, the operation directory operation-1 lists block records",
       "remediation": "delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
     },
     "destroy": {
-      "code": "lifecycle.state",
+      "code": "engine.unindexed-records",
       "message": "the context holds operation records or evidence that no index names: the mutation evidence reads applied and retained, the operation directory operation-1 lists block records",
       "remediation": "delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
     }
@@ -77,17 +77,17 @@
       ]
     },
     "plan": {
-      "code": "lifecycle.state",
+      "code": "engine.unindexed-records",
       "message": "the context holds operation records or evidence that no index names: the mutation evidence reads an unrecognized record, the operation directory operation-1 lists block records",
       "remediation": "abandon the context with bootwright context delete --name lab --purge --allow-orphans, which cannot list what it may still own"
     },
     "apply": {
-      "code": "lifecycle.state",
+      "code": "engine.unindexed-records",
       "message": "the context holds operation records or evidence that no index names: the mutation evidence reads an unrecognized record, the operation directory operation-1 lists block records",
       "remediation": "abandon the context with bootwright context delete --name lab --purge --allow-orphans, which cannot list what it may still own"
     },
     "destroy": {
-      "code": "lifecycle.state",
+      "code": "engine.unindexed-records",
       "message": "the context holds operation records or evidence that no index names: the mutation evidence reads an unrecognized record, the operation directory operation-1 lists block records",
       "remediation": "abandon the context with bootwright context delete --name lab --purge --allow-orphans, which cannot list what it may still own"
     }

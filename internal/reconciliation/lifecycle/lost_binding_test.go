@@ -278,7 +278,7 @@ func TestALostFrozenBindingRefusesEveryContinuationAndRemovalBeforeAnyEffect(t *
 							t.Fatalf("attempt %d presented %d plans and asked %d times", attempt, len(h.presenter.presented)-presented, h.confirmer.asked-asked)
 						}
 					}
-					if first.Code != "lifecycle.state" ||
+					if first.Code != "engine.binding-lost" ||
 						!strings.HasPrefix(first.Message, "the "+string(operation.Verb)+" "+operation.ID+" ("+string(operation.State)+") froze the Secret binding bind-1, "+loss.why+"; ") ||
 						!strings.Contains(first.Message, "ArtifactServer/alpha") ||
 						first.Remediation != "restore the context's keyring from a complete backup and repeat bootwright "+string(verb)+" --context lab"+
@@ -308,7 +308,7 @@ func TestABindingLostAfterItWasListedRefusesAtItsReopen(t *testing.T) {
 	before, presented := untouchedOf(h), len(h.presenter.presented)
 	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if len(reported) != 1 || reported[0].Code != "engine.binding-lost" ||
 		!strings.Contains(reported[0].Message, "froze the Secret binding bind-1, which the context's keyring no longer lists; ") {
 		t.Fatalf("the apply = %+v (%v)", reported, err)
 	}
@@ -333,7 +333,7 @@ func TestABindingAnotherRemovalReleasedSinceTheDecisionReportsTheChange(t *testi
 	}}
 	_, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if len(reported) != 1 || reported[0].Code != "engine.plan-moved" ||
 		!strings.HasPrefix(reported[0].Message, "the context changed after this command read it") ||
 		strings.Contains(reported[0].Remediation, "--allow-orphans") {
 		t.Fatalf("the destroy = %+v (%v)", reported, err)

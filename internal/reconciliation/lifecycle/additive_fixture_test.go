@@ -196,6 +196,12 @@ func refusedBeforeEffect(code string) bool {
 	return false
 }
 
+// authorizationRefusal is whether a code refuses for an authorization: the
+// legacy lifecycle.authorization, or a declared authorize stop.
+func authorizationRefusal(code string) bool {
+	return code == "lifecycle.authorization" || strings.HasPrefix(code, "authorize.")
+}
+
 func headPlan(t *testing.T, h *harness) (operationstore.Operation, reconciliation.Plan) {
 	t.Helper()
 	operation, _ := durableOperation(t, h)

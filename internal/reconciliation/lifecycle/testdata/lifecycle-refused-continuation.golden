@@ -22,7 +22,7 @@
       "next": "continue-apply"
     },
     "apply": {
-      "code": "lifecycle.state",
+      "code": "engine.other-build",
       "message": "this executable does not support the execution contract of block alpha",
       "remediation": "install bootwright devel (abcdef1), which registered this operation, and run bootwright controller install"
     },
