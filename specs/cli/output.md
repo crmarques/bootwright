@@ -354,7 +354,10 @@ what an `apply` or `destroy` reached for those blocks: `id`, `description`,
 `stage`, `state`, `outcome`, `attempts`, for an unproved block `unresolved`, and
 for a block that is not `done` whose latest attempt recorded a cause `failure`,
 `{code, reason, remedy}`, the first diagnostic that attempt reported, its remedy
-omitted when it had none. Each diagnostic a block's cause reports that names no
+omitted when it had none, and for a `pending` block `waitsFor`, the unfinished
+blocks it runs after, an apply's dependencies or a removal's dependents, in
+plan order, which the human row adds as `, waiting for <block>, ...`. Each
+diagnostic a block's cause reports that names no
 object names the block's own, so the causes of several failed blocks pair with
 their rows.
 For these results and `status`, `outcome` is the latest attempt or resolution

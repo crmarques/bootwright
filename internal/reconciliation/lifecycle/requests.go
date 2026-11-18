@@ -240,6 +240,7 @@ type BlockResult struct {
 	// running block, and it is nil for every other.
 	Unresolved *Unresolved
 	Failure    *BlockFailure
+	WaitsFor   []string
 }
 
 type BlockFailure struct {

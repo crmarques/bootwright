@@ -130,6 +130,7 @@ type statusBlock struct {
 	Attempts    int               `json:"attempts"`
 	Unresolved  *statusUnresolved `json:"unresolved,omitempty"`
 	Failure     *statusFailure    `json:"failure,omitempty"`
+	WaitsFor    []string          `json:"waitsFor,omitempty"`
 }
 
 type statusUnresolved struct {
@@ -189,6 +190,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 				row.Unresolved = &statusUnresolved{Reason: escapeDisplayLine(block.Unresolved.Reason), Remedy: escapeDisplayLine(block.Unresolved.Remedy)}
 			}
 			row.Failure = displayFailure(block.Failure)
+			row.WaitsFor = displayLines(block.WaitsFor)
 			blocks = append(blocks, row)
 		}
 		out.Lifecycle = &statusLifecycle{

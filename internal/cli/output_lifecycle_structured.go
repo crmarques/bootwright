@@ -112,6 +112,7 @@ type operationBlockPresentation struct {
 	Attempts    int               `json:"attempts"`
 	Unresolved  *statusUnresolved `json:"unresolved,omitempty"`
 	Failure     *statusFailure    `json:"failure,omitempty"`
+	WaitsFor    []string          `json:"waitsFor,omitempty"`
 }
 
 func displayOperation(result *lifecycle.OperationResult) operationPresentation {
@@ -122,6 +123,7 @@ func displayOperation(result *lifecycle.OperationResult) operationPresentation {
 			block.Unresolved = &statusUnresolved{Reason: escapeDisplayLine(b.Unresolved.Reason), Remedy: escapeDisplayLine(b.Unresolved.Remedy)}
 		}
 		block.Failure = displayFailure(b.Failure)
+		block.WaitsFor = displayLines(b.WaitsFor)
 		shown.Blocks = append(shown.Blocks, block)
 	}
 	return shown

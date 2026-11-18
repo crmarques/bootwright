@@ -795,6 +795,31 @@ func blockResults(plan reconciliation.Plan, states map[string]reconciliation.Blo
 	return out
 }
 
+func waitsFor(blocks []BlockResult, plan reconciliation.Plan, verb reconciliation.Verb) {
+	state := map[string]string{}
+	for _, block := range blocks {
+		state[block.ID] = block.State
+	}
+	for index := range blocks {
+		if blocks[index].State != string(reconciliation.BlockPending) {
+			continue
+		}
+		for _, other := range plan.Blocks {
+			first := other.ID
+			if verb == reconciliation.Destroy {
+				if !slices.Contains(other.Dependencies, blocks[index].ID) {
+					continue
+				}
+			} else if block, _ := plan.Block(blocks[index].ID); !slices.Contains(block.Dependencies, first) {
+				continue
+			}
+			if waited := state[first]; waited != "" && waited != string(reconciliation.BlockDone) {
+				blocks[index].WaitsFor = append(blocks[index].WaitsFor, first)
+			}
+		}
+	}
+}
+
 // logFault names the context's log directory under the log root, which an
 // operator restores, or the log root itself when the store names none.
 func logFault(err error, directory string) error {
@@ -943,6 +968,7 @@ func adapterWarning(plan reconciliation.Plan, block reconciliation.Block, warnin
 
 func (s Service) recordedBlockResults(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, command string) ([]BlockResult, error) {
 	blocks := blockResults(plan, states)
+	waitsFor(blocks, plan, operation.Verb)
 	for i := range blocks {
 		record, err := store.Block(ctx, operation.ID, blocks[i].ID)
 		if err != nil {

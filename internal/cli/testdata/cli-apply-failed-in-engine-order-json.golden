@@ -41,7 +41,10 @@
         "stage": "machines",
         "state": "pending",
         "outcome": "",
-        "attempts": 0
+        "attempts": 0,
+        "waitsFor": [
+          "machine-rhel-01"
+        ]
       }
     ],
     "settled": false,

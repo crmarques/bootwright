@@ -2863,6 +2863,33 @@ func TestAFailedAttemptsCauseIsKeptAndShown(t *testing.T) {
 	t.Fatal("status lists no failed block")
 }
 
+// A block an apply left pending names the unfinished blocks it waits for, and
+// a removal's names the dependents it removes first.
+func TestAPendingBlockNamesWhatItWaitsFor(t *testing.T) {
+	t.Parallel()
+	plan := reconciliation.Plan{Blocks: []reconciliation.Block{
+		{BlockDefinition: stagedDefinition("provider", reconciliation.StageSubstrates)},
+		{BlockDefinition: stagedDefinition("node", reconciliation.StageMachines, "provider")},
+		{BlockDefinition: stagedDefinition("cluster", reconciliation.StageClusters, "node")},
+	}}
+	states := map[string]reconciliation.BlockState{"provider": reconciliation.BlockFailed}
+	applied := blockResults(plan, states)
+	waitsFor(applied, plan, reconciliation.Apply)
+	if !slices.Equal(applied[1].WaitsFor, []string{"provider"}) || !slices.Equal(applied[2].WaitsFor, []string{"node"}) || applied[0].WaitsFor != nil {
+		t.Fatalf("an apply's pending blocks wait for %v, %v and %v", applied[0].WaitsFor, applied[1].WaitsFor, applied[2].WaitsFor)
+	}
+	removed := blockResults(plan, map[string]reconciliation.BlockState{"provider": reconciliation.BlockDone, "node": reconciliation.BlockDone, "cluster": reconciliation.BlockUnknown})
+	waitsFor(removed, plan, reconciliation.Destroy)
+	if removed[1].WaitsFor != nil || removed[0].WaitsFor != nil {
+		t.Fatalf("a removal's done blocks wait for %v", removed[1].WaitsFor)
+	}
+	removed[1].State = string(reconciliation.BlockPending)
+	waitsFor(removed, plan, reconciliation.Destroy)
+	if !slices.Equal(removed[1].WaitsFor, []string{"cluster"}) {
+		t.Fatalf("a removal's pending node waits for %v, want its dependent", removed[1].WaitsFor)
+	}
+}
+
 // A required-log failure is a durable fault of the operation, not of the
 // invocation that met it: a later invocation starts nothing until it has
 // proved the boundary writable again, and only that proof clears the fault.

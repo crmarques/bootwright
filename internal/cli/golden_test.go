@@ -252,6 +252,8 @@ func cliGoldens() []cliGolden {
 			result.Blocks[2].State = "pending"
 		case "unknown":
 			result.Receipt.Next = "resolve"
+		case "failed":
+			result.Blocks[3].WaitsFor = []string{result.Blocks[2].ID}
 		}
 		return result
 	}

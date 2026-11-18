@@ -215,6 +215,9 @@ func (d *display) lifecycleOutcomes(blocks []lifecycle.BlockResult) {
 			if block.Outcome != "" {
 				description += " (" + block.Outcome + ")"
 			}
+			if len(block.WaitsFor) != 0 {
+				description += ", waiting for " + strings.Join(block.WaitsFor, ", ")
+			}
 			r.styledParagraph(escapeDisplayLine(description), "    "+styleState(blockStatusToken(block.State), r.options)+" ", "plain")
 		}
 	})

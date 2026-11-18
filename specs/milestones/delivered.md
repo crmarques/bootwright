@@ -17431,3 +17431,17 @@ performed no effect`, and the second names what broke it
 ([attempt outcomes](../state-reconciliation.md#attempt-outcomes)). Guarded by
 the runner's failed-exit, killed, malformed, out-of-order, non-canonical and
 null-evidence tests.
+
+## X591 — A pending block names what it waits for
+
+### B1581
+
+Under [D276](backlog.md#d276) (audit 006 W1.2, finding O02-03 and its
+duplicates), split from [B1562](m1.md#b1562). A block an operation left
+`pending` gave no reason, so after a failure an operator could not tell which
+blocks would run once it cleared. A pending block now names the unfinished
+blocks it runs after, an apply's dependencies or a removal's dependents, in the
+results of `apply`, `destroy` and `status`
+([lifecycle and status results](../cli/output.md#lifecycle-and-status-results)).
+Guarded by `TestAPendingBlockNamesWhatItWaitsFor` and the `cli-apply-failed`
+goldens.
