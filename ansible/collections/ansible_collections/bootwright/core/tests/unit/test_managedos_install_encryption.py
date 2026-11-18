@@ -368,6 +368,6 @@ def test_private_material_is_protected_before_publication():
             assert "/.stage/" in task["dest"]
             assert task["mode"] == "0640" and task["owner"] == task["group"] == "root"
         commands = [(i, task["ansible.builtin.command"]["argv"]) for i, task in enumerate(tasks) if "ansible.builtin.command" in task]
-        labels = [i for i, argv in commands if argv[0] == "/usr/bin/chcon" and "/.stage/" in argv[-1]]
+        labels = [i for i, argv in commands if argv[0] == "/usr/bin/chcon" and argv[-1].startswith(".stage/")]
         publications = [i for i, argv in commands if argv[0] == "/usr/bin/mv" and "--no-target-directory" in argv]
         assert labels and publications and max(labels) < min(publications)

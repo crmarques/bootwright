@@ -492,6 +492,52 @@ def test_no_task_file_builds_an_ssh_argv():
     assert opened == GUEST_SESSIONS, "the guest sessions moved: %s" % sorted(opened ^ GUEST_SESSIONS)
 
 
+# A private publication's directory is named by an unguessable token, the only
+# access control on what it serves. A command's argv is readable by any local
+# account through /proc, so no command names the token or a path built from it;
+# it runs in that directory with relative paths instead.
+TOKENED = re.compile(r"\b(\w+_token)\b")
+
+
+def tokened_variables():
+    """Every variable the token is, or a role default builds from it."""
+    found = set()
+    for path in sorted(ROLES.glob("*/defaults/main.yml")):
+        for name, value in (yaml.safe_load(path.read_text()) or {}).items():
+            if isinstance(value, str) and TOKENED.search(value):
+                found.add(name)
+    return found
+
+
+def token_argv_problems(where, tasks, tokened):
+    problems = []
+    for task in role_tasks.flatten(tasks):
+        if action(task) not in COMMANDS + ("ansible.builtin.shell", "ansible.builtin.raw"):
+            continue
+        body = {key: value for key, value in task.items() if key not in role_tasks.SECTIONS}
+        argv = command_argv(task) or [str(arguments(task).get("cmd", body.get(action(task), "")))]
+        named = {word for item in argv for word in re.findall(r"\b\w+\b", str(item))}
+        if named & tokened or any(TOKENED.search(str(item)) for item in argv):
+            problems.append("%s: %r puts a publication token in its argv" % (where, task.get("name")))
+    return problems
+
+
+def test_no_command_puts_a_publication_token_in_its_argv():
+    tokened = tokened_variables()
+    assert {"managedos_install_anaconda_private_dir", "containercluster_media_agent_directory"} <= tokened, sorted(tokened)
+    problems = []
+    for path in task_files():
+        problems.extend(token_argv_problems(label(path), load(path), tokened))
+    assert not problems, "\n".join(problems)
+
+
+def test_a_planted_token_argv_is_reported():
+    planted = [{"name": "Publish", "ansible.builtin.command": {"argv": ["/usr/bin/mv", "a", "{{ some_private_dir }}/b"]}},
+               {"name": "Mint", "ansible.builtin.command": {"argv": ["/usr/bin/echo", "{{ some_token.stdout }}"]}},
+               {"name": "Relative", "ansible.builtin.command": {"chdir": "{{ some_private_dir }}", "argv": ["/usr/bin/mv", "a", "b"]}}]
+    assert len(token_argv_problems("planted.yml", planted, {"some_private_dir"})) == 2
+
+
 def test_a_planted_ssh_argv_is_reported():
     planted = [{"name": "Reach the guest", "ansible.builtin.command": {"argv": ["/usr/bin/ssh", "-o", "BatchMode=yes", "fleet@192.0.2.10"]}},
                {"name": "Pin a key", "ansible.builtin.copy": {"content": "x", "dest": "/run/known_hosts"}},

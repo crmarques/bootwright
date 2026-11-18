@@ -150,9 +150,12 @@ def test_each_file_is_staged_protected_labelled_and_then_renamed():
         staged = PRIVATE["path"] + "/" + TOKEN + "/.stage/" + item["name"]
         assert render(copy[COPY]["src"], item=item) == item["source"]
         assert render(copy[COPY]["dest"], item=item) == staged
-        assert render(tasks[label][COMMAND]["argv"], item=item["name"]) == ["/usr/bin/chcon", "--reference", SERVED, staged]
+        relative = ".stage/" + item["name"]
+        assert render(tasks[label][COMMAND]["argv"], item=item["name"]) == ["/usr/bin/chcon", "--reference", SERVED, relative]
         assert render(tasks[rename][COMMAND]["argv"], item=item["name"]) == [
-            "/usr/bin/mv", "--no-target-directory", staged, PRIVATE["path"] + "/" + TOKEN + "/" + item["name"]]
+            "/usr/bin/mv", "--no-target-directory", relative, item["name"]]
+        for task in (tasks[label], tasks[rename]):
+            assert render(task[COMMAND]["chdir"]) + "/" + relative == staged
     for task in (tasks[label], tasks[rename]):
         assert render(task["loop"]) == FILES
     for task in (copy, tasks[label], tasks[rename]):

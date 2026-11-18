@@ -28,22 +28,24 @@
 
 - name: Label the registration material so the serving process can read it
   ansible.builtin.command:
+    chdir: '{{ managedos_install_anaconda_private_dir }}'
     argv:
       - /usr/bin/chcon
       - --reference
       - '{{ managedos_install_anaconda_served_root }}'
-      - '{{ managedos_install_anaconda_private_dir }}/.stage/{{ item }}'
+      - '.stage/{{ item }}'
   loop: '{{ managedos_install_anaconda_registration_files }}'
   changed_when: true
   no_log: true
 
 - name: Atomically publish the protected registration material
   ansible.builtin.command:
+    chdir: '{{ managedos_install_anaconda_private_dir }}'
     argv:
       - /usr/bin/mv
       - --no-target-directory
-      - '{{ managedos_install_anaconda_private_dir }}/.stage/{{ item }}'
-      - '{{ managedos_install_anaconda_private_dir }}/{{ item }}'
+      - '.stage/{{ item }}'
+      - '{{ item }}'
   loop: '{{ managedos_install_anaconda_registration_files }}'
   changed_when: true
   no_log: true

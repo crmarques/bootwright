@@ -17484,3 +17484,17 @@ Guarded by `TestABlockStoppedByAFullDiskNamesTheFault`, which also asserts no
 path of the failure's text is shown. The architecture's effect grants admit
 the errno constants alone for the engine. The network and trust faults of the
 adapters stay with B1562.
+
+## X595 — No command line names a publication token
+
+### B1585
+
+Under [D276](backlog.md#d276) (audit 006 W6.4, finding X10-03), split from
+[B1567](m1.md#b1567). The token naming a private publication's directory, the
+only access control on the recovery passphrase, the registration files and an
+agent image, was in the argv of the `chcon` and `mv` commands that published
+them, readable by any local account through `/proc` while they ran. Those
+commands now run in the token's directory with relative paths
+([private consumer publication](../infrastructure-services.md#private-consumer-publication)).
+A role rule fails any command whose argv names the token or a default built
+from it; it flagged all seven old commands.

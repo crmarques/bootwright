@@ -65,11 +65,12 @@
 
 - name: Label the staged host key pair before publication
   ansible.builtin.command:
+    chdir: '{{ managedos_install_anaconda_private_dir }}'
     argv:
       - /usr/bin/chcon
       - --reference
       - '{{ managedos_install_anaconda_served_root }}'
-      - '{{ managedos_install_anaconda_private_dir }}/.stage/{{ item }}'
+      - '.stage/{{ item }}'
   loop:
     - identity
     - identity.pub
@@ -79,11 +80,12 @@
 
 - name: Atomically publish the protected host key pair
   ansible.builtin.command:
+    chdir: '{{ managedos_install_anaconda_private_dir }}'
     argv:
       - /usr/bin/mv
       - --no-target-directory
-      - '{{ managedos_install_anaconda_private_dir }}/.stage/{{ item }}'
-      - '{{ managedos_install_anaconda_private_dir }}/{{ item }}'
+      - '.stage/{{ item }}'
+      - '{{ item }}'
   loop:
     - identity
     - identity.pub

@@ -92,11 +92,12 @@
 
 - name: Publish the image by atomic rename
   ansible.builtin.command:
+    chdir: '{{ containercluster_media_agent_directory }}'
     argv:
       - /usr/bin/mv
       - --no-target-directory
       - '{{ containercluster_media_agent_products.files[0].path }}'
-      - '{{ containercluster_media_agent_directory }}/agent.iso'
+      - agent.iso
   when: not (containercluster_media_agent_published | bool)
   changed_when: true
   no_log: true

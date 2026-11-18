@@ -242,7 +242,7 @@ def test_the_published_image_is_fetched_through_the_listener_before_its_receipt(
     tasks = build_tasks()
     order = [
         position(tasks, "publish the image by rename",
-                 lambda task: argv(task)[:1] == ["/usr/bin/mv"] and argv(task)[-1].endswith("/agent.iso")),
+                 lambda task: argv(task)[:1] == ["/usr/bin/mv"] and argv(task)[-1] == "agent.iso"),
         position(tasks, "set the published image's mode",
                  lambda task: str((task.get("ansible.builtin.file") or {}).get("path", "")).endswith("/agent.iso")),
         position(tasks, "label the published subtree", lambda task: argv(task)[:1] == ["/usr/bin/chcon"]),
@@ -324,9 +324,9 @@ def test_the_fetch_reads_the_address_a_machine_boots_from_verified_by_the_bound_
     # The address is the one the install block reads back from what the
     # rename published, and hands to the machine that boots it.
     rename = trusted_build_task("publish the image by rename",
-                                lambda task: argv(task)[:1] == ["/usr/bin/mv"] and argv(task)[-1].endswith("/agent.iso"))
+                                lambda task: argv(task)[:1] == ["/usr/bin/mv"] and argv(task)[-1] == "agent.iso")
     published = pathlib.Path(templar(MEDIA, media_scope({"path": str(tmp_path)})).template(
-        rename["ansible.builtin.command"]["argv"][-1]))
+        rename["ansible.builtin.command"]["chdir"])) / rename["ansible.builtin.command"]["argv"][-1]
     published.parent.mkdir()
     published.write_bytes(b"")
     expected = containercluster_install_inspect.published(str(tmp_path), IMAGE["url"])

@@ -183,7 +183,8 @@ def write_targets(task):
         if isinstance(task.get(module), dict):
             targets.append(task[module].get("path", task[module].get("dest")))
     if argv(task)[:1] == ["/usr/bin/mv"]:
-        targets.append(argv(task)[-1])
+        target, directory = argv(task)[-1], (task.get(COMMAND) or {}).get("chdir")
+        targets.append(target if target.startswith("/") or not directory else (directory, target))
     return [target for target in targets if target]
 
 
@@ -201,7 +202,8 @@ def test_every_task_naming_the_private_url_or_token_is_hidden_and_stays_private(
             seen.append(task.get("name"))
             assert render(task.get("no_log", False)) in (True, "True", "true"), "%s: %r is not hidden" % (name, task.get("name"))
             for target in write_targets(task):
-                written = render(target, item={"name": "identity", "source": "/run/material/host-key"})
+                item = {"name": "identity", "source": "/run/material/host-key"}
+                written = "/".join(str(render(part, item=item)) for part in target) if isinstance(target, tuple) else render(target, item=item)
                 if written == "/var/tmp/bootwright-scratch-1-1/managedos-media-url":
                     assert task[COPY]["mode"] == "0600" and task["diff"] is False
                     assert task["delegate_to"] == "localhost"

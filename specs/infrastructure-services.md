@@ -575,7 +575,10 @@ served content publishes it beneath `private/<object>/<token>/` of the same
 served root. The final segment is an unguessable token of at least 32 bytes
 from the operating system's cryptographic random source, minted by the attempt
 that publishes it and never by the plan, so it appears in no frozen request, no
-evidence, no progress output and no log. The consumer block owns
+evidence, no progress output and no log. No command line names it either,
+since any local account reads a process's arguments: a command that moves or
+labels a file beneath it runs in the token's directory with relative paths
+(`test_no_command_puts_a_publication_token_in_its_argv`). The consumer block owns
 `private/<object>/` as its reserved path; every directory from `private/` down
 is `0711` `root:root`, so nothing is listable and the token is the only way to
 name what it contains. Every file is `0640` `root:root`: the server's workers
