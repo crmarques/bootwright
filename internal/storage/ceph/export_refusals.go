@@ -1,7 +1,20 @@
 package ceph
 
+import (
+	"github.com/crmarques/bootwright/internal/reconciliation"
+)
+
+type observedEffect struct {
+	effect reconciliation.EffectState
+	error
+}
+
+func (o observedEffect) WithDetail(string) error { return o }
+
 func consumerRefusals() map[string]error {
 	out := adapterRefusals()
+	out["export-absent"] = observedEffect{reconciliation.EffectNoEffect, failure("lifecycle.unknown", "Ceph consumer created nothing yet", "")}
+	out["export-incomplete"] = observedEffect{reconciliation.EffectPartial, failure("lifecycle.unknown", "Ceph consumer began and did not complete", "")}
 	for _, reason := range []string{"export-foreign-principal", "export-prerequisite", "export-identity"} {
 		out[reason] = failure("lifecycle.unknown", "Ceph consumer refused: "+reason, "inspect the consumer prerequisites and its owned identities before continuing")
 	}

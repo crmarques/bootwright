@@ -130,6 +130,31 @@ def test_lost_native_reply_recovers_without_mint(monkeypatch):
     assert native.retained == retained and len(native.auth) == 5
 
 
+def test_an_unfinished_apply_is_observed_as_what_it_left(monkeypatch):
+    # An observation never refuses an apply that began nothing or did not
+    # complete: it says which, so the engine retries instead of freezing.
+    native = worker(monkeypatch)
+    with pytest.raises(export.Refusal, match="export-absent"):
+        native.execute(False, {})
+    assert native.markers.writes == [] and native.auth == {}
+    original = native.ceph
+
+    def ceph(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if args[:2] == ("auth", "add"):
+            raise RuntimeError("lost native reply")
+        return result
+    monkeypatch.setattr(native, "ceph", ceph)
+    with pytest.raises(RuntimeError):
+        native.execute(True, {})
+    monkeypatch.setattr(native, "ceph", original)
+    writes = len(native.markers.writes)
+    with pytest.raises(export.Refusal, match="export-incomplete"):
+        native.execute(False, {})
+    assert len(native.markers.writes) == writes
+    assert native.execute(True, {})["private"]
+
+
 def test_foreign_principal_refuses_before_custody(monkeypatch):
     native = worker(monkeypatch)
     entity = "client." + native.identifier + "-health"

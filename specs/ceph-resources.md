@@ -1443,6 +1443,8 @@ the named filesystem. Consumers that share a cluster, filesystem or gateway are
 not isolated from each other: per-consumer principals give per-consumer removal,
 not isolation.
 
+### Consumer key custody
+
 Each CephX key is generated at the declared type and retained under client
 custody ([native-side retention](secrets.md#native-side-retention)) before its
 native add; a lost reply recaptures it and never regenerates. The RGW user is
@@ -1455,7 +1457,10 @@ info --uid=<minted>`, read privately, and refuses unless the user has exactly
 one S3 key pair and the minted caps. An entity or RGW user of a minted name
 that this block has no attempt record for refuses as foreign; a key of
 another type refuses. The consumer never adopts, rotates, re-caps or removes an
-entity it did not mint and never changes the monitors' cipher policy.
+entity it did not mint and never changes the monitors' cipher policy. Its
+observation reads an apply that wrote no scope record and finds no minted
+principal as no effect, and one whose scope record carries no completion as
+partial, so the next apply continues it with what it retained.
 
 The block then assembles the details in the exporter's entry vocabulary and
 offers them as its produced output `external-details` only from a proved

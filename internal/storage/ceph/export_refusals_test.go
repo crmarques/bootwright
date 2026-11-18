@@ -14,27 +14,7 @@ import (
 )
 
 func TestConsumerRefusalsNameTheMissingPrerequisite(t *testing.T) {
-	block := managedExportPlan(t, false)
-	catalog := filesystemCatalog(withMDS)
-	cluster, _ := catalog.Find(api.CephCluster, "example")
-	base, err := baseRequest(catalog, cluster, "synthetic")
-	if err != nil {
-		t.Fatal(err)
-	}
-	base.Action, base.Controller = "cluster", "controller"
-	for i := range base.Hosts {
-		base.Hosts[i].HostKeyRef = base.Hosts[i].Name + "-host-key"
-	}
-	request, err := DecodeConsumerRequest(block.Request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.HostSecretRefs = hostSecretRefs(base.Hosts)
-	if block.Request, err = request.Canonical(); err != nil {
-		t.Fatal(err)
-	}
-	e := lifecycle.Execution{Block: reconciliation.Block{BlockDefinition: block}, ApplyOperation: "apply-original", Operation: "apply-retry", ApplyProved: []lifecycle.BlockEvidence{coreClusterProof(t, base, nil), imageProof(t, "example", base.Image, resolvedDigest)}}
-	e = withMaterial(e, base)
+	e := consumerExecution(t)
 	for token, want := range map[string]string{
 		"export-prerequisite-pool-identity": "pool", "export-prerequisite-rbd-application": "RBD application", "export-prerequisite-filesystem": "filesystem", "export-prerequisite-csi-group": "csi", "export-prerequisite-prometheus": "Prometheus", "export-prerequisite-monitor-leader": "MON leader", "export-prerequisite-monitor-v2": "v2", "export-prerequisite-monitoring-address": "monitoring", "export-prerequisite-realm": "realm", "export-prerequisite-zonegroup": "zone group", "export-prerequisite-zone": "zone", "export-prerequisite-gateway-query": "radosgw-admin", "export-key-type": "allowed", "export-key-type-aes": "aes", "export-key-type-aes256k": "aes256k",
 	} {
@@ -64,6 +44,45 @@ func TestConsumerMapsEveryNativeExportRefusal(t *testing.T) {
 		}
 		if named[reason] == nil {
 			t.Errorf("native export refusal %s has no diagnostic", reason)
+		}
+	}
+}
+
+// consumerExecution is a consumer block's execution over a proved cluster.
+func consumerExecution(t *testing.T) lifecycle.Execution {
+	t.Helper()
+	block := managedExportPlan(t, false)
+	catalog := filesystemCatalog(withMDS)
+	cluster, _ := catalog.Find(api.CephCluster, "example")
+	base, err := baseRequest(catalog, cluster, "synthetic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base.Action, base.Controller = "cluster", "controller"
+	for i := range base.Hosts {
+		base.Hosts[i].HostKeyRef = base.Hosts[i].Name + "-host-key"
+	}
+	request, err := DecodeConsumerRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.HostSecretRefs = hostSecretRefs(base.Hosts)
+	if block.Request, err = request.Canonical(); err != nil {
+		t.Fatal(err)
+	}
+	e := lifecycle.Execution{Block: reconciliation.Block{BlockDefinition: block}, ApplyOperation: "apply-original", Operation: "apply-retry", ApplyProved: []lifecycle.BlockEvidence{coreClusterProof(t, base, nil), imageProof(t, "example", base.Image, resolvedDigest)}}
+	e = withMaterial(e, base)
+	return e
+}
+
+// An observation of an apply that began nothing reads no effect, and one that
+// began and did not complete reads partial, so the next apply converges it.
+func TestAnUnfinishedConsumerApplyIsObservedAsWhatItLeft(t *testing.T) {
+	e := consumerExecution(t)
+	for token, want := range map[string]reconciliation.EffectState{"export-absent": reconciliation.EffectNoEffect, "export-incomplete": reconciliation.EffectPartial} {
+		observation, err := NewConsumer(&refusingRunner{reason: token}).WithProofs(hostProofs{}).Observe(context.Background(), e)
+		if err != nil || observation.Effect != want {
+			t.Fatalf("%s: observed %s (%v), want %s", token, observation.Effect, err, want)
 		}
 	}
 }

@@ -17563,3 +17563,18 @@ installs the closure and goes on, and a removal refuses as it does for a silent
 hypervisor ([provider host realization](../substrates.md#provider-host-realization)).
 Guarded by `test_a_host_without_the_libvirt_client_reads_as_a_silent_hypervisor`.
 No SSH provider host has run live.
+
+## X601 — An interrupted Ceph consumer apply continues
+
+### B1591
+
+Under [D276](backlog.md#d276) (audit 006 W5, finding C10-01, High), split from
+[B1566](m1.md#b1566). A Ceph consumer apply that ended canceled or unknown
+before its completion record could never continue: its observation answered
+only ready or refused `export-identity`, so the block stayed unknown through
+every repeat, whatever prerequisite the operator fixed. The observation now
+reads an apply that began nothing as no effect and one that began and did not
+complete as partial, so the next apply continues it with the keys it retained
+([consumer export](../ceph-resources.md#consumer-key-custody)).
+Guarded by `TestAnUnfinishedConsumerApplyIsObservedAsWhatItLeft` and
+`test_an_unfinished_apply_is_observed_as_what_it_left`.

@@ -182,7 +182,6 @@ var docsLeafExceptions = map[string]docsSectionException{
 	"specs/ceph-native-api.md ### RGW, ingress and NFS records":                 {ceiling: 8993, since: "2026-10-29"},
 	"specs/ceph-native-api.md ### Service identity and references":              {ceiling: 9552, since: "2026-10-29"},
 	"specs/ceph-native-api.md ### Verified native orchestration transport":      {ceiling: 9910, since: "2026-10-29"},
-	"specs/ceph-resources.md ### Consumer refusals":                             {ceiling: 8954, since: "2026-10-29"},
 	"specs/ceph.md ### Cluster execution budget":                                {ceiling: 11210, since: "2026-10-29"},
 	"specs/cli.md ### Lifecycle receipt":                                        {ceiling: 10899, since: "2026-10-29"},
 	"specs/cli.md ### Local privilege and user identity":                        {ceiling: 10666, since: "2026-10-29"},

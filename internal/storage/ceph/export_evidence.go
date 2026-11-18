@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -172,6 +173,10 @@ func (c ConsumerCapability) Apply(ctx context.Context, e lifecycle.Execution) (l
 }
 func (c ConsumerCapability) Observe(ctx context.Context, e lifecycle.Execution) (lifecycle.Observation, error) {
 	result, r, err := c.runExport(ctx, e, "observe")
+	if observed := (observedEffect{}); errors.As(err, &observed) {
+		lifecycle.ClearProduced(result.Produced)
+		return lifecycle.Observation{Effect: observed.effect}, nil
+	}
 	if err != nil {
 		lifecycle.ClearProduced(result.Produced)
 		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err

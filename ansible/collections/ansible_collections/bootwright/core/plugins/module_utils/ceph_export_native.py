@@ -23,7 +23,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import
 VERSION = "ceph-export-request-v1"
 EVIDENCE_VERSION = "ceph-export-evidence-v1"
 PHASES = ("export_apply", "export_observe")
-REASONS = ("gateway-dns", "export-foreign-principal", "export-key-type", "export-key-type-aes", "export-key-type-aes256k",
+REASONS = ("gateway-dns", "export-absent", "export-incomplete", "export-foreign-principal", "export-key-type", "export-key-type-aes", "export-key-type-aes256k",
            "export-prerequisite", "export-identity", "export-prerequisite-pool-identity", "export-prerequisite-rbd-application",
            "export-prerequisite-filesystem", "export-prerequisite-csi-group", "export-prerequisite-prometheus",
            "export-prerequisite-monitor-leader", "export-prerequisite-monitor-v2", "export-prerequisite-monitoring-address",
@@ -217,6 +217,10 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         existing = {entry["entity"]: entry for entry in auth["auth_dump"] if isinstance(entry, dict) and entry.get("entity") in names}
         require(recorded is not None or not existing, "export-foreign-principal")
         require(recorded is None or recorded == scope, "export-identity")
+        if not apply and recorded is None:
+            raise Refusal("export-absent")
+        if not apply and self.markers.read(marker + "-complete.json") is None:
+            raise Refusal("export-incomplete")
         store = Custody(self, "client", "-export-" + self.export["name"], 65536, self.decode_keys)
         store.records(scope)
         if not apply:

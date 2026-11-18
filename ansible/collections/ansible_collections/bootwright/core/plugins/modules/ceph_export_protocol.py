@@ -127,6 +127,8 @@ options:
       - osd-orphan-unproved
       - osd-class-drift
       - gateway-dns
+      - export-absent
+      - export-incomplete
       - export-foreign-principal
       - export-key-type
       - export-key-type-aes
