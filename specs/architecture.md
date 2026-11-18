@@ -989,7 +989,7 @@ an acknowledgement is the line `proceed`. The lifecycle runner
 through `internal/adapterprotocol`: its one decoder reads every record, and
 its one runner core starts, supervises, cancels and drains every adapter
 process, while each runner supplies its invocation and judges its records.
-They accept these phases:
+They accept these phases, and a lifecycle run [one more](#adapter-stop-records):
 
 | Phase | Runner | Direction | Fields | Acknowledgement | Bounds | Failure effect |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1116,7 +1116,13 @@ per node it boots, each the controller itself over a local connection, so that
 per-node phases run at the frozen fan-out; such a host carries no identity of
 its own.
 
-#### Adapter warnings and group progress
+## Adapter records beyond the phases
+
+The [result protocol](#the-adapter-result-protocol) carries, besides its
+phases, presentation the engine never reads as evidence: warnings and group
+progress, and the record that names the task a lifecycle run stopped at.
+
+### Adapter warnings and group progress
 
 A lifecycle `group` record may carry `progress`, exactly `completed` and
 `total`, integers from 0 to 2^63-1 with `completed` at most `total`: the bytes
@@ -1168,6 +1174,27 @@ names when the plan holds a block of that kind and object, or else the
 block's own. They never change an outcome, the evidence or a block's state.
 The member is additive and the protocol carries no version of its own; each
 code is a row of the [diagnostic registry](cli/output.md#diagnostic-taxonomy-and-order).
+
+### Adapter stop records
+
+A lifecycle run may write one `stopped` record, exactly `phase`, `task`,
+`host` and `kind`, optionally `role`: the name of the task whose failure ended
+the run as its role wrote it, at most 160 bytes of printable ASCII, with each
+template expression replaced by `...`; its role's name, letters, digits, `.`
+and `_`, at most 128 bytes; its host's inventory name, letters, digits, `.`,
+`_` and `-`, at most 253 bytes; and `kind`, `failed` or `unreachable`. The
+collection's [censored output callback](security.md#logs-output-and-diagnostics)
+writes it, only when the lifecycle runner set `BOOTWRIGHT_STOP_RECORD`, for the
+first failure that neither `ignore_errors` nor the `rescue` of a block whose
+body holds the task may recover,
+and never writes what the task said; a write that fails changes nothing. The
+decoder refuses the record in a controller run and any other member or bound;
+the runner keeps the first one read before `completed` or a `refused` record,
+ignores any other and never ends or breaks a run for one, and a failed exit
+then reads `the adapter operation did not complete: task "<task>" of role
+<role> failed on host <host>`, or `: host <host> did not answer task "<task>"`.
+A `refused` record keeps its own diagnostic. The record changes no outcome,
+state or evidence.
 
 ## Implementations and version variation
 

@@ -30,7 +30,10 @@ type Record struct {
 	Evidence    json.RawMessage
 	Preparation json.RawMessage
 	Warnings    []Warning
+	Stop        *Stop
 }
+
+type Stop struct{ Task, Role, Host, Kind string }
 
 type NativeError struct{ Coordinate, Cause string }
 
@@ -108,6 +111,7 @@ type phase struct {
 	progress    Admission
 	nativeError Admission
 	warnings    Admission
+	role        Admission
 }
 
 // phases is the one table of which runner admits which phase.
@@ -119,7 +123,14 @@ var phases = map[string]phase{
 	"continue":  {members: []string{"phase"}, admitted: Controller},
 	"completed": {members: []string{"evidence", "outcome", "phase"}, admitted: Lifecycle | Controller, warnings: Lifecycle},
 	"refused":   {members: []string{"phase", "reason"}, admitted: Lifecycle | Controller, source: Controller, detail: Lifecycle, nativeError: Lifecycle},
+	"stopped":   {members: []string{"host", "kind", "phase", "task"}, admitted: Lifecycle, role: Lifecycle},
 }
+
+const (
+	maxStopTask = 160
+	maxStopRole = 128
+	maxStopHost = 253
+)
 
 var (
 	errCanonical = errors.New("protocol record is not canonical")
@@ -331,6 +342,8 @@ func shape(members map[string]json.RawMessage, admission Admission) (Record, err
 			record.NativeError, ok = nativeError(raw)
 			valid = valid && ok
 		}
+	case "stopped":
+		record.Stop, valid = stopRecord(members)
 	case "prepared":
 		record.Preparation = members["preparation"]
 		valid = len(record.Preparation) > 0 && record.Preparation[0] == '{'
@@ -367,12 +380,47 @@ func expectedMembers(members map[string]json.RawMessage, rule phase, admission A
 	for _, optional := range []struct {
 		name     string
 		admitted Admission
-	}{{"source", rule.source}, {"detail", rule.detail}, {"progress", rule.progress}, {"nativeError", rule.nativeError}, {"warnings", rule.warnings}} {
+	}{{"source", rule.source}, {"detail", rule.detail}, {"progress", rule.progress}, {"nativeError", rule.nativeError}, {"warnings", rule.warnings}, {"role", rule.role}} {
 		if _, named := members[optional.name]; named && optional.admitted&admission != 0 {
 			expected = append(slices.Clone(expected), optional.name)
 		}
 	}
 	return expected
+}
+
+func stopRecord(members map[string]json.RawMessage) (*Stop, bool) {
+	stop := &Stop{}
+	valid := text(members["task"], &stop.Task) && plain(stop.Task, maxStopTask) &&
+		text(members["host"], &stop.Host) && named(stop.Host, maxStopHost, "._-") &&
+		text(members["kind"], &stop.Kind) && (stop.Kind == "failed" || stop.Kind == "unreachable")
+	if raw, given := members["role"]; given {
+		valid = valid && text(raw, &stop.Role) && named(stop.Role, maxStopRole, "._")
+	}
+	return stop, valid
+}
+
+func plain(value string, maximum int) bool {
+	if value == "" || len(value) > maximum {
+		return false
+	}
+	for _, c := range value {
+		if c < 0x20 || c > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+func named(value string, maximum int, extra string) bool {
+	if value == "" || len(value) > maximum {
+		return false
+	}
+	for _, c := range value {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune(extra, c)) {
+			return false
+		}
+	}
+	return true
 }
 
 func groupRecord(members map[string]json.RawMessage, record *Record) bool {

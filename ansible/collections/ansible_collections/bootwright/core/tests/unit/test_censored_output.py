@@ -144,3 +144,59 @@ def test_the_censored_callback_prints_a_task_in_the_open_as_the_default_does(pri
     output = printed["bootwright.core.censored"][shown(shape)]
     assert VALUE in output
     assert output == printed["ansible.builtin.default"][shown(shape)]
+
+
+def stopped_run(tmp_path, tasks, lifecycle=True):
+    """What a play wrote on descriptor 3 under the censored callback."""
+    (tmp_path / "play.yml").write_text(json.dumps([{
+        "hosts": "localhost", "gather_facts": False, "connection": "local",
+        "vars": {"ansible_python_interpreter": sys.executable}, "tasks": tasks,
+    }]))
+    (tmp_path / "ansible.cfg").write_text("")
+    environment = dict(
+        os.environ, ANSIBLE_CONFIG=str(tmp_path / "ansible.cfg"), ANSIBLE_HOME=str(tmp_path / "home"),
+        ANSIBLE_LOCAL_TEMP=str(tmp_path / "local"), ANSIBLE_COLLECTIONS_PATH=str(COLLECTIONS),
+        ANSIBLE_STDOUT_CALLBACK="bootwright.core.censored", ANSIBLE_LOAD_CALLBACK_PLUGINS="0",
+        ANSIBLE_NOCOLOR="1", LC_ALL="C.UTF-8", ANSIBLE_ROLES_PATH=str(tmp_path / "roles"))
+    if lifecycle:
+        environment["BOOTWRIGHT_STOP_RECORD"] = "1"
+    reader, writer = os.pipe()
+
+    def channel():
+        os.dup2(writer, 3)
+
+    subprocess.run(
+        [sys.executable, "-m", "ansible.cli.playbook", "-i", "localhost,", str(tmp_path / "play.yml")],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environment,
+        cwd=str(tmp_path), check=False, preexec_fn=channel, close_fds=False)
+    os.close(writer)
+    with os.fdopen(reader, "rb") as written:
+        return [json.loads(line) for line in written.read().splitlines()]
+
+
+FAILING = {"ansible.builtin.fail": {"msg": "refused " + VALUE}}
+
+
+def test_a_lifecycle_run_names_the_first_unrecovered_failure_and_nothing_it_said(tmp_path):
+    written = stopped_run(tmp_path, [
+        dict(FAILING, name="ignored", ignore_errors=True),
+        {"name": "rescued", "block": [dict(FAILING, name="inside")], "rescue": [{"ansible.builtin.debug": {"msg": "ok"}}]},
+        dict(FAILING, name="wait for {{ secret }} to answer", vars={"secret": VALUE}),
+    ])
+    assert written == [{"host": "localhost", "kind": "failed", "phase": "stopped", "task": "wait for ... to answer"}]
+
+
+def test_a_failure_inside_a_rescue_or_a_role_is_named(tmp_path):
+    role = tmp_path / "roles" / "probe" / "tasks"
+    role.mkdir(parents=True)
+    (role / "main.yml").write_text(json.dumps([dict(FAILING, name="role step")]))
+    written = stopped_run(tmp_path, [
+        {"name": "outer", "block": [dict(FAILING, name="inside")], "rescue": [dict(FAILING, name="in the rescue")]},
+    ])
+    assert written == [{"host": "localhost", "kind": "failed", "phase": "stopped", "task": "in the rescue"}]
+    written = stopped_run(tmp_path, [{"ansible.builtin.include_role": {"name": "probe"}, "name": "run the role"}])
+    assert written == [{"host": "localhost", "kind": "failed", "phase": "stopped", "role": "probe", "task": "role step"}]
+
+
+def test_a_run_outside_the_lifecycle_runner_writes_no_stopped_record(tmp_path):
+    assert stopped_run(tmp_path, [dict(FAILING, name="fails")], lifecycle=False) == []

@@ -261,6 +261,12 @@ func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
 			return exec.Command("/bin/sh", "-c", "(exec >/dev/null 2>&1 4<&-; sleep 5) & exit 3")
 		}, "the adapter operation did not complete"},
 		{"no-result", func() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 0") }, "the adapter operation has no complete result"},
+		{"stopped", func() *exec.Cmd {
+			return exec.Command("/bin/sh", "-c", `printf '%s\n' '{"host":"node-1","kind":"failed","phase":"stopped","role":"bootwright.core.managed_os","task":"wait for the installer"}' >&3; exit 2`)
+		}, `the adapter operation did not complete: task "wait for the installer" of role bootwright.core.managed_os failed on host node-1`},
+		{"unreachable", func() *exec.Cmd {
+			return exec.Command("/bin/sh", "-c", `printf '%s\n' '{"host":"node-1","kind":"unreachable","phase":"stopped","task":"gather"}' >&3; exit 4`)
+		}, `the adapter operation did not complete: host node-1 did not answer task "gather"`},
 		{"malformed", child("malformed"), "the adapter structured result was incomplete"},
 		{"out-of-order", child("out-of-order"), "the adapter capability protocol was invalid"},
 	} {
@@ -319,6 +325,11 @@ func TestANamedRefusalFailsTheRunWithItsCallersDiagnostic(t *testing.T) {
 		{
 			name:    "before the exit",
 			script:  handoff + `printf '{"phase":"refused","reason":"identity-mismatch"}\n' >&3; sleep 0.2; echo printed after the refusal; exit 2`,
+			message: "the machine answers as another system", printed: "printed after the refusal\n",
+		},
+		{
+			name:    "followed by the stop of the task that failed after it",
+			script:  handoff + `printf '{"phase":"refused","reason":"identity-mismatch"}\n{"host":"node-1","kind":"failed","phase":"stopped","task":"fail"}\n' >&3; sleep 0.2; echo printed after the refusal; exit 2`,
 			message: "the machine answers as another system", printed: "printed after the refusal\n",
 		},
 		{name: "after the exit", script: handoff + readAfter(refusal), message: "the machine answers as another system"},

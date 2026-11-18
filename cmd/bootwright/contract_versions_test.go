@@ -458,6 +458,7 @@ func automationCapitalized() map[string]automationFormat {
 		"CN=Bootwright ephemeral pull broker":               transient("the subject of the pull broker's certificate, made and discarded within one run"),
 		"Bootwright-Controller/1":                           transient("the controller download's User-Agent"),
 		"_BOOTWRIGHT_SOURCE":                                transient("the attribute that carries a helper's source into the worker process within one call"),
+		"BOOTWRIGHT_STOP_RECORD":                            transient("the environment marker the lifecycle runner sets for one adapter run's stopped record"),
 		"._BOOTWRIGHT_SOURCE":                               transient("the attribute that carries a helper's source into the worker process within one call"),
 		"@@BOOTWRIGHT_VOLUME_WWN@@":                         kickstart,
 		"@@BOOTWRIGHT_VOLUME_SIZE@@":                        kickstart,

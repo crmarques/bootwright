@@ -111,6 +111,7 @@ func TestDecodeAdmitsEachRunnersPhasesOnly(t *testing.T) {
 	)
 	refuses(t, Controller,
 		`{"group":"boot","phase":"group","status":"running"}`,
+		`{"host":"node-1","kind":"failed","phase":"stopped","task":"wait"}`,
 		`{"phase":"unknown"}`,
 	)
 	lifecycle := accepts(t, Lifecycle,
@@ -144,6 +145,26 @@ func TestDecodeAdmitsEachRunnersPhasesOnly(t *testing.T) {
 	if controller[5].Source != "tool-helm" || controller[5].Reason != "timeout" || controller[4].Source != "" {
 		t.Fatalf("controller refusals = %+v and %+v", controller[4], controller[5])
 	}
+}
+
+func TestAStoppedRecordNamesOnlyATaskARoleAHostAndAKind(t *testing.T) {
+	stopped := accepts(t, Lifecycle,
+		`{"host":"node-1","kind":"failed","phase":"stopped","role":"bootwright.core.managed_os","task":"wait for the installer"}`,
+		`{"host":"node-1.lab","kind":"unreachable","phase":"stopped","task":"gather"}`,
+	)
+	if got := *stopped[0].Stop; got != (Stop{Task: "wait for the installer", Role: "bootwright.core.managed_os", Host: "node-1", Kind: "failed"}) {
+		t.Fatalf("the stop reads %+v", got)
+	}
+	refuses(t, Lifecycle,
+		`{"host":"node-1","kind":"refused","phase":"stopped","task":"wait"}`,
+		`{"host":"node 1","kind":"failed","phase":"stopped","task":"wait"}`,
+		`{"host":"node-1","kind":"failed","phase":"stopped","task":""}`,
+		`{"host":"node-1","kind":"failed","phase":"stopped","task":"`+strings.Repeat("t", maxStopTask+1)+`"}`,
+		`{"host":"node-1","kind":"failed","phase":"stopped","task":"a\u0007b"}`,
+		`{"host":"node-1","kind":"failed","phase":"stopped","role":"a/b","task":"wait"}`,
+		`{"host":"node-1","kind":"failed","msg":"x","phase":"stopped","task":"wait"}`,
+		`{"kind":"failed","phase":"stopped","task":"wait"}`,
+	)
 }
 
 func TestPreparedIsAdmittedForLifecycleRuns(t *testing.T) {

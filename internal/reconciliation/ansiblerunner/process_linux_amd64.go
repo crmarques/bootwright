@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -341,6 +342,7 @@ type lifecycleJudge struct {
 	request   lifecycle.RunRequest
 	grace     time.Duration
 	deadline  time.Duration
+	stop      *adapterprotocol.Stop
 	loaded    bool
 	prepared  bool
 	completed bool
@@ -421,6 +423,8 @@ func (j *lifecycleJudge) Judge(ctx context.Context, record adapterprotocol.Recor
 	case "completed":
 		valid = valid && j.loaded
 		j.completed = j.completed || valid
+	case "stopped":
+		valid = j.keep(record.Stop, moment)
 	case "refused":
 		// The adapter names a refusal its caller remedies by name, then fails.
 		// The caller's own failure for it replaces the adapter's.
@@ -512,7 +516,7 @@ func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Endi
 	case adapterprotocol.RetainedOutput:
 		return lifecycle.RunResult{}, failure("lifecycle.unknown", "adapter descendants retained the adapter's output after it exited", remediation)
 	case adapterprotocol.FailedExit:
-		return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter operation did not complete", remediation)
+		return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter operation did not complete"+j.stopped(), remediation)
 	case adapterprotocol.Incomplete:
 		return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter structured result was incomplete", remediation)
 	case adapterprotocol.Invalid:
@@ -521,6 +525,31 @@ func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Endi
 		return lifecycle.RunResult{}, failure("lifecycle.unknown", "adapter authorization delivery was uncertain", remediation)
 	}
 	return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter operation has no complete result", remediation)
+}
+
+// keep holds the first stopped record read before completed; any other is ignored.
+func (j *lifecycleJudge) keep(stop *adapterprotocol.Stop, moment adapterprotocol.Moment) bool {
+	if moment.Open && !j.completed && j.stop == nil {
+		j.stop = stop
+	}
+	return true
+}
+
+// stopped names the task whose failure ended the run, when the collection's
+// callback recorded one.
+func (j *lifecycleJudge) stopped() string {
+	stop := j.stop
+	if stop == nil {
+		return ""
+	}
+	task := "task " + strconv.Quote(stop.Task)
+	if stop.Role != "" {
+		task += " of role " + stop.Role
+	}
+	if stop.Kind == "unreachable" {
+		return ": host " + stop.Host + " did not answer " + task
+	}
+	return ": " + task + " failed on host " + stop.Host
 }
 
 // expired is the cause of a run its own deadline ended: the effect may have

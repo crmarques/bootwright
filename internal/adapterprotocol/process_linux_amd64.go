@@ -110,6 +110,9 @@ func compose(invocation Invocation) *exec.Cmd {
 		"ANSIBLE_NOCOLOR=1", "ANSIBLE_FORCE_COLOR=0", "ANSIBLE_LOAD_CALLBACK_PLUGINS=0",
 		"TMPDIR="+invocation.Scratch, "PATH=/usr/bin:/usr/sbin")
 	command.Env = append(command.Env, pluginEnvironment(collection)...)
+	if invocation.Lifecycle {
+		command.Env = append(command.Env, "BOOTWRIGHT_STOP_RECORD=1")
+	}
 	return command
 }
 
@@ -325,6 +328,9 @@ func (s *session) readEnded(err error) {
 
 func (s *session) receive(ctx context.Context, record Record) {
 	verdict := s.judge.Judge(ctx, record, Moment{Open: (!s.ended || s.exited) && !s.canceled, Exited: s.exited || s.undelivered})
+	if record.Phase == "stopped" {
+		return
+	}
 	switch {
 	case !verdict.Valid:
 		// A refused record breaks the protocol whichever of it and the
