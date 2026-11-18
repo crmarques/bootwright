@@ -17578,3 +17578,29 @@ complete as partial, so the next apply continues it with the keys it retained
 ([consumer export](../ceph-resources.md#consumer-key-custody)).
 Guarded by `TestAnUnfinishedConsumerApplyIsObservedAsWhatItLeft` and
 `test_an_unfinished_apply_is_observed_as_what_it_left`.
+
+## X602 — Stops, a catalog and the runner's codes
+
+### B1592
+
+Under [D276](backlog.md#d276) (audit 006 W2.1, first sub-slice; findings
+O05-04, O06-01, E04-01), split from [B1563](m1.md#b1563). Every way an `apply`
+or `destroy` ends without completing its verb gets one declared stop, and this
+slice lays the ground: the stop vocabulary and `diagnostics.Stop` in
+`internal/diagnostics`; the [stop catalog](../cli/stops.md), a spec table
+held equal to the declarations; and the lifecycle runner's fourteen adapter
+run endings as its first rows, renamed from `lifecycle.state` and
+`lifecycle.unknown` to `runner.*` codes with their messages unchanged. Whether
+an attempt is `failed` or `unknown` now comes from the stop's certainty, not
+from a code string ([attempt outcomes](../state-reconciliation.md#attempt-outcomes)),
+and an ending its raiser gave no remedy fires with its row's. A closure check,
+`TestEveryLifecycleDiagnosticIsBuiltFromADeclaredStop`, counts in a ledger
+that only shrinks the 1,215 lifecycle diagnostic sites of 29 packages not yet
+moved onto a stop. Guarded also by
+`TestTheRunnersStopsAreTheCatalogsAdapterRunStops`, the runner's ending tests
+and the race runs of the runner, power, diagnostics and lifecycle packages;
+an independent Opus review found no defect, and its one suggested check, every stop's outcome, was added. Codes recorded by operations already
+running read as before; the development policy keeps no compatibility. The
+rest of W2.1 is in the plan's remaining sub-slices: the runner's other sites,
+the engine's execution stops and refusals, `bootwright explain`, and the
+code, cause and recovery in the structured output and the receipt.

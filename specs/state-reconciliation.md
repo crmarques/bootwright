@@ -634,8 +634,12 @@ its invocation's cancellation interrupted as `canceled`, whatever it reported.
 An attempt whose required log failed before its outcome was logged records a
 reported `failed` as `unknown`, because a typed failure proves less than
 completion, and one whose log could not be created records `unknown` without
-running its effect. A run its own deadline ended reports `lifecycle.unknown`,
-naming its block and the deadline. A failed exit the runner did not cause
+running its effect. A failure a capability reports leaves its attempt
+`unknown` when one of its diagnostics is a [stop](cli/stops.md) of certainty
+`unproved`, or carries the code `lifecycle.unknown`, and `failed` otherwise;
+the adapter run's own endings are the stops of the catalog's
+[adapter run section](cli/stops.md#adapter-run-stops). A run its own deadline
+ended reports `runner.deadline`, naming its block and the deadline. A failed exit the runner did not cause
 names how the adapter ended, `(exit status N)` or `(signal NAME)`, and, as a
 deadline does, the step it was in: `, during step <group>`, the last
 [group](architecture.md#adapter-warnings-and-group-progress) still running,

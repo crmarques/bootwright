@@ -177,7 +177,7 @@ func TestARunThatReachesItsDeadlineSaysSo(t *testing.T) {
 	}
 	_, err := runner.Run(context.Background(), request)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.unknown" ||
+	if len(reported) != 1 || reported[0].Code != "runner.deadline" ||
 		!strings.Contains(reported[0].Message, "block artifact-server-lab reached its deadline of 1s") ||
 		!strings.Contains(reported[0].Remediation, "run bootwright apply --context lab, which observes the effect") {
 		t.Fatalf("an expired run reported %+v (%v)", reported, err)
@@ -289,7 +289,7 @@ func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
 					t.Fatalf("the failed adapter ran until the deadline (%v)", err)
 				}
 				reported := diagnostics.Of(err)
-				if len(reported) != 1 || reported[0].Message != failed.message || reported[0].Remediation != remediation {
+				if len(reported) != 1 || reported[0].Message != failed.message || remediation != "" && reported[0].Remediation != remediation || reported[0].Remediation == "" {
 					t.Fatalf("a failed adapter under %q reported %+v (%v)", remediation, reported, err)
 				}
 			})
@@ -697,7 +697,7 @@ func TestAFailedRunNamesTheStepThatWasRunning(t *testing.T) {
 func TestALifecycleRunEndsUnknownOnANonCanonicalRecord(t *testing.T) {
 	_, err := lifecycleRunOf(t, `printf '{"phase": "loaded"}\n' >&3; read -r reply <&4; exit 2`)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Message != "the adapter structured result was incomplete: a record is not canonical JSON" {
+	if len(reported) != 1 || reported[0].Code != "runner.result-incomplete" || reported[0].Message != "the adapter structured result was incomplete: a record is not canonical JSON" {
 		t.Fatalf("a non-canonical record reported %+v (%v)", reported, err)
 	}
 	if outcome := lifecycle.AttemptOutcome(err); outcome != reconciliation.OutcomeUnknown {
@@ -711,7 +711,7 @@ func TestALifecycleCompletionWithNullEvidenceEndsUnknown(t *testing.T) {
 	result, err := lifecycleRunOf(t, `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
 		`printf '{"evidence":null,"outcome":"changed","phase":"completed"}\n' >&3; exit 0`)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Message != "the adapter structured result was incomplete: a record does not carry exactly its phase's members and values" {
+	if len(reported) != 1 || reported[0].Code != "runner.result-incomplete" || reported[0].Message != "the adapter structured result was incomplete: a record does not carry exactly its phase's members and values" {
 		t.Fatalf("a completion with null evidence reported %+v (%v)", reported, err)
 	}
 	if result.Outcome != "" || result.Evidence != nil {
@@ -934,7 +934,7 @@ func TestAnAcknowledgementAfterAFailedExitKeepsThatExit(t *testing.T) {
 				t.Fatalf("an undelivered acknowledgement left the adapter running for %s", elapsed)
 			}
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.HasPrefix(reported[0].Message, "the adapter operation did not complete") {
+			if len(reported) != 1 || reported[0].Code != "runner.exited" || !strings.HasPrefix(reported[0].Message, "the adapter operation did not complete") {
 				t.Fatalf("an acknowledgement nothing could receive reported %+v (%v)", reported, err)
 			}
 		})
@@ -962,7 +962,7 @@ func TestARunReturnsAtItsDrainWhenADescendantHoldsItsOutput(t *testing.T) {
 		t.Fatalf("the run waited %s on a descendant holding its output", elapsed)
 	}
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Message != "adapter descendants retained the adapter's output after it exited" || reported[0].Remediation != request.OutputRemediation {
+	if len(reported) != 1 || reported[0].Code != "runner.output-retained" || reported[0].Message != "adapter descendants retained the adapter's output after it exited" || reported[0].Remediation != request.OutputRemediation {
 		t.Fatalf("retained output reported %+v (%v)", reported, err)
 	}
 	if result.Outcome != "" {
@@ -1066,7 +1066,7 @@ func TestACompletedRunHandsItsWarningsOnce(t *testing.T) {
 	}
 	unregistered := strings.Replace(completion, `"substrate.shadowed-route"`, `"substrate.unregistered"`, 1)
 	handed, _, err = run(`printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; printf '%s\n' '` + unregistered + `' >&3; exit 0`)
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || len(handed) != 0 {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "runner.result-incomplete" || len(handed) != 0 {
 		t.Fatalf("an unregistered warning code reported %+v and handed %+v", reported, handed)
 	}
 }

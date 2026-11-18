@@ -60,7 +60,7 @@
   "diagnostics": [
     {
       "severity": "error",
-      "code": "lifecycle.unknown",
+      "code": "runner.deadline",
       "message": "the adapter run of block machine-rhel-01 reached its deadline of 2h0m0s before it ended, so its effect is unproved",
       "object": {
         "apiVersion": "bootwright.io/v1alpha1",

@@ -20,8 +20,9 @@ var warningOnlyDiagnosticCodes = []string{
 func TestEveryErrorCodeHasADefaultRemediation(t *testing.T) {
 	documented := documentedDiagnosticCodes(t)
 	defaults := diagnostics.DefaultRemediationCodes()
+	stops := stopCatalogCodes(t)
 	for code := range documented {
-		if code == "cli.usage" || slices.Contains(warningOnlyDiagnosticCodes, code) {
+		if code == "cli.usage" || slices.Contains(warningOnlyDiagnosticCodes, code) || stops[code] {
 			continue
 		}
 		if diagnostics.DefaultRemediation(code) == "" {

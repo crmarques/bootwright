@@ -1129,7 +1129,9 @@ carries in its envelope's `diagnostics`.
 
 ## Diagnostic taxonomy and order
 
-Diagnostic codes are stable machine identifiers. Include an object identity
+Diagnostic codes are stable machine identifiers. The codes of declared stops
+are registered in the [stop catalog](stops.md#catalog), not in this table, and
+each fires with its row's remedy when its raiser gives none. Include an object identity
 only when its kind and name form a valid API identity; malformed names are
 reported through the source coordinates and `$.metadata.name` field without
 repeating unbounded authored text. This table is the registry: it lists every

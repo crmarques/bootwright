@@ -302,14 +302,8 @@ func Materials(placement machineref.Placement) []MaterialFile {
 // unknown block: reporting every adapter failure that way strands the context
 // with no path forward.
 func AttemptOutcome(err error) reconciliation.Outcome {
-	reported := diagnostics.Of(err)
-	if len(reported) == 0 {
+	if len(diagnostics.Of(err)) == 0 || diagnostics.Unproved(err) {
 		return reconciliation.OutcomeUnknown
-	}
-	for _, entry := range reported {
-		if entry.Code == "lifecycle.unknown" {
-			return reconciliation.OutcomeUnknown
-		}
 	}
 	return reconciliation.OutcomeFailed
 }

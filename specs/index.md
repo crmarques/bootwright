@@ -15,7 +15,7 @@ implemented or authorized.
 | Desired-state grammar, compilation, defaults | [api](api.md); input discovery and ceilings: [input](api/input.md) |
 | One kind's fields | [environment](api/environment.md), [secrets](api/secrets.md), [machines](api/machines.md), [networks](api/networks.md), [infrastructure services](api/infrastructure-services.md), [container clusters](api/openshift-clusters.md), [storage](api/ceph.md#kinds), [add-ons](api/addons.md), [custom playbooks](api/custom-playbooks.md) |
 | Copying files or directories to and from Machines | [machine file copies](cli/machine-copy.md) |
-| Command behavior and journeys | [cli](cli.md); flags: [commands](cli/commands.md); streams, JSON, diagnostics: [output](cli/output.md) |
+| Command behavior and journeys | [cli](cli.md); flags: [commands](cli/commands.md); streams, JSON, diagnostics: [output](cli/output.md), [stops](cli/stops.md) |
 | Host prerequisites, install and uninstall, the controller stage | [controller](controller.md) |
 | Contexts, frozen input, storage, locking, deletion | [contexts](contexts.md); [controller record](contexts/controller-record.md); [log root](contexts/log-root.md) |
 | Secret custody, bindings and reveal | [secrets](secrets.md) |

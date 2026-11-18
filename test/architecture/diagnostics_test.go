@@ -380,6 +380,35 @@ func documentedDiagnosticCodes(t *testing.T) map[string]bool {
 		}
 		codes[code] = true
 	}
+	for code := range stopCatalogCodes(t) {
+		if codes[code] {
+			t.Errorf("%s is both a stop of specs/cli/stops.md and a row of the specs/cli/output.md registry; list it once", code)
+		}
+		codes[code] = true
+	}
+	return codes
+}
+
+func stopCatalogCodes(t *testing.T) map[string]bool {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "specs", "cli", "stops.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, catalog, found := strings.Cut(string(data), "\n## Catalog\n")
+	if !found {
+		t.Fatal("specs/cli/stops.md has no catalog section")
+	}
+	codes := map[string]bool{}
+	for _, line := range strings.Split(catalog, "\n") {
+		if code, ok := strings.CutPrefix(line, "| `"); ok {
+			code, _, _ = strings.Cut(code, "`")
+			if codes[code] {
+				t.Errorf("specs/cli/stops.md lists %s twice", code)
+			}
+			codes[code] = true
+		}
+	}
 	return codes
 }
 

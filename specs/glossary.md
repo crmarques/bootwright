@@ -57,6 +57,8 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
   `hardware.nics[]` entry in order. A bond member is the
   interface that NMState `link-aggregation.port` lists; a listener port is a
   TCP or UDP service port.
+- **Stop**: a declared way an `apply` or `destroy` ends without completing its
+  verb, with one code, its certainty and its recovery ([stop catalog](cli/stops.md)).
 - **Segment** and **Network**: a segment is one provider network a NIC is
   cabled to, an `InfraProvider` `segments[]` entry or a managed `Network` of
   that provider, carrying its Networks untagged or tagged with an MTU capacity

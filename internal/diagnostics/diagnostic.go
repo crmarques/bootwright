@@ -26,6 +26,7 @@ type Diagnostic struct {
 	Object      *ObjectIdentity `json:"object,omitempty"`
 	Field       string          `json:"field,omitempty"`
 	Remediation string          `json:"remediation,omitempty"`
+	Certainty   Certainty       `json:"-"`
 }
 
 // Failure carries a refusal's diagnostics. Usage marks a refusal of how the

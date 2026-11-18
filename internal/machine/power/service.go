@@ -468,9 +468,7 @@ func settlement(ctx context.Context, err error) string {
 	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
 		return "canceled"
 	}
-	if slices.ContainsFunc(diagnostics.Of(err), func(reported diagnostics.Diagnostic) bool {
-		return reported.Code == "lifecycle.unknown"
-	}) {
+	if diagnostics.Unproved(err) {
 		return "unknown"
 	}
 	return "failed"
