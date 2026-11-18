@@ -142,14 +142,14 @@ func TestInstallAnUnprovedAdminCredentialRunRefusesAndClears(t *testing.T) {
 	produced := credentialOutputs(preparedGuard())
 	capability := NewInstall(&credentialRunner{result: lifecycle.RunResult{Evidence: credentialProof(false), Produced: produced}}).WithPasswordHash(hashed)
 	guard, err := capability.PrepareAdminCredential(context.Background(), execution)
-	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "access.unavailable" || d[0].Message != "the administrator credential preparation was not proved" || guard.Size() != 0 {
+	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.credential-preparation-invalid" || d[0].Message != "the administrator credential preparation was not proved" || guard.Size() != 0 {
 		t.Fatalf("an unproved prepare returned %+v", d)
 	}
 	cleared(t, producedMaterials(produced)...)
 	produced = credentialOutputs(preparedGuard())
 	capability = NewInstall(&credentialRunner{result: lifecycle.RunResult{Evidence: []byte(`{"proved":true,"request":"other"}`), Produced: produced}})
 	err = capability.UpdateAdminCredential(context.Background(), execution, secrets.Material{})
-	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "access.unavailable" || d[0].Message != "the administrator credential update was not proved" {
+	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.credential-update-unproved" || d[0].Message != "the administrator credential update was not proved" {
 		t.Fatalf("an unproved update returned %+v", d)
 	}
 	cleared(t, producedMaterials(produced)...)

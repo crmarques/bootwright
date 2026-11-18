@@ -34,8 +34,12 @@ func launchRefused(t *testing.T, h *harness, message string) {
 func requireSetupRefusal(t *testing.T, err error, message string) {
 	t.Helper()
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "controller.state" || reported[0].Message != message || !strings.HasPrefix(reported[0].Remediation, "run bootwright controller install") {
-		t.Fatalf("the launch reported %+v (%v), want controller.state %q naming bootwright controller install", reported, err, message)
+	code := "engine.runtime-unprepared"
+	if !strings.HasPrefix(message, "the controller runtime for this build") {
+		code = "controller.state"
+	}
+	if len(reported) != 1 || reported[0].Code != code || reported[0].Message != message || !strings.HasPrefix(reported[0].Remediation, "run bootwright controller install") {
+		t.Fatalf("the launch reported %+v (%v), want %s %q naming bootwright controller install", reported, err, code, message)
 	}
 }
 
@@ -184,7 +188,7 @@ func TestAFailedRebuildRefusesWithRunSetup(t *testing.T) {
 	}))
 	_, err := apply(h)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "controller.state" || reported[0].Remediation != "run bootwright controller install" ||
+	if len(reported) != 1 || reported[0].Code != "engine.runtime-unprepared" || reported[0].Remediation != "run bootwright controller install" ||
 		!strings.Contains(reported[0].Message, "could not be rebuilt from the wheel cache: pip could not install") {
 		t.Fatalf("a failed rebuild reported %+v (%v)", reported, err)
 	}

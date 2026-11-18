@@ -124,7 +124,7 @@ func refusesDeclaration(refusal lifecycle.Refusal, object api.Object, catalog ap
 // TestUnrealizedTableMatchesUnsupported holds the Admitted but unrealized
 // table of specs/api.md to the data validate warns from and to what planning
 // refuses: every row is the data, every declaration a fixture makes is warned
-// api.unrealized at its path and refused lifecycle.unsupported before
+// api.unrealized at its path and refused plan.object-unsupported before
 // registration, and every row is declared by some fixture.
 func TestUnrealizedTableMatchesUnsupported(t *testing.T) {
 	t.Parallel()

@@ -140,7 +140,7 @@ func TestRetirementRefusesBeforeRegistrationWhileAConsumerSurvives(t *testing.T)
 			warnings, err := arrangedPreview(t, h, capability, tc.arrange, machines)
 			pair := tc.consumer + " consumes ArtifactServer/storage"
 			if unread := capability.unread["consumer"]; unread != (err != nil) || !unread && !slices.ContainsFunc(warnings, func(d diagnostics.Diagnostic) bool {
-				return d.Severity == "warning" && d.Code == "lifecycle.surviving-consumer" && strings.Contains(d.Message, pair+" and outlives")
+				return d.Severity == "warning" && d.Code == "plan.consumer-outlives-destroy" && strings.Contains(d.Message, pair+" and outlives")
 			}) {
 				t.Fatalf("apply plan warnings = %+v (%v), want %s", warnings, err, pair)
 			}

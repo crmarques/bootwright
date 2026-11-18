@@ -128,7 +128,7 @@ func TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives(t *testing.T) {
 	services := assembleServices(deps)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	const pair = "OpenShiftCluster/compact consumes CephConsumer/compact-storage"
-	if _, stderr := contextRun(t, services, 0, "plan", "--context", "alpha"); !strings.Contains(stderr, "lifecycle.surviving-consumer") || !strings.Contains(humanContent(stderr), humanContent(pair+" and outlives")) {
+	if _, stderr := contextRun(t, services, 0, "plan", "--context", "alpha"); !strings.Contains(stderr, "plan.consumer-outlives-destroy") || !strings.Contains(humanContent(stderr), humanContent(pair+" and outlives")) {
 		t.Fatalf("the apply plan warns %q", stderr)
 	}
 	appliedDone(t, repository, applied)

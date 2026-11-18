@@ -653,7 +653,7 @@ func (r Runner) extract(ctx context.Context) (stagedAutomation, error) {
 		if staged.Release != nil {
 			staged.Release()
 		}
-		return stagedAutomation{}, failure("controller.identity", "the staged automation does not match this executable's automation", "rerun the command")
+		return stagedAutomation{}, runnerAutomationMismatch.Fail("the staged automation does not match this executable's automation", "rerun the command")
 	}
 	return stagedAutomation{path: staged.Path, lock: lock, release: staged.Release}, nil
 }

@@ -304,7 +304,7 @@ func (r *run) validateEffective(catalog api.Catalog) bool {
 
 // unrealizedIssue: specs/api.md, Admitted but unrealized.
 func unrealizedIssue(declaration api.Unrealized, object api.Object) api.Issue {
-	message := object.Identity() + " declares " + declaration.Declaration() + ", which this build admits but does not realize, so plan refuses it with lifecycle.unsupported"
+	message := object.Identity() + " declares " + declaration.Declaration() + ", which this build admits but does not realize, so plan refuses it with plan.object-unsupported"
 	remediation := "remove " + strings.TrimPrefix(declaration.Path, "$.") + " from " + object.Identity() + " to plan with this build"
 	if declaration.Item != "" {
 		message += "; tracked as " + declaration.Item

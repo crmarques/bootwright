@@ -199,7 +199,7 @@ func TestAControllerStageWaitingForTheClusterMediaRefuses(t *testing.T) {
 	}
 	_, err = lifecycle.DependOnController(resolver, resolved)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "controller.unsupported" || !strings.Contains(reported[0].Message, "waits for block cluster-media-sno") {
+	if len(reported) != 1 || reported[0].Code != "plan.controller-order" || !strings.Contains(reported[0].Message, "waits for block cluster-media-sno") {
 		t.Fatalf("refusal = %+v", reported)
 	}
 }

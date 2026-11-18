@@ -177,7 +177,7 @@ func TestTheRebindExitRefusesAnythingButARotatedAccessCredential(t *testing.T) {
 			err := destroyWith(h, tc.authorizations...)
 			reported := diagnostics.Of(err)
 			if len(reported) == 0 || reported[0].Code != "authorize.rebind-invalid" || !strings.Contains(reported[0].Message, tc.message) {
-				t.Fatalf("refusal = %+v (%v), want lifecycle.authorization containing %q", reported, err, tc.message)
+				t.Fatalf("refusal = %+v (%v), want an authorize refusal containing %q", reported, err, tc.message)
 			}
 			after, _ := durableOperation(t, h)
 			if h.binder.issued != issued || len(h.binder.rebinds) != 0 || len(h.capability.executions) != executions || after.ID != before.ID || h.confirmer.asked != 0 {
@@ -239,7 +239,7 @@ func TestARebindRefusesABlockWhoseCapabilityCannotNameItsSecrets(t *testing.T) {
 	reported := diagnostics.Of(err)
 	want := "step 1 (remove alpha) has a capability that cannot name the Secrets it references, so no Secret is rebound"
 	if len(reported) == 0 || reported[0].Code != "authorize.rebind-invalid" || !strings.Contains(reported[0].Message, want) {
-		t.Fatalf("refusal = %+v (%v), want lifecycle.authorization containing %q", reported, err, want)
+		t.Fatalf("refusal = %+v (%v), want an authorize refusal containing %q", reported, err, want)
 	}
 	if len(h.binder.rebinds) != 0 || h.confirmer.asked != 0 {
 		t.Fatalf("the refusal rebound %v and asked %d confirmations", h.binder.rebinds, h.confirmer.asked)

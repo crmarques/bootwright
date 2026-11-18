@@ -190,6 +190,84 @@ var (
 	diffContextMoved = diagnostics.Stop{Code: "diff.context-moved", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseConcurrency, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "the context changed while diff read it", Remedy: "repeat the diff"}
+	engineCredentialUnapplied = diagnostics.Stop{Code: "engine.credential-unapplied", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "an administrator credential update names a cluster no completed apply installed and proved", Remedy: "complete the cluster's apply before updating its credentials"}
+	engineCredentialClusterUnknown = diagnostics.Stop{Code: "engine.credential-cluster-unknown", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "an administrator credential update names a cluster the context does not select", Remedy: "bootwright cluster info lists the selected clusters"}
+	engineCredentialExternal = diagnostics.Stop{Code: "engine.credential-external-cluster", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "an administrator credential update names an external cluster, whose credentials its own administrator keeps", Remedy: "update the credentials through the external cluster's administrator"}
+	engineCredentialCustody = diagnostics.Stop{Code: "engine.credential-custody-unproved", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "the custody of a cluster administrator credential is missing, unproved or invalid, so its update changed nothing", Remedy: "restore the original credential custody"}
+	engineCredentialPending = diagnostics.Stop{Code: "engine.credential-update-pending", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "an administrator credential update was left pending, so custody holds no credential proved current", Remedy: "finish the retained update with bootwright cluster update-admin-credentials"}
+	engineCredentialPreparationInvalid = diagnostics.Stop{Code: "engine.credential-preparation-invalid", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "the cluster's read-only preparation of an administrator credential update was not proved or returned no valid update, so nothing changed", Remedy: "check the cluster's original administrator account"}
+	engineCredentialUpdateUnproved = diagnostics.Stop{Code: "engine.credential-update-unproved", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyPossible,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "the adapter that updates a cluster administrator credential ended without proving the update", Remedy: "repeat bootwright cluster update-admin-credentials to finish the retained update"}
+	engineControllerUnprepared = diagnostics.Stop{Code: "engine.controller-unprepared", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseEnvironment, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "this host has no completed controller setup, so nothing ran", Remedy: "run bootwright controller install"}
+	engineControllerUnbound = diagnostics.Stop{Code: "engine.controller-unbound", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "the context is not bound to the controller host it runs on, so nothing ran", Remedy: "run bootwright controller install to record the controller binding and host evidence"}
+	engineControllerOtherHost = diagnostics.Stop{Code: "engine.controller-other-host", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "this host is not the controller host the context is bound to, or the recorded binding does not match it, so nothing ran", Remedy: "run the command on the host the context is bound to"}
+	engineRuntimeUnprepared = diagnostics.Stop{Code: "engine.runtime-unprepared", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseEnvironment, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "the controller runtime for this build is not prepared on this host and could not be rebuilt, so nothing ran", Remedy: "run bootwright controller install"}
+	engineClientNotInstalled = diagnostics.Stop{Code: "engine.client-not-installed", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a controller client the work needs is not installed by the context's controller stage, so nothing ran", Remedy: "apply the context's controller stage, then repeat the command"}
+	engineWiringMissing = diagnostics.Stop{Code: "engine.wiring-missing", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "this build was wired without a part the command needs, so nothing ran", Remedy: "repeat the command; a repeated failure is a Bootwright defect to report"}
+	engineLogUnmaintained = diagnostics.Stop{Code: "engine.log-unmaintained", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
+		Cause: diagnostics.CauseEnvironment, Fault: diagnostics.FaultStorage, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a required private operation log could not be maintained", Remedy: "restore the context's private log tree under /var/log/bootwright before repeating the operation"}
+	engineProducedNameInvalid = diagnostics.Stop{Code: "engine.produced-name-invalid", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
+		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryNone,
+		Meaning: "a block offered produced material under an invalid or repeated name, so custody kept none of it", Remedy: "report the message as a defect"}
+	planControllerOrder = diagnostics.Stop{Code: "plan.controller-order", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "a block the controller stage waits for runs only after that stage", Remedy: "place the object the message names where the controller stage need not wait for it"}
+	planReservationKeyTooLong = diagnostics.Stop{Code: "plan.reservation-key-too-long", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "a host reservation key would exceed its bound once keyed by the SSH host it is placed on", Remedy: "reach the Machine by a shorter address, or give the reserving service a shorter name"}
+	planHostKeyUnreadable = diagnostics.Stop{Code: "plan.host-key-unreadable", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "the SSH host key Secret of a Machine binds no readable host key, so the reservations placed there cannot name the host it pins", Remedy: "author access.ssh.knownHostsRef on the Machine as one known-hosts entry for its SSH host"}
+	planSocketConflict = diagnostics.Stop{Code: "plan.socket-conflict", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "two services of the context would listen on one socket of a host", Remedy: "give one of them another bind address or port"}
+	planTemplateValue = diagnostics.Stop{Code: "plan.template-value", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "a planned request holds a template delimiter or a key ansible-core reserves, which no adapter may take as data", Remedy: "remove it from the desired-state values, import them, then plan again"}
+	planObjectUnsupported = diagnostics.Stop{Code: "plan.object-unsupported", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "this executable cannot realize a selected object, for the reason the message names, so nothing was registered", Remedy: "remove the object this executable cannot realize, or use a build that supports it"}
+	planConsumerOutlivesDestroy = diagnostics.Stop{Code: "plan.consumer-outlives-destroy", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "a warning that a consumer runs where a destroy of this context will not delete it, so that destroy will refuse before registration", Remedy: "run the consumer on Machines this context deletes, or keep this context while the consumer runs"}
+	storageHealth = diagnostics.Stop{Code: "storage.health", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryNone,
+		Meaning: "a warning: a read-only Ceph observation reported a health check naming a pool or filesystem", Remedy: "resolve the health check through the Ceph cluster"}
+	storageNotReady = diagnostics.Stop{Code: "storage.not-ready", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryNone,
+		Meaning: "a warning: a read-only Ceph observation completed with checks that kept the block from ready", Remedy: "resolve the checks the message names through the Ceph cluster"}
+	substrateShadowedRoute = diagnostics.Stop{Code: "substrate.shadowed-route", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryNone,
+		Meaning: "a warning: a libvirt host apply admitted a main-table route broader than a managed network's", Remedy: "narrow the route the message names on the libvirt host"}
+	controllerOutdatedClient = diagnostics.Stop{Code: "controller.outdated-client", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "a warning: an apply's controller stage proved a client below this build's minimum, which a settling apply and a removal keep running", Remedy: "take the apply back with destroy and apply again to install this build's default client, or keep the build that applied it"}
 )
 
 var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineRecordsDenied, engineRecordsDevice, engineEscaped, engineStartUnrecorded,
@@ -202,6 +280,21 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, destroyPostconditionUnknown,
 	prepareRefused, prepareUnsupported,
 	engineBorrowedSSH, engineConfirmationRequired, engineInputInvalid, engineCredentialMoved, engineFinalizationIncomplete,
-	destroyReleaseIncomplete, destroyUnprovedEffects, engineOutcomeUnknown, authorizeRelaxationChanged, diffContextMoved}
+	destroyReleaseIncomplete, destroyUnprovedEffects, engineOutcomeUnknown, authorizeRelaxationChanged, diffContextMoved,
+	engineCredentialUnapplied, engineCredentialClusterUnknown, engineCredentialExternal, engineCredentialCustody, engineCredentialPending,
+	engineCredentialPreparationInvalid, engineCredentialUpdateUnproved, engineControllerUnprepared, engineControllerUnbound, engineControllerOtherHost,
+	engineRuntimeUnprepared, engineClientNotInstalled, engineWiringMissing, engineLogUnmaintained, engineProducedNameInvalid,
+	planControllerOrder, planReservationKeyTooLong, planHostKeyUnreadable, planSocketConflict, planTemplateValue, planObjectUnsupported,
+	planConsumerOutlivesDestroy, storageHealth, storageNotReady, substrateShadowedRoute, controllerOutdatedClient}
+
+var relayedWarnings = []string{storageHealth.Code, storageNotReady.Code, substrateShadowedRoute.Code, "substrate.lend-not-revoked", "substrate.unclaimed-server"}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }
+
+func raised(stop diagnostics.Stop, message, remediation string) diagnostics.Diagnostic {
+	return diagnostics.Of(stop.Fail(message, remediation))[0]
+}
+
+func warned(stop diagnostics.Stop, message, remediation string) diagnostics.Diagnostic {
+	return diagnostics.Diagnostic{Severity: "warning", Code: stop.Code, Message: message, Remediation: remediation}
+}

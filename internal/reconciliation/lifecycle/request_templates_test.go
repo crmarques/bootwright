@@ -30,7 +30,7 @@ const (
 // imports the repaired values before it plans again.
 func heldRefusal(kind, name, held, removed string) diagnostics.Diagnostic {
 	return diagnostics.Diagnostic{
-		Severity: "error", Code: "api.value",
+		Severity: "error", Code: "plan.template-value", Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput, Certainty: diagnostics.CertaintyNone,
 		Message: "the request planned for " + kind + "/" + name + " holds " + held,
 		Object:  &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: name},
 		Remediation: "remove " + removed + " from the desired-state values " + kind + "/" + name + " is planned from, import them with bootwright context update --name " +

@@ -45,7 +45,7 @@ func TestAPowerVerbRefusesATemplateDelimiterBeforeAnyBinding(t *testing.T) {
 	_, err := New(state, evidenceSource{}, proved, runtime, runner, nil, confirmer, nil, nil).
 		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}})
 	refused := onlyRefusal(t, err)
-	if refused.Code != "api.value" || refused.Object == nil || refused.Object.Kind != string(api.Machine) || refused.Object.Name != "metal" {
+	if refused.Code != "plan.template-value" || refused.Object == nil || refused.Object.Kind != string(api.Machine) || refused.Object.Name != "metal" {
 		t.Fatalf("refusal = %+v", refused)
 	}
 	if !strings.Contains(refused.Message, `holds the template delimiter "{{" in controller.credentialsRef`) {
@@ -67,7 +67,7 @@ func TestAPowerReadRefusesATemplateDelimiterBeforeAnyBinding(t *testing.T) {
 	_, err := New(state, evidenceSource{}, &pins{}, runtime, runner, nil, nil, nil, nil).
 		Read(context.Background(), "lab", []string{"metal", "rack"})
 	refused := onlyRefusal(t, err)
-	if refused.Code != "api.value" || refused.Object == nil || refused.Object.Name != "rack" {
+	if refused.Code != "plan.template-value" || refused.Object == nil || refused.Object.Name != "rack" {
 		t.Fatalf("refusal = %+v", refused)
 	}
 	if !strings.Contains(refused.Message, `holds the template delimiter "{%" in controller.credentialsRef`) {

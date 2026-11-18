@@ -400,7 +400,7 @@ for an open socket; `host-port` status is `realized` or `manual`, and `remedy` i
 empty for a realized one ([host firewall requirements](../managed-os.md#host-firewall-requirements)).
 Text output lists each kind under its own heading. These observations
 never change the frozen plan or register an operation. A `plan` of an apply
-also reports one `lifecycle.surviving-consumer` warning for each consumer and
+also reports one `plan.consumer-outlives-destroy` warning for each consumer and
 effect a destroy of the context would refuse over
 ([quiescence before removal](../state-reconciliation.md#quiescence-before-removal)),
 in `diagnostics` and on standard error before the plan.
@@ -1175,14 +1175,13 @@ it to a variable.
 | `api.invariant` | A cross-field or cross-object rule is violated. |
 | `api.selection` | Environment selection excludes an otherwise discovered authored object. |
 | `api.deferred` | Valid authored state declares inactive operational semantics. |
-| `api.unrealized` | A warning: valid authored state declares something this build admits but no capability realizes, so `plan` refuses it with `lifecycle.unsupported`; it names the path and the tracking item ([admitted but unrealized](../api.md#admitted-but-unrealized)). |
+| `api.unrealized` | A warning: valid authored state declares something this build admits but no capability realizes, so `plan` refuses it with `plan.object-unsupported`; it names the path and the tracking item ([admitted but unrealized](../api.md#admitted-but-unrealized)). |
 | `api.unverified` | A warning: an admitted name only the node confirms, an agent-path `ethernet` one that must be its [kernel name](../openshift-clusters.md#node-networking). |
 | `cli.usage` | Arguments or flags do not match this contract. |
 | `cli.not-implemented` | The command is defined but its application use case is not available. |
 | `render.publish` | A rendered artifact could not be safely published: its directory or file is unusable, exists as a non-regular file, or overlaps the input. |
 | `runtime.encode` | A trustworthy result could not be encoded. |
 | `runtime.tool` | A comparison program `diff --tool` names could not be started. |
-| `runtime.log` | A required private operation log could not be safely maintained. |
 | `runtime.interrupted` | An operating-system interrupt canceled the command. |
 | `runtime.canceled` | The supplied context was canceled without an interrupt. |
 | `runtime.deadline` | The supplied context deadline expired. |
@@ -1217,19 +1216,9 @@ it to a variable.
 | `controller.untested-release` | Informational: the host's release is outside the releases this build was tested on; setup checks its floors and continues. Never a refusal. |
 | `controller.loader-preload` | Informational: `/etc/ld.so.preload` is not empty, so it loads libraries into every process, root dnf runs included; setup continues. Never a refusal. |
 | `controller.runtime-retention` | Informational: after a setup, a controller runtime a running command holds was kept ("kept: 3 runtimes (1 in use)"), or older runtimes and wheels could not all be removed; the next setup retries. Never a refusal and never changes the setup's outcome. |
-| `controller.outdated-client` | A warning `status` and `diff` report over an apply whose controller stage proved a client below this build's minimum; it names the client, the proved release and the minimum, and its remedy names the destroy and apply that install this build's default, or keeping the build that applied it ([outdated clients](../cli.md#outdated-clients)). Never a refusal. |
 | `controller.unknown` | A local controller prerequisite action has an unresolved effect outcome. |
-| `lifecycle.unsupported` | This executable cannot realize a selected object: no capability claims its kind, its capability reports the shape unsupported, or two implementations of one capability claim it. |
-| `lifecycle.authorization` | The frozen plan requires an authorization that was not validly supplied, or a supplied one it does not require. |
-| `storage.health` | A warning a Ceph cluster block's read-only observation under `diff --observe` reported: a health check that names a pool or filesystem, and so keeps only the blocks owning it from ready, as `health: <check> names pool <name>` or `health: <check> names filesystem <name>` (the [scoped checks](../ceph.md#scoped-health-checks)). `diff --observe` shows it as a note of the cluster block's reading; it changes no block's state. |
-| `storage.not-ready` | A warning a Ceph adapter reported with a read-only observation's completed result: one check, daemon count or endpoint that kept the block from ready, as `not ready: <entry>` in the grammar of the [readiness entries](../ceph.md#resources-readiness-and-access). `diff --observe` shows it as a note of the block's reading; no run reports it as a diagnostic, because an apply or removal completes ready or refuses. |
-| `substrate.shadowed-route` | A warning an adapter reported with its completed result: a libvirt host apply admitted a main-table route through a gateway that is broader than a managed network's prefix, whose hosts inside that prefix the network's connected route now takes over; it names the route, gateway, device, prefix and attachment, about the provider's InfraProvider. Never a refusal, and it changes no block's state. |
 | `substrate.unclaimed-server` | A warning a `machine-hardware-<machine>` block reports when the host of an OS-ready Machine it reads over SSH reports no permanent hardware address, so the server is not claimed ([OS-ready server claim](../substrates.md#physical-machine-realization)). Never a refusal. |
 | `substrate.lend-not-revoked` | A warning a block's attempt reports when the return of a KubeVirt host access it was lent could not delete the per-lend Secret its token is bound to; it names the host cluster, the Secret and the lifetime that still bounds the token, and a later lend sweeps the Secret once that lifetime has passed ([lent KubeVirt access revocation](../substrates.md#lent-kubevirt-access-revocation)). Never a refusal, and it changes no block's state. |
-| `lifecycle.surviving-consumer` | Informational: a `plan` of an apply names a consumer whose cluster would outlive a destroy of the context while consuming an effect that destroy retires, so that destroy refuses with `destroy.consumer-survives`. Never a refusal. |
-| `logs.not-found` | `bootwright logs` names an operation, block, attempt, bounded run or setup whose records or retained log no longer exist, or the context has no operation; the remedy names what retention keeps and the `status` that shows the durable records. |
-| `logs.detached` | A warning that ends a `bootwright logs --follow`: the followed operation is still `running`, but no `apply` or `destroy` holds its context, so nothing will write to it until one continues it; the remedy names that command. |
-| `logs.truncated` | A warning after `bootwright logs --raw`: the attempt's retained output was cut short at its bound, so it holds less than the adapter printed. |
 | `trust.identity` | SSH identity is missing, changed, contradictory, or not authorized. |
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |
 | `access.unproved` | A revealed credential was kept from an effect never proved complete, so the access it grants was not proved; a warning. |
@@ -1339,7 +1328,7 @@ operation records.
 
 The operation log and required attempt log exist before the corresponding
 effect or resolution observation. A create, append, flush, or finalize failure
-stops admission of new work, requests cancellation, and returns `runtime.log`.
+stops admission of new work, requests cancellation, and returns `engine.log-unmaintained`.
 Its effect-state and log-fault transitions depend on the available positive
 evidence and follow
 [state reconciliation](../state-reconciliation.md#plan-and-execution) exactly.

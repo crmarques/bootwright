@@ -58,12 +58,12 @@ func refusedContinuations() []refusedContinuation {
 		{
 			name: "an unbound failed apply", arrange: failedApplyUnder(unbound),
 			steps: []string{"bootwright destroy --context lab"}, verb: reconciliation.Apply,
-			code: "controller.identity", message: "this context is not bound to a controller host",
+			code: "engine.controller-unbound", message: "this context is not bound to a controller host",
 		},
 		{
 			name: "an unbound unknown removal", arrange: unknownRemovalUnder(unbound),
 			steps: []string{deletion}, verb: reconciliation.Destroy,
-			code: "controller.identity", message: "this context is not bound to a controller host", exit: deletion,
+			code: "engine.controller-unbound", message: "this context is not bound to a controller host", exit: deletion,
 		},
 		{
 			name: "a failed apply another build freezes differently", arrange: failedApplyUnder(movedApply),

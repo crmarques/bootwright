@@ -1237,7 +1237,7 @@ before registration, every selected object this executable cannot realize: an
 effect-bearing object no implementation
 [claims](architecture.md#implementation-selection), such as a managed
 `Registry` or an enabled `CustomPlaybook`, and every shape a capability reports
-unsupported. Each refused object is its own `lifecycle.unsupported`
+unsupported. Each refused object is its own `plan.object-unsupported`
 diagnostic, with the reason its capability gives, or that nothing claims it,
 and the remedy, so `plan` says why as `apply` does; one refused for two
 reasons is two diagnostics. An object two implementations of one family both
@@ -1636,14 +1636,14 @@ reservations with it ([permanent deletion](contexts.md#permanent-deletion)).
 
 A required-log write failure is also a sticky, durable operation fault: it sets
 the operation record's `logFault` flag, and no later effect or retry starts
-until the required private logging boundary is safely restored, even when
+until the required private logging boundary is safely restored, even if
 positive evidence resolves the affected block to `done` or `failed`. The
 required logs are the operation log and each effect or resolution attempt log,
-and a failure to create, append to or finalize one is the fault; retained
-adapter output is not a required log. The invocation that meets it admits
+and failing to create, append to or finalize one is the fault; retained
+adapter output is not a required log. The invocation meeting it admits
 nothing further, requests cancellation of what is in flight, appends nothing
-more to the log that failed, records the flag under the boundary cancellation
-does not reach, and returns `runtime.log`.
+more to the failed log, records the flag under the boundary cancellation
+does not reach, and returns `engine.log-unmaintained`.
 
 Restoration is proved, never assumed. While the faulted operation is the
 context's current one, exactly these invocations restore it: any later
@@ -2420,7 +2420,7 @@ the removal: each consumer's cluster must leave with owned virtual node
 Machines the same removal deletes, not only erases, or the removal refuses
 before registration, before any quiescence probe and whatever a capability
 would answer, naming the consumer and what it consumes. The apply's `plan`
-warns of each such consumer with `lifecycle.surviving-consumer`, from the
+warns of each such consumer with `plan.consumer-outlives-destroy`, from the
 decision taken over the apply's inverse. It is not an
 online effect, its Machines are `Stop first`, its quiescence derives from
 their stop proof, and its inverse and removal observation record retirement
@@ -2910,15 +2910,15 @@ consumes and which refuses when it does not apply, and `erase=<machine>:<method>
 is the [erase relaxation](#erase-relaxation), which no block consumes either. `all`, unknown, duplicate,
 empty, and inapplicable values are errors. A plan requires exactly the tokens its
 blocks [consume](#plan-and-execution). A token the frozen plan does not require
-is inapplicable and refuses with `lifecycle.authorization` before registration,
+is inapplicable and refuses with `authorize.unneeded` before registration,
 so a habitual authorization cannot pre-authorize a future destructive plan; a
-required token that is not supplied refuses the same way, naming the blocks
+required token that is not supplied refuses `authorize.missing`, naming the blocks
 that consume it. A `data-loss` token may carry the digest of the steps that
 consume it, `data-loss=<digest>`: the first 16 lowercase hexadecimal digits of
 a SHA-256 over those steps' identity, kind, object, implementation, content
 digest and request digest in frozen order, which every presentation of the
 plan prints beside the token. A digest the frozen plan does not give refuses
-`lifecycle.authorization` before registration, naming the steps the plan holds
+`authorize.stale` before registration, naming the steps the plan holds
 now and `bootwright plan` to review them. An invocation no reviewed prompt
 precedes, under `--yes` or with input that cannot answer one, must carry it, and
 a bare token there refuses the same way, so an unattended authorization is
@@ -2957,7 +2957,7 @@ while every unrelaxed block's digest stays what it was. A token naming a
 Machine that none of the removal's blocks relaxes, which is a Machine that
 declares no `onRemoval` other than `retain`, one whose erase this removal no
 longer performs, or any Machine of a `destroy` that settles, refuses
-`lifecycle.authorization` before registration, naming the token and the
+`authorize.unneeded` before registration, naming the token and the
 command without it; the capability's own refusal of a method, such as for a
 Machine that already clears only metadata on every target, is reported as it
 refused. A relaxation waives only the erase it names: it never relaxes
@@ -2971,7 +2971,7 @@ invocation names. A failed removal's next command and `status` repeat the
 so the operator sees that choice again rather than having it carried over. A
 running, paused or unknown removal's continuation carries exactly the
 relaxations its plan froze: the identical set continues it, and any other set
-refuses `lifecycle.authorization`, naming that continuation. The one exception
+refuses `authorize.relaxation-changed`, naming that continuation. The one exception
 is a `destroy` naming a relaxation that removal's plan does not hold, which is
 how an operator stops waiting for a long or stuck erase: it supersedes the
 removal as a failed one is superseded, resolving every unproved block of it
@@ -2993,7 +2993,7 @@ or `destroy` that continues an operation or removes one names each such Secret
 with `--authorize rebind=<secret>` (D183, Q70). Before anything is confirmed,
 bound or registered, and after the plan's own tokens are authorized, each named
 Secret must meet every condition below, or the invocation refuses
-`lifecycle.authorization` naming the condition and the command without that
+`authorize.rebind-invalid` naming the condition and the command without that
 token:
 
 - the transition reopens a frozen binding, so a fresh apply and a verb that

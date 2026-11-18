@@ -246,7 +246,7 @@ func (s Service) establishBinding(ctx context.Context, tx Transaction, machine s
 		return err
 	}
 	if !setupComplete(tx.Controller()) {
-		return failure("controller.identity", "this host has no completed controller setup", "run bootwright controller install")
+		return engineControllerUnprepared.Fail("this host has no completed controller setup", "run bootwright controller install")
 	}
 	return tx.Bind(ctx, machine, host)
 }

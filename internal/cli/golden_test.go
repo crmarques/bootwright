@@ -567,8 +567,8 @@ func cliGoldens() []cliGolden {
 		))
 		return &compilation.EffectiveResult{Counts: compilation.Counts{FilesSeen: 2, ObjectsDecoded: 2}, Effective: api.NewCatalog([]api.Object{controller, environment})}
 	}
-	unauthorized := diagnostics.NewFailureWithRemediation("lifecycle.authorization",
-		"this plan has data-loss consequences that are not authorized: step 3 (install the operating system of metal-01)", "",
+	authorizeMissing := lifecycle.Stops()[slices.IndexFunc(lifecycle.Stops(), func(stop diagnostics.Stop) bool { return stop.Code == "authorize.missing" })]
+	unauthorized := authorizeMissing.Fail("this plan has data-loss consequences that are not authorized: step 3 (install the operating system of metal-01)",
 		"repeat it with the authorization: bootwright apply --context lab --stage machines --authorize data-loss")
 	noInput := diagnostics.NewFailureWithRemediation("context.input", "context lab has no desired state", "", "import input with bootwright context update --name lab --input-dir <dir>")
 	stateRootRefused := func(r *dispatchRecord) {
@@ -931,7 +931,7 @@ func cliGoldens() []cliGolden {
 		},
 		{
 			args: "apply --yes --stage machines", code: 1, record: func(r *dispatchRecord) { r.err = unauthorized },
-			stderr: "  error  lifecycle.authorization\n" +
+			stderr: "  error  authorize.missing\n" +
 				"    this plan has data-loss consequences that are not authorized: step 3 (install the operating\n" +
 				"    system of metal-01)\n" +
 				"    Next: repeat it with the authorization: bootwright apply --context lab --stage machines\n" +

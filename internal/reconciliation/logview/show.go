@@ -111,7 +111,7 @@ func (s Service) showRaw(ctx context.Context, name string, selection Selection) 
 	}
 	result := &Result{Context: name, Operation: session.operation, Verb: session.verb, State: string(session.state), Raw: raw}
 	if raw.Truncated {
-		result.Warnings = append(result.Warnings, diagnostics.Diagnostic{Severity: "warning", Code: "logs.truncated",
+		result.Warnings = append(result.Warnings, diagnostics.Diagnostic{Severity: "warning", Code: logsTruncated.Code,
 			Message: "the retained output " + raw.Path + " was cut short at its bound; what the adapter printed after it is not retained"})
 	}
 	return result, nil

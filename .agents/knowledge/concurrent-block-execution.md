@@ -49,8 +49,8 @@ first write that needs them, through `operationArea.EnsureDirectory` and
 `Mkdirat` the same `blocks`, and the context's first operation also races on the
 `operations` subtree itself. The losers' `EEXIST` used to be refused as a
 foreign entry, so a real-host `destroy` of a 13-block context ended
-`state: unknown` with `runtime.log: a required private operation log could not
-be maintained`, and the log fault's cancellation then landed inside sibling
+`state: unknown` with `runtime.log: a required private operation log could
+not be maintained` (now `engine.log-unmaintained`), and the log fault's cancellation then landed inside sibling
 blocks' publications as `context.state: published lifecycle record is unsafe`.
 
 The operation areas (lifecycle, bounded runs, SSH trust) and

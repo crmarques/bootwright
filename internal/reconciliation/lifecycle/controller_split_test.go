@@ -71,7 +71,7 @@ func TestASplitControllerStageWaitingForWorkThatNeedsItsClientsRefuses(t *testin
 	}
 	_, err = precursorService("artifact-server-mirror", "mirror-files-lab").dependOnController(resolved)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "controller.unsupported" || reported[0].Message !=
+	if len(reported) != 1 || reported[0].Code != "plan.controller-order" || reported[0].Message !=
 		"block controller-mirrored-clients waits for block artifact-server-lab, which runs only after the controller stage it waits for" {
 		t.Fatalf("closure refusal = %+v", reported)
 	}
@@ -184,7 +184,7 @@ func TestAPrecursorOfALaterControllerBlockMustWaitForAnEarlierOne(t *testing.T) 
 	}
 	_, err = precursorService("artifact-server-mirror", "mirror-files-lab").dependOnController(resolved)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "controller.unsupported" || reported[0].Message !=
+	if len(reported) != 1 || reported[0].Code != "plan.controller-order" || reported[0].Message !=
 		"block controller-mirrored-clients waits for block artifact-server-mirror, which runs only after the controller stage it waits for" {
 		t.Fatalf("refusal = %+v", reported)
 	}

@@ -175,7 +175,7 @@ func TestAnEraseRelaxationThatChangesNothingOrIsNoRelaxationRefuses(t *testing.T
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := New(nil).Relax(context.Background(), test.block, test.method)
-			expectRefusal(t, err, "lifecycle.authorization")
+			expectRefusal(t, err, "erase.relaxation-inapplicable")
 			reported := diagnostics.Of(err)[0]
 			if !strings.Contains(reported.Message, test.message) || !strings.Contains(reported.Remediation, test.remedy) {
 				t.Fatalf("the refusal is %q, remedy %q", reported.Message, reported.Remediation)

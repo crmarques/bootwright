@@ -114,14 +114,14 @@ func TestCephAnUnprovedAdminCredentialRunRefusesAndClears(t *testing.T) {
 	produced := credentialOutputs()
 	capability := New(api.CephCluster, &credentialRunner{result: lifecycle.RunResult{Evidence: credentialProof(e, false), Produced: produced}})
 	guard, err := capability.PrepareAdminCredential(context.Background(), e)
-	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "access.unavailable" || d[0].Message != "the administrator credential preparation was not proved" || guard.Size() != 0 {
+	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.credential-preparation-invalid" || d[0].Message != "the administrator credential preparation was not proved" || guard.Size() != 0 {
 		t.Fatalf("an unproved prepare returned %+v", d)
 	}
 	cleared(t, produced)
 	produced = credentialOutputs()
 	capability = New(api.CephCluster, &credentialRunner{result: lifecycle.RunResult{Evidence: []byte(`{"proved":true,"request":"other"}`), Produced: produced}})
 	err = capability.UpdateAdminCredential(context.Background(), e, secrets.Material{})
-	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "access.unavailable" || d[0].Message != "the administrator credential update was not proved" {
+	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.credential-update-unproved" || d[0].Message != "the administrator credential update was not proved" {
 		t.Fatalf("an unproved update returned %+v", d)
 	}
 	cleared(t, produced)

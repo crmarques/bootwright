@@ -113,7 +113,7 @@ func DependOnController(capabilities CapabilityResolver, definitions []reconcili
 			capability, ok := capabilities.Resolve(definition.Kind, definition.Implementation)
 			precursor, precedes := capability.(ControllerPrecursor)
 			if !ok || !precedes || !precursor.PrecedesController(definition) || position > 0 && !waitsForAny(definitions, definition.ID, stages[:position]) {
-				return nil, failure("controller.unsupported", "block "+identity+" waits for block "+definition.ID+", which runs only after the controller stage it waits for",
+				return nil, planControllerOrder.Fail("block "+identity+" waits for block "+definition.ID+", which runs only after the controller stage it waits for",
 					"place "+definition.Kind+"/"+definition.Object+" where the controller stage need not wait for it")
 			}
 		}
@@ -342,7 +342,7 @@ func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHRese
 		claimed := slices.Clone(reservation.Keys)
 		reservation.Keys = infrastructureservices.QualifiedKeys(infrastructureservices.SSHReservationQualifier(claim.Address, claim.Port), reservation.Keys)
 		if slices.ContainsFunc(reservation.Keys, func(key string) bool { return len(key) > infrastructureservices.MaxReservationKeyBytes }) {
-			return nil, nil, failure("api.value",
+			return nil, nil, planReservationKeyTooLong.Fail(
 				"the SSH address "+claim.Address+" of Machine/"+claim.Machine+" is too long to qualify the host reservations "+
 					reservation.Kind+" "+reservation.Service+" publishes, which hold at most "+strconv.Itoa(infrastructureservices.MaxReservationKeyBytes)+" bytes each",
 				"reach Machine/"+claim.Machine+" by a shorter address")
@@ -350,7 +350,7 @@ func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHRese
 		if slices.ContainsFunc(claimed, func(key string) bool {
 			return len(key)+infrastructureservices.SSHHostKeyQualifierBytes > infrastructureservices.MaxReservationKeyBytes
 		}) {
-			return nil, nil, failure("api.value",
+			return nil, nil, planReservationKeyTooLong.Fail(
 				"a host reservation key of "+reservation.Kind+" "+reservation.Service+", placed on Machine/"+claim.Machine+
 					", is too long to be keyed by that host's SSH host key as well, within the "+strconv.Itoa(infrastructureservices.MaxReservationKeyBytes)+" bytes each key holds",
 				"place "+reservation.Kind+" "+reservation.Service+" on the controller Machine, or give it a shorter name")
@@ -377,7 +377,7 @@ func hostKeyedReservations(binding capabilityBinding, material map[string]secret
 		qualifier, err := pinnedHostQualifier(claim, material)
 		if err != nil {
 			reservation := reservations[claim.reservation]
-			return nil, failure("trust.identity",
+			return nil, planHostKeyUnreadable.Fail(
 				"the SSH host key Secret "+claim.knownHostsRef+" of Machine/"+claim.machine+" binds no readable host key ("+firstMessage(err)+
 					"), so the host reservations "+reservation.Kind+" "+reservation.Service+" publishes there cannot name the host it pins",
 				"author access.ssh.knownHostsRef on Machine/"+claim.machine+" as one known-hosts entry for "+machine.SSHHost(claim.address, claim.port))
@@ -428,11 +428,11 @@ func controllerKeyQualifiers(ctx context.Context, keys ControllerHostKeys) ([]in
 func pinnedHostQualifier(claim hostKeyedClaim, material map[string]secrets.Material) (infrastructureservices.Qualifier, error) {
 	bound, found := material[claim.knownHostsRef]
 	if !found {
-		return infrastructureservices.Qualifier{}, failure("access.unavailable", "the Secret is not bound", "")
+		return infrastructureservices.Qualifier{}, planHostKeyUnreadable.Fail("the Secret is not bound", "")
 	}
 	value, found := bound.Part(secrets.ValuePart)
 	if !found || len(value) == 0 {
-		return infrastructureservices.Qualifier{}, failure("access.unavailable", "the Secret carries no material", "")
+		return infrastructureservices.Qualifier{}, planHostKeyUnreadable.Fail("the Secret carries no material", "")
 	}
 	defer clear(value)
 	return machine.SSHHostKeyQualifier(string(value), claim.address, claim.port)
@@ -478,7 +478,7 @@ func (h *hostClaims) name(conflict infrastructureservices.SocketConflict) string
 }
 
 func socketConflict(conflict infrastructureservices.SocketConflict, host string) error {
-	return failure("api.invariant",
+	return planSocketConflict.Fail(
 		"this context's "+conflict.First.Kind+" "+conflict.First.Service+" at "+conflict.FirstSocket+" and "+
 			conflict.Second.Kind+" "+conflict.Second.Service+" at "+conflict.SecondSocket+" cannot both listen on "+host,
 		"give one of them another bind address or port")
@@ -534,10 +534,9 @@ func refuseTemplateValues(contextName, retry string, definitions []reconciliatio
 		// imported before the context is planned again.
 		remedy := "remove " + strings.Join(removed, " and ") + " from the desired-state values " + object + " is planned from, " +
 			"import them with bootwright context update --name " + contextName + " --input-dir <dir>, then run " + retry
-		refused = append(refused, diagnostics.Diagnostic{
-			Severity: "error", Code: "api.value", Message: message, Remediation: remedy,
-			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: definition.Kind, Name: definition.Object},
-		})
+		reported := raised(planTemplateValue, message, remedy)
+		reported.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: definition.Kind, Name: definition.Object}
+		refused = append(refused, reported)
 	}
 	if len(refused) == 0 {
 		return nil
@@ -643,10 +642,10 @@ func unsupportedFailure(refused []Refusal) error {
 		if remediation == "" {
 			remediation = "correct " + refusal.identity()
 		}
-		reported = append(reported, diagnostics.Diagnostic{
-			Severity: "error", Code: "lifecycle.unsupported", Message: refusal.Reason, Field: refusal.Field, Remediation: remediation,
-			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: refusal.Kind, Name: refusal.Name},
-		})
+		entry := raised(planObjectUnsupported, refusal.Reason, remediation)
+		entry.Field = refusal.Field
+		entry.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: refusal.Kind, Name: refusal.Name}
+		reported = append(reported, entry)
 	}
 	return &diagnostics.Failure{Diagnostics: reported}
 }

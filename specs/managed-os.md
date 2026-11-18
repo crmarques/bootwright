@@ -1216,7 +1216,7 @@ Bootwright neither reads nor unregisters that Machine's guest, records an empty
 `registration` for it, and withdraws its published content, in the removal and
 in every resolution the invocation runs against that installation. The flag is
 accepted only for a Machine whose installation the destroy plan unregisters;
-any other name refuses `lifecycle.authorization` before confirmation, as
+any other name refuses `authorize.unneeded` before confirmation, as
 [the command contract](cli/commands.md) states. It holds for that invocation
 only: nothing persists it, and no next step names it except the authorization
 refusal of that invocation, whose command keeps it beside the tokens the plan

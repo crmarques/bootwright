@@ -64,10 +64,13 @@ var (
 	stopInstallNetwork = diagnostics.Stop{Code: "erase.install-network", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryAuthorize,
 		Meaning: "the install network names a bond option or VLAN that the erase image's boot arguments cannot carry, so the machine was not booted", Remedy: "release the machine without erasing its disks"}
+	stopRelaxationInapplicable = diagnostics.Stop{Code: "erase.relaxation-inapplicable", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "an erase relaxation names a block that is no removal erase, a method other than metadataClear or retain, or one that changes nothing, so nothing was registered", Remedy: "repeat the destroy without that --authorize"}
 )
 
 var stops = []diagnostics.Stop{stopUnconfigured, stopCustodyUnavailable, stopRecordsMissing, stopEvidenceMismatch, stopReceiptIncomplete, stopMachineRunning, stopTargetMismatch,
 	stopControllerUnanswered, stopControllerRefused, stopControllerDeadline, stopPowerOffUnproved, stopWorkerFailed, stopWorkerUnreachable, stopForeignWorker, stopReceiptTimeout,
-	stopCustodyMismatch, stopBootMediaMismatch, stopImageBuildFailed, stopInstallNetwork}
+	stopCustodyMismatch, stopBootMediaMismatch, stopImageBuildFailed, stopInstallNetwork, stopRelaxationInapplicable}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }

@@ -1387,7 +1387,7 @@ func TestAnAttemptThatMeetsTheEntryBoundLeavesItsBlockResolvable(t *testing.T) {
 		}
 	}
 	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if code := firstCode(err); code == "runtime.log" {
+	if code := firstCode(err); code == "engine.log-unmaintained" {
 		t.Fatalf("the attempt at the bound latched a log fault: %v", err)
 	}
 	if free := operationstore.MaxEntries - areaEntries(area, ""); free != 0 {
@@ -1402,7 +1402,7 @@ func TestAnAttemptThatMeetsTheEntryBoundLeavesItsBlockResolvable(t *testing.T) {
 	}
 	h.capability.hold = nil
 	_, err = h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if code := firstCode(err); code == "runtime.log" || err == nil {
+	if code := firstCode(err); code == "engine.log-unmaintained" || err == nil {
 		t.Fatalf("the apply at the bound = %v, want a refusal before its resolution", err)
 	}
 	if record, _ := durableOperation(t, h); record.LogFault {

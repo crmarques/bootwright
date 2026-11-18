@@ -14,10 +14,7 @@ import (
 // declares a stop, and a package whose count reaches zero leaves the ledger.
 func stopLedger() map[string]int {
 	return map[string]int{
-		"internal/managedos/physicalerase":      3,
-		"internal/reconciliation/ansiblerunner": 6,
-		"internal/reconciliation/lifecycle":     47,
-		"internal/reconciliation/logview":       7,
+		"internal/reconciliation/lifecycle": 1,
 	}
 }
 

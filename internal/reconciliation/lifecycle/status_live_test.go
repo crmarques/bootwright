@@ -134,7 +134,7 @@ func TestStatusPathsOnlyWhenAsked(t *testing.T) {
 	}
 	h.service.options.Paths = nil
 	_, err = h.service.Status(ctx, StatusRequest{ContextName: "lab", Paths: true})
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "runtime.internal" {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "engine.wiring-missing" {
 		t.Fatalf("a status with no paths source reported %+v (%v), want an internal failure", reported, err)
 	}
 	if _, err := h.service.Status(ctx, StatusRequest{ContextName: "lab"}); err != nil {

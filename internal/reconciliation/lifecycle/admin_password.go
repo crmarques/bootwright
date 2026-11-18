@@ -38,7 +38,7 @@ func (s AdminCredentialService) AdministratorPassword(ctx context.Context, conte
 		current := valid && subtle.ConstantTimeCompare(password, []byte(update.Password)) == 1
 		if !current {
 			active.Material.Clear()
-			return secretstore.ProducedMaterial{}, false, failure("access.unavailable", "the administrator credential update has not completed in custody",
+			return secretstore.ProducedMaterial{}, false, engineCredentialPending.Fail("the administrator credential update has not completed in custody",
 				"bootwright cluster update-admin-credentials --context "+contextName+" --name "+cluster+" finishes the retained update")
 		}
 	}

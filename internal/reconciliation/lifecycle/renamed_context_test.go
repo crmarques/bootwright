@@ -254,7 +254,7 @@ func TestAContinuationOfAnUnboundContextNamesAnExitThatWorks(t *testing.T) {
 			_, err = h.service.Apply(ctx, ApplyRequest{ContextName: contextName, SkipConfirmation: true})
 		}
 		reported := diagnostics.Of(err)
-		if len(reported) != 1 || reported[0].Code != "controller.identity" || reported[0].Message != "this context is not bound to a controller host" || reported[0].Remediation != want {
+		if len(reported) != 1 || reported[0].Code != "engine.controller-unbound" || reported[0].Message != "this context is not bound to a controller host" || reported[0].Remediation != want {
 			t.Fatalf("the %s continuation = %+v (%v), want the remedy %q", verb, reported, err, want)
 		}
 		if !before.equal(durableOf(h)) {

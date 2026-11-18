@@ -20,7 +20,7 @@ func TestABoundedRefusalNamesAReservedKeyAndItsRetry(t *testing.T) {
 	definitions := []reconciliation.BlockDefinition{{Kind: "Machine", Object: "metal", Request: []byte(`{"a":{"__ansible_unsafe":1}}`)}}
 	const retry = "bootwright machine stop --context lab --name metal"
 	reported := diagnostics.Of(RefuseBoundedTemplateDelimiters("lab", retry, definitions))
-	if len(reported) != 1 || reported[0].Code != "api.value" || reported[0].Object == nil || reported[0].Object.Name != "metal" ||
+	if len(reported) != 1 || reported[0].Code != "plan.template-value" || reported[0].Object == nil || reported[0].Object.Name != "metal" ||
 		!strings.Contains(reported[0].Message, `the ansible-core reserved key "__ansible_unsafe" in a`) ||
 		!strings.HasSuffix(reported[0].Remediation, ", then run "+retry) {
 		t.Fatalf("the bounded refusal reported %+v", reported)

@@ -449,13 +449,13 @@ func TestAnObservedDiffRefusesAnotherHostOrAnUnboundContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, tt := range map[string]struct {
-		prepare        func(f diffFixture)
-		message, fixes string
+		prepare              func(f diffFixture)
+		code, message, fixes string
 	}{
-		"another host": {func(f diffFixture) { f.service.host = testHost{identity: other} }, "this host is not the host the context is bound to", ""},
-		"an unbound context": {func(f diffFixture) { f.workspace.controller.State.Bindings = nil },
+		"another host": {func(f diffFixture) { f.service.host = testHost{identity: other} }, "engine.controller-other-host", "this host is not the host the context is bound to", ""},
+		"an unbound context": {func(f diffFixture) { f.workspace.controller.State.Bindings = nil }, "engine.controller-unbound",
 			"this context is not bound to a controller host", "run bootwright diff --context lab without --observe"},
-		"no setup": {func(f diffFixture) { f.workspace.controller.Prepared = false }, "this host has no completed controller setup", "run bootwright controller install"},
+		"no setup": {func(f diffFixture) { f.workspace.controller.Prepared = false }, "engine.controller-unprepared", "this host has no completed controller setup", "run bootwright controller install"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f, _, _ := observedFixture(t, "alpha")
@@ -465,7 +465,7 @@ func TestAnObservedDiffRefusesAnotherHostOrAnUnboundContext(t *testing.T) {
 			if result != nil || len(f.capability.observes) != observes {
 				t.Fatalf("an unproved host still observed: %+v", result)
 			}
-			refusedWith(t, err, "controller.identity", tt.message, tt.fixes)
+			refusedWith(t, err, tt.code, tt.message, tt.fixes)
 		})
 	}
 }

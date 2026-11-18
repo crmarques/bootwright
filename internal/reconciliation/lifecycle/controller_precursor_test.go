@@ -95,7 +95,7 @@ func TestAControllerBlockWaitingForWorkThatNeedsItsClientsRefuses(t *testing.T) 
 	}
 	_, err = precursorService("artifact-server-mirror", "mirror-files-lab").dependOnController(resolved)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "controller.unsupported" {
+	if len(reported) != 1 || reported[0].Code != "plan.controller-order" {
 		t.Fatalf("closure refusal = %+v", reported)
 	}
 	for _, named := range []string{"controller-prerequisites", "waits for block artifact-server-lab"} {

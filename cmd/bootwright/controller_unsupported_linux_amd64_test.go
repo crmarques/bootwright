@@ -18,7 +18,7 @@ import (
 
 // A controller shape the API admits but this executable cannot realize is
 // reported through the engine's unsupported port, which a plan and an apply
-// read before registration and refuse with lifecycle.unsupported, naming the
+// read before registration and refuse with plan.object-unsupported, naming the
 // Environment, the reason and the remedy. The controller stage's own
 // planning refuses it with the same words, so no path plans it.
 func TestUnsupportedControllerShapesRefuseBeforeRegistration(t *testing.T) {

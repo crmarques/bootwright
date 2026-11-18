@@ -141,7 +141,7 @@ func (s AdminCredentialService) UpdateAdminCredentials(ctx context.Context, requ
 
 func (s AdminCredentialService) credentialBasis(ctx context.Context, view View, name string) (credentialBasis, error) {
 	refuse := func() (credentialBasis, error) {
-		return credentialBasis{}, failure("access.unavailable", "administrator credential updates require a completed apply for cluster "+name, "complete the cluster's apply before updating its credentials")
+		return credentialBasis{}, engineCredentialUnapplied.Fail("administrator credential updates require a completed apply for cluster "+name, "complete the cluster's apply before updating its credentials")
 	}
 	state, report, err := s.compiler.Compile(ctx, view.Inputs())
 	if err != nil {
@@ -161,10 +161,10 @@ func (s AdminCredentialService) credentialBasis(ctx context.Context, view View, 
 	}
 
 	if !found {
-		return credentialBasis{}, failure("access.target", "the context selects no cluster named "+name, "bootwright cluster info lists the selected clusters")
+		return credentialBasis{}, engineCredentialClusterUnknown.Fail("the context selects no cluster named "+name, "bootwright cluster info lists the selected clusters")
 	}
 	if cluster.Spec().Get("management").Text() == "external" {
-		return credentialBasis{}, failure("cluster.not-applicable", "administrator credential updates do not apply to external "+string(cluster.Kind())+" "+name, "update the credentials through the external cluster's administrator")
+		return credentialBasis{}, engineCredentialExternal.Fail("administrator credential updates do not apply to external "+string(cluster.Kind())+" "+name, "update the credentials through the external cluster's administrator")
 	}
 	store := s.store(view)
 	index, err := store.Index(ctx)
@@ -235,10 +235,10 @@ func (s AdminCredentialService) updateAdminCredential(ctx context.Context, tx Tr
 		return err
 	}
 	if !activeFound && !basis.updater.AdminCredentialMayBeMissing() {
-		return failure("access.unavailable", "the original administrator credential is missing", "restore the original credential custody")
+		return engineCredentialCustody.Fail("the original administrator credential is missing", "restore the original credential custody")
 	}
 	if active.Unproved || active.Identity != "" && active.Identity != identity {
-		return failure("access.unavailable", "the administrator credential's custody is unproved", "restore the original credential custody")
+		return engineCredentialCustody.Fail("the administrator credential's custody is unproved", "restore the original credential custody")
 	}
 	pending, found, err := read(basis.output + "-update")
 	defer pending.Material.Clear()
@@ -246,7 +246,7 @@ func (s AdminCredentialService) updateAdminCredential(ctx context.Context, tx Tr
 		return err
 	}
 	if pending.Unproved || pending.Identity != "" && pending.Identity != identity {
-		return failure("access.unavailable", "the pending administrator credential is unproved", "restore the original credential custody")
+		return engineCredentialCustody.Fail("the pending administrator credential is unproved", "restore the original credential custody")
 	}
 	previous := credentialDigest(active.Material)
 	var update adminUpdate
@@ -254,12 +254,12 @@ func (s AdminCredentialService) updateAdminCredential(ctx context.Context, tx Tr
 		bytes, _ := pending.Material.Part(secrets.ValuePart)
 		if len(bytes) > 16384 {
 			clear(bytes)
-			return failure("secret.store.corrupt", "the pending administrator credential is oversized", "restore the original credential custody")
+			return engineCredentialCustody.Fail("the pending administrator credential is oversized", "restore the original credential custody")
 		}
 		err = canonicaljson.DecodeClosed(bytes, &update)
 		clear(bytes)
 		if err != nil || !s.validAdminUpdate(update) {
-			return failure("secret.store.corrupt", "the pending administrator credential is invalid", "restore the context's credential custody")
+			return engineCredentialCustody.Fail("the pending administrator credential is invalid", "restore the context's credential custody")
 		}
 		if update.Previous != previous {
 			password, _ := active.Material.Part(secrets.ValuePart)
@@ -280,11 +280,11 @@ func (s AdminCredentialService) updateAdminCredential(ctx context.Context, tx Tr
 		data, _ := guard.Part(secrets.ValuePart)
 		defer clear(data)
 		if err := json.Unmarshal(data, &update); err != nil {
-			return failure("access.unavailable", "the administrator credential preparation was invalid", "check the cluster's original administrator account")
+			return engineCredentialPreparationInvalid.Fail("the administrator credential preparation was invalid", "check the cluster's original administrator account")
 		}
 		update.Previous = previous
 		if !s.validAdminUpdate(update) {
-			return failure("access.unavailable", "the administrator credential preparation was invalid", "check the cluster's original administrator account")
+			return engineCredentialPreparationInvalid.Fail("the administrator credential preparation was invalid", "check the cluster's original administrator account")
 		}
 		data, err = json.Marshal(update)
 		if err != nil {
@@ -371,7 +371,7 @@ func (s AdminCredentialService) adminCredentialExecution(ctx context.Context, tx
 	}
 	execution.LendProduced = func(inner context.Context, input ProducedInput) (secrets.Material, error) {
 		if input.Kind != basis.block.Kind || input.Object != basis.block.Object {
-			return secrets.Material{}, failure("access.unavailable", "credential update requested unrelated produced access", "restore the original credential custody")
+			return secrets.Material{}, engineRequestDefect.Fail("credential update requested unrelated produced access", "restore the original credential custody")
 		}
 		held, found, err := s.adminProduced(inner, tx, basis.block.ID, input.Output)
 		if err != nil || !found || held.Unproved {
@@ -379,7 +379,7 @@ func (s AdminCredentialService) adminCredentialExecution(ctx context.Context, tx
 			if err != nil {
 				return secrets.Material{}, err
 			}
-			return secrets.Material{}, failure("access.unavailable", "the cluster's original administrator access is unavailable", "restore its original credential custody")
+			return secrets.Material{}, engineCredentialCustody.Fail("the cluster's original administrator access is unavailable", "restore its original credential custody")
 		}
 		return held.Material, nil
 	}

@@ -158,7 +158,7 @@ refuses at planning without them.
 The `oss` arm holds the optional community `mirror` and `checksum`, `redhat`
 holds nothing, and `ibm` holds `callHome` and `packages`. Core Ceph realizes
 only `ibm`, so planning refuses any other arm, an omitted one included, with
-`lifecycle.unsupported` ([refusal table](../ceph.md#refusal-table)).
+`plan.object-unsupported` ([refusal table](../ceph.md#refusal-table)).
 `release` is the operator's release label;
 `packageVersion` selects the Ceph/cephadm RPM roots and
 `cephadm.ansible.packageVersion` selects the actual cephadm-ansible RPM.

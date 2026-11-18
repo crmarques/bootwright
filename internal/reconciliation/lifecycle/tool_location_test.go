@@ -156,7 +156,7 @@ func TestALookupWithoutAnAnsweringControllerStageRefuses(t *testing.T) {
 	}{
 		"no controller stage": {
 			harness:     func(t *testing.T) *harness { return newHarness(t, "artifacts") },
-			code:        "controller.state",
+			code:        "engine.client-not-installed",
 			remediation: "run bootwright apply --context lab --stage controller",
 		},
 		"a stage that cannot locate": {

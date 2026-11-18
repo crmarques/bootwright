@@ -184,7 +184,7 @@ func TestTheDigestCoversARelaxationAndLeavesAnUnrelaxedOneUnchanged(t *testing.T
 
 func TestAnInapplicableRelaxationRefusesBeforeAnythingRuns(t *testing.T) {
 	t.Parallel()
-	refusal := failure("lifecycle.authorization", "Machine/bravo already clears only metadata on every target", "repeat the command without --authorize erase=bravo:metadataClear")
+	refusal := failure("erase.relaxation-inapplicable", "Machine/bravo already clears only metadata on every target", "repeat the command without --authorize erase=bravo:metadataClear")
 	for name, test := range map[string]struct {
 		relaxations     map[string]string
 		message, remedy string
@@ -213,7 +213,7 @@ func TestAnInapplicableRelaxationRefusesBeforeAnythingRuns(t *testing.T) {
 			before := untouchedOf(h)
 			_, err := destroyRelaxed(h, test.relaxations, reconciliation.AuthorizationDataLoss)
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || !authorizationRefusal(reported[0].Code) || reported[0].Message != test.message || reported[0].Remediation != test.remedy {
+			if len(reported) != 1 || !(authorizationRefusal(reported[0].Code) || reported[0].Code == "erase.relaxation-inapplicable") || reported[0].Message != test.message || reported[0].Remediation != test.remedy {
 				t.Fatalf("the destroy refused %+v (%v)", reported, err)
 			}
 			_, err = h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName, Relaxations: test.relaxations})

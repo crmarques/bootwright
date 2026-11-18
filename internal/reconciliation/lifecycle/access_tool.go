@@ -22,7 +22,7 @@ func (s Service) AccessTool(ctx context.Context, contextName string, tool eviden
 			return err
 		}
 		if index.Current == "" {
-			return failure("access.unavailable", "this context has no installed controller clients", "run bootwright apply --context "+name+" --stage controller")
+			return engineClientNotInstalled.Fail("this context has no installed controller clients", "run bootwright apply --context "+name+" --stage controller")
 		}
 		operation, err := store.ReadOperation(ctx, index.Current)
 		if err != nil {

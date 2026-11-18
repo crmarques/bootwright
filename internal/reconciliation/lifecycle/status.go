@@ -55,7 +55,7 @@ func (s Service) Status(ctx context.Context, request StatusRequest) (*StatusResu
 // contextPaths refuses a build wired with no source rather than answer empty.
 func (s Service) contextPaths(ctx context.Context, name string) ([]ContextPath, []diagnostics.Diagnostic, error) {
 	if s.options.Paths == nil {
-		return nil, nil, failure("runtime.internal", "context paths are not configured", "")
+		return nil, nil, engineWiringMissing.Fail("context paths are not configured", "")
 	}
 	paths, warnings, err := s.options.Paths.Paths(ctx, name)
 	if err != nil {
@@ -469,7 +469,7 @@ func (s Service) continuation(ctx context.Context, view View, operation operatio
 	if !slices.ContainsFunc(view.Controller().State.Bindings, func(item prerequisites.ControllerBinding) bool {
 		return item.Context == view.Identity().Name
 	}) {
-		return refusalExit(view, failure("controller.identity", "this context is not bound to a controller host", unboundExit(view, operation)))
+		return refusalExit(view, engineControllerUnbound.Fail("this context is not bound to a controller host", unboundExit(view, operation)))
 	}
 	located, err := s.locateRuntime(ctx, false)
 	if err != nil {

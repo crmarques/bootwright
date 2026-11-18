@@ -90,12 +90,21 @@ var (
 	runnerPreparationUnrecorded = diagnostics.Stop{Code: "runner.preparation-unrecorded", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyUnproved,
 		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryRepeat,
 		Meaning: "the before-state the adapter reported could not be recorded before its effect", Remedy: observeAndRepeat}
+	runnerBindingUnavailable = diagnostics.Stop{Code: "runner.binding-unavailable", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "a bound Secret the run lends is not available to the attempt or lacks the part it needs, so no adapter ran", Remedy: "repeat the operation, which reopens its Secret bindings"}
+	runnerHostKeyInvalid = diagnostics.Stop{Code: "runner.host-key-invalid", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "the SSH host key Secret of a placement is not one known-hosts entry for its host, so no adapter ran", Remedy: "author access.ssh.knownHostsRef on the Machine as one known-hosts entry for its SSH host"}
+	runnerAutomationMismatch = diagnostics.Stop{Code: "runner.automation-mismatch", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "the staged automation does not match this executable's automation, so no adapter ran", Remedy: "rerun the command"}
 )
 
 var stops = []diagnostics.Stop{runnerResultChannel, runnerAuthorizationChannel, runnerNotStarted, runnerChannelRetained, runnerOutputRetained,
 	runnerExitedBeforeLoad, runnerTaskFailed, runnerHostUnreachable, runnerExited, runnerResultIncomplete, runnerProtocolInvalid,
 	runnerAuthorizationUncertain, runnerDeadline, runnerNoResult, runnerRequestInvalid, runnerHostKeyUnbound, runnerBoundaryUnavailable,
 	runnerUnsupportedPlatform, runnerStorage, runnerScratchUnusable, runnerStaleRun, runnerAdapterRunning, runnerMaterialUnprepared,
-	runnerInvocationEnded, runnerOutputInvalid, runnerPreparationUnrecorded}
+	runnerInvocationEnded, runnerOutputInvalid, runnerPreparationUnrecorded, runnerBindingUnavailable, runnerHostKeyInvalid, runnerAutomationMismatch}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }

@@ -766,7 +766,7 @@ step's description, so the relaxation is reviewed in the plan and bound by its
 `data-loss` digest. Then they check the authorizations, then ask the ordinary
 confirmation. A required token not
 supplied, or a supplied one the whole frozen plan does not require, then
-refuses `lifecycle.authorization`, naming the consuming steps by their number
+refuses `authorize.missing` or `authorize.unneeded`, naming the consuming steps by their number
 in that plan and their description and the exact command that passes, before
 the ordinary confirmation and before registration. A fresh `destroy`'s plan
 also closes with `Stop first`, naming the Machines whose removal its quiescence

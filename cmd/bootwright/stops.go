@@ -23,6 +23,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/reconciliation/logview"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -39,5 +40,5 @@ func stopCatalog() []diagnostics.Stop {
 		diskdiscovery.Stops(), physicalerase.Stops(), mirrorfill.Stops(), baremetal.Stops(), kubevirt.Stops(), libvirt.Stops(),
 		agentinstall.Stops(), managedservice.Stops(), installation.Stops(), ceph.Stops(),
 		kernel.Stops(), media.Stops(),
-		artifactserver.Stops(), machine.Stops(), hardware.Stops(), clients.Stops(), reconciliation.Stops(), substrate.Stops(), driver.Stops(), instance.Stops(), cli.Stops(), contexts.Stops(), contextfs.Stops(), operationstore.Stops())
+		artifactserver.Stops(), machine.Stops(), hardware.Stops(), clients.Stops(), reconciliation.Stops(), substrate.Stops(), driver.Stops(), instance.Stops(), cli.Stops(), contexts.Stops(), contextfs.Stops(), operationstore.Stops(), logview.Stops())
 }

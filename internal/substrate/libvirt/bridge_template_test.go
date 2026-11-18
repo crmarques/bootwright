@@ -37,7 +37,7 @@ func TestAPlannedBridgeHoldingATemplateDelimiterRefusesBeforeRegistration(t *tes
 		t.Fatalf("refused %+v, want one refusal for each of %v", got, want)
 	}
 	for _, refused := range got {
-		if refused.Object == nil || refused.Code != "api.value" {
+		if refused.Object == nil || refused.Code != "plan.template-value" {
 			t.Fatalf("refusal %+v", refused)
 		}
 		suffix, found := want[refused.Object.Kind+"/"+refused.Object.Name]

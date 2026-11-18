@@ -21,7 +21,7 @@ func TestTheRunnersStopsAreTheCatalogsAdapterRunStops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, section, _ := strings.Cut(string(data), "\n### Adapter run stops\n")
+	_, section, _ := strings.Cut(string(data), "\n## Adapter run stops\n")
 	section, _, _ = strings.Cut(section, "\n## ")
 	section, _, _ = strings.Cut(section, "\n### ")
 	rows := map[string][]string{}

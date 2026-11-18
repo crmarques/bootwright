@@ -597,7 +597,7 @@ func (s Service) locateTool(ctx context.Context, store recordReader, view prereq
 		}
 	}
 	if len(stages) == 0 {
-		return "", failure("controller.state",
+		return "", engineClientNotInstalled.Fail(
 			"the "+tool.Executable+" of release "+tool.Version+" is not installed on this controller",
 			"run "+contextCommand(contextName, string(reconciliation.Apply), "--stage", string(reconciliation.StageController)))
 	}
@@ -833,7 +833,7 @@ func logFault(err error, directory string) error {
 	if directory != "" {
 		tree = path.Dir(path.Dir(directory))
 	}
-	return failure("runtime.log",
+	return engineLogUnmaintained.Fail(
 		"a required private operation log could not be maintained",
 		"restore "+tree+" before repeating the operation")
 }
@@ -947,20 +947,10 @@ func (c *warningCollector) reported() []operationstore.Warning {
 func adapterWarning(plan reconciliation.Plan, block reconciliation.Block, warning operationstore.Warning) (diagnostics.Diagnostic, bool) {
 	reported := diagnostics.Diagnostic{Severity: "warning", Message: warning.Message,
 		Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: block.Kind, Name: block.Object}}
-	switch warning.Code {
-	case "storage.health":
-		reported.Code = "storage.health"
-	case "storage.not-ready":
-		reported.Code = "storage.not-ready"
-	case "substrate.shadowed-route":
-		reported.Code = "substrate.shadowed-route"
-	case "substrate.lend-not-revoked":
-		reported.Code = "substrate.lend-not-revoked"
-	case "substrate.unclaimed-server":
-		reported.Code = "substrate.unclaimed-server"
-	default:
+	if !slices.Contains(relayedWarnings, warning.Code) {
 		return diagnostics.Diagnostic{}, false
 	}
+	reported.Code = warning.Code
 	if named := warning.Object; named != nil && slices.ContainsFunc(plan.Blocks, func(planned reconciliation.Block) bool {
 		return planned.Kind == named.Kind && planned.Object == named.Name
 	}) {

@@ -17874,3 +17874,21 @@ stop's fields when it rewrites the retention and reserve refusals' remedies.
 Guarded by `TestEveryCatalogedStopIsComposedAndExplained`,
 `TestDiagnosticCodesMatchOutputSpec`, the packages' tests and an independent
 Opus review.
+
+## X623 — The engine's last failures are stops
+
+### B1615
+
+Under [D276](backlog.md#d276) (audit 006 W2.3, clause 14), split from
+[B1563](m1.md#b1563). The engine, the lifecycle runner, physical erase's
+relaxation refusals and `bootwright logs` raise their last diagnostics from
+declared stops: an ending the engine reports under a code other commands share
+is a stop of its own, the log reader's `logs.*` codes and four warnings keep
+their names as catalogued stops, `lifecycle.unsupported` is
+`plan.object-unsupported`, and an authorization refusal raises the
+`authorize.*` stops. The three last generic `lifecycle.*` codes leave the
+registry with their default remedies. The ledger keeps one site: the engine's
+no-selection refusal stays `context.state`, which every command raises
+byte-identically. Guarded by `TestEveryCatalogedStopIsComposedAndExplained`,
+`TestDiagnosticCodesMatchOutputSpec`, the race runs of the engine and the
+runner and an independent Opus review.

@@ -29,7 +29,7 @@ func PrepareAdminCredential(ctx context.Context, a AdminCredentialCall, e Execut
 		return secrets.Material{}, err
 	}
 	if !AdminCredentialProved(result.Evidence, e.Block.RequestDigest) {
-		return secrets.Material{}, failure("access.unavailable", "the administrator credential preparation was not proved", "check the cluster's original administrator account")
+		return secrets.Material{}, engineCredentialPreparationInvalid.Fail("the administrator credential preparation was not proved", "check the cluster's original administrator account")
 	}
 	for _, output := range result.Produced {
 		if output.Name == "guard" {
@@ -46,7 +46,7 @@ func UpdateAdminCredential(ctx context.Context, a AdminCredentialCall, e Executi
 		return err
 	}
 	if !AdminCredentialProved(result.Evidence, e.Block.RequestDigest) {
-		return failure("access.unavailable", "the administrator credential update was not proved", "repeat bootwright cluster update-admin-credentials to finish the retained update")
+		return engineCredentialUpdateUnproved.Fail("the administrator credential update was not proved", "repeat bootwright cluster update-admin-credentials to finish the retained update")
 	}
 	return nil
 }

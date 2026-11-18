@@ -154,12 +154,12 @@ func checkHostKey(request lifecycle.RunRequest) (string, error) {
 	}
 	bound, ok := request.Material[placement.KnownHostsRef]
 	if !ok {
-		return "", failure("secret.store", "a bound Secret this operation needs is not available to this attempt", lifecycle.ReopenBindings(request.Context, request.Repeat))
+		return "", runnerBindingUnavailable.Fail("a bound Secret this operation needs is not available to this attempt", lifecycle.ReopenBindings(request.Context, request.Repeat))
 	}
 	value, ok := bound.Part(secrets.ValuePart)
 	defer clear(value)
 	if !ok || len(value) == 0 || len(value) > maxMaterialBytes {
-		return "", failure("secret.part", "a bound Secret does not carry the part this operation needs", lifecycle.ReopenBindings(request.Context, request.Repeat))
+		return "", runnerBindingUnavailable.Fail("a bound Secret does not carry the part this operation needs", lifecycle.ReopenBindings(request.Context, request.Repeat))
 	}
 	key, err := trust.ParseKnownHostsLine(string(value), placement.Address, placement.Port)
 	if err != nil {
@@ -168,7 +168,7 @@ func checkHostKey(request lifecycle.RunRequest) (string, error) {
 			reason = reported[0].Message
 		}
 		token := trust.HostToken(placement.Address, placement.Port)
-		return "", failure("trust.identity",
+		return "", runnerHostKeyInvalid.Fail(
 			"the SSH host key Secret "+placement.KnownHostsRef+" of Machine/"+placement.Machine+" is not one known-hosts entry for "+token+
 				" ("+reason+"), so nothing connects to that host",
 			"author access.ssh.knownHostsRef on Machine/"+placement.Machine+" as one known-hosts entry for "+token)
@@ -181,11 +181,11 @@ func materialBytes(request lifecycle.RunRequest) (map[string][]byte, error) {
 	for _, file := range request.Materials {
 		bound, ok := request.Material[file.Secret]
 		if !ok {
-			return nil, failure("secret.store", "a bound Secret this operation needs is not available to this attempt", lifecycle.ReopenBindings(request.Context, request.Repeat))
+			return nil, runnerBindingUnavailable.Fail("a bound Secret this operation needs is not available to this attempt", lifecycle.ReopenBindings(request.Context, request.Repeat))
 		}
 		value, ok := bound.Part(file.Part)
 		if !ok || len(value) == 0 || len(value) > maxMaterialBytes {
-			return nil, failure("secret.part", "a bound Secret does not carry the part this operation needs", lifecycle.ReopenBindings(request.Context, request.Repeat))
+			return nil, runnerBindingUnavailable.Fail("a bound Secret does not carry the part this operation needs", lifecycle.ReopenBindings(request.Context, request.Repeat))
 		}
 		out[file.Name] = slices.Clone(value)
 	}

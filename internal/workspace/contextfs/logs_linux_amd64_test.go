@@ -376,7 +376,7 @@ func TestInitRemovesALeftoverLogDirectory(t *testing.T) {
 }
 
 // A log area write the root refuses is an error its caller sees, which the
-// lifecycle latches as runtime.log; the store repairs nothing.
+// lifecycle latches as engine.log-unmaintained; the store repairs nothing.
 func TestALogAreaWriteFailureLatchesRuntimeLog(t *testing.T) {
 	t.Parallel()
 	store, _ := lifecycleFixture(t)

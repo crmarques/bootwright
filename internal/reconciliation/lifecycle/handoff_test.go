@@ -19,7 +19,7 @@ func TestSettledApplyRestoresALatchedLogFault(t *testing.T) {
 	logPath := "append " + operationstore.OperationLogPath(id)
 	h.workspace.logArea.fail[logPath] = errors.New("no space")
 	before := untouchedOf(h)
-	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName}); firstCode(err) != "runtime.log" {
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName}); firstCode(err) != "engine.log-unmaintained" {
 		t.Fatalf("settle with an unrestored log fault: %v", err)
 	}
 	before.require(t, h)

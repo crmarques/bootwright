@@ -33,7 +33,6 @@ var defaultRemediations = map[string]string{
 	"render.publish":      "choose an --output-dir this account can write that holds no link or other non-regular file at the artifact's name",
 	"runtime.encode":      "repeat the command; a repeated failure is a Bootwright defect to report",
 	"runtime.tool":        "pass --tool a program on PATH, or a path to an executable this account can run",
-	"runtime.log":         "make the context's log directory writable by the invoking user and repeat the command",
 	"runtime.interrupted": "repeat the command",
 	"runtime.canceled":    "repeat the command",
 	"runtime.deadline":    "repeat the command",
@@ -71,9 +70,7 @@ var defaultRemediations = map[string]string{
 	"controller.uninstall":   "resolve what the message names and repeat bootwright controller uninstall",
 	"controller.unknown":     "repeat bootwright controller install to resolve the unknown action",
 
-	"lifecycle.unsupported":   "remove the object this executable cannot realize, or use a build that supports it",
-	"lifecycle.authorization": "repeat the command with the authorization the frozen plan requires",
-	"logs.not-found":          "run bootwright status --context <context> to see the operation records that remain",
+	"logs.not-found": "run bootwright status --context <context> to see the operation records that remain",
 
 	"trust.identity":     "review the SSH identity the message names and enroll it with bootwright machine trust --context <context>",
 	"access.unavailable": "provide the access metadata or credential the message names and repeat the command",

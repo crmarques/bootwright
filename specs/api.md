@@ -29,7 +29,7 @@ access, native rendering or platform mutation. Accepting a declaration claims
 no executable support for its effectful consumer.
 
 An admitted declaration that no capability of this build realizes refuses at
-`plan`, before registration, with `lifecycle.unsupported`: that is the default
+`plan`, before registration, with `plan.object-unsupported`: that is the default
 refusal point, and each capability's refusal table names its rows. Admission
 refuses a declaration with `api.invariant` instead only when no build of this
 API version has any consumer for it, as it refuses `spec.lifecycle.rescue`

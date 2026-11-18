@@ -59,7 +59,7 @@ func TestAFreshDestroyOnAnotherHostRefusesBeforeAnyEffect(t *testing.T) {
 	h := newHarness(t, "alpha")
 	completeApply(t, h)
 	anotherHost(t, h)
-	requireRemovalRefusedUntouched(t, h, "controller.identity", "this host is not the host the context is bound to", anotherHostRemedy)
+	requireRemovalRefusedUntouched(t, h, "engine.controller-other-host", "this host is not the host the context is bound to", anotherHostRemedy)
 }
 
 // A fresh removal that supersedes an incomplete apply is held to the same
@@ -69,7 +69,7 @@ func TestAFreshDestroySupersedingAnIncompleteApplyOnAnotherHostRefuses(t *testin
 	h := newHarness(t, "alpha")
 	failedApply(t, h)
 	anotherHost(t, h)
-	requireRemovalRefusedUntouched(t, h, "controller.identity", "this host is not the host the context is bound to", anotherHostRemedy)
+	requireRemovalRefusedUntouched(t, h, "engine.controller-other-host", "this host is not the host the context is bound to", anotherHostRemedy)
 }
 
 // A binding the controller state records for the context that names another
@@ -79,7 +79,7 @@ func TestAFreshDestroyWhoseBindingNamesAnotherHostRefuses(t *testing.T) {
 	h := newHarness(t, "alpha")
 	completeApply(t, h)
 	h.workspace.controller.State.Bindings[0].HostDigest = strings.Repeat("0", 64)
-	requireRemovalRefusedUntouched(t, h, "controller.identity", "the recorded controller binding does not match this host", anotherHostRemedy)
+	requireRemovalRefusedUntouched(t, h, "engine.controller-other-host", "the recorded controller binding does not match this host", anotherHostRemedy)
 }
 
 // Setup that has not completed on this host refuses the removal, naming the
@@ -89,7 +89,7 @@ func TestAFreshDestroyOverIncompleteSetupRefuses(t *testing.T) {
 	h := newHarness(t, "alpha")
 	failedApply(t, h)
 	h.workspace.controller.Prepared = false
-	requireRemovalRefusedUntouched(t, h, "controller.identity", "this host has no completed controller setup", "run bootwright controller install")
+	requireRemovalRefusedUntouched(t, h, "engine.controller-unprepared", "this host has no completed controller setup", "run bootwright controller install")
 }
 
 // A context the controller state records no binding for is admitted once its
@@ -141,17 +141,17 @@ func TestAFreshDestroyReprovesItsHostUnderTheExclusiveLock(t *testing.T) {
 		name, code, message, remediation string
 		move                             func(*testing.T, *harness)
 	}{
-		{"another host", "controller.identity", "this host is not the host the context is bound to", anotherHostRemedy,
+		{"another host", "engine.controller-other-host", "this host is not the host the context is bound to", anotherHostRemedy,
 			func(t *testing.T, h *harness) {
 				// The running destroy holds its own copy of the service, so
 				// the host it reads moves through the shared pointer.
 				h.service.host.(*movableHost).identity = anotherHostIdentity(t)
 			}},
-		{"a binding naming another host", "controller.identity", "the recorded controller binding does not match this host", anotherHostRemedy,
+		{"a binding naming another host", "engine.controller-other-host", "the recorded controller binding does not match this host", anotherHostRemedy,
 			func(_ *testing.T, h *harness) {
 				h.workspace.controller.State.Bindings[0].HostDigest = strings.Repeat("0", 64)
 			}},
-		{"incomplete setup", "controller.identity", "this host has no completed controller setup", "run bootwright controller install",
+		{"incomplete setup", "engine.controller-unprepared", "this host has no completed controller setup", "run bootwright controller install",
 			func(_ *testing.T, h *harness) { h.workspace.controller.Prepared = false }},
 	}
 	operations := []struct {

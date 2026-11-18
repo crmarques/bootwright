@@ -34,7 +34,7 @@ func (s Service) publishProduced(ctx context.Context, tx Transaction, producer r
 	names := make(map[string]bool, len(produced))
 	for _, output := range produced {
 		if !reconciliation.ValidSegment(output.Name) || names[output.Name] {
-			return secretstore.Failure("declaration", "a block offered produced material under an invalid or repeated name")
+			return engineProducedNameInvalid.Fail("a block offered produced material under an invalid or repeated name", "")
 		}
 		names[output.Name] = true
 		identity := output.Identity

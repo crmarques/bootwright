@@ -105,7 +105,7 @@ func resolveContext(ctx context.Context, selection CurrentSelection, name string
 		return name, nil
 	}
 	if selection == nil {
-		return "", failure("context.state", "current context selection is not configured", "")
+		return "", engineWiringMissing.Fail("current context selection is not configured", "")
 	}
 	selected, err := selection(ctx)
 	if err != nil {

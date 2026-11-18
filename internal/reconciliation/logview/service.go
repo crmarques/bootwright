@@ -64,15 +64,15 @@ func (s Service) resolve(ctx context.Context, name string) (string, error) {
 		return name, nil
 	}
 	if s.options.Selection == nil {
-		return "", diagnostics.NewFailure("context.state", "current context selection is not configured", "")
+		return "", logsWiringMissing.Fail("current context selection is not configured", "")
 	}
 	selected, err := s.options.Selection(ctx)
 	if err != nil {
 		return "", err
 	}
 	if selected == "" {
-		return "", diagnostics.NewFailureWithRemediation("context.state", "no current context is selected",
-			"", "select one with bootwright context use --name <context>, or name it with --context <context>")
+		return "", logsNoContextSelected.Fail("no current context is selected",
+			"select one with bootwright context use --name <context>, or name it with --context <context>")
 	}
 	return selected, nil
 }
@@ -82,7 +82,7 @@ func (s Service) store(view View) OperationStore {
 }
 
 func usage(message string) error {
-	return &diagnostics.Failure{Usage: true, Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "cli.usage", Message: message}}}
+	return diagnostics.UsageFailure(message)
 }
 
 func Validate(selection Selection) error { return validate(selection) }
@@ -126,7 +126,7 @@ func validInstallID(value string) bool {
 }
 
 func notFound(message, remediation string) error {
-	return diagnostics.NewFailureWithRemediation("logs.not-found", message, "", remediation)
+	return logsNotFound.Fail(message, remediation)
 }
 
 func busy(err error) bool {

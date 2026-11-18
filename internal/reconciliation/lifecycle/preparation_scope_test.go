@@ -236,7 +236,7 @@ func TestAPreparationJudgesUnclaimedObjectsByItsOwnEffectBearing(t *testing.T) {
 	}
 	_, err := h.service.PlanPreparation(ctx, requestPreparation())
 	refused := diagnostics.Of(err)
-	if len(refused) != 1 || refused[0].Code != "lifecycle.unsupported" || refused[0].Message != "the preparation bears every object" {
+	if len(refused) != 1 || refused[0].Code != "plan.object-unsupported" || refused[0].Message != "the preparation bears every object" {
 		t.Fatalf("a preparation's plan = %v: %+v, want its own bearing's refusal", err, refused)
 	}
 }

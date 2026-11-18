@@ -1279,7 +1279,7 @@ and its `spec.management`, or a service kind with its
 and bindings of one family are alternatives. Every selected object of a block
 family is claimed by exactly one bound implementation or refused by its
 domain's refusal table: two bindings of one family that plan blocks for, or
-claim, one object refuse before registration with `lifecycle.unsupported`,
+claim, one object refuse before registration with `plan.object-unsupported`,
 naming both implementations. Every implementation lists, once per selected
 graph and independently of planning, the objects it claims: those it plans
 blocks for, and those its own rule realizes with no block, such as a

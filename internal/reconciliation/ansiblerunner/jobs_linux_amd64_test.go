@@ -391,7 +391,7 @@ func TestAnSSHPlacementRefusesKnownHostsNotOneEntryForItsHostBeforeItConnects(t 
 			request := sshAdapterRequest(t, value)
 			_, err := runner.Run(context.Background(), request)
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "trust.identity" || started ||
+			if len(reported) != 1 || reported[0].Code != "runner.host-key-invalid" || started ||
 				!strings.Contains(reported[0].Message, "Secret host-key of Machine/services is not one known-hosts entry for [192.0.2.9]:2222") ||
 				reported[0].Remediation != "author access.ssh.knownHostsRef on Machine/services as one known-hosts entry for [192.0.2.9]:2222" {
 				t.Fatalf("%+v (%v), started=%t", reported, err, started)

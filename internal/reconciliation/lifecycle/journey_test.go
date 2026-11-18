@@ -1977,7 +1977,7 @@ func TestApplyRefusesAnUnpreparedControllerHost(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	h.workspace.controller.Prepared = false
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if diagnostics.Of(err)[0].Code != "controller.identity" || !strings.Contains(diagnostics.Of(err)[0].Remediation, "bootwright controller install") {
+	if diagnostics.Of(err)[0].Code != "engine.controller-unprepared" || !strings.Contains(diagnostics.Of(err)[0].Remediation, "bootwright controller install") {
 		t.Fatalf("unprepared host error = %v", err)
 	}
 	if len(h.capability.applies) != 0 || h.workspace.binds != 0 {
@@ -2146,11 +2146,11 @@ func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	want := []diagnostics.Diagnostic{
 		{
-			Severity: "error", Code: "lifecycle.unsupported", Message: "the install profile selects spec.subscription", Field: "$.spec.os.install.profileRef", Remediation: "correct Machine/guest",
+			Severity: "error", Code: "plan.object-unsupported", Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryChangeInput, Certainty: diagnostics.CertaintyNone, Message: "the install profile selects spec.subscription", Field: "$.spec.os.install.profileRef", Remediation: "correct Machine/guest",
 			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "Machine", Name: "guest"},
 		},
 		{
-			Severity: "error", Code: "lifecycle.unsupported", Message: cluster.Reason, Remediation: cluster.Remediation,
+			Severity: "error", Code: "plan.object-unsupported", Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryChangeInput, Certainty: diagnostics.CertaintyNone, Message: cluster.Reason, Remediation: cluster.Remediation,
 			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "OpenShiftCluster", Name: "sno"},
 		},
 	}
@@ -2170,7 +2170,7 @@ func TestAnUnclaimedObjectRefusesNamingItsReasonAndRemedy(t *testing.T) {
 	h.service.compiler = testCompiler{state: withEnabledPlaybook()}
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
 	want := []diagnostics.Diagnostic{{
-		Severity: "error", Code: "lifecycle.unsupported", Message: "no capability of this executable runs an enabled CustomPlaybook",
+		Severity: "error", Code: "plan.object-unsupported", Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryChangeInput, Certainty: diagnostics.CertaintyNone, Message: "no capability of this executable runs an enabled CustomPlaybook",
 		Remediation: "remove CustomPlaybook/tune from the selected Environment, or use an example within the supported shape such as " + supportedExample,
 		Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "CustomPlaybook", Name: "tune"},
 	}}
@@ -2915,7 +2915,7 @@ func TestRequiredLogFaultStopsTheOperation(t *testing.T) {
 	operationLog := "append " + path.Join("op-"+strings.Repeat("01", 16), "operation.jsonl")
 	h.workspace.logArea.fail[operationLog] = errors.New("no space")
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "runtime.log" {
+	if code := firstCode(err); code != "engine.log-unmaintained" {
 		t.Fatalf("log fault = %q (%v)", code, err)
 	}
 	if remedy := diagnostics.Of(err)[0].Remediation; remedy != "restore /var/log/bootwright/contexts/lab before repeating the operation" {
@@ -2928,7 +2928,7 @@ func TestRequiredLogFaultStopsTheOperation(t *testing.T) {
 		t.Fatal("the log fault was not recorded on the operation")
 	}
 	_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "runtime.log" {
+	if code := firstCode(err); code != "engine.log-unmaintained" {
 		t.Fatalf("an unrestored boundary = %q (%v)", code, err)
 	}
 	if record, _ := durableOperation(t, h); len(h.capability.applies) != 0 || !record.LogFault {
@@ -2957,7 +2957,7 @@ func TestALogFaultLatchesCancellationAndItsRecord(t *testing.T) {
 	defer cancel()
 	logging := newLogBoundary(store, currentOperation(t, h), cancel)
 	first := logging.fail(ctx, errors.New("no space"))
-	if code := firstCode(first); code != "runtime.log" || ctx.Err() == nil {
+	if code := firstCode(first); code != "engine.log-unmaintained" || ctx.Err() == nil {
 		t.Fatalf("fault = %q, cancellation requested %t", code, ctx.Err() != nil)
 	}
 	if record, _ := durableOperation(t, h); !record.LogFault {
@@ -2990,7 +2990,7 @@ func TestALogFaultTheLatchCouldNotRecordIsRecordedAsTheOperationSettles(t *testi
 			delete(h.workspace.area.fail, record)
 		}
 	})
-	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); firstCode(err) != "runtime.log" {
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); firstCode(err) != "engine.log-unmaintained" {
 		t.Fatalf("apply = %v", err)
 	}
 	if settled, _ := durableOperation(t, h); !settled.LogFault {
@@ -3041,7 +3041,7 @@ func TestAFailedAttemptLogStopsTheInvocationAndLeavesTheAttemptUnknown(t *testin
 			h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: tc.reported}}
 			tc.arrange(h)
 			result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-			if code := firstCode(err); code != "runtime.log" || result == nil || result.Receipt.State != string(tc.operation) {
+			if code := firstCode(err); code != "engine.log-unmaintained" || result == nil || result.Receipt.State != string(tc.operation) {
 				t.Fatalf("apply = %+v (%q, %v)", result, code, err)
 			}
 			if !slices.Equal(h.capability.applies, tc.applies) {
@@ -3078,7 +3078,7 @@ func TestAResolutionWithoutItsLogsObservesNothing(t *testing.T) {
 	} {
 		h.workspace.logArea.fail["append "+broken] = errors.New("no space")
 		_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-		if code := firstCode(err); code != "runtime.log" {
+		if code := firstCode(err); code != "engine.log-unmaintained" {
 			t.Fatalf("%s: apply = %q (%v)", broken, code, err)
 		}
 		delete(h.workspace.logArea.fail, "append "+broken)
@@ -3114,7 +3114,7 @@ func TestALogFaultDuringARemovalsResolutionRefusesTheRemoval(t *testing.T) {
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
 	h.capability.observeHold = failDuring(h, path.Join(applied, "blocks", "artifact-server-lab", "attempt-000001-resolution-000001.jsonl"))
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "runtime.log" {
+	if code := firstCode(err); code != "engine.log-unmaintained" {
 		t.Fatalf("destroy = %q (%v)", code, err)
 	}
 	record, states := durableOperation(t, h)
@@ -3146,7 +3146,7 @@ func TestAFreshApplyRestoresTheBoundaryACompletedRemovalFaulted(t *testing.T) {
 	removal := "op-" + strings.Repeat("02", 16)
 	h.capability.destroyHold = failDuring(h, path.Join(removal, "blocks", "artifact-server-lab", "attempt-000001.jsonl"))
 	result, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "runtime.log" || result == nil || result.Receipt.State != string(reconciliation.OperationDone) {
+	if code := firstCode(err); code != "engine.log-unmaintained" || result == nil || result.Receipt.State != string(reconciliation.OperationDone) {
 		t.Fatalf("destroy = %+v (%q, %v)", result, code, err)
 	}
 	if record, _ := durableOperation(t, h); record.ID != removal || !record.LogFault {
@@ -3157,7 +3157,7 @@ func TestAFreshApplyRestoresTheBoundaryACompletedRemovalFaulted(t *testing.T) {
 	}
 	operationLog := "append " + path.Join(removal, "operation.jsonl")
 	h.workspace.logArea.fail[operationLog] = errors.New("no space")
-	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); firstCode(err) != "runtime.log" {
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); firstCode(err) != "engine.log-unmaintained" {
 		t.Fatalf("apply over an unrestored removal = %v", err)
 	}
 	if currentOperation(t, h) != removal || len(h.capability.applies) != 1 {
@@ -3191,7 +3191,7 @@ func TestARemovalOverAnUnrestoredBoundaryStartsNothing(t *testing.T) {
 	operationLog := "append " + path.Join(applied, "operation.jsonl")
 	h.workspace.logArea.fail[operationLog] = errors.New("no space")
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "runtime.log" {
+	if code := firstCode(err); code != "engine.log-unmaintained" {
 		t.Fatalf("destroy = %q (%v)", code, err)
 	}
 	record, _ := durableOperation(t, h)
@@ -3218,7 +3218,7 @@ func TestARestorationWhoseClearFailsStartsNothing(t *testing.T) {
 	operation := "op-" + strings.Repeat("01", 16)
 	attemptLog := path.Join(operation, "blocks", "alpha", "attempt-000001.jsonl")
 	h.capability.hold = failDuring(h, attemptLog)
-	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); firstCode(err) != "runtime.log" {
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true}); firstCode(err) != "engine.log-unmaintained" {
 		t.Fatalf("apply = %v", err)
 	}
 	if record, _ := durableOperation(t, h); record.State != reconciliation.OperationRunning || !record.LogFault {
@@ -3267,7 +3267,7 @@ func TestALogRecordTheAttemptLogCannotKeepCancelsTheRun(t *testing.T) {
 		}
 	})
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "runtime.log" || !canceled {
+	if code := firstCode(err); code != "engine.log-unmaintained" || !canceled {
 		t.Fatalf("apply = %q (%v), run canceled %t", code, err, canceled)
 	}
 	if record, _ := durableOperation(t, h); !record.LogFault {
@@ -3298,7 +3298,7 @@ func TestALogThatCannotBeFinalizedIsALogFault(t *testing.T) {
 		}
 	})
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "runtime.log" {
+	if code := firstCode(err); code != "engine.log-unmaintained" {
 		t.Fatalf("apply = %q (%v)", code, err)
 	}
 	if record, _ := durableOperation(t, h); !record.LogFault {
@@ -3417,7 +3417,7 @@ func TestAResolutionThatCannotStartLeavesTheOperationUnchanged(t *testing.T) {
 				if record.LogFault != tc.logFault {
 					t.Fatalf("log fault = %t, want %t", record.LogFault, tc.logFault)
 				}
-				if code := firstCode(err); tc.logFault && code != "runtime.log" {
+				if code := firstCode(err); tc.logFault && code != "engine.log-unmaintained" {
 					t.Fatalf("refusal = %q (%v)", code, err)
 				}
 			})
@@ -3691,7 +3691,7 @@ func TestAnInterruptedBlockIsRecordedUnknown(t *testing.T) {
 		t.Fatalf("receipt = %+v", result)
 	}
 	// The interrupt reaches no log write, so it is never a log fault.
-	if record, _ := durableOperation(t, h); record.LogFault || firstCode(err) == "runtime.log" {
+	if record, _ := durableOperation(t, h); record.LogFault || firstCode(err) == "engine.log-unmaintained" {
 		t.Fatalf("an interrupt read as a log fault: fault %t (%v)", record.LogFault, err)
 	}
 	status, err := h.service.Status(context.Background(), StatusRequest{ContextName: "lab"})
@@ -3775,7 +3775,7 @@ func TestAnInterruptedResolutionIsRecordedUnknown(t *testing.T) {
 	if err == nil {
 		t.Fatal("an interrupted resolution reported success")
 	}
-	if record, _ := durableOperation(t, h); record.LogFault || firstCode(err) == "runtime.log" {
+	if record, _ := durableOperation(t, h); record.LogFault || firstCode(err) == "engine.log-unmaintained" {
 		t.Fatalf("an interrupt read as a log fault: fault %t (%v)", record.LogFault, err)
 	}
 	record := string(h.workspace.area.files[resolutionRecord(h, "artifact-server-lab")])
@@ -4705,14 +4705,14 @@ func TestUnclaimedKindsRefuseBeforeRegistration(t *testing.T) {
 	// realizes, and the remedy of leaving it out.
 	unclaimed := func(kind, name, reason string) diagnostics.Diagnostic {
 		return diagnostics.Diagnostic{
-			Severity: "error", Code: "lifecycle.unsupported", Message: reason,
+			Severity: "error", Code: "plan.object-unsupported", Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryChangeInput, Certainty: diagnostics.CertaintyNone, Message: reason,
 			Remediation: "remove " + kind + "/" + name + " from the selected Environment, or use an example within the supported shape such as " + supportedExample,
 			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: name},
 		}
 	}
 	want := []diagnostics.Diagnostic{
 		unclaimed("CephCluster", "ceph", "no capability of this executable realizes the CephCluster kind"),
-		{Severity: "error", Code: "lifecycle.unsupported", Message: "no capability of this executable manages the LoadBalancer kind",
+		{Severity: "error", Code: "plan.object-unsupported", Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryChangeInput, Certainty: diagnostics.CertaintyNone, Message: "no capability of this executable manages the LoadBalancer kind",
 			Remediation: "declare spec.management: external on LoadBalancer/lab-balancer to use a LoadBalancer the operator runs, or remove it from the selected Environment",
 			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "LoadBalancer", Name: "lab-balancer"}},
 		unclaimed("Machine", "bare", "no capability of this executable realizes a Machine whose operating system is not provided"),

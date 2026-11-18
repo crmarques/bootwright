@@ -464,12 +464,12 @@ removed with the subscription service's own tools, and is accepted only on
 `destroy`. On that invocation the Machine's installation neither reads nor
 unregisters its guest and records no registration, as
 [managed OS](../managed-os.md#registration) states; nothing persists the name,
-and only the `lifecycle.authorization` refusal of a missing or inapplicable
+and only the `authorize.missing` or `authorize.unneeded` refusal of a missing or inapplicable
 token carries it: its command repeats the invocation's own `--unregistered`
 names, sorted and joined by commas, after the tokens the plan requires, so the
 manual unregistration's printed next steps complete a destroy whose plan
 consumes `data-loss`. A name whose installation the destroy plan does
-not unregister refuses `lifecycle.authorization` before confirmation and
+not unregister refuses `authorize.unneeded` before confirmation and
 registration: `this destroy removes no subscription registration from
 Machine/<name>, so --unregistered <name> acknowledges nothing`, remedied by
 `repeat <command> without --unregistered <name>`, where `<command>` is the

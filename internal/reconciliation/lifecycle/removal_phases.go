@@ -301,9 +301,9 @@ func (s Service) removalWarnings(plan reconciliation.Plan) []diagnostics.Diagnos
 	slices.SortFunc(found, compareSurvivors)
 	var warnings []diagnostics.Diagnostic
 	for _, survivor := range slices.Compact(found) {
-		warnings = append(warnings, diagnostics.Diagnostic{Severity: "warning", Code: "lifecycle.surviving-consumer",
-			Message:     "a destroy of this context refuses before registration while " + consumption([]SurvivingConsumer{survivor}) + " and outlives that destroy",
-			Remediation: "run the consumer on owned virtual node Machines this context deletes, or keep this context while the consumer runs"})
+		warnings = append(warnings, warned(planConsumerOutlivesDestroy,
+			"a destroy of this context refuses before registration while "+consumption([]SurvivingConsumer{survivor})+" and outlives that destroy",
+			"run the consumer on owned virtual node Machines this context deletes, or keep this context while the consumer runs"))
 	}
 	return warnings
 }

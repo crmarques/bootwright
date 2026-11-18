@@ -56,7 +56,7 @@ func TestAnObjectTwoImplementationsClaimRefusesBeforeRegistration(t *testing.T) 
 	}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	want := []diagnostics.Diagnostic{{
-		Severity: "error", Code: "lifecycle.unsupported",
+		Severity: "error", Code: "plan.object-unsupported", Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryChangeInput, Certainty: diagnostics.CertaintyNone,
 		Message: "two implementations of this executable claim Machine/node-b: machine-first-v1 and machine-second-v1",
 		Remediation: "remove Machine/node-b from the selected Environment, or use an example within the supported shape such as " + supportedExample +
 			"; each object is realized by exactly one implementation",

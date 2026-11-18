@@ -9364,6 +9364,11 @@ owner's review:
 11. A restore from a backup is not offered as an exit until a procedure exists.
 12. Parked items the plan meets are promoted when their slice starts.
 13. The order is the plan's: W6.1, then W1 before W2.
+14. Taken by the session on 2026-11-18, also pending the owner's review: an
+    `apply` or `destroy` ending the engine raises under a code other commands
+    share (`access.*`, `controller.*`, `api.*`, `secret.*`, `trust.*`) is a
+    stop of its own, named for the situation, and the shared code stays in the
+    registry for its other emitters.
 
 The owner's focused-check instruction of [D273](#d273) remains in force: each
 slice lands on its focused checks and, in the safety class, its race runs,

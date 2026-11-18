@@ -218,7 +218,7 @@ func TestNextStepsCarryTheContextAndTheTokensTheirDecisionNeeds(t *testing.T) {
 			}
 			verb := reconciliation.Verb(strings.Fields(status.NextSteps[0])[1])
 			tokens := reviewed(authorizeTokens(status.NextSteps[0]), shownBinding(t, h, "lab-b"))
-			requireAuthorizedAs(t, h, verb, nil, "lifecycle.authorization")
+			requireAuthorizedAs(t, h, verb, nil, "authorize.")
 			requireAuthorizedAs(t, h, verb, tokens, "")
 		})
 	}
@@ -246,7 +246,7 @@ func requireAuthorizedIn(t *testing.T, h *harness, contextName string, verb reco
 	switch {
 	case code == "" && (err == nil || err.Error() != "declined"):
 		t.Fatalf("the offered %s with %q = %v, want it to ask", verb, tokens, err)
-	case code != "" && firstCode(err) != code && !(code == "lifecycle.authorization" && authorizationRefusal(firstCode(err))):
+	case code != "" && firstCode(err) != code && !(code == "authorize." && authorizationRefusal(firstCode(err))):
 		t.Fatalf("the offered %s with %q = %v, want %s", verb, tokens, err, code)
 	}
 }
@@ -449,7 +449,7 @@ func requireSetupRefuses(t *testing.T, h *harness, verb reconciliation.Verb) {
 		_, err = h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
 	}
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || (reported[0].Code != "controller.identity" && reported[0].Code != "controller.state") ||
+	if len(reported) != 1 || (reported[0].Code != "engine.controller-unprepared" && reported[0].Code != "engine.runtime-unprepared") ||
 		!strings.Contains(reported[0].Remediation, "bootwright controller install") {
 		t.Fatalf("the %s status replaces with setup = %+v (%v), want a refusal naming setup", verb, reported, err)
 	}

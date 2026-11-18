@@ -45,7 +45,7 @@ Proxy, DNSServer, NTPServer or Registry declares, and
 `TestManagedServiceRefusalTableMatchesUnsupported` holds the Proxy, DNSServer,
 NTPServer and Registry capabilities' to every row except the artifact socket bound,
 which only an ArtifactServer declares. Reason and
-remedy are the diagnostic's message and remediation (`lifecycle.unsupported` on
+remedy are the diagnostic's message and remediation (`plan.object-unsupported` on
 the refused service), in which `<server>` is the refused service, `<machine>`
 its placement Machine and `<proxy>` the Proxy that Machine selects. The
 installed-host rows hold the ArtifactServer alone, except the firewall row, and

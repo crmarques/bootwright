@@ -57,7 +57,7 @@
       "next": "continue-apply"
     },
     "apply": {
-      "code": "controller.identity",
+      "code": "engine.controller-unbound",
       "message": "this context is not bound to a controller host",
       "remediation": "take back what this operation owns with bootwright destroy --context lab, after which bootwright apply --context lab binds the context again, or restore the controller state that recorded this context's binding from a matching backup"
     },
@@ -100,11 +100,11 @@
       "message": "an incomplete destroy must be continued before another operation",
       "remediation": "restore the controller state that recorded this context's binding from a matching backup, or delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own",
       "causes": [
-        "controller.identity: this context is not bound to a controller host (restore the controller state that recorded this context's binding from a matching backup, or delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own)"
+        "engine.controller-unbound: this context is not bound to a controller host (restore the controller state that recorded this context's binding from a matching backup, or delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own)"
       ]
     },
     "destroy": {
-      "code": "controller.identity",
+      "code": "engine.controller-unbound",
       "message": "this context is not bound to a controller host",
       "remediation": "restore the controller state that recorded this context's binding from a matching backup, or delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own"
     }

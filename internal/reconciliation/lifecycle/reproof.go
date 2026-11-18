@@ -227,32 +227,32 @@ func (s Service) closureRefusal(ctx context.Context, view View, operation operat
 // and admitUnbound admits that context instead, once the host is proved.
 func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity, host evidence.InstalledHostIdentity, unbound string, admitUnbound bool) error {
 	if !view.Exists || !view.Prepared {
-		return failure("controller.identity", "this host has no completed controller setup", "run bootwright controller install")
+		return engineControllerUnprepared.Fail("this host has no completed controller setup", "run bootwright controller install")
 	}
 	if !view.Initialized {
 		if admitUnbound {
 			return nil
 		}
-		return failure("controller.identity", "this context is not bound to a controller host", unbound)
+		return engineControllerUnbound.Fail("this context is not bound to a controller host", unbound)
 	}
 	digest, err := host.PrivateDigest()
 	if err != nil {
 		return err
 	}
 	if !view.State.Host.Equal(host) {
-		return failure("controller.identity", "this host is not the host the context is bound to", evidence.HostMismatchRemedy(identity.Name))
+		return engineControllerOtherHost.Fail("this host is not the host the context is bound to", evidence.HostMismatchRemedy(identity.Name))
 	}
 	for _, binding := range view.State.Bindings {
 		if binding.Context != identity.Name {
 			continue
 		}
 		if binding.HostDigest != digest {
-			return failure("controller.identity", "the recorded controller binding does not match this host", evidence.HostMismatchRemedy(identity.Name))
+			return engineControllerOtherHost.Fail("the recorded controller binding does not match this host", evidence.HostMismatchRemedy(identity.Name))
 		}
 		return nil
 	}
 	if admitUnbound {
 		return nil
 	}
-	return failure("controller.identity", "this context is not bound to a controller host", unbound)
+	return engineControllerUnbound.Fail("this context is not bound to a controller host", unbound)
 }

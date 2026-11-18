@@ -48,9 +48,11 @@
   "diagnostics": [
     {
       "severity": "error",
-      "code": "lifecycle.authorization",
+      "code": "authorize.missing",
       "message": "this plan has data-loss consequences that are not authorized: step 3 (install the operating system of metal-01)",
-      "remediation": "repeat it with the authorization: bootwright apply --context lab --stage machines --authorize data-loss"
+      "remediation": "repeat it with the authorization: bootwright apply --context lab --stage machines --authorize data-loss",
+      "cause": "input",
+      "recovery": "authorize"
     }
   ],
   "logs": [

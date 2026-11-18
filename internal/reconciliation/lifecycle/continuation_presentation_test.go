@@ -79,7 +79,7 @@ func TestAnApplyOverARefusedRemovalNamesTheRefusalsExit(t *testing.T) {
 			anotherHost(t, h)
 			return h
 		},
-		code: "controller.identity", message: "this host is not the host the context is bound to",
+		code: "engine.controller-other-host", message: "this host is not the host the context is bound to",
 	})
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {

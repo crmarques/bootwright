@@ -496,7 +496,7 @@ func TestADestroyWhosePlanLacksTheControllerStageRefusesWhateverItsSourceHolds(t
 		removal := operationstore.Operation{Verb: reconciliation.Destroy, Source: source}
 		_, err := h.service.locateTool(ctx, f.store, prerequisites.StorageView{Prepared: true}, "lab", removal, f.headPlan, installer)
 		reported := diagnostics.Of(err)
-		if len(reported) != 1 || reported[0].Code != "controller.state" {
+		if len(reported) != 1 || reported[0].Code != "engine.client-not-installed" {
 			t.Fatalf("a destroy of %s without the stage located: %+v (%v)", name, reported, err)
 		}
 	}

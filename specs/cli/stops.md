@@ -32,7 +32,9 @@ attribute, such as a role task that failed without naming a declared reason.
 
 ## Catalog
 
-### Adapter run stops
+Each section below holds the stops one package declares.
+
+## Adapter run stops
 
 The lifecycle runner's stops of one adapter run
 (`internal/reconciliation/ansiblerunner`): the refusals that let no adapter
@@ -66,8 +68,11 @@ start, and the endings of one that ran.
 | `runner.invocation-ended` | adapter-run | none | defect | - | repeat | a run was asked of an invocation that had already ended, so no adapter ran | repeat the operation |
 | `runner.output-invalid` | adapter-run | possible | defect | - | repeat | a file the adapter was to produce is not the private regular file the run expects | read the block's retained output with bootwright logs --raw, then repeat the operation |
 | `runner.preparation-unrecorded` | adapter-run | unproved | records | - | repeat | the before-state the adapter reported could not be recorded before its effect | repeat the operation, which observes the effect before anything else starts |
+| `runner.binding-unavailable` | adapter-run | none | records | - | repeat | a bound Secret the run lends is not available to the attempt or lacks the part it needs, so no adapter ran | repeat the operation, which reopens its Secret bindings |
+| `runner.host-key-invalid` | adapter-run | none | input | - | change-input | the SSH host key Secret of a placement is not one known-hosts entry for its host, so no adapter ran | author access.ssh.knownHostsRef on the Machine as one known-hosts entry for its SSH host |
+| `runner.automation-mismatch` | adapter-run | none | build | - | repeat | the staged automation does not match this executable's automation, so no adapter ran | rerun the command |
 
-### Engine stops
+## Engine stops
 
 The lifecycle engine's stops (`internal/reconciliation/lifecycle`): a block
 that stopped on its host or on a defect, an attempt that recorded no start, a
@@ -75,7 +80,7 @@ removal that would take back state in use, the end of an operation that did
 not complete, which reads as the consequence of the causes before it, and the
 refusals of a decision and its plan before any effect.
 
-#### Execution and removal
+### Execution and removal
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -99,8 +104,10 @@ refusals of a decision and its plan before any effect.
 | `destroy.release-incomplete` | operation | owed | records | - | repeat | the removal completed, and releasing what it owned did not | repeat the destroy to finish it |
 | `destroy.unproved-effects` | operation | unproved | target | - | fix-then-repeat | a removal cannot prove what some effects left behind, so it registered nothing | do what each block's diagnostic reports, then repeat the destroy |
 | `engine.outcome-unknown` | resolution | unproved | target | - | fix-then-repeat | a block's outcome is still unknown after an observation, for the reason the message names | do what the reason names, then repeat the command to observe the block again |
+| `engine.log-unmaintained` | block | possible | environment | `storage` | fix-then-repeat | a required private operation log could not be maintained | restore the context's private log tree under /var/log/bootwright before repeating the operation |
+| `engine.produced-name-invalid` | block | possible | defect | - | none | a block offered produced material under an invalid or repeated name, so custody kept none of it | report the message as a defect |
 
-#### Decisions
+### Decisions
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -130,7 +137,7 @@ refusals of a decision and its plan before any effect.
 | `engine.input-invalid` | operation | none | input | - | fix-then-repeat | an invocation option holds a value the engine refuses | repeat the command with the value the message names |
 | `engine.credential-moved` | operation | none | concurrency | - | repeat | a cluster administrator credential changed while its update was decided or pending | repeat the credential update against the current context |
 
-#### Plans, preparations and authorizations
+### Plans, preparations and authorizations
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -147,6 +154,43 @@ refusals of a decision and its plan before any effect.
 | `prepare.unsupported` | operation | none | build | - | none | this executable registers no preparation for the requested owner | use a build that registers the preparation |
 | `authorize.relaxation-changed` | operation | none | input | - | fix-then-repeat | an operation continues only under the erase relaxations its plan froze, and the invocation names others | continue it naming the relaxations its plan froze, or replace it with a fresh destroy |
 | `diff.context-moved` | context | none | concurrency | - | repeat | the context changed while diff read it | repeat the diff |
+| `plan.controller-order` | context | none | input | - | change-input | a block the controller stage waits for runs only after that stage | place the object the message names where the controller stage need not wait for it |
+| `plan.reservation-key-too-long` | context | none | input | - | change-input | a host reservation key would exceed its bound once keyed by the SSH host it is placed on | reach the Machine by a shorter address, or give the reserving service a shorter name |
+| `plan.host-key-unreadable` | context | none | input | - | change-input | the SSH host key Secret of a Machine binds no readable host key, so the reservations placed there cannot name the host it pins | author access.ssh.knownHostsRef on the Machine as one known-hosts entry for its SSH host |
+| `plan.socket-conflict` | context | none | input | - | change-input | two services of the context would listen on one socket of a host | give one of them another bind address or port |
+| `plan.template-value` | context | none | input | - | change-input | a planned request holds a template delimiter or a key ansible-core reserves, which no adapter may take as data | remove it from the desired-state values, import them, then plan again |
+| `plan.object-unsupported` | context | none | build | - | change-input | this executable cannot realize a selected object, for the reason the message names, so nothing was registered | remove the object this executable cannot realize, or use a build that supports it |
+
+### Credentials and the controller host
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `engine.credential-unapplied` | operation | none | input | - | other-verb | an administrator credential update names a cluster no completed apply installed and proved | complete the cluster's apply before updating its credentials |
+| `engine.credential-cluster-unknown` | operation | none | input | - | change-input | an administrator credential update names a cluster the context does not select | bootwright cluster info lists the selected clusters |
+| `engine.credential-external-cluster` | operation | none | input | - | change-input | an administrator credential update names an external cluster, whose credentials its own administrator keeps | update the credentials through the external cluster's administrator |
+| `engine.credential-custody-unproved` | operation | none | records | - | fix-then-repeat | the custody of a cluster administrator credential is missing, unproved or invalid, so its update changed nothing | restore the original credential custody |
+| `engine.credential-update-pending` | operation | none | records | - | other-verb | an administrator credential update was left pending, so custody holds no credential proved current | finish the retained update with bootwright cluster update-admin-credentials |
+| `engine.credential-preparation-invalid` | operation | none | target | - | fix-then-repeat | the cluster's read-only preparation of an administrator credential update was not proved or returned no valid update, so nothing changed | check the cluster's original administrator account |
+| `engine.credential-update-unproved` | operation | possible | target | - | repeat | the adapter that updates a cluster administrator credential ended without proving the update | repeat bootwright cluster update-admin-credentials to finish the retained update |
+| `engine.controller-unprepared` | operation | none | environment | - | fix-then-repeat | this host has no completed controller setup, so nothing ran | run bootwright controller install |
+| `engine.controller-unbound` | operation | none | records | - | fix-then-repeat | the context is not bound to the controller host it runs on, so nothing ran | run bootwright controller install to record the controller binding and host evidence |
+| `engine.controller-other-host` | operation | none | target | - | fix-then-repeat | this host is not the controller host the context is bound to, or the recorded binding does not match it, so nothing ran | run the command on the host the context is bound to |
+| `engine.runtime-unprepared` | operation | none | environment | - | fix-then-repeat | the controller runtime for this build is not prepared on this host and could not be rebuilt, so nothing ran | run bootwright controller install |
+| `engine.client-not-installed` | block | none | target | - | fix-then-repeat | a controller client the work needs is not installed by the context's controller stage, so nothing ran | apply the context's controller stage, then repeat the command |
+| `engine.wiring-missing` | context | none | defect | - | repeat | this build was wired without a part the command needs, so nothing ran | repeat the command; a repeated failure is a Bootwright defect to report |
+
+### Warnings
+
+Warnings the engine reports, or relays from an adapter's completed result.
+They carry the row's code and end no verb.
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `plan.consumer-outlives-destroy` | operation | none | target | - | change-input | a warning that a consumer runs where a destroy of this context will not delete it, so that destroy will refuse before registration | run the consumer on Machines this context deletes, or keep this context while the consumer runs |
+| `storage.health` | block | none | target | - | none | a warning: a read-only Ceph observation reported a health check naming a pool or filesystem | resolve the health check through the Ceph cluster |
+| `storage.not-ready` | block | none | target | - | none | a warning: a read-only Ceph observation completed with checks that kept the block from ready | resolve the checks the message names through the Ceph cluster |
+| `substrate.shadowed-route` | block | none | target | - | none | a warning: a libvirt host apply admitted a main-table route broader than a managed network's | narrow the route the message names on the libvirt host |
+| `controller.outdated-client` | operation | none | build | - | other-verb | a warning: an apply's controller stage proved a client below this build's minimum, which a settling apply and a removal keep running | take the apply back with destroy and apply again to install this build's default client, or keep the build that applied it |
 
 ## Machine power stops
 
@@ -204,6 +248,7 @@ The physical erase capability's stops (`internal/managedos/physicalerase`).
 | `erase.boot-media-mismatch` | adapter-run | none | environment | - | fix-then-repeat | the installer image the apply pinned is missing from the media store or no longer matches, so no erase image was built | restore the image with bootwright media add, then repeat the destroy |
 | `erase.image-build-failed` | adapter-run | none | build | - | fix-then-repeat | the erase image could not be built from its pinned installer image within its time bound, so the machine was not booted | check the execution host's free space and tools, then repeat the destroy |
 | `erase.install-network` | adapter-run | none | input | - | authorize | the install network names a bond option or VLAN that the erase image's boot arguments cannot carry, so the machine was not booted | release the machine without erasing its disks |
+| `erase.relaxation-inapplicable` | operation | none | input | - | fix-then-repeat | an erase relaxation names a block that is no removal erase, a method other than metadataClear or retain, or one that changes nothing, so nothing was registered | repeat the destroy without that --authorize |
 
 ## Mirror fill stops
 
@@ -594,3 +639,15 @@ The context root lock's and lease's stops (`internal/workspace/contextfs/kernel`
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `context.busy` | context | possible | concurrency | - | wait | another Bootwright command holds the context's root lock or lease, so this command stopped where it needed it | repeat the command once the other command on the context has finished |
+
+## Log stops
+
+The `bootwright logs` reader's stops and warnings (`internal/reconciliation/logview`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `logs.not-found` | context | none | records | - | change-input | the logs a reading names, or every operation of the context, no longer exist in the records or retained logs | run bootwright status --context <context> to see the operation records that remain |
+| `logs.detached` | context | none | concurrency | - | other-verb | a warning that ends a followed log: its operation still reads running, but no apply or destroy holds its context | continue the operation with the apply or destroy the message names |
+| `logs.truncated` | context | none | bound | - | none | a warning: an attempt's retained output was cut short at its bound, so it holds less than the adapter printed | read the block's events with bootwright logs, which no bound cuts short |
+| `logs.wiring-missing` | context | none | defect | - | repeat | the log reader was wired without a part the reading needs, so nothing was read | repeat the command; a repeated failure is a Bootwright defect to report |
+| `logs.no-context-selected` | context | none | input | - | change-input | the reading names no context and none is selected | select one with bootwright context use --name <context>, or name it with --context <context> |

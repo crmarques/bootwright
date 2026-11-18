@@ -47,19 +47,19 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 		{name: "a valid plan", definitions: nestedDefinitions()},
 		{name: "a valid selection", definitions: nestedDefinitions(), stages: []string{"substrates"}},
 		{
-			name: "an unsupported shape", definitions: nestedDefinitions(), refusal: "lifecycle.unsupported",
+			name: "an unsupported shape", definitions: nestedDefinitions(), refusal: "plan.object-unsupported",
 			prepare: func(h *harness) {
 				h.capability.unsupported = []Refusal{{Kind: "OpenShiftCluster", Name: "sno", Reason: "unsupported"}}
 			},
 		},
 		{
-			name: "an unclaimed kind", definitions: nestedDefinitions(), refusal: "lifecycle.unsupported",
+			name: "an unclaimed kind", definitions: nestedDefinitions(), refusal: "plan.object-unsupported",
 			prepare: func(h *harness) { h.service.compiler = testCompiler{state: withEnabledPlaybook()} },
 		},
 		{name: "a zero-block plan", refusal: "engine.request-defect"},
 		{name: "a stage boundary", definitions: controlled, stages: []string{"infrastructure-services"}, refusal: "apply.stage-empty"},
 		{
-			name: "its own sockets in conflict", definitions: nestedDefinitions(), refusal: "api.invariant",
+			name: "its own sockets in conflict", definitions: nestedDefinitions(), refusal: "plan.socket-conflict",
 			prepare: func(h *harness) { h.capability.reservations = conflictingSockets() },
 		},
 		{
@@ -71,7 +71,7 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 			},
 		},
 		{
-			name: "its own sockets in conflict on one SSH host", definitions: nestedDefinitions(), refusal: "api.invariant",
+			name: "its own sockets in conflict on one SSH host", definitions: nestedDefinitions(), refusal: "plan.socket-conflict",
 			prepare: func(h *harness) { h.capability.sshClaims = sshSockets("services", "services") },
 		},
 		{
@@ -79,7 +79,7 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 			prepare: func(h *harness) { h.capability.sshClaims = sshSockets("services", "storage") },
 		},
 		{
-			name: "its own sockets in conflict through two Machines on one SSH host", definitions: nestedDefinitions(), refusal: "api.invariant",
+			name: "its own sockets in conflict through two Machines on one SSH host", definitions: nestedDefinitions(), refusal: "plan.socket-conflict",
 			prepare: func(h *harness) { h.capability.sshClaims = sshSockets("services", "alias") },
 		},
 		{
@@ -94,14 +94,14 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 			},
 		},
 		{
-			name: "a controller socket claimed again through loopback SSH", definitions: nestedDefinitions(), refusal: "api.invariant",
+			name: "a controller socket claimed again through loopback SSH", definitions: nestedDefinitions(), refusal: "plan.socket-conflict",
 			prepare: func(h *harness) {
 				h.capability.reservations = reservationOf("alpha")
 				h.capability.sshClaims = []SSHReservation{sshClaim("loopback", reservationOf("beta")[0])}
 			},
 		},
 		{
-			name: "a controller socket claimed again through the controller's own address", definitions: nestedDefinitions(), refusal: "api.invariant",
+			name: "a controller socket claimed again through the controller's own address", definitions: nestedDefinitions(), refusal: "plan.socket-conflict",
 			prepare: func(h *harness) {
 				h.service.compiler = testCompiler{state: withControllerAddress()}
 				h.capability.reservations = reservationOf("alpha")
@@ -148,7 +148,7 @@ func TestAPlanWhoseOwnSocketsConflictNamesBoth(t *testing.T) {
 	h.capability.reservations = conflictingSockets()
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "api.invariant" ||
+	if len(reported) != 1 || reported[0].Code != "plan.socket-conflict" ||
 		reported[0].Message != "this context's artifact-server alpha at 192.0.2.1:8443 and proxy beta at [::]:8443 cannot both listen on the controller" ||
 		reported[0].Remediation != "give one of them another bind address or port" {
 		t.Fatalf("refusal = %+v (%v)", reported, err)
@@ -241,7 +241,7 @@ func TestTwoMachinesReachingOneSSHHostConflictThere(t *testing.T) {
 	h.capability.sshClaims = sshSockets("services", "alias")
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "api.invariant" ||
+	if len(reported) != 1 || reported[0].Code != "plan.socket-conflict" ||
 		reported[0].Message != "this context's proxy gamma at 0.0.0.0:3128 and dns delta at 192.0.2.9:3128 cannot both listen on the SSH host at 192.0.2.10:22, which Machine/alias and Machine/services both reach" ||
 		reported[0].Remediation != "give one of them another bind address or port" {
 		t.Fatalf("refusal = %+v (%v)", reported, err)
@@ -280,7 +280,7 @@ func TestAMachineReachingTheControllerConflictsThere(t *testing.T) {
 			_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
 			reported := diagnostics.Of(err)
 			want := "this context's artifact-server alpha at 192.0.2.1:8443 and artifact-server beta at 192.0.2.1:8443 cannot both listen on " + tc.host
-			if len(reported) != 1 || reported[0].Code != "api.invariant" || reported[0].Message != want {
+			if len(reported) != 1 || reported[0].Code != "plan.socket-conflict" || reported[0].Message != want {
 				t.Fatalf("refusal = %+v (%v), want %q", reported, err, want)
 			}
 		})
@@ -297,7 +297,7 @@ func TestAPlanWhoseOwnSocketsConflictOnAnSSHHostNamesTheHost(t *testing.T) {
 	h.capability.sshClaims = append(sshSockets("storage", "storage"), sshSockets("services", "services")...)
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "api.invariant" ||
+	if len(reported) != 1 || reported[0].Code != "plan.socket-conflict" ||
 		reported[0].Message != "this context's proxy gamma at 0.0.0.0:3128 and dns delta at 192.0.2.9:3128 cannot both listen on the SSH host Machine/services" ||
 		reported[0].Remediation != "give one of them another bind address or port" {
 		t.Fatalf("refusal = %+v (%v)", reported, err)
@@ -344,7 +344,7 @@ func TestAnSSHAddressTooLongToQualifyItsClaimsRefuses(t *testing.T) {
 	h.capability.sshClaims = []SSHReservation{{Machine: "services", Address: long, Port: 22,
 		Reservation: infrastructureservices.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma", Keys: []string{"path:/srv/bootwright/proxies/gamma/" + strings.Repeat("d", 24)}}}}
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "api.value" || !strings.Contains(reported[0].Message, "of Machine/services is too long") {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "plan.reservation-key-too-long" || !strings.Contains(reported[0].Message, "of Machine/services is too long") {
 		t.Fatalf("refusal = %+v (%v)", reported, err)
 	}
 }
@@ -357,7 +357,7 @@ func TestAClaimTooLongToKeyByItsHostKeyRefuses(t *testing.T) {
 	h.capability.sshClaims = []SSHReservation{sshClaim("services", infrastructureservices.HostReservation{Context: testContextName, Kind: "proxy", Service: "gamma",
 		Keys: []string{"path:/srv/" + strings.Repeat("d", 256-infrastructureservices.SSHHostKeyQualifierBytes-len("path:/srv/")+1)}})}
 	_, err := h.service.Plan(context.Background(), PlanRequest{ContextName: "lab"})
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "api.value" ||
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "plan.reservation-key-too-long" ||
 		!strings.Contains(reported[0].Message, "of proxy gamma, placed on Machine/services, is too long to be keyed by that host's SSH host key") {
 		t.Fatalf("refusal = %+v (%v)", reported, err)
 	}
@@ -378,7 +378,7 @@ func TestAnSSHClaimWhosePinnedHostKeyCannotBeReadRefusesBeforeItIsPublished(t *t
 			h.capability.sshClaims = sshSockets("services", "storage")
 			h.binder.material["services-known-hosts"] = material
 			_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "trust.identity" ||
+			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "plan.host-key-unreadable" ||
 				!strings.HasPrefix(reported[0].Message, "the SSH host key Secret services-known-hosts of Machine/services binds no readable host key") ||
 				reported[0].Remediation != "author access.ssh.knownHostsRef on Machine/services as one known-hosts entry for 192.0.2.10:22" {
 				t.Fatalf("refusal = %+v (%v)", reported, err)
@@ -471,7 +471,7 @@ func TestAFreshPlanAfterADestroyRefusesAsItsApplyDoes(t *testing.T) {
 		t.Fatal("the preview wrote durable state")
 	}
 	_, applyErr := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(previewErr); code != "lifecycle.unsupported" {
+	if code := firstCode(previewErr); code != "plan.object-unsupported" {
 		t.Fatalf("preview after a destroy = %q (%v)", code, previewErr)
 	}
 	if !reflect.DeepEqual(diagnostics.Of(previewErr), diagnostics.Of(applyErr)) {

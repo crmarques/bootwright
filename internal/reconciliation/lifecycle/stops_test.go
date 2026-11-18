@@ -20,9 +20,8 @@ func TestTheEnginesStopsAreTheCatalogsEngineStops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, section, _ := strings.Cut(string(data), "\n### Engine stops\n")
+	_, section, _ := strings.Cut(string(data), "\n## Engine stops\n")
 	section, _, _ = strings.Cut(section, "\n## ")
-	section, _, _ = strings.Cut(section, "\n### ")
 	rows := map[string][]string{}
 	for _, line := range strings.Split(section, "\n") {
 		if !strings.HasPrefix(line, "| `") {

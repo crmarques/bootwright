@@ -26,7 +26,7 @@ func TestAccessToolWithoutAnOperationOrWithCancellationRefuses(t *testing.T) {
 	t.Parallel()
 	h, _ := stagedToolHarness(t)
 	path, err := h.service.AccessTool(t.Context(), "lab", installer)
-	if path != "" || firstCode(err) != "access.unavailable" {
+	if path != "" || firstCode(err) != "engine.client-not-installed" {
 		t.Fatalf("path %q, error %v", path, err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())

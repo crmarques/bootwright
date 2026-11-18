@@ -18,7 +18,7 @@ func (s Service) Follow(ctx context.Context, selection Selection, sink Sink) (*S
 	case selection.Raw:
 		return nil, usage("--follow streams events and output as they are written; --raw reads one whole output")
 	case sink == nil:
-		return nil, diagnostics.NewFailure("runtime.internal", "a followed log has nowhere to be written", "")
+		return nil, logsWiringMissing.Fail("a followed log has nowhere to be written", "")
 	case selection.Run != "" || selection.Install != "":
 		return s.followStream(ctx, selection, sink)
 	}
@@ -74,7 +74,7 @@ func (s Service) Follow(ctx context.Context, selection Selection, sink Sink) (*S
 			detached = 0
 		}
 		if detached >= detachedPolls {
-			summary.Warnings = append(summary.Warnings, diagnostics.Diagnostic{Severity: "warning", Code: "logs.detached",
+			summary.Warnings = append(summary.Warnings, diagnostics.Diagnostic{Severity: "warning", Code: logsDetached.Code,
 				Message:     "operation " + session.operation + " is running but no apply or destroy holds context " + name,
 				Remediation: "continue it with bootwright " + session.verb + " --context " + name})
 			return summary, follower.drain()

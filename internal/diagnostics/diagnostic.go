@@ -45,6 +45,10 @@ func IsUsage(err error) bool {
 	return errors.As(err, &failure) && failure.Usage
 }
 
+func UsageFailure(message string) error {
+	return &Failure{Usage: true, Diagnostics: []Diagnostic{{Severity: "error", Code: usageCode, Message: message}}}
+}
+
 func NewFailure(code, message, path string) error {
 	return NewFailureWithRemediation(code, message, path, "")
 }

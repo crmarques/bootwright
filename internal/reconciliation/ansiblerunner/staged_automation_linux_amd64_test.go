@@ -179,7 +179,7 @@ func TestAStagedTreeThisExecutableCannotRunIsRefused(t *testing.T) {
 			adapter := &completingAdapter{}
 			runner := stagedRunner(t, stager, adapter)
 			_, err := runner.Run(context.Background(), stagedRequest())
-			if code, _ := codeOf(err); code != "controller.identity" {
+			if code, _ := codeOf(err); code != "runner.automation-mismatch" {
 				t.Fatalf("run = %q (%v)", code, err)
 			}
 			entries, _ := os.ReadDir(runner.jobParent)

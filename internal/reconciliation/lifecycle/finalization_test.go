@@ -357,7 +357,7 @@ func TestARemovalWhoseBindingReleaseFailsReportsIncompleteFinalization(t *testin
 			}
 			reported := diagnostics.Of(err)
 			if faulted {
-				if len(reported) < 2 || reported[0].Code != "runtime.log" {
+				if len(reported) < 2 || reported[0].Code != "engine.log-unmaintained" {
 					t.Fatalf("the removal lost its log fault: %+v (%v)", reported, err)
 				}
 				reported = reported[len(reported)-1:]

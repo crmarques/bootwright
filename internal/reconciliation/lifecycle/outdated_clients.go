@@ -75,12 +75,10 @@ func outdatedClient(contextName, owner string, client ProvedClient) (*OutdatedCl
 	if order, comparable := tooltable.CompareReleases(client.Version, pin.Minimum); comparable && order >= 0 {
 		return nil, diagnostics.Diagnostic{}
 	}
-	return &OutdatedClient{Kind: client.Kind, Release: client.Version, Minimum: pin.Minimum, Apply: owner}, diagnostics.Diagnostic{
-		Severity: "warning", Code: "controller.outdated-client",
-		Message: "apply " + owner + " proved " + client.Kind + " " + client.Version + " on this controller, below this build's minimum " + pin.Minimum + "; a settling apply and a removal keep running it",
-		Remediation: "run " + contextCommand(contextName, string(reconciliation.Destroy)) + " and then " + contextCommand(contextName, string(reconciliation.Apply)) +
-			" to install this build's default " + client.Kind + ", or keep the build that applied it",
-	}
+	return &OutdatedClient{Kind: client.Kind, Release: client.Version, Minimum: pin.Minimum, Apply: owner}, warned(controllerOutdatedClient,
+		"apply "+owner+" proved "+client.Kind+" "+client.Version+" on this controller, below this build's minimum "+pin.Minimum+"; a settling apply and a removal keep running it",
+		"run "+contextCommand(contextName, string(reconciliation.Destroy))+" and then "+contextCommand(contextName, string(reconciliation.Apply))+
+			" to install this build's default "+client.Kind+", or keep the build that applied it")
 }
 
 func (s Service) statusOutdatedClients(ctx context.Context, store recordReader, contextName string, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, result *StatusResult) error {

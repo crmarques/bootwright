@@ -31,7 +31,7 @@ func (Capability) RelaxesMachine(block reconciliation.Block) bool {
 func (c Capability) Relax(_ context.Context, block reconciliation.Block, method string) (lifecycle.Removal, error) {
 	token := "--authorize " + lifecycle.EraseAuthorization + block.Object + ":" + method
 	if !c.RelaxesMachine(block) {
-		return lifecycle.Removal{}, refusal("lifecycle.authorization", token+" names a block that is not the removal erase of Machine/"+block.Object, "repeat the command without "+token)
+		return lifecycle.Removal{}, stopRelaxationInapplicable.Fail(token+" names a block that is not the removal erase of Machine/"+block.Object, "repeat the command without "+token)
 	}
 	request, err := DecodeEraseRequest(block.Request)
 	if err != nil {
@@ -42,12 +42,12 @@ func (c Capability) Relax(_ context.Context, block reconciliation.Block, method 
 	case lifecycle.EraseRetain:
 	case lifecycle.EraseMetadataClear:
 		if !slices.ContainsFunc(request.Targets, func(target EraseTarget) bool { return target.Method != EraseMetadataClear }) {
-			return lifecycle.Removal{}, refusal("lifecycle.authorization",
+			return lifecycle.Removal{}, stopRelaxationInapplicable.Fail(
 				token+" names Machine/"+block.Object+", whose onRemoval already clears only metadata on every disk it erases, so the relaxation changes nothing",
 				without+", or name "+lifecycle.EraseAuthorization+block.Object+":"+lifecycle.EraseRetain+" to waive the erase")
 		}
 	default:
-		return lifecycle.Removal{}, refusal("lifecycle.authorization", token+" names "+method+", and an erase relaxation is metadataClear or retain", without)
+		return lifecycle.Removal{}, stopRelaxationInapplicable.Fail(token+" names "+method+", and an erase relaxation is metadataClear or retain", without)
 	}
 	return eraseRemoval(request, method), nil
 }
