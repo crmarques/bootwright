@@ -32,10 +32,10 @@ func (r Runner) ensureScratchParent() error {
 	}
 	var filesystem syscall.Statfs_t
 	if err := statfs(r.scratchParent, &filesystem); err != nil {
-		return failure("lifecycle.state", "the filesystem of the run scratch directory "+r.scratchParent+" cannot be read", "")
+		return runnerScratchUnusable.Fail("the filesystem of the run scratch directory "+r.scratchParent+" cannot be read", "")
 	}
 	if filesystem.Flags&statNoexec != 0 {
-		return failure("lifecycle.state", "the run scratch directory "+r.scratchParent+" lies on a noexec filesystem",
+		return runnerScratchUnusable.Fail("the run scratch directory "+r.scratchParent+" lies on a noexec filesystem",
 			"remount the filesystem that holds "+r.scratchParent+" with exec, then repeat the command")
 	}
 	return nil
@@ -54,6 +54,6 @@ func (r Runner) ownedDirectory(path string, mode fs.FileMode, owner uint32, admi
 }
 
 func (r Runner) unsafeParent(path string, owner uint32, mode string) error {
-	return failure("lifecycle.state", "the run scratch parent "+path+" is not a directory this user owns and alone may write",
+	return runnerScratchUnusable.Fail("the run scratch parent "+path+" is not a directory this user owns and alone may write",
 		"remove "+path+" or make it a directory owned by user "+strconv.FormatUint(uint64(owner), 10)+" with mode "+mode+", then repeat the command")
 }

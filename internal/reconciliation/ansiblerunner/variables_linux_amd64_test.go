@@ -164,7 +164,7 @@ func TestARequestThatIsNotOneObjectIsNotPrepared(t *testing.T) {
 		request.Canonical = []byte(canonical)
 		if values, err := variables(request, nil); err == nil {
 			t.Fatalf("%s was prepared as %v", canonical, values)
-		} else if code, _ := codeOf(err); code != "lifecycle.state" {
+		} else if code, _ := codeOf(err); !strings.HasPrefix(code, "runner.") {
 			t.Fatalf("%s was refused as %v", canonical, err)
 		}
 	}

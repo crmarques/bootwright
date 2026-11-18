@@ -109,7 +109,7 @@ func TestAnUnsafeOutputFailsTheRun(t *testing.T) {
 			request := outputRequest(t)
 			request.OutputRemediation = "read what this request names"
 			result, err := runner.Run(context.Background(), request)
-			if code, remediation := codeOf(err); code != "lifecycle.state" || remediation != request.OutputRemediation || len(result.Produced) != 0 {
+			if code, remediation := codeOf(err); !strings.HasPrefix(code, "runner.") || remediation != request.OutputRemediation || len(result.Produced) != 0 {
 				t.Fatalf("an unsafe output returned %v with %d outputs", err, len(result.Produced))
 			}
 		})
@@ -158,7 +158,7 @@ func TestOutputsAreRefusedOffTheController(t *testing.T) {
 			request := outputRequest(t)
 			change(&request)
 			_, err := runner.Run(context.Background(), request)
-			if code, _ := codeOf(err); code != "lifecycle.state" || started || len(runNames(t, runner.jobParent)) != 0 {
+			if code, _ := codeOf(err); !strings.HasPrefix(code, "runner.") || started || len(runNames(t, runner.jobParent)) != 0 {
 				t.Fatalf("%s: %v, started=%t", name, err, started)
 			}
 		})

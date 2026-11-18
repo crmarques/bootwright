@@ -38,7 +38,7 @@ func TestTheComposedInvocationScopeAdmitsSiblingRunsOfItsRunner(t *testing.T) {
 	first := runHeldBy(t, ctx, runner)
 	second := runHeldBy(t, ctx, runner)
 	_, err := runner.Run(context.Background(), composedRequest(t, nil))
-	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "lifecycle.adapter-running" {
+	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "runner.adapter-running" {
 		t.Fatalf("a run outside the invocation passed its live jobs: %v", err)
 	}
 	for _, stop := range []func() error{first, second} {

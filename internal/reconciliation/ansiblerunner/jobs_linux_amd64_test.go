@@ -205,7 +205,7 @@ func TestAnAdapterStillRunningRefusesTheNextRun(t *testing.T) {
 	_, err = runner.Run(ctx, request)
 	lock := filepath.Join(job, lockName)
 	want := []diagnostics.Diagnostic{{
-		Severity: "error", Code: "lifecycle.adapter-running",
+		Severity: "error", Code: "runner.adapter-running", Certainty: diagnostics.CertaintyNone,
 		Message:     "context alpha's Serve ArtifactServer/artifact-server-lab ended, but processes it started still hold its adapter job lock",
 		Remediation: "end the processes that hold " + lock + ", then repeat the command",
 	}}
@@ -286,7 +286,7 @@ func TestARepeatedMaterialRefusesBeforeAnyJobExists(t *testing.T) {
 				secrets.CertificatePart: []byte("CERTIFICATE"), secrets.PrivateKeyPart: []byte("PRIVATE"),
 			})}
 			_, err := runner.Run(context.Background(), request)
-			if code, _ := codeOf(err); code != "lifecycle.state" || started {
+			if code, _ := codeOf(err); !strings.HasPrefix(code, "runner.") || started {
 				t.Fatalf("%v, started=%t", err, started)
 			}
 			if after := trees(t, runner.jobParent, runner.scratchParent); !slices.Equal(after, before) {
@@ -338,7 +338,7 @@ func TestAnUnsafeMaterialNameOrValueRefusesBeforeAnyJobExists(t *testing.T) {
 				secrets.CertificatePart: []byte("CERTIFICATE"),
 			})}
 			_, err := runner.Run(context.Background(), request)
-			if code, _ := codeOf(err); code != "lifecycle.state" || started {
+			if code, _ := codeOf(err); !strings.HasPrefix(code, "runner.") || started {
 				t.Fatalf("%v, started=%t", err, started)
 			}
 			if after := trees(t, runner.jobParent, runner.scratchParent); !slices.Equal(after, before) {
@@ -420,7 +420,7 @@ func TestAnSSHPlacementRefusesKnownHostsNotOneEntryForItsHostBeforeItConnects(t 
 			request := sshAdapterRequest(t, pinnedKnownHosts)
 			change(&request)
 			_, err := runner.Run(context.Background(), request)
-			if code, _ := codeOf(err); code != "lifecycle.state" || started {
+			if code, _ := codeOf(err); !strings.HasPrefix(code, "runner.") || started {
 				t.Fatalf("%v, started=%t", err, started)
 			}
 		})
@@ -559,7 +559,7 @@ func TestAJobThatCannotBeRemovedKeepsFailingClosed(t *testing.T) {
 	var output bytes.Buffer
 	for range 2 {
 		_, err := runner.Run(context.Background(), adapterRequest(t, &output))
-		if code, _ := codeOf(err); code != "lifecycle.state" {
+		if code, _ := codeOf(err); !strings.HasPrefix(code, "runner.") {
 			t.Fatalf("a stale job deeper than a sweep descends ended with %v", err)
 		}
 	}
@@ -641,7 +641,7 @@ func TestTheSweepRefusesBeyondItsBounds(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err := runner.Run(context.Background(), adapterRequest(t, &output))
-		if code, _ := codeOf(err); code != "lifecycle.state" {
+		if code, _ := codeOf(err); !strings.HasPrefix(code, "runner.") {
 			t.Fatalf("a parent holding more run directories than the bound ended with %v", err)
 		}
 	})
@@ -657,7 +657,7 @@ func TestTheSweepRefusesBeyondItsBounds(t *testing.T) {
 		job := plantJob(t, runner.jobParent, "bootwright-run-4949")
 		nest(t, filepath.Join(job, "tree"), maxRunTreeDepth)
 		_, err := runner.Run(context.Background(), adapterRequest(t, &output))
-		if code, _ := codeOf(err); code != "lifecycle.state" {
+		if code, _ := codeOf(err); !strings.HasPrefix(code, "runner.") {
 			t.Fatalf("a stale job deeper than the bound ended with %v", err)
 		}
 		for _, name := range []string{recordName, lockName} {
@@ -684,7 +684,7 @@ func TestTheSweepRefusesBeyondItsBounds(t *testing.T) {
 		files["tmp/b"] = ""
 		job := plant(t, filepath.Join(runner.jobParent, "bootwright-run-4747"), files)
 		_, err := runner.Run(context.Background(), adapterRequest(t, &output))
-		if code, _ := codeOf(err); code != "lifecycle.state" {
+		if code, _ := codeOf(err); !strings.HasPrefix(code, "runner.") {
 			t.Fatalf("a stale job holding more entries than the bound ended with %v", err)
 		}
 		for _, name := range []string{recordName, lockName} {
@@ -765,7 +765,7 @@ func TestTheSweepNeverEmptiesAMount(t *testing.T) {
 		// The job keeps its record, so the next run fails closed too.
 		for range 2 {
 			_, err := runner.Run(context.Background(), adapterRequest(t, &output))
-			if code, _ := codeOf(err); code != "lifecycle.state" {
+			if code, _ := codeOf(err); !strings.HasPrefix(code, "runner.") {
 				t.Fatalf("a stale job holding a mount ended with %v", err)
 			}
 		}

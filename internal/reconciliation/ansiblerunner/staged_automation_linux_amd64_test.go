@@ -196,7 +196,7 @@ func TestARunnerWithoutAStagerRefuses(t *testing.T) {
 	adapter := &completingAdapter{}
 	runner := stagedRunner(t, nil, adapter)
 	_, err := runner.Run(context.Background(), stagedRequest())
-	if code, _ := codeOf(err); code != "lifecycle.state" || len(adapter.commands) != 0 {
+	if code, _ := codeOf(err); !strings.HasPrefix(code, "runner.") || len(adapter.commands) != 0 {
 		t.Fatalf("run = %q (%v), started %d adapters", code, err, len(adapter.commands))
 	}
 }

@@ -17604,3 +17604,21 @@ running read as before; the development policy keeps no compatibility. The
 rest of W2.1 is in the plan's remaining sub-slices: the runner's other sites,
 the engine's execution stops and refusals, `bootwright explain`, and the
 code, cause and recovery in the structured output and the receipt.
+
+## X603 — The runner's refusals are catalogued stops
+
+### B1593
+
+Under [D276](backlog.md#d276) (audit 006 W2.1, second sub-slice), split from
+[B1563](m1.md#b1563). The lifecycle runner's 42 other lifecycle diagnostic
+sites, the refusals that let no adapter start (an invalid frozen request, an
+unbound host key, a missing execution boundary or platform, its private
+storage, an unusable scratch directory, a stale run, a held job lock, Secret
+material it could not prepare, an ended invocation) and two endings of a run
+(an invalid output, an unrecorded preparation), now raise twelve declared
+stops of the [catalog](../cli/stops.md#adapter-run-stops), so every message
+keeps its words and gains a code, a certainty and a remedy. The code
+`lifecycle.adapter-running` becomes `runner.adapter-running`. The runner's
+ledger falls from 48 to 6, the six being Secret, trust and controller codes
+other families own. Guarded by `TestTheRunnersStopsAreTheCatalogsAdapterRunStops`
+and the runner's refusal tests.

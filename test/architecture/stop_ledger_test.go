@@ -31,7 +31,7 @@ func stopLedger() map[string]int {
 		"internal/managedos/media":                       1,
 		"internal/managedos/physicalerase":               29,
 		"internal/reconciliation":                        6,
-		"internal/reconciliation/ansiblerunner":          48,
+		"internal/reconciliation/ansiblerunner":          6,
 		"internal/reconciliation/lifecycle":              218,
 		"internal/reconciliation/logview":                7,
 		"internal/reconciliation/operationstore":         4,

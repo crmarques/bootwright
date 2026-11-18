@@ -70,11 +70,11 @@ func recordFor(request lifecycle.RunRequest) jobRecord {
 // back.
 func checkIdentity(request lifecycle.RunRequest) error {
 	if !api.ValidLexical(api.LexicalName, request.Context) {
-		return failure("lifecycle.state", "the adapter run names no context", "")
+		return runnerRequestInvalid.Fail("the adapter run names no context", "")
 	}
 	record := recordFor(request)
 	if encoded, err := json.Marshal(record); err != nil || len(encoded) > maxRecordBytes || !recordable(record) {
-		return failure("lifecycle.state", "the adapter run's identity cannot be recorded in its job", "")
+		return runnerStorage.Fail("the adapter run's identity cannot be recorded in its job", "")
 	}
 	return nil
 }
@@ -103,21 +103,21 @@ func recordable(record jobRecord) bool {
 func claim(job string, request lifecycle.RunRequest) (*os.File, *os.File, error) {
 	lock, err := os.OpenFile(filepath.Join(job, lockName), os.O_RDWR|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0600)
 	if err != nil {
-		return nil, nil, failure("lifecycle.state", "the adapter job lock could not be created", "")
+		return nil, nil, runnerStorage.Fail("the adapter job lock could not be created", "")
 	}
 	if syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
 		lock.Close()
-		return nil, nil, failure("lifecycle.state", "the adapter job lock could not be taken", "")
+		return nil, nil, runnerStorage.Fail("the adapter job lock could not be taken", "")
 	}
 	holder, err := os.OpenFile(filepath.Join(job, holderName), os.O_RDWR|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0600)
 	if err != nil {
 		unlockAndClose(lock)
-		return nil, nil, failure("lifecycle.state", "the adapter job holder could not be created", "")
+		return nil, nil, runnerStorage.Fail("the adapter job holder could not be created", "")
 	}
 	if syscall.Flock(int(holder.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
 		holder.Close()
 		unlockAndClose(lock)
-		return nil, nil, failure("lifecycle.state", "the adapter job holder could not be taken", "")
+		return nil, nil, runnerStorage.Fail("the adapter job holder could not be taken", "")
 	}
 	if err := publishRecord(job, recordFor(request)); err != nil {
 		unlockAndClose(holder)
@@ -136,7 +136,7 @@ func publishRecord(job string, record jobRecord) error {
 		return err
 	}
 	if err := os.Rename(filepath.Join(job, partialRecordName), filepath.Join(job, recordName)); err != nil {
-		return failure("lifecycle.state", "the frozen adapter invocation could not be materialized", "")
+		return runnerStorage.Fail("the frozen adapter invocation could not be materialized", "")
 	}
 	return nil
 }
@@ -183,7 +183,7 @@ func (r Runner) sweep(contextName string) error {
 func (r Runner) sweepLocked(contextName string) error {
 	dirs, err := r.openRunDirectories()
 	if err != nil {
-		return failure("lifecycle.state", "private adapter invocation storage is unavailable", "")
+		return runnerStorage.Fail("private adapter invocation storage is unavailable", "")
 	}
 	defer dirs.close()
 	jobs, err := dirs.matching(dirs.jobs, jobSuffix)
@@ -223,18 +223,18 @@ func (r Runner) heldRefusal(contextName, lock string, held holding) error {
 	record := held.record
 	switch {
 	case !held.attributed:
-		return failure("lifecycle.adapter-running", "a lifecycle adapter of no known context still runs and holds its job lock",
+		return runnerAdapterRunning.Fail("a lifecycle adapter of no known context still runs and holds its job lock",
 			"wait for it to end, or end the processes that hold "+lock+", then repeat the command")
 	case record.Context != contextName:
 		return nil
 	case r.owns(lock, held):
 		return nil
 	case held.alive:
-		return failure("lifecycle.adapter-running", "context "+record.Context+" is still running "+record.doing()+
+		return runnerAdapterRunning.Fail("context "+record.Context+" is still running "+record.doing()+
 			" (adapter operation "+record.Operation+" on Machine "+record.Machine+")",
 			"wait for it to end, then repeat the command")
 	default:
-		return failure("lifecycle.adapter-running", "context "+record.Context+"'s "+record.doing()+
+		return runnerAdapterRunning.Fail("context "+record.Context+"'s "+record.doing()+
 			" ended, but processes it started still hold its adapter job lock",
 			"end the processes that hold "+lock+", then repeat the command")
 	}
@@ -250,7 +250,7 @@ func (record jobRecord) doing() string {
 }
 
 func (r Runner) unswept() error {
-	return failure("lifecycle.state", "a stale adapter run directory could not be removed safely",
+	return runnerStaleRun.Fail("a stale adapter run directory could not be removed safely",
 		"remove the bootwright-run directories in "+r.jobParent+" and "+r.scratchParent+" that no process holds, then repeat the command")
 }
 

@@ -128,7 +128,7 @@ func TestASameContextRunRefusesNamingTheHeldJob(t *testing.T) {
 	runner.command = func(string, ...string) *exec.Cmd { started = true; return completing() }
 	_, err := runner.Run(context.Background(), adapterRequest(t, &bytes.Buffer{}))
 	want := []diagnostics.Diagnostic{{
-		Severity: "error", Code: "lifecycle.adapter-running",
+		Severity: "error", Code: "runner.adapter-running", Certainty: diagnostics.CertaintyNone,
 		Message:     "context alpha is still running Serve ArtifactServer/artifact-server-lab (adapter operation apply on Machine controller)",
 		Remediation: "wait for it to end, then repeat the command",
 	}}
@@ -482,7 +482,7 @@ func TestAHeldJobWithoutAnAttributableRecordRefusesEveryContext(t *testing.T) {
 			lock := filepath.Join(job, lockName)
 			release := holdLock(t, lock)
 			want := []diagnostics.Diagnostic{{
-				Severity: "error", Code: "lifecycle.adapter-running",
+				Severity: "error", Code: "runner.adapter-running", Certainty: diagnostics.CertaintyNone,
 				Message:     "a lifecycle adapter of no known context still runs and holds its job lock",
 				Remediation: "wait for it to end, or end the processes that hold " + lock + ", then repeat the command",
 			}}
@@ -519,7 +519,7 @@ func TestARunNamingNoContextRefusesBeforeAnyJobExists(t *testing.T) {
 			request := adapterRequest(t, &bytes.Buffer{})
 			request.Context = contextName
 			_, err := runner.Run(context.Background(), request)
-			want := []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "the adapter run names no context"}}
+			want := diagnostics.Of(runnerRequestInvalid.Fail("the adapter run names no context", ""))
 			if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) || started {
 				t.Fatalf("a run naming %q started %t and reported %+v", contextName, started, reported)
 			}
@@ -548,7 +548,7 @@ func TestARunWhoseIdentityCannotBeRecordedRefusesBeforeAnyJobExists(t *testing.T
 			request := adapterRequest(t, &bytes.Buffer{})
 			change(&request)
 			_, err := runner.Run(context.Background(), request)
-			want := []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "the adapter run's identity cannot be recorded in its job"}}
+			want := diagnostics.Of(runnerStorage.Fail("the adapter run's identity cannot be recorded in its job", ""))
 			if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) || started {
 				t.Fatalf("the run started %t and reported %+v", started, reported)
 			}

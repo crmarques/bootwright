@@ -55,7 +55,7 @@ func (r Runner) claimRun(request lifecycle.RunRequest) (string, *os.File, *os.Fi
 		r.invocation.mu.Lock()
 		defer r.invocation.mu.Unlock()
 		if !r.invocation.active {
-			return "", nil, nil, failure("lifecycle.state", "the lifecycle adapter invocation has ended", "")
+			return "", nil, nil, runnerInvocationEnded.Fail("the lifecycle adapter invocation has ended", "")
 		}
 	}
 	if err := r.ensureScratchParent(); err != nil {
@@ -66,11 +66,11 @@ func (r Runner) claimRun(request lifecycle.RunRequest) (string, *os.File, *os.Fi
 	}
 	job, err := os.MkdirTemp(r.jobParent, jobPrefix)
 	if err != nil {
-		return "", nil, nil, failure("lifecycle.state", "private adapter invocation storage is unavailable", "")
+		return "", nil, nil, runnerStorage.Fail("private adapter invocation storage is unavailable", "")
 	}
 	if err := os.Chmod(job, 0700); err != nil {
 		_ = os.RemoveAll(job)
-		return "", nil, nil, failure("lifecycle.state", "private adapter invocation storage is unsafe", "")
+		return "", nil, nil, runnerStorage.Fail("private adapter invocation storage is unsafe", "")
 	}
 	lock, holder, err := claim(job, request)
 	if err != nil {
@@ -84,7 +84,7 @@ func (r Runner) claimRun(request lifecycle.RunRequest) (string, *os.File, *os.Fi
 			unlockAndClose(lock)
 			unlockAndClose(holder)
 			_ = os.RemoveAll(job)
-			return "", nil, nil, failure("lifecycle.state", "the adapter job ownership could not be verified", "")
+			return "", nil, nil, runnerStorage.Fail("the adapter job ownership could not be verified", "")
 		}
 		r.invocation.jobs[job] = jobOwnership{lockIdentity, holderIdentity}
 	}

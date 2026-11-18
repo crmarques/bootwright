@@ -27,12 +27,12 @@ func checkOutputs(request lifecycle.RunRequest) error {
 		return nil
 	}
 	if !request.Placement.Local() {
-		return failure("lifecycle.state", "an adapter output is read only from a run on the controller", "")
+		return runnerRequestInvalid.Fail("an adapter output is read only from a run on the controller", "")
 	}
 	names := make(map[string]bool, len(request.Outputs))
 	for _, output := range request.Outputs {
 		if !reconciliation.ValidSegment(output.Name) || output.Variable == "" || names[output.Name] {
-			return failure("lifecycle.state", "an adapter output is named twice, or by an invalid name or variable", "")
+			return runnerRequestInvalid.Fail("an adapter output is named twice, or by an invalid name or variable", "")
 		}
 		names[output.Name] = true
 	}
@@ -49,7 +49,7 @@ func prepareOutputs(job string, request lifecycle.RunRequest) (map[string]any, e
 	}
 	directory := filepath.Join(job, outputsDirectory)
 	if err := os.Mkdir(directory, 0700); err != nil {
-		return nil, failure("lifecycle.state", "private adapter output storage is unavailable", "")
+		return nil, runnerStorage.Fail("private adapter output storage is unavailable", "")
 	}
 	paths := make(map[string]any, len(request.Outputs))
 	for _, output := range request.Outputs {
@@ -123,5 +123,5 @@ func (d runDirectories) output(directory *os.Root, name, remediation string) ([]
 }
 
 func unsafeOutput(remediation string) error {
-	return failure("lifecycle.state", "an adapter output is not a private regular file of the expected size", remediation)
+	return runnerOutputInvalid.Fail("an adapter output is not a private regular file of the expected size", remediation)
 }

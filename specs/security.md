@@ -358,7 +358,7 @@ implementation, operation, Machine and request digest. A run that names no
 valid context, or whose record a sweep could not read back, refuses before any
 job exists. The adapter inherits the lock, and so do the `ansible-playbook`
 child its supervisor forks and every Ansible worker, so the lock is free only
-once none of them runs; a worker still being stopped keeps holding it. A run refuses with `lifecycle.adapter-running`,
+once none of them runs; a worker still being stopped keeps holding it. A run refuses with `runner.adapter-running`,
 and starts nothing, only while a job of its own context holds its lock, except
 for its own live sibling adapters. That exemption requires the private
 [invocation scope](state-reconciliation.md#stages-and-the-pause-boundary)

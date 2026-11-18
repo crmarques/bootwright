@@ -39,10 +39,10 @@ func (r Runner) checkReadOnly(request lifecycle.RunRequest) error {
 	lend := request.Operation == lifecycle.LendOperation
 	revoke := (request.Operation == lifecycle.RevokeOperation || request.Operation == "prepare_credentials") && r.readOnly[request.Implementation+"/"+request.Operation]
 	if request.ReadOnly && request.Operation != lifecycle.ObserveOperation && !lend && !revoke {
-		return failure("lifecycle.state", "a read-only invocation may run only its capability's observation", "")
+		return runnerRequestInvalid.Fail("a read-only invocation may run only its capability's observation", "")
 	}
 	if request.Unrecorded && len(request.Outputs) != 0 && !lend {
-		return failure("lifecycle.state", lifecycle.UnrecordedMaterialRefusal, "")
+		return runnerRequestInvalid.Fail(lifecycle.UnrecordedMaterialRefusal, "")
 	}
 	return nil
 }
@@ -102,7 +102,7 @@ func phaseInventory(request lifecycle.RunRequest, paths map[string]string) (map[
 		return value, nil
 	}
 	if !request.Placement.Local() || request.NodeCount < 0 || request.NodeCount > 512 || request.Parallelism < 1 || request.Parallelism > 16 {
-		return nil, failure("lifecycle.state", "per-node inventory requires bounded controller-local phases", "plan the operation again")
+		return nil, runnerRequestInvalid.Fail("per-node inventory requires bounded controller-local phases", "plan the operation again")
 	}
 	hosts := map[string]any{}
 	for index := 0; index < request.NodeCount; index++ {
@@ -124,7 +124,7 @@ func variables(request lifecycle.RunRequest, paths map[string]string) (map[strin
 	decoder.UseNumber()
 	decoded := map[string]any{}
 	if decoder.Decode(&decoded) != nil || decoded == nil || decoder.Decode(new(any)) != io.EOF {
-		return nil, failure("lifecycle.state", "the frozen adapter request could not be prepared", "")
+		return nil, runnerRequestInvalid.Fail("the frozen adapter request could not be prepared", "")
 	}
 	material := map[string]any{}
 	for _, file := range request.Materials {
@@ -149,7 +149,7 @@ func checkHostKey(request lifecycle.RunRequest) (string, error) {
 	}
 	pinned := slices.IndexFunc(request.Materials, func(file lifecycle.MaterialFile) bool { return file.Name == "known_hosts" })
 	if placement.KnownHostsRef == "" || pinned < 0 || request.Materials[pinned].Secret != placement.KnownHostsRef || request.Materials[pinned].Part != secrets.ValuePart {
-		return "", failure("lifecycle.state", "an SSH placement connects only against the host key its own access.ssh.knownHostsRef binds",
+		return "", runnerHostKeyUnbound.Fail("an SSH placement connects only against the host key its own access.ssh.knownHostsRef binds",
 			"author access.ssh.knownHostsRef on Machine/"+placement.Machine)
 	}
 	bound, ok := request.Material[placement.KnownHostsRef]

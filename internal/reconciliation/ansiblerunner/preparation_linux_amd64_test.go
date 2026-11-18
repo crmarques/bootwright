@@ -59,7 +59,7 @@ func TestLifecyclePreparationIsRecordedBeforeItIsAcknowledged(t *testing.T) {
 		return errors.New("the attempt record could not be written")
 	})
 	reported := diagnostics.Of(err)
-	if output != "" || len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Message != "the attempt's preparation could not be recorded" {
+	if output != "" || len(reported) != 1 || reported[0].Code != "runner.preparation-unrecorded" || reported[0].Message != "the attempt's preparation could not be recorded" {
 		t.Fatalf("an unrecorded preparation let the adapter print %q and reported %+v (%v)", output, reported, err)
 	}
 	if outcome := lifecycle.AttemptOutcome(err); outcome == "changed" {

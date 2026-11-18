@@ -33,7 +33,7 @@ func TestAnInvocationsCopiedRunnersProceedBesideTheirOwnJobs(t *testing.T) {
 	defer closeOther()
 	for _, foreign := range []context.Context{context.Background(), other} {
 		_, err := runner.Run(foreign, adapterRequest(t, &bytes.Buffer{}))
-		if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "lifecycle.adapter-running" {
+		if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "runner.adapter-running" {
 			t.Fatalf("foreign invocation passed live ownership: %v", err)
 		}
 	}
@@ -70,7 +70,7 @@ func TestAnEndedOwnedJobStillRefusesWhileItsDescendantHoldsIt(t *testing.T) {
 	defer descendant.Close()
 	runner.release(job, "", lock, holder)
 	_, err = runner.Run(ctx, request)
-	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "lifecycle.adapter-running" || !strings.Contains(found[0].Message, "ended, but") {
+	if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "runner.adapter-running" || !strings.Contains(found[0].Message, "ended, but") {
 		t.Fatalf("released ownership exempted a descendant: %v", err)
 	}
 	descendant.Close()
@@ -106,7 +106,7 @@ func TestOwnedJobsRequireTheirOriginalFilesAndReadableAttribution(t *testing.T) 
 				}
 				defer holdLock(t, path)()
 			}
-			if found := diagnostics.Of(runner.sweep(request.Context)); len(found) != 1 || found[0].Code != "lifecycle.adapter-running" {
+			if found := diagnostics.Of(runner.sweep(request.Context)); len(found) != 1 || found[0].Code != "runner.adapter-running" {
 				t.Fatalf("changed %s retained trusted ownership: %+v", changed, found)
 			}
 		})

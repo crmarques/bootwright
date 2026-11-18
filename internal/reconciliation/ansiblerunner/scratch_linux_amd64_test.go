@@ -128,7 +128,7 @@ func TestAnUnsafeOrNoexecScratchParentRefusesBeforeTheRun(t *testing.T) {
 			want := prepare(t, &runner)
 			_, err := runner.Run(context.Background(), adapterRequest(t, &output))
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message+" "+reported[0].Remediation, want) {
+			if len(reported) != 1 || reported[0].Code != "runner.scratch-unusable" || !strings.Contains(reported[0].Message+" "+reported[0].Remediation, want) {
 				t.Fatalf("the run reported %+v (%v), want lifecycle.state naming %q", reported, err, want)
 			}
 			if ran || len(runNames(t, runner.jobParent)) != 0 {

@@ -77,10 +77,10 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (result l
 	}
 	playbook, ok := r.playbookFor(request)
 	if !ok {
-		return lifecycle.RunResult{}, failure("lifecycle.state", "the lifecycle adapter operation is not recognized", "")
+		return lifecycle.RunResult{}, runnerRequestInvalid.Fail("the lifecycle adapter operation is not recognized", "")
 	}
 	if r.command == nil || r.stager == nil || !filepath.IsAbs(request.Launch.Program) || !filepath.IsAbs(request.Launch.Shim) {
-		return lifecycle.RunResult{}, failure("lifecycle.state", "the authorized adapter execution boundary is unavailable", setupRemediation)
+		return lifecycle.RunResult{}, runnerBoundaryUnavailable.Fail("the authorized adapter execution boundary is unavailable", setupRemediation)
 	}
 	if err := ctx.Err(); err != nil {
 		return lifecycle.RunResult{}, err
@@ -114,7 +114,7 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (result l
 	defer func() { r.release(job, scratch, lock, holder) }()
 	scratch, err = os.MkdirTemp(r.scratchParent, scratchPrefix+strings.TrimPrefix(filepath.Base(job), jobPrefix)+"-")
 	if err != nil {
-		return lifecycle.RunResult{}, failure("lifecycle.state", "private adapter staging storage is unavailable", "")
+		return lifecycle.RunResult{}, runnerStorage.Fail("private adapter staging storage is unavailable", "")
 	}
 	paths, err := r.materialize(job, request, pinned)
 	if err != nil {
@@ -190,19 +190,19 @@ func checkMaterials(request lifecycle.RunRequest) error {
 	bound := make(map[string]bool, len(request.Materials))
 	for _, file := range request.Materials {
 		if !materialName(file.Name) {
-			return failure("lifecycle.state", "a material file is named by an unsafe name, or by one the runner's job already uses", "")
+			return runnerRequestInvalid.Fail("a material file is named by an unsafe name, or by one the runner's job already uses", "")
 		}
 		if names[file.Name] || bound[file.Variable] {
-			return failure("lifecycle.state", "a material file is named twice, or two material files bind one variable", "")
+			return runnerRequestInvalid.Fail("a material file is named twice, or two material files bind one variable", "")
 		}
 		names[file.Name], bound[file.Variable] = true, true
 	}
 	for name, value := range request.MaterialValues {
 		if bound[name] {
-			return failure("lifecycle.state", "a material value is named as a material file's variable", "")
+			return runnerRequestInvalid.Fail("a material value is named as a material file's variable", "")
 		}
 		if confidentialValue(request.Material, value) {
-			return failure("lifecycle.state", "material value "+name+" carries bound secret material, whole or within it, which reaches an adapter only as a lent file", "")
+			return runnerRequestInvalid.Fail("material value "+name+" carries bound secret material, whole or within it, which reaches an adapter only as a lent file", "")
 		}
 	}
 	return nil
@@ -256,7 +256,7 @@ func (r Runner) materialize(job string, request lifecycle.RunRequest, pinned str
 		// Every bound part is private to this invocation and to root alone.
 		if err := os.WriteFile(target, value, 0600); err != nil {
 			clear(value)
-			return nil, failure("lifecycle.state", "bound Secret material could not be prepared for the adapter", lifecycle.ReopenBindings(request.Context, request.Repeat))
+			return nil, runnerMaterialUnprepared.Fail("bound Secret material could not be prepared for the adapter", lifecycle.ReopenBindings(request.Context, request.Repeat))
 		}
 		clear(value)
 		paths[file.Name] = target
@@ -273,7 +273,7 @@ func writeSSHConfig(job string, request lifecycle.RunRequest, paths map[string]s
 	}
 	target := filepath.Join(job, sshConfigName)
 	if err := os.WriteFile(target, []byte("Include "+cryptoPolicyConfig+"\n"), 0600); err != nil {
-		return failure("lifecycle.state", "the frozen adapter invocation could not be materialized", "")
+		return runnerStorage.Fail("the frozen adapter invocation could not be materialized", "")
 	}
 	paths[sshConfigName] = target
 	return nil
@@ -293,10 +293,10 @@ func writeVariables(job string, values map[string]any) error {
 
 func writeEncoded(job, name string, encoded []byte, err error) error {
 	if err != nil || len(encoded) > maxVariableBytes {
-		return failure("lifecycle.state", "the frozen adapter invocation could not be materialized", "")
+		return runnerStorage.Fail("the frozen adapter invocation could not be materialized", "")
 	}
 	if err := os.WriteFile(filepath.Join(job, name), encoded, 0600); err != nil {
-		return failure("lifecycle.state", "the frozen adapter invocation could not be materialized", "")
+		return runnerStorage.Fail("the frozen adapter invocation could not be materialized", "")
 	}
 	return nil
 }
@@ -449,7 +449,7 @@ func (j *lifecycleJudge) unprepared(err error) error {
 	if err == nil || len(diagnostics.Of(err)) != 0 {
 		return err
 	}
-	return failure("lifecycle.unknown", "the attempt's preparation could not be recorded", j.request.OutputRemediation)
+	return runnerPreparationUnrecorded.Fail("the attempt's preparation could not be recorded", j.request.OutputRemediation)
 }
 
 type completedRefusal interface{ WithDetail(detail string) error }
@@ -629,7 +629,7 @@ func (r Runner) stage(ctx context.Context) (stagedAutomation, error) {
 	r.invocation.mu.Lock()
 	defer r.invocation.mu.Unlock()
 	if !r.invocation.active {
-		return stagedAutomation{}, failure("lifecycle.state", "the lifecycle adapter invocation has ended", "")
+		return stagedAutomation{}, runnerInvocationEnded.Fail("the lifecycle adapter invocation has ended", "")
 	}
 	if r.invocation.automation == nil {
 		staged, err := r.extract(ctx)

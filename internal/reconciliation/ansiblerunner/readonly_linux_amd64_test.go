@@ -44,7 +44,7 @@ func assertNothingStaged(t *testing.T, runner Runner) {
 func assertRefused(t *testing.T, err error, message string) {
 	t.Helper()
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != message {
+	if len(reported) != 1 || reported[0].Code != "runner.request-invalid" || reported[0].Message != message {
 		t.Fatalf("the run reported %+v (%v), want %q", reported, err, message)
 	}
 }
