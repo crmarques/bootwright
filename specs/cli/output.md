@@ -1378,7 +1378,9 @@ masking obligation: every adapter task that reads bound material marks itself
 `no_log`, so a retained run carries none. It is cut at
 `operationstore.MaxAdapterOutputBytes` without a marker. Neither retaining it
 nor failing to changes what the run reports. An adapter failure that its output explains points its remediation at this file,
-as an attempt's points at the output beside that attempt's log. A
+as an attempt's points at the output beside that attempt's log, by the
+`bootwright logs --context <context> --operation <id> --block <block> --raw
+--attempt <N>` that prints it. A
 [reading](../cli.md#resource-inspection-and-explicit-access) names no retained
 output, so it keeps none: it creates no run file, discards what its adapter
 printed and points no remediation at output.

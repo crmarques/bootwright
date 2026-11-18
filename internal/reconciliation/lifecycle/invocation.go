@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -269,7 +270,11 @@ func attemptOutputRemediation(execution Execution) string {
 	if !found {
 		return retained
 	}
-	return "read " + relative + " in this operation's Logs directory, as root, for why block " + execution.Block.ID + " failed"
+	if execution.Context == "" {
+		return "read " + relative + " in this operation's Logs directory, as root, for why block " + execution.Block.ID + " failed"
+	}
+	return "run bootwright logs --context " + execution.Context + " --operation " + execution.Operation + " --block " + execution.Block.ID +
+		" --raw --attempt " + strconv.Itoa(execution.Attempt) + " for why block " + execution.Block.ID + " failed"
 }
 
 // Materials lists exactly which bound parts a placement needs on disk. A local

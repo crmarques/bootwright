@@ -104,7 +104,7 @@
           "failure": {
             "code": "lifecycle.state",
             "reason": "the adapter operation did not complete",
-            "remedy": "read blocks/proxy-lab-proxy/attempt-000001.output in this operation's Logs directory, as root, for why block proxy-lab-proxy failed"
+            "remedy": "run bootwright logs --context lab --operation op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a --block proxy-lab-proxy --raw --attempt 1 for why block proxy-lab-proxy failed"
           }
         },
         {

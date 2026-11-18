@@ -323,7 +323,7 @@ func TestAFailedResolutionKeepsItsAdapterOutputInTheAttempt(t *testing.T) {
 	runner := &failingRunner{err: refused}
 	result, err := imageCapability(runner).Apply(context.Background(), e)
 	if err != refused || result.Outcome != reconciliation.OutcomeUnknown || runner.request.Output != output ||
-		!strings.Contains(runner.request.OutputRemediation, "attempt-000002.output") || runner.request.Refusals["discovery"] == nil {
+		!strings.Contains(runner.request.OutputRemediation, "--raw --attempt 2") || runner.request.Refusals["discovery"] == nil {
 		t.Fatalf("a failed resolution lost its adapter output: %+v %v %q", result, err, runner.request.OutputRemediation)
 	}
 }

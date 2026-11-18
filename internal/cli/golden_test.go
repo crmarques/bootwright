@@ -320,7 +320,7 @@ func cliGoldens() []cliGolden {
 			if result.Lifecycle.Blocks[index].State == "failed" {
 				result.Lifecycle.Blocks[index].Failure = &lifecycle.BlockFailure{
 					Code: "lifecycle.state", Message: "the adapter operation did not complete",
-					Remedy: "read blocks/proxy-lab-proxy/attempt-000001.output in this operation's Logs directory, as root, for why block proxy-lab-proxy failed",
+					Remedy: "run bootwright logs --context lab --operation op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a --block proxy-lab-proxy --raw --attempt 1 for why block proxy-lab-proxy failed",
 				}
 			}
 		}

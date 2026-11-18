@@ -43,6 +43,8 @@ func TestAFailedAttemptNamesItsBlockAndOutputFile(t *testing.T) {
 			"read blocks/os-install-rhel-01/attempt-000002.output in this operation's Logs directory, as root, for why block os-install-rhel-01 failed"},
 		{Execution{Operation: "op-x", Attempt: 2, Resolution: 1, Block: block},
 			"read blocks/os-install-rhel-01/attempt-000002-resolution-000001.output in this operation's Logs directory, as root, for why block os-install-rhel-01 failed"},
+		{Execution{Context: "lab", Operation: "op-x", Attempt: 2, Resolution: 1, Block: block},
+			"run bootwright logs --context lab --operation op-x --block os-install-rhel-01 --raw --attempt 2 for why block os-install-rhel-01 failed"},
 		{Execution{Operation: "op-x", Block: block}, retained},
 		{Execution{}, retained},
 	} {

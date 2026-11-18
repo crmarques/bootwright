@@ -17346,3 +17346,34 @@ Guarded by `TestARunThatReachesItsDeadlineSaysSo`, which failed with the change
 disabled, and `TestARunIsBoundedByItsRequestsDeadline`. The other endings W1.3
 names (exit status and signal, a death before the request was loaded, a
 protocol breach's reason, the last step) stay with B1562.
+
+## X583 — A failed role names the task it stopped at
+
+### B1573
+
+Under [D276](backlog.md#d276) (audit 006 W1.4, finding C17-01 and the role
+findings that share it), split from [B1562](m1.md#b1562). A role task that
+failed without naming one of its declared refusals ended every lifecycle run as
+`the adapter operation did not complete`, whatever its task said. The
+collection's censored callback now writes one `stopped` record for the first
+failure nothing recovers, naming the task as its role wrote it, its role, its
+host and whether it failed or was unreachable, and the failed exit reads
+`the adapter operation did not complete: task "<task>" of role <role> failed on
+host <host>` ([adapter stop records](../architecture.md#adapter-stop-records)).
+No text the task produced crosses the channel, and no outcome changes, under
+D276 (3) and (4). Guarded by `TestAStoppedRecordNamesOnlyATaskARoleAHostAndAKind`,
+the runner's `stopped` and `unreachable` endings and the callback's playbook
+tests, which run ansible-playbook locally with the channel open.
+
+## X584 — An attempt's output remedy is a command
+
+### B1574
+
+Under [D276](backlog.md#d276) (audit 006 W1.5, finding X16-02 and its
+duplicates), split from [B1562](m1.md#b1562). An adapter failure that its
+output explains told the operator to read a file in the operation's Logs
+directory as root. Its remedy is now the `bootwright logs --raw` command that
+prints that output, with its context, operation, block and attempt
+([private operation logs](../cli/output.md#private-operation-logs)). Guarded by
+`TestAFailedAttemptNamesItsBlockAndOutputFile` and the
+`cli-status-unresolved` goldens.
