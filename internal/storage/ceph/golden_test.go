@@ -246,7 +246,7 @@ func TestEvidenceGolden(t *testing.T) {
 
 func TestFIPSSecurityGolden(t *testing.T) {
 	r := frozenGoldenRequest()
-	r.Security = &Security{FIPS: true, CephXKeyType: "aes"}
+	r.Security = &Security{FIPS: true, CephXKeyType: "aes256k"}
 	data, err := r.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -259,7 +259,7 @@ func TestFIPSSecurityGolden(t *testing.T) {
 
 func TestFIPSHostSecurityGolden(t *testing.T) {
 	r := packageRequest(t)
-	r.Security = &Security{FIPS: true, CephXKeyType: "aes"}
+	r.Security = &Security{FIPS: true, CephXKeyType: "aes256k"}
 	host := HostRequest{Cluster: scopeOf(r), Host: r.Hosts[0].Name, ImagesSeconds: hostImagesBudget, Pulls: []ImagePull{}, Version: HostVersion}
 	data, err := host.canonical()
 	if err != nil {

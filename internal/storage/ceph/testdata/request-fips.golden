@@ -101,7 +101,7 @@
   "registryRef": "registry",
   "release": "9.9.1.2",
   "security": {
-    "cephxKeyType": "aes",
+    "cephxKeyType": "aes256k",
     "fips": true
   },
   "services": [

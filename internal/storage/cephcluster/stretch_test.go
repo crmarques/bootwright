@@ -87,7 +87,7 @@ func TestReferenceStretchTopologyAdmitsAProvidedTiebreakerOnASecondPublicCIDR(t 
 		t.Fatalf("stretch normalization = %v", stretch)
 	}
 	fips, catalog := stretchCatalog(t, func(spec api.Value) api.Value {
-		return spec.WithPath(api.BoolValue(true), "security", "fips", "enabled").WithPath(m("keyType", "aes"), "security", "cephx")
+		return spec.WithPath(api.BoolValue(true), "security", "fips", "enabled").WithPath(m("keyType", "aes256k"), "security", "cephx")
 	})
 	if issues := clusterIssuesAt(Validate(fips, catalog), "$.spec.topology.nodes[6].machineRef"); len(issues) != 0 {
 		t.Fatalf("a FIPS cluster refused its provided tiebreaker at admission: %#v", issues)

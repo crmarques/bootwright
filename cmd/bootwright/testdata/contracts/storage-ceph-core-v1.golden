@@ -283,7 +283,7 @@ request-schema:
   registryTrustBundleRef string omitempty
   release string
   security *struct ceph.Security omitempty
-  security.cephxKeyType string
+  security.cephxKeyType string omitempty
   security.fips bool
   service *struct ceph.ServiceUnit omitempty
   service.bindings []struct ceph.ServiceBinding omitempty

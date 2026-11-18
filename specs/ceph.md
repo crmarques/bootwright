@@ -101,8 +101,8 @@ of the authored package repository for package acquisition, and a supplied diges
 publisher trust. FIPS, CephX, encryption and call-home choices retain their
 independent API, trust and authorization requirements. Native tools determine
 whether the selected versions can realize those choices; Bootwright does not
-screen their version compatibility. A FIPS Ceph request freezes its FIPS and
-AES CephX policy, requires a completed FIPS installation proof for every
+screen their version compatibility. A FIPS Ceph request freezes its FIPS
+policy, requires a completed FIPS installation proof for every
 installed host, and checks each host's kernel and inherited crypto policy
 before cluster claims: exactly `1` and exactly `FIPS`, as the
 [managed-OS proof](managed-os.md#fips-mode) reads them. A provided host has no
@@ -113,11 +113,23 @@ proof; a mismatch or an unreadable file refuses `fips-not-enabled`, naming the
 Machine, and the cluster block requires that evidence. Its pinned host key
 must be ECDSA or RSA of at least 2048 bits. Bootwright never switches a
 host's FIPS mode; FIPS mode at installation, disk encryption and patching of
-a provided host stay the operator's. Ed25519 cluster SSH keys and authored AES256K CephX policy refuse
+a provided host stay the operator's. Ed25519 cluster SSH keys refuse
 before host preparation. Synthetic route keys use ECDSA on an observed FIPS
-kernel. Native auth keys must prove the declared AES type before readiness
-or client-key publication; a mismatch retains ownership and reports its cause,
-without changing native cipher policy. No FIPS service allowlist or vendor
+kernel.
+
+`spec.security.cephx.keyType` is a proof of the native outcome, never cipher
+configuration, and admits only `aes256k`: CephX type 2 with a 32-byte secret,
+the type the provider recommends wherever its clients support it. Omitting it
+uses the selected build's own key type with no key-type proof. FIPS implies no
+key type: FIPS is a host property the checks above prove. A declared type
+freezes in the request; every native auth key, and every client key Bootwright
+generates, must prove it before readiness or client-key publication. A
+mismatch refuses `cephx-policy`, retains ownership and reports its cause
+without disclosing key material or changing native cipher policy. An older
+client's `aes` key is a consumer's own choice
+([CephConsumer](ceph-resources.md#cephconsumer)), never a cluster-wide
+policy, and only on a cluster that declares no key type: validation refuses a
+consumer whose key type differs from the one its cluster declares. No FIPS service allowlist or vendor
 qualification is inferred. Adapter
 [version specializations](architecture.md#implementations-and-version-variation)
 adapt native mechanics to capabilities read from the frozen, authenticated

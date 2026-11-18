@@ -581,7 +581,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	r.PackageRepository, r.NFSGaneshaPackageVersion = "https://publisher.example.test/ceph", "synthetic-ganesha-1"
 	r.MonIP, r.ClusterSSHUser, r.CallHome = "192.0.2.1", "operator", "enabled"
 	r.RegistryTrustBundleRef, r.RegistryProxy = "registry-ca", "http://proxy.example.test:3128"
-	r.Security = &Security{FIPS: true, CephXKeyType: "aes"}
+	r.Security = &Security{FIPS: true, CephXKeyType: "aes256k"}
 	r.PublicNetworks, r.ClusterNetworks = []string{"192.0.2.0/24"}, []string{"198.51.100.0/24"}
 	r.Stretch = &Stretch{DataSites: []string{"site-a", "site-b"}, FailureDomain: "datacenter", Rule: "stretch-rule", Tiebreaker: "node-3", TiebreakerSite: "site-c"}
 	r.Action, r.Pool, r.Client = "pool", &Pool{Name: "volumes"}, &Client{Name: "consumer", Pool: "volumes", Access: "readOnly"}

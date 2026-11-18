@@ -19,8 +19,8 @@ def scope_checks(request):
     require(request["version"] == "ceph-core-v1")
     if "security" in request:
         security = request["security"]
-        require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
-        require(type(security["fips"]) is bool and security["cephxKeyType"] == "aes")
+        require(isinstance(security, dict) and {"fips"} <= set(security) <= {"fips", "cephxKeyType"})
+        require(type(security["fips"]) is bool and security.get("cephxKeyType", "aes256k") == "aes256k")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])

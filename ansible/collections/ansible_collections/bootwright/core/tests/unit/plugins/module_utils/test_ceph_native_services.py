@@ -300,22 +300,23 @@ def test_validate_refuses_malformed_auxiliary(core_request, change):
         ceph_native.validate_scope(scope)
 
 
-@pytest.mark.parametrize("kind,size", [(1, 16), (2, 32)])
-def test_fips_native_auth_observation_gates_readiness_without_writes(core_request, monkeypatch, kind, size):
+@pytest.mark.parametrize("key_type,kind,size", [("aes256k", 2, 32), ("aes256k", 1, 16), ("aes256k", 2, 16), (None, 1, 16), (None, 2, 32)])
+def test_fips_native_auth_observation_gates_readiness_without_writes(core_request, monkeypatch, key_type, kind, size):
     import base64
     import io
     with_mds(core_request)
-    core_request["security"] = {"fips": True, "cephxKeyType": "aes"}
+    core_request["security"] = {"fips": True} if key_type is None else {"fips": True, "cephxKeyType": key_type}
     key = base64.b64encode(kind.to_bytes(2, "little") + bytes(8) + size.to_bytes(2, "little") + b"s" * size).decode()
     answers = mds_answers(core_request)
     answers[("auth", "ls")] = {"auth_dump": [{"entity": "client.admin", "key": key}]}
-    native, unused = core_fixtures.worker(core_request, answers)
+    native, calls = core_fixtures.worker(core_request, answers)
     monkeypatch.setattr("builtins.open", lambda path, mode: io.BytesIO(b"1\n"))
     monkeypatch.setattr(ceph_native, "read_regular", lambda *args, **kwargs: b"FIPS")
-    if kind == 1:
+    if (key_type, kind, size) in (("aes256k", 2, 32), (None, 1, 16), (None, 2, 32)):
         assert native.observe()["ready"] is True
     else:
         with pytest.raises(ceph_native.NativeFailure, match="cephx-policy") as caught:
             native.observe()
         assert key not in repr(caught.value.native_error)
+    assert any(argv[-2:] == ["auth", "ls"] for argv in calls) is (key_type is not None)
     assert native.markers.writes == []

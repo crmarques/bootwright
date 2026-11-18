@@ -8,5 +8,6 @@ spec:
 
   dataFoundation:
     rbdPoolRef: odf-hub-multidc-02-rbd
+    cephxKeyType: aes256k
     filesystemRef: odf-cephfs
     objectGatewayRef: odf-rgw-all

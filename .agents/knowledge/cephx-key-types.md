@@ -3,9 +3,9 @@
 Which key types a Ceph cluster mints, which clients parse them, and how a type
 mismatch shows up when a Data Foundation consumer attaches. The Ceph side of the
 attach is [B86](../../specs/milestones/m4.md#b86) and the package
-[B85](../../specs/milestones/m4.md#b85). The admission of a declared key type is
-M2's [B628](../../specs/milestones/m2.md#b628), the root of the Data Foundation
-client question. The attach is in
+[B85](../../specs/milestones/m4.md#b85). The cluster's declared key type was
+decided by [D277](../../specs/milestones/backlog.md#d277), closing
+[B628](../../specs/milestones/delivered.md#b628). The attach is in
 [data-foundation-external-mode.md](data-foundation-external-mode.md).
 
 Provenance: `R3:C<n>` is a claim id of the M4 definition's research of
@@ -52,9 +52,9 @@ allowing only `aes256k` are now qualified for one selected artifact by the
 [current native evidence](#current-native-key-evidence), not for every build.
 
 Upstream Ceph from the releases above can create `aes256k` keys, and the Rook
-and ODF scripts expose `aes` and `aes256k` selection. The guard "refuse a key
-whose type is not 1" and `spec.security.cephx.keyType: aes` are Bootwright-side
-constructs, not an ODF contract.
+and ODF scripts expose `aes` and `aes256k` selection. Bootwright's cluster
+`spec.security.cephx.keyType: aes256k` proof is a Bootwright-side construct,
+not an ODF contract.
 
 ## Current native key evidence
 
@@ -76,20 +76,19 @@ type, creation time, secret length and secret order; AES is type 1 with
 16-byte material and AES256KRB5 is type 2 with 32-byte material. The observed
 layout agrees with the existing decoder; no wire-offset defect was found.
 
-Bootwright's
-[security projection](../../internal/storage/ceph/requests.go) freezes the AES
-proof whenever the security declaration is present, even with FIPS false.
-The [native worker](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py)
-checks every auth entry and does not change MON cipher policy. The
+This evidence decided [D277](../../specs/milestones/backlog.md#d277): the
+[security projection](../../internal/storage/ceph/requests.go) freezes a
+key-type proof only for a declared `aes256k`, never for FIPS alone. The
+[native worker](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py)
+then proves every auth entry is type 2 with a 32-byte secret and does not
+change MON cipher policy. The
 [client worker](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_resources.py)
-currently invokes the pinned `ceph-authtool` generator without an explicit key
-type. Existing
-[policy tests](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_core.py)
-prove the type/length refusal without disclosing material. [B628](../../specs/milestones/m2.md#b628)
-owns the corrective-contract question; it remains undefined and not started.
-No recovery choice, key rotation, cipher rewrite or admitted-value change is
-selected by this evidence. Required behavior remains with the
-[security contract](../../specs/ceph.md#frozen-release-and-trust).
+invokes the pinned `ceph-authtool` generator without an explicit key type;
+upstream `src/tools/ceph_authtool.cc` at v20.2.4 defaults to
+`CEPH_CRYPTO_AES256KRB5`, and the proof refuses any other type before import.
+The [policy tests](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_core.py)
+prove the type/length refusal without disclosing material. Required behavior
+is the [CephX clause](../../specs/ceph.md#frozen-release-and-trust).
 
 IBM's
 [ODF administrative-key parsing advisory](https://www.ibm.com/support/pages/odf-upgrade-failure-42111-4220-or-4221-storagecluster-cr-reports-malformed-input-buffer3-error-clientadminkeyring)
@@ -159,4 +158,4 @@ discriminator was the vendor build, not the version number:
 R3's open question O6 gives the commands: the node kernel (`oc debug node/<node>
 -- chroot /host uname -r`) and, on Ceph, `ceph mon dump | grep -i cipher`,
 `ceph config get mon auth_preferred_cipher` and `ceph auth get-or-create -h`.
-[B761](../../specs/milestones/m4.md#b761) and B628 own the live answers.
+[B761](../../specs/milestones/m4.md#b761) owns the live answers.

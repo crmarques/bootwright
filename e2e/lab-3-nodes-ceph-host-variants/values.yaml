@@ -1,5 +1,5 @@
 # Default input of the lab-3-nodes-ceph-host-variants case, profile P5: bonded
-# VLAN networking, managed RHSM registration, FIPS, AES CephX and a
+# VLAN networking, managed RHSM registration, FIPS, AES256K CephX and a
 # TPM2-encrypted root with recovery. Override keys with e2e/render.sh --set or
 # a --values file.
 

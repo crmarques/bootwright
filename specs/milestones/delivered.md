@@ -6908,7 +6908,7 @@ the signed source archive and not an entitled image; the observation of a
 configured seed now reading the image payload for the `set-user` seam; and the
 image tags of the runbook, taken from the design and not confirmed against an
 authenticated registry. Follow-ups: [B627](#x57--applied-specializations-in-ceph-evidence) the evidence member,
-[B628](m2.md#b628) the CephX key type, [B629](m2.md#b629) the provider bootstrap
+[B628](#b628) the CephX key type, [B629](m2.md#b629) the provider bootstrap
 tail on a continued seed, [B630](backlog.md#b630) narrowing `partial-cluster`
 for a proved-absent rejection, [B631](backlog.md#b631) an earlier Call Home
 refusal, [B632](#x277--parked-defects-fixed-on-request) the unused `installed_cephadm`,
@@ -17816,3 +17816,28 @@ unchanged; messages are unchanged and a site that gave no remedy carries its
 stop's. Both packages leave the ledger. Guarded by
 `TestEveryCatalogedStopIsComposedAndExplained`, the packages' tests and an
 independent Opus review.
+
+## X620 — The cluster CephX key type proves aes256k
+
+### B628
+
+Under [D277](backlog.md#d277). The live 20.2.x evidence the item required is
+the owner's 2026-11-01
+[native key evidence](../../.agents/knowledge/cephx-key-types.md#current-native-key-evidence):
+the pinned IBM Storage Ceph 9.9.1.2 build mints only `aes256k` keys and its
+MONs allow nothing else. The correction is the second outcome the item
+allowed, a specified change of the admitted values and their frozen-request
+effect, stated in the
+[CephX clause](../ceph.md#frozen-release-and-trust): `security.cephx.keyType`
+admits only `aes256k` and proves type 2 with a 32-byte secret over every
+native auth key and every client key Bootwright generates; omitting it
+freezes no key-type proof; FIPS freezes none; and a CephConsumer of a
+cluster that declares a type must declare the same one. The core and host requests keep
+their versions under the development policy, so an operation frozen with the
+retired `aes` policy is finished or destroyed with its own build. Guarded by
+the request, validation and key-proof unit tests and the effective-state
+goldens. The kernel CephFS and RBD client checks of the
+[selected release run](../../e2e/lab-3-nodes-ceph/runbook.md#native-cryptography-and-client-protocols)
+and the external consumer's gate ([B761](m4.md#b761)) still qualify the
+clients; the consumer's `aes` default is parked as
+[B1612](backlog.md#b1612).

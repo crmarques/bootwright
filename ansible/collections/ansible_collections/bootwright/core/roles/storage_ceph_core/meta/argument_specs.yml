@@ -786,7 +786,9 @@ argument_specs:
             options:
               cephxKeyType:
                 type: str
-                required: true
+                required: false
+                choices:
+                  - aes256k
               fips:
                 type: bool
                 required: true

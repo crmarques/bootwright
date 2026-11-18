@@ -59,7 +59,7 @@ func boundTiebreaker(catalog api.Catalog, cluster api.Object) (Request, error) {
 	spec := cluster.Spec()
 	r := Request{Cluster: cluster.Name(), ClusterSSHUser: spec.Get("cephadm", "clusterSSH", "user").Text(), ClusterKeyRef: spec.Get("cephadm", "clusterSSH", "keyRef").Text(), Hosts: []Host{}}
 	if spec.Get("security", "fips", "enabled").Bool() {
-		r.Security = &Security{FIPS: true, CephXKeyType: "aes"}
+		r.Security = &Security{FIPS: true, CephXKeyType: "aes256k"}
 	}
 	err := bindHosts(&r, catalog, cluster, "synthetic")
 	return r, err
@@ -264,7 +264,7 @@ func TestAProvidedHostKeyIsTheOnePinnedKnownHostsEntryForItsAddress(t *testing.T
 }
 
 func TestAProvidedHostOfAFIPSClusterIsPreparedOnlyWithItsObservedFIPSMode(t *testing.T) {
-	r := HostRequest{Host: "tie", Cluster: ClusterScope{Security: &Security{FIPS: true, CephXKeyType: "aes"}, Hosts: []Host{{Name: "tie", Machine: "tie", Provided: true, Devices: []Device{}}}}}
+	r := HostRequest{Host: "tie", Cluster: ClusterScope{Security: &Security{FIPS: true, CephXKeyType: "aes256k"}, Hosts: []Host{{Name: "tie", Machine: "tie", Provided: true, Devices: []Device{}}}}}
 	digest := strings.Repeat("a", 64)
 	evidence := HostEvidence{Ready: true, Route: true, ImageID: digest, UID: 167, GID: 167, Label: SharedLabel, PolicySHA256: digest, CephadmSHA256: digest, PlanDigest: digest, Devices: []HostDevice{}}
 	for _, test := range []struct {
@@ -289,7 +289,7 @@ func TestAProvidedHostOfAFIPSClusterIsPreparedOnlyWithItsObservedFIPSMode(t *tes
 }
 
 func TestAClusterBlockReadsAProvidedHostsFIPSModeFromItsHostBlock(t *testing.T) {
-	scope := ClusterScope{Cluster: "example", Version: Version, Security: &Security{FIPS: true, CephXKeyType: "aes"}, Packages: &PackageRequest{Sources: []PackageSource{{Host: "tie"}}},
+	scope := ClusterScope{Cluster: "example", Version: Version, Security: &Security{FIPS: true, CephXKeyType: "aes256k"}, Packages: &PackageRequest{Sources: []PackageSource{{Host: "tie"}}},
 		Hosts: []Host{{Name: "tie", Machine: "tie", Provided: true, Devices: []Device{}}}}
 	request, err := HostRequest{Version: HostVersion, Host: "tie", Cluster: scope, ImagesSeconds: hostImagesBudget, Pulls: []ImagePull{}}.canonical()
 	if err != nil {

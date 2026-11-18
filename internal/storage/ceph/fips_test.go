@@ -2,6 +2,7 @@ package ceph
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ func fipsCatalog() api.Catalog {
 	objects := poolRequestCatalog(3, 3).Objects()
 	for i, object := range objects {
 		if object.Kind() == api.CephCluster {
-			objects[i] = object.WithSpec(object.Spec().WithPath(requestMap("fips", requestMap("enabled", true), "cephx", requestMap("keyType", "aes")), "security"))
+			objects[i] = object.WithSpec(object.Spec().WithPath(requestMap("fips", requestMap("enabled", true)), "security"))
 		}
 	}
 	objects = append(objects, api.NewObject(api.MachineInstallProfile, "rhel", api.Value{}, requestMap("customizations", requestMap("security", requestMap("fips", requestMap("enabled", true))))))
@@ -27,17 +28,15 @@ func TestFIPSPlanningFreezesPolicyAndRefusesUnsafeInputs(t *testing.T) {
 	catalog := fipsCatalog()
 	cluster, _ := catalog.Find(api.CephCluster, "example")
 	r, err := baseRequest(catalog, cluster, "synthetic")
-	if err != nil || r.Security == nil || !r.Security.FIPS || r.Security.CephXKeyType != "aes" {
+	if err != nil || r.Security == nil || !r.Security.FIPS || r.Security.CephXKeyType != "" {
 		t.Fatalf("FIPS request: %+v %v", r.Security, err)
 	}
 	if scopeOf(r).Security != r.Security {
 		t.Fatal("host scope lost FIPS policy")
 	}
-	for _, kind := range []string{"aes256k", "unknown"} {
-		changed := cluster.WithSpec(cluster.Spec().WithPath(api.StringValue(kind), "security", "cephx", "keyType"))
-		if _, err := baseRequest(catalog, changed, "synthetic"); err == nil {
-			t.Fatalf("admitted %s", kind)
-		}
+	declared := cluster.WithSpec(cluster.Spec().WithPath(api.StringValue("aes256k"), "security", "cephx", "keyType"))
+	if r, err := baseRequest(catalog, declared, "synthetic"); err != nil || r.Security == nil || !r.Security.FIPS || r.Security.CephXKeyType != "aes256k" {
+		t.Fatalf("declared key type: %+v %v", r.Security, err)
 	}
 	for _, change := range []string{"profile", "key"} {
 		objects := catalog.Objects()
@@ -91,5 +90,29 @@ func TestFIPSImportedEd25519RefusesBeforeHostPreparation(t *testing.T) {
 	runner := &capturingRunner{}
 	if _, err := NewHost(runner).WithProofs(proofs).Apply(context.Background(), e); err == nil || runner.calls != 0 {
 		t.Fatalf("unsafe key reached host preparation: %v, calls %d", err, runner.calls)
+	}
+}
+
+func TestSecurityPolicyFreezesNoKeyTypeUnlessDeclared(t *testing.T) {
+	catalog := fipsCatalog()
+	cluster, _ := catalog.Find(api.CephCluster, "example")
+	for name, test := range map[string]struct {
+		security api.Value
+		want     *Security
+	}{
+		"fips only":              {requestMap("fips", requestMap("enabled", true)), &Security{FIPS: true}},
+		"fips disabled":          {requestMap("fips", requestMap("enabled", false)), nil},
+		"key type only":          {requestMap("cephx", requestMap("keyType", "aes256k")), &Security{CephXKeyType: "aes256k"}},
+		"fips disabled with key": {requestMap("fips", requestMap("enabled", false), "cephx", requestMap("keyType", "aes256k")), &Security{CephXKeyType: "aes256k"}},
+	} {
+		changed := cluster.WithSpec(cluster.Spec().WithPath(test.security, "security"))
+		r, err := baseRequest(catalog, changed, "synthetic")
+		if err != nil || (test.want == nil) != (r.Security == nil) || test.want != nil && *r.Security != *test.want {
+			t.Fatalf("%s: %+v %v", name, r.Security, err)
+		}
+		encoded, err := json.Marshal(r.Security)
+		if err != nil || test.want != nil && test.want.CephXKeyType == "" && strings.Contains(string(encoded), "cephxKeyType") {
+			t.Fatalf("%s: encoded %s %v", name, encoded, err)
+		}
 	}
 }

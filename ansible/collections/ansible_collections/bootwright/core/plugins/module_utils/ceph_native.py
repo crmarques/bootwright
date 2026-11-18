@@ -570,15 +570,19 @@ def observe_fips(request, host):
     return values
 
 
+def cephx_key_type_declared(request):
+    return request.get("security", {}).get("cephxKeyType") is not None
+
+
 def prove_cephx_key(request, key):
-    if "security" not in request:
+    if not cephx_key_type_declared(request):
         return
     try:
         require(isinstance(key, str) and len(key) <= 1024)
         raw = base64.b64decode(key, validate=True)
-        require(len(raw) == 28 and int.from_bytes(raw[:2], "little") == 1 and int.from_bytes(raw[10:12], "little") == 16)
+        require(len(raw) == 44 and int.from_bytes(raw[:2], "little") == 2 and int.from_bytes(raw[10:12], "little") == 32)
     except (ValueError, TypeError, Refusal):
-        raise NativeFailure("cephx-policy", "CephX key policy", b"a native key does not prove the requested aes type and 16-byte key length") from None
+        raise NativeFailure("cephx-policy", "CephX key policy", b"a native key does not prove the declared aes256k type and 32-byte key length") from None
 
 
 def validate(request):
@@ -2595,7 +2599,7 @@ class Worker:
     def prove_cluster_policy(self):
         prove_fips(self.request)
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
-        if "security" in self.request:
+        if cephx_key_type_declared(self.request):
             keys = self.ceph("auth", "ls")
             require(isinstance(keys, dict) and isinstance(keys.get("auth_dump"), list) and keys["auth_dump"], "cephx-policy")
             for entry in keys["auth_dump"]:

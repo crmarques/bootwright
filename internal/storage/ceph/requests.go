@@ -260,7 +260,7 @@ type AuxiliaryReference struct {
 }
 
 type Security struct {
-	CephXKeyType string `json:"cephxKeyType"`
+	CephXKeyType string `json:"cephxKeyType,omitempty"`
 	FIPS         bool   `json:"fips"`
 }
 
@@ -417,8 +417,8 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if r.ClusterSSHTransport != "native" && r.ClusterSSHTransport != "verifiedTunnel" {
 		return Request{}, failure("api.invariant", "unknown Ceph SSH transport", "select native or verifiedTunnel; each transport requires artifact qualification")
 	}
-	if r.ClusterSSHUser == "" || r.ClusterKeyRef == "" || r.RegistryRef == "" || spec.Get("security", "cephx", "keyType").Present() && spec.Get("security", "cephx", "keyType").Text() != "aes" {
-		return Request{}, cephUnsupportedProfile.Fail("the requested Ceph trust profile is not implemented by the core adapter", "declare the cluster SSH key, registry entitlement and the aes CephX core profile")
+	if r.ClusterSSHUser == "" || r.ClusterKeyRef == "" || r.RegistryRef == "" {
+		return Request{}, cephUnsupportedProfile.Fail("the requested Ceph trust profile is not implemented by the core adapter", "declare the cluster SSH key and registry entitlement")
 	}
 	r.Stretch = stretchOf(cluster)
 	if r.Security, err = securityPolicy(c, spec, r.ClusterKeyRef); err != nil {
@@ -730,10 +730,10 @@ func dataDeviceSet(r Request) map[string]bool {
 }
 
 func securityPolicy(c api.Catalog, spec api.Value, keyRef string) (*Security, error) {
-	if !spec.Get("security").Present() {
+	policy := &Security{FIPS: spec.Get("security", "fips", "enabled").Bool(), CephXKeyType: spec.Get("security", "cephx", "keyType").Text()}
+	if !policy.FIPS && policy.CephXKeyType == "" {
 		return nil, nil
 	}
-	policy := &Security{FIPS: spec.Get("security", "fips", "enabled").Bool(), CephXKeyType: "aes"}
 	if policy.FIPS {
 		key, found := c.Find(api.Secret, keyRef)
 		if found && key.Spec().Has("source", "generated") {

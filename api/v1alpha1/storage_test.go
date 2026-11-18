@@ -390,3 +390,17 @@ func TestNVMeoFSubsystemSchemaShape(t *testing.T) {
 		}
 	}
 }
+
+func TestCephClusterAdmitsOnlyTheAES256KCephXKeyType(t *testing.T) {
+	security, _ := Schema(CephCluster).Field("security")
+	cephx, _ := security.Shape.Field("cephx")
+	keyType, ok := cephx.Shape.Field("keyType")
+	if !ok || !keyType.Required || !slices.Equal(keyType.Shape.Enums, []string{"aes256k"}) {
+		t.Fatalf("cluster cephx keyType = %+v", keyType)
+	}
+	consumer, _ := Schema(CephConsumer).Field("dataFoundation")
+	perClient, _ := consumer.Shape.Field("cephxKeyType")
+	if !slices.Equal(perClient.Shape.Enums, []string{"aes", "aes256k"}) {
+		t.Fatalf("consumer cephxKeyType = %v", perClient.Shape.Enums)
+	}
+}

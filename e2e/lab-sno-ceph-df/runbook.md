@@ -25,8 +25,8 @@ It rehearses the `fdf` path of [B85](../../specs/milestones/m4.md#b85) and
 compact cluster with a TLS object gateway, so this case accepts none of them: a
 run here is an observation, not the gate. It also produces evidence for the
 Data Foundation client question that
-[B628](../../specs/milestones/m2.md#b628) names the root of: whether the client
-and the node's kernel accept the monitors' `aes256k` keys. Without an object
+[D277](../../specs/milestones/backlog.md#d277) leaves to client qualification:
+whether the client and the node's kernel accept the monitors' `aes256k` keys. Without an object
 gateway, the `ceph-rgw` class and the gateway trust parts of B761 are not
 exercised.
 

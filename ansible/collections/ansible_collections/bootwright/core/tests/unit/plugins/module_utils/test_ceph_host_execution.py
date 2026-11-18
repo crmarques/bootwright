@@ -519,7 +519,7 @@ def test_the_package_call_relays_the_bound_repository_bundle(host_request, tmp_p
 def tiebreaker_request(host_request):
     """A FIPS cluster whose provided tiebreaker runs a MON alone and holds no device."""
     cluster = host_request["cluster"]
-    cluster["security"] = {"fips": True, "cephxKeyType": "aes"}
+    cluster["security"] = {"fips": True}
     cluster["hosts"].append({"name": "tie", "machine": "tie", "address": "198.51.100.10", "user": "operator", "port": 22, "devices": [], "labels": [],
                              "location": {}, "sshKeyRef": "fleet-key", "knownHostsRef": "tie-known-hosts", "provided": True})
     cluster["publicNetworks"].append("198.51.100.0/24")

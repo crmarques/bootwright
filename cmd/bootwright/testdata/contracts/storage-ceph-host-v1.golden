@@ -96,7 +96,7 @@ request-schema:
   cluster.registryTrustBundleRef string omitempty
   cluster.release string
   cluster.security *struct ceph.Security omitempty
-  cluster.security.cephxKeyType string
+  cluster.security.cephxKeyType string omitempty
   cluster.security.fips bool
   cluster.services []opaque
   cluster.singleHostDefaults bool omitempty

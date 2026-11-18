@@ -421,6 +421,9 @@ func (a *admission) export(cluster api.Object, managed bool) {
 		if !slices.ContainsFunc(cluster.Spec().Get("services").Items(), func(service api.Value) bool { return service.Get("service_type").Text() == "prometheus" }) {
 			a.invalid("$.spec.clusterRef", "a managed export requires a prometheus service", "declare a prometheus service on the referenced CephCluster")
 		}
+		if declared := cluster.Spec().Get("security", "cephx", "keyType").Text(); declared != "" && consumerKeyType(refs) != declared {
+			a.invalid("$.spec.dataFoundation.cephxKeyType", "the consumer's CephX key type differs from the "+declared+" key type its CephCluster proves", "set spec.dataFoundation.cephxKeyType to "+declared+", or remove spec.security.cephx.keyType from the CephCluster")
+		}
 		a.poolRole(textOf(refs, "rbdPoolRef"), "$.spec.dataFoundation.rbdPoolRef", "rbd", cluster)
 		a.sameOwner(api.CephFilesystem, textOf(refs, "filesystemRef"), "$.spec.dataFoundation.filesystemRef", cluster)
 		if refs.Has("objectGatewayRef") {
@@ -434,6 +437,15 @@ func (a *admission) export(cluster api.Object, managed bool) {
 		a.required(spec, "externalDetails", "$.spec")
 		a.forbid(spec, "$.spec", "dataFoundation")
 	}
+}
+
+const ConsumerDefaultKeyType = "aes"
+
+func consumerKeyType(refs api.Value) string {
+	if kind := textOf(refs, "cephxKeyType"); kind != "" {
+		return kind
+	}
+	return ConsumerDefaultKeyType
 }
 
 func DefaultReplicas(cluster api.Object) (int64, int64) {

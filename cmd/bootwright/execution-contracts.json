@@ -93,11 +93,11 @@
   },
   "storage-ceph-core-v1": {
     "contentDigest": "36df5d9340708fbe7420c946057dfc09548e3e870f8431a06157718186c137c3",
-    "fingerprint": "ce2724d8b0716d96690a85e505e41732b147b1c3adb3f561470ef99bd9281ab2"
+    "fingerprint": "1f189719877de020b9364fd58b170bf51dd564d1776120e5300e1f2396df49a1"
   },
   "storage-ceph-host-v1": {
     "contentDigest": "6b788b28f193d3cdf8b5b4873453ffa95bde5aecd04804a5362c7bf4ebdde8d3",
-    "fingerprint": "dadb27b7f47ca4e44285443537c9852c538bc53a87ad7cf527bca13f5704d1df"
+    "fingerprint": "a80f73d5685e001b882e3c596c1f808e51357ef4c36da264f6a368db3ea05273"
   },
   "storage-ceph-image-v1": {
     "contentDigest": "f0822b3d0eb59977829abbed7248c391a51d33a21602d3cbba5e3035d50b62d8",

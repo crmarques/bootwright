@@ -528,7 +528,7 @@ spec:
     fips:
       enabled: true
     cephx:
-      keyType: aes
+      keyType: aes256k
   config:
     global:
       osd_pool_default_min_size: "2"

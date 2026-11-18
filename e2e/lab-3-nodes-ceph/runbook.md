@@ -75,9 +75,9 @@ tag pair with authenticated registry metadata before the run.
 
 Use the selected release's native cryptographic defaults and protocol
 negotiation. The base template omits `CephCluster.spec.security`; do not add
-`security.cephx.keyType: aes` to this comparison profile. That declaration
-requires legacy AES keys even when FIPS is false; it does not select the
-build's default. Keep the selected release, matching client packages and
+`security.cephx.keyType` to this comparison profile: that declaration adds a
+proof that every key is `aes256k`, while this profile reads the build's own
+default. Keep the selected release, matching client packages and
 versioned provider documentation with the private run evidence. Preserve the
 case's authored disk encryption, TLS endpoints and service protocols.
 

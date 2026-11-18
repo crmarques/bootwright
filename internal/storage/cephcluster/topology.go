@@ -151,9 +151,6 @@ func (a *admission) clusterAccess(ceph api.Value) {
 }
 
 func (a *admission) topology(ceph api.Value) {
-	if ceph.Get("security", "fips", "enabled").Bool() && ceph.Get("security", "cephx", "keyType").Text() == "aes256k" {
-		a.invalid("$.spec.security.cephx.keyType", "FIPS storage refuses AES256K CephX keys", "set spec.security.cephx.keyType to aes for FIPS storage")
-	}
 	nodes := ceph.Get("topology", "nodes").Items()
 	fqdns, names, machines := []string{}, []string{}, []string{}
 	for i, node := range nodes {

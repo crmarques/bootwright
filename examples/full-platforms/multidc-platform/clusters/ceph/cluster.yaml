@@ -50,7 +50,7 @@ spec:
       enabled: true
 
     cephx:
-      keyType: aes
+      keyType: aes256k
 
   config:
     global:

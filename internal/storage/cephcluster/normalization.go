@@ -48,7 +48,7 @@ func Normalize(object api.Object, catalog api.Catalog) (api.Object, []api.Issue)
 		spec = normalizeSMB(spec, catalog)
 	case api.CephConsumer:
 		if spec.Has("dataFoundation") {
-			spec = spec.With("dataFoundation", spec.Get("dataFoundation").Default("cephxKeyType", api.StringValue("aes")))
+			spec = spec.With("dataFoundation", spec.Get("dataFoundation").Default("cephxKeyType", api.StringValue(ConsumerDefaultKeyType)))
 		}
 	}
 	return object.WithSpec(spec), nil

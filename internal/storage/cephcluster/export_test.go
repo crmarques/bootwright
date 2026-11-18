@@ -65,6 +65,10 @@ func TestManagedExportAdmissionRulesAndPassingTwin(t *testing.T) {
 			cl := find(t, c, api.CephCluster, "storage")
 			return replace(c, cl.WithSpec(cl.Spec().WithPath(api.ListValue(), "services")))
 		}},
+		{"cluster key type", "$.spec.dataFoundation.cephxKeyType", func(c api.Catalog) api.Catalog {
+			cl := find(t, c, api.CephCluster, "storage")
+			return replace(c, cl.WithSpec(cl.Spec().WithPath(api.StringValue("aes256k"), "security", "cephx", "keyType")))
+		}},
 		{"replication", "$.spec.dataFoundation.rbdPoolRef", func(c api.Catalog) api.Catalog {
 			pool := find(t, c, api.CephPool, "block")
 			return replace(c, pool.WithSpec(pool.Spec().Without("replicated").With("erasure", m("dataChunks", 2, "codingChunks", 1))))
@@ -91,5 +95,16 @@ func TestManagedExportAdmissionRulesAndPassingTwin(t *testing.T) {
 	facts := AddonExportFacts(catalog)
 	if len(facts) != 1 || facts[0].Name != "export" || !facts[0].Gateway || facts[0].TLS {
 		t.Fatalf("export facts: %+v", facts)
+	}
+}
+
+func TestAConsumerOfAnAES256KClusterDeclaresAES256K(t *testing.T) {
+	catalog := validExportCatalog(t)
+	cluster := find(t, catalog, api.CephCluster, "storage")
+	catalog = replace(catalog, cluster.WithSpec(cluster.Spec().WithPath(api.StringValue("aes256k"), "security", "cephx", "keyType")))
+	export := find(t, catalog, api.CephConsumer, "export")
+	export = export.WithSpec(export.Spec().WithPath(api.StringValue("aes256k"), "dataFoundation", "cephxKeyType"))
+	if issues := Validate(export, replace(catalog, export)); len(issues) != 0 {
+		t.Fatalf("matching key type refused: %+v", issues)
 	}
 }

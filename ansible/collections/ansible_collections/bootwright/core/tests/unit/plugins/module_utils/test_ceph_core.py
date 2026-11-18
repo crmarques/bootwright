@@ -2500,30 +2500,58 @@ def test_host_images_refuses_an_oversized_bound_bundle_before_the_run(core_reque
 
 
 @pytest.mark.parametrize("fips", [False, True])
-def test_frozen_security_policy_has_no_service_allowlist(core_request, fips):
-    core_request["security"] = {"fips": fips, "cephxKeyType": "aes"}
+@pytest.mark.parametrize("key_type", [None, "aes256k"])
+def test_frozen_security_policy_has_no_service_allowlist(core_request, fips, key_type):
+    core_request["security"] = {"fips": fips} if key_type is None else {"fips": fips, "cephxKeyType": key_type}
     assert ceph_native.validate(core_request) is core_request
-    core_request["security"]["cephxKeyType"] = "aes256k"
+
+
+@pytest.mark.parametrize("security", [{"fips": True, "cephxKeyType": "aes"}, {"fips": True, "cephxKeyType": ""}, {"fips": True, "cephxKeyType": None},
+                                      {"fips": True, "cephxKeyType": "aes256k", "extra": 1}, {"cephxKeyType": "aes256k"}, {"fips": 1}, {}, []])
+def test_frozen_security_policy_refuses_other_types_and_members(core_request, security):
+    core_request["security"] = security
     with pytest.raises(ceph_native.Refusal):
         ceph_native.validate(core_request)
 
 
-@pytest.mark.parametrize("kind,size", [(1, 16), (2, 32), (1, 32), (0, 16)])
-def test_cephx_policy_proves_native_type_and_length_without_disclosure(kind, size):
-    request = {"security": {"fips": True, "cephxKeyType": "aes"}}
-    key = base64.b64encode(kind.to_bytes(2, "little") + bytes(8) + size.to_bytes(2, "little") + b"s" * size).decode()
-    if (kind, size) == (1, 16):
+def aes256k_key(kind=2, size=32, length=None):
+    length = size if length is None else length
+    return base64.b64encode(kind.to_bytes(2, "little") + bytes(8) + length.to_bytes(2, "little") + b"s" * size).decode()
+
+
+def test_cephx_policy_proves_the_aes256k_native_key():
+    request = {"security": {"fips": True, "cephxKeyType": "aes256k"}}
+    assert len(base64.b64decode(aes256k_key())) == 44
+    ceph_native.prove_cephx_key(request, aes256k_key())
+
+
+@pytest.mark.parametrize("kind,size,length", [(1, 16, None), (1, 32, None), (2, 16, None), (2, 32, 16), (2, 33, 33), (0, 32, None), (3, 32, None)])
+def test_cephx_policy_refuses_other_types_and_lengths_without_disclosure(kind, size, length):
+    request = {"security": {"fips": True, "cephxKeyType": "aes256k"}}
+    key = aes256k_key(kind, size, length)
+    with pytest.raises(ceph_native.NativeFailure, match="cephx-policy") as caught:
         ceph_native.prove_cephx_key(request, key)
-    else:
-        with pytest.raises(ceph_native.NativeFailure, match="cephx-policy") as caught:
-            ceph_native.prove_cephx_key(request, key)
-        assert key not in repr(caught.value.native_error)
+    assert key not in repr(caught.value.native_error) and "aes256k" in caught.value.native_error["cause"]
+
+
+@pytest.mark.parametrize("key", ["not base64!", "AQ=", "", None, 7, "A" * 1025, base64.b64encode(b"x" * 900).decode()])
+def test_cephx_policy_refuses_malformed_or_over_long_values_without_disclosure(key):
+    request = {"security": {"fips": True, "cephxKeyType": "aes256k"}}
+    with pytest.raises(ceph_native.NativeFailure, match="cephx-policy") as caught:
+        ceph_native.prove_cephx_key(request, key)
+    assert not isinstance(key, str) or not key or key not in repr(caught.value.native_error)
+
+
+@pytest.mark.parametrize("request_value", [{}, {"security": {"fips": True}}, {"security": {"fips": False}}])
+def test_a_request_without_a_declared_key_type_proves_no_key(request_value):
+    ceph_native.prove_cephx_key(request_value, aes256k_key(1, 16))
+    ceph_native.prove_cephx_key(request_value, "not base64!")
 
 
 @pytest.mark.parametrize("kernel,policy", [(b"1\n", b"FIPS"), (b"0\n", b"FIPS"), (b"1\n", b"DEFAULT"), (b"1\n", b"FIPS:OSPP")])
 def test_host_fips_policy_is_observed_before_claim(monkeypatch, kernel, policy):
     import io
-    request = {"security": {"fips": True, "cephxKeyType": "aes"}}
+    request = {"security": {"fips": True}}
     monkeypatch.setattr("builtins.open", lambda path, mode: io.BytesIO(kernel))
     monkeypatch.setattr(ceph_native, "read_regular", lambda *args, **kwargs: policy)
     if kernel == b"1\n" and policy == b"FIPS":
@@ -2549,7 +2577,7 @@ def test_a_provided_host_observes_exact_fips_mode_or_refuses_fips_not_enabled(mo
         return policy
     monkeypatch.setattr("builtins.open", opened)
     monkeypatch.setattr(ceph_native, "read_regular", regular)
-    request, host = {"security": {"fips": True, "cephxKeyType": "aes"}}, {"name": "tie.example.test", "machine": "tie", "provided": True}
+    request, host = {"security": {"fips": True}}, {"name": "tie.example.test", "machine": "tie", "provided": True}
     if proved:
         assert ceph_native.observe_fips(request, host) == {"kernel": "1", "policy": "FIPS"}
     else:
@@ -2557,14 +2585,14 @@ def test_a_provided_host_observes_exact_fips_mode_or_refuses_fips_not_enabled(mo
             ceph_native.observe_fips(request, host)
         assert str(caught.value) == "fips-not-enabled" and "kernel=" in repr(caught.value.native_error)
     with pytest.raises(ceph_native.Refusal, match="request"):
-        ceph_native.observe_fips({"security": {"fips": False, "cephxKeyType": "aes"}}, host)
+        ceph_native.observe_fips({"security": {"fips": False}}, host)
     with pytest.raises(ceph_native.Refusal, match="request"):
         ceph_native.observe_fips(request, dict(host, provided=False))
 
 
 def test_missing_live_fips_refuses_before_any_claim_effect(core_request, monkeypatch):
     import io
-    core_request["security"] = {"fips": True, "cephxKeyType": "aes"}
+    core_request["security"] = {"fips": True}
     native, calls = worker(core_request, {})
     monkeypatch.setattr("builtins.open", lambda path, mode: io.BytesIO(b"0\n"))
     monkeypatch.setattr(ceph_native, "read_regular", lambda *args, **kwargs: b"FIPS")
@@ -2576,7 +2604,7 @@ def test_missing_live_fips_refuses_before_any_claim_effect(core_request, monkeyp
 def test_missing_live_fips_refuses_before_package_host_inspection(monkeypatch):
     import io
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_packages
-    request = {"security": {"fips": True, "cephxKeyType": "aes"}}
+    request = {"security": {"fips": True}}
     monkeypatch.setattr("builtins.open", lambda path, mode: io.BytesIO(b"0\n"))
     monkeypatch.setattr(ceph_native, "read_regular", lambda *args, **kwargs: b"FIPS")
     monkeypatch.setattr(ceph_packages, "actual_platform", lambda: pytest.fail("reached package inspection"))

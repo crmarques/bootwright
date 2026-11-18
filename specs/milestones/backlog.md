@@ -327,6 +327,7 @@ Alias cell.
 | [B1555](#b1555) | new, 2026-11-17 (X573 review) | product | Substrate, with CLI | `machine eject-media` releases every virtual-media device a management controller exposes, not only the one Bootwright inserts through | Bootwright inserts through one device, so only that one has refused an insert; no owner run has met another |
 | [B1557](#b1557) | new, 2026-11-17 (X576) | enabling | Verification tooling, with each owning context | The role families that call fixed executables, fixed host roots or remote endpoints run their entry points through ansible-core in the gate | Each needs an executable, root or endpoint override in the role, a custody change the owner has not asked for |
 | [B1588](#b1588) | new, 2026-11-18 (X597 review) | safety | Substrate | A libvirt guest listing reads each domain by its UUID, so no domain name is read as another domain's ID | Low confidence that libvirt admits an all-digit domain name; the fix touches every guest-listing fixture |
+| [B1612](#b1612) | new, 2026-11-18 (D277) | product | Storage, with Add-ons | An omitted CephConsumer key type defaults to one the cluster's MONs allow | An explicit `aes256k` already works; the default needs an owner decision |
 
 ### B82
 
@@ -3705,6 +3706,22 @@ roots, downloads) and Ceph beyond the image release (absolute `cephadm`,
 integration target per family in the `integration` lane. Parked because each
 needs a test-only executable, root or endpoint override inside the role, a
 custody change no owner decision asks for.
+
+### B1612
+
+**Owner:** Storage, with Add-ons. **Kind:** product. **Requires:** an owner
+decision. **Definition:** Candidate. **Outcome:** the
+[CephConsumer](../ceph-resources.md#cephconsumer)'s omitted
+`dataFoundation.cephxKeyType` no longer defaults to a type the selected
+cluster's MONs disallow: it defaults to `aes256k`, which the providers
+recommend, or becomes required. Today it defaults to `aes`, which a cluster
+admitting only `aes256k`, such as the pinned IBM Storage Ceph 9.9.1.2 build,
+refuses before minting any principal; an explicit `aes256k` works.
+**Exit evidence:** the normalization and export tests over the chosen
+default, and the examples and goldens that rely on it. Parked by
+[D277](#d277) because changing a consumer default is outside that decision
+and the kernel client's key support is still unqualified
+([B761](m4.md#b761)).
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its
@@ -7157,7 +7174,7 @@ Use versioned provider instructions and matching client artifacts; record
 native defaults and test actual client I/O without an automatic cipher
 downgrade or client fallback. This selects a comparison profile, not a new
 admitted value or a correction to the explicit-AES contract of
-[B628](m2.md#b628). Kernel and Data Foundation compatibility require their own
+[B628](delivered.md#b628). Kernel and Data Foundation compatibility require their own
 evidence. FIPS and the unassisted license-persistence gate remain open under
 [B1013](m2.md#b1013) and [B1014](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03); no run is accepted by this choice.
 
@@ -7494,7 +7511,7 @@ opens slice X303 with [B1127](m4.md#b1127), [B1128](m4.md#b1128),
 [B1129](m4.md#b1129) and [B1131](m4.md#b1131). Session clauses, pending the
 owner's review: the case declares no object gateway; it keeps the consumer's
 key type at `aes256k`, which the IBM Storage Ceph 9.9.x monitors require, and
-leaves the client question to [B628](m2.md#b628); and the fail-fast refusal of
+leaves the client question to [B628](delivered.md#b628); and the fail-fast refusal of
 a replaced CSV is recorded as [B1130](m4.md#b1130), not implemented.
 
 ### D233
@@ -9352,3 +9369,30 @@ The owner's focused-check instruction of [D273](#d273) remains in force: each
 slice lands on its focused checks and, in the safety class, its race runs,
 with one full gate at the end. No real-host operation, release or push is
 authorized.
+
+### D277
+
+**owner** (2026-11-18): after `ceph-prd-dc1-test` refused `cephx-policy`
+because its input still declared `security.cephx.keyType: aes` against the
+pinned IBM Storage Ceph 9.9.1.2 build, which mints only `aes256k` keys, the
+owner was shown four corrections of [B628](delivered.md#b628) and chose the
+fourth, "proceed with option 4. resolve any backlog depending on this
+decision". The cluster's `security.cephx.keyType` admits only `aes256k` and
+proves it; omitting it keeps the build's own key type with no proof; FIPS
+implies no key type; an older client's `aes` key stays the consumer's own
+choice. The rule is the [CephX clause](../ceph.md#frozen-release-and-trust).
+The basis is the providers' guidance as read that day: Ceph and Rook name
+`aes256k` the key type to use wherever clients support it, the advisory
+behind it (OSSN-0108, CVE-2025-30156) describes the legacy `aes`
+construction's fixed IV and missing HMAC, and Red Hat treats FIPS as a
+RHEL property, with no tie to a key type. This replaces the AES256K key
+refusal that [D164](#d164) (2) kept and the FIPS-implies-AES policy of
+[D159](#d159) clause 16, and closes B628 with
+[X620](delivered.md#x620--the-cluster-cephx-key-type-proves-aes256k). It
+selects no MON cipher rewrite, key rotation or consumer default change.
+[D218](#d218)'s native-default comparison profile stays as chosen.
+Taken by the session, pending the owner's review: a consumer of a cluster
+that declares a key type must declare the same type, so the cluster's proof
+never meets a key Bootwright minted itself; B761's acceptance re-verifies the
+key type the consumer actually declares, not a type-1 key; and the
+consumer's `aes` default is parked for decision as [B1612](#b1612).

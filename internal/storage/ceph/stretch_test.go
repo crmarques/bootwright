@@ -253,7 +253,7 @@ func TestEveryBlockThatDialsAFIPSTiebreakerRefusesItsWeakPinnedHostKey(t *testin
 	weak := trust.HostKey{Type: "ssh-ed25519", PublicKey: wire([]byte("ssh-ed25519"), make([]byte, 32))}
 	for _, key := range []trust.HostKey{weak, rsaKey(2048)} {
 		e := lifecycle.Execution{Material: map[string]secrets.Material{"tie-known-hosts": secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(key.Line(tieAddress, 22))})}}
-		scope := ClusterScope{Bootstrap: "tie", Security: &Security{FIPS: true, CephXKeyType: "aes"}, Hosts: []Host{tie}}
+		scope := ClusterScope{Bootstrap: "tie", Security: &Security{FIPS: true, CephXKeyType: "aes256k"}, Hosts: []Host{tie}}
 		admitted := key.Type == "ssh-rsa"
 		for name, bind := range map[string]func() error{
 			"smb and consumer": func() error {

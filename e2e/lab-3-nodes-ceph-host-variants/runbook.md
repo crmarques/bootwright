@@ -9,7 +9,7 @@ Both NICs join one bridge, `virbr-e2e`, so the bond proves neither physical
 network isolation nor independent links. The guests register with RHSM, install
 in FIPS mode without OSPP and encrypt their root with LUKS unlocked by the
 guest TPM2 and recovered by a passphrase; both SSH keys are ECDSA P-256 and
-CephX uses AES. Cluster `ceph-e2e` has 3 mons, 2 mgrs and one OSD per host on an
+CephX keys prove AES256K. Cluster `ceph-e2e` has 3 mons, 2 mgrs and one OSD per host on an
 80 GiB virtual SSD, and a 2/2 replicated RBD pool. Each guest has 4 vCPU and a
 60 GiB root; memory is 13, 13 and 10 GiB (IBM's per-guest figures of 11, 11
 and 8 GB plus 2 GiB of operating-system headroom). Context
@@ -43,7 +43,7 @@ private records for cleanup. Run each other input variant from the beginning.
 ## 1. Choose the inputs
 
 Everything P5 varies is fixed in the templates: FIPS without OSPP, the TPM2
-unlock with an empty PCR policy, the AES CephX key type, the bond and VLAN, the
+unlock with an empty PCR policy, the AES256K CephX key type, the bond and VLAN, the
 4 GiB OSD memory target (`4294967296`, a target and not a process cap) and the
 2/2 pool. [values.yaml](values.yaml) holds the addresses, upstreams, media
 names, VLAN id, cluster CIDR, guest sizes and the release coordinates. A release
@@ -282,9 +282,9 @@ check of [Key type](#key-type), without exporting a key.
 
 `config dump` and the capabilities show no key type. A CephX key's base64
 encoding starts with a little-endian 16-bit type, `1` for AES and `2` for
-AES256K, and carries the secret length in bytes 10 and 11, `16` for AES: the
-check Bootwright makes before readiness ([managed Ceph](../../specs/ceph.md),
-"Native auth keys must prove the declared AES type"). Decode it inside a
+AES256K, and carries the secret length in bytes 10 and 11, `32` for AES256K:
+the check Bootwright makes before readiness
+([CephX clause](../../specs/ceph.md#frozen-release-and-trust)). Decode it inside a
 root-private scratch directory on the admin guest; only the type and length are
 printed:
 
@@ -296,11 +296,11 @@ umask 077
 check_dir=$(mktemp -d /var/tmp/ceph-key-type.XXXXXXXX)
 trap 'rm -f -- "$check_dir/auth.json"; rmdir -- "$check_dir"' EXIT
 ceph --conf "$1" --keyring "$2" auth get "$3" --format json > "$check_dir/auth.json"
-python3 -c 'import base64, json, struct, sys; d = base64.b64decode(json.load(open(sys.argv[1]))[0]["key"], validate=True); t, n = struct.unpack_from("<H", d, 0)[0], struct.unpack_from("<H", d, 10)[0]; print("cephx key type:", {1: "aes", 2: "aes256k"}.get(t, "unknown"), "secret bytes:", n); sys.exit(0 if (t, n, len(d)) == (1, 16, 28) else 1)' "$check_dir/auth.json"
+python3 -c 'import base64, json, struct, sys; d = base64.b64decode(json.load(open(sys.argv[1]))[0]["key"], validate=True); t, n = struct.unpack_from("<H", d, 0)[0], struct.unpack_from("<H", d, 10)[0]; print("cephx key type:", {1: "aes", 2: "aes256k"}.get(t, "unknown"), "secret bytes:", n); sys.exit(0 if (t, n, len(d)) == (2, 32, 44) else 1)' "$check_dir/auth.json"
 KEYTYPE
 ```
 
-Require `cephx key type: aes secret bytes: 16` and exit 0; repeat with
+Require `cephx key type: aes256k secret bytes: 32` and exit 0; repeat with
 `CLIENT="client.admin"` selected in the assignment above.
 
 ### Pool client
@@ -558,5 +558,5 @@ Shared media and the private evidence remain.
 The row for the ledger:
 
 ```text
-| <YYYY-MM-DD> | Commit <sha>; Source clean | Retained locally | e2e/lab-3-nodes-ceph-host-variants (P5) with the lab conventions only | Retained locally | P5 matrix qualification: host and security variants (active-backup bond over 2 NICs, VLAN cluster network over the bond, final NMState, RHSM registration, FIPS without OSPP, CephX AES, LUKS root with TPM2 unlock and recovery, reboot access), one explicit data disk, explicit 2/2 pool, pool client access, one-host outage, interruption, replay, changed intent and removal | Retained locally | observation, not acceptance |
+| <YYYY-MM-DD> | Commit <sha>; Source clean | Retained locally | e2e/lab-3-nodes-ceph-host-variants (P5) with the lab conventions only | Retained locally | P5 matrix qualification: host and security variants (active-backup bond over 2 NICs, VLAN cluster network over the bond, final NMState, RHSM registration, FIPS without OSPP, CephX AES256K, LUKS root with TPM2 unlock and recovery, reboot access), one explicit data disk, explicit 2/2 pool, pool client access, one-host outage, interruption, replay, changed intent and removal | Retained locally | observation, not acceptance |
 ```
