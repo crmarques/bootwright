@@ -64,6 +64,51 @@ def test_an_evidence_value_outside_its_own_grammar_is_refused(overrides):
         machine_power_protocol.evidence_for(arguments(**overrides))
 
 
+def ejecting(**overrides):
+    values = arguments(verb="eject-media", power="On", previous="On", media="none", previous_media="foreign")
+    values.update(overrides)
+    return values
+
+
+# An eject proves only a device read back presenting nothing, at whatever power
+# the machine was; whose image it presented is never published.
+def test_an_eject_proves_only_a_device_read_back_empty():
+    evidence = machine_power_protocol.evidence_for(ejecting())
+    assert evidence["postcondition"]
+    assert evidence["media"] == "none" and evidence["previousMedia"] == "present"
+    assert machine_power_protocol.evidence_for(ejecting(power="Off", previous="Off", previous_media="none"))["postcondition"]
+    assert machine_power_protocol.evidence_for(ejecting(previous_media="own"))["previousMedia"] == "present"
+    assert machine_power_protocol.evidence_for(ejecting(previous_media="unknown"))["previousMedia"] == "unknown"
+    for unproved in ({"media": "foreign"}, {"media": "own"}, {"media": "unknown"}, {"power": ""}):
+        assert not machine_power_protocol.evidence_for(ejecting(**unproved))["postcondition"], unproved
+
+
+def test_an_unproved_eject_names_the_media_not_the_power():
+    evidence, refusal = machine_power_protocol.completion(ejecting(media="foreign"))
+    assert not evidence["postcondition"]
+    assert refusal == "the management controller did not prove the virtual-media device presents nothing"
+    assert machine_power_protocol.completion(ejecting())[1] is None
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"media": "https://media.test/other.iso"},
+        {"previous_media": ""},
+        {"media": None},
+    ],
+)
+def test_an_eject_media_value_outside_its_grammar_is_refused(overrides):
+    with pytest.raises(ValueError):
+        machine_power_protocol.evidence_for(ejecting(**overrides))
+
+
+def test_a_power_verb_publishes_no_media():
+    assert "media" not in machine_power_protocol.evidence_for(arguments())
+    with pytest.raises(ValueError):
+        machine_power_protocol.evidence_for(arguments(media="none"))
+
+
 def reads(*results):
     return {"digest": DIGEST, "readings": list(results)}
 

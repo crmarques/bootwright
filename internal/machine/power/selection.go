@@ -22,7 +22,7 @@ type realizations func(name string) (machine.OwnershipState, bool, error)
 // beside the request rather than in it: it decides whether the operation holds
 // the Machine to a proved identity first, never what the adapter is asked.
 func requestFor(catalog api.Catalog, contextName, name string, verb Verb, force bool, realized realizations) (Request, bool, bool, error) {
-	if !slices.Contains([]Verb{Start, Stop, Restart}, verb) {
+	if !slices.Contains([]Verb{Start, Stop, Restart, EjectMedia}, verb) {
 		return Request{}, false, false, failure("lifecycle.state", "unsupported power verb", "")
 	}
 	context, valid := api.ParseContextName(contextName)
@@ -41,7 +41,7 @@ func requestFor(catalog api.Catalog, contextName, name string, verb Verb, force 
 	if err != nil {
 		return Request{}, false, false, err
 	}
-	if removed && verb != Stop {
+	if removed && verb != Stop && verb != EjectMedia {
 		return Request{}, false, false, failure("access.unavailable",
 			"the destroy current in this context removed the realization of "+object.Identity()+", so there is nothing to "+string(verb),
 			"finish the removal with bootwright destroy --context "+contextName+", then bootwright apply --context "+contextName+" realizes "+object.Identity()+" again")

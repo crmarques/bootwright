@@ -1,0 +1,8 @@
+  ✓ Machine presents no media
+
+    Machine   rhel-01
+    Media     none
+    Previous  present
+    Power     on
+    Logs      /var/log/bootwright/contexts/lab/runs/run-000003.output
+    Follow    bootwright logs --context lab --run run-000003

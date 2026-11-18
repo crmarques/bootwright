@@ -743,6 +743,17 @@ bootwright machine stop --context lab-rhel --name rhel-01,rhel-02,rhel-03 --yes
 bootwright machine exec --context lab-rhel --name rhel-01,rhel-02,rhel-03 cat /etc/os-release
 ```
 
+When an insert refuses because a BMC still presents other media, such as an
+image an operator attached by hand or one an interrupted run left, `machine
+eject-media` releases whatever each listed Machine presents and reads the
+device back empty, leaving its power as it was
+([eject](../specs/cli.md#machine-media-eject)); then repeat the refused
+command:
+
+```sh
+bootwright machine eject-media --context lab-rhel --name rhel-01,rhel-02 --yes
+```
+
 `cluster exec` does the same across clusters and nodes: `--name` and `--node`
 take comma-separated lists, each listed cluster runs the command on its
 administrator node (the one `cluster info` names), or on the `--node` members

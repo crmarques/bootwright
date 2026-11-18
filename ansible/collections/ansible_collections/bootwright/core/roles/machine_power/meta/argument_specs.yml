@@ -90,6 +90,7 @@ argument_specs:
               - start
               - stop
               - restart
+              - eject-media
           version:
             type: str
             required: true

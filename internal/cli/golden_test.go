@@ -501,6 +501,18 @@ func cliGoldens() []cliGolden {
 	powered := func(verb power.Verb, now, previous string, changed bool) *power.Results {
 		return &power.Results{Context: "lab", Verb: verb, Machines: []power.Result{powerRow("rhel-01", verb, now, previous, changed)}}
 	}
+	ejectedMedia := func(names ...string) *power.Results {
+		results := &power.Results{Context: "lab", Verb: power.EjectMedia}
+		for index, name := range names {
+			row := powerRow(name, power.EjectMedia, "on", "on", index == 0)
+			row.Media, row.PreviousMedia = power.MediaNone, power.MediaPresent
+			if index != 0 {
+				row.PreviousMedia = power.MediaNone
+			}
+			results.Machines = append(results.Machines, row)
+		}
+		return results
+	}
 	poweredSeveral := func(r *dispatchRecord) {
 		r.result.power = &power.Results{Context: "lab", Verb: "stop", Machines: []power.Result{
 			powerRow("rhel-01", "stop", "off", "on", true), powerRow("rhel-02", "stop", "off", "off", false),
@@ -1107,6 +1119,9 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-machine-stop-json", args: "machine stop --name rhel-01 --yes --output json", record: func(r *dispatchRecord) { r.result.power = powered("stop", "off", "off", false) }},
 		{golden: "cli-machine-restart", args: "machine restart --name rhel-01 --force --yes", record: func(r *dispatchRecord) { r.result.power = powered("restart", "on", "on", true) }},
 		{golden: "cli-machine-restart-json", args: "machine restart --name rhel-01 --force --yes --output json", record: func(r *dispatchRecord) { r.result.power = powered("restart", "on", "on", true) }},
+		{golden: "cli-machine-eject-media", args: "machine eject-media --name rhel-01 --yes", record: func(r *dispatchRecord) { r.result.power = ejectedMedia("rhel-01") }},
+		{golden: "cli-machine-eject-media-json", args: "machine eject-media --name rhel-01 --yes --output json", record: func(r *dispatchRecord) { r.result.power = ejectedMedia("rhel-01") }},
+		{golden: "cli-machine-eject-media-several", args: "machine eject-media --name rhel-02,rhel-01 --yes", record: func(r *dispatchRecord) { r.result.power = ejectedMedia("rhel-01", "rhel-02") }},
 		// A refused run: text named the run's directory while it ran, so it
 		// adds only the diagnostic; JSON reported no progress, so its failure
 		// envelope names the retained file.
@@ -1336,7 +1351,7 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 		"add-ons list", "add-ons info",
 		"validate", "preflight", "render effective", "render acquisitions", "status", "logs", "diff",
 		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "controller install",
-		"machine cp", "machine list", "machine info", "machine start", "machine stop", "machine restart", "media list", "cluster list", "cluster info",
+		"machine cp", "machine list", "machine info", "machine start", "machine stop", "machine restart", "machine eject-media", "media list", "cluster list", "cluster info",
 	}
 	implemented := map[string]bool{}
 	for _, spec := range commandCatalog() {

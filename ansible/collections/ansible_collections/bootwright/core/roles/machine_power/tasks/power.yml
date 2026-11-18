@@ -1,14 +1,14 @@
 ---
 # Power goes through the power and state_read entry points of the substrate
-# machine port, dispatched by the arm the frozen request carries, so every arm
-# the substrate realizes takes exactly this path. Every step polls the
-# resource to the state it asked for.
+# machine port, and an eject through its media_eject entry point, dispatched by
+# the arm the frozen request carries, so every arm the substrate realizes takes
+# exactly this path. Every step polls the resource to the state it asked for.
 - name: Validate the frozen power request
   ansible.builtin.assert:
     that:
       - bootwright_machine_power_request.version == 'machine-power-v1'
       - bootwright_machine_power_request.arm is string
-      - bootwright_machine_power_request.verb in ['start', 'stop', 'restart']
+      - bootwright_machine_power_request.verb in ['start', 'stop', 'restart', 'eject-media']
       - bootwright_machine_power_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
   no_log: true
@@ -218,6 +218,10 @@
   ansible.builtin.include_tasks: start.yml
   when: bootwright_machine_power_request.verb in ['start', 'restart']
 
+- name: Eject whatever media the machine presents
+  ansible.builtin.include_tasks: eject.yml
+  when: bootwright_machine_power_request.verb == 'eject-media'
+
 - name: Read the state the operation settled at
   ansible.builtin.include_role:
     name: bootwright.core.substrate_machine
@@ -225,7 +229,7 @@
   vars:
     bootwright_machine_arm: '{{ bootwright_machine_power_request.arm }}'
     bootwright_machine_port: >-
-      {{ machine_power_access | combine({'media': false}) }}
+      {{ machine_power_access | combine({'media': bootwright_machine_power_request.verb == 'eject-media'}) }}
 
 - name: Retain the machine port answer
   ansible.builtin.set_fact:
@@ -248,14 +252,24 @@
     outcome: >-
       {{ 'changed' if machine_power_after.power != machine_power_before.power
          or bootwright_machine_power_request.verb == 'restart'
-         and machine_power_before.power == 'On' else 'unchanged' }}
+         and machine_power_before.power == 'On'
+         or bootwright_machine_power_request.verb == 'eject-media'
+         and machine_power_media_changed | bool else 'unchanged' }}
     digest: '{{ bootwright_machine_power_digest }}'
     machine: '{{ bootwright_machine_power_request.identity.object }}'
     verb: '{{ bootwright_machine_power_request.verb }}'
     power: '{{ machine_power_after.power }}'
     previous: '{{ machine_power_before.power }}'
+    media: >-
+      {{ machine_power_after.media_state | default('unknown')
+         if bootwright_machine_power_request.verb == 'eject-media' else omit }}
+    previous_media: >-
+      {{ machine_power_media_before.media_state | default('unknown')
+         if bootwright_machine_power_request.verb == 'eject-media' else omit }}
     changed: >-
       {{ machine_power_after.power != machine_power_before.power
          or bootwright_machine_power_request.verb == 'restart'
-         and machine_power_before.power == 'On' }}
+         and machine_power_before.power == 'On'
+         or bootwright_machine_power_request.verb == 'eject-media'
+         and machine_power_media_changed | bool }}
   no_log: true

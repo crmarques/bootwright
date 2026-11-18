@@ -17,11 +17,14 @@ type machinePowerPresentation struct {
 }
 
 type machinePowerRowPresentation struct {
-	Machine  string   `json:"machine"`
-	Power    string   `json:"power,omitempty"`
-	Previous string   `json:"previous,omitempty"`
-	Changed  bool     `json:"changed"`
-	Logs     []string `json:"logs"`
+	Machine  string `json:"machine"`
+	Power    string `json:"power,omitempty"`
+	Previous string `json:"previous,omitempty"`
+	Media    string `json:"media,omitempty"`
+	// PreviousMedia is what the device presented before an eject.
+	PreviousMedia string   `json:"previousMedia,omitempty"`
+	Changed       bool     `json:"changed"`
+	Logs          []string `json:"logs"`
 }
 
 func (machinePowerPresentation) documentedResult() {}
@@ -51,7 +54,8 @@ func displayMachinePower(result *power.Results) machinePowerPresentation {
 	for _, row := range result.Machines {
 		rows = append(rows, machinePowerRowPresentation{
 			Machine: escapeDisplayLine(row.Machine), Power: escapeDisplayLine(row.Power),
-			Previous: escapeDisplayLine(row.Previous), Changed: row.Changed, Logs: displayLines(row.Logs),
+			Previous: escapeDisplayLine(row.Previous), Media: escapeDisplayLine(row.Media), PreviousMedia: escapeDisplayLine(row.PreviousMedia),
+			Changed: row.Changed, Logs: displayLines(row.Logs),
 		})
 	}
 	return machinePowerPresentation{
@@ -67,6 +71,9 @@ func writeMachinePower(out io.Writer, command string, result *power.Results, jso
 		})
 	}
 	if len(result.Machines) == 1 {
+		if result.Verb == power.EjectMedia {
+			return writeSingleMachineEject(out, result.Machines[0])
+		}
 		return writeSingleMachinePower(out, result.Machines[0])
 	}
 	var text display
@@ -74,10 +81,18 @@ func writeMachinePower(out io.Writer, command string, result *power.Results, jso
 	if slices.ContainsFunc(result.Machines, func(row power.Result) bool { return row.Changed }) {
 		status = "OK"
 	}
-	text.headline(status, fmt.Sprintf("%d machines settled", len(result.Machines)))
+	settled, _ := settledWords(result)
+	text.headline(status, fmt.Sprintf("%d machines %s", len(result.Machines), settled))
 	text.section("")
 	writePowerTable(&text, result)
 	return text.writeTo(out)
+}
+
+func settledWords(result *power.Results) (string, string) {
+	if result.Verb == power.EjectMedia {
+		return "ejected", "eject"
+	}
+	return "settled", "settle"
 }
 
 func writeMachinePowerFailure(out, errOut io.Writer, command string, result *power.Results, requested int, diagnostics []diagnostic, jsonMode bool) error {
@@ -94,7 +109,8 @@ func writeMachinePowerFailure(out, errOut io.Writer, command string, result *pow
 		}
 	}
 	var text display
-	text.headline("FAIL", fmt.Sprintf("%d of %d machines did not settle", unsettled, requested))
+	_, settle := settledWords(result)
+	text.headline("FAIL", fmt.Sprintf("%d of %d machines did not %s", unsettled, requested, settle))
 	text.section("")
 	writePowerTable(&text, result)
 	if err := text.writeTo(out); err != nil {
@@ -104,6 +120,10 @@ func writeMachinePowerFailure(out, errOut io.Writer, command string, result *pow
 }
 
 func writePowerTable(text *display, result *power.Results) {
+	if result.Verb == power.EjectMedia {
+		writeEjectTable(text, result)
+		return
+	}
 	rows := make([][]string, 0, len(result.Machines))
 	for _, row := range result.Machines {
 		rows = append(rows, []string{row.Machine, displayValue(row.Power), displayValue(row.Previous), displayValue(row.LogLocation)})
@@ -123,6 +143,33 @@ func writeSingleMachinePower(out io.Writer, result power.Result) error {
 		{Label: "Machine", Value: result.Machine},
 		{Label: "Power", Value: result.Power},
 		{Label: "Previous", Value: displayValue(result.Previous)},
+	}
+	fields = append(fields, logFields(result.LogLocation, logsHint{Context: result.Context, Run: result.Run})...)
+	text.fields(fields...)
+	return text.writeTo(out)
+}
+
+func writeEjectTable(text *display, result *power.Results) {
+	rows := make([][]string, 0, len(result.Machines))
+	for _, row := range result.Machines {
+		rows = append(rows, []string{row.Machine, displayValue(row.Media), displayValue(row.PreviousMedia), displayValue(row.Power), displayValue(row.LogLocation)})
+	}
+	text.resourceTable([]string{"MACHINE", "MEDIA", "PREVIOUS", "POWER", "LOGS"}, rows, tableStyle{Kind: "machine", Identity: 0, States: []int{1, 3}})
+}
+
+func writeSingleMachineEject(out io.Writer, result power.Result) error {
+	var text display
+	status := "OK"
+	if !result.Changed {
+		status = "SKIPPED"
+	}
+	text.headline(status, "Machine presents no media")
+	text.section("")
+	fields := []field{
+		{Label: "Machine", Value: result.Machine},
+		{Label: "Media", Value: displayValue(result.Media)},
+		{Label: "Previous", Value: displayValue(result.PreviousMedia)},
+		{Label: "Power", Value: displayValue(result.Power)},
 	}
 	fields = append(fields, logFields(result.LogLocation, logsHint{Context: result.Context, Run: result.Run})...)
 	text.fields(fields...)

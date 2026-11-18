@@ -35,6 +35,19 @@ func machineCommands() []commandSpec {
 		available(powerCommand("machine start", "Power machines on through their management controllers", false, Services.invokeMachineStart)),
 		available(powerCommand("machine stop", "Shut machines down through their management controllers", true, Services.invokeMachineStop)),
 		available(powerCommand("machine restart", "Restart machines through their management controllers", true, Services.invokeMachineRestart)),
+		available(ejectMediaCommand()),
+	}
+}
+
+func ejectMediaCommand() commandSpec {
+	return commandSpec{
+		path: "machine eject-media", short: "Eject whatever virtual media machines present", example: "--context lab --name node --yes",
+		flags: []flagSpec{machineNamesFlag(), confirmationFlag()}, invoke: Services.invokeMachineEjectMedia,
+		validate: firstRefusal(validateMachineNames, validateEjectConfirmation), render: renderMachinePower(), results: []jsonResult{machinePowerPresentation{}},
+		long: "Eject whatever image the virtual-media device Bootwright inserts through presents on each machine, whichever image it is and whoever attached it, " +
+			"and leave its power as it is. --name takes a comma-separated list, and the command applies to every listed machine at once. " +
+			"Success reports that the controller was read back presenting no media, not that an eject was requested. " +
+			"A machine still running from the ejected image may fail; review the machines before confirming; --yes skips ordinary confirmation.",
 	}
 }
 
@@ -78,6 +91,7 @@ type MachinePowerService interface {
 	Start(context.Context, power.PowerRequest) (*power.Results, error)
 	Stop(context.Context, power.PowerRequest) (*power.Results, error)
 	Restart(context.Context, power.PowerRequest) (*power.Results, error)
+	EjectMedia(context.Context, power.PowerRequest) (*power.Results, error)
 }
 
 func (s Services) invokeMachineList(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
@@ -155,5 +169,13 @@ func (s Services) invokeMachineRestart(ctx context.Context, values *requestValue
 		return commandResult{}, errMissingService
 	}
 	result, err := invokeResult(ctx, values, s.powerRequest(values), s.MachinePower.Restart)
+	return commandResult{power: result}, err
+}
+
+func (s Services) invokeMachineEjectMedia(ctx context.Context, values *requestValues, _ []string) (commandResult, error) {
+	if s.MachinePower == nil {
+		return commandResult{}, errMissingService
+	}
+	result, err := invokeResult(ctx, values, s.powerRequest(values), s.MachinePower.EjectMedia)
 	return commandResult{power: result}, err
 }

@@ -37,8 +37,11 @@ func hostedNamespace(access Access) string {
 
 const runOverhead = 5 * time.Minute
 
-func powerDeadline(arm substrate.Arm) time.Duration {
+func powerDeadline(arm substrate.Arm, verb Verb) time.Duration {
 	bounds, _ := substrate.MachineBoundsFor(arm)
+	if verb == EjectMedia {
+		return bounds.MediaEject + 4*bounds.StateRead + runOverhead
+	}
 	return bounds.Power + 2*bounds.StateRead + runOverhead
 }
 

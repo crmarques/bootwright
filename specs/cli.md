@@ -163,7 +163,7 @@ resolved scalar value under the last-occurrence-wins rule.
 
 `--clusters`, `--replace`, and `--stage` are comma-separated
 lists, and so are the optional `--name` of `machine trust`, the required `--name` of `machine start`, `machine stop`,
-`machine restart` and `machine exec`, the required `--name` and the `--node` of
+`machine restart`, `machine eject-media` and `machine exec`, the required `--name` and the `--node` of
 `cluster exec`, and the optional `--name` of `cluster info`, `machine info` and `secret info`.
 Whitespace around a member is ignored, empty members are ignored, and duplicate
 members collapse to their first occurrence. Omission selects all eligible
@@ -181,8 +181,8 @@ preserve these command-specific compatibility rules:
   while an empty or comma-only `--replace` selects no replacement; and
 - a supplied `--stage` must resolve to at least one member, so a comma-only
   value is a usage error, and every member must be a declared stage name; and
-- a supplied `--name` of `machine start`, `machine stop`, `machine restart`
-  and `machine exec` must likewise resolve to at least one member, so a
+- a supplied `--name` of `machine start`, `machine stop`, `machine restart`,
+  `machine eject-media` and `machine exec` must likewise resolve to at least one member, so a
   comma-only value is a usage error. `machine rsh` opens one interactive
   session and keeps a single `--name`: a value containing a comma is a usage
   error;
@@ -1587,10 +1587,12 @@ that lists the fingerprints and the `--expect` that records them (D183, Q97).
 ### Machine power operations
 
 `machine start`, `machine stop` and `machine restart` converge one exact
-Machine to a power state. They are bounded operations, not desired state: they
+Machine to a power state, and `machine eject-media` converges its virtual-media
+device to presenting nothing. They are bounded operations, not desired state: they
 register no lifecycle operation, freeze no plan, and change no ownership,
 continuation, or frozen plan, so a machine an operator stopped is still a
-machine this context owns and will reconcile.
+machine this context owns and will reconcile. [An eject](#machine-media-eject)
+otherwise follows a stop.
 
 `--name` is a comma-separated list under the
 [list rules](#parsing-and-input-conventions). One member after normalization
@@ -1707,3 +1709,25 @@ management controller what state it is in and reports the answer. Because it
 observes rather than converges, an unreachable management controller leaves its
 own Machine `unknown` instead of refusing, and a Machine no management
 controller resolves for is omitted from the reading instead of failing `access.unavailable`.
+
+### Machine media eject
+
+`machine eject-media` releases whatever image the virtual-media device that
+Bootwright inserts through presents, whichever operation, context or operator
+attached it, so an insert that refused a device presenting other media can run
+again; another device of the same management controller is neither read nor
+ejected. It reads what the device
+presents, ejects it through the arm's `media_eject`
+[entry point](substrates.md#adapter-boundary), and reads it back; only a read
+showing the device empty settles the run, and the result reports `media`
+`none`, what the device presented before, `present`, `none` or `unknown`, and
+the power state, which the eject leaves as it was. It never reports which image
+was presented, because an image address can carry a credential. A device
+already empty settles unchanged. It takes the ordinary confirmation of a stop,
+naming the media eject, and no `--force`. A Machine whose realization the
+current destroy removed reports `none` and unchanged, as a stop reports it
+`off`. On the KubeVirt arm the eject removes the `media` volume from the
+VirtualMachine and deletes this context's upload DataVolume; it refuses a
+DataVolume of that name another owner holds, touching nothing. Its read back is
+of the VirtualMachine, so a running instance still presents the image until it
+next stops, while `none` is already reported.

@@ -327,6 +327,7 @@ Alias cell.
 | [B1545](#b1545) | new, 2026-11-17 (X566 review) | product | Managed OS | An erase policy whose install network the erase image cannot carry is refused at admission or plan, not first at destroy | Found by X566's safety review; the owner's bond is carried, and the destroy-time refusal names its release |
 | [B1551](#b1551) | new, 2026-11-17 (X571 review) | defect | Storage | A Ceph package decision resolved from a subscription names its cause and recovery when the host's repositories later select other URLs | Found by X571's safety review, unconfirmed; it fails closed with the generic packages refusal |
 | [B1552](#b1552) | new, 2026-11-17 (X572) | defect | Storage | A hosted-DVD Ceph host updated within its release from the CDN or a configured repository prepares without a downgrade refusal | No such update source can be read back as a package source yet; no owner run has met it |
+| [B1555](#b1555) | new, 2026-11-17 (X573 review) | product | Substrate, with CLI | `machine eject-media` releases every virtual-media device a management controller exposes, not only the one Bootwright inserts through | Bootwright inserts through one device, so only that one has refused an insert; no owner run has met another |
 
 ### B82
 
@@ -3752,6 +3753,18 @@ source that updated it, or is refused at plan before any effect, instead of
 failing `package-resolution` on a downgrade at host preparation.
 **Exit evidence:** a planning test of each source and a resolver test of a host
 holding a newer `podman` than its DVD. Parked because no owner run has met it.
+
+### B1555
+
+**Owner:** Substrate, with CLI. **Kind:** product. **Requires:** B1553.
+**Definition:** Candidate. **Outcome:** [`machine eject-media`](../cli.md#machine-media-eject)
+also reads and ejects a second optical, USB or removable-disk virtual-media
+device of a Redfish management controller, and a running KubeVirt instance's
+media, instead of the one device Bootwright inserts through and the
+VirtualMachine definition. **Exit evidence:** a Redfish discovery test of a
+controller exposing two presenting devices. Parked because only the device
+Bootwright inserts through has refused an insert.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its

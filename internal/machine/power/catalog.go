@@ -14,13 +14,20 @@ const Operation = "power"
 const Variable = "bootwright_machine_power"
 
 // The verbs a power request carries. Each converges the Machine to the power
-// state its name means; a request is never evidence that it arrived.
+// state its name means, or its media to none; a request is not evidence.
 type Verb string
 
 const (
-	Start   Verb = "start"
-	Stop    Verb = "stop"
-	Restart Verb = "restart"
+	Start      Verb = "start"
+	Stop       Verb = "stop"
+	Restart    Verb = "restart"
+	EjectMedia Verb = "eject-media"
+)
+
+const (
+	MediaNone    = "none"
+	MediaPresent = "present"
+	MediaUnknown = "unknown"
 )
 
 // ReadImplementation is the automation identity a power reading runs through.

@@ -296,6 +296,10 @@ func (s machinePowerSpy) Restart(ctx context.Context, request power.PowerRequest
 	return s.record.result.power, s.record.called(ctx, "machine restart", request)
 }
 
+func (s machinePowerSpy) EjectMedia(ctx context.Context, request power.PowerRequest) (*power.Results, error) {
+	return s.record.result.power, s.record.called(ctx, "machine eject-media", request)
+}
+
 type machineTrustSpy struct{ record *dispatchRecord }
 
 func (s machineTrustSpy) Enroll(ctx context.Context, request enrollment.EnrollRequest) (*enrollment.Report, error) {

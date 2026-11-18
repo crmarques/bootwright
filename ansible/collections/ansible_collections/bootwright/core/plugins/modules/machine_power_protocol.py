@@ -39,6 +39,28 @@ options:
     description: The power state the controller reported before the operation.
     type: str
     required: false
+  media:
+    description:
+      - The media state the controller reported once an eject settled, as the
+        machine port reads it. Only C(eject-media) supplies it.
+    type: str
+    required: false
+    choices:
+      - none
+      - own
+      - foreign
+      - unknown
+  previous_media:
+    description:
+      - The media state the controller reported before an eject. Only
+        C(eject-media) supplies it.
+    type: str
+    required: false
+    choices:
+      - none
+      - own
+      - foreign
+      - unknown
   changed:
     description: Whether the reported state differs from the state before it.
     type: bool

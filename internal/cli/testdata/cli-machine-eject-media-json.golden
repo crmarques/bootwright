@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine eject-media",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "verb": "eject-media",
+    "machines": [
+      {
+        "machine": "rhel-01",
+        "power": "on",
+        "previous": "on",
+        "media": "none",
+        "previousMedia": "present",
+        "changed": true,
+        "logs": [
+          "contexts/lab/runs/run-000003.output"
+        ]
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": [
+    "contexts/lab/runs/run-000003.output"
+  ]
+}

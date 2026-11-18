@@ -40,6 +40,7 @@
       "Bash(*bootwright *machine discover*)",
       "Bash(*bootwright *machine stop*)",
       "Bash(*bootwright *machine restart*)",
+      "Bash(*bootwright *machine eject-media*)",
       "Bash(*bootwright *machine trust*)",
       "Bash(*bootwright *machine rsh*)",
       "Bash(*bootwright *machine exec*)",

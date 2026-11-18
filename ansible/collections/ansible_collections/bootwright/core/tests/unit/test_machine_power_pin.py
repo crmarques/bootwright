@@ -141,7 +141,8 @@ def test_the_identity_is_read_and_compared_before_any_power_request():
     compared = indexed(compares, "compare the pin")
     before = indexed(lambda task: "machine_power_before" in task.get("ansible.builtin.set_fact", {}), "read the power state")
     includes = [index for index, task in enumerate(loaded) if any(action in task for action in INCLUDES)]
-    assert len(includes) == 2, "the walk no longer sees both power task files included"
+    assert len(includes) == 3, "the walk no longer sees the power and eject task files included"
+    assert sorted(loaded[index]["ansible.builtin.include_tasks"] for index in includes) == ["eject.yml", "start.yml", "stop.yml"]
     assert before < read < stopped < compared < min(includes)
     arguments = loaded[read]["vars"]["bootwright_machine_port"]
     assert "machine_power_access" in arguments and "'inspect': true" in arguments

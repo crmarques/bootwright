@@ -19,7 +19,11 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 REFUSALS = ("controller-host", "hardware-mismatch", "identity-unproved", "identity-mismatch")
 REPORTED = {"On": "on", "Off": "off", "": ""}
 READINGS = {"On": "on", "Off": "off"}
-VERBS = {"start": "on", "stop": "off", "restart": "on"}
+VERBS = {"start": "on", "stop": "off", "restart": "on", "eject-media": None}
+EJECT = "eject-media"
+# A machine port reads its device as none, own, foreign or unknown; evidence
+# says only whether it presents anything, never whose image it is.
+MEDIA = {"none": "none", "own": "present", "foreign": "present", "unknown": "unknown"}
 
 
 def state(value):
@@ -27,6 +31,13 @@ def state(value):
     if value not in REPORTED:
         raise ValueError("power state")
     return REPORTED[value]
+
+
+def media(value):
+    """Translate one machine port media state, refusing anything else."""
+    if value not in MEDIA:
+        raise ValueError("media state")
+    return MEDIA[value]
 
 
 def evidence_for(arguments):
@@ -45,6 +56,12 @@ def evidence_for(arguments):
         "previous": previous,
         "request": adapter_protocol.request_digest(arguments.get("digest")),
     }
+    if verb == EJECT:
+        evidence["media"] = media(arguments.get("media"))
+        evidence["previousMedia"] = media(arguments.get("previous_media"))
+        evidence["postcondition"] = power in ("on", "off") and evidence["media"] == "none"
+    elif arguments.get("media") is not None or arguments.get("previous_media") is not None:
+        raise ValueError("media state")
     return evidence
 
 
@@ -98,6 +115,8 @@ def completion(arguments):
     evidence = evidence_for(arguments)
     if evidence["postcondition"]:
         return evidence, None
+    if arguments.get("verb") == EJECT:
+        return evidence, "the management controller did not prove the virtual-media device presents nothing"
     return evidence, "the machine did not reach the power state this operation asked for"
 
 

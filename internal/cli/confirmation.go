@@ -154,6 +154,10 @@ func confirmationIn(action, object, contextName string) confirmation {
 		verb := strings.TrimSuffix(action, " machines")
 		return confirmation{code: "machine.power", label: "power", review: "it", scope: contextName,
 			prompt: "Confirm " + verb + " of machines " + shown + "? [y/N] "}
+	case "eject-media machine", "eject-media machines":
+		noun := strings.TrimPrefix(action, "eject-media ")
+		return confirmation{code: "machine.power", label: "media eject", review: "it", scope: contextName,
+			prompt: "Confirm the media eject of " + noun + " " + shown + "? [y/N] "}
 	}
 	return confirmation{code: "context.state", label: "context", review: "it", scope: contextName,
 		prompt: "Confirm " + escapeDisplayLine(action) + " of " + shown + "? [y/N] "}

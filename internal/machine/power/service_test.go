@@ -118,6 +118,7 @@ type adapter struct {
 	machine string
 	power   string
 	changed bool
+	media   [2]string
 	groups  [][2]string
 	err     error
 }
@@ -138,7 +139,7 @@ func (a *adapter) Run(ctx context.Context, request lifecycle.RunRequest) (lifecy
 	}
 	evidence, err := json.Marshal(Evidence{
 		Changed: a.changed, Machine: answering, Postcondition: true,
-		Power: a.power, Previous: "on", Request: request.Digest,
+		Power: a.power, Previous: "on", Media: a.media[0], PreviousMedia: a.media[1], Request: request.Digest,
 	})
 	if err != nil {
 		return lifecycle.RunResult{}, err
@@ -492,10 +493,17 @@ func TestOnlyAnInterruptingVerbAsksForConfirmation(t *testing.T) {
 		{"restart", machine.PowerOn, func(s Service) (*Results, error) {
 			return s.Restart(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}})
 		}, true},
+		{"eject-media", machine.PowerOn, func(s Service) (*Results, error) {
+			return s.EjectMedia(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}})
+		}, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			confirmer := &answer{}
-			if _, err := test.invoke(service(&boundary{}, &adapter{power: test.settle}, confirmer)); err != nil {
+			runner := &adapter{power: test.settle}
+			if test.name == "eject-media" {
+				runner.media = [2]string{MediaNone, MediaPresent}
+			}
+			if _, err := test.invoke(service(&boundary{}, runner, confirmer)); err != nil {
 				t.Fatal(err)
 			}
 			if asked := len(confirmer.asked) == 1; asked != test.asks {
@@ -815,6 +823,67 @@ func TestEvidenceIsAcceptedOnlyForTheExactFrozenRequest(t *testing.T) {
 	}
 	if _, err := validate(nil, request, "digest"); err == nil {
 		t.Fatal("absent evidence was accepted")
+	}
+}
+
+func TestAnEjectFreezesItsVerbAndReportsTheMediaItProved(t *testing.T) {
+	runner, confirmer := &adapter{power: "on", changed: true, media: [2]string{MediaNone, MediaPresent}}, &answer{}
+	result, err := service(&boundary{}, runner, confirmer).EjectMedia(context.Background(),
+		PowerRequest{ContextName: "lab", Names: []string{"guest"}, Force: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var frozen Request
+	if err := json.Unmarshal(runner.seen.Canonical, &frozen); err != nil {
+		t.Fatal(err)
+	}
+	if frozen.Verb != EjectMedia || frozen.Force {
+		t.Fatalf("frozen verb = %q, force = %t", frozen.Verb, frozen.Force)
+	}
+	if runner.seen.Repeat != "bootwright machine eject-media --context lab --name guest" {
+		t.Fatalf("repeat = %q", runner.seen.Repeat)
+	}
+	row := result.Machines[0]
+	if result.Verb != EjectMedia || row.Media != MediaNone || row.PreviousMedia != MediaPresent || !row.Changed || row.Power != machine.PowerOn {
+		t.Fatalf("result = %+v", result)
+	}
+	if len(confirmer.asked) != 1 || confirmer.asked[0] != "eject-media machine guest in lab" {
+		t.Fatalf("confirmation = %+v", confirmer.asked)
+	}
+}
+
+func TestEjectEvidenceIsAcceptedOnlyForADeviceReadBackEmpty(t *testing.T) {
+	request := Request{Identity: Identity{Context: "lab", Object: "guest"}, Verb: EjectMedia}
+	for _, power := range []string{machine.PowerOn, machine.PowerOff} {
+		for _, previous := range []string{MediaNone, MediaPresent, MediaUnknown} {
+			valid := Evidence{Machine: "guest", Postcondition: true, Power: power, Media: MediaNone, PreviousMedia: previous, Request: "digest"}
+			if _, err := validate(encode(t, valid), request, "digest"); err != nil {
+				t.Fatalf("%s/%s: %v", power, previous, err)
+			}
+		}
+	}
+	for _, test := range []struct {
+		name     string
+		evidence Evidence
+		code     string
+	}{
+		{"still presenting", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Media: MediaPresent, PreviousMedia: MediaPresent, Request: "digest"}, "lifecycle.unknown"},
+		{"unproved", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Media: MediaUnknown, PreviousMedia: MediaPresent, Request: "digest"}, "lifecycle.unknown"},
+		{"no media read", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Request: "digest"}, "lifecycle.state"},
+		{"another value", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Media: "own", PreviousMedia: MediaPresent, Request: "digest"}, "lifecycle.unknown"},
+		{"no postcondition", Evidence{Machine: "guest", Power: machine.PowerOn, Media: MediaNone, PreviousMedia: MediaPresent, Request: "digest"}, "lifecycle.unknown"},
+		{"no power", Evidence{Machine: "guest", Postcondition: true, Media: MediaNone, PreviousMedia: MediaPresent, Request: "digest"}, "lifecycle.unknown"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := validate(encode(t, test.evidence), request, "digest")
+			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != test.code {
+				t.Fatalf("diagnostics = %+v, want %s", reported, test.code)
+			}
+		})
+	}
+	stop := Request{Identity: Identity{Object: "guest"}, Verb: Stop}
+	if _, err := validate(encode(t, Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOff, Media: MediaNone, Request: "digest"}), stop, "digest"); err == nil {
+		t.Fatal("a power verb accepted evidence reporting media")
 	}
 }
 

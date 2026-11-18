@@ -166,7 +166,7 @@ func refusedOn(name, message, remediation string) error {
 	}}}
 }
 
-// confirm asks once, for every Machine, before a stop or restart.
+// confirm asks once, for every Machine, before a stop, restart or eject.
 func (s Service) confirm(ctx context.Context, contextName string, request PowerRequest, targets []target) error {
 	if request.Verb == Start || request.SkipConfirmation {
 		return nil

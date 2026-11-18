@@ -19,6 +19,8 @@ type Evidence struct {
 	Postcondition bool   `json:"postcondition"`
 	Power         string `json:"power"`
 	Previous      string `json:"previous"`
+	Media         string `json:"media,omitempty"`
+	PreviousMedia string `json:"previousMedia,omitempty"`
 	Request       string `json:"request"`
 }
 
@@ -37,6 +39,9 @@ func validate(data []byte, request Request, digest string) (Evidence, error) {
 		return Evidence{}, failure("lifecycle.state", "the power evidence names another Machine", "")
 	}
 	command := powerCommand(string(request.Identity.Context), request)
+	if request.Verb == EjectMedia {
+		return ejected(evidence, command)
+	}
 	reread := "once its BMC answers, read its power state with bootwright machine list --context " + string(request.Identity.Context) +
 		" --power-status, and repeat " + command + " if it is not " + expected(request.Verb)
 	if !evidence.Postcondition {
@@ -45,8 +50,22 @@ func validate(data []byte, request Request, digest string) (Evidence, error) {
 	if !slices.Contains([]string{machine.PowerOn, machine.PowerOff}, evidence.Power) {
 		return Evidence{}, failure("lifecycle.unknown", "the management controller reported no usable power state", reread)
 	}
+	if evidence.Media != "" || evidence.PreviousMedia != "" {
+		return Evidence{}, failure("lifecycle.state", "the power evidence reports media a power verb never reads", "")
+	}
 	if evidence.Power != expected(request.Verb) {
 		return Evidence{}, failure("lifecycle.unknown", "the machine did not reach the power state this operation asked for", unreached(command, request))
+	}
+	return evidence, nil
+}
+
+func ejected(evidence Evidence, command string) (Evidence, error) {
+	if !slices.Contains([]string{MediaNone, MediaPresent, MediaUnknown}, evidence.PreviousMedia) {
+		return Evidence{}, failure("lifecycle.state", "the eject evidence reports no media state before the eject", "")
+	}
+	if !evidence.Postcondition || evidence.Media != MediaNone || !slices.Contains([]string{machine.PowerOn, machine.PowerOff}, evidence.Power) {
+		return Evidence{}, failure("lifecycle.unknown", "the management controller did not prove the virtual-media device presents nothing",
+			"repeat "+command+" once the management controller answers")
 	}
 	return evidence, nil
 }

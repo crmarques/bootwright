@@ -1,0 +1,5 @@
+  ✓ 2 machines ejected
+
+  MACHINE   MEDIA   PREVIOUS   POWER   LOGS
+  rhel-01   none    present    on      /var/log/bootwright/contexts/lab/runs/run-000003.output
+  rhel-02   none    none       on      /var/log/bootwright/contexts/lab/runs/run-000004.output

@@ -76,6 +76,12 @@ func (s Service) Restart(ctx context.Context, request PowerRequest) (*Results, e
 	return s.converge(ctx, request)
 }
 
+func (s Service) EjectMedia(ctx context.Context, request PowerRequest) (*Results, error) {
+	request.Verb = EjectMedia
+	request.Force = false
+	return s.converge(ctx, request)
+}
+
 // Read reports what each named Machine's own management controller answers
 // about its power right now. It registers no operation and changes nothing: a
 // reading is a live observation, so it is never evidence of ownership and
@@ -305,8 +311,12 @@ func batchCommand(contextName string, verb Verb, names []string, force bool) str
 func (s Service) execute(ctx context.Context, name string, resolved target, position, total int) (*Result, error) {
 	frozen := resolved.frozen
 	if resolved.removed {
-		s.progress(ctx, powerStep(frozen, position, total), "unchanged", machine.PowerOff)
-		return &Result{Context: name, Machine: frozen.Identity.Object, Verb: frozen.Verb, Power: machine.PowerOff}, nil
+		removed := &Result{Context: name, Machine: frozen.Identity.Object, Verb: frozen.Verb, Power: machine.PowerOff}
+		if frozen.Verb == EjectMedia {
+			removed.Media, removed.PreviousMedia = MediaNone, MediaNone
+		}
+		s.progress(ctx, powerStep(frozen, position, total), "unchanged", settledDetail(frozen.Verb, Evidence{Power: removed.Power, Media: removed.Media}))
+		return removed, nil
 	}
 	canonical, err := frozen.Canonical()
 	if err != nil {
@@ -333,10 +343,11 @@ func (s Service) execute(ctx context.Context, name string, resolved target, posi
 			s.progress(inner, step, settlement(inner, err), "")
 			return err
 		}
-		s.progress(inner, step, outcome(evidence), evidence.Power)
+		s.progress(inner, step, outcome(evidence), settledDetail(frozen.Verb, evidence))
 		result = &Result{
 			Context: name, Machine: frozen.Identity.Object, Verb: frozen.Verb,
 			Power: evidence.Power, Previous: evidence.Previous, Changed: evidence.Changed,
+			Media: evidence.Media, PreviousMedia: evidence.PreviousMedia,
 			LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs), Run: runtime.Run,
 		}
 		return nil
@@ -353,7 +364,7 @@ func (s Service) run(ctx context.Context, runtime lifecycle.Runtime, resolved ta
 	request := invocation(runtime, frozen, canonical, digest, resolved.pin, s.groups(step, frozen.Force))
 	physicalProofs(&request, resolved)
 	if frozen.Controller.HostCluster != "" {
-		request.Deadline = powerDeadline(frozen.Arm)
+		request.Deadline = powerDeadline(frozen.Arm, frozen.Verb)
 		material, release, err := s.lend(ctx, runtime, frozen.Controller, frozen.Identity.Object, frozen.Placement, digest, request.Deadline)
 		defer release()
 		if err != nil {
@@ -404,7 +415,7 @@ func readStep(survey ReadSurvey, position, total int) lifecycle.ProgressEvent {
 // are its sub-steps; it declares no count of them, because a stop skips the
 // shutdown of a Machine that is already off.
 func powerStep(frozen Request, position, total int) lifecycle.ProgressEvent {
-	action := map[Verb]string{Start: "Start", Stop: "Stop", Restart: "Restart"}[frozen.Verb]
+	action := map[Verb]string{Start: "Start", Stop: "Stop", Restart: "Restart", EjectMedia: "Eject the media of"}[frozen.Verb]
 	if frozen.Verb == Stop && frozen.Force {
 		action = "Force off"
 	}
@@ -426,8 +437,19 @@ func groupDetail(group string, force bool) string {
 		return "shut down"
 	case "power-on":
 		return "power on"
+	case "read-media":
+		return "read the presented media"
+	case "eject-media":
+		return "eject the presented media"
 	}
 	return group
+}
+
+func settledDetail(verb Verb, evidence Evidence) string {
+	if verb == EjectMedia {
+		return "media " + evidence.Media
+	}
+	return evidence.Power
 }
 
 // outcome is what a settled run proved: a change, or a Machine that was

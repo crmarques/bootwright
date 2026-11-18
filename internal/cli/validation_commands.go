@@ -178,6 +178,13 @@ func validatePowerConfirmation(command *cobra.Command) string {
 	return ""
 }
 
+func validateEjectConfirmation(command *cobra.Command) string {
+	if selectedJSON(command) && !boolValue(command.Flags(), "yes") {
+		return structuredLabel(command) + " media ejection requires --yes"
+	}
+	return ""
+}
+
 func validateMachineTrustCommand(command *cobra.Command) string {
 	return validateMachineTrust(command, command.Flags())
 }

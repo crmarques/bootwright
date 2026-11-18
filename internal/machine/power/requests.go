@@ -61,12 +61,14 @@ type Request struct {
 // run that fails once its runtime is lent proves nothing, so its row names only
 // its Machine and where its adapter output is retained.
 type Result struct {
-	Context  string
-	Machine  string
-	Verb     Verb
-	Power    string
-	Previous string
-	Changed  bool
+	Context       string
+	Machine       string
+	Verb          Verb
+	Power         string
+	Previous      string
+	Changed       bool
+	Media         string
+	PreviousMedia string
 	// LogLocation and Logs name this run's retained adapter output on this host
 	// and in the log root: troubleshooting material, never evidence.
 	LogLocation string

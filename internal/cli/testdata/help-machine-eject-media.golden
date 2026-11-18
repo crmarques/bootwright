@@ -1,0 +1,27 @@
+  bootwright / machine eject-media
+      Eject whatever image the virtual-media device Bootwright inserts through presents on each
+      machine, whichever image it is and whoever attached it, and leave its power as it is.
+      --name takes a comma-separated list, and the command applies to every listed machine at
+      once. Success reports that the controller was read back presenting no media, not that an
+      eject was requested. A machine still running from the ejected image may fail; review the
+      machines before confirming; --yes skips ordinary confirmation.
+
+  Usage
+    bootwright machine eject-media [flags]
+
+  Command flags
+      --name  Select comma-separated machine names (required)
+      --yes   Confirm the command's ordinary confirmation
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  Examples
+    bootwright machine eject-media --context lab --name node --yes

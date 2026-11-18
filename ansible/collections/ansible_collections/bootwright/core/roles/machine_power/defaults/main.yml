@@ -47,6 +47,13 @@ machine_power_is_controller_host: '{{ machine_power_verdict.controllerHost }}'
 # MAC set it declares and names the system.
 machine_power_reports_declared: '{{ machine_power_verdict.declared }}'
 
+# Whether an eject changed anything: the device presented an image before it,
+# or, when that read proved nothing, the arm reports that it detached one.
+machine_power_media_changed: >-
+  {{ machine_power_media_before.media_state | default('unknown') in ['own', 'foreign']
+     or machine_power_media_before.media_state | default('unknown') == 'unknown'
+     and machine_power_ejected.changed | default(false) | bool }}
+
 machine_power_access: >-
   {{ bootwright_machine_power_request.machinePort
      | bootwright.core.machine_port_access(bootwright_machine_power_material) }}
