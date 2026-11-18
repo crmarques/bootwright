@@ -34,7 +34,7 @@ func Selected(catalog api.Catalog, selection api.Value, identity string) (api.Ob
 			"declare it or correct artifactServerEndpoint.serverRef on "+identity)
 	}
 	if server.Spec().Get("management").Text() != "managed" {
-		return api.Object{}, refusal("lifecycle.state", "a consumer publishes only into a managed artifact server",
+		return api.Object{}, artifactServerUnmanaged.Fail("a consumer publishes only into a managed artifact server",
 			"select a managed server on "+identity)
 	}
 	return server, nil
@@ -66,7 +66,7 @@ func PrivatePath(catalog api.Catalog, server api.Object, selection api.Value, co
 		return Publication{}, "", err
 	}
 	if !hasPrefix(base, "https://") {
-		return Publication{}, "", refusal("lifecycle.state", "material only one machine may read is served only over a verified connection",
+		return Publication{}, "", artifactPrivateUnverified.Fail("material only one machine may read is served only over a verified connection",
 			"select an https endpoint on "+identity)
 	}
 	certificate := server.Spec().Get("tls", "secretRef").Text()

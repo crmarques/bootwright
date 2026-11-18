@@ -519,12 +519,12 @@ func addMeetingALock(t *testing.T, store *Store, name, data, pin string) error {
 }
 
 // An unpinned add whose publication meets another command's lock refuses with
-// that lock's lifecycle.lease, removes its stage and publishes nothing.
+// that lock's context.busy, removes its stage and publishes nothing.
 func TestMediaAddThatCannotRetakeTheRootLockPublishesNothing(t *testing.T) {
 	t.Parallel()
 	store := impatient(mediaFixture(t))
 	err := addMeetingALock(t, store, "demo.iso", "installer bytes", "")
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "context.busy" {
 		t.Fatalf("publication under a held root lock = %#v", reported)
 	}
 	if entries := mediaDirectory(t, store); len(entries) != 0 {
@@ -832,7 +832,7 @@ func TestAPinnedAddNeverRetainsAStageRewrittenInPlaceAfterItWasFilled(t *testing
 	if rewritten.count < 2 {
 		t.Fatal("the add never reached its publication; the case proves nothing")
 	}
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" ||
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "context.busy" ||
 		strings.Contains(reported[0].Message, "verified but not published") ||
 		strings.Contains(reported[0].Remediation, "without acquiring it again") {
 		t.Fatalf("publication of a rewritten stage under a held root lock = %#v", reported)
@@ -1099,7 +1099,7 @@ func TestAPinnedAddThatCannotRetakeTheRootLockRetainsItsStage(t *testing.T) {
 	ctx := context.Background()
 	store := impatient(mediaFixture(t))
 	err := addMeetingALock(t, store, "demo.iso", "installer bytes", mediaDigest("installer bytes"))
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" ||
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "media.store-busy" ||
 		!strings.Contains(reported[0].Remediation, "without acquiring it again") {
 		t.Fatalf("publication under a held root lock = %#v", reported)
 	}
@@ -1163,7 +1163,7 @@ func TestARetentionThatFinishesDuringAPruneKeepsItsPair(t *testing.T) {
 	if err := pruning.MutateMedia(ctx, func(media.Transaction) error { return nil }); err != nil || !paused {
 		t.Fatalf("the pruning mutation (paused %v) failed: %#v", paused, diagnostics.Of(err))
 	}
-	if reported := diagnostics.Of(retention); len(reported) != 1 || reported[0].Code != "lifecycle.lease" ||
+	if reported := diagnostics.Of(retention); len(reported) != 1 || reported[0].Code != "media.store-busy" ||
 		!strings.Contains(reported[0].Remediation, "without acquiring it again") {
 		t.Fatalf("the add meeting the pruning lock = %#v", reported)
 	}
@@ -1224,7 +1224,7 @@ func TestARepeatedAddWhosePublicationMeetsALockAgainKeepsTheRetainedStage(t *tes
 	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }}
 	locked := &lockedPublication{Store: store, t: t, at: 2}
 	_, err = media.New(locked, acquirer, nil, mediaClock{}).Add(ctx, pinnedAdd("demo.iso", "installer bytes"))
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" || !strings.Contains(reported[0].Remediation, "without acquiring it again") {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "media.store-busy" || !strings.Contains(reported[0].Remediation, "without acquiring it again") {
 		t.Fatalf("a repeated publication under a held root lock = %#v", reported)
 	}
 	if entries := mediaDirectory(t, store); !slices.Equal(entries, retainedFiles("demo.iso")) {

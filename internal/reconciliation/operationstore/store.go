@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -75,7 +74,7 @@ func (s *Store) expectation(target string) ([]byte, bool) {
 
 func (s *Store) now() (string, error) {
 	if s.clock == nil {
-		return "", recordError("lifecycle record timestamps require an injected clock")
+		return "", defectError("lifecycle record timestamps require an injected clock")
 	}
 	value := s.clock().UTC().Truncate(time.Second).Format(time.RFC3339)
 	if err := validateTimestamps(value); err != nil {
@@ -118,10 +117,10 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 		return err
 	}
 	if digest != operation.PlanDigest {
-		return recordError("lifecycle operation does not carry its own plan digest")
+		return defectError("lifecycle operation does not carry its own plan digest")
 	}
 	if plan.Verb != operation.Verb {
-		return recordError("lifecycle plan and operation disagree about the verb")
+		return defectError("lifecycle plan and operation disagree about the verb")
 	}
 	if err := checkContracts(operation, plan); err != nil {
 		return err
@@ -138,7 +137,7 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	}
 	encodedPlan, err := encode(plan, MaxPlanBytes)
 	if err != nil {
-		return recordError("lifecycle plan exceeds its encoded plan limit")
+		return boundError("lifecycle plan exceeds its encoded plan limit")
 	}
 	encoded, err := encode(operation, MaxOperationBytes)
 	if err != nil {
@@ -191,7 +190,7 @@ func (s *Store) Claim(ctx context.Context, id string, plan reconciliation.Plan) 
 
 func (s *Store) ClaimAdding(ctx context.Context, id string, plan reconciliation.Plan, predecessor string) error {
 	if !reconciliation.ValidOperationID(id) {
-		return recordError("lifecycle operation identity is invalid")
+		return defectError("lifecycle operation identity is invalid")
 	}
 	claimed, err := s.Claimed(ctx)
 	if err != nil {
@@ -201,7 +200,7 @@ func (s *Store) ClaimAdding(ctx context.Context, id string, plan reconciliation.
 		return err
 	}
 	if slices.Contains(claimed, id) {
-		return recordError("the lifecycle operation identity already has a directory")
+		return defectError("the lifecycle operation identity already has a directory")
 	}
 	if err := s.admit(ctx, id, plan, predecessor, 0); err != nil {
 		return err
@@ -219,7 +218,7 @@ type boundRefusal struct{ error }
 func (r boundRefusal) Unwrap() error { return r.error }
 
 func refuseAtTheBound(message string) error {
-	return boundRefusal{recordError(message)}
+	return boundRefusal{operationsRetentionFull.Fail(message, "")}
 }
 
 // AtTheBound reports whether err is a claim's or a registration's refusal at
@@ -351,13 +350,13 @@ func (s *Store) AdmitAttempt(ctx context.Context, operation Operation, plan reco
 
 func refuseAttempt(apply bool, holds string, needed, kept int64) error {
 	if apply {
-		return reserveRefusal{recordError(fmt.Sprintf("the context's operation area keeps what is left of it for the removal that takes this apply back: %s, and this attempt needs %d more beside the %d that removal keeps",
-			holds, needed, kept))}
+		return reserveRefusal{operationsAreaReserved.Fail(fmt.Sprintf("the context's operation area keeps what is left of it for the removal that takes this apply back: %s, and this attempt needs %d more beside the %d that removal keeps",
+			holds, needed, kept), "")}
 	}
 	if kept > 0 {
-		return reserveRefusal{recordError(fmt.Sprintf("the context's operation area cannot hold another resolution before this removal registers: %s, and it needs %d more beside the %d its registration keeps", holds, needed, kept))}
+		return reserveRefusal{operationsAreaReserved.Fail(fmt.Sprintf("the context's operation area cannot hold another resolution before this removal registers: %s, and it needs %d more beside the %d its registration keeps", holds, needed, kept), "")}
 	}
-	return reserveRefusal{recordError(fmt.Sprintf("the context's operation area cannot hold another attempt of this removal: %s, and it needs %d more", holds, needed))}
+	return reserveRefusal{operationsAreaReserved.Fail(fmt.Sprintf("the context's operation area cannot hold another attempt of this removal: %s, and it needs %d more", holds, needed), "")}
 }
 
 func (s *Store) resolutions(ctx context.Context, id string, plan reconciliation.Plan, block string) (int, error) {
@@ -396,7 +395,7 @@ func (s *Store) removalReserve(ctx context.Context, operation Operation, plan re
 	}
 	encodedPlan, err := encode(removal, MaxPlanBytes)
 	if err != nil {
-		return 0, 0, recordError("lifecycle plan exceeds its encoded plan limit")
+		return 0, 0, boundError("lifecycle plan exceeds its encoded plan limit")
 	}
 	record, err := encode(operation, MaxOperationBytes)
 	if err != nil {
@@ -662,14 +661,14 @@ func (s *Store) ReadOperation(ctx context.Context, id string) (Operation, error)
 // bytes as the expectation a later replacement must find.
 func (s *Store) readOperation(ctx context.Context, id string) (Operation, []byte, error) {
 	if !reconciliation.ValidOperationID(id) {
-		return Operation{}, nil, recordError("lifecycle operation identity is invalid")
+		return Operation{}, nil, defectError("lifecycle operation identity is invalid")
 	}
 	data, found, err := s.area.Read(ctx, s.operationPath(id), MaxOperationBytes)
 	if err != nil {
 		return Operation{}, nil, err
 	}
 	if !found {
-		return Operation{}, nil, recordError("the named lifecycle operation has no durable record")
+		return Operation{}, nil, operationsRecordMissing.Fail("the named lifecycle operation has no durable record", "")
 	}
 	var operation Operation
 	if err := decodeUnder(data, MaxOperationBytes, &operation, s.running); err != nil {
@@ -691,7 +690,7 @@ func (s *Store) readOperation(ctx context.Context, id string) (Operation, []byte
 // read it still refuses the replacement guarded on that earlier read.
 func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, error) {
 	if !reconciliation.ValidOperationID(id) {
-		return reconciliation.Plan{}, recordError("lifecycle operation identity is invalid")
+		return reconciliation.Plan{}, defectError("lifecycle operation identity is invalid")
 	}
 	data, found, err := s.area.Read(ctx, path.Join(id, "plan.json"), MaxPlanBytes)
 	if err != nil {
@@ -720,8 +719,8 @@ func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, e
 	}
 	rebuiltDigest, err := rebuilt.Digest()
 	if err != nil || stored != rebuiltDigest {
-		return reconciliation.Plan{}, diagnostics.NewFailureWithRemediation("lifecycle.state",
-			"the frozen plan is not a plan this executable could have produced", "",
+		return reconciliation.Plan{}, operationsPlanOtherBuild.Fail(
+			"the frozen plan is not a plan this executable could have produced",
 			"destroy this context with the build that registered the operation, which its operation.json records")
 	}
 	operation, _, err := s.readOperation(ctx, id)
@@ -729,7 +728,7 @@ func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, e
 		return reconciliation.Plan{}, err
 	}
 	if operation.PlanDigest != stored || operation.Verb != plan.Verb {
-		return reconciliation.Plan{}, recordError("the frozen plan is not the plan its operation recorded")
+		return reconciliation.Plan{}, operationsPlanMismatch.Fail("the frozen plan is not the plan its operation recorded", "")
 	}
 	if err := checkContracts(operation, plan); err != nil {
 		return reconciliation.Plan{}, err
@@ -776,7 +775,7 @@ func (s *Store) UpdateOperation(ctx context.Context, operation Operation) error 
 	target := s.operationPath(operation.ID)
 	expected, read := s.expectation(target)
 	if !read || expected == nil {
-		return recordError("lifecycle operation replacement lacks its exact read expectation")
+		return defectError("lifecycle operation replacement lacks its exact read expectation")
 	}
 	if err := s.area.Replace(ctx, target, encoded, expected); err != nil {
 		return err

@@ -6,19 +6,16 @@ import (
 	"errors"
 	"os"
 	"syscall"
-
-	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 // BusyError is a root lock or context lease another Bootwright command holds.
-// Nothing is wrong with the store, so it is reported as lifecycle.lease rather
+// Nothing is wrong with the store, so it is reported as context.busy rather
 // than context.state: the same command succeeds once the holder finishes, and
 // Bootwright never takes a lock over.
 type BusyError struct{ Failure error }
 
 func Busy(message string) error {
-	return &BusyError{diagnostics.NewFailureWithRemediation("lifecycle.lease", message, "",
-		"retry after the running Bootwright command finishes")}
+	return &BusyError{ContextBusy.Fail(message, "retry after the running Bootwright command finishes")}
 }
 
 func (e *BusyError) Error() string { return e.Failure.Error() }

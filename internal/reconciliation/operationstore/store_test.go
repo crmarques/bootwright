@@ -379,7 +379,7 @@ func TestOnlyTheCurrentOperationRecordVersionReads(t *testing.T) {
 			}
 			area.files[target] = append(data, '\n')
 			_, err = New(area, area.logs, fixedClock()).ReadOperation(ctx, current.ID)
-			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "operations.record-invalid" {
 				t.Fatalf("the record read back (%v)", err)
 			}
 		})
@@ -433,11 +433,11 @@ func TestAFrozenPlanThatIsNotItsOperationsRefuses(t *testing.T) {
 		area.files[target] = encoded
 		return encoded
 	}
-	refused := func(t *testing.T, area *memoryArea, id, message string) {
+	refused := func(t *testing.T, area *memoryArea, id, code, message string) {
 		t.Helper()
 		_, err := New(area, area.logs, fixedClock()).ReadPlan(ctx, id)
 		reported := diagnostics.Of(err)
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != message {
+		if len(reported) != 1 || reported[0].Code != code || reported[0].Message != message {
 			t.Fatalf("the read = %+v (%v)", reported, err)
 		}
 	}
@@ -445,7 +445,7 @@ func TestAFrozenPlanThatIsNotItsOperationsRefuses(t *testing.T) {
 	t.Run("a valid plan whose digest the record does not carry", func(t *testing.T) {
 		area, operation, _ := registered(t)
 		write(t, area, operation.ID+"/plan.json", testPlan(t, "alpha", "charlie"), MaxPlanBytes)
-		refused(t, area, operation.ID, disagreement)
+		refused(t, area, operation.ID, "operations.plan-mismatch", disagreement)
 	})
 	t.Run("a plan of the other verb whose digest the record carries", func(t *testing.T) {
 		area, operation, plan := registered(t)
@@ -458,12 +458,12 @@ func TestAFrozenPlanThatIsNotItsOperationsRefuses(t *testing.T) {
 		}
 		write(t, area, operation.ID+"/plan.json", inverse, MaxPlanBytes)
 		write(t, area, operation.ID+"/operation.json", operation, MaxOperationBytes)
-		refused(t, area, operation.ID, disagreement)
+		refused(t, area, operation.ID, "operations.plan-mismatch", disagreement)
 	})
 	t.Run("a plan beside no operation record", func(t *testing.T) {
 		area, operation, _ := registered(t)
 		delete(area.files, operation.ID+"/operation.json")
-		refused(t, area, operation.ID, "the named lifecycle operation has no durable record")
+		refused(t, area, operation.ID, "operations.record-missing", "the named lifecycle operation has no durable record")
 	})
 	t.Run("the registered plan", func(t *testing.T) {
 		area, operation, plan := registered(t)
@@ -855,9 +855,53 @@ func TestAStartRefusesAnInvalidBuild(t *testing.T) {
 	}
 }
 
+func refusedAs(err error, code string) bool {
+	reported := diagnostics.Of(err)
+	return len(reported) == 1 && reported[0].Code == code
+}
+
+func TestAPreconditionOrABoundIsNotADamagedRecord(t *testing.T) {
+	ctx := context.Background()
+	plan := testPlan(t, "alpha")
+	operation := testOperation(t, plan)
+	store, _ := newStore(t)
+
+	unclocked := New(store.area, store.logs, nil)
+	if _, err := unclocked.now(); !refusedAs(err, "operations.defect") {
+		t.Fatalf("a store without a clock read as %v", err)
+	}
+	mismatched := operation
+	mismatched.Verb = reconciliation.Destroy
+	if err := store.Register(ctx, mismatched, plan); !refusedAsRecord(err) {
+		t.Fatalf("an operation that does not hold its source read as %v", err)
+	}
+	other := operation
+	other.PlanDigest = strings.Repeat("0", 64)
+	if err := store.Register(ctx, other, plan); !refusedAs(err, "operations.defect") {
+		t.Fatalf("an operation with another plan digest read as %v", err)
+	}
+	if err := store.Claim(ctx, "not-an-operation", plan); !refusedAs(err, "operations.defect") {
+		t.Fatalf("a claim of an invalid identity read as %v", err)
+	}
+	if _, err := store.ReadOperation(ctx, "not-an-operation"); !refusedAs(err, "operations.defect") {
+		t.Fatalf("a read of an invalid identity read as %v", err)
+	}
+	if err := (*Log)(nil).Append(ctx, LogRecord{Event: "x"}); !refusedAs(err, "operations.defect") {
+		t.Fatalf("an append to a log that is not open read as %v", err)
+	}
+	if _, err := encode(map[string]string{"big": strings.Repeat("x", MaxAttemptBytes)}, MaxAttemptBytes); !refusedAs(err, "operations.bound") {
+		t.Fatalf("a record over its bound read as %v", err)
+	}
+	oversized := Attempt{Version: 1, Block: "alpha", Number: 1, Phase: "running", Preparation: json.RawMessage(strings.Repeat("1", MaxAttemptBytes+1)), Build: testBuild,
+		Started: "2026-09-11T12:00:01Z", Updated: "2026-09-11T12:00:01Z"}
+	if err := validateAttempt(oversized); !refusedAs(err, "operations.bound") {
+		t.Fatalf("a preparation over its bound read as %v", err)
+	}
+}
+
 func refusedAsRecord(err error) bool {
 	reported := diagnostics.Of(err)
-	return len(reported) == 1 && reported[0].Code == "lifecycle.state"
+	return len(reported) == 1 && reported[0].Code == "operations.record-invalid"
 }
 
 // An attempt record names the build that ran it; one that names none refuses.
@@ -1251,8 +1295,8 @@ func TestAClaimedOperationRegistersIntoItsDirectory(t *testing.T) {
 	if started, err := store.Started(ctx, operation.ID); err != nil || started {
 		t.Fatalf("a claimed directory reads started %t (%v)", started, err)
 	}
-	if err := store.Claim(ctx, operation.ID, plan); err == nil {
-		t.Fatal("a claim took an identity that already has a directory")
+	if err := store.Claim(ctx, operation.ID, plan); !refusedAs(err, "operations.defect") {
+		t.Fatalf("a claim took an identity that already has a directory: %v", err)
 	}
 	for index := range MaxOperations - 2 {
 		area.directories["slot-"+FormatIndex(index)] = true
@@ -1385,8 +1429,8 @@ func TestAdmissionKeepsTheFirstPassWithinTheAreaEntries(t *testing.T) {
 	refusedAtTheBound := func(err error, id string) {
 		t.Helper()
 		refused := diagnostics.Of(err)
-		if len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations") {
-			t.Fatalf("admission beyond the entry bound reported %+v, want the lifecycle.state retained-operation refusal", refused)
+		if len(refused) != 1 || refused[0].Code != "operations.retention-full" || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations") {
+			t.Fatalf("admission beyond the entry bound reported %+v, want the operations.retention-full refusal", refused)
 		}
 		if areadouble.IsDirectory(area.files, area.directories, id) {
 			t.Fatalf("the refused admission created %s", id)
@@ -1449,7 +1493,7 @@ func TestAdmissionKeepsADirectoryForTheRemoval(t *testing.T) {
 	}
 	apply := "op-" + strings.Repeat("cd", 16)
 	err = store.Claim(ctx, apply, plan)
-	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "operations.retention-full" ||
 		!strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations: it retains 1023 of its 1024, and this apply needs room for 2: its own and that of the removal that takes it back") {
 		t.Fatalf("an apply one directory short of the bound reported %+v (%v)", refused, err)
 	}
@@ -1464,7 +1508,7 @@ func TestAdmissionKeepsADirectoryForTheRemoval(t *testing.T) {
 	other := testOperation(t, removalPlan)
 	other.ID, other.Source = "op-"+strings.Repeat("ef", 16), apply
 	err = store.Register(ctx, other, removalPlan)
-	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "operations.retention-full" ||
 		!strings.Contains(refused[0].Message, "it retains 1024 of its 1024, and this removal needs room for its own") {
 		t.Fatalf("a removal at the bound reported %+v (%v)", refused, err)
 	}
@@ -1485,7 +1529,7 @@ func TestAdmissionKeepsTheReservedBytesFree(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := store.Claim(ctx, operation.ID, plan)
-	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "operations.retention-full" ||
 		!strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations: its operation area holds 50331649 of its 67108864 bytes, and this apply needs the 16777216 it keeps for its records and those of the removal that takes it back") {
 		t.Fatalf("an apply one byte past the line reported %+v (%v)", refused, err)
 	}
@@ -1522,7 +1566,7 @@ func TestAdmissionKeepsTheReservedBytesFree(t *testing.T) {
 	}
 	area.files["filled/records"] = make([]byte, MaxBytes-held-int64(registration)+1)
 	err = store.Register(ctx, removal, removalPlan)
-	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "operations.retention-full" ||
 		!strings.Contains(refused[0].Message, fmt.Sprintf("holds %d of its 67108864 bytes, and this removal needs %d more for the records its registration writes", MaxBytes-int64(registration)+1, registration)) {
 		t.Fatalf("a removal one byte short of its registration reported %+v (%v)", refused, err)
 	}
@@ -1565,7 +1609,7 @@ func TestTheRefusalsAtTheRetainedOperationBoundAreKnownAsSuch(t *testing.T) {
 		removal := testOperation(t, removalPlan)
 		removal.ID, removal.Source = "op-"+strings.Repeat("ef", 16), apply
 		for verb, err := range map[string]error{"apply": store.Claim(ctx, apply, plan), "removal": store.Register(ctx, removal, removalPlan)} {
-			if refused := diagnostics.Of(err); !AtTheBound(err) || len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.HasPrefix(refused[0].Message, retainedMaximum+": ") {
+			if refused := diagnostics.Of(err); !AtTheBound(err) || len(refused) != 1 || refused[0].Code != "operations.retention-full" || !strings.HasPrefix(refused[0].Message, retainedMaximum+": ") {
 				t.Fatalf("the %s refused at the %s bound with %+v (%v), want a refusal known to be at the bound", verb, bound, refused, err)
 			}
 		}
@@ -1946,7 +1990,7 @@ func TestAdmitAttemptKeepsTheRemovalReserve(t *testing.T) {
 		t.Fatalf("the second attempt beside the reserve refused: %v", err)
 	}
 	_, err = store.AdmitAttempt(ctx, operation, plan, "alpha", false)
-	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
+	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 || refused[0].Code != "operations.area-reserved" ||
 		!strings.Contains(refused[0].Message, "this attempt needs 9 more beside the 11 that removal keeps") {
 		t.Fatalf("a third attempt running beside two reported %+v (%v)", refused, err)
 	}

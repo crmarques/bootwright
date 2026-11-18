@@ -185,8 +185,8 @@ func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
 	}
 	refusedAtTheBound := func(operations *operationstore.Store, id string, plan reconciliation.Plan) {
 		refused := diagnostics.Of(operations.Claim(ctx, id, plan))
-		if len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations") {
-			t.Fatalf("a claim for %d blocks beyond the retained-operation bound reported %+v, want its lifecycle.state refusal", len(plan.Blocks), refused)
+		if len(refused) != 1 || refused[0].Code != "operations.retention-full" || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations") {
+			t.Fatalf("a claim for %d blocks beyond the retained-operation bound reported %+v, want its operations.retention-full refusal", len(plan.Blocks), refused)
 		}
 		if _, err := os.Stat(filepath.Join(area, id)); !os.IsNotExist(err) {
 			t.Fatalf("the refused claim left its directory (%v)", err)
@@ -351,7 +351,7 @@ func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
 			return err
 		}
 		refused := diagnostics.Of(operations.Claim(ctx, applied, plan))
-		if len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations: its operation area holds 50331649 of its 67108864 bytes") {
+		if len(refused) != 1 || refused[0].Code != "operations.retention-full" || !strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations: its operation area holds 50331649 of its 67108864 bytes") {
 			t.Fatalf("a claim one byte past the line reported %+v, want its lifecycle.state refusal", refused)
 		}
 		if _, err := os.Stat(filepath.Join(area, applied)); !os.IsNotExist(err) {

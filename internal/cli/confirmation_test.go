@@ -204,9 +204,9 @@ func TestEachConfirmationNamesItsObjectAndContextAndKeepsItsConsumersCode(t *tes
 		{action: "media delete", object: "rhel.iso", prompt: "Confirm delete of stored media rhel.iso? [y/N] ", args: []string{"media", "delete", "--name", "rhel.iso"},
 			code: "media.store", label: "media", remedy: "review it, then repeat bootwright media delete --name rhel.iso with --yes"},
 		{action: "apply", object: "lab", prompt: "Confirm apply for context lab? [y/N] ", args: []string{"apply", "--context", "lab"},
-			code: "lifecycle.state", label: "apply", remedy: "review the plan, then repeat bootwright apply --context lab with --yes"},
+			code: "command.unconfirmed", label: "apply", remedy: "review the plan, then repeat bootwright apply --context lab with --yes"},
 		{action: "destroy", object: "lab", prompt: "Confirm destroy for context lab? [y/N] ", args: []string{"destroy"},
-			code: "lifecycle.state", label: "destroy", remedy: "review the plan, then repeat bootwright destroy --context lab with --yes"},
+			code: "command.unconfirmed", label: "destroy", remedy: "review the plan, then repeat bootwright destroy --context lab with --yes"},
 		{action: "trust", object: "lab", prompt: "Confirm trust for context lab? [y/N] ", args: []string{"machine", "trust", "--context", "lab"},
 			code: "trust.identity", label: "trust", remedy: "review the plan, then repeat bootwright machine trust --context lab with --yes"},
 		{action: "rotate secret encryption", object: "lab", prompt: "Confirm rotation of the secret encryption key of context lab? [y/N] ",
@@ -275,6 +275,9 @@ func TestEachConfirmationNamesItsObjectAndContextAndKeepsItsConsumersCode(t *tes
 				}
 				want := []diagnostics.Diagnostic{{Severity: "error", Code: tc.code, Message: tc.label + " confirmation " + answer.reason,
 					Object: tc.identity, Remediation: tc.remedy}}
+				if tc.code == commandUnconfirmed.Code {
+					want[0].Cause, want[0].Recovery, want[0].Certainty = commandUnconfirmed.Cause, commandUnconfirmed.Recovery, commandUnconfirmed.Certainty
+				}
 				if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) {
 					t.Fatalf("refusal = %+v, want %+v", reported, want)
 				}

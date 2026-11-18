@@ -130,20 +130,13 @@ func AddedInput(apply string) string {
 }
 
 func AddedInputWarning(name, apply string) diagnostics.Diagnostic {
-	return diagnostics.Diagnostic{
-		Severity: "warning", Code: "lifecycle.state",
-		Message: AddedInput(apply) + "; this predicts that admission without proving the custody of the material the added instances borrow, which bootwright diff --context " +
-			name + " --observe and the apply prove",
-		Remediation: "run bootwright apply --context " + name,
-	}
+	return warning(contextInputAdded, AddedInput(apply)+"; this predicts that admission without proving the custody of the material the added instances borrow, which bootwright diff --context "+
+		name+" --observe and the apply prove", "run bootwright apply --context "+name)
 }
 
 // appliedInputWarning is the warning of changed input over a completed apply,
 // which apply refuses until a destroy takes back what that apply owns.
 func appliedInputWarning(name string) diagnostics.Diagnostic {
-	return diagnostics.Diagnostic{
-		Severity: "warning", Code: "lifecycle.state",
-		Message:     "context " + name + " holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; importing the original files again does not undo this update, because they become a new revision apply refuses the same way",
-		Remediation: "take it back with bootwright destroy --context " + name + ", then run bootwright apply --context " + name,
-	}
+	return warning(contextInputChanged, "context "+name+" holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; importing the original files again does not undo this update, because they become a new revision apply refuses the same way",
+		"take it back with bootwright destroy --context "+name+", then run bootwright apply --context "+name)
 }

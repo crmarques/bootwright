@@ -30,7 +30,7 @@ func TestUnreadableOperationNamesItsRegisteringBuildWithoutAdoptingTheRecord(t *
 			area.files[recordPath] = bytes.Clone(data)
 			_, err := store.ReadOperation(context.Background(), operation.ID)
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, `build "devel" at commit "abcdef1"`) {
+			if len(reported) != 1 || reported[0].Code != "operations.record-unreadable" || !strings.Contains(reported[0].Message, `build "devel" at commit "abcdef1"`) {
 				t.Fatalf("refusal does not name the registering build: %+v", reported)
 			}
 			remedy := reported[0].Remediation
@@ -104,7 +104,7 @@ func TestTheLifecycleRecordRefusesEachNonCanonicalEncodingInItsOwnWords(t *testi
 	} {
 		var index Index
 		reported := diagnostics.Of(decode([]byte(tc.data), MaxIndexBytes, &index))
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != tc.message {
+		if len(reported) != 1 || reported[0].Code != "operations.record-invalid" || reported[0].Message != tc.message {
 			t.Errorf("%s: refusal = %+v, want %q", name, reported, tc.message)
 		}
 	}
@@ -136,30 +136,32 @@ func TestARecordWithAnUnknownMemberNamesTheBuildThatWroteIt(t *testing.T) {
 		return bytes.Replace(data, []byte("{"), []byte(`{"later":true,`+member), 1)
 	}
 	plain := "lifecycle record is malformed or unsupported"
+	invalid, otherBuild := operationsRecordInvalid.Code, operationsRecordOtherBuild.Code
 	for name, tc := range map[string]struct {
 		build                *Build
 		member               string
 		running              *Executable
 		message, remediation string
+		code                 string
 	}{
 		"a named build": {named, "", nil, plain + `; build "v0.9.0" at commit "abc123" wrote it`,
-			`continue or remove this operation with build "v0.9.0" at commit "abc123", which reads the record`},
+			`continue or remove this operation with build "v0.9.0" at commit "abc123", which reads the record`, otherBuild},
 		"another running build": {named, "", &Executable{Version: "v1.0.0", Commit: "def456"}, plain + `; build "v0.9.0" at commit "abc123" wrote it`,
-			`continue or remove this operation with build "v0.9.0" at commit "abc123", which reads the record`},
-		"the running build": {named, "", &Executable{Version: "v0.9.0", Commit: "abc123"}, plain + `; it names build "v0.9.0" at commit "abc123", this executable`, ""},
+			`continue or remove this operation with build "v0.9.0" at commit "abc123", which reads the record`, otherBuild},
+		"the running build": {named, "", &Executable{Version: "v0.9.0", Commit: "abc123"}, plain + `; it names build "v0.9.0" at commit "abc123", this executable`, operationsRecordInvalid.Remedy, invalid},
 		"an unidentified build": {&Build{AutomationDigest: digest, ContentDigest: digest}, "", &Executable{},
 			plain + "; the build with automation digest " + digest + " wrote it",
-			"continue or remove this operation with the build with automation digest " + digest + ", which reads the record"},
-		"an invalid build":       {&Build{AutomationDigest: "x", ContentDigest: digest}, "", nil, plain, ""},
-		"no build":               {nil, "", nil, plain, ""},
-		"a case-variant member":  {nil, `"Build":{"automationDigest":"` + digest + `","contentDigest":"` + digest + `","executable":{"version":"v0.9.0","commit":"abc123"}},`, nil, plain, ""},
-		"a second build member":  {named, `"build":{"automationDigest":"` + digest + `","contentDigest":"` + digest + `","executable":{"version":"v0.8.0","commit":"abc"}},`, nil, plain, ""},
-		"a non-canonical member": {nil, `"build":{"contentDigest":"` + digest + `","automationDigest":"` + digest + `","executable":{"version":"v0.9.0","commit":"abc123"}},`, nil, plain, ""},
+			"continue or remove this operation with the build with automation digest " + digest + ", which reads the record", otherBuild},
+		"an invalid build":       {&Build{AutomationDigest: "x", ContentDigest: digest}, "", nil, plain, operationsRecordInvalid.Remedy, invalid},
+		"no build":               {nil, "", nil, plain, operationsRecordInvalid.Remedy, invalid},
+		"a case-variant member":  {nil, `"Build":{"automationDigest":"` + digest + `","contentDigest":"` + digest + `","executable":{"version":"v0.9.0","commit":"abc123"}},`, nil, plain, operationsRecordInvalid.Remedy, invalid},
+		"a second build member":  {named, `"build":{"automationDigest":"` + digest + `","contentDigest":"` + digest + `","executable":{"version":"v0.8.0","commit":"abc"}},`, nil, plain, operationsRecordInvalid.Remedy, invalid},
+		"a non-canonical member": {nil, `"build":{"contentDigest":"` + digest + `","automationDigest":"` + digest + `","executable":{"version":"v0.9.0","commit":"abc123"}},`, nil, plain, operationsRecordInvalid.Remedy, invalid},
 	} {
 		var record Attempt
 		reported := diagnostics.Of(decodeUnder(written(tc.build, tc.member), MaxAttemptBytes, &record, tc.running))
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != tc.message || reported[0].Remediation != tc.remediation {
-			t.Errorf("%s: refusal = %+v, want %q remedied by %q", name, reported, tc.message, tc.remediation)
+		if len(reported) != 1 || reported[0].Code != tc.code || reported[0].Message != tc.message || reported[0].Remediation != tc.remediation {
+			t.Errorf("%s: refusal = %+v, want %s %q remedied by %q", name, reported, tc.code, tc.message, tc.remediation)
 		}
 	}
 }

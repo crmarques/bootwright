@@ -40,18 +40,17 @@ const (
 // point refuses nothing here, because its installation fails before any proof.
 func PreBootRefusals(arm Arm, contextName, continuation, machine, endpoint string) map[string]error {
 	identity := string(api.Machine) + "/" + machine
-	refused := func(message, remediation string) error {
-		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-			Severity: "error", Code: "lifecycle.state", Message: message, Remediation: remediation,
-			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: machine},
-		}}}
+	refused := func(stop diagnostics.Stop, message, remediation string) error {
+		failure := stop.Fail(message, remediation).(*diagnostics.Failure)
+		failure.Diagnostics[0].Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: machine}
+		return failure
 	}
 	apply := "bootwright apply --context " + contextName
 	next := continuation
 	if next == "" {
 		next = apply
 	}
-	running := refused(identity+" is running, and its installation erases its disk, so no media was inserted into it and it was not booted",
+	running := refused(prebootMachineRunning, identity+" is running, and its installation erases its disk, so no media was inserted into it and it was not booted",
 		"stop it with bootwright machine stop --context "+contextName+" --name "+machine+", then run "+next)
 	// The refusing apply stays incomplete, so it continues its frozen plan
 	// and the context's input cannot change under it: a corrected declaration
@@ -64,29 +63,29 @@ func PreBootRefusals(arm Arm, contextName, continuation, machine, endpoint strin
 	case ArmKubeVirt:
 		return map[string]error{
 			RefusalMachineRunning: running,
-			RefusalTPMAbsent: refused(identity+" presents no persistent vTPM, so no encrypted installer was booted",
+			RefusalTPMAbsent: refused(prebootTPMAbsent, identity+" presents no persistent vTPM, so no encrypted installer was booted",
 				destroy+", declare tpm without persistent: false on the profile "+identity+" selects"+update+", then run "+apply),
-			RefusalIdentityMismatch: refused("the host cluster or VirtualMachine answering for "+identity+" is not the one its machine block recorded, so no media was inserted into it and it was not booted",
+			RefusalIdentityMismatch: refused(prebootIdentityMismatch, "the host cluster or VirtualMachine answering for "+identity+" is not the one its machine block recorded, so no media was inserted into it and it was not booted",
 				"restore the Secret the provider's spec.kubevirt.kubeconfigRef names so it reaches the cluster "+identity+" was realized on, then run "+next+
 					" with --authorize rebind=<that Secret>; to realize it again instead, "+destroy+", then run "+apply),
 		}
 	case ArmBaremetal:
 		return map[string]error{
 			RefusalTargetUnanswered: UnansweredTarget(machine, endpoint),
-			RefusalHardwareMismatch: refused("the machine answering at "+endpoint+" does not report exactly the hardware addresses "+identity+
+			RefusalHardwareMismatch: refused(prebootHardwareMismatch, "the machine answering at "+endpoint+" does not report exactly the hardware addresses "+identity+
 				" declares, or its inventory could not be read in full, so no media was inserted into it and it was not booted",
 				"once the machine reports the hardware "+identity+" declares in full, run "+next+"; to correct that declaration instead, "+destroy+
 					", correct spec.hardware.bmc.address or spec.hardware.nics on "+identity+update+", then run "+apply),
-			RefusalIdentityMismatch: refused("the management controller at "+endpoint+" answers as another system than the one this operation proved for "+
+			RefusalIdentityMismatch: refused(prebootIdentityMismatch, "the management controller at "+endpoint+" answers as another system than the one this operation proved for "+
 				identity+", so no media was inserted into it and it was not booted",
 				destroy+", correct spec.hardware.bmc.address on "+identity+" if it names another BMC"+update+", then run "+apply+
 					", so the machine is proved again"),
 			RefusalMachineRunning: running,
-			RefusalTPMAbsent:      refused(identity+" does not positively report an enabled TPM 2.0, so no encrypted installer was booted", "enable a supported TPM 2.0 on "+identity+", then run "+next),
-			RefusalFirmwareMismatch: refused("the machine answering at "+endpoint+" does not report the firmware settings "+identity+" declares under "+FirmwarePath+".mode prove, so no media was inserted into it and it was not booted",
+			RefusalTPMAbsent:      refused(prebootTPMAbsent, identity+" does not positively report an enabled TPM 2.0, so no encrypted installer was booted", "enable a supported TPM 2.0 on "+identity+", then run "+next),
+			RefusalFirmwareMismatch: refused(prebootFirmwareMismatch, "the machine answering at "+endpoint+" does not report the firmware settings "+identity+" declares under "+FirmwarePath+".mode prove, so no media was inserted into it and it was not booted",
 				"set the declared values on "+identity+" through its BMC, then run "+next+"; to have Bootwright set them instead, "+destroy+
 					", set "+FirmwarePath+".mode to enforce on "+identity+update+", then run "+apply),
-			RefusalFirmwareNotApplied: refused("the management controller at "+endpoint+" refused or did not apply the firmware settings "+identity+" declares, so no media was inserted into it and no installer was booted",
+			RefusalFirmwareNotApplied: refused(prebootFirmwareNotApplied, "the management controller at "+endpoint+" refused or did not apply the firmware settings "+identity+" declares, so no media was inserted into it and no installer was booted",
 				"when the reasons say the machine was not proved off, first stop it with bootwright machine stop --context "+contextName+" --name "+machine+" --force; "+
 					"read the BMC's message in the attempt's retained output and correct the cause through the BMC, then run "+next+
 					"; any one-time setup boot and settings this step staged stay on the machine and apply at its next boot; to correct the declaration instead, "+destroy+
@@ -98,10 +97,8 @@ func PreBootRefusals(arm Arm, contextName, continuation, machine, endpoint strin
 
 // UnansweredTarget never interprets an unavailable system read as different hardware.
 func UnansweredTarget(machine, endpoint string) error {
-	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-		Severity: "error", Code: "lifecycle.unknown",
-		Message:     "the management controller at " + endpoint + " did not answer the system read for Machine/" + machine,
-		Remediation: "read the controller's cause in the attempt's retained output, restore access and repeat apply",
-		Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: machine},
-	}}}
+	failure := prebootTargetUnanswered.Fail("the management controller at "+endpoint+" did not answer the system read for Machine/"+machine,
+		"read the controller's cause in the attempt's retained output, restore access and repeat apply").(*diagnostics.Failure)
+	failure.Diagnostics[0].Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: machine}
+	return failure
 }

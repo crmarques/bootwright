@@ -91,15 +91,15 @@ func expectState(t *testing.T, err error) {
 	}
 }
 
-// expectBusy requires the typed contention refusal: lifecycle.lease with the
+// expectBusy requires the typed contention refusal: context.busy with the
 // retry remedy, never a context.state defect.
 func expectBusy(t *testing.T, err error) {
 	t.Helper()
 	var held *kernel.BusyError
 	reported := diagnostics.Of(err)
-	if !errors.As(err, &held) || len(reported) != 1 || reported[0].Code != "lifecycle.lease" ||
+	if !errors.As(err, &held) || len(reported) != 1 || reported[0].Code != "context.busy" ||
 		reported[0].Remediation != "retry after the running Bootwright command finishes" {
-		t.Fatalf("expected a lifecycle.lease busy refusal, got %v %#v", err, reported)
+		t.Fatalf("expected a context.busy busy refusal, got %v %#v", err, reported)
 	}
 }
 

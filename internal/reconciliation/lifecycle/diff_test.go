@@ -343,7 +343,7 @@ func TestDiffOfAnUncompilableSelectedRevisionRefuses(t *testing.T) {
 type leasedWorkspace struct{ Workspace }
 
 func (leasedWorkspace) ReadLifecycle(context.Context, string, func(View) error) error {
-	return failure("lifecycle.lease", "another operation holds this context", "wait for it to finish")
+	return failure("context.busy", "another operation holds this context", "wait for it to finish")
 }
 
 func TestDiffRefusesWhileAnOperationHoldsTheContext(t *testing.T) {
@@ -351,7 +351,7 @@ func TestDiffRefusesWhileAnOperationHoldsTheContext(t *testing.T) {
 	f := newDiffHarness(t, "alpha")
 	f.service.workspace = leasedWorkspace{Workspace: f.workspace}
 	result, err := f.service.Diff(context.Background(), DiffRequest{ContextName: "lab"})
-	if reported := diagnostics.Of(err); result != nil || len(reported) != 1 || reported[0].Code != "lifecycle.lease" {
+	if reported := diagnostics.Of(err); result != nil || len(reported) != 1 || reported[0].Code != "context.busy" {
 		t.Fatalf("diff = %+v (%v)", result, err)
 	}
 }

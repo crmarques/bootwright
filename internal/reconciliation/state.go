@@ -1,7 +1,5 @@
 package reconciliation
 
-import "github.com/crmarques/bootwright/internal/diagnostics"
-
 // AuthorizationDataLoss is the only token a plan may consume. A block that
 // consumes it destroys data the operator must acknowledge before registration.
 const AuthorizationDataLoss = "data-loss"
@@ -172,9 +170,9 @@ func NextOperationState(states []BlockState, boundary bool) (OperationState, err
 }
 
 func stateError(message string) error {
-	return diagnostics.NewFailure("lifecycle.state", message, "")
+	return recordsStateUnrecognized.Fail(message, "")
 }
 
 func planError(message string) error {
-	return diagnostics.NewFailure("lifecycle.state", message, "")
+	return recordsPlanInvalid.Fail(message, "")
 }

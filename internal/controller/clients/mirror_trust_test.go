@@ -86,7 +86,7 @@ func TestADecodedMirrorAnchorMustNameAHostItsClientsAreReadFrom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := DecodeRequest(data); firstCode(err) != "lifecycle.state" {
+	if _, err := DecodeRequest(data); firstCode(err) != "clients.request-unreadable" {
 		t.Fatalf("decode = %v", err)
 	}
 }

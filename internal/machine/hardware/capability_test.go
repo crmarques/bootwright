@@ -141,7 +141,7 @@ func TestTheProvedClaimIsOneBMCMACKeyPerPermanentAddress(t *testing.T) {
 		t.Fatalf("the largest address set was refused: %v", err)
 	}
 	_, _, err = New(nil).ProvedClaim("lab", block, evidenceOf(t, block.RequestDigest, many...))
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "65 permanent hardware addresses") {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != hardwareAddressesTooMany.Code || !strings.Contains(reported[0].Message, "65 permanent hardware addresses") {
 		t.Fatalf("an address set beyond the bound = %+v", reported)
 	}
 	for name, data := range map[string][]byte{

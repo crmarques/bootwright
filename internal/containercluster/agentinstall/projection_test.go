@@ -599,7 +599,7 @@ func TestAnUnresolvedServerIsRefusedAsTheSelection(t *testing.T) {
 	}
 	_, _, _, err := Requests(catalog, "controller", testContext)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if len(reported) != 1 || reported[0].Code != "artifact.server-unmanaged" ||
 		reported[0].Message != "a consumer publishes only into a managed artifact server" ||
 		reported[0].Remediation != "select a managed server on OpenShiftCluster/sno" {
 		t.Fatalf("refusal = %#v", reported)

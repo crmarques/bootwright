@@ -26,7 +26,7 @@ func TestPlanRequestAggregateBound(t *testing.T) {
 	definitions = append(definitions, definition("excess"))
 	_, err = NewPlan(Apply, definitions)
 	issues := diagnostics.Of(err)
-	if len(issues) != 1 || issues[0].Code != "lifecycle.state" || !strings.Contains(issues[0].Message, "aggregate request") {
+	if len(issues) != 1 || issues[0].Code != "records.plan-too-large" || !strings.Contains(issues[0].Message, "aggregate request") {
 		t.Fatalf("aggregate refusal = %v", err)
 	}
 }
@@ -71,7 +71,7 @@ func TestPlanCollectionBounds(t *testing.T) {
 			test.set(&d, test.limit+1)
 			_, err := NewPlan(Apply, []BlockDefinition{d})
 			issues := diagnostics.Of(err)
-			if len(issues) != 1 || issues[0].Code != "lifecycle.state" || !strings.Contains(issues[0].Message, test.name) {
+			if len(issues) != 1 || issues[0].Code != "records.plan-invalid" || !strings.Contains(issues[0].Message, test.name) {
 				t.Fatalf("bound refusal = %v", err)
 			}
 		})

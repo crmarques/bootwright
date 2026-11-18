@@ -571,7 +571,7 @@ func TestEveryPreviewDecidesAsItsVerbDoes(t *testing.T) {
 // showed, under the receipt the row names.
 func agreeOnPresentation(t *testing.T, row previewRow, c previewCase, current string, preview *PlanResult, previewErr, verbErr error, presented int) {
 	t.Helper()
-	if previewErr != nil || (verbErr != nil && firstCode(verbErr) != row.fails && !(row.fails == "lifecycle.unknown" && unprovedCode(firstCode(verbErr)))) || (verbErr == nil && row.fails != "") {
+	if previewErr != nil || (verbErr != nil && !codeIs(firstCode(verbErr), row.fails)) || (verbErr == nil && row.fails != "") {
 		t.Fatalf("preview = %v, %s = %v", previewErr, c.verb, verbErr)
 	}
 	if preview.Finalizes || len(c.presenter.presented) != presented+1 {
@@ -714,7 +714,7 @@ func previewRows(ctx context.Context) []previewRow {
 		{
 			// The harness answers an unscripted observation as still unknown,
 			// so the repeated destroy presents its plan and then fails again.
-			name: "an unknown destroy that still holds an unresolved block", shown: reconciliation.Destroy, next: "resolve", fails: "lifecycle.unknown",
+			name: "an unknown destroy that still holds an unresolved block", shown: reconciliation.Destroy, next: "resolve", fails: anyUnproved,
 			prepare: func(t *testing.T) previewCase {
 				h := newHarness(t, "alpha", "bravo")
 				removalOutcome(t, h, reconciliation.OutcomeUnknown)

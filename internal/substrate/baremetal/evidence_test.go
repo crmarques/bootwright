@@ -80,7 +80,7 @@ func TestTheProvedIdentityIsReadOnlyFromAPresenceProof(t *testing.T) {
 			if err == nil {
 				t.Fatalf("evidence %q proved the identity %+v", evidence, identity)
 			}
-			want := "lifecycle.state"
+			want := "records.evidence-unreadable"
 			if proofsWithoutIdentity[name] {
 				want = baremetalIdentityUnproved.Code
 			}

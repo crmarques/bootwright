@@ -109,7 +109,7 @@ func requireStateRefusal(t *testing.T, err error, message string) {
 	t.Helper()
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) || !strings.Contains(reported[0].Message, message) {
-		t.Fatalf("refusal = %+v (%v), want lifecycle.state containing %q", reported, err, message)
+		t.Fatalf("refusal = %+v (%v), want a refusal before any effect containing %q", reported, err, message)
 	}
 }
 
@@ -227,7 +227,7 @@ func (c *chainReader) ReadOperation(_ context.Context, id string) (operationstor
 	c.reads++
 	operation, found := c.operations[id]
 	if !found {
-		return operationstore.Operation{}, failure("lifecycle.state", "the named lifecycle operation has no durable record", "")
+		return operationstore.Operation{}, testRefusal.Fail("the named lifecycle operation has no durable record", "")
 	}
 	return operation, nil
 }

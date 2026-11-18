@@ -14,7 +14,7 @@ func TestAStopFiresWithItsClassesAndRemedy(t *testing.T) {
 	if err != nil || string(data) != want {
 		t.Fatalf("a stop fires as %s (%v)", data, err)
 	}
-	if !Unproved(stop.Fail("x", "")) || Unproved(Stop{Certainty: CertaintyPossible}.Fail("x", "")) || Unproved(NewFailure("lifecycle.state", "x", "")) || !Unproved(NewFailure("lifecycle.unknown", "x", "")) {
+	if !Unproved(stop.Fail("x", "")) || Unproved(Stop{Certainty: CertaintyPossible}.Fail("x", "")) || Unproved(NewFailure("test.plain", "x", "")) {
 		t.Fatal("Unproved does not follow the certainty")
 	}
 	if named := Of(stop.Fail("x", "do this")); named[0].Remediation != "do this" {

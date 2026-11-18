@@ -21,10 +21,10 @@ func DecodeEvidence(data []byte, digest, version string) (Evidence, error) {
 		return Evidence{}, err
 	}
 	if e.Version != version || e.Request != digest {
-		return Evidence{}, failure("add-on evidence names another request or version", "")
+		return Evidence{}, clusterobjectsEvidenceMismatch.Fail("add-on evidence names another request or version", "")
 	}
 	if err := co.ValidateEvidence(e.Evidence); err != nil {
-		return Evidence{}, failure("cluster object evidence contains unsafe native values", "")
+		return Evidence{}, clusterobjectsEvidenceUnsafe.Fail("cluster object evidence contains unsafe native values", "")
 	}
 	return e, nil
 }

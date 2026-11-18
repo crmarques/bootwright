@@ -418,3 +418,179 @@ The Ceph storage capability's stops (`internal/storage/ceph`).
 | `ceph.result-invalid` | block | unproved | defect | - | repeat | a Ceph adapter returned an outcome or a value it never produces | repeat the operation, which observes the Ceph state before anything else starts |
 | `ceph.evidence-unproved` | block | unproved | target | - | repeat | the evidence of a Ceph block does not prove the ownership and resource scope the block froze | repeat the operation, which observes the Ceph state before anything else starts |
 | `ceph.tiebreaker-unproved` | block | unproved | target | - | repeat | a provided stretch tiebreaker Machine did not prove its Ceph footprint, its transport boundary or its removal | repeat the operation, which observes the tiebreaker before anything else starts |
+
+## Media store stops
+
+The media store's stops (`internal/managedos/media`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `media.store-busy` | operation | possible | concurrency | - | wait | another Bootwright command holds the media store, so an image was verified and retained but not published | repeat the command once the other command finishes, which publishes the retained image |
+
+## Artifact server stops
+
+The managed artifact server's stops (`internal/infrastructureservices/artifactserver`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `artifact.context-invalid` | operation | none | defect | - | none | the context identity the managed artifact servers are derived under is not usable, so nothing was planned | report the message as a defect |
+| `artifact.name-unsafe` | operation | none | input | - | change-input | an artifact server's name cannot name its unit, container or directory on the host | rename the artifact server the message names |
+| `artifact.server-unmanaged` | operation | none | input | - | change-input | a consumer selected an artifact server that is not managed, and an external server is nobody's to publish into | select a managed artifact server |
+| `artifact.private-unverified` | operation | none | input | - | change-input | material only one machine may read is published at an endpoint that is not served over a verified connection | select an https endpoint of the artifact server |
+| `artifact.listeners-mismatch` | block | possible | records | - | repeat | the evidence an artifact server returned does not cover or match the listeners its request froze | repeat the operation, which observes the artifact server again |
+| `artifact.listener-unanswered` | block | possible | target | - | repeat | an artifact server's listener did not answer with an HTTP status line | repeat the operation, which observes the artifact server again |
+| `artifact.certificate-evidence-invalid` | block | possible | records | - | repeat | an artifact server's listener reported a certificate it should not have, or none it should have | repeat the operation, which observes the artifact server again |
+| `artifact.certificate-mismatch` | block | possible | target | - | fix-then-repeat | an artifact server's listener presented a different certificate than the operation bound | restore the certificate the operation bound, then repeat the operation |
+
+## Machine placement stops
+
+The Machine placement and access checks' stops (`internal/machine`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `machine.placement-no-access` | operation | none | input | - | change-input | a Machine that hosts lifecycle work is neither the controller nor declares SSH access, so no work was placed on it | place the work on the controller Machine, or author access.ssh on the Machine |
+| `machine.placement-auth-unsupported` | operation | none | input | - | change-input | a Machine that hosts lifecycle work authenticates with an operator identity or a password, which a placement does not support | author access.ssh.auth.privateKeyRef on the Machine |
+| `machine.placement-key-missing` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares no SSH private key reference | author access.ssh.auth.privateKeyRef on the Machine |
+| `machine.placement-host-key-missing` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares no bound SSH host key | author access.ssh.knownHostsRef on the Machine |
+| `machine.placement-escalates` | operation | none | input | - | change-input | a Machine that hosts lifecycle work declares an SSH account other than root or an escalation Secret | set access.ssh.user to root or omit it, and remove access.ssh.sudoPasswordRef, on the Machine |
+| `machine.installed-access-mismatch` | operation | none | input | - | change-input | a Machine Bootwright installs declares SSH access other than its installation's own, so no work was placed on it | remove spec.access.ssh from the Machine so its access is the installation's own |
+
+## Machine hardware stops
+
+The Machine hardware capability's stops (`internal/machine/hardware`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `hardware.desired-state-missing` | operation | none | defect | - | none | the machine hardware capability was asked to plan without compiled desired state | report the message as a defect |
+| `hardware.request-invalid` | block | none | records | - | registering-build | the frozen machine hardware request names no Machine reached over SSH, so no adapter ran | destroy it with the build that applied it |
+| `hardware.request-mismatch` | block | none | defect | - | none | the frozen machine hardware request names another Machine than its block, so no adapter ran | report the message as a defect |
+| `hardware.unconfigured` | block | none | defect | - | none | the machine hardware capability runs without its adapter | report the message as a defect |
+| `hardware.evidence-malformed` | block | possible | records | - | repeat | the machine hardware evidence breaks its shape or its bounds | repeat the operation, which reads the Machine's hardware again |
+| `hardware.evidence-incomplete` | block | possible | target | - | repeat | the machine hardware evidence proves no complete read of its host's permanent hardware addresses | repeat the operation, which reads the Machine's hardware again |
+| `hardware.unproved` | block | unproved | target | - | repeat | the machine hardware adapter ended without proving its postcondition | repeat the operation, which observes the effect before anything else starts |
+| `hardware.removal-evidence-unencoded` | block | none | defect | - | none | the evidence of the machine hardware removal could not be encoded | report the message as a defect |
+| `hardware.addresses-too-many` | block | possible | input | - | change-input | a Machine's host reports more permanent hardware addresses than one claim holds | place the work on a Machine whose host reports fewer physical network interfaces |
+
+## Controller client stops
+
+The controller's client tools capability's stops (`internal/controller/clients`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `clients.egress-unproved` | block | none | records | - | fix-then-repeat | the completed controller stage does not hold the records that prove the one route its downloads took, so nothing ran | complete the controller stage and retry apply without changing its route |
+| `clients.evidence-unencodable` | block | possible | defect | - | none | the controller prerequisites evidence cannot be written within its bounds after the stage ran | use a compatible executable |
+| `clients.plan-defect` | operation | none | defect | - | none | the controller prerequisites capability is planned without compiled desired state or without the Machine its block names, so nothing ran | use a compatible executable |
+| `clients.publication-missing` | block | none | defect | - | none | the controller prerequisites block runs without the stage capability that publishes its clients, so nothing ran | use a compatible executable |
+| `clients.request-unreadable` | block | none | records | - | registering-build | a frozen controller prerequisites request names packages, a part or a mirror trust anchor this build does not select, so no adapter ran | destroy it with the build that applied it |
+
+## Pre-boot stops
+
+The substrate pre-boot checks' stops (`internal/substrate`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `preboot.unrealized-substrate` | operation | none | input | - | change-input | a Machine is placed on a provider whose substrate this executable does not realize, so nothing was planned | place the Machine on a libvirt, bare-metal or KubeVirt provider |
+| `preboot.target-unanswered` | adapter-run | unproved | environment | `unreachable` | repeat | the management controller did not answer the system read that proves a physical machine, so what it is stays unknown | restore access to the controller, then repeat the apply |
+| `preboot.hardware-mismatch` | adapter-run | none | target | - | fix-then-repeat | a physical machine does not report exactly the hardware its Machine declares, or its inventory could not be read in full, so no media was inserted | make the machine report the hardware its Machine declares, then continue the apply |
+| `preboot.identity-mismatch` | adapter-run | none | target | - | fix-then-repeat | the system answering for a Machine is not the one the operation proved for it, so no media was inserted | correct the declared address of the Machine, or restore the system it was realized on, then continue the apply |
+| `preboot.machine-running` | adapter-run | none | target | - | fix-then-repeat | a machine is running while its installation would write its disk, so no media was inserted | stop the machine, then continue the apply |
+| `preboot.tpm-absent` | adapter-run | none | target | - | fix-then-repeat | an encrypted installation has no positive proof of a TPM 2.0, so no encrypted installer was booted | provide a TPM 2.0 for the machine, then continue the apply |
+| `preboot.firmware-mismatch` | adapter-run | none | target | - | fix-then-repeat | a machine does not report the firmware settings its Machine asks to prove, so no media was inserted | set the declared firmware values through the controller, then continue the apply |
+| `preboot.firmware-not-applied` | adapter-run | possible | target | - | fix-then-repeat | the controller refused or did not apply the firmware settings its Machine asks to enforce, and a setup boot or settings it staged may remain | correct the cause through the controller, then continue the apply |
+
+## Cluster object stops
+
+The cluster objects add-on driver's stops (`internal/addons/clusterobjects/driver`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `clusterobjects.runtime-unavailable` | block | none | target | - | fix-then-repeat | the cluster object runtime or the custody of the cluster's produced input is not available, so no adapter ran | apply the controller and cluster stages first |
+| `clusterobjects.identity-unavailable` | block | none | defect | - | none | the apply that owns the cluster objects named no ownership identity, so no adapter ran | report the message as a defect |
+| `clusterobjects.operation-unsupported` | block | none | defect | - | none | a cluster object run was asked for an operation other than apply or observe, so no adapter ran | report the message as a defect |
+| `clusterobjects.placement-unbound` | block | none | input | - | fix-then-repeat | the Secret a placement copies into the cluster is not bound to the operation, so no adapter ran | restore its Secret binding or apply the export producer first |
+| `clusterobjects.placement-unmapped` | block | none | input | - | change-input | a Secret placement does not map exactly the parts of the Secret it copies, so no adapter ran | correct the package part mapping |
+| `clusterobjects.evidence-mismatch` | block | possible | records | - | repeat | the evidence a cluster object adapter returned names another request or version | repeat the operation, which observes the objects again |
+| `clusterobjects.evidence-unsafe` | block | possible | defect | - | repeat | the evidence a cluster object adapter returned carries native values that may not be kept | repeat the operation, which observes the objects again |
+
+## Add-on stops
+
+The add-on instance capability's stops (`internal/addons/instance`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `addon.binding-invalid` | operation | none | input | - | change-input | an add-on binding, or the add-on it selects, cannot be realized or rendered as declared, so nothing was planned | correct the add-on binding |
+| `addon.controller-differs` | operation | none | input | - | change-input | the controller an add-on selects is not the controller of the operation, so nothing was planned | correct the controller selection |
+| `addon.facts-unavailable` | operation | none | defect | - | none | the add-on capability was built without the cluster facts its plan reads, so nothing was planned | report the message as a defect |
+| `addon.placement-invalid` | operation | none | input | - | change-input | a Secret placement of an add-on names input that is undeclared or does not fit it, so nothing was planned | correct the Secret the add-on's placement names |
+| `addon.frozen-other-build` | block | none | build | - | registering-build | the frozen add-on request does not match what this build holds for its package, so no adapter ran | destroy the operation with the build that froze it, or plan again with this build |
+| `addon.completion-unproved` | block | unproved | target | - | repeat | the add-on adapter ended without evidence that its objects reached the declared state | repeat apply to observe its objects |
+| `addon.outcome-unknown` | block | unproved | defect | - | repeat | the add-on adapter ended without an outcome the block can settle on | repeat apply to observe its objects |
+| `addon.addition-undecodable` | operation | none | defect | - | none | an add-on instance added to a completed apply froze a request this build cannot read, so nothing was added | report the message as a defect |
+| `addon.cluster-not-installed` | operation | none | input | - | change-input | an add-on added to a completed apply names a cluster that apply did not install, so nothing was added | declare it on a cluster that apply installed, or take the apply back and apply again |
+
+## Command stops
+
+The command line's stops (`internal/cli`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `command.unconfirmed` | operation | none | input | - | authorize | the confirmation an apply or destroy asks for was declined, canceled or could not be asked, so nothing began | review the plan, then repeat the command with --yes |
+
+## Context input stops
+
+The context input checks' stops (`internal/workspace/contexts`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `input.added-since-apply` | context | none | input | - | repeat | imported input declares more than an apply in progress froze, and the next apply adds it without running its blocks | run bootwright apply to add it to that apply |
+| `input.changed-since-apply` | context | none | input | - | other-verb | the context holds a completed apply and imported input changed since it, which apply refuses until a destroy takes back what that apply owns | take the apply back with bootwright destroy, then apply again |
+
+## Context store stops
+
+The context store's stops (`internal/workspace/contextfs`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `contextfs.runs-exhausted` | operation | none | bound | - | fix-then-repeat | the numbers a context's run logs are named by are used up, so no run was started | remove the run log directory the message names, then repeat the command |
+
+## Record stops
+
+The reconciliation records' and plans' stops (`internal/reconciliation`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `records.request-unwritable` | operation | none | defect | - | none | a request a plan composed cannot be frozen into its canonical bytes, so nothing ran | report the message as a defect |
+| `records.request-unreadable` | block | none | records | - | registering-build | a frozen request is not one this build reads back as it was written, so no adapter ran | destroy it with the build that applied it |
+| `records.version-unsupported` | block | none | build | - | registering-build | a frozen request names a version this build does not read, so no adapter ran | destroy it with the build that applied it |
+| `records.evidence-unreadable` | block | possible | defect | - | none | the evidence an adapter returned is empty, unbounded or not the one shape its capability declares | report the message as a defect |
+| `records.state-unrecognized` | block | possible | defect | - | none | a lifecycle record, number or identity holds a value this build does not recognize | report the message as a defect |
+| `records.plan-invalid` | operation | none | defect | - | none | a lifecycle plan, lineage or block breaks the shape or the bounds a plan holds, so nothing ran | report the message as a defect |
+| `records.lineage-reshaped` | operation | none | input | - | other-verb | an additive apply would freeze a block of the applied lineage differently, so nothing ran | take the apply back with bootwright destroy, then apply the changed input |
+| `records.plan-too-large` | operation | none | bound | - | change-input | a lifecycle plan exceeds its block count or its aggregate request size, so nothing ran | declare fewer objects in the context, or split them across contexts |
+| `records.block-identity-clash` | operation | none | input | - | change-input | two objects of different kinds name one block, so the plan cannot tell them apart and nothing ran | rename one of the two objects so their block identities differ |
+| `records.dependency-cycle` | operation | none | input | - | change-input | the blocks of a plan wait for one another in a cycle, so no order exists and nothing ran | remove one of the references that order these blocks after one another |
+
+## Operation record stops
+
+The operation store's stops (`internal/reconciliation/operationstore`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `operations.record-invalid` | operation | possible | records | - | abandon-context | an operation record of the context, or the record this build was to write, is malformed, over its bound or not valid | restore the context's records from a matching backup, or delete the context with what it may still own |
+| `operations.defect` | block | none | defect | - | none | the operation store was driven against a precondition its contract states, so the call recorded nothing | report the message as a defect |
+| `operations.bound` | operation | none | bound | - | change-input | a plan or record this build was to write exceeds its encoded size bound, so the call recorded nothing | declare fewer objects in the context, or split them across contexts, then repeat the command |
+| `operations.record-missing` | operation | none | records | - | abandon-context | an operation the context names has no durable record to read | restore the context's records from a matching backup, or delete the context with what it may still own |
+| `operations.plan-mismatch` | operation | none | records | - | abandon-context | the frozen plan the context holds is not the plan its operation recorded | restore the context's records from a matching backup, or delete the context with what it may still own |
+| `operations.record-other-build` | operation | none | build | - | registering-build | a record of the context names another build as its writer, and this build cannot read it | continue or remove the operation with the build that wrote the record |
+| `operations.record-unreadable` | operation | none | records | - | registering-build | the record of an operation is malformed, unsupported or not canonical, so status cannot read it | use the build that registered the operation to inspect and remove it, or restore the whole context store from a matching backup |
+| `operations.plan-other-build` | operation | none | build | - | registering-build | the frozen plan of an operation is not one this build could have produced | destroy the context with the build that registered the operation |
+| `operations.retention-full` | operation | none | bound | - | other-verb | the context has retained the most operations it keeps, or its operation area cannot hold a new one, so none was registered | take back what the context owns with destroy, or delete the context and create it again |
+| `operations.area-reserved` | operation | none | bound | - | other-verb | the operation area keeps its remaining room for the removal of the apply, so it cannot hold another attempt | take back what the context owns with destroy, or delete the context and create it again |
+
+## Context lock stops
+
+The context root lock's and lease's stops (`internal/workspace/contextfs/kernel`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `context.busy` | context | possible | concurrency | - | wait | another Bootwright command holds the context's root lock or lease, so this command stopped where it needed it | repeat the command once the other command on the context has finished |

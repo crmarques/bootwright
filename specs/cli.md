@@ -785,7 +785,7 @@ exact command, with `--context`, that continues a `paused`, `failed`,
 interrupt after registration writes that result and receipt, then
 `runtime.interrupted` naming the same command, and exits `130`. A refusal
 before registration reports its diagnostics and no receipt. A root lock or
-context lease that cannot be acquired fails `lifecycle.lease`, naming the safe
+context lease that cannot be acquired fails `context.busy`, naming the safe
 retry; Bootwright never takes a lease over.
 
 `apply` and `destroy` follow the state owner's
@@ -1028,7 +1028,7 @@ reads. It reads durable records under the shared lock, so it contacts no host,
 registers no operation, allocates no identity, writes no record, binds no
 Secret and creates no log; only `--output-dir` and `--tool` write files,
 outside the store. While an apply or destroy holds the context it
-refuses `lifecycle.lease`, naming the safe retry; every other refusal is a
+refuses `context.busy`, naming the safe retry; every other refusal is a
 lifecycle read's own.
 
 ### Observation and exit status
@@ -1040,7 +1040,7 @@ It still registers no operation, writes no record and binds no Secret: it
 reopens the binding the apply froze, read-only, and adds only the refusals
 those rules name. A long `--observe` holds the context's shared lock while it
 observes, so an `apply` or `destroy` started meanwhile refuses
-`lifecycle.lease`. What it cannot read, such as a collected input revision
+`context.busy`. What it cannot read, such as a collected input revision
 or an object whose blocks failed, is shown as unknown beside the object and is
 never a refusal. It exits `0` whenever it renders a comparison, whatever the
 comparison found, unless `--exit-code` is set, and writes no

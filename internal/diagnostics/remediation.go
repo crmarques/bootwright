@@ -71,11 +71,8 @@ var defaultRemediations = map[string]string{
 	"controller.uninstall":   "resolve what the message names and repeat bootwright controller uninstall",
 	"controller.unknown":     "repeat bootwright controller install to resolve the unknown action",
 
-	"lifecycle.state":         "run bootwright status --context <context> to see the records and the next step",
 	"lifecycle.unsupported":   "remove the object this executable cannot realize, or use a build that supports it",
 	"lifecycle.authorization": "repeat the command with the authorization the frozen plan requires",
-	"lifecycle.lease":         "repeat the command once the other operation on the context has finished",
-	"lifecycle.unknown":       "resolve the unknown effect with the command bootwright status --context <context> names",
 	"logs.not-found":          "run bootwright status --context <context> to see the operation records that remain",
 
 	"trust.identity":     "review the SSH identity the message names and enroll it with bootwright machine trust --context <context>",

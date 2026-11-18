@@ -17851,3 +17851,26 @@ after [X615](#x615--the-host-firewalls-failures-are-stops) raised the host
 firewall's failures from stops, its `refusal` helper had no caller, and
 `make check`'s static analysis refused it as unused (U1000). The helper is
 removed; behavior is unchanged.
+
+## X622 — The last capability failures are stops, and two generic codes retire
+
+### B1614
+
+Under [D276](backlog.md#d276) (audit 006 W2.3), split from
+[B1563](m1.md#b1563). The artifact server, Machine placement and hardware,
+controller clients, the records and plans of `internal/reconciliation`, the
+operation store, the pre-boot checks, both add-on packages, the command
+line's confirmation, the context input warnings and the context store raise
+declared stops, each family with its section of the
+[stop catalog](../cli/stops.md#record-stops). The context lock's lease
+refusal is [`context.busy`](../cli/stops.md#context-lock-stops), and a media
+image verified but not published under a held lock is
+[`media.store-busy`](../cli/stops.md#media-store-stops). No production code
+raises `lifecycle.state` or `lifecycle.unknown` any more, so both leave the
+registry with their default remedies, and an attempt is `unknown` only through
+a stop of certainty `unproved`
+([attempt outcomes](../state-reconciliation.md#attempts-and-unknown-outcomes)). The engine keeps a
+stop's fields when it rewrites the retention and reserve refusals' remedies.
+Guarded by `TestEveryCatalogedStopIsComposedAndExplained`,
+`TestDiagnosticCodesMatchOutputSpec`, the packages' tests and an independent
+Opus review.

@@ -19,7 +19,7 @@ import (
 func TestOnlyAnUnaccountedAdapterFailureLeavesTheBlockUnknown(t *testing.T) {
 	t.Parallel()
 	for name, err := range map[string]error{
-		"adapter did not complete": diagnostics.NewFailure("lifecycle.state", "the adapter operation did not complete", ""),
+		"adapter did not complete": testPossible.Fail("the adapter operation did not complete", ""),
 		"bound secret missing":     diagnostics.NewFailure("secret.store", "a bound Secret is not available", ""),
 		"boundary unavailable":     diagnostics.NewFailure("controller.identity", "the controller runtime is unavailable", ""),
 	} {
@@ -32,8 +32,8 @@ func TestOnlyAnUnaccountedAdapterFailureLeavesTheBlockUnknown(t *testing.T) {
 	// A result the runner never received is not a diagnosis, so it is unknown
 	// however the process ended.
 	for name, err := range map[string]error{
-		"incomplete result":   diagnostics.NewFailure("lifecycle.unknown", "the adapter structured result was incomplete", ""),
-		"descendants held on": diagnostics.NewFailure("lifecycle.unknown", "adapter descendants retained the result channel", ""),
+		"incomplete result":   testUnproved.Fail("the adapter structured result was incomplete", ""),
+		"descendants held on": testUnproved.Fail("adapter descendants retained the result channel", ""),
 		"lost result":         errors.New("lost"),
 		"cancelled":           context.Canceled,
 	} {

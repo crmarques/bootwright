@@ -57,8 +57,8 @@ func TestReadLogsTakesOnlyTheSharedRootLockAndReadsNoInput(t *testing.T) {
 	appendLog(t, store, logOperation+"/operation.jsonl", "{}\n")
 	err := store.Transact(ctx, false, nil, func(contexts.Transaction) error {
 		readErr := store.ReadLogs(ctx, "example", func(logview.View) error { return nil })
-		if diagnosticCode(readErr) != "lifecycle.lease" {
-			t.Fatalf("a read beside an exclusive root holder = %#v, want lifecycle.lease", diagnostics.Of(readErr))
+		if diagnosticCode(readErr) != "context.busy" {
+			t.Fatalf("a read beside an exclusive root holder = %#v, want context.busy", diagnostics.Of(readErr))
 		}
 		return nil
 	})

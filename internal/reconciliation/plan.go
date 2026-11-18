@@ -12,7 +12,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/canonicaljson"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 const (
@@ -101,7 +100,7 @@ func NewPlan(verb Verb, definitions []BlockDefinition) (Plan, error) {
 		return Plan{}, planError("lifecycle plan verb is not recognized")
 	}
 	if len(definitions) > MaxBlocks {
-		return Plan{}, planError("lifecycle plan exceeds its block limit")
+		return Plan{}, recordsPlanTooLarge.Fail("lifecycle plan exceeds its block limit", "")
 	}
 	requestBytes := 0
 	for _, definition := range definitions {
@@ -110,7 +109,7 @@ func NewPlan(verb Verb, definitions []BlockDefinition) (Plan, error) {
 		}
 		requestBytes += len(definition.Request)
 		if requestBytes > MaxPlanRequestBytes {
-			return Plan{}, planError("lifecycle plan exceeds its 4 MiB aggregate request limit")
+			return Plan{}, recordsPlanTooLarge.Fail("lifecycle plan exceeds its 4 MiB aggregate request limit", "")
 		}
 	}
 	resolved, err := ResolveRequirements(definitions)
@@ -325,7 +324,7 @@ func order(definitions []BlockDefinition) ([]BlockDefinition, error) {
 			if earlier.Kind == definition.Kind && earlier.Object == definition.Object {
 				return nil, planError("lifecycle plan repeats a block identity")
 			}
-			return nil, diagnostics.NewFailureWithRemediation("lifecycle.state", fmt.Sprintf("%s %s and %s %s both name the block %s", earlier.Kind, earlier.Object, definition.Kind, definition.Object, definition.ID), "", "rename one of the two objects so their block identities differ")
+			return nil, recordsBlockIdentityClash.Fail(fmt.Sprintf("%s %s and %s %s both name the block %s", earlier.Kind, earlier.Object, definition.Kind, definition.Object, definition.ID), "rename one of the two objects so their block identities differ")
 		}
 		known[definition.ID] = definition
 	}
@@ -385,7 +384,7 @@ func waves(known map[string]BlockDefinition) (map[string]int, error) {
 		}
 	}
 	if measured != len(known) {
-		return nil, diagnostics.NewFailureWithRemediation("lifecycle.state", "lifecycle plan dependencies form a cycle: "+strings.Join(cycleOf(known, remaining), " -> "), "",
+		return nil, recordsDependencyCycle.Fail("lifecycle plan dependencies form a cycle: "+strings.Join(cycleOf(known, remaining), " -> "),
 			"remove one of the references that order these blocks after one another")
 	}
 	return depth, nil

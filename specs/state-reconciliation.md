@@ -177,9 +177,9 @@ keeps the changed-input refusal, naming the first block that differs:
 - this executable plans the selected input and the
   [comparison](#comparing-desired-and-real-state) of the lineage's plan with
   that plan shows every lineage block the same and at least one block added. A
-  lineage block it would freeze differently refuses `lifecycle.state`, naming
-  it; so does an existing instance that would wait for the added one, as the
-  instances of a cluster wait for its last package;
+  lineage block it would freeze differently refuses `records.lineage-reshaped`,
+  naming it, and an existing instance that would wait for the added one
+  refuses too, as the instances of a cluster wait for its last package;
 - each added block's capability admits it through the optional `DeltaAdmitter`
   port, which only the add-on instance implements, for a cluster the lineage
   installed, and states that the block reads bound Secret material only in its
@@ -636,7 +636,7 @@ reported `failed` as `unknown`, because a typed failure proves less than
 completion, and one whose log could not be created records `unknown` without
 running its effect. A failure a capability reports leaves its attempt
 `unknown` when one of its diagnostics is a [stop](cli/stops.md) of certainty
-`unproved`, or carries the code `lifecycle.unknown`, and `failed` otherwise;
+`unproved`, and `failed` otherwise;
 the adapter run's own endings are the stops of the catalog's
 [adapter run section](cli/stops.md#adapter-run-stops). A run its own deadline
 ended reports `runner.deadline`, naming its block and the deadline. A failed exit the runner did not cause
@@ -2004,7 +2004,7 @@ build's priority, including continuation of an operation another build froze.
 A comparison sets a context's desired state beside what its operations
 realized, object by object. It is a read: it registers no operation, writes no
 record, binds no Secret, reserves nothing and runs no effect. It runs under one
-shared-lock read of the context, so it refuses `lifecycle.lease` while an apply
+shared-lock read of the context, so it refuses `context.busy` while an apply
 or destroy holds the context, refuses a retired operation index and unreadable
 or contradictory records as every lifecycle read does, and refuses with the
 compiler's own diagnostics when the selected input revision does not compile.
@@ -2161,7 +2161,7 @@ throttle, skipping a block whose throttle is full so it never holds back a
 later one; an observation claims no exclusive resource. Readings fold in frozen plan order, whatever order observations return in. It
 reports one check row, `observation`, and holds the lock until every
 observation returned, so an apply or destroy started meanwhile refuses
-`lifecycle.lease`. Canceling it stops further observations, and a block not
+`context.busy`. Canceling it stops further observations, and a block not
 yet observed reads unknown with `the observation was canceled`; a read-only
 Ceph remote worker an observation already started may run on until its own
 deadline.

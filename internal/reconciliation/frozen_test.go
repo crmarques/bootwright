@@ -37,7 +37,7 @@ func TestDecodeEvidenceAdmitsOnlyOneBoundedValueOfItsShape(t *testing.T) {
 	} {
 		decoded, err := DecodeEvidence[evidence]([]byte(tc.data), 64, "fixture")
 		reported := diagnostics.Of(err)
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != tc.message {
+		if len(reported) != 1 || reported[0].Code != "records.evidence-unreadable" || reported[0].Message != tc.message {
 			t.Errorf("%s: refused with %v, want %q", name, err, tc.message)
 		}
 		if decoded != (evidence{}) {
@@ -75,20 +75,20 @@ func TestThawVersionReadsTheVersionBeforeTheShape(t *testing.T) {
 	}
 	const remedy = "destroy it with the build that applied it"
 	const unreadable = "the frozen probe request has an unsupported version it does not name readably"
-	for name, tc := range map[string]struct{ data, message, remediation string }{
-		"another version with a removed member": {`{"aRemovedField":true,"name":"lab","version":"probe-v1"}`, "the frozen probe request has an unsupported version: probe-v1", remedy},
-		"a number":                              {`{"name":"lab","version":2}`, unreadable, remedy},
-		"no version":                            {`{"name":"lab"}`, unreadable, remedy},
-		"an empty version":                      {`{"name":"lab","version":""}`, unreadable, remedy},
-		"an unsafe version":                     {`{"name":"lab","version":"v2\nx"}`, unreadable, remedy},
-		"a non-object":                          {`["probe-v2"]`, "the frozen probe request is malformed", ""},
-		"this version and a new member":         {`{"aRemovedField":true,"name":"lab","version":"probe-v2"}`, "the frozen probe request is malformed", ""},
-		"a case-variant version":                {`{"Version":"probe-v1","name":"lab","version":"probe-v2"}`, "the frozen probe request is not canonical", ""},
-		"trailing data":                         {exact + "x", "the frozen probe request contains trailing data", ""},
+	for name, tc := range map[string]struct{ data, message, remediation, code string }{
+		"another version with a removed member": {`{"aRemovedField":true,"name":"lab","version":"probe-v1"}`, "the frozen probe request has an unsupported version: probe-v1", remedy, "records.version-unsupported"},
+		"a number":                              {`{"name":"lab","version":2}`, unreadable, remedy, "records.version-unsupported"},
+		"no version":                            {`{"name":"lab"}`, unreadable, remedy, "records.version-unsupported"},
+		"an empty version":                      {`{"name":"lab","version":""}`, unreadable, remedy, "records.version-unsupported"},
+		"an unsafe version":                     {`{"name":"lab","version":"v2\nx"}`, unreadable, remedy, "records.version-unsupported"},
+		"a non-object":                          {`["probe-v2"]`, "the frozen probe request is malformed", remedy, "records.request-unreadable"},
+		"this version and a new member":         {`{"aRemovedField":true,"name":"lab","version":"probe-v2"}`, "the frozen probe request is malformed", remedy, "records.request-unreadable"},
+		"a case-variant version":                {`{"Version":"probe-v1","name":"lab","version":"probe-v2"}`, "the frozen probe request is not canonical", remedy, "records.request-unreadable"},
+		"trailing data":                         {exact + "x", "the frozen probe request contains trailing data", remedy, "records.request-unreadable"},
 	} {
 		decoded, err := ThawVersion[probe]([]byte(tc.data), "probe", "probe-v2")
 		reported := diagnostics.Of(err)
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != tc.message || reported[0].Remediation != tc.remediation || reported[0].Source != nil {
+		if len(reported) != 1 || reported[0].Code != tc.code || reported[0].Message != tc.message || reported[0].Remediation != tc.remediation || reported[0].Source != nil {
 			t.Errorf("%s: refusal = %+v, want %q", name, reported, tc.message)
 		}
 		if decoded != (probe{}) {
@@ -124,7 +124,7 @@ func TestTheFrozenRequestRefusesEachNonCanonicalEncodingInItsOwnWords(t *testing
 		"a line feed after the object": {exact + "\n", "the frozen probe request is not canonical"},
 	} {
 		reported := diagnostics.Of(read(tc.data))
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != tc.message {
+		if len(reported) != 1 || reported[0].Code != "records.request-unreadable" || reported[0].Message != tc.message {
 			t.Errorf("%s: refusal = %+v, want %q", name, reported, tc.message)
 		}
 	}

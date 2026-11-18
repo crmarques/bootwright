@@ -125,5 +125,5 @@ func unrenderable(selection addons.SelectedInstance, binding string, err error) 
 
 func unrenderableRefusal(selection addons.SelectedInstance, err error) error {
 	reason, remedy := unrenderable(selection, string(api.ClusterAddonBinding)+"/"+selection.Instance.Binding, err)
-	return refusal(reason, remedy)
+	return addonBindingInvalid.Fail(reason, remedy)
 }

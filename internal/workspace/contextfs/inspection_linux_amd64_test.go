@@ -32,7 +32,7 @@ func TestAnInspectionHoldsTheSharedLockAndWritesNothing(t *testing.T) {
 				t.Fatal("a mutator ran beside the inspection")
 				return nil
 			})
-			if reported := diagnostics.Of(mutated); len(reported) != 1 || reported[0].Code != "lifecycle.lease" {
+			if reported := diagnostics.Of(mutated); len(reported) != 1 || reported[0].Code != "context.busy" {
 				t.Fatalf("a mutator beside the inspection reported %#v", reported)
 			}
 			if err := tx.Delete(ctx, record); err == nil {

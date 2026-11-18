@@ -38,7 +38,7 @@ func secretConflict(ctx context.Context, message string, err error) error {
 	return secretstore.Failure("store.conflict", message)
 }
 
-// secretLockFailure reports a lock another command holds as lifecycle.lease,
+// secretLockFailure reports a lock another command holds as context.busy,
 // like every other store command, and any other lock failure as a conflict.
 func secretLockFailure(ctx context.Context, message string, err error) error {
 	var held *kernel.BusyError

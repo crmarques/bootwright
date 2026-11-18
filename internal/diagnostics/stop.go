@@ -85,7 +85,7 @@ func (s Stop) Fail(message, remediation string) error {
 
 func Unproved(err error) bool {
 	for _, entry := range Of(err) {
-		if entry.Certainty == CertaintyUnproved || entry.Code == "lifecycle.unknown" {
+		if entry.Certainty == CertaintyUnproved {
 			return true
 		}
 	}

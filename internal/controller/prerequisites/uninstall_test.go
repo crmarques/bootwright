@@ -217,7 +217,7 @@ func TestAnUninstallRefusesBeforeAnyEffect(t *testing.T) {
 	pending.Setup.State.Pending = &PendingSetup{ID: "install-000003"}
 	foreign := installReceipt()
 	foreign.Setup = SetupView{Exists: true, Foreign: "bootwright.setup-state-v0"}
-	held := diagnostics.NewFailureWithRemediation("lifecycle.lease", "a staging extraction is held by another process", "", "retry")
+	held := diagnostics.NewFailureWithRemediation("context.busy", "a staging extraction is held by another process", "", "retry")
 	cases := map[string]struct {
 		view          UninstallView
 		busy, erase   error
@@ -225,7 +225,7 @@ func TestAnUninstallRefusesBeforeAnyEffect(t *testing.T) {
 	}{
 		"a context":                {view: UninstallView{RootExists: true, Contexts: []string{"lab", "prod"}}, code: uninstallCode, message: "lab, prod"},
 		"an image":                 {view: UninstallView{RootExists: true, Media: []string{"rhel.iso"}}, code: uninstallCode, message: "rhel.iso"},
-		"a held staging stage":     {view: installReceipt(), busy: held, code: "lifecycle.lease", message: "staging extraction"},
+		"a held staging stage":     {view: installReceipt(), busy: held, code: "context.busy", message: "staging extraction"},
 		"an interrupted install":   {view: pending, code: uninstallCode, message: "(install-000003) was interrupted"},
 		"a foreign record":         {view: foreign, code: uninstallCode, message: "written by another Bootwright build"},
 		"a dependent package":      {view: installReceipt(), erase: failure(uninstallCode, "other installed packages require podman: cockpit-podman", ""), code: uninstallCode, message: "cockpit-podman"},

@@ -272,7 +272,7 @@ func TestFollowSkipsBusyPollsThenRefusesAfterSixty(t *testing.T) {
 			pause, pauses := scripted(steps...)
 			summary, err := f.service(pause).Follow(f.ctx, Selection{Context: "lab"}, &recorder{})
 			if test.failed {
-				if !slices.Equal(codes(err), []string{"lifecycle.lease"}) || *pauses != MaxBusyPolls {
+				if !slices.Equal(codes(err), []string{"context.busy"}) || *pauses != MaxBusyPolls {
 					t.Fatalf("after %d pauses = %+v %#v", *pauses, summary, diagnostics.Of(err))
 				}
 				return
@@ -285,7 +285,7 @@ func TestFollowSkipsBusyPollsThenRefusesAfterSixty(t *testing.T) {
 	f := newFixture(t, "dns")
 	f.log("operation.jsonl", record("09:00:00", "opened", "", ""))
 	f.ws.busy = 1
-	if _, err := f.service(nil).Follow(f.ctx, Selection{Context: "lab"}, &recorder{}); !slices.Equal(codes(err), []string{"lifecycle.lease"}) {
+	if _, err := f.service(nil).Follow(f.ctx, Selection{Context: "lab"}, &recorder{}); !slices.Equal(codes(err), []string{"context.busy"}) {
 		t.Fatalf("a busy first read = %#v", diagnostics.Of(err))
 	}
 }

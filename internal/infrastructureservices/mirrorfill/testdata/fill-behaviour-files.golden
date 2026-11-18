@@ -114,11 +114,11 @@ plan without state: err=mirror.planning-input-missing|mirror planning requires c
 plan cancelled: err=context canceled definitions=0
 removal: "remove the artifact mirror files of lab from mirror" impacts=["remove-content /var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public/mirror/lab"] consumes=[] err=nil
 removal cancelled: context canceled
-removal of a broken request: lifecycle.state|the frozen mirror files request is malformed||-
+removal of a broken request: records.request-unreadable|the frozen mirror files request is malformed|destroy it with the build that applied it|-
 references: [mirror-access-key mirror-known-hosts] err=nil
-references of a broken request: lifecycle.state|the frozen mirror files request is malformed||-
+references of a broken request: records.request-unreadable|the frozen mirror files request is malformed|destroy it with the build that applied it|-
 classes: map[mirror-access-key:access credential mirror-known-hosts:trust anchor] err=nil
-classes of a broken request: lifecycle.state|the frozen mirror files request is malformed||-
+classes of a broken request: records.request-unreadable|the frozen mirror files request is malformed|destroy it with the build that applied it|-
 quiescent: {State:quiescent Reason:the controller stage that reads the mirror precedes its fill in removal Stop: Remedy:} err=<nil>
 claimed: [ArtifactServer/mirror]; none declared: []
 unresolved apply complete: false {Reason: Remedy:}
@@ -163,13 +163,13 @@ apply other request unchanged: outcome=unknown evidence= err=mirror.adapter-unpr
 apply other request failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
 apply garbage evidence: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
 apply runner error plain: outcome=unknown evidence= err=plain: adapter stopped
-apply runner error unknown: outcome=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
+apply runner error unknown: outcome=unknown evidence= err=test.unproved|adapter lost|retry|-
 apply runner error state: outcome=failed evidence= err=lifecycle.state|adapter refused|fix|-
 apply unconfigured runner: outcome=failed evidence= err=mirror.unconfigured|the mirror files adapter is not configured|report the message as a defect|-
 apply foreign block object: outcome=failed evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|- no run
 apply foreign block kind: outcome=failed evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|-
-apply undecodable request: outcome=failed evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
-apply empty execution: outcome=failed evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
+apply undecodable request: outcome=failed evidence= err=records.request-unreadable|the frozen mirror files request is malformed|destroy it with the build that applied it|-
+apply empty execution: outcome=failed evidence= err=records.request-unreadable|the frozen mirror files request is malformed|destroy it with the build that applied it|-
 destroy complete changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
   run mirror-files-v1 destroy var=bootwright_mirror_files deadline=35m0s canonical=69d80d1ee52e machine=mirror materials=[id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=
 destroy complete unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
@@ -194,13 +194,13 @@ destroy other request unchanged: outcome=unknown evidence= err=mirror.adapter-un
 destroy other request failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
 destroy garbage evidence: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
 destroy runner error plain: outcome=unknown evidence= err=plain: adapter stopped
-destroy runner error unknown: outcome=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
+destroy runner error unknown: outcome=unknown evidence= err=test.unproved|adapter lost|retry|-
 destroy runner error state: outcome=failed evidence= err=lifecycle.state|adapter refused|fix|-
 destroy unconfigured runner: outcome=failed evidence= err=mirror.unconfigured|the mirror files adapter is not configured|report the message as a defect|-
 destroy foreign block object: outcome=failed evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|- no run
 destroy foreign block kind: outcome=failed evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|-
-destroy undecodable request: outcome=failed evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
-destroy empty execution: outcome=failed evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
+destroy undecodable request: outcome=failed evidence= err=records.request-unreadable|the frozen mirror files request is malformed|destroy it with the build that applied it|-
+destroy empty execution: outcome=failed evidence= err=records.request-unreadable|the frozen mirror files request is malformed|destroy it with the build that applied it|-
 observe complete changed: effect=completed evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
   run mirror-files-v1 observe var=bootwright_mirror_files deadline=35m0s canonical=69d80d1ee52e machine=mirror materials=[id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=
 observe complete unchanged: effect=completed evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
@@ -225,13 +225,13 @@ observe other request unchanged: effect=unknown evidence={"absent":false,"files"
 observe other request failed: effect=unknown evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"other","version":"mirror-files-evidence-v1"} err=nil
 observe garbage evidence: effect=unknown evidence={ err=nil
 observe runner error plain: effect=unknown evidence= err=plain: adapter stopped
-observe runner error unknown: effect=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
+observe runner error unknown: effect=unknown evidence= err=test.unproved|adapter lost|retry|-
 observe runner error state: effect=unknown evidence= err=lifecycle.state|adapter refused|fix|-
 observe unconfigured runner: effect=unknown evidence= err=mirror.unconfigured|the mirror files adapter is not configured|report the message as a defect|-
 observe foreign block object: effect=unknown evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|- no run
 observe foreign block kind: effect=unknown evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|-
-observe undecodable request: effect=unknown evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
-observe empty execution: effect=unknown evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
+observe undecodable request: effect=unknown evidence= err=records.request-unreadable|the frozen mirror files request is malformed|destroy it with the build that applied it|-
+observe empty execution: effect=unknown evidence= err=records.request-unreadable|the frozen mirror files request is malformed|destroy it with the build that applied it|-
 observe removal complete changed: effect=no-effect evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
   run mirror-files-v1 observe var=bootwright_mirror_files deadline=35m0s canonical=69d80d1ee52e machine=mirror materials=[id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=
 observe removal complete unchanged: effect=no-effect evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
@@ -256,10 +256,10 @@ observe removal other request unchanged: effect=unknown evidence={"absent":false
 observe removal other request failed: effect=unknown evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"other","version":"mirror-files-evidence-v1"} err=nil
 observe removal garbage evidence: effect=unknown evidence={ err=nil
 observe removal runner error plain: effect=unknown evidence= err=plain: adapter stopped
-observe removal runner error unknown: effect=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
+observe removal runner error unknown: effect=unknown evidence= err=test.unproved|adapter lost|retry|-
 observe removal runner error state: effect=unknown evidence= err=lifecycle.state|adapter refused|fix|-
 observe removal unconfigured runner: effect=unknown evidence= err=mirror.unconfigured|the mirror files adapter is not configured|report the message as a defect|-
 observe removal foreign block object: effect=unknown evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|- no run
 observe removal foreign block kind: effect=unknown evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|-
-observe removal undecodable request: effect=unknown evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
-observe removal empty execution: effect=unknown evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
+observe removal undecodable request: effect=unknown evidence= err=records.request-unreadable|the frozen mirror files request is malformed|destroy it with the build that applied it|-
+observe removal empty execution: effect=unknown evidence= err=records.request-unreadable|the frozen mirror files request is malformed|destroy it with the build that applied it|-

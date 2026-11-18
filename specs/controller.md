@@ -457,7 +457,7 @@ remedy named, unless it names another code:
   stage refuses naming each image, with the remedy
   `bootwright media delete --name <image>` for each, because uninstall never
   deletes media the operator supplied;
-- a staging extraction another process holds refuses `lifecycle.lease` with a
+- a staging extraction another process holds refuses `context.busy` with a
   retry remedy;
 - any Bootwright-owned object the owned-object proof below
   finds refuses naming each, such as "libvirt domain bootwright-lab-rhel-01",
@@ -586,7 +586,7 @@ The plan names each action in order, then what stays:
 The inspection after confirmation repeats the erase test and the preview
 check before dnf removes anything, so a dependent installed meanwhile still
 refuses; one another dnf installs after that last test is an accepted window.
-A media stage a running `media add` holds refuses `lifecycle.lease`; an
+A media stage a running `media add` holds refuses `context.busy`; an
 abandoned stage goes with the state. A root that is its own mount, a bind
 mount included, refuses before any effect, since no rename in its parent can
 move it, and a staging directory, log root, hosted root or image prefix that

@@ -1219,11 +1219,8 @@ it to a variable.
 | `controller.runtime-retention` | Informational: after a setup, a controller runtime a running command holds was kept ("kept: 3 runtimes (1 in use)"), or older runtimes and wheels could not all be removed; the next setup retries. Never a refusal and never changes the setup's outcome. |
 | `controller.outdated-client` | A warning `status` and `diff` report over an apply whose controller stage proved a client below this build's minimum; it names the client, the proved release and the minimum, and its remedy names the destroy and apply that install this build's default, or keeping the build that applied it ([outdated clients](../cli.md#outdated-clients)). Never a refusal. |
 | `controller.unknown` | A local controller prerequisite action has an unresolved effect outcome. |
-| `lifecycle.state` | Durable lifecycle state does not permit the requested transition or continuation. |
 | `lifecycle.unsupported` | This executable cannot realize a selected object: no capability claims its kind, its capability reports the shape unsupported, or two implementations of one capability claim it. |
 | `lifecycle.authorization` | The frozen plan requires an authorization that was not validly supplied, or a supplied one it does not require. |
-| `lifecycle.lease` | The context root lock or mutation lease cannot be safely acquired or recovered. |
-| `lifecycle.unknown` | A frozen block has an unresolved unknown effect outcome. |
 | `storage.health` | A warning a Ceph cluster block's read-only observation under `diff --observe` reported: a health check that names a pool or filesystem, and so keeps only the blocks owning it from ready, as `health: <check> names pool <name>` or `health: <check> names filesystem <name>` (the [scoped checks](../ceph.md#scoped-health-checks)). `diff --observe` shows it as a note of the cluster block's reading; it changes no block's state. |
 | `storage.not-ready` | A warning a Ceph adapter reported with a read-only observation's completed result: one check, daemon count or endpoint that kept the block from ready, as `not ready: <entry>` in the grammar of the [readiness entries](../ceph.md#resources-readiness-and-access). `diff --observe` shows it as a note of the block's reading; no run reports it as a diagnostic, because an apply or removal completes ready or refuses. |
 | `substrate.shadowed-route` | A warning an adapter reported with its completed result: a libvirt host apply admitted a main-table route through a gateway that is broader than a managed network's prefix, whose hosts inside that prefix the network's connected route now takes over; it names the route, gateway, device, prefix and attachment, about the provider's InfraProvider. Never a refusal, and it changes no block's state. |
@@ -1507,8 +1504,8 @@ it, so a command that needs the exclusive root lock waits for that short hold
 and a follow never makes another command fail, except `controller uninstall`,
 which refuses at once while anything holds the store, and the setup probe's
 instant above ([locking](../contexts.md#storage-locking-and-publication)). An initial read
-that finds the lock busy refuses `lifecycle.lease`; a busy poll is skipped, and
-60 consecutive busy polls refuse `lifecycle.lease`, exit `1`.
+that finds the lock busy refuses `context.busy`; a busy poll is skipped, and
+60 consecutive busy polls refuse `context.busy`, exit `1`.
 
 **Lines.** Lines split on LF and lose one trailing CR. A partial line waits for
 its LF and is written when the follow ends; a followed line past 16 KiB is cut
@@ -1532,7 +1529,7 @@ content}` of the exact bytes, encoded as the [export rule](#json-output) says. `
 with either format is a `cli.usage` refusal, as is `--follow --raw`.
 
 **Exit and diagnostics.** `0` when rendered or a follow ended; `1` for
-`logs.not-found`, `lifecycle.lease`, an unsafe log file (`context.state`) or a
+`logs.not-found`, `context.busy`, an unsafe log file (`context.state`) or a
 failed write to standard output; `2` for usage; `130` for an interrupt, which
 stops only the reader. `logs.not-found`, `logs.detached` and `logs.truncated`
 are in the [taxonomy](#diagnostic-taxonomy-and-order).

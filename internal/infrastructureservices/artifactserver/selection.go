@@ -32,7 +32,7 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 // canonical object order. It reads no host, endpoint or Secret material.
 func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, error) {
 	if !api.ValidLexical(api.LexicalName, contextName) {
-		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
+		return nil, artifactContextInvalid.Fail("the lifecycle context identity is invalid", "")
 	}
 	servers := catalog.OfKind(api.ArtifactServer)
 	slices.SortFunc(servers, func(x, y api.Object) int { return strings.Compare(x.Name(), y.Name()) })
@@ -53,7 +53,7 @@ func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Req
 func requestFor(catalog api.Catalog, server api.Object, controllerMachine, contextName string) (Request, error) {
 	name := server.Name()
 	if !managedservice.SafeSegment(name) {
-		return Request{}, refusal("lifecycle.state", "the artifact server name is not a safe host identifier", "rename "+server.Identity())
+		return Request{}, artifactNameUnsafe.Fail("the artifact server name is not a safe host identifier", "rename "+server.Identity())
 	}
 	spec := server.Spec()
 	machine, found := catalog.Find(api.Machine, spec.Get("machineRef").Text())

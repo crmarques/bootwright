@@ -465,26 +465,26 @@ func TestPausedOperationReportsSuccessAndItsContinuation(t *testing.T) {
 }
 
 func TestADefaultRemediationNamesTheInvokingContext(t *testing.T) {
-	failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "the operation did not complete"}}}
+	failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "logs.not-found", Message: "the operation did not complete"}}}
 	record := &dispatchRecord{result: commandResult{lifecycleOperation: &lifecycle.OperationResult{Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: "apply"}}, err: failure}
 	var out, errOut bytes.Buffer
 	if code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"apply", "--context", "lab", "--yes"}); code != 1 {
 		t.Fatalf("code = %d", code)
 	}
-	if !strings.Contains(errOut.String(), "Next: run bootwright status --context lab to see the records and the next step\n") {
+	if !strings.Contains(errOut.String(), "Next: run bootwright status --context lab to see the operation records that remain\n") {
 		t.Fatalf("stderr = %q", errOut.String())
 	}
 }
 
 // An operation on the current context names the context its result resolved.
 func TestADefaultRemediationNamesTheResolvedContext(t *testing.T) {
-	failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "the operation did not complete"}}}
+	failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "logs.not-found", Message: "the operation did not complete"}}}
 	record := &dispatchRecord{result: commandResult{lifecycleOperation: &lifecycle.OperationResult{Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: "apply"}}, err: failure}
 	var out, errOut bytes.Buffer
 	if code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"apply", "--yes"}); code != 1 {
 		t.Fatalf("code = %d", code)
 	}
-	if !strings.Contains(errOut.String(), "Next: run bootwright status --context lab to see the records and the next step\n") {
+	if !strings.Contains(errOut.String(), "Next: run bootwright status --context lab to see the operation records that remain\n") {
 		t.Fatalf("stderr = %q", errOut.String())
 	}
 }
@@ -492,12 +492,12 @@ func TestADefaultRemediationNamesTheResolvedContext(t *testing.T) {
 // A --context value that is not a context name never reaches a remedy: the
 // default keeps its placeholder.
 func TestADefaultRemediationKeepsThePlaceholderForAnInvalidContext(t *testing.T) {
-	failure := diagnostics.Diagnostic{Severity: "error", Code: "lifecycle.state", Message: "the operation did not complete"}
+	failure := diagnostics.Diagnostic{Severity: "error", Code: "logs.not-found", Message: "the operation did not complete"}
 	for name, want := range map[string]string{
-		"lab":           "run bootwright status --context lab to see the records and the next step",
-		"lab; rm -rf ~": "run bootwright status --context <context> to see the records and the next step",
-		"$(id)":         "run bootwright status --context <context> to see the records and the next step",
-		"Lab":           "run bootwright status --context <context> to see the records and the next step",
+		"lab":           "run bootwright status --context lab to see the operation records that remain",
+		"lab; rm -rf ~": "run bootwright status --context <context> to see the operation records that remain",
+		"$(id)":         "run bootwright status --context <context> to see the operation records that remain",
+		"Lab":           "run bootwright status --context <context> to see the operation records that remain",
 	} {
 		command := &cobra.Command{Use: "apply"}
 		command.Flags().String("context", "", "")
@@ -523,7 +523,7 @@ func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 				LogLocation: "/var/log/bootwright/contexts/lab/operations/op-abc",
 				Receipt:     lifecycle.Receipt{Operation: "op-abc", Verb: path, State: "failed", Next: "continue-" + path},
 			}
-			failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "the operation did not complete"}}}
+			failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "logs.not-found", Message: "the operation did not complete"}}}
 			record := &dispatchRecord{result: commandResult{lifecycleOperation: operation}, err: failure}
 			var out, errOut bytes.Buffer
 			code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{path, "--yes"})
@@ -540,7 +540,7 @@ func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 			if !strings.HasSuffix(rendered, "next: continue-"+path+"\n") {
 				t.Fatalf("result does not end with its receipt: %q", rendered)
 			}
-			if errOut.String() != "  error  lifecycle.state\n    the operation did not complete\n    Next: run bootwright status --context lab to see the records and the next step\n" {
+			if errOut.String() != "  error  logs.not-found\n    the operation did not complete\n    Next: run bootwright status --context lab to see the operation records that remain\n" {
 				t.Fatalf("stderr = %q", errOut.String())
 			}
 		})
@@ -548,14 +548,14 @@ func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 }
 
 func TestRefusedOperationPresentsOnlyItsDiagnostic(t *testing.T) {
-	failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "no block carries the selected stage"}}}
+	failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "logs.not-found", Message: "no block carries the selected stage"}}}
 	record := &dispatchRecord{err: failure}
 	var out, errOut bytes.Buffer
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"apply", "--stage", "substrates", "--yes"})
 	if code != 1 || out.String() != "" {
 		t.Fatalf("refusal code=%d stdout=%q", code, out.String())
 	}
-	if errOut.String() != "  error  lifecycle.state\n    no block carries the selected stage\n    Next: run bootwright status --context <context> to see the records and the next step\n" {
+	if errOut.String() != "  error  logs.not-found\n    no block carries the selected stage\n    Next: run bootwright status --context <context> to see the operation records that remain\n" {
 		t.Fatalf("stderr = %q", errOut.String())
 	}
 }

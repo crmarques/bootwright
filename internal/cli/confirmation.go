@@ -78,6 +78,7 @@ func (c *Confirmation) ConfirmHostKey(ctx context.Context, contextName, name, ad
 type confirmation struct {
 	code, prompt, label, review, scope string
 	object                             *diagnostics.ObjectIdentity
+	stop                               diagnostics.Stop
 }
 
 func (c *Confirmation) Interactive() bool {
@@ -118,7 +119,7 @@ func confirmationOf(action, name string) confirmation {
 		return confirmation{code: "media.store", label: "media", review: "it",
 			prompt: "Confirm " + verb + " of stored media " + shown + "? [y/N] "}
 	case "apply", "destroy":
-		return confirmation{code: "lifecycle.state", label: action, review: "the plan", scope: name,
+		return confirmation{stop: commandUnconfirmed, label: action, review: "the plan", scope: name,
 			prompt: "Confirm " + action + " for context " + shown + "? [y/N] "}
 	case "trust":
 		return confirmation{code: "trust.identity", label: "trust", review: "the plan", scope: name,
@@ -181,11 +182,14 @@ func (c *Confirmation) remedy(asked confirmation) string {
 // carries the flag.
 func (c *Confirmation) confirm(ctx context.Context, asked confirmation) error {
 	refuse := func(reason string) error {
-		reported := diagnostics.Diagnostic{Severity: "error", Code: asked.code, Message: asked.label + " confirmation " + reason, Object: asked.object, Remediation: "repeat the command to be asked again"}
+		message, remedy := asked.label+" confirmation "+reason, "repeat the command to be asked again"
 		if reason != canceled {
-			reported.Remediation = c.remedy(asked)
+			remedy = c.remedy(asked)
 		}
-		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{reported}}
+		if asked.stop.Code != "" {
+			return asked.stop.Fail(message, remedy)
+		}
+		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: asked.code, Message: message, Object: asked.object, Remediation: remedy}}}
 	}
 	if ctx.Err() != nil {
 		return refuse(canceled)

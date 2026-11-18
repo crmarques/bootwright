@@ -50,7 +50,7 @@ func Additive(fresh Plan, owned ...Plan) (Plan, error) {
 		return Plan{}, planError("only an apply plan can be added")
 	}
 	if first, differs := Compare(lineage, fresh).First(); differs && first.Change != Added {
-		return Plan{}, planError("lifecycle block " + first.Block + " would be frozen differently from the plan it was frozen in")
+		return Plan{}, recordsLineageReshaped.Fail("lifecycle block "+first.Block+" would be frozen differently from the plan it was frozen in", "")
 	}
 	held := map[string]bool{}
 	for _, block := range lineage.Blocks {

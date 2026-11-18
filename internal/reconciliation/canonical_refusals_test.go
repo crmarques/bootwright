@@ -32,7 +32,7 @@ func TestThePlanRequestRefusesEachNonCanonicalEncodingInItsOwnWords(t *testing.T
 			continue
 		}
 		reported := diagnostics.Of(err)
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != tc.message {
+		if len(reported) != 1 || reported[0].Code != "records.plan-invalid" || reported[0].Message != tc.message {
 			t.Errorf("%s: refusal = %+v, want %q", name, reported, tc.message)
 		}
 	}

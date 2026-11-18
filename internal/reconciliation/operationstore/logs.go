@@ -242,7 +242,7 @@ func (o *AdapterOutput) flush(ctx context.Context) error {
 func AdapterOutputPath(logPath string) (string, error) {
 	trimmed, found := strings.CutSuffix(logPath, ".jsonl")
 	if !found || trimmed == "" {
-		return "", recordError("an adapter output path requires its attempt log")
+		return "", defectError("an adapter output path requires its attempt log")
 	}
 	return trimmed + ".output", nil
 }
@@ -274,7 +274,7 @@ func (s *Store) OpenLog(ctx context.Context, target string) (*Log, error) {
 
 func (l *Log) Append(ctx context.Context, record LogRecord) error {
 	if l == nil || l.closed {
-		return recordError("the private operation log is not open")
+		return defectError("the private operation log is not open")
 	}
 	if l.failed != nil {
 		return l.failed
@@ -290,11 +290,11 @@ func (l *Log) Append(ctx context.Context, record LogRecord) error {
 	record.Group = safeLogText(record.Group, maxLogDetail)
 	record.Detail = safeLogText(record.Detail, maxLogDetail)
 	if record.Event == "" {
-		return recordError("a private operation log record requires its event")
+		return defectError("a private operation log record requires its event")
 	}
 	line, err := json.Marshal(record)
 	if err != nil {
-		return recordError("a private operation log record could not be encoded")
+		return defectError("a private operation log record could not be encoded")
 	}
 	line = append(line, '\n')
 	limit := l.limit
@@ -330,7 +330,7 @@ func (l *Log) Close(ctx context.Context) error {
 		Dropped   int  `json:"dropped"`
 	}{true, dropped})
 	if err != nil {
-		return recordError("the private operation log truncation marker could not be encoded")
+		return defectError("the private operation log truncation marker could not be encoded")
 	}
 	return l.area.Append(ctx, l.path, append(line, '\n'))
 }
@@ -477,7 +477,7 @@ type OutputFile struct {
 
 func (s *Store) LatestOutput(ctx context.Context, id, block string, attempt int) (OutputFile, bool, error) {
 	if !reconciliation.ValidOperationID(id) || !reconciliation.ValidSegment(block) {
-		return OutputFile{}, false, recordError("a retained output is named by its operation and block")
+		return OutputFile{}, false, defectError("a retained output is named by its operation and block")
 	}
 	directory := path.Join(id, "blocks", block)
 	entries, err := s.logs.Entries(ctx, directory)

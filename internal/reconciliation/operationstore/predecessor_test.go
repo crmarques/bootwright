@@ -293,7 +293,7 @@ func TestAnAdditiveApplyIsAdmittedAgainstItsLineagesRemoval(t *testing.T) {
 	refused := func(err error) {
 		t.Helper()
 		reported := diagnostics.Of(err)
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "retained the maximum number of lifecycle operations") ||
+		if len(reported) != 1 || reported[0].Code != "operations.retention-full" || !strings.Contains(reported[0].Message, "retained the maximum number of lifecycle operations") ||
 			!strings.Contains(reported[0].Message, "this apply needs") || areadouble.IsDirectory(area.files, area.directories, operation.ID) {
 			t.Fatalf("admission reported %+v, want the retained-operation refusal naming the bound with nothing created", reported)
 		}

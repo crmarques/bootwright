@@ -124,7 +124,7 @@ func TestARetainedSingleBlockStageOfTheEarlierVersionRefuses(t *testing.T) {
 	}
 	_, err = DecodeRequest(data)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if len(reported) != 1 || reported[0].Code != "records.version-unsupported" ||
 		reported[0].Message != "the frozen controller prerequisites request has an unsupported version: controller-clients-v5" ||
 		reported[0].Remediation != "destroy it with the build that applied it" {
 		t.Fatalf("a retained v5 stage refused as %+v", reported)
@@ -161,7 +161,7 @@ func TestAnImageMirrorOnTheControllerAddsItsCopyToolToThePackagesHalf(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reported := diagnostics.Of(err0(DecodeRequest(data))); len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+	if reported := diagnostics.Of(err0(DecodeRequest(data))); len(reported) != 1 || reported[0].Code != "clients.request-unreadable" {
 		t.Fatalf("a packages half that dropped skopeo decoded as %+v", reported)
 	}
 }
@@ -190,7 +190,7 @@ func TestADecodedPartMustHoldOnlyItsHalf(t *testing.T) {
 			t.Fatal(err)
 		}
 		reported := diagnostics.Of(err0(DecodeRequest(data)))
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "names a part of the stage it does not hold") {
+		if len(reported) != 1 || reported[0].Code != "clients.request-unreadable" || !strings.Contains(reported[0].Message, "names a part of the stage it does not hold") {
 			t.Errorf("%s: decode = %+v", name, reported)
 		}
 	}

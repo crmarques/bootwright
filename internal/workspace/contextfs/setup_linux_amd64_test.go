@@ -484,7 +484,7 @@ func TestDiscardRefusesWhileALaunchHoldsARuntime(t *testing.T) {
 		})
 	}
 	err = discard()
-	if diagnostic := onlyDiagnostic(t, err); diagnostic.Code != "lifecycle.lease" || diagnostic.Message != "a controller runtime is in use by a running command" {
+	if diagnostic := onlyDiagnostic(t, err); diagnostic.Code != "context.busy" || diagnostic.Message != "a controller runtime is in use by a running command" {
 		t.Fatalf("a discard under a held runtime refused with %#v", diagnostic)
 	}
 	if _, err := os.Stat(filepath.Join(hold.Path(), "lib", "python3.14", "site-packages", "marker.py")); err != nil {
@@ -688,7 +688,7 @@ func TestASecondSetupIsBusy(t *testing.T) {
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
 	mutateSetup(t, store, func(prerequisites.SetupTransaction) error {
 		err := store.MutateSetup(context.Background(), func(prerequisites.SetupTransaction) error { return nil })
-		if diagnostic := onlyDiagnostic(t, err); diagnostic.Code != "lifecycle.lease" {
+		if diagnostic := onlyDiagnostic(t, err); diagnostic.Code != "context.busy" {
 			t.Fatalf("a concurrent setup refused with %#v", diagnostic)
 		}
 		return nil
@@ -718,7 +718,7 @@ func TestACompletedSetupUnlocksBeforeClosingItsSharedDescription(t *testing.T) {
 					t.Fatal("another setup entered before the transaction returned")
 					return nil
 				})
-				if diagnostic := onlyDiagnostic(t, competing); diagnostic.Code != "lifecycle.lease" {
+				if diagnostic := onlyDiagnostic(t, competing); diagnostic.Code != "context.busy" {
 					t.Fatalf("a concurrent setup refused with %#v", diagnostic)
 				}
 				if errors.Is(outcome.err, context.Canceled) {

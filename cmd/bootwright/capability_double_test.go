@@ -124,7 +124,7 @@ func (d contractDouble) doubleMutate(ctx context.Context, execution lifecycle.Ex
 	evidence, named := d.doubleEvidence(execution, result.Evidence)
 	proved := named && (operation == "apply" && evidence.doubleRealized() || operation == "destroy" && evidence.doubleRemoved())
 	if !proved || result.Outcome != "changed" && result.Outcome != "unchanged" {
-		return unknown, diagnostics.NewFailure("lifecycle.unknown", "the contract double's evidence proves nothing of its request", "")
+		return unknown, contractUnproved.Fail("the contract double's evidence proves nothing of its request", "")
 	}
 	return lifecycle.Result{Outcome: reconciliation.Outcome(result.Outcome), Evidence: result.Evidence}, nil
 }

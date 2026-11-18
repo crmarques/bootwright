@@ -35,37 +35,38 @@ func TestEachPreBootRefusalNamesTheMachineWhatWasRefusedAndTheRemedy(t *testing.
 
 func eachPreBootRefusal(t *testing.T, continuation string) {
 	object := &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: "metal-01"}
-	refusal := func(message, remediation string) []diagnostics.Diagnostic {
-		return []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: message, Remediation: remediation, Object: object}}
+	refusal := func(stop diagnostics.Stop, message, remediation string) []diagnostics.Diagnostic {
+		return []diagnostics.Diagnostic{{Severity: "error", Code: stop.Code, Message: message, Remediation: remediation, Object: object,
+			Cause: stop.Cause, Recovery: stop.Recovery, Certainty: stop.Certainty}}
 	}
 	next := continuation
 	if next == "" {
 		next = "bootwright apply --context lab-b"
 	}
-	running := refusal("Machine/metal-01 is running, and its installation erases its disk, so no media was inserted into it and it was not booted",
+	running := refusal(prebootMachineRunning, "Machine/metal-01 is running, and its installation erases its disk, so no media was inserted into it and it was not booted",
 		"stop it with bootwright machine stop --context lab-b --name metal-01, then run "+next)
 	for arm, want := range map[Arm]map[string][]diagnostics.Diagnostic{
 		ArmLibvirt: {RefusalMachineRunning: running},
 		ArmBaremetal: {
 			RefusalTargetUnanswered: diagnostics.Of(UnansweredTarget("metal-01", preBootEndpoint)),
-			RefusalHardwareMismatch: refusal("the machine answering at "+preBootEndpoint+" does not report exactly the hardware addresses Machine/metal-01 declares, "+
+			RefusalHardwareMismatch: refusal(prebootHardwareMismatch, "the machine answering at "+preBootEndpoint+" does not report exactly the hardware addresses Machine/metal-01 declares, "+
 				"or its inventory could not be read in full, so no media was inserted into it and it was not booted",
 				"once the machine reports the hardware Machine/metal-01 declares in full, run "+next+"; to correct that declaration instead, "+
 					"take this context back with bootwright destroy --context lab-b, correct spec.hardware.bmc.address or spec.hardware.nics on Machine/metal-01 "+
 					"and import that input with bootwright context update --name lab-b --input-dir <directory>, then run bootwright apply --context lab-b"),
-			RefusalIdentityMismatch: refusal("the management controller at "+preBootEndpoint+" answers as another system than the one this operation proved "+
+			RefusalIdentityMismatch: refusal(prebootIdentityMismatch, "the management controller at "+preBootEndpoint+" answers as another system than the one this operation proved "+
 				"for Machine/metal-01, so no media was inserted into it and it was not booted",
 				"take this context back with bootwright destroy --context lab-b, correct spec.hardware.bmc.address on Machine/metal-01 "+
 					"if it names another BMC and import that input with bootwright context update --name lab-b --input-dir <directory>, "+
 					"then run bootwright apply --context lab-b, so the machine is proved again"),
 			RefusalMachineRunning: running,
-			RefusalTPMAbsent:      refusal("Machine/metal-01 does not positively report an enabled TPM 2.0, so no encrypted installer was booted", "enable a supported TPM 2.0 on Machine/metal-01, then run "+next),
-			RefusalFirmwareMismatch: refusal("the machine answering at "+preBootEndpoint+" does not report the firmware settings Machine/metal-01 declares "+
+			RefusalTPMAbsent:      refusal(prebootTPMAbsent, "Machine/metal-01 does not positively report an enabled TPM 2.0, so no encrypted installer was booted", "enable a supported TPM 2.0 on Machine/metal-01, then run "+next),
+			RefusalFirmwareMismatch: refusal(prebootFirmwareMismatch, "the machine answering at "+preBootEndpoint+" does not report the firmware settings Machine/metal-01 declares "+
 				"under spec.hardware.firmware.mode prove, so no media was inserted into it and it was not booted",
 				"set the declared values on Machine/metal-01 through its BMC, then run "+next+"; to have Bootwright set them instead, "+
 					"take this context back with bootwright destroy --context lab-b, set spec.hardware.firmware.mode to enforce on Machine/metal-01 "+
 					"and import that input with bootwright context update --name lab-b --input-dir <directory>, then run bootwright apply --context lab-b"),
-			RefusalFirmwareNotApplied: refusal("the management controller at "+preBootEndpoint+" refused or did not apply the firmware settings Machine/metal-01 declares, "+
+			RefusalFirmwareNotApplied: refusal(prebootFirmwareNotApplied, "the management controller at "+preBootEndpoint+" refused or did not apply the firmware settings Machine/metal-01 declares, "+
 				"so no media was inserted into it and no installer was booted",
 				"when the reasons say the machine was not proved off, first stop it with bootwright machine stop --context lab-b --name metal-01 --force; "+
 					"read the BMC's message in the attempt's retained output and correct the cause through the BMC, then run "+next+
@@ -159,7 +160,36 @@ func preBootTaskRefusals(t *testing.T, tasks string, list []map[string]any, fact
 func TestAnUnansweredPhysicalProofRemainsUnknown(t *testing.T) {
 	err := PreBootRefusals(ArmBaremetal, "lab", "", "metal-01", preBootEndpoint)["target-unanswered"]
 	found := diagnostics.Of(err)
-	if len(found) != 1 || found[0].Code != "lifecycle.unknown" {
+	if len(found) != 1 || found[0].Code != "preboot.target-unanswered" || found[0].Certainty != diagnostics.CertaintyUnproved || !diagnostics.Unproved(err) {
 		t.Fatalf("unanswered proof = %+v", found)
+	}
+}
+
+func TestEachPreBootRefusalReasonKeepsItsCodeAndCertainty(t *testing.T) {
+	want := map[string]struct {
+		code      string
+		certainty diagnostics.Certainty
+	}{
+		RefusalTargetUnanswered:   {"preboot.target-unanswered", diagnostics.CertaintyUnproved},
+		RefusalHardwareMismatch:   {"preboot.hardware-mismatch", diagnostics.CertaintyNone},
+		RefusalIdentityMismatch:   {"preboot.identity-mismatch", diagnostics.CertaintyNone},
+		RefusalMachineRunning:     {"preboot.machine-running", diagnostics.CertaintyNone},
+		RefusalTPMAbsent:          {"preboot.tpm-absent", diagnostics.CertaintyNone},
+		RefusalFirmwareMismatch:   {"preboot.firmware-mismatch", diagnostics.CertaintyNone},
+		RefusalFirmwareNotApplied: {"preboot.firmware-not-applied", diagnostics.CertaintyPossible},
+	}
+	seen := map[string]bool{}
+	for _, arm := range []Arm{ArmLibvirt, ArmKubeVirt, ArmBaremetal} {
+		for reason, err := range PreBootRefusals(arm, "lab", "", "metal-01", preBootEndpoint) {
+			found := diagnostics.Of(err)
+			expected, known := want[reason]
+			if !known || len(found) != 1 || found[0].Code != expected.code || found[0].Certainty != expected.certainty {
+				t.Errorf("%s %s = %+v, want %+v", arm, reason, found, expected)
+			}
+			seen[reason] = true
+		}
+	}
+	if len(seen) != len(want) {
+		t.Errorf("the arms refused %d reasons, want %d", len(seen), len(want))
 	}
 }

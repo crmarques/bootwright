@@ -32,14 +32,14 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	}
 	assessed := c.assess(input.State)
 	if len(assessed.refusals) > 0 {
-		return lifecycle.CapabilityPlan{}, refusal("selected add-on cannot be realized", "select a built-in package")
+		return lifecycle.CapabilityPlan{}, addonBindingInvalid.Fail("selected add-on cannot be realized", "select a built-in package")
 	}
 	selected, issues := assessed.selected, assessed.issues
 	if !assessed.instanced {
 		selected, issues = addons.Instances(input.State.Effective(), c.registry)
 	}
 	if len(issues) > 0 {
-		return lifecycle.CapabilityPlan{}, refusal(issues[0].Issue.Message, "correct the add-on binding")
+		return lifecycle.CapabilityPlan{}, addonBindingInvalid.Fail(issues[0].Issue.Message, "correct the add-on binding")
 	}
 	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}, Secrets: []string{}}
 	if len(selected) == 0 {
@@ -50,10 +50,10 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return plan, err
 	}
 	if input.Controller != "" && input.Controller != controllerName {
-		return plan, refusal("add-on controller differs from the operation controller", "correct the controller selection")
+		return plan, addonControllerDiffers.Fail("add-on controller differs from the operation controller", "correct the controller selection")
 	}
 	if c.facts == nil {
-		return plan, refusal("add-on cluster facts are unavailable", "")
+		return plan, addonFactsUnavailable.Fail("add-on cluster facts are unavailable", "")
 	}
 	for index, selection := range selected {
 		rendered, known := assessed.renders[index]
@@ -135,11 +135,11 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 	}
 	effect, err := effectOf(result.Evidence, request, execution.Block.RequestDigest)
 	if err != nil || effect != reconciliation.EffectCompleted {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown, Evidence: safe}, refusal("add-on adapter did not prove completion", "repeat apply to observe its objects")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown, Evidence: safe}, addonCompletionUnproved.Fail("add-on adapter did not prove completion", "repeat apply to observe its objects")
 	}
 	outcome, usable := result.Outcome, result.Outcome.Settled()
 	if !usable {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown, Evidence: safe}, refusal("add-on adapter returned an unknown outcome", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown, Evidence: safe}, addonOutcomeUnknown.Fail("add-on adapter returned an unknown outcome", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
@@ -210,13 +210,13 @@ func (c Capability) ReadsMaterialOnlyInApply(block reconciliation.Block) bool {
 func (c Capability) AdmitAdded(lineage reconciliation.Plan, added reconciliation.Block) error {
 	request, err := DecodeRequest(added.Request)
 	if err != nil {
-		return refusal("the add-on instance "+added.ID+" cannot be added: "+err.Error(), "")
+		return addonAdditionUndecodable.Fail("the add-on instance "+added.ID+" cannot be added: "+err.Error(), "")
 	}
 	cluster := request.ProducedInputs[0]
 	if !slices.ContainsFunc(lineage.Blocks, func(block reconciliation.Block) bool {
 		return block.Kind == cluster.Kind && block.Object == cluster.Object
 	}) {
-		return refusal("the add-on "+request.Package+" cannot be added: the completed apply did not install the cluster "+request.Cluster, "declare it on a cluster that apply installed, or take the apply back and apply again")
+		return addonClusterNotInstalled.Fail("the add-on "+request.Package+" cannot be added: the completed apply did not install the cluster "+request.Cluster, "declare it on a cluster that apply installed, or take the apply back and apply again")
 	}
 	return nil
 }

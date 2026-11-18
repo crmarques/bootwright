@@ -128,7 +128,7 @@ func (m mediaStore) lendMedia(ctx context.Context, root *directory, registry con
 
 // mediaBusy is a root lock another command holds. The media service tells it
 // from every other refusal, so a pinned add keeps the stage it verified; it
-// still reports the lock's lifecycle.lease diagnostic.
+// still reports the lock's context.busy diagnostic.
 type mediaBusy struct{ held *kernel.BusyError }
 
 func (e *mediaBusy) Error() string { return e.held.Error() }

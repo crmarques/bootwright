@@ -198,9 +198,9 @@ over frozen bytes that still verify, keeps that revision: it publishes
 nothing, asks nothing and reports the context unchanged, so a completed apply
 over that revision still
 [settles](state-reconciliation.md#lifecycle-unit). Changed input over a
-completed apply warns, before the prompt, with `lifecycle.state`. When an
+completed apply warns, before the prompt, with `input.changed-since-apply`. When an
 [additive apply](state-reconciliation.md#additive-apply) would admit it, the
-warning prints the sentence the `diff` [Input row](cli.md#comparison-header) prints for it,
+warning (`input.added-since-apply`) prints the sentence the `diff` [Input row](cli.md#comparison-header) prints for it,
 `bootwright apply` adds it to that apply without running any of its blocks,
 with the same caveat that this predicts the admission without proving the
 custody of the material the added instances borrow, and names no destroy;
@@ -395,14 +395,14 @@ and the lease to write and re-proves its
 [replacement decision](secrets.md#acquisition-and-commands) there. Every
 mutator except `controller uninstall` waits, unlocked, while anything holds
 the root lock, shared or exclusive, up to the root lock wait or cancellation,
-then refuses `lifecycle.lease`; uninstall, a reader taking its shared hold and
+then refuses `context.busy`; uninstall, a reader taking its shared hold and
 a lease refuse at once with a retry remedy; no lock or lease is ever taken over. A `logs --follow` takes no lease,
 and `logs --install` no root lock, so it lists the log `controller/` unlocked:
 whether a writer still holds the operation, run or setup it follows is a
 non-blocking lock test released at once. That probe of the setup lock is a
 shared test, and `controller install` takes the setup lock without waiting, so
 an install that starts at the instant of a probe is refused as busy with
-`lifecycle.lease` and repeats at once. A lease is held
+`context.busy` and repeats at once. A lease is held
 only once its stage collection, layout verification and reservation check
 succeed; a lease that refuses is released at once. `controller install`
 [selects no context](controller.md#the-setup-flow), so it
@@ -444,7 +444,7 @@ or tool publication. Those transactions and its bundle reads also wait for the
 root lock, each up to the bound below or cancellation; one
 operation's waits queue, so its Nth concurrent wait may last N bounds. No root
 holder waits for a lock, so none deadlocks. Past the bound they refuse
-`lifecycle.lease`. The block it served then records `failed` when none of its
+`context.busy`. The block it served then records `failed` when none of its
 effect ran, and `unknown` once some may have, such as the custody publication
 of what a proved effect produced, which keeps that material as
 [produced material custody](state-reconciliation.md#produced-material-custody)
@@ -630,7 +630,7 @@ without target clients, and otherwise the base plus each client source's
 clamped to the client-installation ceiling; a closure past that ceiling is
 refused before Ansible starts, so the clamp never shortens a run it admits.
 
-A claim or registration refuses `lifecycle.state` at the retained-operation
+A claim or registration refuses `operations.retention-full` at the retained-operation
 bound once the context could not retain the operation directories the new
 operation needs, or once the operation area could not hold what it needs. A
 fresh apply needs room for its own directory and for that of the removal that
@@ -664,7 +664,7 @@ attempt, retry or resolution of the apply writes, it counts three
 entries, what an attempt creates at most, and the bytes of its record,
 started and done, for itself and for every other one
 the same invocation runs beside it. One whose writes would cut into the
-reserve refuses `lifecycle.state` before its effect, naming
+reserve refuses `operations.area-reserved` before its effect, naming
 `bootwright destroy --context <name>`, which is then that apply's only way on,
 and its result names no continuation beside it; the removal then
 registers and completes (`TestApplyRetriesNeverTakeTheRemovalReserve`). An
@@ -788,12 +788,12 @@ of removing it and repeating the deletion, and nothing inside it is removed
 (`TestAFailedNonRegularMediaEntryIsRemovedByMediaDelete`).
 
 A command that cannot take the lock for the second hold refuses with
-`lifecycle.lease` and publishes nothing. When the request pinned the digest with
+`context.busy` and publishes nothing. When the request pinned the digest with
 `--sha256`, it first retains its stage: still holding the stage's lock and no
 root lock, it writes exclusively beside the stage the canonical media record it
 would have published, as
-`media/staging-<32 lowercase hexadecimal digits>.json`, and its refusal says
-that repeating the command publishes the image without acquiring it again. It
+`media/staging-<32 lowercase hexadecimal digits>.json`, and its refusal,
+`media.store-busy`, says that repeating the command publishes the image without acquiring it again. It
 retains a stage it filled only when the stage passes the second hold's proof
 that it is unchanged since its bytes were measured. A filled stage that fails
 that proof, and an unpinned stage, are removed, and the refusal is the lock's

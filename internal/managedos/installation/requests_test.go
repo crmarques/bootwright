@@ -18,7 +18,7 @@ func TestARequestOfAnotherVersionRefusesByItsVersion(t *testing.T) {
 	}
 	_, err = DecodeRequest([]byte(`{"anUndeclaredField":true,` + string(data[1:])))
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Source != nil ||
+	if len(reported) != 1 || reported[0].Code != "records.version-unsupported" || reported[0].Source != nil ||
 		reported[0].Message != "the frozen installation request has an unsupported version: os-install-anaconda-v5" ||
 		reported[0].Remediation != "destroy it with the build that applied it" {
 		t.Fatalf("an installation of another version refused as %+v", reported)

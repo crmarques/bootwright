@@ -137,7 +137,7 @@ func TestValidateNamespacesRefusesWhatDiffersFromTheRegistry(t *testing.T) {
 			change(&edited)
 			err := validateNamespaces(edited, registry)
 			got := diagnostics.Of(err)
-			if len(got) != 1 || got[0].Code != "lifecycle.state" || !strings.Contains(got[0].Message, edited.Package) || got[0].Remediation == "" {
+			if len(got) != 1 || got[0].Code != "addon.frozen-other-build" || !strings.Contains(got[0].Message, edited.Package) || got[0].Remediation == "" {
 				t.Fatalf("namespaces that differ from the registry were accepted: %v", err)
 			}
 		})
@@ -165,7 +165,7 @@ func TestApplyAndObserveRefuseAFrozenRequestWhoseNamespacesWereWidened(t *testin
 	_, observeErr := capability.Observe(context.Background(), execution)
 	for name, err := range map[string]error{"apply": applyErr, "observe": observeErr} {
 		got := diagnostics.Of(err)
-		if len(got) != 1 || got[0].Code != "lifecycle.state" || !strings.Contains(got[0].Message, "beta") || got[0].Remediation == "" {
+		if len(got) != 1 || got[0].Code != "addon.frozen-other-build" || !strings.Contains(got[0].Message, "beta") || got[0].Remediation == "" {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
@@ -196,7 +196,7 @@ func TestARequestOfTheEarlierVersionRefusesAtRetirement(t *testing.T) {
 	_, removalErr := capability.Removal(context.Background(), block)
 	for name, err := range map[string]error{"destroy": destroyErr, "removal": removalErr} {
 		got := diagnostics.Of(err)
-		if len(got) != 1 || got[0].Code != "lifecycle.state" || !strings.Contains(got[0].Message, "unsupported version: addon-instance-request-v2") || got[0].Remediation == "" {
+		if len(got) != 1 || got[0].Code != "records.version-unsupported" || !strings.Contains(got[0].Message, "unsupported version: addon-instance-request-v2") || got[0].Remediation == "" {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}

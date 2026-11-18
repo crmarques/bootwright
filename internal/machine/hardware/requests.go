@@ -2,7 +2,6 @@ package hardware
 
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -67,7 +66,7 @@ func DecodeRequest(data []byte) (Request, error) {
 	if request.Identity.Object == "" || request.Identity.Context == "" || request.Identity.Block != BlockID(request.Identity.Object) ||
 		placement.Connection != machineref.ConnectionSSH || placement.Machine != request.Identity.Object || placement.Address == "" ||
 		placement.KnownHostsRef == "" || placement.PrivateKeyRef == "" {
-		return Request{}, refusal("lifecycle.state", "the frozen machine hardware request names no Machine reached over SSH", "destroy it with the build that applied it")
+		return Request{}, hardwareRequestInvalid.Fail("the frozen machine hardware request names no Machine reached over SSH", "destroy it with the build that applied it")
 	}
 	return request, nil
 }
@@ -75,7 +74,3 @@ func DecodeRequest(data []byte) (Request, error) {
 func (r Request) SecretReferences() []string { return r.Placement.SecretReferences() }
 
 func (r Request) SecretClasses() secrets.Classes { return r.Placement.SecretClasses() }
-
-func refusal(code, message, remediation string) error {
-	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
-}

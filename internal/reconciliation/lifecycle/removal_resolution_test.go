@@ -39,7 +39,7 @@ func TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves(t *testing.T) {
 		{"a proved removal completes", reconciliation.EffectCompleted, reconciliation.OperationDone, reconciliation.BlockDone,
 			"", "", []string{"bind-1"}, 1},
 		{"an unproved removal stays unknown", reconciliation.EffectUnknown, reconciliation.OperationUnknown, reconciliation.BlockUnknown,
-			"lifecycle.unknown", "the outcome of " + block + " is still unknown: its observation proved neither the effect nor its absence", nil, 1},
+			anyUnproved, "the outcome of " + block + " is still unknown: its observation proved neither the effect nor its absence", nil, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newHarness(t, block)
@@ -59,7 +59,7 @@ func TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves(t *testing.T) {
 			if result == nil || result.Receipt.State != string(tc.state) || result.Receipt.Verb != string(reconciliation.Destroy) {
 				t.Fatalf("resolved removal = %+v (%v), want a %s destroy", result, err, tc.state)
 			}
-			if firstCode(err) != tc.code && !(tc.code == "lifecycle.unknown" && unprovedCode(firstCode(err))) || (tc.message != "" && !slices.ContainsFunc(diagnostics.Of(err), func(reported diagnostics.Diagnostic) bool {
+			if !codeIs(firstCode(err), tc.code) || (tc.message != "" && !slices.ContainsFunc(diagnostics.Of(err), func(reported diagnostics.Diagnostic) bool {
 				return reported.Message == tc.message
 			})) {
 				t.Fatalf("resolved removal reported %v, want %s %q", err, tc.code, tc.message)

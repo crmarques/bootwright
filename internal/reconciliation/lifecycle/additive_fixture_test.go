@@ -182,13 +182,10 @@ func (f *additiveFixture) refusedWith(t *testing.T, fragments ...string) {
 	}
 }
 
-// refusedBeforeEffect is whether a code is a refusal that made no effect: the
-// legacy lifecycle.state, or a declared stop of certainty none.
+// refusedBeforeEffect is whether a code is a refusal that made no effect: a
+// declared stop of certainty none or owed.
 func refusedBeforeEffect(code string) bool {
-	if code == "lifecycle.state" {
-		return true
-	}
-	for _, stop := range Stops() {
+	for _, stop := range slices.Concat(Stops(), operationstore.Stops(), []diagnostics.Stop{testRefusal}) {
 		if stop.Code == code {
 			return stop.Certainty == diagnostics.CertaintyNone || stop.Certainty == diagnostics.CertaintyOwed
 		}
@@ -196,12 +193,24 @@ func refusedBeforeEffect(code string) bool {
 	return false
 }
 
-// unprovedCode is whether a code leaves an outcome unproved: the legacy
-// lifecycle.unknown, or a declared stop of certainty unproved.
+const anyUnproved = "<unproved>"
+
+var testUnproved = diagnostics.Stop{Code: "test.unproved", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyUnproved, Cause: diagnostics.CauseUnclassified,
+	Recovery: diagnostics.RecoveryRepeat, Meaning: "a test adapter lost its outcome", Remedy: "repeat the operation"}
+
+var testPossible = diagnostics.Stop{Code: "test.possible", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyPossible, Cause: diagnostics.CauseTarget,
+	Recovery: diagnostics.RecoveryRepeat, Meaning: "a test adapter refused within its boundary", Remedy: "repeat the operation"}
+
+var testRefusal = diagnostics.Stop{Code: "test.refusal", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone, Cause: diagnostics.CauseInput,
+	Recovery: diagnostics.RecoveryChangeInput, Meaning: "a test double refused before any effect", Remedy: "change the input"}
+
+func codeIs(got, want string) bool {
+	return got == want || want == anyUnproved && unprovedCode(got)
+}
+
+// unprovedCode is whether a code leaves an outcome unproved: a declared stop of
+// certainty unproved.
 func unprovedCode(code string) bool {
-	if code == "lifecycle.unknown" {
-		return true
-	}
 	for _, stop := range Stops() {
 		if stop.Code == code {
 			return stop.Certainty == diagnostics.CertaintyUnproved

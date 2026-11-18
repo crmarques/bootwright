@@ -249,7 +249,7 @@ func TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, stderr := contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
-	if !strings.HasPrefix(out, "  ✓ Context updated\n") || !strings.HasPrefix(stderr, "  warning  lifecycle.state\n    context alpha holds a completed apply") {
+	if !strings.HasPrefix(out, "  ✓ Context updated\n") || !strings.HasPrefix(stderr, "  warning  input.changed-since-apply\n    context alpha holds a completed apply") {
 		t.Fatalf("the update over a completed apply: %s %q", out, stderr)
 	}
 	before := stateFingerprint(t, root)

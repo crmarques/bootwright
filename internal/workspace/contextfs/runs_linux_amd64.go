@@ -14,7 +14,6 @@ import (
 
 	"github.com/crmarques/bootwright/internal/workspace/contextfs/kernel"
 
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -95,7 +94,7 @@ func (s *Store) openNextRun(ctx context.Context, runs *directory) (string, *os.F
 	for attempt := 1; attempt <= maxRunAllocations; attempt++ {
 		name, err := outputName(runPrefix, highest+attempt)
 		if err != nil {
-			return "", nil, diagnostics.NewFailureWithRemediation("lifecycle.state", "bounded run numbers are exhausted in "+runs.Path, "",
+			return "", nil, contextfsRunsExhausted.Fail("bounded run numbers are exhausted in "+runs.Path,
 				"remove "+runs.Path+", then repeat the command")
 		}
 		run, err := s.createRun(ctx, runs, name)

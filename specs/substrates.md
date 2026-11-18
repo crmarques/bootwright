@@ -2282,8 +2282,8 @@ its failed check makes in a fact of its own role, cleared before the proof and
 once it holds, and the consumer names that refusal to its runner under the
 [adapter result protocol](architecture.md#the-adapter-result-protocol) before
 its run fails, a cluster under the node's position in its frozen request. The
-operator then receives the installation's `lifecycle.state` diagnostic, whose
-object is the Machine, instead of the adapter's failure: `hardware-mismatch`,
+operator then receives the installation's diagnostic under the `preboot.` code of
+the reason, whose object is the Machine, instead of the adapter's failure: `hardware-mismatch`,
 a physical machine whose declaration names no MAC, whose complete inventory
 lacks a declared MAC, reports one it does not declare or reports no system
 identity, or whose inventory was not

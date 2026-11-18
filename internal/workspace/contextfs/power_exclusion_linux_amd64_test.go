@@ -31,7 +31,7 @@ func TestMachinePowerAndLifecycleNetworkRestartExcludeOneAnother(t *testing.T) {
 					err = other.RunLifecycle(ctx, "example", func(lifecycle.RunView) error { entered = true; return nil })
 				}
 				reported := diagnostics.Of(err)
-				if entered || len(reported) != 1 || reported[0].Code != "lifecycle.lease" {
+				if entered || len(reported) != 1 || reported[0].Code != "context.busy" {
 					t.Fatalf("a competing host effect entered=%t, diagnostics=%+v, error=%v", entered, reported, err)
 				}
 				return nil

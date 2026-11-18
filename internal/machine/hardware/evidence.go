@@ -24,7 +24,7 @@ func decodeEvidence(data []byte) (Evidence, error) {
 	if err != nil {
 		return Evidence{}, err
 	}
-	malformed := refusal("lifecycle.state", "the machine hardware evidence is malformed", "")
+	malformed := hardwareEvidenceMalformed.Fail("the machine hardware evidence is malformed", "")
 	if evidence.Version != EvidenceVersion || len(evidence.Addresses) > MaxAddresses || !slices.IsSorted(evidence.Addresses) ||
 		len(slices.Compact(slices.Clone(evidence.Addresses))) != len(evidence.Addresses) || evidence.Absent && len(evidence.Addresses) != 0 {
 		return Evidence{}, malformed
@@ -43,7 +43,7 @@ func presence(data []byte, digest string) (Evidence, error) {
 		return Evidence{}, err
 	}
 	if evidence.Request != digest || evidence.Absent || !evidence.Postcondition {
-		return Evidence{}, refusal("lifecycle.state", "the machine hardware evidence proves no complete read of its host's permanent hardware addresses", "")
+		return Evidence{}, hardwareEvidenceIncomplete.Fail("the machine hardware evidence proves no complete read of its host's permanent hardware addresses", "")
 	}
 	return evidence, nil
 }

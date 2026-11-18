@@ -203,7 +203,7 @@ func (w *workspace) ReadLogs(ctx context.Context, name string, callback func(Vie
 	if w.busy > 0 {
 		w.busy--
 		w.mutex.Unlock()
-		return diagnostics.NewFailureWithRemediation("lifecycle.lease", "context storage is busy", "", "retry")
+		return diagnostics.NewFailureWithRemediation("context.busy", "context storage is busy", "", "retry")
 	}
 	w.locked = true
 	w.mutex.Unlock()

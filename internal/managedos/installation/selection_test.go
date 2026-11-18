@@ -590,7 +590,7 @@ func TestOnlyManagedServicesAreUsed(t *testing.T) {
 		text("management", "external"), text("machineRef", "controller"),
 	))
 	_, _, err := Requests(labCatalog(external), "controller", testContext)
-	expectRefusal(t, err, "lifecycle.state")
+	expectRefusal(t, err, "artifact.server-unmanaged")
 }
 
 func TestFrozenRequestsRoundTripExactly(t *testing.T) {

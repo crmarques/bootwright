@@ -241,7 +241,7 @@ func TestBoundedRunNumbersRefuseOnceExhausted(t *testing.T) {
 		_, err := view.OpenRun(ctx)
 		return err
 	})
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Remediation != "remove "+root+", then repeat the command" {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "contextfs.runs-exhausted" || reported[0].Remediation != "remove "+root+", then repeat the command" {
 		t.Fatalf("an exhausted runs area reported %v %#v", err, reported)
 	}
 }

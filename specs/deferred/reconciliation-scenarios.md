@@ -163,7 +163,7 @@ Each rule is an acceptance clause for any scenario slice.
 7. **Reads refuse while an apply runs.** A comparison read takes the lock
    rule of
    [storage, locking and publication](../contexts.md#storage-locking-and-publication),
-   so it refuses `lifecycle.lease` for the whole run. The lock narrows only
+   so it refuses `context.busy` for the whole run. The lock narrows only
    with [B18](../milestones/delivered.md#b18).
 8. **Seams need a present consumer.** Build a seam only where a consumer exists
    now: `diff` consumes `Compare`. Admission, `DeltaAdmitter` and the union

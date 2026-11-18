@@ -246,7 +246,7 @@ func TestARegistryHoldingTheNameRefusesAFrozenAuthoredRequestYetRetirementStillW
 	_, observeErr := capability.Observe(context.Background(), execution)
 	for _, err := range []error{applyErr, observeErr} {
 		got := diagnostics.Of(err)
-		if len(got) != 1 || got[0].Code != "lifecycle.state" || !strings.Contains(got[0].Message, "widget") || got[0].Remediation == "" {
+		if len(got) != 1 || got[0].Code != "addon.frozen-other-build" || !strings.Contains(got[0].Message, "widget") || got[0].Remediation == "" {
 			t.Fatalf("diagnostics = %+v", got)
 		}
 	}
@@ -336,7 +336,7 @@ func TestAnApplyOfATamperedAuthoredRequestRefusesBeforeAnyRunnerCall(t *testing.
 				return
 			}
 			for _, err := range []error{applyErr, observeErr} {
-				if got := diagnostics.Of(err); len(got) != 1 || got[0].Code != "lifecycle.state" || !strings.Contains(got[0].Message, "widget") {
+				if got := diagnostics.Of(err); len(got) != 1 || got[0].Code != "addon.frozen-other-build" || !strings.Contains(got[0].Message, "widget") {
 					t.Fatalf("diagnostics = %+v", got)
 				}
 			}

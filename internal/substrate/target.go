@@ -170,7 +170,7 @@ func TargetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 	}
 	arm := Variant(provider)
 	if !IsRealized(provider) {
-		return Target{}, refusal("lifecycle.state", "this executable does not realize the substrate of "+provider.Identity(),
+		return Target{}, prebootUnrealizedSubstrate.Fail("this executable does not realize the substrate of "+provider.Identity(),
 			"place "+machine.Identity()+" on a libvirt, bare-metal or KubeVirt provider")
 	}
 	target := Target{Provider: provider.Name(), Substrate: arm, Port: arm, Delivery: DeliveryOf(arm)}

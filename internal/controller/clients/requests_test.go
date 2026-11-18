@@ -22,7 +22,7 @@ func TestAnUnsupportedRequestVersionRefusesBeforeItsShape(t *testing.T) {
 	}
 	_, err = DecodeRequest([]byte(`{"aRemovedField":true,` + string(data[1:])))
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Source != nil ||
+	if len(reported) != 1 || reported[0].Code != "records.version-unsupported" || reported[0].Source != nil ||
 		reported[0].Message != "the frozen controller prerequisites request has an unsupported version: controller-clients-v2" ||
 		reported[0].Remediation != "destroy it with the build that applied it" {
 		t.Fatalf("an earlier prerequisites request refused as %+v", reported)

@@ -749,7 +749,7 @@ func TestAPinnedAddRetainsItsStageOnlyWhenItsPublicationMeetsALock(t *testing.T)
 				return
 			}
 			reported := diagnostics.Of(err)
-			if len(store.kept) != 1 || len(reported) != 1 || reported[0].Code != "lifecycle.lease" || !strings.Contains(reported[0].Remediation, "without acquiring it again") {
+			if len(store.kept) != 1 || len(reported) != 1 || reported[0].Code != "media.store-busy" || !strings.Contains(reported[0].Remediation, "without acquiring it again") {
 				t.Fatalf("retained %d records, refusal %#v", len(store.kept), reported)
 			}
 			entry, err := managedos.DecodeStagedMediaRecord(store.kept[0])
@@ -809,7 +809,7 @@ func TestARetainedStageRefusalPromisesOnlyWhatItsRepetitionDoes(t *testing.T) {
 	acquirer := &fakeAcquirer{data: "installer bytes", origin: "file:///images/demo.iso"}
 	_, err := newService(store, acquirer, nil).Add(context.Background(), request)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.lease" ||
+	if len(reported) != 1 || reported[0].Code != "media.store-busy" ||
 		!strings.Contains(reported[0].Remediation, "it re-verifies the image it retained and publishes it without acquiring it again") {
 		t.Fatalf("the lock-refused publication reported %#v", reported)
 	}
@@ -1156,7 +1156,7 @@ func TestAFailedPublicationSettlesItsStepFailed(t *testing.T) {
 		change   func(*fakeStore)
 		code     string
 	}{
-		"another command holds the store": {busyAt: 2, code: "lifecycle.lease"},
+		"another command holds the store": {busyAt: 2, code: "media.store-busy"},
 		"the name was published meanwhile": {
 			change: func(s *fakeStore) { s.occupied = []string{"demo.iso"} }, code: "media.store",
 		},

@@ -53,7 +53,7 @@ func TestAForeignRequestVersionRefuses(t *testing.T) {
 	}
 	if _, err := DecodeMediaRequest(data); err == nil {
 		t.Fatal("a request of another version was read as this one")
-	} else if code := refusalCode(t, err); code != "lifecycle.state" {
+	} else if code := refusalCode(t, err); code != "records.version-unsupported" {
 		t.Fatalf("refusal = %s", code)
 	}
 }
@@ -69,7 +69,7 @@ func TestAnInstallRequestOfAnotherVersionRefuses(t *testing.T) {
 	}
 	if _, err := DecodeInstallRequest(data); err == nil {
 		t.Fatal("an install request of another version was read as this one")
-	} else if code := refusalCode(t, err); code != "lifecycle.state" {
+	} else if code := refusalCode(t, err); code != "records.version-unsupported" {
 		t.Fatalf("refusal = %s", code)
 	}
 }
@@ -153,7 +153,7 @@ func TestAMediaRequestOfAnotherVersionRefuses(t *testing.T) {
 	}
 	if _, err := DecodeMediaRequest(data); err == nil {
 		t.Fatal("a media request of another version was read as this one")
-	} else if code := refusalCode(t, err); code != "lifecycle.state" {
+	} else if code := refusalCode(t, err); code != "records.version-unsupported" {
 		t.Fatalf("refusal = %s", code)
 	}
 }
@@ -217,7 +217,7 @@ func withAnUndeclaredField(t *testing.T, encode func() ([]byte, error)) []byte {
 func expectVersionRefusal(t *testing.T, err error, subject, version string) {
 	t.Helper()
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Source != nil ||
+	if len(reported) != 1 || reported[0].Code != "records.version-unsupported" || reported[0].Source != nil ||
 		reported[0].Message != "the frozen "+subject+" request has an unsupported version: "+version ||
 		reported[0].Remediation != "destroy it with the build that applied it" {
 		t.Fatalf("a %s request of another version refused as %+v", subject, reported)

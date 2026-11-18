@@ -2114,7 +2114,7 @@ func checkpointMediaRetainScenario() checkpointScenario {
 		if held != nil {
 			return held
 		}
-		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" {
+		if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "media.store-busy" {
 			return fmt.Errorf("the add whose publication met a held root lock = %v %#v", err, reported)
 		}
 		release()

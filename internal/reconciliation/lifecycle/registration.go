@@ -206,7 +206,12 @@ func atTheBound(ctx context.Context, view View, store OperationStore, verb recon
 	if !operationstore.AtTheBound(err) || len(reported) != 1 {
 		return err
 	}
-	return failure(reported[0].Code, reported[0].Message, retainedExit(ctx, view, store, verb))
+	return remedied(reported[0], retainedExit(ctx, view, store, verb))
+}
+
+func remedied(reported diagnostics.Diagnostic, remediation string) error {
+	reported.Remediation = remediation
+	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{reported}}
 }
 
 // retainedExit is the remedy of a refusal at the retained-operation bound. No

@@ -138,18 +138,21 @@ func TestSSHPlacementRequiresKeyAndHostKey(t *testing.T) {
 	if placement.Connection != connectionSSH || placement.Address != "192.0.2.1" || placement.Port != 2222 || placement.User != "root" {
 		t.Fatalf("placement = %+v", placement)
 	}
-	for name, auth := range map[string]api.Value{
-		"operator identity": complete.With("auth", api.MapValue(field("operatorIdentity", api.MapValue()))),
-		"password":          complete.With("auth", api.MapValue(text("passwordRef", "services-password"))),
-		"no key":            complete.With("auth", api.MapValue()),
-		"no host key":       complete.Without("knownHostsRef"),
-		"non-root user":     complete.With("user", api.StringValue("operator")),
-		"escalation secret": complete.With("sudoPasswordRef", api.StringValue("services-sudo")),
+	for name, refusal := range map[string]struct {
+		auth api.Value
+		code string
+	}{
+		"operator identity": {complete.With("auth", api.MapValue(field("operatorIdentity", api.MapValue()))), "machine.placement-auth-unsupported"},
+		"password":          {complete.With("auth", api.MapValue(text("passwordRef", "services-password"))), "machine.placement-auth-unsupported"},
+		"no key":            {complete.With("auth", api.MapValue()), "machine.placement-key-missing"},
+		"no host key":       {complete.Without("knownHostsRef"), "machine.placement-host-key-missing"},
+		"non-root user":     {complete.With("user", api.StringValue("operator")), "machine.placement-escalates"},
+		"escalation secret": {complete.With("sudoPasswordRef", api.StringValue("services-sudo")), "machine.placement-escalates"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := Requests(catalogOf(host(auth), server), "controller", testContext)
+			_, err := Requests(catalogOf(host(refusal.auth), server), "controller", testContext)
 			reported := diagnostics.Of(err)
-			if err == nil || len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "lifecycle placement") {
+			if err == nil || len(reported) != 1 || reported[0].Code != refusal.code || !strings.Contains(reported[0].Message, "lifecycle placement") {
 				t.Fatalf("an unsupported SSH posture was not refused as a lifecycle placement: %+v", reported)
 			}
 		})

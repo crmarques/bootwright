@@ -218,10 +218,10 @@ func TestEvidenceForEveryTerminalState(t *testing.T) {
 	}
 }
 
-func TestDomainFailuresCarryTheLifecycleCode(t *testing.T) {
+func TestDomainFailuresCarryTheirStop(t *testing.T) {
 	_, err := NewPlan("reconcile", nil)
 	var failure *diagnostics.Failure
-	if !errors.As(err, &failure) || len(failure.Diagnostics) != 1 || failure.Diagnostics[0].Code != "lifecycle.state" {
+	if !errors.As(err, &failure) || len(failure.Diagnostics) != 1 || failure.Diagnostics[0].Code != "records.plan-invalid" {
 		t.Fatalf("plan failure = %v", err)
 	}
 }

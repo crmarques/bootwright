@@ -26,14 +26,14 @@ func TestEveryDefaultNamingAContextBackedCommandCarriesTheContext(t *testing.T) 
 }
 
 func TestADefaultRemediationNamesTheInvokingContext(t *testing.T) {
-	failure := Diagnostic{Severity: "error", Code: "lifecycle.state", Message: "m"}
-	if got, want := WithRemediationFor(failure, "lab").Remediation, "run bootwright status --context lab to see the records and the next step"; got != want {
+	failure := Diagnostic{Severity: "error", Code: "logs.not-found", Message: "m"}
+	if got, want := WithRemediationFor(failure, "lab").Remediation, "run bootwright status --context lab to see the operation records that remain"; got != want {
 		t.Fatalf("remediation = %q, want %q", got, want)
 	}
 	if got := WithRemediation(failure).Remediation; !strings.Contains(got, "--context "+ContextPlaceholder) {
 		t.Fatalf("a remediation with no invoking context = %q", got)
 	}
-	own := Diagnostic{Severity: "error", Code: "lifecycle.state", Message: "m", Remediation: "run bootwright status --context <context>"}
+	own := Diagnostic{Severity: "error", Code: "logs.not-found", Message: "m", Remediation: "run bootwright status --context <context>"}
 	if got := WithRemediationFor(own, "lab").Remediation; got != own.Remediation {
 		t.Fatalf("an emitter's own remediation became %q", got)
 	}

@@ -66,22 +66,22 @@ func PlacementFor(machine api.Object, controllerMachine string) (Placement, erro
 	}
 	ssh := machine.Spec().Get("access", "ssh")
 	if !ssh.Present() {
-		return Placement{}, placementFailure("lifecycle.state", "a placement host must be the controller or declare SSH access", "place the work on the controller Machine, or author access.ssh on "+machine.Identity())
+		return Placement{}, machinePlacementNoAccess.Fail("a placement host must be the controller or declare SSH access", "place the work on the controller Machine, or author access.ssh on "+machine.Identity())
 	}
 	if ssh.Has("auth", "operatorIdentity") {
-		return Placement{}, placementFailure("lifecycle.state", "operator SSH identity is unsupported for lifecycle placement", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
+		return Placement{}, machinePlacementAuthUnsupported.Fail("operator SSH identity is unsupported for lifecycle placement", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
 	}
 	if ssh.Has("auth", "passwordRef") {
-		return Placement{}, placementFailure("lifecycle.state", "password SSH authentication is unsupported for lifecycle placement", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
+		return Placement{}, machinePlacementAuthUnsupported.Fail("password SSH authentication is unsupported for lifecycle placement", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
 	}
 	if !ssh.Has("auth", "privateKeyRef") {
-		return Placement{}, placementFailure("lifecycle.state", "lifecycle placement requires an SSH private key reference", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
+		return Placement{}, machinePlacementKeyMissing.Fail("lifecycle placement requires an SSH private key reference", "author access.ssh.auth.privateKeyRef on "+machine.Identity())
 	}
 	if !ssh.Has("knownHostsRef") {
-		return Placement{}, placementFailure("lifecycle.state", "lifecycle placement requires a bound SSH host key", "author access.ssh.knownHostsRef on "+machine.Identity())
+		return Placement{}, machinePlacementHostKeyMissing.Fail("lifecycle placement requires a bound SSH host key", "author access.ssh.knownHostsRef on "+machine.Identity())
 	}
 	if len(privilegeFields(ssh)) != 0 {
-		return Placement{}, placementFailure("lifecycle.state", "a lifecycle placement host connects as root and never escalates", "set access.ssh.user to root or omit it, and remove access.ssh.sudoPasswordRef, on "+machine.Identity())
+		return Placement{}, machinePlacementEscalates.Fail("a lifecycle placement host connects as root and never escalates", "set access.ssh.user to root or omit it, and remove access.ssh.sudoPasswordRef, on "+machine.Identity())
 	}
 	address, err := infrastructureservices.ResolveAddress(machine, ssh.Get("addressRef").Text())
 	if err != nil {
@@ -108,7 +108,7 @@ func ServicePlacementFor(machine api.Object, controllerMachine string) (Placemen
 	ssh, found := SSH(machine)
 	install, declared := infrastructureservices.AddressOf(machine, machine.Spec().Get("network", "installAddressRef").Text())
 	if !found || !declared || ssh.Address != install || ssh.Port != 22 || ssh.PrivateKeyRef == "" || ssh.User == "" {
-		return Placement{}, placementFailure("lifecycle.state", "a service on a Machine Bootwright installs is reached at its install address on port 22 with the fleet key, as its installation configured it",
+		return Placement{}, machineInstalledAccessMismatch.Fail("a service on a Machine Bootwright installs is reached at its install address on port 22 with the fleet key, as its installation configured it",
 			"remove spec.access.ssh from "+machine.Identity()+" so its access is the installation's own")
 	}
 	return Placement{Address: ssh.Address, Connection: ConnectionInstalled, Machine: machine.Name(), Port: ssh.Port, PrivateKeyRef: ssh.PrivateKeyRef, User: ssh.User}, nil

@@ -24,7 +24,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return plan, err
 	}
 	if input.State == nil {
-		return plan, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
+		return plan, hardwareDesiredStateMissing.Fail("lifecycle planning requires compiled desired state", "")
 	}
 	requests, err := Requests(input.State.Effective(), input.Controller, input.Context.Name)
 	if err != nil {
@@ -91,7 +91,7 @@ func (c Capability) Apply(ctx context.Context, execution lifecycle.Execution) (l
 	}
 	outcome, usable := result.Outcome, result.Outcome.Settled()
 	if !usable {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, refusal("lifecycle.state", "the machine hardware adapter reported no usable outcome", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, hardwareUnproved.Fail("the machine hardware adapter reported no usable outcome", "")
 	}
 	if _, err := presence(result.Evidence, execution.Block.RequestDigest); err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
@@ -115,7 +115,7 @@ func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) 
 	outcome, usable := result.Outcome, result.Outcome.Settled()
 	evidence, err := decodeEvidence(result.Evidence)
 	if err != nil || !usable || !evidence.Absent || !evidence.Postcondition || evidence.Request != execution.Block.RequestDigest {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, refusal("lifecycle.state", "the machine hardware adapter did not prove the release of its claim", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, hardwareUnproved.Fail("the machine hardware adapter did not prove the release of its claim", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
@@ -143,7 +143,7 @@ func (Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Execut
 	}
 	evidence, err := json.Marshal(Evidence{Absent: true, Addresses: []string{}, Postcondition: true, Request: execution.Block.RequestDigest, Version: EvidenceVersion})
 	if err != nil {
-		return unknown, refusal("lifecycle.state", "the machine hardware removal evidence cannot be encoded", "")
+		return unknown, hardwareRemovalEvidenceUnencoded.Fail("the machine hardware removal evidence cannot be encoded", "")
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
 }
@@ -163,10 +163,10 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		return lifecycle.RunResult{}, request, err
 	}
 	if execution.Block.Kind != Kind || execution.Block.Object != request.Identity.Object {
-		return lifecycle.RunResult{}, request, refusal("lifecycle.state", "the machine hardware request does not match its frozen block identity", "")
+		return lifecycle.RunResult{}, request, hardwareRequestMismatch.Fail("the machine hardware request does not match its frozen block identity", "")
 	}
 	if c.runner == nil {
-		return lifecycle.RunResult{}, request, refusal("lifecycle.state", "the machine hardware adapter is not configured", "")
+		return lifecycle.RunResult{}, request, hardwareUnconfigured.Fail("the machine hardware adapter is not configured", "")
 	}
 	canonical, err := request.Canonical()
 	if err != nil {
@@ -193,10 +193,10 @@ func claim(contextName string, request Request, data []byte) (infrastructureserv
 		return infrastructureservices.HostReservation{}, err
 	}
 	if evidence.Absent || !evidence.Postcondition {
-		return infrastructureservices.HostReservation{}, refusal("lifecycle.state", "the machine hardware evidence proves no read of its host", "")
+		return infrastructureservices.HostReservation{}, hardwareEvidenceIncomplete.Fail("the machine hardware evidence proves no read of its host", "")
 	}
 	if len(evidence.Addresses) > infrastructureservices.MaxReservationKeys {
-		return infrastructureservices.HostReservation{}, refusal("lifecycle.state",
+		return infrastructureservices.HostReservation{}, hardwareAddressesTooMany.Fail(
 			"Machine/"+request.Identity.Object+" reports "+strconv.Itoa(len(evidence.Addresses))+" permanent hardware addresses, more than the "+
 				strconv.Itoa(infrastructureservices.MaxReservationKeys)+" one claim holds, so the server behind it cannot be claimed",
 			"place the work on a Machine whose host reports at most "+strconv.Itoa(infrastructureservices.MaxReservationKeys)+" physical network interfaces")

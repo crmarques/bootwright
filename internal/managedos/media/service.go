@@ -395,8 +395,8 @@ func unpublished(ctx context.Context, err error, stage Stage, record []byte, nam
 	if !errors.Is(err, ErrBusy) || expected == "" || stage.Retain(ctx, record) != nil {
 		return err
 	}
-	return diagnostics.NewFailureWithRemediation("lifecycle.lease",
-		"another Bootwright command holds the media store, so image "+name+" was verified but not published", "",
+	return mediaStoreBusy.Fail(
+		"another Bootwright command holds the media store, so image "+name+" was verified but not published",
 		"repeat this command once that command finishes: it re-verifies the image it retained and publishes it without acquiring it again; "+
 			"or discard it with bootwright media delete --name "+name)
 }

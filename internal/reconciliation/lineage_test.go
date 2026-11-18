@@ -105,7 +105,7 @@ func TestPlanRefusesMalformedPrerequisites(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := NewPlan(test.verb, test.definitions)
-			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "records.plan-invalid" {
 				t.Fatalf("planning read as %+v", reported)
 			}
 		})
@@ -124,7 +124,7 @@ func manyPrerequisites() []string {
 func TestInverseRefusesAPlanThatCarriesPrerequisites(t *testing.T) {
 	plan := planOf(t, withPrerequisites("alpha", nil, "root"))
 	_, err := plan.Inverse()
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "records.plan-invalid" ||
 		reported[0].Message != "lifecycle plan with prerequisites cannot be inverted without the plans that hold them" {
 		t.Fatalf("inverse read as %+v", reported)
 	}
@@ -239,19 +239,20 @@ func TestAdditiveRefusesWhatWouldRewriteTheLineage(t *testing.T) {
 	for name, test := range map[string]struct {
 		fresh   []BlockDefinition
 		message string
+		code    string
 	}{
 		"a changed request": {edit(func(d *BlockDefinition) { d.Request = json.RawMessage(`{"name":"cluster","x":1}`) }),
-			"lifecycle block cluster would be frozen differently from the plan it was frozen in"},
+			"lifecycle block cluster would be frozen differently from the plan it was frozen in", "records.lineage-reshaped"},
 		"a changed dependency set": {edit(func(d *BlockDefinition) { d.Dependencies = nil }),
-			"lifecycle block cluster would be frozen differently from the plan it was frozen in"},
+			"lifecycle block cluster would be frozen differently from the plan it was frozen in", "records.lineage-reshaped"},
 		"a dropped block": {[]BlockDefinition{definition("net"), definition("instance", "net")},
-			"lifecycle block cluster would be frozen differently from the plan it was frozen in"},
+			"lifecycle block cluster would be frozen differently from the plan it was frozen in", "records.lineage-reshaped"},
 		"nothing added": {[]BlockDefinition{definition("net"), definition("cluster", "net")},
-			"the plan adds no block to the lineage"},
+			"the plan adds no block to the lineage", "records.plan-invalid"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := Additive(planOf(t, test.fresh...), root)
-			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != test.message {
+			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != test.code || reported[0].Message != test.message {
 				t.Fatalf("adding read as %+v", reported)
 			}
 		})
@@ -300,7 +301,7 @@ func TestLineageRefusesWhatIsNotOneLineage(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := Lineage(test.plans...)
-			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != test.message {
+			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "records.plan-invalid" || reported[0].Message != test.message {
 				t.Fatalf("joining read as %+v", reported)
 			}
 		})

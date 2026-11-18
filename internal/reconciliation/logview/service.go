@@ -131,7 +131,7 @@ func notFound(message, remediation string) error {
 
 func busy(err error) bool {
 	for _, reported := range diagnostics.Of(err) {
-		if reported.Code == "lifecycle.lease" {
+		if reported.Code == "context.busy" {
 			return true
 		}
 	}

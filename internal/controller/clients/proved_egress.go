@@ -53,5 +53,5 @@ func ProvedEgress(machine string, records []lifecycle.BlockEvidence) (prerequisi
 }
 
 func unprovedEgress() error {
-	return refuse("lifecycle.state", "the completed frozen controller stage does not prove one acquisition route", "complete the controller stage and retry apply without changing its route")
+	return clientsEgressUnproved.Fail("the completed frozen controller stage does not prove one acquisition route", "complete the controller stage and retry apply without changing its route")
 }

@@ -92,7 +92,7 @@ func withAnUndeclaredField(t *testing.T, canonical []byte) []byte {
 func expectVersionRefusal(t *testing.T, err error, subject, version string) {
 	t.Helper()
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Source != nil ||
+	if len(reported) != 1 || reported[0].Code != "records.version-unsupported" || reported[0].Source != nil ||
 		reported[0].Message != "the frozen "+subject+" request has an unsupported version: "+version ||
 		reported[0].Remediation != "destroy it with the build that applied it" {
 		t.Fatalf("a %s request of another version refused as %+v", subject, reported)

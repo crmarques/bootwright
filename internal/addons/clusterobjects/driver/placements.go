@@ -21,7 +21,7 @@ func placementMaterials(placements []co.SecretPlacement, material map[string]sec
 		}
 		source, ok := material[name]
 		if !ok {
-			return nil, nil, failure("placement source "+name+" is not bound for placement", "restore its Secret binding or apply the export producer first")
+			return nil, nil, clusterobjectsPlacementUnbound.Fail("placement source "+name+" is not bound for placement", "restore its Secret binding or apply the export producer first")
 		}
 		mapped := []secrets.Part{}
 		for _, key := range keys {
@@ -29,7 +29,7 @@ func placementMaterials(placements []co.SecretPlacement, material map[string]sec
 		}
 		slices.Sort(mapped)
 		if !slices.Equal(mapped, source.Parts()) {
-			return nil, nil, failure("Secret placement "+placement.Name+" does not map exactly its bound parts", "correct the package part mapping")
+			return nil, nil, clusterobjectsPlacementUnmapped.Fail("Secret placement "+placement.Name+" does not map exactly its bound parts", "correct the package part mapping")
 		}
 		if _, exists := sources[name]; exists {
 			continue

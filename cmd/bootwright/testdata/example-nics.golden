@@ -6123,7 +6123,7 @@
     "refusals": {
       "agent": "openshift.selection-unsupported: this executable installs no OKD cluster; ",
       "installation": "api.reference: the profile's boot image is not in the selected graph; ",
-      "libvirt": "lifecycle.state: operator SSH identity is unsupported for lifecycle placement; "
+      "libvirt": "machine.placement-auth-unsupported: operator SSH identity is unsupported for lifecycle placement; "
     }
   },
   "physical-3-nodes-ceph": {

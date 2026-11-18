@@ -198,7 +198,7 @@ func TestAnUnrenderablePackageIsRefusedNotReturnedBare(t *testing.T) {
 	failure := errors.New("renderer failed")
 	selection := addons.SelectedInstance{Package: syntheticPackage("broken", nil), Instance: addons.Instance{Cluster: "cluster", Binding: "binding"}}
 	got := diagnostics.Of(unrenderableRefusal(selection, failure))
-	if len(got) != 1 || got[0].Code != "lifecycle.state" || got[0].Message != "package broken cannot be rendered for cluster: renderer failed" || got[0].Remediation != "correct the configuration of package broken in ClusterAddonBinding/binding" {
+	if len(got) != 1 || got[0].Code != "addon.binding-invalid" || got[0].Message != "package broken cannot be rendered for cluster: renderer failed" || got[0].Remediation != "correct the configuration of package broken in ClusterAddonBinding/binding" {
 		t.Fatalf("diagnostics = %+v", got)
 	}
 	registry, err := addons.NewRegistry([]addons.Package{syntheticPackage("broken", func(addons.Instance) (addons.Rendered, error) { return addons.Rendered{}, failure })})
@@ -210,7 +210,7 @@ func TestAnUnrenderablePackageIsRefusedNotReturnedBare(t *testing.T) {
 		return addons.ClusterFacts{Name: "cluster", Release: "4.21.1"}
 	}
 	_, err = New(nil, registry, facts).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"})
-	if got := diagnostics.Of(err); len(got) != 1 || got[0].Code != "lifecycle.state" || got[0].Remediation == "" {
+	if got := diagnostics.Of(err); len(got) != 1 || got[0].Code != "addon.binding-invalid" || got[0].Remediation == "" {
 		t.Fatalf("plan error = %v, diagnostics = %+v", err, got)
 	}
 }

@@ -100,7 +100,7 @@ func (e Evidence) Observed() managedservice.Observed {
 func (e Evidence) Ready(request Request, fingerprint string) error {
 	targets := request.ProbeTargets()
 	if len(e.Listeners) != len(targets) {
-		return refusal("lifecycle.state", "the artifact-server evidence does not cover every listener", "")
+		return artifactListenersMismatch.Fail("the artifact-server evidence does not cover every listener", "")
 	}
 	observed := slices.Clone(e.Listeners)
 	slices.SortFunc(observed, func(x, y ListenerEvidence) int {
@@ -112,19 +112,19 @@ func (e Evidence) Ready(request Request, fingerprint string) error {
 	for index, target := range targets {
 		listener := observed[index]
 		if listener.Name != target.Name || listener.Address != target.Address || listener.Port != target.Port || listener.Protocol != target.Protocol {
-			return refusal("lifecycle.state", "the artifact-server evidence does not match its frozen listeners", "")
+			return artifactListenersMismatch.Fail("the artifact-server evidence does not match its frozen listeners", "")
 		}
 		if !strings.HasPrefix(listener.Status, "HTTP/1.") {
-			return refusal("lifecycle.state", "an artifact-server listener did not answer with an HTTP status line", "")
+			return artifactListenerUnanswered.Fail("an artifact-server listener did not answer with an HTTP status line", "")
 		}
 		if target.Protocol == "https" && (len(listener.Fingerprint) != 64 || strings.Trim(listener.Fingerprint, "0123456789abcdef") != "") {
-			return refusal("lifecycle.state", "an artifact-server listener supplied no usable certificate fingerprint", "")
+			return artifactCertificateEvidenceInvalid.Fail("an artifact-server listener supplied no usable certificate fingerprint", "")
 		}
 		if target.Protocol == "https" && listener.Fingerprint != fingerprint {
-			return errors.Join(managedservice.ErrCertificateMismatch, refusal("lifecycle.state", "an artifact-server listener presented a different certificate than the operation bound", ""))
+			return errors.Join(managedservice.ErrCertificateMismatch, artifactCertificateMismatch.Fail("an artifact-server listener presented a different certificate than the operation bound", ""))
 		}
 		if target.Protocol == "http" && listener.Fingerprint != "" {
-			return refusal("lifecycle.state", "an HTTP artifact-server listener reported a certificate", "")
+			return artifactCertificateEvidenceInvalid.Fail("an HTTP artifact-server listener reported a certificate", "")
 		}
 	}
 	return nil

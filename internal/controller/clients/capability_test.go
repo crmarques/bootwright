@@ -907,7 +907,7 @@ func TestStageFailuresKeepTheirCodesAndNameTheStage(t *testing.T) {
 // A block frozen by another build must not be reinterpreted by this one.
 func TestDecodeRefusesAnotherRequestVersion(t *testing.T) {
 	_, err := DecodeRequest([]byte(`{"egress":{"httpProxy":"","httpsProxy":"","noProxy":[]},"libvirt":"","libvirtClient":false,"machine":"controller","tools":[],"version":"controller-clients-v0"}`))
-	if firstCode(err) != "lifecycle.state" {
+	if firstCode(err) != "records.version-unsupported" {
 		t.Fatalf("code = %q (%v)", firstCode(err), err)
 	}
 }
@@ -923,7 +923,7 @@ func TestDecodeRefusesPackagesItsClosuresDoNotSelect(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := DecodeRequest(data); firstCode(err) != "lifecycle.state" {
+		if _, err := DecodeRequest(data); firstCode(err) != "clients.request-unreadable" {
 			t.Fatalf("%s: decode = %v", name, err)
 		}
 	}

@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	"github.com/crmarques/bootwright/internal/canonicaljson"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 // Freeze encodes a request exactly as the plan digest and the adapter both
@@ -14,15 +13,15 @@ import (
 func Freeze(value any, subject string) ([]byte, error) {
 	data, err := canonicaljson.Encode(value, canonicaljson.Bare)
 	if err != nil {
-		return nil, frozenFailure("the " + subject + " request cannot be encoded")
+		return nil, recordsRequestUnwritable.Fail("the "+subject+" request cannot be encoded", "")
 	}
 	switch err := canonicaljson.ProveObject(data); {
 	case err == nil:
 		return data, nil
 	case errors.Is(err, canonicaljson.ErrMalformed), errors.Is(err, canonicaljson.ErrTrailing):
-		return nil, frozenFailure("the " + subject + " request cannot be decoded")
+		return nil, recordsRequestUnwritable.Fail("the "+subject+" request cannot be decoded", "")
 	default:
-		return nil, frozenFailure("the " + subject + " request is not canonically ordered")
+		return nil, recordsRequestUnwritable.Fail("the "+subject+" request is not canonically ordered", "")
 	}
 }
 
@@ -41,7 +40,7 @@ func ThawVersion[T any](data []byte, subject, want string) (T, error) {
 			if ValidSegment(version) {
 				message = "the frozen " + subject + " request has an unsupported version: " + version
 			}
-			return empty, diagnostics.NewFailureWithRemediation("lifecycle.state", message, "", "destroy it with the build that applied it")
+			return empty, recordsVersionUnsupported.Fail(message, "destroy it with the build that applied it")
 		}
 	}
 	request, err := Thaw[T](data, subject)
@@ -63,9 +62,9 @@ func Thaw[T any](data []byte, subject string) (T, error) {
 	case err == nil:
 		return request, nil
 	case errors.Is(err, canonicaljson.ErrTrailing):
-		return empty, frozenFailure("the frozen " + subject + " request contains trailing data")
+		return empty, recordsRequestUnreadable.Fail("the frozen "+subject+" request contains trailing data", "")
 	default:
-		return empty, frozenFailure("the frozen " + subject + " request is malformed")
+		return empty, recordsRequestUnreadable.Fail("the frozen "+subject+" request is malformed", "")
 	}
 }
 
@@ -75,16 +74,16 @@ func Thaw[T any](data []byte, subject string) (T, error) {
 func DecodeEvidence[T any](data []byte, maximum int, subject string) (T, error) {
 	var empty T
 	if len(data) == 0 || len(data) > maximum {
-		return empty, frozenFailure("the " + subject + " adapter returned no bounded evidence")
+		return empty, recordsEvidenceUnreadable.Fail("the "+subject+" adapter returned no bounded evidence", "")
 	}
 	var evidence T
 	switch err := canonicaljson.DecodeClosed(data, &evidence); {
 	case err == nil:
 		return evidence, nil
 	case errors.Is(err, canonicaljson.ErrTrailing):
-		return empty, frozenFailure("the " + subject + " adapter returned trailing evidence")
+		return empty, recordsEvidenceUnreadable.Fail("the "+subject+" adapter returned trailing evidence", "")
 	default:
-		return empty, frozenFailure("the " + subject + " adapter returned malformed evidence")
+		return empty, recordsEvidenceUnreadable.Fail("the "+subject+" adapter returned malformed evidence", "")
 	}
 }
 
@@ -97,11 +96,7 @@ func ProveCanonical(data []byte, value any, subject string) error {
 		return err
 	}
 	if !bytes.Equal(canonical, data) {
-		return frozenFailure("the frozen " + subject + " request is not canonical")
+		return recordsRequestUnreadable.Fail("the frozen "+subject+" request is not canonical", "")
 	}
 	return nil
-}
-
-func frozenFailure(message string) error {
-	return diagnostics.NewFailureWithRemediation("lifecycle.state", message, "", "")
 }

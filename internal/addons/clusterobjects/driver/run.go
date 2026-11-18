@@ -7,7 +7,6 @@ import (
 
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
 	"github.com/crmarques/bootwright/internal/controller/evidence"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -27,13 +26,13 @@ func Run(ctx context.Context, runner Runner, execution lifecycle.Execution, oper
 		return lifecycle.RunResult{}, err
 	}
 	if runner == nil || execution.LendProduced == nil || execution.LocateTool == nil {
-		return lifecycle.RunResult{}, failure("cluster object runtime or produced-input custody is unavailable", "apply the controller and cluster stages first")
+		return lifecycle.RunResult{}, clusterobjectsRuntimeUnavailable.Fail("cluster object runtime or produced-input custody is unavailable", "apply the controller and cluster stages first")
 	}
 	if execution.ApplyOperation == "" || execution.ApplyRegistered == "" {
-		return lifecycle.RunResult{}, failure("cluster object ownership identity is unavailable", "")
+		return lifecycle.RunResult{}, clusterobjectsIdentityUnavailable.Fail("cluster object ownership identity is unavailable", "")
 	}
 	if operation != "apply" && operation != "observe" {
-		return lifecycle.RunResult{}, failure("unsupported cluster object operation", "")
+		return lifecycle.RunResult{}, clusterobjectsOperationUnsupported.Fail("unsupported cluster object operation", "")
 	}
 	tool, err := execution.LocateTool(ctx, config.Tool)
 	if err != nil {
@@ -91,7 +90,4 @@ func Run(ctx context.Context, runner Runner, execution lifecycle.Execution, oper
 		invocation.Values["secretSources"] = string(sources)
 	}
 	return runner.Run(ctx, lifecycle.RunFor(execution, invocation))
-}
-func failure(reason, remedy string) error {
-	return diagnostics.NewFailureWithRemediation("lifecycle.state", reason, "", remedy)
 }

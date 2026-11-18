@@ -61,7 +61,7 @@ func TestEveryClientsRefusalNamesItsRemedy(t *testing.T) {
 func TestAnotherBuildsRequestCarriesItsRemedy(t *testing.T) {
 	_, decoded := DecodeRequest([]byte(`{"egress":{"httpProxy":"","httpsProxy":"","noProxy":[]},"hypervisor":false,"installerMedia":false,"libvirt":"","libvirtClient":false,"machine":"controller","tools":[],"version":"controller-clients-v0"}`))
 	reported := diagnostics.Of(decoded)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Remediation != "destroy it with the build that applied it" || reported[0].Source != nil {
+	if len(reported) != 1 || reported[0].Code != "records.version-unsupported" || reported[0].Remediation != "destroy it with the build that applied it" || reported[0].Source != nil {
 		t.Errorf("refusal = %+v", reported)
 	}
 }

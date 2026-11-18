@@ -949,6 +949,9 @@ func contractRequests(row contractRow, block reconciliation.Block, capability li
 	}
 }
 
+var contractUnproved = diagnostics.Stop{Code: "test.unproved", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyUnproved, Cause: diagnostics.CauseUnclassified,
+	Recovery: diagnostics.RecoveryRepeat, Meaning: "a contract double could not tell what it did", Remedy: "repeat the operation"}
+
 // contractRunnerFailures proves an attempt keeps a lost or unknown-flagged
 // runner failure unknown and records any other diagnosed one failed.
 func contractRunnerFailures(row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
@@ -958,7 +961,7 @@ func contractRunnerFailures(row contractRow, block reconciliation.Block, capabil
 		want reconciliation.Outcome
 	}{
 		{"an undiagnosed failure", errors.New("the adapter's result was lost"), reconciliation.OutcomeUnknown},
-		{"a failure diagnosed unknown", diagnostics.NewFailure("lifecycle.unknown", "the adapter cannot tell what it did", ""), reconciliation.OutcomeUnknown},
+		{"a failure diagnosed unknown", contractUnproved.Fail("the adapter cannot tell what it did", ""), reconciliation.OutcomeUnknown},
 		{"a diagnosed failure", diagnostics.NewFailure("lifecycle.state", "the adapter refused within its boundary", ""), reconciliation.OutcomeFailed},
 	}
 	for _, operation := range contractMutationOperations(row) {

@@ -115,8 +115,8 @@ func (c *mutationCall) mutation(prepare error, proved error) Mutation[string] {
 // evidence for its operation, and clears every produced material on every
 // exit, because a result never carries it.
 func TestTheMutationSkeletonMapsEachExitAndClearsWhatWasProduced(t *testing.T) {
-	refused := failure("lifecycle.state", "refused", "")
-	unknownFailure := failure("lifecycle.unknown", "lost", "")
+	refused := testPossible.Fail("refused", "")
+	unknownFailure := testUnproved.Fail("lost", "")
 	for name, test := range map[string]struct {
 		operation string
 		request   string

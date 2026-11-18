@@ -1477,12 +1477,12 @@ func TestAnIdenticalUpdateKeepsTheSelectedRevisionAndAsksNothing(t *testing.T) {
 func TestChangedInputOverACompletedApplyWarnsBeforeThePrompt(t *testing.T) {
 	const applied = `{"version":1,"operation":"applied","ownership":"retained"}`
 	destroy := diagnostics.Diagnostic{
-		Severity: "warning", Code: "lifecycle.state",
+		Severity: "warning", Code: "input.changed-since-apply", Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb, Certainty: diagnostics.CertaintyNone,
 		Message:     "context example holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; importing the original files again does not undo this update, because they become a new revision apply refuses the same way",
 		Remediation: "take it back with bootwright destroy --context example, then run bootwright apply --context example",
 	}
 	adds := diagnostics.Diagnostic{
-		Severity: "warning", Code: "lifecycle.state",
+		Severity: "warning", Code: "input.added-since-apply", Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryRepeat, Certainty: diagnostics.CertaintyNone,
 		Message: "changed since op-1; bootwright apply adds it to that apply without running any of its blocks; this predicts that admission without proving the custody of the material the added instances borrow, " +
 			"which bootwright diff --context example --observe and the apply prove",
 		Remediation: "run bootwright apply --context example",
@@ -1506,7 +1506,7 @@ func TestChangedInputOverACompletedApplyWarnsBeforeThePrompt(t *testing.T) {
 			lifecycleWarnings := func(reported []diagnostics.Diagnostic) []diagnostics.Diagnostic {
 				var found []diagnostics.Diagnostic
 				for _, d := range reported {
-					if d.Code == "lifecycle.state" {
+					if strings.HasPrefix(d.Code, "input.") {
 						found = append(found, d)
 					}
 				}
@@ -1647,7 +1647,7 @@ func TestContextListCarriesEachUnfinishedOperation(t *testing.T) {
 func TestContextListMarksAnUnreadableOperationAndListsTheRest(t *testing.T) {
 	for _, failure := range []error{
 		contexts.StateError("the context directory is missing"),
-		diagnostics.NewFailureWithRemediation("lifecycle.lease", "context storage is busy", "", "wait for the other bootwright command to finish"),
+		diagnostics.NewFailureWithRemediation("context.busy", "context storage is busy", "", "wait for the other bootwright command to finish"),
 	} {
 		r := existingRepository(t)
 		r.registry.Contexts = append(r.registry.Contexts, contexts.Record{Name: "healthy", Mode: contexts.Ready})

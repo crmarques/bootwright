@@ -13,7 +13,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/canonicaljson"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -239,7 +238,7 @@ const (
 func encode(value any, maximum int) ([]byte, error) {
 	data, err := canonicaljson.Encode(value, canonicaljson.Line)
 	if err != nil || len(data)-1 >= maximum {
-		return nil, recordError("lifecycle record exceeds its encoding limit")
+		return nil, boundError("lifecycle record exceeds its encoding limit")
 	}
 	return data, nil
 }
@@ -266,7 +265,7 @@ func decodeUnder(data []byte, maximum int, target any, running *Executable) erro
 			if running != nil && *running != (Executable{}) && build.Executable == *running && !build.Modified {
 				return recordError("lifecycle record is malformed or unsupported; it names " + named + ", this executable")
 			}
-			return diagnostics.NewFailureWithRemediation("lifecycle.state", "lifecycle record is malformed or unsupported; "+named+" wrote it", "",
+			return operationsRecordOtherBuild.Fail("lifecycle record is malformed or unsupported; "+named+" wrote it",
 				"continue or remove this operation with "+named+", which reads the record")
 		}
 		return recordError("lifecycle record is malformed or unsupported")
@@ -306,7 +305,7 @@ func operationDecodeError(data []byte, message string, running *Executable) erro
 			remedy = "inspect and remove this operation with " + named + ", then delete its context before using this build"
 		}
 	}
-	return diagnostics.NewFailureWithRemediation("lifecycle.state", message, "", remedy)
+	return operationsRecordUnreadable.Fail(message, remedy)
 }
 
 func validateIndex(index Index) error {
@@ -382,7 +381,7 @@ func validateOperation(operation Operation) error {
 // writes, so every registration names the closure its effects run in.
 func validateRegistration(operation Operation) error {
 	if operation.Version != OperationVersion {
-		return recordError("a lifecycle operation registers only at the current record version")
+		return defectError("a lifecycle operation registers only at the current record version")
 	}
 	return validateOperation(operation)
 }
@@ -433,7 +432,7 @@ func validateAttempt(record Attempt) error {
 		return recordError("lifecycle attempt phase is invalid")
 	}
 	if len(record.Preparation) > MaxAttemptBytes {
-		return recordError("lifecycle attempt preparation exceeds its bound")
+		return boundError("lifecycle attempt preparation exceeds its bound")
 	}
 	if record.Phase == "running" {
 		// A record that was written without evidence reads back as JSON null,
@@ -446,7 +445,7 @@ func validateAttempt(record Attempt) error {
 			return recordError("an observed lifecycle attempt requires its outcome and effect state")
 		}
 		if len(record.Evidence) > MaxAttemptBytes {
-			return recordError("lifecycle attempt evidence exceeds its bound")
+			return boundError("lifecycle attempt evidence exceeds its bound")
 		}
 	}
 	if record.Removal && record.Resolution == 0 {
@@ -572,5 +571,13 @@ func validateTimestamps(values ...string) error {
 }
 
 func recordError(message string) error {
-	return diagnostics.NewFailure("lifecycle.state", message, "")
+	return operationsRecordInvalid.Fail(message, "")
+}
+
+func defectError(message string) error {
+	return operationsDefect.Fail(message, "")
+}
+
+func boundError(message string) error {
+	return operationsBound.Fail(message, "")
 }

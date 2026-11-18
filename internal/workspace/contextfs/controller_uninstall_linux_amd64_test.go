@@ -197,13 +197,13 @@ func TestAnUninstallInspectionRefusesWhatItMustNotRemove(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err = uninstallView(t, store)
-		uninstallDiagnostic(t, err, "lifecycle.lease", "staging extraction")
+		uninstallDiagnostic(t, err, "context.busy", "staging extraction")
 	})
 	t.Run("the root lock", func(t *testing.T) {
 		store, _ := installedStore(t)
 		if err := store.Transact(context.Background(), false, nil, func(contexts.Transaction) error {
 			_, err := uninstallView(t, store)
-			uninstallDiagnostic(t, err, "lifecycle.lease", "held by another")
+			uninstallDiagnostic(t, err, "context.busy", "held by another")
 			return nil
 		}); err != nil {
 			t.Fatal(err)
@@ -213,7 +213,7 @@ func TestAnUninstallInspectionRefusesWhatItMustNotRemove(t *testing.T) {
 		store, _ := installedStore(t)
 		mutateSetup(t, store, func(prerequisites.SetupTransaction) error {
 			_, err := uninstallView(t, store)
-			uninstallDiagnostic(t, err, "lifecycle.lease", "controller setup is held")
+			uninstallDiagnostic(t, err, "context.busy", "controller setup is held")
 			return nil
 		})
 	})
@@ -332,7 +332,7 @@ func TestAnUninstallLeavesWhatIsNotItsOwn(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = uninstallView(t, store)
-	uninstallDiagnostic(t, err, "lifecycle.lease", "another Bootwright command holds "+leftover)
+	uninstallDiagnostic(t, err, "context.busy", "another Bootwright command holds "+leftover)
 	if _, err := os.Lstat(file); err != nil {
 		t.Fatalf("the look-alike file was removed (%v)", err)
 	}
@@ -482,7 +482,7 @@ func TestAnUninstallHandsAnotherBuildsStoreToTheService(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err = uninstallView(t, store)
-		uninstallDiagnostic(t, err, "lifecycle.lease", "controller setup is held")
+		uninstallDiagnostic(t, err, "context.busy", "controller setup is held")
 	})
 	t.Run("a held root lock", func(t *testing.T) {
 		store, base := everyRootStore(t)
@@ -496,7 +496,7 @@ func TestAnUninstallHandsAnotherBuildsStoreToTheService(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err = uninstallView(t, store)
-		uninstallDiagnostic(t, err, "lifecycle.lease", "held by another")
+		uninstallDiagnostic(t, err, "context.busy", "held by another")
 	})
 }
 

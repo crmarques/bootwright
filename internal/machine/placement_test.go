@@ -90,7 +90,7 @@ func TestALifecyclePlacementHostConnectsAsRoot(t *testing.T) {
 	} {
 		t.Run("placement refuses "+name, func(t *testing.T) {
 			_, err := PlacementFor(host(ssh), "controller")
-			if reported := diagnostics.Of(err); err == nil || len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+			if reported := diagnostics.Of(err); err == nil || len(reported) != 1 || reported[0].Code != machinePlacementEscalates.Code {
 				t.Fatalf("placement = %v", reported)
 			}
 		})

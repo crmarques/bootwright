@@ -171,10 +171,10 @@ func admitAttempt(ctx context.Context, tx Transaction, store OperationStore, ope
 		return release, err
 	}
 	if operation.Verb == reconciliation.Apply && !removal {
-		return nil, onlyExit{failure(reported[0].Code, reported[0].Message,
+		return nil, onlyExit{remedied(reported[0],
 			"remove what the context owns with bootwright destroy --context "+tx.Identity().Name+", which is this apply's only way on")}
 	}
-	return nil, failure(reported[0].Code, reported[0].Message, deletionExit(tx))
+	return nil, remedied(reported[0], deletionExit(tx))
 }
 
 type onlyExit struct{ error }

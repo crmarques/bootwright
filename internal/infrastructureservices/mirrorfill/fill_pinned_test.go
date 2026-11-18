@@ -298,7 +298,7 @@ func pinnedTranscript(t *testing.T, kind pinnedKind) []byte {
 			failure error
 		}{
 			{"plain", fmt.Errorf("adapter stopped")},
-			{"unknown", diagnostics.NewFailureWithRemediation("lifecycle.unknown", "adapter lost", "", "retry")},
+			{"unknown", unprovedStop.Fail("adapter lost", "retry")},
 			{"state", diagnostics.NewFailureWithRemediation("lifecycle.state", "adapter refused", "", "fix")},
 		} {
 			name, failure := failed.name, failed.failure
@@ -326,6 +326,9 @@ func pinnedTranscript(t *testing.T, kind pinnedKind) []byte {
 	}
 	return []byte(out.String())
 }
+
+var unprovedStop = diagnostics.Stop{Code: "test.unproved", Level: diagnostics.LevelAdapterRun, Certainty: diagnostics.CertaintyUnproved, Cause: diagnostics.CauseUnclassified,
+	Recovery: diagnostics.RecoveryRepeat, Meaning: "a test adapter lost its outcome", Remedy: "retry"}
 
 // The three fill capabilities are pinned through their public surface, one
 // transcript each: every plan, refusal, outcome, effect, unresolved reading,

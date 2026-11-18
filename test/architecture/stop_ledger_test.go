@@ -14,24 +14,10 @@ import (
 // declares a stop, and a package whose count reaches zero leaves the ledger.
 func stopLedger() map[string]int {
 	return map[string]int{
-		"internal/addons/clusterobjects/driver":          1,
-		"internal/addons/instance":                       1,
-		"internal/cli":                                   1,
-		"internal/controller/clients":                    9,
-		"internal/infrastructureservices/artifactserver": 10,
-		"internal/machine":                               7,
-		"internal/machine/hardware":                      11,
-		"internal/managedos/media":                       1,
-		"internal/managedos/physicalerase":               3,
-		"internal/reconciliation":                        6,
-		"internal/reconciliation/ansiblerunner":          6,
-		"internal/reconciliation/lifecycle":              47,
-		"internal/reconciliation/logview":                7,
-		"internal/reconciliation/operationstore":         4,
-		"internal/substrate":                             3,
-		"internal/workspace/contextfs":                   1,
-		"internal/workspace/contextfs/kernel":            1,
-		"internal/workspace/contexts":                    2,
+		"internal/managedos/physicalerase":      3,
+		"internal/reconciliation/ansiblerunner": 6,
+		"internal/reconciliation/lifecycle":     47,
+		"internal/reconciliation/logview":       7,
 	}
 }
 

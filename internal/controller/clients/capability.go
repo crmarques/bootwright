@@ -51,7 +51,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	}
 	empty := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
 	if input.State == nil {
-		return empty, refuse("lifecycle.state", "lifecycle planning requires compiled desired state", "use a compatible executable")
+		return empty, clientsPlanDefect.Fail("lifecycle planning requires compiled desired state", "use a compatible executable")
 	}
 	catalog := input.State.Effective()
 	selection, err := controller.Select(catalog)
@@ -73,7 +73,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return empty, nil
 	}
 	if selection.MachineName() != input.Controller {
-		return empty, refuse("lifecycle.state", "the controller prerequisites block does not name the selected controller Machine", "use a compatible executable")
+		return empty, clientsPlanDefect.Fail("the controller prerequisites block does not name the selected controller Machine", "use a compatible executable")
 	}
 	request := NewRequest(selection, requests).WithMirrorTrust(catalog)
 	mirror, declared := infrastructureservices.ArtifactMirrorOf(catalog)
@@ -263,7 +263,7 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 func (c Capability) observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	if execution.Stage == nil {
-		return unknown, refuse("lifecycle.state", "the controller prerequisites block has no publication capability", "use a compatible executable")
+		return unknown, clientsPublicationMissing.Fail("the controller prerequisites block has no publication capability", "use a compatible executable")
 	}
 	request, err := admitted(execution)
 	if err != nil {
@@ -345,7 +345,7 @@ func (c Capability) apply(ctx context.Context, execution lifecycle.Execution) (l
 		return failed, refuse("controller.unsupported", "controller prerequisite installation is not configured", "use a compatible executable")
 	}
 	if execution.Stage == nil || execution.Stage.ClientArea == nil || execution.Stage.SealClientArea == nil || execution.Stage.RetireToolAreas == nil || execution.Stage.RetainDependencies == nil || execution.Stage.Prepare == nil {
-		return failed, refuse("lifecycle.state", "the controller prerequisites block has no publication capability", "use a compatible executable")
+		return failed, clientsPublicationMissing.Fail("the controller prerequisites block has no publication capability", "use a compatible executable")
 	}
 	request, err := admitted(execution)
 	if err != nil {

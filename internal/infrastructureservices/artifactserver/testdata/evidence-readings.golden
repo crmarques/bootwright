@@ -65,11 +65,11 @@ absent, unit left:
 garbage:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter returned malformed evidence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter returned malformed evidence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter returned malformed evidence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter returned malformed evidence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server adapter returned malformed evidence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:records.evidence-unreadable Message:the artifact-server adapter returned malformed evidence Source:<nil> Object:<nil> Field: Remediation:report the message as a defect Cause:defect Recovery:none Certainty:possible}]
+  absence: [{Severity:error Code:records.evidence-unreadable Message:the artifact-server adapter returned malformed evidence Source:<nil> Object:<nil> Field: Remediation:report the message as a defect Cause:defect Recovery:none Certainty:possible}]
+  partial: [{Severity:error Code:records.evidence-unreadable Message:the artifact-server adapter returned malformed evidence Source:<nil> Object:<nil> Field: Remediation:report the message as a defect Cause:defect Recovery:none Certainty:possible}]
+  unremoved: [{Severity:error Code:records.evidence-unreadable Message:the artifact-server adapter returned malformed evidence Source:<nil> Object:<nil> Field: Remediation:report the message as a defect Cause:defect Recovery:none Certainty:possible}]
+  unfinished: [{Severity:error Code:records.evidence-unreadable Message:the artifact-server adapter returned malformed evidence Source:<nil> Object:<nil> Field: Remediation:report the message as a defect Cause:defect Recovery:none Certainty:possible}]
 nothing, unclaimed:
   apply unknown: accepted
   removal unknown: accepted
@@ -97,7 +97,7 @@ present, absent flag:
 present, another certificate:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:an artifact-server listener presented a different certificate than the operation bound Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:artifact.certificate-mismatch Message:an artifact-server listener presented a different certificate than the operation bound Source:<nil> Object:<nil> Field: Remediation:restore the certificate the operation bound, then repeat the operation Cause:target Recovery:fix-then-repeat Certainty:possible}]
   absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
@@ -121,7 +121,7 @@ present, another request:
 present, extra listener:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not cover every listener Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:artifact.listeners-mismatch Message:the artifact-server evidence does not cover every listener Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the artifact server again Cause:records Recovery:repeat Certainty:possible}]
   absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
@@ -129,7 +129,7 @@ present, extra listener:
 present, http with a certificate:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:an HTTP artifact-server listener reported a certificate Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:artifact.certificate-evidence-invalid Message:an HTTP artifact-server listener reported a certificate Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the artifact server again Cause:records Recovery:repeat Certainty:possible}]
   absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
@@ -137,7 +137,7 @@ present, http with a certificate:
 present, malformed certificate:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:an artifact-server listener supplied no usable certificate fingerprint Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:artifact.certificate-evidence-invalid Message:an artifact-server listener supplied no usable certificate fingerprint Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the artifact server again Cause:records Recovery:repeat Certainty:possible}]
   absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
@@ -145,7 +145,7 @@ present, malformed certificate:
 present, moved listener:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not match its frozen listeners Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:artifact.listeners-mismatch Message:the artifact-server evidence does not match its frozen listeners Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the artifact server again Cause:records Recovery:repeat Certainty:possible}]
   absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
@@ -153,7 +153,7 @@ present, moved listener:
 present, no certificate:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:an artifact-server listener supplied no usable certificate fingerprint Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:artifact.certificate-evidence-invalid Message:an artifact-server listener supplied no usable certificate fingerprint Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the artifact server again Cause:records Recovery:repeat Certainty:possible}]
   absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
@@ -193,7 +193,7 @@ present, no root unclaimed:
 present, no status line:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:an artifact-server listener did not answer with an HTTP status line Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:artifact.listener-unanswered Message:an artifact-server listener did not answer with an HTTP status line Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the artifact server again Cause:target Recovery:repeat Certainty:possible}]
   absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
@@ -201,7 +201,7 @@ present, no status line:
 present, one listener missing:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not cover every listener Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:artifact.listeners-mismatch Message:the artifact-server evidence does not cover every listener Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the artifact server again Cause:records Recovery:repeat Certainty:possible}]
   absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
@@ -209,7 +209,7 @@ present, one listener missing:
 present, renamed listener:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not match its frozen listeners Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:artifact.listeners-mismatch Message:the artifact-server evidence does not match its frozen listeners Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the artifact server again Cause:records Recovery:repeat Certainty:possible}]
   absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
@@ -217,7 +217,7 @@ present, renamed listener:
 present, silent:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not cover every listener Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:artifact.listeners-mismatch Message:the artifact-server evidence does not cover every listener Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the artifact server again Cause:records Recovery:repeat Certainty:possible}]
   absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
