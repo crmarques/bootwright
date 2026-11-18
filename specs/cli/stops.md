@@ -9,7 +9,8 @@ interruption. Each is declared once, beside the code that raises it, as a
 `diagnostics.Stop`, and is one row of this catalog. Its code is the
 diagnostic's `code`; this catalog registers it, and the
 [diagnostic registry](output.md#diagnostic-taxonomy-and-order) does not list it
-again. A firing's message is composed where it is raised; its remedy defaults
+again. [`bootwright explain`](commands.md#command-and-flag-catalog) prints
+the catalog, or one row with `--code`. A firing's message is composed where it is raised; its remedy defaults
 to the row's when the raising code has none. Its certainty decides the
 attempt's outcome: `unproved` leaves it `unknown`, every other certainty
 `failed`. Codes not yet moved onto a declared stop remain in the registry, and

@@ -307,6 +307,7 @@ and their output goldens:
 | `controller rebind` | `outcome`, `bindings`, `reservations` |
 | `controller uninstall` | `outcome`, `packages`, `paths`, `kept` |
 | `diff` | `context`, `operation`, `input`, optional `adds`, `plan`, `observed`, `blocks`, `objects`, `files`, `summary`, optional `outdatedClients` |
+| `explain` | `stops` |
 | `help` | `command`, `usage`, `description`, `commands`, `flags` |
 | `logs` | optional `context`, optional `operation`, optional `verb`, optional `state`, optional `events`, optional `source`, optional `path`, optional `bytes`, optional `truncated`, optional `output` |
 | `machine cp` | `context`, `source`, `machines` |

@@ -195,6 +195,7 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"version", nil, notAdmitted},
 		{"schema", []string{"--format", "json-schema"}, notAdmitted},
 		{"sbom", []string{"--format", "cyclonedx-json"}, notAdmitted},
+		{"explain", []string{"--code", "runner.deadline"}, notAdmitted},
 		{"help", nil, notAdmitted},
 		{"completion bash", nil, notAdmitted},
 		{"completion zsh", nil, notAdmitted},

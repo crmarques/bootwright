@@ -54,7 +54,7 @@ var rootHelpGroups = []struct {
 	{"Host", []string{"controller", "media"}},
 	{"Context", []string{"context", "secret", "validate", "preflight", "plan", "apply", "destroy", "status", "logs", "diff"}},
 	{"Resources", []string{"machine", "cluster", "add-ons", "render"}},
-	{"Tools", []string{"version", "schema", "sbom", "completion", "help"}},
+	{"Tools", []string{"version", "schema", "sbom", "explain", "completion", "help"}},
 }
 
 func SessionCommand(path string) bool { return specFor(path).session }

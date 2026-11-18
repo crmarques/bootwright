@@ -37,6 +37,7 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[versionPresentation](),
 	reflect.TypeFor[schemaPresentation](),
 	reflect.TypeFor[billOfMaterialsPresentation](),
+	reflect.TypeFor[explainPresentation](),
 	reflect.TypeFor[acquisitionsPresentation](),
 	reflect.TypeFor[planPresentation](),
 	reflect.TypeFor[operationPresentation](),

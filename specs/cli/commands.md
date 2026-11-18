@@ -185,6 +185,7 @@ Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and a
 | `bootwright version` | none | version, commit, source state, Go runtime and target, embedded dependency-bundle identity and the build's vulnerability verdict | none |
 | `bootwright schema` | required `--format json-schema` | the advisory [JSON Schema export](../cli.md#schema-export) of every registered kind | none |
 | `bootwright sbom` | required `--format cyclonedx-json` | this executable's [bill of materials](../cli.md#bill-of-materials) | none |
+| `bootwright explain` | `--code <code>` | every row of the [stop catalog](stops.md#catalog), or the one `--code` names, with its meaning, level, certainty, cause, recovery, whether repeating helps and its remedy; an unknown code is a `cli.usage` refusal | none |
 | `bootwright help [command ...]` | no local flags | help for the exact resolved command, human or structured | none |
 | `bootwright completion bash` | `--no-descriptions` false | Bash completion script | none |
 | `bootwright completion zsh` | `--no-descriptions` false | Zsh completion script | none |

@@ -34,6 +34,7 @@
   version      Show executable and dependency build identities
   schema       Export the advisory schema of every desired-state kind
   sbom         Export this executable's software bill of materials
+  explain      Explain the stop codes apply and destroy report
   completion   Generate shell completion scripts
   help         Show help for an exact command path
 

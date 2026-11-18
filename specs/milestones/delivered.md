@@ -17641,3 +17641,18 @@ ledger falls from 218 to 210. Guarded by
 `TestTheEnginesStopsAreTheCatalogsEngineStops`, the engine's journey and
 outcome tests and its race run. The engine's decision and registration
 refusals are the next sub-slice.
+
+## X605 — `bootwright explain` prints the stop catalog
+
+### B1595
+
+Under [D276](backlog.md#d276) (audit 006 W2.1, the explain sub-slice; D276
+clause (8)), split from [B1563](m1.md#b1563). A new read-only, context-free
+command prints every stop of the [catalog](../cli/stops.md) the executable
+composes, or with `--code` one stop's meaning, level, certainty, cause,
+recovery, whether repeating the command helps and its remedy; an unknown code
+is a usage refusal ([command catalog](../cli/commands.md#command-and-flag-catalog)).
+The composition root joins the runner's and the engine's stops. Guarded by
+`TestEveryCatalogedStopIsComposedAndExplained`, which holds the composed
+catalog equal to the spec's rows and explains each, `TestExplainRefusesAnUnknownCode` and its siblings
+and the `help-explain` golden.
