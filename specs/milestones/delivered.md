@@ -12763,7 +12763,7 @@ Gates: `make focus` and `make quick` passed on each lane; `make check` and
 through JSON or YAML output or the file itself; a `controller install` that
 starts at the instant of a `logs --setup --follow` probe is refused busy; an
 attempt's log records only its outcome word, not its cause
-([B1233](backlog.md#b1233)).
+([B1233](#b1233)).
 
 ### X336 — A container build into a shared output directory
 
@@ -17275,3 +17275,44 @@ eject of a Machine the current destroy removed, the deadline a hosted KubeVirt
 eject is lent its token for, and the progress steps of an eject run. A test of
 each brings the package to 93.8%, and each was seen to fail with its path
 altered. No production code changed and no floor moved.
+
+## X579 — A lineage keeps its bindings when an additive apply stops early
+
+### B1569
+
+Under [D276](backlog.md#d276) ([audit 006](../../audits/006-lifecycle-flows/report-fable.md)
+W6.1, finding E05-01), split from [B1567](m1.md#b1567). A fresh apply read the
+Secret bindings its lineage holds from its result's receipt, which is set only
+at the end of its run, so a failed operation-log open, a failed block read, a
+failed finish or an interrupt after the registration made the collection
+release the binding a predecessor froze. The registration record now keeps
+the operation it proved registered, and what an apply keeps is read from it
+([context mutation evidence](../state-reconciliation.md#context-mutation-evidence)).
+Guarded by `TestAnAdditiveApplyStoppedAfterItRegisteredKeepsItsLineagesBindings`,
+which failed on all three triggers before the fix; an independent Opus review
+found no gap. Gates: the reconciliation packages' tests and the lifecycle race
+run; `make check` deferred to the end of the program ([D273](backlog.md#d273)).
+
+## X580 — A failed attempt keeps its cause
+
+### B1570
+
+Under [D276](backlog.md#d276) (audit 006 W1.1, findings E09-01, E06-02,
+O07-02 and their duplicates), split from [B1562](m1.md#b1562). An effect attempt
+that ends `failed`, `canceled` or `unknown` records the first diagnostic it
+reported as its `failure`, logs it as `cause` before its `outcome`, and
+`status`, `apply` and `destroy` report it as the block's `failure`; status
+prints a `Failed <block>` section, and an unknown block no resolution read
+names the cause its attempt recorded
+([operation records](../state-reconciliation.md#operation-records),
+[lifecycle and status results](../cli/output.md#lifecycle-and-status-results)).
+Guarded by `TestAFailedAttemptsCauseIsKeptAndShown`, which failed with the
+recording disabled, `TestAnAttemptThatDidNotCompleteKeepsItsCause` and the
+`cli-status-unresolved` goldens. A build without this change refuses an attempt
+record that carries `failure`, as for every optional member.
+
+### B1233
+
+Moved from the backlog's parked items, 2026-11-18, and delivered by the same
+change: a block's attempt log records why its attempt did not complete, as
+`cause`, `<code>: <message>`.

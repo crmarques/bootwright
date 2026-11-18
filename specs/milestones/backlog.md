@@ -292,7 +292,6 @@ Alias cell.
 | [B1229](#b1229) | new, 2026-11-09 (X332's review) | defect | Substrate | A provider host that stops defining managed Networks removes the refusal and firewall-ready units an earlier apply installed | The units stay owned and refuse only the subnets they held; the firewall-ready unit's gap predates X332 |
 | [B1230](#b1230) | new, 2026-11-09 (X331) | product | Machine power, with Substrate | A failed revoke of a lent KubeVirt token reaches the operator of a power command or reading | Power results carry no warning channel; the token still ends at its bounded lifetime and the revoke's adapter output is retained |
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
-| [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1300](#b1300) | new, 2026-11-10 (X363) | product | CLI | The acquisition list names `cp.icr.io`'s blob delivery host | The list landed (X363); the host answers only an entitled client, which this session could not use |
 | [B1284](#b1284) | new, 2026-11-10 (D255 (8)) | product | Substrate | A tagged managed Network carries an IPv6 prefix on its leg | A leg is IPv4 only and the owned table rejects IPv6 to and from a leg; no tracked input needs it |
@@ -3301,19 +3300,6 @@ adapter output, since power results carry no warning
 **Outcome:** the power result names `substrate.lend-not-revoked`, the Secret
 and the lifetime that still bounds the token. **Exit evidence:** a power
 service test whose revoke fails.
-
-### B1233
-
-**Owner:** Reconciliation, with CLI. **Kind:** product. **Requires:** B1223.
-**Definition:** Candidate, from the X329 plan: an attempt's `outcome` record
-holds only the outcome word, so `bootwright logs` shows that a block failed but
-not why; record a bounded, normalized reason (the refusal code, or the adapter
-failure class and its first diagnostic line) in the attempt log, carrying no
-secret, raw adapter byte or terminal control sequence. **Exit evidence:** an
-attempt log test whose failed outcome record names its reason, and a `logs`
-golden that renders it. **Outcome:** an operator reading a failed block's
-events sees its cause without opening raw output.
-
 
 ### B1250
 
@@ -9375,3 +9361,43 @@ Q79 (b) narrow substrate arm. Taken by the session, pending the owner's review:
 6. `Network.spec.provided` stays a boolean.
 
 No push, release or live command is authorized.
+
+### D276
+
+**owner** (2026-11-18): shown [audit 006](../../audits/006-lifecycle-flows/report-fable.md) and its plan, asks to "implement plan".
+This authorizes, out of sequence for implementation, the plan's workstreams in
+its order as M1 items [B1562](m1.md#b1562) to [B1568](m1.md#b1568), each cut
+into slices when it starts, no more than two active at once, beginning with
+X579 ([B1569](delivered.md#b1569)). The owner did not answer the plan's thirteen
+decisions, so the session takes the report's recommendations, pending the
+owner's review:
+
+1. A stop code is a readable dotted name; its cause and recovery classes are
+   separate fields of the structured output.
+2. Codes become a promise at 1.0, under the development policy.
+3. No text a task writes crosses the adapter channel; Go renders every value
+   from what it holds.
+4. A role failure that names no stop after effects began stays `failed`.
+5. A target that is gone keeps today's refusal; every such refusal names the
+   orphan-acknowledged deletion and what it abandons. A scoped acknowledgement
+   waits for the owner ([B1566](m1.md#b1566)).
+6. The contract fingerprint stops hashing Go type names now; a destroy that
+   supersedes an incomplete removal after a build update is a later safety
+   slice; keeping the registering executable waits for the owner.
+7. A destroy paused for Machines to stop is a stop with its own code and a
+   non-zero exit status, with no success headline.
+8. `bootwright explain` is added; the stop catalog is a spec table written by
+   hand and held to the code by a test; the operator guide's reference is
+   generated from it.
+9. The machine goes to tables that decide, held equal to the code by tests;
+   an engine executed from the tables is a later decision.
+10. A refusal before registration is logged as an event of the context's log
+    area so `status` can show it.
+11. A restore from a backup is not offered as an exit until a procedure exists.
+12. Parked items the plan meets are promoted when their slice starts.
+13. The order is the plan's: W6.1, then W1 before W2.
+
+The owner's focused-check instruction of [D273](#d273) remains in force: each
+slice lands on its focused checks and, in the safety class, its race runs,
+with one full gate at the end. No real-host operation, release or push is
+authorized.
