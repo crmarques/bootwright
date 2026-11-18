@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
 
@@ -15,6 +16,31 @@ else:
     import physical_erase_worker as worker
 
 ROOT = Path("/run/bootwright-erase")
+CONSOLE = Path("/dev/tty1")
+CODE = re.compile(r"[a-z0-9][a-z0-9-]{0,47}")
+
+
+def announce(line):
+    """One fixed line on the machine console, which isolation leaves empty.
+
+    The console never becomes the service's controlling terminal, so no
+    keystroke signals the worker, and a stopped or missing console only drops
+    the line: the write never blocks.
+    """
+    try:
+        descriptor = os.open(CONSOLE, os.O_WRONLY | os.O_NOCTTY | os.O_NONBLOCK | os.O_CLOEXEC)
+    except OSError:
+        return
+    try:
+        os.write(descriptor, ("\nbootwright erase: " + line + "\n").encode("ascii"))
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)
+
+
+def active():
+    return command(["/usr/bin/systemctl", "show", "--property=ActiveState", "--value", "bootwright-erase.service"]) == "active"
 
 
 def command(argv):
@@ -39,7 +65,7 @@ def isolate():
                 raise worker.Refusal("ram-upper")
     elif filesystem["fstype"] not in ("rootfs", "tmpfs"):
         raise worker.Refusal("ram-root")
-    required = {"bootwright.erase=1", "rd.live.ram=1", "rd.live.overlay.overlayfs=1", "inst.zram=0"}
+    required = {"bootwright.erase=1", "rd.live.ram=1", "rd.live.overlay.overlayfs=1", "inst.zram=0", "systemd.zram=0"}
     if not required.issubset(Path("/proc/cmdline").read_text().split()):
         raise worker.Refusal("boot-purpose")
     units = ("anaconda.service", "anaconda-direct.service", "anaconda-sshd.service", "sshd.service", "sshd.socket")
@@ -73,14 +99,20 @@ def isolate():
 
 
 def status():
-    with (ROOT / "status.json").open("rb") as stream:
-        data = stream.read(32769)
+    try:
+        with (ROOT / "status.json").open("rb") as stream:
+            data = stream.read(32769)
+    except FileNotFoundError:
+        # A worker that stopped before its first status is failed, so its wait
+        # refuses at once; one still proving its targets has not answered yet.
+        if active():
+            raise worker.Refusal("starting") from None
+        return {"state": "failed"}
     if len(data) > 32768:
         raise worker.Refusal("receipt-size")
     value = json.loads(data)
-    if value.get("state") == "partial":
-        if command(["/usr/bin/systemctl", "show", "--property=ActiveState", "--value", "bootwright-erase.service"]) != "active":
-            value["state"] = "failed"
+    if value.get("state") == "partial" and not active():
+        value["state"] = "failed"
     return value
 
 
@@ -138,8 +170,10 @@ LogLevel QUIET
     command(["/usr/bin/systemctl", "start", "bootwright-erase-sshd.service"])
     if command(["/usr/bin/systemctl", "is-active", "bootwright-erase-sshd.service"]) != "active":
         raise worker.Refusal("receipt-server")
+    announce("receipt server started; proving and erasing the targets")
     request = json.loads((ROOT / "request.json").read_bytes())
     worker.execute(request, ROOT)
+    announce("every target erased; waiting for the controller's acknowledgement")
     # A successful write is not permission to disappear before its receipt is
     # durable on the controller. Cancellation leaves this RAM service running.
     while not (ROOT / "ack.json").exists():
@@ -149,9 +183,18 @@ LogLevel QUIET
         time.sleep(60)
 
 
+def stopped(failure):
+    """The console line of a stopped worker: its closed refusal code, never a native value."""
+    code = str(failure) if isinstance(failure, worker.Refusal) and CODE.fullmatch(str(failure)) else "unexpected-error"
+    announce("stopped, refused " + code + "; no target is proved erased")
+
+
 if __name__ == "__main__":
+    SERVING = len(sys.argv) == 2 and sys.argv[1] == "serve"
     try:
-        serve() if len(sys.argv) == 2 and sys.argv[1] == "serve" else run()
-    except BaseException:
+        serve() if SERVING else run()
+    except BaseException as failure:  # pylint: disable=broad-exception-caught
         # No native values or exceptions enter the installer journal.
+        if not SERVING:
+            stopped(failure)
         sys.exit(1)  # pylint: disable=ansible-bad-function

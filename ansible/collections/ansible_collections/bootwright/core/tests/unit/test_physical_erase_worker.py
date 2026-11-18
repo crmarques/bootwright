@@ -278,6 +278,66 @@ class WorkerLivenessTests(unittest.TestCase):
                     self.assertEqual(namespace["status"]()["state"], expected)
                     self.assertEqual(namespace["command"].call_args.args[0][-1], "bootwright-erase.service")
 
+    def test_a_worker_stopped_before_its_first_status_reports_failed_and_a_starting_one_no_answer(self):
+        from unittest.mock import Mock
+
+        namespace = erase_runtime()
+        with tempfile.TemporaryDirectory() as temporary:
+            namespace["ROOT"] = Path(temporary)
+            for service in ("failed", "inactive"):
+                with self.subTest(service=service):
+                    namespace["command"] = Mock(return_value=service)
+                    self.assertEqual(namespace["status"](), {"state": "failed"})
+            namespace["command"] = Mock(return_value="active")
+            with self.assertRaisesRegex(worker.Refusal, "^starting$"):
+                namespace["status"]()
+
+
+class ConsoleLineTests(unittest.TestCase):
+    """Isolation leaves the console empty, so the worker names its state there, never a native value."""
+
+    def lines(self, call):
+        namespace = erase_runtime()
+        with tempfile.TemporaryDirectory() as temporary:
+            namespace["CONSOLE"] = Path(temporary) / "tty1"
+            namespace["CONSOLE"].write_text("")
+            call(namespace)
+            return namespace["CONSOLE"].read_text()
+
+    def test_a_refused_worker_names_its_closed_code(self):
+        text = self.lines(lambda namespace: namespace["stopped"](worker.Refusal("active-swap")))
+        self.assertEqual(text, "\nbootwright erase: stopped, refused active-swap; no target is proved erased\n")
+
+    def test_any_other_failure_names_no_native_value(self):
+        for failure in (OSError("/dev/nvme0n1: secret"), worker.Refusal("Not A Code /dev/x"), KeyboardInterrupt()):
+            with self.subTest(failure=type(failure).__name__):
+                text = self.lines(lambda namespace, failure=failure: namespace["stopped"](failure))
+                self.assertEqual(text, "\nbootwright erase: stopped, refused unexpected-error; no target is proved erased\n")
+
+    def test_a_missing_console_is_ignored(self):
+        namespace = erase_runtime()
+        namespace["CONSOLE"] = Path("/nonexistent/bootwright/tty1")
+        namespace["announce"]("receipt server started")
+
+    def test_the_console_never_becomes_the_controlling_terminal_and_a_stopped_one_never_blocks(self):
+        import os
+        from unittest.mock import patch
+
+        namespace = erase_runtime()
+        opened, closed = [], []
+
+        def fake_open(path, flags, *unused):
+            opened.append(flags)
+            return 99
+
+        with patch.object(namespace["os"], "open", side_effect=fake_open), \
+                patch.object(namespace["os"], "write", side_effect=BlockingIOError()), \
+                patch.object(namespace["os"], "close", side_effect=closed.append):
+            namespace["announce"]("receipt server started")
+        for flag in (os.O_WRONLY, os.O_NOCTTY, os.O_NONBLOCK, os.O_CLOEXEC):
+            self.assertTrue(opened[0] & flag)
+        self.assertEqual(closed, [99])
+
 
 class AtomicWriteTests(unittest.TestCase):
     def test_a_failed_write_removes_its_stage_so_a_later_acknowledgement_succeeds(self):
@@ -822,7 +882,7 @@ def isolation_runtime(tmp_path, damage):
     from unittest.mock import Mock
 
     namespace = erase_runtime()
-    flags = ["bootwright.erase=1", "rd.live.ram=1", "rd.live.overlay.overlayfs=1", "inst.zram=0"]
+    flags = ["bootwright.erase=1", "rd.live.ram=1", "rd.live.overlay.overlayfs=1", "inst.zram=0", "systemd.zram=0"]
     if damage in flags:
         flags.remove(damage)
     (tmp_path / "cmdline").write_text(" ".join(flags))
@@ -858,7 +918,7 @@ def test_actual_isolation_refusals_never_start_writer(tmp_path):
 
     cases = ["ram-filesystem", "ram-root", "ram-upper", "ram-work", "installer-units", "installer-running",
              "process-inventory", "installer-process", "bootwright.erase=1", "rd.live.ram=1",
-             "rd.live.overlay.overlayfs=1", "inst.zram=0"]
+             "rd.live.overlay.overlayfs=1", "inst.zram=0", "systemd.zram=0"]
     for index, damage in enumerate(cases):
         root = tmp_path / str(index)
         root.mkdir()

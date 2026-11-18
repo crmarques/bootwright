@@ -2698,8 +2698,18 @@ Anaconda `%pre` which launches a dedicated RAM service. The service masks and
 stops installer frontends and refuses any remaining installer process before
 starting the writer. It requires RAM-backed runtime/root filesystems; no
 ordinary installation directives are present. The image selects `rd.live.ram=1`,
-`rd.live.overlay.overlayfs=1` and `inst.zram=0`; an overlay's upper and work
-directories must both resolve to tmpfs. The
+`rd.live.overlay.overlayfs=1`, `inst.zram=0` and `systemd.zram=0`, and the
+service requires each of them; an overlay's upper and work directories must
+both resolve to tmpfs. `inst.zram=0` stops only Anaconda's own swap: the
+installer runtime also ships the
+[systemd zram generator](https://github.com/systemd/zram-generator/blob/main/man/zram-generator.md),
+which swaps on every boot unless `systemd.zram=0`, and the worker refuses any
+active swap. The image drops the media's `quiet` and `rhgb`, so its console
+shows the RAM copy and network bring-up, and once isolation empties the console
+the service writes one line there for each state it reaches: its receipt
+server started, every target erased, or stopped with its closed refusal code
+and never a native value. It never takes the console as its terminal or waits
+on it, so no keystroke or stopped console reaches the worker. The
 [dracut 057 live-root implementation](https://github.com/dracutdevs/dracut/blob/057/modules.d/90dmsquash-live/dmsquash-live-root.sh)
 defines the RAM copy and overlay selection, and
 [RHEL 9's boot reference](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html-single/interactively_installing_rhel_from_installation_media/index)
@@ -2730,7 +2740,9 @@ removes `base64` and `usermod`.
 
 Cancellation never means erase finished. An authenticated partial status resumes
 only while the independent RAM worker service is active. A stopped or failed
-worker refuses promptly. A worker no session reaches refuses
+worker refuses promptly, one stopped before its first status included: it
+reports failed, and only a worker still active before that status answers with
+no report. A worker no session reaches refuses
 `worker-unreachable` once none has answered within the 900-second RAM startup
 allowance plus 300 seconds of the wait's start, or once an answering worker
 stays unanswered for 600 seconds; both are timed within one wait, so a repeated

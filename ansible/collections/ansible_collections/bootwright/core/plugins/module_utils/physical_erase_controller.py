@@ -397,16 +397,17 @@ class Controller:
             answer = self.session("receipt")
             if answer.code == 0 and answer.stdout:
                 observed = json.loads(answer.stdout)
+                # A worker stopped before its first status names no request.
+                if observed.get("state") not in ("complete", "partial"):
+                    raise worker.Refusal("worker-failed")
                 if observed.get("request") != self.digest or observed.get("originalAttempt") != state["originalAttempt"]:
                     raise worker.Refusal("foreign-worker")
                 if observed.get("state") == "complete":
                     worker.validate_receipt(self.worker_request, observed)
                     write(self.root / "receipt.json", worker.canonical(observed))
                     receipt = observed
-                elif observed.get("state") == "partial":
-                    running = True
                 else:
-                    raise worker.Refusal("worker-failed")
+                    running = True
         return {
             "work": str(self.root),
             "private": publication["path"] + "/" + state["token"],
@@ -444,6 +445,7 @@ class Controller:
                 "rd.live.ram=1",
                 "rd.live.overlay.overlayfs=1",
                 "inst.zram=0",
+                "systemd.zram=0",
             ] + network
             # Lorax passes this absolute path unchanged to its subprocesses.
             # Refer to our still-held FD, so neither mkksiso nor xorriso can
@@ -458,7 +460,7 @@ class Controller:
                     " ".join(arguments),
                     "--rm-args",
                     "rd.live.check rd.live.ram rd.live.overlay rd.live.overlay.overlayfs rd.overlay rootflags rd.writable.fsimg inst.zram inst.sshd"
-                    " ip bond vlan rd.neednet",
+                    " ip bond vlan rd.neednet systemd.zram quiet rhgb",
                     held,
                     str(image),
                 ],

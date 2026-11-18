@@ -13,6 +13,18 @@ import unittest
 from unittest.mock import patch
 
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_controller as controller
+from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_runtime
+
+
+def runtime_required_flags():
+    """The boot arguments the RAM runtime requires before it starts, read from its source."""
+    import ast
+
+    tree = ast.parse(Path(physical_erase_runtime.__file__).read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and [getattr(target, "id", "") for target in node.targets] == ["required"]:
+            return set(ast.literal_eval(node.value))
+    raise AssertionError("the runtime names no required boot arguments")
 
 
 class ControllerTests(unittest.TestCase):
@@ -86,12 +98,13 @@ class ControllerTests(unittest.TestCase):
             token = "a" * 64
             (published / token).mkdir()
             instance.load = lambda: {"token": token}
-            observed, cmdlines = [], []
+            observed, cmdlines, removed = [], [], []
 
             def build(argv, **unused):
                 held = argv[-2]
                 observed.append(held)
                 cmdlines.append(argv[argv.index("--cmdline") + 1].split())
+                removed.append(argv[argv.index("--rm-args") + 1].split())
                 source.unlink()
                 source.write_bytes(b"replaced pathname")
                 self.assertEqual(Path(held).read_bytes(), original)
@@ -118,6 +131,12 @@ class ControllerTests(unittest.TestCase):
                 Path(observed[0]).read_bytes()
             self.assertEqual(cmdlines[0][0], "ifname=eno1:52:54:00:00:00:01")
             self.assertEqual(cmdlines[0][-3:], ["vlan=eno1.20:eno1", "ip=192.0.2.10:::255.255.255.0:metal-01:eno1.20:none", "rd.neednet=1"])
+            # systemd's zram generator swaps on every installer boot unless
+            # systemd.zram=0, and any active swap refuses the worker; the
+            # media's quiet and rhgb would hide the boot on the console.
+            self.assertTrue({"inst.zram=0", "systemd.zram=0"} <= set(cmdlines[0]))
+            self.assertTrue({"systemd.zram", "inst.zram", "quiet", "rhgb"} <= set(removed[0]))
+            self.assertTrue(runtime_required_flags() <= set(cmdlines[0]))
 
     def test_an_install_network_the_boot_arguments_cannot_carry_refuses_before_the_image_changes(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -302,8 +321,10 @@ class RemovalCustodyTests(unittest.TestCase):
 
     OPERATION = "op-" + "0" * 32
 
-    def prepared(self, temporary, attempt):
+    def prepared(self, temporary, attempt, answer=None):
         import contextlib
+
+        answer = answer or controller.ssh.Outcome(255, b"", False, False, "refused")
 
         hosted, publication = Path(temporary) / "hosted", Path(temporary) / "published"
         publication.mkdir(exist_ok=True)
@@ -331,7 +352,7 @@ class RemovalCustodyTests(unittest.TestCase):
                 (controller.ssh_key_policy, "effective_policy", lambda policy: {"configuration": "Host *\n"}),
                 (controller.ssh_key_policy, "check_keys", lambda policy, keys: None),
                 (controller.boot, "kickstart", lambda network, worker_request, key, authorized: "kickstart " + worker_request["originalAttempt"]),
-                (controller.Controller, "session", lambda self, command, data=b"": controller.ssh.Outcome(255, b"", False, False, "refused")),
+                (controller.Controller, "session", lambda self, command, data=b"": answer),
             ):
                 stack.enter_context(patch.object(target, name, value))
             instance = controller.Controller(request, "a" * 64, material, create=True)
@@ -339,6 +360,17 @@ class RemovalCustodyTests(unittest.TestCase):
                 return instance.prepare(), instance.root, publication
             finally:
                 instance.close()
+
+    def test_a_worker_stopped_before_its_first_status_refuses_worker_failed_not_foreign(self):
+        import json
+
+        stopped = controller.ssh.Outcome(0, json.dumps({"state": "failed"}).encode(), False, False, None)
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(controller.worker.Refusal, "^worker-failed$"):
+                self.prepared(temporary, "op-remove-1/erase-metal-01/1", stopped)
+        polled = PollTests().polling({"state": "failed"})
+        with self.assertRaisesRegex(controller.worker.Refusal, "^worker-failed$"):
+            polled.poll()
 
     def test_a_retry_of_the_same_removal_boots_the_running_builds_kickstart_under_its_frozen_custody(self):
         import json
