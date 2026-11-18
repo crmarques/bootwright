@@ -29,6 +29,16 @@ cache_root = _acquire.cache_root
 
 SUITES = ("syntax", "lint", "sanity", "units", "integration")
 
+# The integration targets that each run one role family's shipped entry point,
+# through the shared harness of the hidden setup_entry_point target.
+ENTRY_POINT_TARGETS = (
+    "controller_prerequisites",
+    "machine_hardware",
+    "addons_instance",
+    "containercluster_network",
+    "storage_ceph_image",
+)
+
 # The area is every check process's HOME, and ansible-core renders its
 # ANSIBLE_HOME defaults in Jinja's native environment, which parses the
 # rendered path as Python. After a hyphen, a random part such as "3if" starts a
@@ -643,15 +653,14 @@ def integration_lane(run_: Run, wheelhouse: Path) -> Lane:
         str(run_.executable.parent / "ansible-test"),
     ]
     names = ["controller_tool", "controller_supervisor", "discovery_contract"]
+    # One shipped entry point per role family, run twice through
+    # ansible-core over the runner protocol against a temporary root.
+    names += list(ENTRY_POINT_TARGETS)
     # native_transaction builds an RPM and drives the running RHEL 9 host's
     # package manager, so it is an operator-run harness rather than part of
     # the unitary gate.
     if os.environ.get("BOOTWRIGHT_ANSIBLE_NATIVE_TARGET") == "1":
         names.append("native_transaction")
-    # controller_prerequisites drives the shipped controller playbook over
-    # the real runner protocol, an operator-run harness like the above.
-    if os.environ.get("BOOTWRIGHT_ANSIBLE_CONTROLLER_TARGET") == "1":
-        names.append("controller_prerequisites")
 
     def lane(output: Optional[TextIO]) -> None:
         test_collection, environment = collection_lane(
@@ -806,10 +815,7 @@ UNREAD_DIRECTORIES = ("__pycache__", ".pytest_cache")
 
 # The operator-run integration targets a variable selects; a run with one is
 # no complete gate run, so it neither reads nor writes the record.
-OPTIONAL_TARGETS = (
-    "BOOTWRIGHT_ANSIBLE_NATIVE_TARGET",
-    "BOOTWRIGHT_ANSIBLE_CONTROLLER_TARGET",
-)
+OPTIONAL_TARGETS = ("BOOTWRIGHT_ANSIBLE_NATIVE_TARGET",)
 
 # Where the host's tools and their packages live: a check reaches tools such
 # as shellcheck or ssh through PATH, so a package change moves the key.

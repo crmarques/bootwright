@@ -512,6 +512,11 @@ class LanesTest(unittest.TestCase):
                 (["integration", "controller_tool"] + local, copy, "lane"),
                 (["integration", "controller_supervisor"] + local, copy, "lane"),
                 (["integration", "discovery_contract"] + local, copy, "lane"),
+                (["integration", "controller_prerequisites"] + local, copy, "lane"),
+                (["integration", "machine_hardware"] + local, copy, "lane"),
+                (["integration", "addons_instance"] + local, copy, "lane"),
+                (["integration", "containercluster_network"] + local, copy, "lane"),
+                (["integration", "storage_ceph_image"] + local, copy, "lane"),
             ],
         )
 
@@ -854,7 +859,6 @@ class UsesRecordTest(unittest.TestCase):
             (["--suite", "units"], {}),
             (["--suite", "units", "a"], {}),
             ([], {"BOOTWRIGHT_ANSIBLE_NATIVE_TARGET": "1"}),
-            ([], {"BOOTWRIGHT_ANSIBLE_CONTROLLER_TARGET": "1"}),
         ):
             with self.subTest(arguments=arguments, environ=environ):
                 self.assertFalse(ansible_check.uses_record(arguments, environ))

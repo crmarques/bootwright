@@ -108,14 +108,24 @@ One target is excluded by default because it needs the dnf4 backend of a RHEL 9
 host: `native_transaction` builds a fixture RPM and drives the package manager
 into an isolated installroot. It is an operator-run harness rather than part of
 the unitary gate. Select it with `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` on RHEL 9.
-`controller_prerequisites` is the other operator-run harness: it runs the
-shipped `playbooks/controller/setup.yml` over the real runner protocol with one
-`controller-prerequisites-v1` request, whose single synthetic client is
-already retained in a private temporary tool area, then replays it. It needs
-no root and no network. Select it with
-`BOOTWRIGHT_ANSIBLE_CONTROLLER_TARGET=1`.
-The integration fixture requires local process communication; it never runs a
-downloaded binary or changes host packages.
+
+The gate runs one shipped entry point of each role family that can run
+without a remote: `controller_prerequisites` (`controller/setup.yml`, one
+synthetic client already retained in a temporary tool area),
+`machine_hardware` (`machine/hardware_apply.yml`, a read-only listing of the
+gate host's `/sys/class/net`), `addons_instance` and
+`containercluster_network` (`addons/instance_apply.yml` and
+`containercluster/network_apply.yml`, against a stub `oc` holding the cluster
+in a file) and `storage_ceph_image` (`storage/image_destroy.yml`, which reads
+nothing remote). Each runs the playbook through `ansible-playbook` with a
+local connection, an isolated inventory and the frozen request as extra
+variables, over the runner protocol's descriptors 3 and 4, against a
+temporary root with its stubs first on `PATH`, then replays it: the first run
+must publish a `completed` record and the replay the same evidence with no
+task changed. The shared harness is the hidden `setup_entry_point` target.
+The integration fixture requires local process communication; it needs no
+root and no network, never runs a downloaded binary and changes no host
+package.
 
 `ansible-test-artifacts.json` pins the separate sanity tool environments,
 including Ansible's pip bootstrap, and the floor's unit test environment, whose
