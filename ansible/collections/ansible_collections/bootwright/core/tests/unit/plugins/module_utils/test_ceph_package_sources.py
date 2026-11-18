@@ -215,3 +215,54 @@ def test_a_nul_after_the_declaration_is_refused_on_a_later_read(tmp_path):
 def test_each_foreign_byte_order_mark_is_refused(tmp_path, bom):
     with pytest.raises(ceph_native.Refusal, match="^packages$"):
         member(tmp_path, "primary", bom + b"<metadata/>")
+
+
+# (type, stored, open) of every admitted member of a full-history EL9 BaseOS and
+# AppStream pair, as their repomd.xml declared them on 2026-11-18.
+FULL_HISTORY = {
+    "baseos": [("primary", 162114573, 1203027027), ("filelists", 14630990, 191325238), ("other", 14791645, 144975524), ("group", 287866, 287866),
+               ("group_gz", 71442, 287866), ("updateinfo", 2514145, 13057463)],
+    "appstream": [("group", 538085, 538085), ("filelists", 109124652, 1743113080), ("updateinfo", 5436194, 30054741), ("group_gz", 126350, 538085),
+                  ("modules", 30728, 30728), ("primary", 9087971, 149756299), ("other", 14223846, 152549679)],
+}
+
+
+def repomd(members):
+    entries = []
+    for kind, stored, opened in members:
+        suffix = ".xml" if kind == "group" else ".yaml.gz" if kind == "modules" else ".xml.gz"
+        entries.append('<data type="%s"><checksum type="sha256">%s</checksum><open-checksum type="sha256">%s</open-checksum>'
+                       '<location href="repodata/%s%s"/><size>%d</size><open-size>%d</open-size></data>'
+                       % (kind, "a" * 64, "b" * 64, kind, suffix, stored, opened))
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n<repomd xmlns="http://linux.duke.edu/metadata/repo">%s</repomd>\n' % "".join(entries)).encode()
+
+
+def test_a_full_history_subscription_repository_pair_is_within_the_metadata_bounds(tmp_path, monkeypatch):
+    acquisition = object.__new__(sources.Acquisition)
+    acquisition.expanded, acquisition.deadline = 0, sources.time.monotonic() + 10
+    fetched = []
+    monkeypatch.setattr(acquisition, "file", lambda _url, _path, limit, _checksum, size: fetched.append((size, limit)))
+    monkeypatch.setattr(acquisition, "metadata_member", lambda *_args: None)
+    for name, members in FULL_HISTORY.items():
+        monkeypatch.setattr(acquisition, "bytes", lambda *_args, data=repomd(members): data)
+        acquisition.repository(str(tmp_path), name, sources.IBM_BASE + "/" + name, "signer")
+    assert sorted(size for size, _limit in fetched) == sorted(stored for members in FULL_HISTORY.values() for _kind, stored, _opened in members)
+    assert {limit for _size, limit in fetched} == {sources.METADATA_MEMBER_BYTES}
+    opened = [size for members in FULL_HISTORY.values() for _kind, _stored, size in members]
+    assert max(opened) <= sources.METADATA_OPEN_MEMBER_BYTES and sum(opened) <= sources.METADATA_OPEN_BYTES
+
+
+def test_the_open_bound_admits_the_full_history_pair_and_refuses_past_it(tmp_path):
+    acquisition = object.__new__(sources.Acquisition)
+    acquisition.deadline = sources.time.monotonic() + 10
+    path = tmp_path / "filelists.xml.gz"
+    path.write_bytes(gzip.compress(FILELISTS))
+    opened = 1743113080
+    for expanded, refusal in ((sum(size for _kind, _stored, size in FULL_HISTORY["baseos"]), "^packages$"),
+                              (sources.METADATA_OPEN_BYTES - opened + 1, "^package-limit$")):
+        acquisition.expanded = expanded
+        data = sources.ET.fromstring('<data xmlns="http://linux.duke.edu/metadata/repo" type="filelists"><open-checksum type="sha256">%s'
+                                     '</open-checksum><open-size>%d</open-size></data>' % (hashlib.sha256(FILELISTS).hexdigest(), opened))
+        with pytest.raises(ceph_native.Refusal, match=refusal):
+            acquisition.metadata_member(str(path), data, hashlib.sha256(path.read_bytes()).hexdigest(), path.stat().st_size)
+        assert acquisition.expanded == expanded

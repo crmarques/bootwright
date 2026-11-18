@@ -37,6 +37,12 @@ DNS_LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 
 NAMESPACE = "{http://linux.duke.edu/metadata/repo}"
 METADATA_TYPES = {"primary", "filelists", "modules", "group", "group_gz", "updateinfo", "other"}
+# A subscription repository serves every package of its release since GA: one
+# full-history EL9 BaseOS primary member is 155 MiB stored and 1.12 GiB open,
+# its AppStream filelists 1.62 GiB open, and the pair 3.4 GiB open in all.
+METADATA_MEMBER_BYTES = 1 << 30
+METADATA_OPEN_MEMBER_BYTES = 4 << 30
+METADATA_OPEN_BYTES = 16 << 30
 # Every createrepo comps member names its external DTD; only that exact prolog is admitted.
 COMPS_PROLOG = re.compile(rb"""\A(?:<\?xml\s{1,8}version=(["'])1\.0\1(?:\s{1,8}encoding=(["'])(?i:UTF-8)\2)?"""
                           rb"""(?:\s{1,8}standalone=(["'])(?:yes|no)\3)?\s{0,8}\?>)?"""
@@ -473,11 +479,11 @@ class Acquisition:
             relative = location.get("href")
             ceph_native.require(ceph_native.digest(checksum) and isinstance(size.text, str) and re.fullmatch(r"[0-9]{1,12}", size.text) is not None, "packages")
             count = int(size.text)
-            ceph_native.require(0 < count <= 128 << 20 and isinstance(relative, str) and re.fullmatch(r"repodata/[A-Za-z0-9_.-]{1,240}", relative) is not None
-                                and relative not in seen, "packages")
+            ceph_native.require(0 < count <= METADATA_MEMBER_BYTES and isinstance(relative, str)
+                                and re.fullmatch(r"repodata/[A-Za-z0-9_.-]{1,240}", relative) is not None and relative not in seen, "packages")
             seen.add(relative)
             member = str(path / PurePosixPath(relative))
-            self.file(child_url(base, relative), member, 128 << 20, checksum, count)
+            self.file(child_url(base, relative), member, METADATA_MEMBER_BYTES, checksum, count)
             self.metadata_member(member, record, checksum, count)
         ceph_native.require({"primary", "filelists"} <= types, "packages")
         return {"id": identifier, "baseURL": base, "localPath": str(path), "metadataSHA256": hashlib.sha256(data).hexdigest(), "signer": signer}
@@ -498,7 +504,7 @@ class Acquisition:
             checksum, size = expected.text, int(expanded.text)
         else:
             ceph_native.require(path.endswith((".xml", ".yaml")), "packages")
-        ceph_native.require(0 < size <= 256 << 20 and self.expanded + size <= 512 << 20, "package-limit")
+        ceph_native.require(0 < size <= METADATA_OPEN_MEMBER_BYTES and self.expanded + size <= METADATA_OPEN_BYTES, "package-limit")
         count, digest, tail = 0, hashlib.sha256(), b""
         encoding = MetadataEncoding()
         with opener(path, "rb") as source:

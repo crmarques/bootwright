@@ -65,7 +65,9 @@ opener that verifies the Satellite's certificate and host name against the
 lent CA bundle alone, without system roots, presents that repository's
 entitlement certificate and key, which only the TLS library opens by path,
 follows no redirect, uses no proxy and requires TLS 1.2 or later.
-`packageRepositoryProxy` stays the IBM repository's route alone. A download
+`packageRepositoryProxy` stays the IBM repository's route alone. The metadata
+size bounds admit a subscription repository that serves every package of its
+release since GA, whose metadata is many times a DVD's. A download
 admits only a URL under one of the two repositories, the IBM repository or its
 publisher key. A lost connection is retried as the
 [acquisition classification](ceph.md#frozen-release-and-trust) says. A

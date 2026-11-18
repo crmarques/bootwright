@@ -179,3 +179,23 @@ leaves the packages journal without `complete.json`.
   On the owner's prd-dc1 run of 2026-11-17 the hosts installed from the hosted
   DVD and updated from the Satellite; such a host now takes its dependencies
   from that Satellite ([selection](../../specs/ceph-subscription-dependencies.md#selection-and-request)).
+
+## Full-history repository metadata
+
+Symptom: every Satellite-sourced host refuses within seconds with
+`package-limit:package-limit@ceph_package_sources.metadata_member:<line>`,
+before any `decision.json`. The owner's prd-dc1 run of 2026-11-18 met it.
+
+Cause: the metadata bounds fitted one DVD's repositories. A subscription
+repository keeps every package of its release since GA, so its metadata
+outgrows a DVD's many times over. A public EL9 pair with the same retention
+(Oracle Linux 9 `baseos/latest` and `appstream`), read on 2026-11-18, declared
+BaseOS `primary` as 155 MiB stored and 1.12 GiB open, AppStream `filelists` as
+1.62 GiB open, and 3.4 GiB open across both repositories. The earlier bounds
+were 128 MiB stored and 256 MiB open per member, and 512 MiB open in all. The
+bounds in
+`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_package_sources.py`
+now admit that pair with room for the rest of the release's lifetime
+([B1579](../../specs/milestones/m2.md#b1579)). A scan of open metadata runs at
+about 500 MiB/s on the controller, so the larger bounds stay well inside the
+acquisition budget.

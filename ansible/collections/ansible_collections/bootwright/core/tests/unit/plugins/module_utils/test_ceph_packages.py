@@ -666,14 +666,15 @@ def test_metadata_decompression_proves_open_checksum_and_bounds_expansion(tmp_pa
     path.write_bytes(compressed)
     acquisition.metadata_member(str(path), metadata_record(payload), hashlib.sha256(compressed).hexdigest(), len(compressed))
     assert acquisition.expanded == len(payload)
-    for record in (metadata_record(payload, 256 * 1024 * 1024 + 1), metadata_record(payload, len(payload) - 1), metadata_record(payload, digest="f" * 64)):
+    for record in (metadata_record(payload, sources.METADATA_OPEN_MEMBER_BYTES + 1), metadata_record(payload, len(payload) - 1),
+                   metadata_record(payload, digest="f" * 64)):
         with pytest.raises(ceph_native.Refusal):
             acquisition.metadata_member(str(path), record, "a" * 64, len(compressed))
     malicious = b'<!DOCTYPE metadata [<!ENTITY outside SYSTEM "file:///private">]><metadata />'
     path.write_bytes(gzip.compress(malicious))
     with pytest.raises(ceph_native.Refusal):
         acquisition.metadata_member(str(path), metadata_record(malicious), "a" * 64, path.stat().st_size)
-    acquisition.expanded = 512 * 1024 * 1024
+    acquisition.expanded = sources.METADATA_OPEN_BYTES
     with pytest.raises(ceph_native.Refusal, match="package-limit"):
         acquisition.metadata_member(str(path), metadata_record(malicious), "a" * 64, path.stat().st_size)
 
