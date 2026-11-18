@@ -17214,3 +17214,19 @@ values validate with the X568 build. The gitignored fixtures under
 `examples/wip/` were migrated; thirteen of them already failed validation on
 the earlier build for unrelated retired fields and still do.
 
+## X575 — The SNO isolation workload is described once
+
+### B1470
+
+The owner's choice of 2026-11-17 under [D274](backlog.md#d274) (9): the SNO
+case's static `workloads/` tree retires and its isolation chart is the one
+description. The chart's `isolation.profile` is `hardened` by default, its
+output unchanged, or `base`, which renders what the parent runbook's accepted
+drills applied: the Localnet attachment on each pod, the same isolation and
+egress policies, egress firewall and ingress controllers, and the
+`<env>-openshift` answer, with `security.tpm2=false` allowed. A one-time
+comparison found the base output equal to the retired tree in every drilled
+object; it adds restricted pod security, resource bounds and a digest-pinned
+image. The parent runbook renders the base profile, and a test holds both
+profiles to the objects their runbooks drill. The drills await a live run.
+
