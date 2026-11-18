@@ -634,7 +634,8 @@ its invocation's cancellation interrupted as `canceled`, whatever it reported.
 An attempt whose required log failed before its outcome was logged records a
 reported `failed` as `unknown`, because a typed failure proves less than
 completion, and one whose log could not be created records `unknown` without
-running its effect.
+running its effect. A run its own deadline ended reports `lifecycle.unknown`,
+naming its block and the deadline.
 
 | Adapter outcome | Effect state | Block |
 | --- | --- | --- |

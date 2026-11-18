@@ -158,6 +158,35 @@ func running(t *testing.T, matches func(pid, group int) bool) bool {
 	return false
 }
 
+// A run that reaches its own deadline names the deadline, the block and the
+// repeat that observes it, and leaves its attempt unknown.
+func TestARunThatReachesItsDeadlineSaysSo(t *testing.T) {
+	runner := Runner{
+		stager:    newDirStager(t),
+		jobParent: t.TempDir(), scratchParent: privateTempDir(t), drain: 200 * time.Millisecond,
+		playbooks: map[string]string{"artifact-server-nginx-v1/apply": "apply.yml"},
+		command: func(string, ...string) *exec.Cmd {
+			return exec.Command(os.Args[0], "-test.run=^TestLifecycleAdapterChild$", "--", "lifecycle-child-running")
+		},
+	}
+	request := lifecycle.RunRequest{
+		Context: "lab", Implementation: "artifact-server-nginx-v1", Operation: "apply", Variable: "bootwright_artifact_server",
+		Canonical: []byte(`{}`), Placement: machineref.Placement{Connection: "local", Machine: "controller"},
+		Launch: testLaunch, Output: &bytes.Buffer{}, Deadline: time.Second,
+		Block: "artifact-server-lab", Repeat: "bootwright apply --context lab",
+	}
+	_, err := runner.Run(context.Background(), request)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "lifecycle.unknown" ||
+		!strings.Contains(reported[0].Message, "block artifact-server-lab reached its deadline of 1s") ||
+		!strings.Contains(reported[0].Remediation, "run bootwright apply --context lab, which observes the effect") {
+		t.Fatalf("an expired run reported %+v (%v)", reported, err)
+	}
+	if outcome := lifecycle.AttemptOutcome(err); outcome != reconciliation.OutcomeUnknown {
+		t.Fatalf("an expired run left the attempt %s", outcome)
+	}
+}
+
 // A refused record ends the protocol at once. The closed authorization channel
 // releases a descendant waiting on it even outside the adapter's process group,
 // and the group kill stops the adapter, which otherwise keeps booting nodes

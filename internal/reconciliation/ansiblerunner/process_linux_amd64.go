@@ -5,6 +5,7 @@ package ansiblerunner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"os"
 	"os/exec"
@@ -305,7 +306,7 @@ func (r Runner) execute(ctx context.Context, job, scratch string, lock *os.File,
 	if grace <= 0 {
 		grace = resultDrain
 	}
-	judge := &lifecycleJudge{request: request, grace: grace}
+	judge := &lifecycleJudge{request: request, grace: grace, deadline: runDeadline(request.Deadline)}
 	// The adapter inherits the job and automation locks, and so does every
 	// process its supervisor forks: the ansible-playbook child and each worker.
 	// Its own streams are retained as they are produced, so a run that
@@ -339,6 +340,7 @@ func runDeadline(requested time.Duration) time.Duration {
 type lifecycleJudge struct {
 	request   lifecycle.RunRequest
 	grace     time.Duration
+	deadline  time.Duration
 	loaded    bool
 	prepared  bool
 	completed bool
@@ -493,6 +495,9 @@ func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Endi
 		}
 		return lifecycle.RunResult{Outcome: reconciliation.Outcome(ending.Outcome), Evidence: slices.Clone(ending.Evidence)}, nil
 	case adapterprotocol.Canceled:
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return lifecycle.RunResult{}, j.expired()
+		}
 		return lifecycle.RunResult{}, ctx.Err()
 	case adapterprotocol.Named:
 		return lifecycle.RunResult{}, ending.Failure
@@ -516,6 +521,16 @@ func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Endi
 		return lifecycle.RunResult{}, failure("lifecycle.unknown", "adapter authorization delivery was uncertain", remediation)
 	}
 	return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter operation has no complete result", remediation)
+}
+
+// expired is the cause of a run its own deadline ended: the effect may have
+// run part way, so its outcome is unknown and the repeat observes it first.
+func (j *lifecycleJudge) expired() error {
+	remedy := "read the block's output for the step that did not end, then repeat the operation, which observes the effect before anything else"
+	if j.request.Repeat != "" {
+		remedy = "read the block's output for the step that did not end, then run " + j.request.Repeat + ", which observes the effect before anything else"
+	}
+	return failure("lifecycle.unknown", "the adapter run of block "+j.request.Block+" reached its deadline of "+j.deadline.Round(time.Millisecond).String()+" before it ended, so its effect is unproved", remedy)
 }
 
 // stagedAutomation is one run's extracted automation and the lock on it.

@@ -17330,3 +17330,19 @@ a block's cause reports that names no object now names the block's own
 Guarded by `TestAFailedAttemptsCauseIsKeptAndShown`. The rest of W1.2 (engine
 order, the step that was running, pending reasons, the receipt of an early
 stop, the paused destroy) stays with B1562.
+
+## X582 — A run that reaches its deadline says so
+
+### B1572
+
+Under [D276](backlog.md#d276) (audit 006 W1.3, finding E06-01 and its eight
+duplicates), split from [B1562](m1.md#b1562). The runner returned the bare
+context error of a run its own deadline ended, which the scheduler dropped as
+it drops a cancellation, so the block was left unknown with no cause anywhere.
+It now reports `lifecycle.unknown` naming the block and the deadline, with the
+repeat that observes the effect, and the attempt records it as its cause
+([attempt outcomes](../state-reconciliation.md#attempt-outcomes)).
+Guarded by `TestARunThatReachesItsDeadlineSaysSo`, which failed with the change
+disabled, and `TestARunIsBoundedByItsRequestsDeadline`. The other endings W1.3
+names (exit status and signal, a death before the request was loaded, a
+protocol breach's reason, the last step) stay with B1562.

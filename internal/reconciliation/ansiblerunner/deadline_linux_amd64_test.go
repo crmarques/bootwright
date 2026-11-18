@@ -8,9 +8,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -41,7 +43,7 @@ func TestARunIsBoundedByItsRequestsDeadline(t *testing.T) {
 		defer cancel()
 		started := time.Now()
 		_, err := runner.execute(ctx, t.TempDir(), t.TempDir(), nil, stagedAutomation{path: t.TempDir()}, "apply.yml", request)
-		if elapsed := time.Since(started); ctx.Err() != nil || elapsed > 5*time.Second || !errors.Is(err, context.DeadlineExceeded) {
+		if elapsed := time.Since(started); ctx.Err() != nil || elapsed > 5*time.Second || !strings.Contains(firstMessage(err), "reached its deadline of 300ms") {
 			t.Fatalf("a run whose request states %s ended after %s with %v", request.Deadline, elapsed, err)
 		}
 	})
@@ -95,4 +97,11 @@ func TestARunIsBoundedByItsRequestsDeadline(t *testing.T) {
 			}
 		})
 	}
+}
+
+func firstMessage(err error) string {
+	if reported := diagnostics.Of(err); len(reported) != 0 {
+		return reported[0].Message
+	}
+	return ""
 }
