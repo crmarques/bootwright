@@ -682,6 +682,16 @@ func lifecycleRunOf(t *testing.T, script string) (lifecycle.RunResult, error) {
 	return result, err
 }
 
+// A failed run names the step it was in: the last group still running.
+func TestAFailedRunNamesTheStepThatWasRunning(t *testing.T) {
+	_, err := lifecycleRunOf(t, `printf '{"phase":"loaded"}\n' >&3; read -r reply <&4; `+
+		`printf '{"group":"pull-image","phase":"group","status":"running"}\n{"group":"pull-image","phase":"group","status":"ok"}\n{"group":"install-os","phase":"group","status":"running"}\n' >&3; sleep 0.1; exit 2`)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Message != "the adapter operation did not complete (exit status 2), during step install-os" {
+		t.Fatalf("a failed run reported %+v (%v)", reported, err)
+	}
+}
+
 // A record the collection's canonical writer never emits, such as one spaced
 // after its colon, breaks the protocol: the attempt is unknown, never failed.
 func TestALifecycleRunEndsUnknownOnANonCanonicalRecord(t *testing.T) {

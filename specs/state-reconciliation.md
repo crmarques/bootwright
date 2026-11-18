@@ -636,7 +636,10 @@ reported `failed` as `unknown`, because a typed failure proves less than
 completion, and one whose log could not be created records `unknown` without
 running its effect. A run its own deadline ended reports `lifecycle.unknown`,
 naming its block and the deadline. A failed exit the runner did not cause
-names how the adapter ended, `(exit status N)` or `(signal NAME)`; one before
+names how the adapter ended, `(exit status N)` or `(signal NAME)`, and, as a
+deadline does, the step it was in: `, during step <group>`, the last
+[group](architecture.md#adapter-warnings-and-group-progress) still running,
+when its id is lowercase letters, digits, `.` and `-`. One before
 the adapter loaded its request reads that it exited before it loaded its
 request, so it performed no effect. A broken protocol names what broke it: a
 record that is not canonical, names a phase the run does not admit, carries the

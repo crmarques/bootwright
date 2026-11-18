@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -343,6 +344,7 @@ type lifecycleJudge struct {
 	grace     time.Duration
 	deadline  time.Duration
 	stop      *adapterprotocol.Stop
+	step      string
 	loaded    bool
 	prepared  bool
 	completed bool
@@ -403,6 +405,9 @@ func (j *lifecycleJudge) Judge(ctx context.Context, record adapterprotocol.Recor
 			}
 		}
 		reported := valid && !moment.Exited
+		if reported {
+			j.track(record.Group, record.Status)
+		}
 		if reported && j.request.Progress != nil {
 			j.request.Progress(ctx, record.Group, record.Status, bytes)
 		}
@@ -519,7 +524,7 @@ func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Endi
 		if !j.loaded && j.stop == nil {
 			return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter exited before it loaded its request"+exitDetail(ending.Exit)+", so it performed no effect", remediation)
 		}
-		return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter operation did not complete"+exitDetail(ending.Exit)+j.stopped(), remediation)
+		return lifecycle.RunResult{}, failure("lifecycle.state", "the adapter operation did not complete"+exitDetail(ending.Exit)+j.stopped()+j.during(), remediation)
 	case adapterprotocol.Incomplete:
 		return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter structured result was incomplete"+reasonDetail(ending.Reason), remediation)
 	case adapterprotocol.Invalid:
@@ -529,6 +534,24 @@ func (j *lifecycleJudge) result(ctx context.Context, ending adapterprotocol.Endi
 	}
 	return lifecycle.RunResult{}, failure("lifecycle.unknown", "the adapter operation has no complete result", remediation)
 }
+
+func (j *lifecycleJudge) track(group, status string) {
+	switch {
+	case status == "running" && stepName.MatchString(group):
+		j.step = group
+	case group == j.step:
+		j.step = ""
+	}
+}
+
+func (j *lifecycleJudge) during() string {
+	if j.step == "" {
+		return ""
+	}
+	return ", during step " + j.step
+}
+
+var stepName = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,63}$`)
 
 func reasonDetail(reason string) string {
 	if reason == "" {
@@ -576,7 +599,7 @@ func (j *lifecycleJudge) expired() error {
 	if j.request.Repeat != "" {
 		remedy = "read the block's output for the step that did not end, then run " + j.request.Repeat + ", which observes the effect before anything else"
 	}
-	return failure("lifecycle.unknown", "the adapter run of block "+j.request.Block+" reached its deadline of "+j.deadline.Round(time.Millisecond).String()+" before it ended, so its effect is unproved", remedy)
+	return failure("lifecycle.unknown", "the adapter run of block "+j.request.Block+" reached its deadline of "+j.deadline.Round(time.Millisecond).String()+" before it ended"+j.during()+", so its effect is unproved", remedy)
 }
 
 // stagedAutomation is one run's extracted automation and the lock on it.

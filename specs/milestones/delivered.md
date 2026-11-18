@@ -17459,3 +17459,13 @@ and its diagnostic ([human output](../cli/output.md#human-output)). Guarded by
 the `cli-destroy-paused-for-stop` golden. A code of its own for this stop
 waits for the stop catalog of [B1563](m1.md#b1563); an error of the lineage read
 or a probe there still reads as paused.
+
+## X593 — A failed run names the step it was in
+
+### B1583
+
+Under [D276](backlog.md#d276) (audit 006 W1.2, finding O01-02 and its
+duplicates), split from [B1562](m1.md#b1562). A failed exit or a deadline did
+not say how far the run got. Both now name the last group still running, `,
+during step <group>` ([attempt outcomes](../state-reconciliation.md#attempt-outcomes)).
+Guarded by `TestAFailedRunNamesTheStepThatWasRunning`.
