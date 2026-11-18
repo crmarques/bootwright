@@ -62,7 +62,7 @@ func refuseContradictions(ctx context.Context, store decisionRecords, contextNam
 	if len(entries) == 0 {
 		return nil
 	}
-	return failure("lifecycle.state",
+	return engineRecordsContradict.Fail(
 		"the incomplete apply "+operation.ID+" holds records that contradict what it started, and a removal that skipped such a block would leave its effect in place: "+strings.Join(entries, ", "),
 		reviewStatus(contextName))
 }
@@ -124,7 +124,7 @@ func refuseUncontinuable(ctx context.Context, store decisionRecords, contextName
 	if err != nil || len(entries) == 0 {
 		return err
 	}
-	return failure("lifecycle.state",
+	return engineRecordsContradict.Fail(
 		"the incomplete "+string(operation.Verb)+" "+operation.ID+" holds records that contradict what it started, so it cannot be continued: "+strings.Join(entries, ", "),
 		reviewStatus(contextName))
 }

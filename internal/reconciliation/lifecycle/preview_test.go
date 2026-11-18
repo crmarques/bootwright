@@ -57,7 +57,7 @@ func TestFreshPlanAndApplyShareOneDecision(t *testing.T) {
 			prepare: func(h *harness) { h.service.compiler = testCompiler{state: withEnabledPlaybook()} },
 		},
 		{name: "a zero-block plan", refusal: "lifecycle.state"},
-		{name: "a stage boundary", definitions: controlled, stages: []string{"infrastructure-services"}, refusal: "lifecycle.stage"},
+		{name: "a stage boundary", definitions: controlled, stages: []string{"infrastructure-services"}, refusal: "apply.stage-empty"},
 		{
 			name: "its own sockets in conflict", definitions: nestedDefinitions(), refusal: "api.invariant",
 			prepare: func(h *harness) { h.capability.reservations = conflictingSockets() },
@@ -442,7 +442,7 @@ func TestTheControllerReachedByAnUndeclaredAddressRefusesBeforeReservation(t *te
 				return
 			}
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != tc.refused ||
+			if len(reported) != 1 || reported[0].Code != "plan.host-key-unbound" || reported[0].Message != tc.refused ||
 				reported[0].Remediation != tc.remedy {
 				t.Fatalf("refusal = %+v (%v)", reported, err)
 			}
@@ -659,12 +659,12 @@ func previewRows(ctx context.Context) []previewRow {
 			return harnessCase(h, reconciliation.Apply)
 		}},
 		{
-			name: "a continuation whose selection admits nothing", refusal: "lifecycle.stage", message: "the selected stages have nothing to start",
+			name: "a continuation whose selection admits nothing", refusal: "apply.stage-empty", message: "the selected stages have nothing to start",
 			remedy:  "repeat bootwright apply --context lab --stage substrates,clusters",
 			prepare: func(t *testing.T) previewCase { return paused(t, "clusters") },
 		},
 		{
-			name: "a continuation whose selection excludes the failed block", refusal: "lifecycle.stage",
+			name: "a continuation whose selection excludes the failed block", refusal: "apply.stage-excludes-retry",
 			message: "the block this operation must retry is outside the selected stages",
 			remedy:  "repeat bootwright apply --context lab --stage infrastructure-services,machines",
 			prepare: func(t *testing.T) previewCase {
@@ -681,7 +681,7 @@ func previewRows(ctx context.Context) []previewRow {
 			return killedCase(killedAt(ctx, t, nil, reconciliation.Apply, "replace <op>/operation.json#1"), reconciliation.Apply)
 		}},
 		{
-			name: "a running apply whose blocks are all done over a changed input", refusal: "lifecycle.state",
+			name: "a running apply whose blocks are all done over a changed input", refusal: "apply.input-changed",
 			message: "the desired state changed after this apply completed",
 			prepare: func(t *testing.T) previewCase {
 				c := killedCase(killedAt(ctx, t, nil, reconciliation.Apply, "replace <op>/operation.json#1"), reconciliation.Apply)

@@ -92,7 +92,7 @@ func TestAnApplyOverARefusedRemovalNamesTheRefusalsExit(t *testing.T) {
 			before := untouchedOf(h)
 			_, err = h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
 			want := []diagnostics.Diagnostic{
-				{Severity: "error", Code: "lifecycle.state", Message: "an incomplete destroy must be continued before another operation", Remediation: refusal[0].Remediation},
+				diagnostics.Of(engineOtherVerbIncomplete.Fail("an incomplete destroy must be continued before another operation", refusal[0].Remediation))[0],
 				refusal[0],
 			}
 			if got := diagnostics.Of(err); !slices.Equal(got, want) {
@@ -105,8 +105,7 @@ func TestAnApplyOverARefusedRemovalNamesTheRefusalsExit(t *testing.T) {
 		h := newHarness(t, "alpha")
 		unknownRemoval(t, h)
 		_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
-		want := []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state",
-			Message: "an incomplete destroy must be continued before another operation", Remediation: "continue it with bootwright destroy --context lab"}}
+		want := diagnostics.Of(engineOtherVerbIncomplete.Fail("an incomplete destroy must be continued before another operation", "continue it with bootwright destroy --context lab"))
 		if got := diagnostics.Of(err); !slices.Equal(got, want) {
 			t.Fatalf("the apply reported %+v, want %+v", got, want)
 		}

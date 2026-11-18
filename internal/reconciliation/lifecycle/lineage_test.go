@@ -108,7 +108,7 @@ func consumerDefinition() reconciliation.BlockDefinition {
 func requireStateRefusal(t *testing.T, err error, message string) {
 	t.Helper()
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, message) {
+	if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) || !strings.Contains(reported[0].Message, message) {
 		t.Fatalf("refusal = %+v (%v), want lifecycle.state containing %q", reported, err, message)
 	}
 }

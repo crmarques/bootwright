@@ -71,8 +71,9 @@ start, and the endings of one that ran.
 
 The lifecycle engine's stops (`internal/reconciliation/lifecycle`): a block
 that stopped on its host or on a defect, an attempt that recorded no start, a
-removal that would take back state in use, and the end of an operation that
-did not complete, which reads as the consequence of the causes before it.
+removal that would take back state in use, the end of an operation that did
+not complete, which reads as the consequence of the causes before it, and the
+refusals of a decision and its plan before any effect.
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -88,3 +89,20 @@ did not complete, which reads as the consequence of the causes before it.
 | `destroy.incomplete` | operation | possible | unclassified | - | repeat | the destroy ended with blocks not proved gone; the diagnostics before it say why | repeat the destroy once each cause is fixed |
 | `destroy.in-use` | removal-phase | none | target | - | fix-then-repeat | a removal would take back state that is still in use, so it takes back nothing at that boundary | stop what the message names, then repeat the destroy |
 | `destroy.consumer-survives` | removal-phase | none | target | - | fix-then-repeat | a removal would retire what a consumer that outlives it still uses | keep this context while the consumer runs; a destroy takes back what a consumer uses only when the consumer leaves with owned virtual node Machines the same destroy deletes |
+| `engine.finalization-due` | operation | owed | defect | - | repeat | an operation is due its finalization, which no decision may skip | repeat the command, which finalizes that operation before it decides |
+| `engine.records-contradict` | operation | none | records | - | fix-then-repeat | an incomplete operation holds records that contradict what it started | read the records with bootwright status, then restore them from a backup or delete the context |
+| `engine.other-verb-incomplete` | operation | none | input | - | other-verb | an incomplete operation of the other verb must be continued before another operation | continue or replace the incomplete operation the message names |
+| `apply.records-missing` | operation | none | records | - | abandon-context | a completed apply records no completion for blocks it froze, so nothing proves its input applied | restore the context's records, or take back what it owns and apply again |
+| `destroy.records-missing` | operation | none | records | - | abandon-context | a completed destroy records no completion for blocks it froze, so nothing proves their effects removed | restore the context's records, or delete the context with what it may still own |
+| `apply.input-changed` | operation | none | input | - | change-input | the desired state changed after the apply completed, and it is no addition to it | take back what the context owns with destroy, then apply the changed input |
+| `apply.not-an-addition` | operation | none | input | - | change-input | a changed input over a completed apply adds something an additive apply cannot take | take back what the context owns with destroy, then apply the changed input |
+| `apply.prerequisite-lost` | operation | none | records | - | other-verb | a block an addition needs, held by an earlier apply of its lineage, is gone or no longer done | take back what the lineage owns with destroy |
+| `apply.nothing-declared` | operation | none | input | - | change-input | the selected Environment declares nothing this executable would create | declare a managed infrastructure service |
+| `apply.stage-empty` | operation | none | input | - | fix-then-repeat | the selected stages or the --until instance have nothing to start | repeat the apply with a wider selection |
+| `apply.stage-excludes-retry` | operation | none | input | - | fix-then-repeat | the block the operation must retry first is outside the selected stages | repeat the apply with a selection that holds that block |
+| `apply.until-unknown` | operation | none | input | - | fix-then-repeat | --until names no add-on instance of the plan | name an add-on instance the plan holds, or repeat without --until |
+| `plan.input-uncompilable` | context | none | input | - | change-input | the context's frozen desired state could not be compiled | repair the input with validate and import it again |
+| `plan.capability-missing` | context | none | build | - | none | no lifecycle capability of this build plans the selected state | use a build that carries the capability; report it if this build should |
+| `plan.capability-defect` | context | none | defect | - | none | a capability planned a block it may not plan | report the message as a defect |
+| `plan.host-key-unbound` | context | none | input | - | change-input | an SSH placement binds no host key, or reaches the controller where its pinned key does not apply | author access.ssh.knownHostsRef on the Machine the message names |
+| `plan.environment-invalid` | context | none | input | - | change-input | the selected state holds no single Environment naming its controller Machine | repair the input with validate |

@@ -40,7 +40,7 @@ func requireRefused(t *testing.T, h *harness, verb reconciliation.Verb, message,
 		_, err = h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
 	}
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != message || reported[0].Remediation != remedy {
+	if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) || reported[0].Message != message || reported[0].Remediation != remedy {
 		t.Fatalf("the %s = %+v (%v), want the refusal %q", verb, reported, err, message)
 	}
 	before.require(t, h)

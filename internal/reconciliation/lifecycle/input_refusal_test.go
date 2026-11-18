@@ -46,7 +46,7 @@ func applyRefusedWith(t *testing.T, f diffFixture, message, remedy string) {
 	t.Helper()
 	_, err := f.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != message || reported[0].Remediation != remedy {
+	if len(reported) != 1 || reported[0].Code != "apply.input-changed" || reported[0].Message != message || reported[0].Remediation != remedy {
 		t.Fatalf("the apply reported %+v (%v), want %q with remedy %q", reported, err, message, remedy)
 	}
 }
@@ -205,7 +205,7 @@ func TestEveryChangedInputOverACompletedApplyRefuses(t *testing.T) {
 			test.arrange(t, h)
 			before := countWrites(h)
 			_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
-			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != want {
+			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "apply.input-changed" || reported[0].Message != want {
 				t.Fatalf("the apply reported %+v (%v), want %q", reported, err, want)
 			}
 			assertNothingWritten(t, h, before)

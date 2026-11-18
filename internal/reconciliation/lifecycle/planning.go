@@ -88,7 +88,7 @@ func compileWith(ctx context.Context, compiler Compiler, sources desiredstate.So
 		return nil, err
 	}
 	if state == nil || report == nil {
-		return nil, failure("lifecycle.state", "the frozen desired state could not be compiled", "repair the input with validate and import it again")
+		return nil, planInputUncompilable.Fail("the frozen desired state could not be compiled", "repair the input with validate and import it again")
 	}
 	return state, nil
 }
@@ -182,7 +182,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	}
 	bindings := s.planningBindings(scope)
 	if len(bindings) == 0 {
-		return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "no lifecycle capability is available for the selected state", "")
+		return reconciliation.Plan{}, capabilityBinding{}, planCapabilityMissing.Fail("no lifecycle capability is available for the selected state", "")
 	}
 	input := s.planInput(view, state, controller, scope)
 	if err := s.validatePreparationScope(ctx, input); err != nil {
@@ -195,7 +195,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	for _, bound := range bindings {
 		capability, ok := s.capabilities.Resolve(bound.Kind, bound.Implementation)
 		if !ok {
-			return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "a declared lifecycle capability does not resolve", "")
+			return reconciliation.Plan{}, capabilityBinding{}, planCapabilityMissing.Fail("a declared lifecycle capability does not resolve", "")
 		}
 		contribution, err := capability.Plan(ctx, input)
 		if err != nil {
@@ -207,10 +207,10 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		claimed.record(bound, contribution.Definitions)
 		for _, definition := range contribution.Definitions {
 			if scope != nil && len(definition.Consumes) != 0 {
-				return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "a preparation cannot authorize gated destructive effects", "prepare only controller, media and inventory prerequisites")
+				return reconciliation.Plan{}, capabilityBinding{}, planCapabilityDefect.Fail("a preparation cannot authorize gated destructive effects", "prepare only controller, media and inventory prerequisites")
 			}
 			if definition.Family != "" && definition.Family != bound.family() {
-				return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "the "+bound.Implementation+" capability planned a block of another family", "")
+				return reconciliation.Plan{}, capabilityBinding{}, planCapabilityDefect.Fail("the "+bound.Implementation+" capability planned a block of another family", "")
 			}
 			definition.Family = bound.family()
 			definitions = append(definitions, definition)
@@ -360,7 +360,7 @@ func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHRese
 			continue
 		}
 		if claim.KnownHostsRef == "" {
-			return nil, nil, failure("lifecycle.state", "lifecycle placement requires a bound SSH host key",
+			return nil, nil, planHostKeyUnbound.Fail("lifecycle placement requires a bound SSH host key",
 				"author access.ssh.knownHostsRef on Machine/"+claim.Machine)
 		}
 		keyed = append(keyed, hostKeyedClaim{reservation: len(published), keys: claimed,
@@ -401,7 +401,7 @@ func undeclaredControllerAddress(claim hostKeyedClaim) error {
 	if claim.port == 22 {
 		remediation += "declare " + claim.address + " on Machine/" + claim.controller + ", "
 	}
-	return failure("lifecycle.state",
+	return planHostKeyUnbound.Fail(
 		"Machine/"+claim.machine+" reaches the controller, whose SSH host key its access.ssh.knownHostsRef pins, at "+machine.SSHHost(claim.address, claim.port)+
 			", which is not port 22 at an address the controller Machine/"+claim.controller+" declares ("+declared+
 			"), so its claims would not meet the controller's own",
@@ -683,11 +683,11 @@ func controllerMachine(state *compilation.State) (string, error) {
 func ControllerMachine(catalog api.Catalog) (string, error) {
 	environments := catalog.OfKind(api.Environment)
 	if len(environments) != 1 {
-		return "", failure("lifecycle.state", "the selected state does not contain exactly one Environment", "repair the input with validate")
+		return "", planEnvironmentInvalid.Fail("the selected state does not contain exactly one Environment", "repair the input with validate")
 	}
 	name := environments[0].Spec().Get("controller", "machineRef").Text()
 	if name == "" {
-		return "", failure("lifecycle.state", "the Environment declares no controller Machine", "set spec.controller.machineRef")
+		return "", planEnvironmentInvalid.Fail("the Environment declares no controller Machine", "set spec.controller.machineRef")
 	}
 	return name, nil
 }

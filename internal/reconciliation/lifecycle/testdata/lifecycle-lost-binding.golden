@@ -218,7 +218,7 @@
       "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     },
     "apply": {
-      "code": "lifecycle.state",
+      "code": "engine.other-verb-incomplete",
       "message": "an incomplete destroy must be continued before another operation",
       "remediation": "replace it with bootwright destroy --context lab"
     },
@@ -254,7 +254,7 @@
       "next": "continue-destroy"
     },
     "apply": {
-      "code": "lifecycle.state",
+      "code": "engine.other-verb-incomplete",
       "message": "an incomplete destroy must be continued before another operation",
       "remediation": "continue it with bootwright destroy --context lab"
     },
@@ -292,7 +292,7 @@
       "next": "continue-destroy"
     },
     "apply": {
-      "code": "lifecycle.state",
+      "code": "engine.other-verb-incomplete",
       "message": "an incomplete destroy must be continued before another operation",
       "remediation": "continue it with bootwright destroy --context lab"
     },
@@ -328,7 +328,7 @@
       "remediation": "restore the context's keyring from a complete backup and repeat bootwright destroy --context lab, or run bootwright context delete --name lab --purge --allow-orphans and then remove the objects named here by hand"
     },
     "apply": {
-      "code": "lifecycle.state",
+      "code": "engine.other-verb-incomplete",
       "message": "an incomplete destroy must be continued before another operation",
       "remediation": "continue it with bootwright destroy --context lab"
     },
@@ -364,7 +364,7 @@
       "next": "continue-destroy"
     },
     "apply": {
-      "code": "lifecycle.state",
+      "code": "engine.other-verb-incomplete",
       "message": "an incomplete destroy must be continued before another operation",
       "remediation": "continue it with bootwright destroy --context lab"
     },

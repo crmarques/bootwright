@@ -140,7 +140,7 @@ func TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses(t *testing.T)
 
 			result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 			reported := diagnostics.Of(err)
-			if result != nil || len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+			if result != nil || len(reported) != 1 || reported[0].Code != "apply.records-missing" {
 				t.Fatalf("repeated apply = %+v, %+v (%v)", result, reported, err)
 			}
 			want := "the completed apply " + current + " records no block completion for these blocks, so this input cannot be proved applied: " + strings.Join(test.unfinished, ", ")

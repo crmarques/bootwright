@@ -17669,3 +17669,22 @@ class of a failure without parsing its code; any other diagnostic omits both
 ([JSON output](../cli/output.md#json-output)). Guarded by
 `TestAStopFiresWithItsClassesAndRemedy`. The receipt's stop line and the human
 heading stay with the next sub-slice.
+
+## X609 — The engine's decision refusals are stops
+
+### B1598
+
+Under [D276](backlog.md#d276) (audit 006 W2.1, first chunk of the engine
+refusals), split from [B1563](m1.md#b1563). The 37 refusals of a decision and
+its plan, before any effect, become seventeen
+[engine stops](../cli/stops.md#engine-stops): a finalization that is due,
+records that contradict what an operation started, an incomplete operation of
+the other verb, a completed apply or destroy whose records lack completions, a
+changed input that is no addition, an addition's lost prerequisite, an input
+that declares nothing, a stage or `--until` selection that starts nothing or
+excludes the block to retry, an uncompilable input, a missing or misbehaving
+capability, an unbound SSH host key and an Environment that names no
+controller. Their messages and remedies are unchanged. The engine's ledger
+falls from 210 to 173. Guarded by `TestTheEnginesStopsAreTheCatalogsEngineStops`,
+the engine's refusal, preview, transition-table and journey tests, its
+goldens and its race run.

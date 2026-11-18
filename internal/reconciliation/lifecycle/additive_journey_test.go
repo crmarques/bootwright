@@ -208,7 +208,7 @@ func TestAContinuationRefusesWhenAPrerequisiteNoLongerReadsDone(t *testing.T) {
 	lose(f.harness, root.ID+"/blocks/producer-a")
 	_, err := apply(f.harness)
 	reported := diagnostics.Of(err)
-	if len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "prerequisite producer-a") || !strings.Contains(reported[0].Message, "pending") {
+	if len(reported) == 0 || reported[0].Code != "apply.prerequisite-lost" || !strings.Contains(reported[0].Message, "prerequisite producer-a") || !strings.Contains(reported[0].Message, "pending") {
 		t.Fatalf("continuation reported %+v (%v)", reported, err)
 	}
 	if len(f.capability.applies) != 2 {

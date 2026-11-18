@@ -175,7 +175,7 @@ func TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses(t *testing.T
 
 			_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+			if len(reported) != 1 || reported[0].Code != "engine.records-contradict" {
 				t.Fatalf("destroy = %+v (%v)", reported, err)
 			}
 			want := "the incomplete apply " + current + " holds records that contradict what it started, and a removal that skipped such a block would leave its effect in place: " + strings.Join(test.entries, ", ")

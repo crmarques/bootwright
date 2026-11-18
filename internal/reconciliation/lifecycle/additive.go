@@ -119,7 +119,7 @@ func (d decider) addition(ctx context.Context, view View, store recordReader, op
 		return nil, err
 	}
 	if len(unfinished) != 0 {
-		return nil, refusal(failure("lifecycle.state",
+		return nil, refusal(applyRecordsMissing.Fail(
 			"the completed apply "+operation.ID+" records no block completion for these blocks, so nothing proves it applied before it adds to it: "+strings.Join(unfinished, ", "),
 			unfinishedApplyExits(view)))
 	}
@@ -140,7 +140,7 @@ func (d decider) addition(ctx context.Context, view View, store recordReader, op
 	}
 	delta := reconciliation.Compare(held, fresh)
 	if first, differs := delta.First(); differs && first.Change != reconciliation.Added {
-		return nil, refusal(failure("lifecycle.state",
+		return nil, refusal(applyNotAnAddition.Fail(
 			"this executable would freeze the block "+first.Block+" differently from the plan this apply froze, so the input is no addition to it",
 			changeRemedy(view)+"; "+contextCommand(view.Identity().Name, "diff")+" shows each change"))
 	}
@@ -179,7 +179,7 @@ func (d decider) refuseNewReservations(ctx context.Context, view View, before *c
 		return !slices.ContainsFunc(held.hostKeyed, func(other hostKeyedClaim) bool { return reflect.DeepEqual(claim, other) })
 	}
 	if slices.ContainsFunc(after.reservations, unheld) || slices.ContainsFunc(after.hostKeyed, unkeyed) {
-		return refusal(failure("lifecycle.state", "the added blocks need a host reservation or an SSH reservation, which an additive apply never takes", changeRemedy(view)))
+		return refusal(applyNotAnAddition.Fail("the added blocks need a host reservation or an SSH reservation, which an additive apply never takes", changeRemedy(view)))
 	}
 	return nil
 }
@@ -194,7 +194,7 @@ func (d decider) refuseUnnamedSecrets(view View, chain lineage, admission *addit
 			capability, found := d.capabilities.Resolve(block.Kind, block.Implementation)
 			referencer, names := capability.(SecretReferencer)
 			if !found || !names {
-				return refusal(failure("lifecycle.state", "the block "+block.ID+" cannot name the Secrets it references, so no Secret is added beside it", changeRemedy(view)))
+				return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot name the Secrets it references, so no Secret is added beside it", changeRemedy(view)))
 			}
 			references, err := referencer.SecretReferences(block)
 			if err != nil {
@@ -205,7 +205,7 @@ func (d decider) refuseUnnamedSecrets(view View, chain lineage, admission *addit
 	}
 	for _, name := range added {
 		if !slices.Contains(admission.secrets, name) || slices.Contains(held, name) {
-			return refusal(failure("lifecycle.state", "the Secret "+name+" is added, and no added block names it for the first time, so the input is no addition to the completed apply", changeRemedy(view)))
+			return refusal(applyNotAnAddition.Fail("the Secret "+name+" is added, and no added block names it for the first time, so the input is no addition to the completed apply", changeRemedy(view)))
 		}
 	}
 	return nil
@@ -253,7 +253,7 @@ func (d decider) admission(ctx context.Context, view View, chain lineage, held, 
 func (d decider) admitted(ctx context.Context, held reconciliation.Plan, block reconciliation.Block, view View) ([]string, error) {
 	remedy := changeRemedy(view)
 	refuse := func(why string) error {
-		return refusal(failure("lifecycle.state", "the block "+block.ID+" cannot be added to the completed apply: "+why, remedy))
+		return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot be added to the completed apply: "+why, remedy))
 	}
 	capability, found := d.capabilities.Resolve(block.Kind, block.Implementation)
 	if !found {
@@ -290,14 +290,14 @@ func (s Service) custodyProved(ctx context.Context, view View, chain lineage, ad
 		}
 		lend, release, err := s.producedLender(block, chain.definitions(), false, s.producedInContext(view.Identity().Name))
 		if err != nil {
-			return refusal(failure("lifecycle.state", "the block "+block.ID+" cannot be added: "+firstMessage(err), changeRemedy(view)))
+			return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot be added: "+firstMessage(err), changeRemedy(view)))
 		}
 		for _, reference := range references {
 			material, err := lend(ctx, reference)
 			material.Clear()
 			if err != nil {
 				release()
-				return refusal(failure("lifecycle.state", "the block "+block.ID+" cannot be added: "+firstMessage(err), changeRemedy(view)))
+				return refusal(applyNotAnAddition.Fail("the block "+block.ID+" cannot be added: "+firstMessage(err), changeRemedy(view)))
 			}
 		}
 		release()
@@ -352,13 +352,13 @@ func (s Service) prerequisitesRefusal(ctx context.Context, view View, operation 
 		for _, id := range block.Prerequisites {
 			owner, held := chain.ownerOf(id)
 			if !held {
-				return failure("lifecycle.state", "no apply of the lineage of "+operation.ID+" holds the prerequisite "+id, "restore the context store")
+				return applyPrerequisiteLost.Fail("no apply of the lineage of "+operation.ID+" holds the prerequisite "+id, "restore the context store")
 			}
 			if state := owner.states[id]; state != reconciliation.BlockDone {
 				if state == "" {
 					state = reconciliation.BlockPending
 				}
-				return failure("lifecycle.state",
+				return applyPrerequisiteLost.Fail(
 					"the prerequisite "+id+" of "+block.ID+", held by the apply "+owner.operation.ID+", no longer reads done: it reads "+string(state),
 					"take back what the lineage owns with "+contextCommand(view.Identity().Name, string(reconciliation.Destroy)))
 			}

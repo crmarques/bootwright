@@ -174,7 +174,7 @@ func (d decider) decideBy(ctx context.Context, view View, store decisionRecords,
 		}
 		return plannedFrom(decided, operation, states, attempts), nil
 	case transitionFinalize:
-		return operationPlan{}, failure("lifecycle.state",
+		return operationPlan{}, engineFinalizationDue.Fail(
 			"the "+string(operation.Verb)+" "+operation.ID+" is due its finalization, which no decision over its record may skip",
 			"report this as a defect, and repeat the command, which finalizes that operation before it decides")
 	case transitionReplaceRemoval:
@@ -183,7 +183,7 @@ func (d decider) decideBy(ctx context.Context, view View, store decisionRecords,
 		if operation.State != reconciliation.OperationDone {
 			return operationPlan{}, d.refuseOver(ctx, view, operation, frozen, states)
 		}
-		return operationPlan{}, failure("lifecycle.state",
+		return operationPlan{}, destroyRecordsMissing.Fail(
 			"the completed destroy "+operation.ID+" records no block completion for these blocks, so nothing proves their effects removed: "+strings.Join(unfinishedBlocks(frozen, states), ", "),
 			deletionExit(view))
 	case transitionSettle:
@@ -266,13 +266,13 @@ func (d decider) refuseOver(ctx context.Context, view View, operation operations
 		return proof
 	}
 	if len(refused) != 0 {
-		return withCause(failure("lifecycle.state", "an incomplete "+string(operation.Verb)+" "+message, refused[0].Remediation), proof)
+		return withCause(engineOtherVerbIncomplete.Fail("an incomplete "+string(operation.Verb)+" "+message, refused[0].Remediation), proof)
 	}
 	remediation := "continue it with "
 	if next == string(reconciliation.Destroy) {
 		remediation = "replace it with "
 	}
-	return failure("lifecycle.state", "an incomplete "+string(operation.Verb)+" "+message,
+	return engineOtherVerbIncomplete.Fail("an incomplete "+string(operation.Verb)+" "+message,
 		remediation+continuationCommand(name, operation, frozen, states))
 }
 
@@ -300,7 +300,7 @@ func (d decider) settleApply(ctx context.Context, view View, operation operation
 		return operationPlan{}, err
 	}
 	if len(unfinished) != 0 {
-		return operationPlan{}, failure("lifecycle.state",
+		return operationPlan{}, applyRecordsMissing.Fail(
 			"the completed apply "+operation.ID+" records no block completion for these blocks, so this input cannot be proved applied: "+strings.Join(unfinished, ", "),
 			unfinishedApplyExits(view))
 	}
@@ -356,9 +356,9 @@ func (d decider) changedInput(ctx context.Context, view View, operation operatio
 		return err
 	}
 	if !ok {
-		return failure("lifecycle.state", message, remedy)
+		return applyInputChanged.Fail(message, remedy)
 	}
-	return failure("lifecycle.state", message+": "+named, remedy+"; "+contextCommand(name, "diff")+" shows each change")
+	return applyInputChanged.Fail(message+": "+named, remedy+"; "+contextCommand(name, "diff")+" shows each change")
 }
 
 func (d decider) namedChange(ctx context.Context, view View, operation operationstore.Operation) (string, bool) {
@@ -408,34 +408,34 @@ func refuseStageBoundary(contextName string, plan reconciliation.Plan, states ma
 		unstaged.Stages = nil
 		if kind == StepStart {
 			if ready := reconciliation.Startable(plan, states, unstaged); len(ready) != 0 {
-				return failure("lifecycle.stage", "the selected stages have nothing to start",
+				return applyStageEmpty.Fail("the selected stages have nothing to start",
 					"repeat "+widenedApply(contextName, selection, ready[0].Stage, append([]string{"--until", selection.Until}, tokens...)))
 			}
 		}
 		if kind == StepRetry {
 			for _, block := range plan.Blocks {
 				if states[block.ID] == reconciliation.BlockFailed && unstaged.Admits(block) {
-					return failure("lifecycle.stage", "the block this operation must retry is outside the selected stages",
+					return applyStageExcludesRetry.Fail("the block this operation must retry is outside the selected stages",
 						"repeat "+widenedApply(contextName, selection, block.Stage, append([]string{"--until", selection.Until}, tokens...)))
 				}
 			}
 		}
-		return failure("lifecycle.stage",
+		return applyStageEmpty.Fail(
 			"the add-on instance --until names and the blocks it requires have nothing to start under this selection",
 			"repeat "+contextCommand(contextName, string(reconciliation.Apply), flags...)+" without --until")
 	}
 	if kind == StepRetry {
 		failed, _ := plan.Block(heldBehind(plan, states, nil))
-		return failure("lifecycle.stage",
+		return applyStageExcludesRetry.Fail(
 			"the block this operation must retry is outside the selected stages",
 			"repeat "+widenedApply(contextName, selection, failed.Stage, tokens))
 	}
 	ready := reconciliation.Ready(plan, states)
 	if len(ready) == 0 {
-		return failure("lifecycle.stage", "the selected stages have nothing to start",
+		return applyStageEmpty.Fail("the selected stages have nothing to start",
 			"repeat "+contextCommand(contextName, string(reconciliation.Apply), tokens...)+" without --stage")
 	}
-	return failure("lifecycle.stage",
+	return applyStageEmpty.Fail(
 		"the selected stages have nothing to start",
 		"repeat "+widenedApply(contextName, selection, ready[0].Stage, tokens))
 }
@@ -447,13 +447,13 @@ func bindSelection(contextName string, plan reconciliation.Plan, selection recon
 	}
 	candidates := reconciliation.UntilCandidates(plan)
 	if len(candidates) == 0 {
-		return selection, failure("lifecycle.stage", "the plan has no add-on instance for --until to name",
+		return selection, applyUntilUnknown.Fail("the plan has no add-on instance for --until to name",
 			"repeat "+contextCommand(contextName, string(reconciliation.Apply))+" without --until")
 	}
 	if len(candidates) > 8 {
 		candidates = append(candidates[:8], "and "+strconv.Itoa(len(candidates)-8)+" more")
 	}
-	return selection, failure("lifecycle.stage", "the plan has no add-on instance named by --until",
+	return selection, applyUntilUnknown.Fail("the plan has no add-on instance named by --until",
 		"name one of: "+strings.Join(candidates, ", "))
 }
 
@@ -488,7 +488,7 @@ func (d decider) freshApply(ctx context.Context, view View, selection reconcilia
 		return operationPlan{}, err
 	}
 	if len(plan.Blocks) == 0 {
-		return operationPlan{}, failure("lifecycle.state", "the selected Environment declares nothing this executable would create", "declare a managed infrastructure service, or see "+supportedExample)
+		return operationPlan{}, applyNothingDeclared.Fail("the selected Environment declares nothing this executable would create", "declare a managed infrastructure service, or see "+supportedExample)
 	}
 	selection, err = bindSelection(view.Identity().Name, plan, selection)
 	if err != nil {

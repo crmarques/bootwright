@@ -154,7 +154,7 @@ func TestAPlainDeleteClearsTheRefusedRecordStatesBesidePristineEvidence(t *testi
 			}
 			for _, verb := range []string{"apply", "destroy"} {
 				_, stderr := contextRun(t, services, 1, verb, "--context", "alpha", "--yes")
-				if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(stderr, "bootwright context delete --name alpha --purge") ||
+				if !strings.Contains(stderr, "records-missing") && !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(stderr, "bootwright context delete --name alpha --purge") ||
 					strings.Contains(stderr, "--allow-orphans") {
 					t.Fatalf("the %s refused with %s", verb, stderr)
 				}
@@ -257,7 +257,7 @@ func TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses(t *testing.T) {
 	const named = "the desired state changed after this apply completed: it changes Environment/synthetic (spec.domains.base, spec.domains.clusters and 3 more fields), " +
 		"Machine/service-host (spec.network.addresses[fqdn].address)"
 	const remedy = "take back what it owns with bootwright destroy --context alpha, then run bootwright apply --context alpha; bootwright diff --context alpha shows each change"
-	if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(humanContent(stderr), humanContent(named)) || !strings.Contains(humanContent(stderr), humanContent(remedy)) ||
+	if !strings.Contains(stderr, "apply.input-changed") || !strings.Contains(humanContent(stderr), humanContent(named)) || !strings.Contains(humanContent(stderr), humanContent(remedy)) ||
 		!sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatalf("the apply over the changed input refused with %s", stderr)
 	}

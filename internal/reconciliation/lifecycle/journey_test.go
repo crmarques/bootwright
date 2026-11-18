@@ -2288,7 +2288,7 @@ func TestApplyOverACompletedApplyWithChangedInputRefuses(t *testing.T) {
 		desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte("kind: Environment\n# edited\n")),
 	}}
 	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.state" {
+	if code := firstCode(err); code != "apply.input-changed" {
 		t.Fatalf("apply over a changed input = %q (%+v)", code, result)
 	}
 	if len(h.capability.applies) != 1 {
@@ -4448,7 +4448,7 @@ func TestApplyOverAnIncompleteDestroyStillRefuses(t *testing.T) {
 	}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+	if len(reported) != 1 || reported[0].Code != "engine.other-verb-incomplete" {
 		t.Fatalf("refusal = %+v", reported)
 	}
 	if !strings.Contains(reported[0].Message, "an incomplete destroy must be continued") {
@@ -4528,7 +4528,7 @@ func TestStageSelectionWithNothingStartableRefuses(t *testing.T) {
 		ContextName: "lab", SkipConfirmation: true, Stages: []string{"clusters"},
 	})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" {
+	if len(reported) != 1 || reported[0].Code != "apply.stage-empty" {
 		t.Fatalf("fresh refusal = %+v", reported)
 	}
 	if !strings.Contains(reported[0].Remediation, "infrastructure-services") {
@@ -4545,7 +4545,7 @@ func TestStageSelectionWithNothingStartableRefuses(t *testing.T) {
 	_, err = h.service.Apply(context.Background(), ApplyRequest{
 		ContextName: "lab", SkipConfirmation: true, Stages: []string{"clusters"},
 	})
-	if code := firstCode(err); code != "lifecycle.stage" {
+	if code := firstCode(err); code != "apply.stage-empty" {
 		t.Fatalf("continuation refusal = %q", code)
 	}
 }
@@ -4563,7 +4563,7 @@ func TestFailedBlockOutsideTheSelectionRefusesRetry(t *testing.T) {
 		ContextName: "lab", SkipConfirmation: true, Stages: []string{"substrates"},
 	})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || !strings.Contains(reported[0].Remediation, "infrastructure-services") {
+	if len(reported) != 1 || reported[0].Code != "apply.stage-excludes-retry" || !strings.Contains(reported[0].Remediation, "infrastructure-services") {
 		t.Fatalf("retry refusal = %+v", reported)
 	}
 }
@@ -4581,7 +4581,7 @@ func TestAStageRefusalNamesAnApplyThatPassesAuthorization(t *testing.T) {
 	authorized := []string{reconciliation.AuthorizationDataLoss}
 	want := "repeat bootwright apply --context lab --stage infrastructure-services,machines --authorize " + shownBinding(t, h, "lab")
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: []string{"machines"}, Authorizations: authorized})
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != want {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "apply.stage-empty" || reported[0].Remediation != want {
 		t.Fatalf("fresh refusal = %+v, want the remedy %q", reported, want)
 	}
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{
@@ -4590,7 +4590,7 @@ func TestAStageRefusalNamesAnApplyThatPassesAuthorization(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"}, Authorizations: authorized})
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != want {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "apply.stage-empty" || reported[0].Remediation != want {
 		t.Fatalf("continuation refusal = %+v, want the remedy %q", reported, want)
 	}
 	result, err := h.service.Apply(context.Background(), ApplyRequest{
@@ -4606,7 +4606,7 @@ func TestAStageRefusalNamesAnApplyThatPassesAuthorization(t *testing.T) {
 		t.Fatal("a failed block reported success")
 	}
 	_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: []string{"machines"}, Authorizations: authorized})
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != want {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "apply.stage-excludes-retry" || reported[0].Remediation != want {
 		t.Fatalf("retry refusal = %+v, want the remedy %q", reported, want)
 	}
 	result, err = h.service.Apply(context.Background(), ApplyRequest{
@@ -4751,7 +4751,7 @@ func TestSelectingALaterStageWaitsForTheControllerBlock(t *testing.T) {
 	_, err := h.service.Apply(context.Background(), ApplyRequest{
 		ContextName: "lab", SkipConfirmation: true, Stages: []string{"infrastructure-services"},
 	})
-	if diagnostics.Of(err)[0].Code != "lifecycle.stage" || !strings.Contains(diagnostics.Of(err)[0].Remediation, "--stage controller") {
+	if !refusedBeforeEffect(diagnostics.Of(err)[0].Code) || !strings.Contains(diagnostics.Of(err)[0].Remediation, "--stage controller") {
 		t.Fatalf("selection error = %v", err)
 	}
 	if len(h.capability.applies) != 0 {

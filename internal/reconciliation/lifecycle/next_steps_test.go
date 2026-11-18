@@ -315,7 +315,7 @@ func TestStatusOffersTheDeletionItsRefusalNames(t *testing.T) {
 			}
 			_, err = h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || !containsCommand(reported[0].Remediation, status.NextSteps[0]) {
+			if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) || !containsCommand(reported[0].Remediation, status.NextSteps[0]) {
 				t.Fatalf("status offers %q, the apply refused with %+v (%v)", status.NextSteps[0], reported, err)
 			}
 		})
@@ -509,7 +509,7 @@ func requireDecidesIfOffered(t *testing.T, h *harness, verb reconciliation.Verb,
 	switch {
 	case offered && (err == nil || err.Error() != "declined" || !decided):
 		t.Fatalf("the offered %s did not decide: %v (presented %d, asked %d)", verb, err, len(h.presenter.presented)-presented, h.confirmer.asked-asked)
-	case !offered && (firstCode(err) != "lifecycle.state" || len(h.presenter.presented) != presented || h.confirmer.asked != asked):
+	case !offered && (!refusedBeforeEffect(firstCode(err)) || len(h.presenter.presented) != presented || h.confirmer.asked != asked):
 		t.Fatalf("the %s status leaves out = %v, want a lifecycle.state refusal before it presents", verb, err)
 	}
 	before.require(t, h)
@@ -529,7 +529,7 @@ func requirePreviewDecidesIfOffered(t *testing.T, h *harness, verb reconciliatio
 		if err != nil || preview.Verb != string(verb) || preview.Receipt.Next != next {
 			t.Fatalf("the preview of the offered %s = %+v (%v), want one naming %q", verb, preview, err, next)
 		}
-	} else if firstCode(err) != "lifecycle.state" {
+	} else if !refusedBeforeEffect(firstCode(err)) {
 		t.Fatalf("the preview of the %s status leaves out = %v, want a lifecycle.state refusal", verb, err)
 	}
 	before.require(t, h)

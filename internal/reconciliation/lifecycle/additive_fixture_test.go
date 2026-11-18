@@ -169,7 +169,7 @@ func (f *additiveFixture) refusedWith(t *testing.T, fragments ...string) {
 	before, _ := durableOperation(t, f.harness)
 	_, err := apply(f.harness)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+	if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) {
 		t.Fatalf("the apply reported %+v (%v), want one lifecycle.state refusal", reported, err)
 	}
 	for _, fragment := range fragments {
@@ -180,6 +180,20 @@ func (f *additiveFixture) refusedWith(t *testing.T, fragments ...string) {
 	if after, _ := durableOperation(t, f.harness); after.ID != before.ID || after.State != before.State {
 		t.Errorf("a refused apply moved the current operation from %s to %s", before.ID, after.ID)
 	}
+}
+
+// refusedBeforeEffect is whether a code is a refusal that made no effect: the
+// legacy lifecycle.state, or a declared stop of certainty none.
+func refusedBeforeEffect(code string) bool {
+	if code == "lifecycle.state" {
+		return true
+	}
+	for _, stop := range Stops() {
+		if stop.Code == code {
+			return stop.Certainty == diagnostics.CertaintyNone
+		}
+	}
+	return false
 }
 
 func headPlan(t *testing.T, h *harness) (operationstore.Operation, reconciliation.Plan) {

@@ -502,7 +502,7 @@ func TestAFailedBlockOutsideTheSelectionIsNeverRetried(t *testing.T) {
 		ContextName: "lab", Stages: []string{"substrates"}, SkipConfirmation: true,
 	})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Remediation != "repeat bootwright apply --context lab --stage infrastructure-services,substrates" {
+	if len(reported) != 1 || reported[0].Code != "apply.stage-excludes-retry" || reported[0].Remediation != "repeat bootwright apply --context lab --stage infrastructure-services,substrates" {
 		t.Fatalf("retry refusal = %+v", reported)
 	}
 	if len(h.capability.applies) != 3 {

@@ -952,7 +952,7 @@ func TestADecisionOverAFinalizationDueRefusesWithoutEffect(t *testing.T) {
 		}
 		decided, err := h.service.decider(nil).decideOver(ctx, view, store, reconciliation.Destroy, reconciliation.Selection{}, operation, frozen, states, attempts, nil)
 		reported := diagnostics.Of(err)
-		if len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "due its finalization") {
+		if len(reported) == 0 || reported[0].Code != "engine.finalization-due" || !strings.Contains(reported[0].Message, "due its finalization") {
 			t.Fatalf("decideOver over a due finalization returned %v", err)
 		}
 		if decided.fresh || decided.noop || decided.finalize || decided.operation.ID != "" {

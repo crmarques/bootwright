@@ -446,7 +446,7 @@ func decidedAs(t *testing.T, h *harness, verb reconciliation.Verb) (string, reco
 		return err
 	})
 	if err != nil {
-		if code := firstCode(err); code != "lifecycle.state" {
+		if code := firstCode(err); !refusedBeforeEffect(code) {
 			t.Fatalf("the %s refuses %s: %v", verb, code, err)
 		}
 		return "refuse", chosen
@@ -503,7 +503,7 @@ func requirePreviewShape(t *testing.T, h *harness, where string, test stateMachi
 		t.Fatal(err)
 	}
 	if refusal != nil {
-		if code := firstCode(refusal); !test.shown.refused || code != "lifecycle.state" {
+		if code := firstCode(refusal); !test.shown.refused || !refusedBeforeEffect(code) {
 			t.Errorf("%s: the preview refuses %s (%v), want %+v", where, code, refusal, test.shown)
 		}
 		return

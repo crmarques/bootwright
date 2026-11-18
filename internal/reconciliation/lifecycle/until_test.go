@@ -54,7 +54,7 @@ func TestApplyUntilAnAddOnPausesAndALaterApplyResumes(t *testing.T) {
 	}
 	operation := result.Receipt.Operation
 	_, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Until: "lab.second"})
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.stage" || !strings.HasSuffix(reported[0].Remediation, " without --until") {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "apply.stage-empty" || !strings.HasSuffix(reported[0].Remediation, " without --until") {
 		t.Fatalf("a done instance refused with %+v", reported)
 	}
 	result, err = h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
@@ -85,7 +85,7 @@ func TestApplyUntilRefusesBeforeAnyEffect(t *testing.T) {
 			h := newPlannedHarness(t, untilDefinitions())
 			_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Until: tc.until, Stages: tc.stages})
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Message != tc.message || reported[0].Remediation != tc.remedy {
+			if len(reported) != 1 || !refusedBeforeEffect(reported[0].Code) || reported[0].Message != tc.message || reported[0].Remediation != tc.remedy {
 				t.Fatalf("refusal = %+v", reported)
 			}
 			if len(h.capability.applies) != 0 || len(h.workspace.area.files) != 0 || h.workspace.mutations != 0 {
@@ -103,7 +103,7 @@ func TestApplyUntilWidensTheStageOfAFailedBlockItRequires(t *testing.T) {
 	failApply(t, h, "cluster")
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true, Stages: []string{"add-ons"}, Until: "lab.second"})
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.stage" || reported[0].Message != "the block this operation must retry is outside the selected stages" ||
+	if len(reported) != 1 || reported[0].Code != "apply.stage-excludes-retry" || reported[0].Message != "the block this operation must retry is outside the selected stages" ||
 		reported[0].Remediation != "repeat bootwright apply --context lab --stage clusters,add-ons --until lab.second" {
 		t.Fatalf("refusal = %+v", reported)
 	}

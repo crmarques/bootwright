@@ -96,7 +96,7 @@
       "next": "resolve"
     },
     "apply": {
-      "code": "lifecycle.state",
+      "code": "engine.other-verb-incomplete",
       "message": "an incomplete destroy must be continued before another operation",
       "remediation": "restore the controller state that recorded this context's binding from a matching backup, or delete the context with bootwright context delete --name lab --purge --allow-orphans, which abandons what it may still own",
       "causes": [

@@ -52,9 +52,63 @@ var (
 		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Meaning: "a removal would retire what a consumer that outlives it still uses",
 		Remedy:  survivingConsumerRemedy}
+	engineFinalizationDue = diagnostics.Stop{Code: "engine.finalization-due", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyOwed,
+		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "an operation is due its finalization, which no decision may skip", Remedy: "repeat the command, which finalizes that operation before it decides"}
+	engineRecordsContradict = diagnostics.Stop{Code: "engine.records-contradict", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "an incomplete operation holds records that contradict what it started", Remedy: "read the records with bootwright status, then restore them from a backup or delete the context"}
+	engineOtherVerbIncomplete = diagnostics.Stop{Code: "engine.other-verb-incomplete", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "an incomplete operation of the other verb must be continued before another operation", Remedy: "continue or replace the incomplete operation the message names"}
+	applyRecordsMissing = diagnostics.Stop{Code: "apply.records-missing", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
+		Meaning: "a completed apply records no completion for blocks it froze, so nothing proves its input applied", Remedy: "restore the context's records, or take back what it owns and apply again"}
+	destroyRecordsMissing = diagnostics.Stop{Code: "destroy.records-missing", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
+		Meaning: "a completed destroy records no completion for blocks it froze, so nothing proves their effects removed", Remedy: "restore the context's records, or delete the context with what it may still own"}
+	applyInputChanged = diagnostics.Stop{Code: "apply.input-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "the desired state changed after the apply completed, and it is no addition to it", Remedy: "take back what the context owns with destroy, then apply the changed input"}
+	applyNotAnAddition = diagnostics.Stop{Code: "apply.not-an-addition", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "a changed input over a completed apply adds something an additive apply cannot take", Remedy: "take back what the context owns with destroy, then apply the changed input"}
+	applyPrerequisiteLost = diagnostics.Stop{Code: "apply.prerequisite-lost", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryOtherVerb,
+		Meaning: "a block an addition needs, held by an earlier apply of its lineage, is gone or no longer done", Remedy: "take back what the lineage owns with destroy"}
+	applyNothingDeclared = diagnostics.Stop{Code: "apply.nothing-declared", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "the selected Environment declares nothing this executable would create", Remedy: "declare a managed infrastructure service"}
+	applyStageEmpty = diagnostics.Stop{Code: "apply.stage-empty", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "the selected stages or the --until instance have nothing to start", Remedy: "repeat the apply with a wider selection"}
+	applyStageExcludesRetry = diagnostics.Stop{Code: "apply.stage-excludes-retry", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "the block the operation must retry first is outside the selected stages", Remedy: "repeat the apply with a selection that holds that block"}
+	applyUntilUnknown = diagnostics.Stop{Code: "apply.until-unknown", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "--until names no add-on instance of the plan", Remedy: "name an add-on instance the plan holds, or repeat without --until"}
+	planInputUncompilable = diagnostics.Stop{Code: "plan.input-uncompilable", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "the context's frozen desired state could not be compiled", Remedy: "repair the input with validate and import it again"}
+	planCapabilityMissing = diagnostics.Stop{Code: "plan.capability-missing", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryNone,
+		Meaning: "no lifecycle capability of this build plans the selected state", Remedy: "use a build that carries the capability; report it if this build should"}
+	planCapabilityDefect = diagnostics.Stop{Code: "plan.capability-defect", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseDefect, Recovery: diagnostics.RecoveryNone,
+		Meaning: "a capability planned a block it may not plan", Remedy: "report the message as a defect"}
+	planHostKeyUnbound = diagnostics.Stop{Code: "plan.host-key-unbound", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "an SSH placement binds no host key, or reaches the controller where its pinned key does not apply", Remedy: "author access.ssh.knownHostsRef on the Machine the message names"}
+	planEnvironmentInvalid = diagnostics.Stop{Code: "plan.environment-invalid", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryChangeInput,
+		Meaning: "the selected state holds no single Environment naming its controller Machine", Remedy: "repair the input with validate"}
 )
 
 var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineRecordsDenied, engineRecordsDevice, engineEscaped, engineStartUnrecorded,
-	applyUnresolved, destroyUnresolved, applyIncomplete, destroyIncomplete, destroyInUse, destroyConsumerSurvives}
+	applyUnresolved, destroyUnresolved, applyIncomplete, destroyIncomplete, destroyInUse, destroyConsumerSurvives,
+	engineFinalizationDue, engineRecordsContradict, engineOtherVerbIncomplete, applyRecordsMissing, destroyRecordsMissing, applyInputChanged,
+	applyNotAnAddition, applyPrerequisiteLost, applyNothingDeclared, applyStageEmpty, applyStageExcludesRetry, applyUntilUnknown,
+	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }

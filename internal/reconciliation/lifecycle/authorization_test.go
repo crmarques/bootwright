@@ -170,7 +170,7 @@ func TestAKindWithNoBindingIsNamedBeforeRegistration(t *testing.T) {
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("artifacts")})
 	h.service.capabilities = boundResolver{}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.state" {
+	if code := firstCode(err); code != "plan.capability-missing" {
 		t.Fatalf("empty binding set refusal = %q", code)
 	}
 	if h.workspace.mutations != 0 {
