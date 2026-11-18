@@ -4082,7 +4082,7 @@ func TestDestroyOverAnUnprovableBlockRefusesBeforeRegistration(t *testing.T) {
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectUnknown}, {Effect: reconciliation.EffectUnknown}}
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if len(reported) == 0 || reported[len(reported)-1].Code != "lifecycle.unknown" {
+	if len(reported) == 0 || !unprovedCode(reported[len(reported)-1].Code) {
 		t.Fatalf("refusal = %+v", reported)
 	}
 	if !strings.Contains(reported[len(reported)-1].Message, "artifact-server-lab") {

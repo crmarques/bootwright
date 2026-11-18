@@ -95,6 +95,10 @@ refusals of a decision and its plan before any effect.
 | `engine.recapture-mismatch` | block | possible | target | - | fix-then-repeat | an output a block recaptured presents another identity than the one custody holds | find what replaced the effect the block proved; the context's records name the original |
 | `engine.resolved-unperformed` | resolution | none | target | - | repeat | an observation proved a frozen effect never performed, or left part done, so the block is failed and retried | repeat the operation, which retries the block |
 | `destroy.postcondition-unknown` | block | none | target | - | fix-then-repeat | a retried removal read its target again and still could not tell its postcondition, so it performed no effect | restore the target the removal reads, then repeat the destroy |
+| `engine.finalization-incomplete` | operation | owed | records | - | repeat | an operation's effects are complete and its finalization is not | repeat the command, which finishes the finalization |
+| `destroy.release-incomplete` | operation | owed | records | - | repeat | the removal completed, and releasing what it owned did not | repeat the destroy to finish it |
+| `destroy.unproved-effects` | operation | unproved | target | - | fix-then-repeat | a removal cannot prove what some effects left behind, so it registered nothing | do what each block's diagnostic reports, then repeat the destroy |
+| `engine.outcome-unknown` | resolution | unproved | target | - | fix-then-repeat | a block's outcome is still unknown after an observation, for the reason the message names | do what the reason names, then repeat the command to observe the block again |
 
 #### Decisions
 
@@ -121,6 +125,10 @@ refusals of a decision and its plan before any effect.
 | `destroy.stage-selected` | operation | none | input | - | fix-then-repeat | the next operation is a destroy, which accepts no stage selection | repeat the command without --stage and --until |
 | `apply.until-before-preparation` | operation | none | input | - | other-verb | the add-on boundary --until names cannot be planned before preparation completes | run apply to complete preparation, then select --until |
 | `engine.records-damaged` | operation | none | records | - | abandon-context | the context's operation records do not form the lineage or removal the operation needs | restore the context store from a backup, or delete the context with what it may still own |
+| `engine.borrowed-ssh` | operation | none | input | - | fix-then-repeat | a lifecycle operation was given borrowed SSH credentials, which it never uses | remove the --ssh flags and author each Machine's own access |
+| `engine.confirmation-required` | operation | none | input | - | authorize | the operation needs a confirmation the invocation cannot ask for | repeat the command on a terminal, or with --yes once the plan is reviewed |
+| `engine.input-invalid` | operation | none | input | - | fix-then-repeat | an invocation option holds a value the engine refuses | repeat the command with the value the message names |
+| `engine.credential-moved` | operation | none | concurrency | - | repeat | a cluster administrator credential changed while its update was decided or pending | repeat the credential update against the current context |
 
 #### Plans, preparations and authorizations
 
@@ -137,3 +145,5 @@ refusals of a decision and its plan before any effect.
 | `authorize.rebind-invalid` | operation | none | input | - | fix-then-repeat | an --authorize rebind names a Secret the operation cannot rebind | repeat the command naming each rotated access credential once as --authorize rebind=<secret> |
 | `prepare.refused` | operation | none | input | - | fix-then-repeat | a preparation cannot start or advance over the context's current operation or input | finish or take back the current operation, or restore the input the preparation recorded |
 | `prepare.unsupported` | operation | none | build | - | none | this executable registers no preparation for the requested owner | use a build that registers the preparation |
+| `authorize.relaxation-changed` | operation | none | input | - | fix-then-repeat | an operation continues only under the erase relaxations its plan froze, and the invocation names others | continue it naming the relaxations its plan froze, or replace it with a fresh destroy |
+| `diff.context-moved` | context | none | concurrency | - | repeat | the context changed while diff read it | repeat the diff |

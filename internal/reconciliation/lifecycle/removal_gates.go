@@ -37,7 +37,7 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	}
 	name := tx.Identity().Name
 	replaced, frozen, states, err := s.verifyBasis(ctx, store, decided.basis, func(basis) error {
-		return failure("lifecycle.state",
+		return enginePlanMoved.Fail(
 			"the operation this removal was planned from is no longer the one the context holds",
 			"repeat "+contextCommand(name, string(reconciliation.Destroy))+" to plan it from the operation the context holds now")
 	})
@@ -79,7 +79,7 @@ func (s Service) proveRemovable(ctx context.Context, tx Transaction, store Opera
 	s.reportResolution(ctx, ProgressEvent{Status: "unknown"})
 	var unresolved error
 	if len(left) != 0 {
-		unresolved = failure("lifecycle.unknown",
+		unresolved = destroyUnprovedEffects.Fail(
 			"this removal cannot prove what these effects left behind, so it registered nothing: "+strings.Join(left, ", "),
 			"do what the diagnostic of each reports, then repeat "+contextCommand(name, string(reconciliation.Destroy), authorizingUnfixed(decided.plan)...))
 	}
@@ -308,7 +308,7 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 func (s Service) probeQuiescent(ctx context.Context, store OperationStore, contextName string, plan reconciliation.Plan, phases removalPhases, material map[string]secrets.Material, held lineage, launch prerequisites.PythonLaunch, block reconciliation.Block) (Quiescence, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
-		return Quiescence{}, failure("lifecycle.state",
+		return Quiescence{}, engineOtherBuild.Fail(
 			"this executable does not offer the implementation this block froze",
 			"install the executable that registered this operation")
 	}

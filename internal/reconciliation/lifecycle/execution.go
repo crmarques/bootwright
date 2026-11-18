@@ -44,7 +44,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		return nil, err
 	}
 	if borrowed {
-		return nil, failure("lifecycle.state",
+		return nil, engineBorrowedSSH.Fail(
 			"borrowed SSH credentials are unsupported for lifecycle operations",
 			"remove --ssh-user, --ssh-id-file and --ssh-ask-sudo-password and author the Machine's own access")
 	}
@@ -122,7 +122,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 			if len(requiredTokens(decided.plan)) != 0 {
 				remedy = "review the plan, then repeat " + contextCommand(name, string(verb), invocationFlags(decided.selection, authorizing(decided.plan), unregistered)...) + " with --yes"
 			}
-			return nil, failure("lifecycle.state", "this operation requires confirmation", remedy)
+			return nil, engineConfirmationRequired.Fail("this operation requires confirmation", remedy)
 		}
 		if err := s.options.Confirmer.Confirm(ctx, string(verb), name); err != nil {
 			return nil, err
@@ -170,7 +170,7 @@ func (s Service) admitApplyView(ctx context.Context, view View, decided operatio
 // withParallelism changes only this invocation's service copy.
 func (s Service) withParallelism(value int) (Service, error) {
 	if value < 0 {
-		return s, failure("lifecycle.state", "parallelism must not be negative", "use zero for the service default or a positive running-step limit")
+		return s, engineInputInvalid.Fail("parallelism must not be negative", "use zero for the service default or a positive running-step limit")
 	}
 	if value > 0 {
 		s.options.Concurrency = value

@@ -51,7 +51,7 @@ func (s Service) proveContracts(plan reconciliation.Plan, held map[string]string
 }
 
 func contractFailure(format string, args ...any) error {
-	return failure("lifecycle.state", fmt.Sprintf(format, args...), "use the executable that registered the operation")
+	return engineOtherBuild.Fail(fmt.Sprintf(format, args...), "use the executable that registered the operation")
 }
 
 func contractMessage(err error) string {
@@ -64,7 +64,7 @@ func contractMessage(err error) string {
 func (s Service) proveLineageContracts(chain lineage) error {
 	for _, member := range chain {
 		if err := s.proveContracts(member.plan, member.operation.Contracts); err != nil {
-			return failure("lifecycle.state", contractMessage(err), removeWith(member.operation.Executable))
+			return engineOtherBuild.Fail(contractMessage(err), removeWith(member.operation.Executable))
 		}
 	}
 	return nil

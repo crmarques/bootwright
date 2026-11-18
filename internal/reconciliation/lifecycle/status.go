@@ -646,9 +646,9 @@ func replacedRemovals(ctx context.Context, store recordReader, operation operati
 	for id := operation.Replaces; ; {
 		switch {
 		case seen[id]:
-			return nil, failure("lifecycle.state", "the removals this operation replaces name one another in a cycle", "restore the context store")
+			return nil, engineRecordsDamaged.Fail("the removals this operation replaces name one another in a cycle", "restore the context store")
 		case len(seen) > operationstore.MaxOperations:
-			return nil, failure("lifecycle.state", "the removals this operation replaces exceed the operations a context retains", "restore the context store")
+			return nil, engineRecordsDamaged.Fail("the removals this operation replaces exceed the operations a context retains", "restore the context store")
 		}
 		seen[id] = true
 		record, err := store.ReadOperation(ctx, id)
@@ -656,7 +656,7 @@ func replacedRemovals(ctx context.Context, store recordReader, operation operati
 			return nil, err
 		}
 		if record.Verb != reconciliation.Destroy {
-			return nil, failure("lifecycle.state", "the operation this removal replaces is no removal", "restore the context store")
+			return nil, engineRecordsDamaged.Fail("the operation this removal replaces is no removal", "restore the context store")
 		}
 		_, plan, states, err := removedApply(ctx, store, id)
 		if err != nil {

@@ -17,7 +17,7 @@ func PinInstalledHost(execution Execution, placement machineref.Placement, prove
 		return execution, placement, nil
 	}
 	if proved == nil {
-		return execution, placement, failure("lifecycle.state", "the installation proof reader of an installed placement is not bound", "")
+		return execution, placement, engineRequestDefect.Fail("the installation proof reader of an installed placement is not bound", "")
 	}
 	proofs := execution.ApplyProved
 	if len(proofs) == 0 {

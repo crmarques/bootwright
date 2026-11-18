@@ -216,7 +216,7 @@ func TestAnUnprovedPredecessorBlockThatCannotBeResolvedRefusesTheWholeRemoval(t 
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectUnknown}}
 	_, err := destroy(h)
 	reported := diagnostics.Of(err)
-	if len(reported) == 0 || reported[0].Code != "lifecycle.unknown" {
+	if len(reported) == 0 || !unprovedCode(reported[0].Code) {
 		t.Fatalf("destroy = %+v (%v)", reported, err)
 	}
 	if len(h.capability.destroys) != 0 || len(h.binder.released) != 0 {

@@ -136,7 +136,7 @@ func (s Service) finalizeFirst(ctx context.Context, name string, verb reconcilia
 		return operationPlan{}, ContextIdentity{}, err
 	}
 	if decided.finalize {
-		return operationPlan{}, ContextIdentity{}, failure("lifecycle.state",
+		return operationPlan{}, ContextIdentity{}, engineFinalizationIncomplete.Fail(
 			"the operation's finalization did not complete",
 			"repeat "+contextCommand(name, string(verb)))
 	}
@@ -276,7 +276,7 @@ func incompleteRemoval(contextName string, cause error) error {
 	if cause == nil {
 		return nil
 	}
-	return withCause(cause, failure("lifecycle.state",
+	return withCause(cause, destroyReleaseIncomplete.Fail(
 		"the removal completed, but releasing what it owned is incomplete",
 		"repeat "+contextCommand(contextName, string(reconciliation.Destroy))+" to finish it"))
 }

@@ -53,7 +53,7 @@ func UpdateAdminCredential(ctx context.Context, a AdminCredentialCall, e Executi
 
 func runAdminCredential(ctx context.Context, a AdminCredentialCall, e Execution, operation string, update secrets.Material) (RunResult, error) {
 	if a.Runner == nil {
-		return RunResult{}, failure("lifecycle.state", "the "+a.Adapter+" adapter is not configured", "")
+		return RunResult{}, engineRequestDefect.Fail("the "+a.Adapter+" adapter is not configured", "")
 	}
 	execution, call, cleanup, err := a.Bind(ctx, e)
 	if err != nil {
@@ -61,7 +61,7 @@ func runAdminCredential(ctx context.Context, a AdminCredentialCall, e Execution,
 	}
 	defer cleanup()
 	if call.Placement.Machine == "" || call.Placement != (machineref.Placement{Connection: machineref.ConnectionLocal, Machine: call.Placement.Machine}) {
-		return RunResult{}, failure("lifecycle.state", "the frozen administrator credential request is placed off the controller", "")
+		return RunResult{}, engineRequestDefect.Fail("the frozen administrator credential request is placed off the controller", "")
 	}
 	execution.Material = maps.Clone(execution.Material)
 	if execution.Material == nil {

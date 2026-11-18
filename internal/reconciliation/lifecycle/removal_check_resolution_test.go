@@ -75,7 +75,7 @@ func TestARemovalLeavesAnUnreadableApplyBlockUnknownAndRegistersNothing(t *testi
 	applied := currentOperation(t, h)
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectUnknown}, {Effect: reconciliation.EffectUnknown}}
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
-	if code := firstCode(err); code != "lifecycle.unknown" {
+	if code := firstCode(err); !unprovedCode(code) {
 		t.Fatalf("the removal = %+v (%v), want lifecycle.unknown", diagnostics.Of(err), err)
 	}
 	if !slices.Equal(h.capability.calls, []string{"observe:alpha", "observe-removal:alpha"}) || len(h.capability.destroys) != 0 {

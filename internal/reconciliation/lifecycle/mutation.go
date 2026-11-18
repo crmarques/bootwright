@@ -72,7 +72,7 @@ func MutateBlock[R any](ctx context.Context, m Mutation[R], execution Execution,
 		proof = reading.Presence
 	}
 	if proof == nil {
-		return unknown, failure("lifecycle.state", "the "+operation+" evidence has no check", "")
+		return unknown, engineRecordsDamaged.Fail("the "+operation+" evidence has no check", "")
 	}
 	if err := proof(result.Evidence); err != nil {
 		return unknown, err

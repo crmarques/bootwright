@@ -53,7 +53,7 @@ func removalClosure(plan reconciliation.Plan, dependencies []string) (map[string
 		}
 		dependency, found := plan.Block(id)
 		if !found {
-			return nil, failure("lifecycle.state", "the removal names a missing dependency", "")
+			return nil, engineRecordsDamaged.Fail("the removal names a missing dependency", "")
 		}
 		wanted[id] = true
 		pending = append(pending, dependency.Dependencies...)
@@ -73,7 +73,7 @@ func replacedProofs(ctx context.Context, store recordReader, held lineage, opera
 	seen := map[string]bool{operation.ID: true}
 	for id := operation.Replaces; id != ""; {
 		if seen[id] || len(seen) > operationstore.MaxOperations {
-			return nil, failure("lifecycle.state", "the removals this operation replaces name one another in a cycle or exceed the operations a context retains", "restore the context store")
+			return nil, engineRecordsDamaged.Fail("the removals this operation replaces name one another in a cycle or exceed the operations a context retains", "restore the context store")
 		}
 		seen[id] = true
 		record, err := store.ReadOperation(ctx, id)
@@ -81,7 +81,7 @@ func replacedProofs(ctx context.Context, store recordReader, held lineage, opera
 			return nil, err
 		}
 		if record.Verb != reconciliation.Destroy || record.Source != operation.Source {
-			return nil, failure("lifecycle.state", "the operation this removal replaces is no removal of the same apply", "restore the context store")
+			return nil, engineRecordsDamaged.Fail("the operation this removal replaces is no removal of the same apply", "restore the context store")
 		}
 		frozen, err := store.ReadPlan(ctx, id)
 		if err != nil {
@@ -125,7 +125,7 @@ func provedRemovals(ctx context.Context, store recordReader, held lineage, opera
 		}
 		appliedBlock, found := owner.plan.Block(dependency.ID)
 		if !found {
-			return nil, failure("lifecycle.state", "the removal dependency has no original apply identity", "")
+			return nil, engineRecordsDamaged.Fail("the removal dependency has no original apply identity", "")
 		}
 		applied, err := blockEvidence(ctx, store, owner.operation.ID, appliedBlock, reconciliation.Apply)
 		if err != nil {
@@ -170,7 +170,7 @@ func originalRemovalDependents(ctx context.Context, store recordReader, operatio
 		return nil, err
 	}
 	if _, found := original.Block(block); !found {
-		return nil, failure("lifecycle.state", "the removal block has no original apply identity", "")
+		return nil, engineRecordsDamaged.Fail("the removal block has no original apply identity", "")
 	}
 	wanted := map[string]bool{block: true}
 	for changed := true; changed; {

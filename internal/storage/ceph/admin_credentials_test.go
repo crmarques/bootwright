@@ -165,11 +165,11 @@ func TestCephAnUnconfiguredRunnerRefusesTheAdminCredentialRun(t *testing.T) {
 	e := credentialExecution(t)
 	capability := New(api.CephCluster, nil)
 	_, err := capability.PrepareAdminCredential(context.Background(), e)
-	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" || d[0].Message != "the Ceph adapter is not configured" {
+	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.request-defect" || d[0].Message != "the Ceph adapter is not configured" {
 		t.Fatalf("prepare without a runner returned %+v", d)
 	}
 	err = capability.UpdateAdminCredential(context.Background(), e, secrets.Material{})
-	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" || d[0].Message != "the Ceph adapter is not configured" {
+	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.request-defect" || d[0].Message != "the Ceph adapter is not configured" {
 		t.Fatalf("update without a runner returned %+v", d)
 	}
 }

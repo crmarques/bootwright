@@ -214,7 +214,7 @@ func TestAControllerStageInspectionCannotAuthorizeAnEffect(t *testing.T) {
 		"RetainDependencies": inspection.Stage.RetainDependencies(ctx, nil), "Prepare": inspection.Stage.Prepare(ctx, prerequisites.StagePreparation{}),
 	} {
 		t.Run(name, func(t *testing.T) {
-			refusedWith(t, err, "lifecycle.state", "an observation may not authorize a host effect", "")
+			refusedWith(t, err, "engine.request-defect", "an observation may not authorize a host effect", "")
 		})
 	}
 }
@@ -422,7 +422,7 @@ func TestAnObservedDiffRefusesWhenTheContextMovedWhileItRead(t *testing.T) {
 			if result != nil || len(f.capability.observes) != observes {
 				t.Fatalf("a moved context still observed: %+v", result)
 			}
-			refusedWith(t, err, "lifecycle.state", "the context changed while diff read it", "repeat bootwright diff --context lab --observe")
+			refusedWith(t, err, "diff.context-moved", "the context changed while diff read it", "repeat bootwright diff --context lab --observe")
 		})
 	}
 }
@@ -436,7 +436,7 @@ func TestAnObservedDiffRefusesAnUnreopenableBinding(t *testing.T) {
 	if result != nil || f.workspace.runs != runs {
 		t.Fatalf("an unreopenable binding still observed: %+v", result)
 	}
-	refusedWith(t, err, "lifecycle.state",
+	refusedWith(t, err, "engine.binding-lost",
 		"the Secret binding apply "+operation+" froze cannot be reopened, so diff cannot observe its effects: the keyring cannot decrypt the binding",
 		"restore the context's keyring from a complete backup, or run bootwright diff --context lab without --observe")
 }

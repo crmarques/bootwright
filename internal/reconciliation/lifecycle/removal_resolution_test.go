@@ -59,7 +59,7 @@ func TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves(t *testing.T) {
 			if result == nil || result.Receipt.State != string(tc.state) || result.Receipt.Verb != string(reconciliation.Destroy) {
 				t.Fatalf("resolved removal = %+v (%v), want a %s destroy", result, err, tc.state)
 			}
-			if firstCode(err) != tc.code || (tc.message != "" && !slices.ContainsFunc(diagnostics.Of(err), func(reported diagnostics.Diagnostic) bool {
+			if firstCode(err) != tc.code && !(tc.code == "lifecycle.unknown" && unprovedCode(firstCode(err))) || (tc.message != "" && !slices.ContainsFunc(diagnostics.Of(err), func(reported diagnostics.Diagnostic) bool {
 				return reported.Message == tc.message
 			})) {
 				t.Fatalf("resolved removal reported %v, want %s %q", err, tc.code, tc.message)

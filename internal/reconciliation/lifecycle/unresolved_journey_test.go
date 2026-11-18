@@ -190,9 +190,9 @@ func requireRefusal(t *testing.T, journey *lifecycle.CapabilityJourney, adapter 
 		t.Fatalf("the removal over an unproved machine went on: %+v", result)
 	}
 	want := []diagnostics.Diagnostic{
-		{Severity: "error", Code: "lifecycle.unknown", Message: "the outcome of " + lostMachine + " is still unknown: " + reason,
+		{Severity: "error", Code: "engine.outcome-unknown", Message: "the outcome of " + lostMachine + " is still unknown: " + reason,
 			Remediation: remedy + ", then repeat bootwright destroy --context lab --authorize data-loss=<digest bootwright plan prints> to observe it again"},
-		{Severity: "error", Code: "lifecycle.unknown", Message: "this removal cannot prove what these effects left behind, so it registered nothing: " + lostMachine,
+		{Severity: "error", Code: "destroy.unproved-effects", Message: "this removal cannot prove what these effects left behind, so it registered nothing: " + lostMachine,
 			Remediation: "do what the diagnostic of each reports, then repeat bootwright destroy --context lab --authorize data-loss=<digest bootwright plan prints>"},
 	}
 	if got := withoutObjects(diagnostics.Of(err)); !slices.Equal(got, want) {
@@ -307,7 +307,7 @@ func TestADriftedLibvirtMachineWhoseApplyIsUnknownIsRemovedByItsDestroy(t *testi
 	adapter.set(func(h *hypervisor) { h.drifted = true })
 	_, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
 	reported := diagnostics.Of(err)
-	if len(reported) == 0 || reported[0].Code != "lifecycle.unknown" || !strings.HasSuffix(reported[0].Message, "the running management controller is not the frozen image") {
+	if len(reported) == 0 || reported[0].Code != "engine.outcome-unknown" || !strings.HasSuffix(reported[0].Message, "the running management controller is not the frozen image") {
 		t.Fatalf("the apply's resolution reported %+v (%v)", reported, err)
 	}
 	if calls := adapter.took(); !slices.Equal(calls, []string{"observe"}) {
@@ -329,6 +329,7 @@ func TestADriftedLibvirtMachineWhoseApplyIsUnknownIsRemovedByItsDestroy(t *testi
 func withoutObjects(reported []diagnostics.Diagnostic) []diagnostics.Diagnostic {
 	for index := range reported {
 		reported[index].Object = nil
+		reported[index].Certainty, reported[index].Cause, reported[index].Recovery = "", "", ""
 	}
 	return reported
 }

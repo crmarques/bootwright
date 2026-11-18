@@ -212,11 +212,11 @@ func TestInstallAnUnconfiguredRunnerRefusesTheAdminCredentialRun(t *testing.T) {
 	execution, kubeconfig := credentialExecution(t)
 	capability := NewInstall(nil).WithPasswordHash(hashed)
 	_, err := capability.PrepareAdminCredential(context.Background(), execution)
-	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" || d[0].Message != "the installation adapter is not configured" {
+	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.request-defect" || d[0].Message != "the installation adapter is not configured" {
 		t.Fatalf("prepare without a runner returned %+v", d)
 	}
 	err = capability.UpdateAdminCredential(context.Background(), execution, secrets.Material{})
-	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.state" || d[0].Message != "the installation adapter is not configured" {
+	if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "engine.request-defect" || d[0].Message != "the installation adapter is not configured" {
 		t.Fatalf("update without a runner returned %+v", d)
 	}
 	if value, _ := kubeconfig.Part(secrets.ValuePart); string(value) != "kubeconfig-bytes" {

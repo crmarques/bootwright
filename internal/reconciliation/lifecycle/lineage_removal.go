@@ -33,7 +33,7 @@ func removalOver(ctx context.Context, store recordReader, applied operationstore
 	for _, member := range held {
 		for implementation, contract := range member.operation.Contracts {
 			if previous, ok := scope.contracts[implementation]; ok && previous != contract {
-				return removalScope{}, failure("lifecycle.state", "the lineage holds conflicting execution contracts for "+implementation, removeWith(applied.Executable))
+				return removalScope{}, engineOtherBuild.Fail("the lineage holds conflicting execution contracts for "+implementation, removeWith(applied.Executable))
 			}
 			scope.contracts[implementation] = contract
 		}
@@ -55,7 +55,7 @@ func unremovable(applied operationstore.Operation, cause error) error {
 	if reported := diagnostics.Of(cause); len(reported) != 0 {
 		message += ": " + reported[0].Message
 	}
-	return failure("lifecycle.state", message, "restore the context store")
+	return engineRecordsDamaged.Fail(message, "restore the context store")
 }
 
 func replacementOf(ctx context.Context, store recordReader, removal operationstore.Operation, remaining reconciliation.Plan) (removalScope, error) {

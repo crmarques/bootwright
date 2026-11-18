@@ -17725,3 +17725,21 @@ and produced-input contract defects join `plan.capability-defect` and
 engine's ledger falls from 139 to 85. Guarded by
 `TestTheEnginesStopsAreTheCatalogsEngineStops`, the engine's produced-input,
 lineage, preparation and journey tests and their race run.
+
+## X612 — The engine's last direct refusals are stops
+
+### B1603
+
+Under [D276](backlog.md#d276) (audit 006 W2.1, last chunk of the engine's
+direct refusals), split from [B1563](m1.md#b1563). The 38 sites left become ten
+new [engine stops](../cli/stops.md#engine-stops) and earlier ones: borrowed SSH
+credentials, a confirmation the invocation cannot ask, an invalid option, an
+administrator credential that moved, a finalization or a release that is owed
+(`engine.finalization-incomplete`, `destroy.release-incomplete`), a removal
+that cannot prove what effects left (`destroy.unproved-effects`), a block whose
+outcome stays unknown after an observation (`engine.outcome-unknown`), erase
+relaxations that differ from the frozen ones, and a context that moved while
+`diff` read it. The engine's ledger falls from 85 to 47; what remains goes
+through helpers other than the engine's `failure` and other families' codes.
+Guarded by `TestTheEnginesStopsAreTheCatalogsEngineStops`, the engine's
+resolution, finalization, preview and journey tests and their race run.

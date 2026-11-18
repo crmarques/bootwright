@@ -160,6 +160,36 @@ var (
 	prepareUnsupported = diagnostics.Stop{Code: "prepare.unsupported", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryNone,
 		Meaning: "this executable registers no preparation for the requested owner", Remedy: "use a build that registers the preparation"}
+	engineBorrowedSSH = diagnostics.Stop{Code: "engine.borrowed-ssh", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a lifecycle operation was given borrowed SSH credentials, which it never uses", Remedy: "remove the --ssh flags and author each Machine's own access"}
+	engineConfirmationRequired = diagnostics.Stop{Code: "engine.confirmation-required", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryAuthorize,
+		Meaning: "the operation needs a confirmation the invocation cannot ask for", Remedy: "repeat the command on a terminal, or with --yes once the plan is reviewed"}
+	engineInputInvalid = diagnostics.Stop{Code: "engine.input-invalid", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "an invocation option holds a value the engine refuses", Remedy: "repeat the command with the value the message names"}
+	engineCredentialMoved = diagnostics.Stop{Code: "engine.credential-moved", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseConcurrency, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "a cluster administrator credential changed while its update was decided or pending", Remedy: "repeat the credential update against the current context"}
+	engineFinalizationIncomplete = diagnostics.Stop{Code: "engine.finalization-incomplete", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyOwed,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "an operation's effects are complete and its finalization is not", Remedy: "repeat the command, which finishes the finalization"}
+	destroyReleaseIncomplete = diagnostics.Stop{Code: "destroy.release-incomplete", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyOwed,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "the removal completed, and releasing what it owned did not", Remedy: "repeat the destroy to finish it"}
+	destroyUnprovedEffects = diagnostics.Stop{Code: "destroy.unproved-effects", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyUnproved,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a removal cannot prove what some effects left behind, so it registered nothing", Remedy: "do what each block's diagnostic reports, then repeat the destroy"}
+	engineOutcomeUnknown = diagnostics.Stop{Code: "engine.outcome-unknown", Level: diagnostics.LevelResolution, Certainty: diagnostics.CertaintyUnproved,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a block's outcome is still unknown after an observation, for the reason the message names", Remedy: "do what the reason names, then repeat the command to observe the block again"}
+	authorizeRelaxationChanged = diagnostics.Stop{Code: "authorize.relaxation-changed", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "an operation continues only under the erase relaxations its plan froze, and the invocation names others", Remedy: "continue it naming the relaxations its plan froze, or replace it with a fresh destroy"}
+	diffContextMoved = diagnostics.Stop{Code: "diff.context-moved", Level: diagnostics.LevelContext, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseConcurrency, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "the context changed while diff read it", Remedy: "repeat the diff"}
 )
 
 var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineRecordsDenied, engineRecordsDevice, engineEscaped, engineStartUnrecorded,
@@ -170,6 +200,8 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	engineUnindexedRecords, engineRequestDefect, engineOtherBuild, enginePlanMoved, engineInputMoved, engineBindingLost, authorizeUnneeded,
 	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected, applyUntilBeforePreparation,
 	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, destroyPostconditionUnknown,
-	prepareRefused, prepareUnsupported}
+	prepareRefused, prepareUnsupported,
+	engineBorrowedSSH, engineConfirmationRequired, engineInputInvalid, engineCredentialMoved, engineFinalizationIncomplete,
+	destroyReleaseIncomplete, destroyUnprovedEffects, engineOutcomeUnknown, authorizeRelaxationChanged, diffContextMoved}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }

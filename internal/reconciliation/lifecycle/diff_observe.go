@@ -56,7 +56,7 @@ func (s Service) observeDiff(ctx context.Context, name string, read *diffRead) e
 			material[item.Version.Declaration.Name] = item.Material
 		}
 		if err != nil {
-			return failure("lifecycle.state",
+			return engineBindingLost.Fail(
 				"the Secret binding apply "+read.owning.ID+" froze cannot be reopened, so diff cannot observe its effects: "+firstMessage(err),
 				"restore the context's keyring from a complete backup, or "+unobservedDiff(name))
 		}
@@ -109,7 +109,7 @@ func (r diffRead) observedBlocks() []reconciliation.Block {
 }
 
 func (s Service) reproveDiff(ctx context.Context, view RunView, store recordReader, read *diffRead) error {
-	moved := failure("lifecycle.state", "the context changed while diff read it", repeatObserved(read.context.Name))
+	moved := diffContextMoved.Fail("the context changed while diff read it", repeatObserved(read.context.Name))
 	if _, _, _, err := s.verifyBasis(ctx, store, read.basis, func(basis) error { return moved }); err != nil {
 		return err
 	}
@@ -307,7 +307,7 @@ func (s Service) projectReadings(read *diffRead, blocks []reconciliation.Block, 
 		}
 		projections, err := projector.Project(read.applied.effective, block, reading.evidence)
 		if err != nil {
-			err = failure("lifecycle.state", "the evidence of block "+block.ID+" could not be projected", "")
+			err = planCapabilityDefect.Fail("the evidence of block "+block.ID+" could not be projected", "")
 		}
 		if lent := refuseLentMaterial(projections, material, block.ID, read.context.Name); lent != nil {
 			return lent
@@ -493,7 +493,7 @@ func conflictNotes(fragments []fragment, shape *api.Shape, conflicts []string) [
 
 func readOnlyStage(setup prerequisites.StorageView) *ControllerStage {
 	refuse := func() error {
-		return failure("lifecycle.state", "an observation may not authorize a host effect", "")
+		return engineRequestDefect.Fail("an observation may not authorize a host effect", "")
 	}
 	return &ControllerStage{
 		Setup:              setup,

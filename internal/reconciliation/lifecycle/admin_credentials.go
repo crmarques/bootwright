@@ -127,7 +127,7 @@ func (s AdminCredentialService) UpdateAdminCredentials(ctx context.Context, requ
 			return err
 		}
 		if current.operation.ID != basis.operation.ID || current.binding != basis.binding || current.block.RequestDigest != basis.block.RequestDigest || tx.Identity().Revision != basis.revision {
-			return failure("lifecycle.state", "the cluster's credential update basis changed", "repeat the credential update against the current context")
+			return engineCredentialMoved.Fail("the cluster's credential update basis changed", "repeat the credential update against the current context")
 		}
 		return s.execution.withPython(ctx, located, func(launch prerequisites.PythonLaunch) error {
 			return s.updateAdminCredential(ctx, tx, current, material, launch)
@@ -266,7 +266,7 @@ func (s AdminCredentialService) updateAdminCredential(ctx context.Context, tx Tr
 			completed := string(password) == update.Password
 			clear(password)
 			if !completed {
-				return failure("lifecycle.state", "the active credential changed during its pending update", "restore the original credential custody before retrying")
+				return engineCredentialMoved.Fail("the active credential changed during its pending update", "restore the original credential custody before retrying")
 			}
 			found = false
 		}

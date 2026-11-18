@@ -91,7 +91,7 @@ func TestAnUnresolvedCompletedApplyKeepsItsRecordDone(t *testing.T) {
 	h.capability.destroys = nil
 	h.capability.observations = []Observation{{Effect: reconciliation.EffectUnknown}}
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true})
-	if firstCode(err) != "lifecycle.unknown" || len(h.capability.destroys) != 0 {
+	if !unprovedCode(firstCode(err)) || len(h.capability.destroys) != 0 {
 		t.Fatalf("destroy = %+v (%v), destroys = %v", diagnostics.Of(err), err, h.capability.destroys)
 	}
 	operation, states := durableOperation(t, h)

@@ -121,7 +121,7 @@ func Drifted(verb reconciliation.Verb, subject, host string, refused error) (Unr
 // unknown. It names the block, why it stayed unknown and what the operator
 // does before repeating command, the exact command that observes it again.
 func unresolvedFailure(block string, unresolved Unresolved, command string) error {
-	return failure("lifecycle.unknown",
+	return engineOutcomeUnknown.Fail(
 		"the outcome of "+block+" is still unknown: "+unresolved.Reason,
 		unresolved.Remedy+", then repeat "+command+" to observe it again")
 }

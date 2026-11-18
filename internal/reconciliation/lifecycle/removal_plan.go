@@ -24,12 +24,12 @@ import (
 // need, so it refuses.
 func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy operationstore.Executable, source string, scope removalScope, startedNothing bool) (operationPlan, error) {
 	if scope.started == 0 && !startedNothing {
-		return operationPlan{}, failure("lifecycle.state",
+		return operationPlan{}, engineOtherBuild.Fail(
 			"the operation this removal supersedes records no block it still owns",
 			reviewStatus(contextName))
 	}
 	if err := s.proveContracts(scope.owned, scope.contracts); err != nil {
-		return operationPlan{}, failure("lifecycle.state", contractMessage(err), removeWith(frozenBy))
+		return operationPlan{}, engineOtherBuild.Fail(contractMessage(err), removeWith(frozenBy))
 	}
 	plan, err := s.removalOf(ctx, scope.owned, frozenBy, s.relaxing.methods)
 	if err != nil {
@@ -74,7 +74,7 @@ func (s Service) removalOf(ctx context.Context, owned reconciliation.Plan, execu
 	for _, block := range inverted.Blocks {
 		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 		if !ok {
-			return reconciliation.Plan{}, failure("lifecycle.state",
+			return reconciliation.Plan{}, engineOtherBuild.Fail(
 				"this executable provides no "+block.Implementation+" to remove the block "+block.ID+" with",
 				removeWith(executable))
 		}
@@ -124,7 +124,7 @@ func unreadable(block reconciliation.Block, executable operationstore.Executable
 	if reported := diagnostics.Of(err); len(reported) != 0 {
 		detail = ": " + reported[0].Message
 	}
-	return failure("lifecycle.state",
+	return engineOtherBuild.Fail(
 		"the request the block "+block.ID+" froze cannot be read by this executable"+detail,
 		removeWith(executable))
 }

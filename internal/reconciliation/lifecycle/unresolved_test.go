@@ -28,8 +28,8 @@ func requireUnresolvedRefusal(t *testing.T, err error, why Unresolved) {
 	t.Helper()
 	want := []diagnostics.Diagnostic{
 		diagnostics.Of(unresolvedFailure("b", why, "bootwright destroy --context lab"))[0],
-		{Severity: "error", Code: "lifecycle.unknown", Message: "this removal cannot prove what these effects left behind, so it registered nothing: b",
-			Remediation: "do what the diagnostic of each reports, then repeat bootwright destroy --context lab"},
+		diagnostics.Of(destroyUnprovedEffects.Fail("this removal cannot prove what these effects left behind, so it registered nothing: b",
+			"do what the diagnostic of each reports, then repeat bootwright destroy --context lab"))[0],
 	}
 	if got := withoutObjects(diagnostics.Of(err)); !slices.Equal(got, want) {
 		t.Fatalf("the removal reported %+v, want %+v", got, want)

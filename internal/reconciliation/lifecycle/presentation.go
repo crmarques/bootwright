@@ -10,7 +10,7 @@ import (
 
 func (s Service) present(ctx context.Context, name string, decided operationPlan) error {
 	if s.options.Presenter == nil {
-		return failure("lifecycle.state", "lifecycle plan presentation is not configured", "")
+		return engineRequestDefect.Fail("lifecycle plan presentation is not configured", "")
 	}
 	result := s.presentation(decided)
 	result.Context, result.Bound = ContextIdentity{Name: name}, s.Concurrency()

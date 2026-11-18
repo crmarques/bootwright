@@ -190,7 +190,21 @@ func refusedBeforeEffect(code string) bool {
 	}
 	for _, stop := range Stops() {
 		if stop.Code == code {
-			return stop.Certainty == diagnostics.CertaintyNone
+			return stop.Certainty == diagnostics.CertaintyNone || stop.Certainty == diagnostics.CertaintyOwed
+		}
+	}
+	return false
+}
+
+// unprovedCode is whether a code leaves an outcome unproved: the legacy
+// lifecycle.unknown, or a declared stop of certainty unproved.
+func unprovedCode(code string) bool {
+	if code == "lifecycle.unknown" {
+		return true
+	}
+	for _, stop := range Stops() {
+		if stop.Code == code {
+			return stop.Certainty == diagnostics.CertaintyUnproved
 		}
 	}
 	return false

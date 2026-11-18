@@ -101,7 +101,7 @@ func (s Service) refuseInapplicableRelaxations(contextName string, decided opera
 		others := maps.Clone(methods)
 		delete(others, machine)
 		token := eraseToken(machine, methods[machine])
-		return failure("lifecycle.authorization",
+		return authorizeUnneeded.Fail(
 			"--authorize "+token+" names Machine/"+machine+", which declares no spec.hardware.rootDisk.onRemoval or spec.hardware.dataDisks[].onRemoval this destroy performs, so the relaxation changes nothing",
 			"repeat "+contextCommand(contextName, s.relaxing.command, relaxationFlags(others)...)+" without --authorize "+token)
 	}
@@ -113,7 +113,7 @@ func refuseChangedRelaxations(contextName string, operation operationstore.Opera
 	if methods := frozenRelaxations(frozen); len(methods) != 0 {
 		held = strings.Join(relaxationTokens(methods), ", ")
 	}
-	return failure("lifecycle.authorization",
+	return authorizeRelaxationChanged.Fail(
 		"the "+string(operation.Verb)+" "+operation.ID+" continues only under the erase relaxations its plan froze ("+held+"), and this invocation names a different set",
 		"continue it with "+continuationCommand(contextName, operation, frozen, states)+", or replace it with a fresh destroy by naming a relaxation its plan does not hold")
 }

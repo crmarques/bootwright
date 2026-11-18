@@ -68,7 +68,7 @@ func TestAnUnresolvedBlockNamesItsExactRetry(t *testing.T) {
 	}
 	h.capability.outcomeFor = nil
 	reported := diagnostics.Of(authorizedApply(h))
-	if len(reported) == 0 || reported[0].Code != "lifecycle.unknown" ||
+	if len(reported) == 0 || !unprovedCode(reported[0].Code) ||
 		!strings.HasSuffix(reported[0].Remediation, ", then repeat bootwright apply --context lab --authorize "+shown+" to observe it again") {
 		t.Fatalf("the resolution reported %+v", reported)
 	}
@@ -77,7 +77,7 @@ func TestAnUnresolvedBlockNamesItsExactRetry(t *testing.T) {
 	h.capability.consumes = map[string][]string{"alpha": {"data-loss"}}
 	_, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", Authorizations: []string{"data-loss"}, SkipConfirmation: true})
 	reported = diagnostics.Of(err)
-	if len(reported) == 0 || reported[0].Code != "lifecycle.unknown" ||
+	if len(reported) == 0 || !unprovedCode(reported[0].Code) ||
 		!strings.HasSuffix(reported[0].Remediation, ", then repeat bootwright destroy --context lab --authorize "+unfixed+" to observe it again") {
 		t.Fatalf("the removal reported %+v", reported)
 	}
