@@ -91,6 +91,7 @@ request-schema:
   cluster.packages.version string
   cluster.publicNetworks []string
   cluster.registry string
+  cluster.registryProxy string omitempty
   cluster.registryRef string
   cluster.registryTrustBundleRef string omitempty
   cluster.release string

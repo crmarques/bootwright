@@ -47,6 +47,7 @@ type ClusterScope struct {
 	Packages                 *PackageRequest              `json:"packages,omitempty"`
 	PublicNetworks           []string                     `json:"publicNetworks"`
 	Registry                 string                       `json:"registry"`
+	RegistryProxy            string                       `json:"registryProxy,omitempty"`
 	RegistryRef              string                       `json:"registryRef"`
 	RegistryTrustBundleRef   string                       `json:"registryTrustBundleRef,omitempty"`
 	Release                  string                       `json:"release"`

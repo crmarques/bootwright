@@ -23,18 +23,20 @@ func TestPackageProxyAdmitsOnlyImplementedConnections(t *testing.T) {
 		{"proxy CA", "http://proxy.example.test:3128", m("trustBundleRef", "ca"), true},
 		{"relaxed TLS", "http://proxy.example.test:3128", m("tlsVerification", "none"), true},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			connection := m("httpsProxy", tc.endpoint)
-			for _, field := range tc.addition.Fields() {
-				connection = connection.With(field.Name, field.Value)
-			}
-			proxy := object(api.Proxy, "egress", m("management", "external", "connection", connection))
-			authored := cluster.WithSpec(cluster.Spec().WithPath(m("proxyRef", "egress"), "packageRepositoryProxy"))
-			catalog := api.NewCatalog(append(replace(c, authored).Objects(), proxy))
-			issues := issuesAt(Validate(authored, catalog), "$.spec.packageRepositoryProxy")
-			if (len(issues) != 0) != tc.refused {
-				t.Fatalf("issues = %+v", issues)
-			}
-		})
+		for _, field := range []string{"packageRepositoryProxy", "registryProxy"} {
+			t.Run(field+"/"+tc.name, func(t *testing.T) {
+				connection := m("httpsProxy", tc.endpoint)
+				for _, addition := range tc.addition.Fields() {
+					connection = connection.With(addition.Name, addition.Value)
+				}
+				proxy := object(api.Proxy, "egress", m("management", "external", "connection", connection))
+				authored := cluster.WithSpec(cluster.Spec().WithPath(m("proxyRef", "egress"), field))
+				catalog := api.NewCatalog(append(replace(c, authored).Objects(), proxy))
+				issues := issuesAt(Validate(authored, catalog), "$.spec."+field)
+				if (len(issues) != 0) != tc.refused {
+					t.Fatalf("issues = %+v", issues)
+				}
+			})
+		}
 	}
 }

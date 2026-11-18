@@ -78,7 +78,7 @@ def boundary(up):
     value = object.__new__(broker.Broker)
     value.namespace, value.digest, value.upstream = "vendor/ceph", DIGEST, up
     value.total = 0
-    value.failure = None
+    value.failure = value.unreachable = None
     value.untrusted, value.anchor = False, "the host trust store"
     import threading
     value.lock = threading.Lock()
@@ -1074,3 +1074,250 @@ def test_bundle_context_accepts_a_directly_trusted_server_certificate(tmp_path):
     context = broker.bundle_context(leaf_certificate(tmp_path))
     assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
     assert context.cert_store_stats()["x509"] == 1
+
+
+PROXY = "http://proxy.example.test:3128"
+
+
+def loopback(address):
+    return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", address)]
+
+
+def proxy_server(answer, server=None, pause=0):
+    """A loopback CONNECT proxy that records the request head, answers it byte by byte after pause, then optionally speaks TLS."""
+    listener = socket.create_server(("127.0.0.1", 0))
+    seen = []
+
+    def accept():
+        connection, unused = listener.accept()
+        with connection:
+            head = b""
+            while not head.endswith(b"\r\n\r\n"):
+                block = connection.recv(1)
+                if not block:
+                    return
+                head += block
+            seen.append(head)
+            with contextlib.suppress(OSError):
+                if pause:
+                    for index in range(len(answer)):
+                        connection.sendall(answer[index:index + 1])
+                        time.sleep(pause)
+                else:
+                    connection.sendall(answer)
+            if server is not None:
+                with contextlib.suppress(OSError):
+                    with server.wrap_socket(connection, server_side=True):
+                        pass
+
+    worker = threading.Thread(target=accept)
+    worker.start()
+    return listener, worker, seen
+
+
+def test_closed_direct_route_names_the_registry_and_the_proxy_field():
+    listener = socket.create_server(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    listener.close()
+    connection = broker.RegistryConnection(REGISTRY, addresses=loopback(("127.0.0.1", port)), deadline=time.monotonic() + 10,
+                                           port=443, context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=5)
+    with pytest.raises(broker.Unreachable) as raised:
+        connection.connect()
+    assert str(raised.value) == ("broker could not connect to registry.example.test:443 directly: the connection was refused;"
+                                 " a host that reaches the registry only through a proxy needs the CephCluster's spec.registryProxy")
+
+
+@pytest.mark.parametrize("answer,reason", [
+    (b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n", "the proxy answered CONNECT with HTTP 403"),
+    (b"HTTP/1.1 407 Proxy Authentication Required\r\n\r\n", "the proxy answered CONNECT with HTTP 407"),
+    (b"SSH-2.0-not-a-proxy\r\n\r\n", "the proxy answered CONNECT with a malformed response"),
+])
+def test_proxy_refusal_names_the_route_and_status_only(answer, reason):
+    listener, worker, seen = proxy_server(answer)
+    port = listener.getsockname()[1]
+    try:
+        connection = broker.RegistryConnection(REGISTRY, addresses=loopback(("127.0.0.1", port)), deadline=time.monotonic() + 10,
+                                               proxy=PROXY, port=443, context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=5)
+        with pytest.raises(broker.Unreachable) as raised:
+            connection.connect()
+    finally:
+        worker.join(timeout=5)
+        listener.close()
+    assert seen == [b"CONNECT registry.example.test:443 HTTP/1.1\r\nHost: registry.example.test:443\r\n\r\n"]
+    assert str(raised.value) == "broker could not connect to registry.example.test:443 through the proxy " + PROXY + ": " + reason
+
+
+def test_proxy_tunnel_verifies_tls_against_the_registry_name(tmp_path):
+    identity = tmp_path / "identity"
+    identity.mkdir(mode=0o700)
+    server = broker.certificate(str(identity), str(identity / "native-certs"), REGISTRY, openssl)
+    server.verify_mode = ssl.CERT_NONE
+    ca = (identity / "ca.crt").read_text(encoding="ascii")
+    for trust, verified in ((ca, True), (SYNTHETIC_CA, False)):
+        listener, worker, seen = proxy_server(b"HTTP/1.1 200 Connection established\r\n\r\n", server)
+        port = listener.getsockname()[1]
+        connection = broker.RegistryConnection(REGISTRY, addresses=loopback(("127.0.0.1", port)), deadline=time.monotonic() + 10,
+                                               proxy=PROXY, port=443, context=broker.bundle_context(trust), timeout=5)
+        try:
+            if verified:
+                connection.connect()
+            else:
+                with pytest.raises(ssl.SSLCertVerificationError):
+                    connection.connect()
+        finally:
+            connection.close()
+            worker.join(timeout=5)
+            listener.close()
+        assert seen == [b"CONNECT registry.example.test:443 HTTP/1.1\r\nHost: registry.example.test:443\r\n\r\n"]
+
+
+def test_proxied_upstream_resolves_only_the_proxy(monkeypatch):
+    resolved = []
+
+    def resolve(host, port, **options):
+        resolved.append((host, port))
+        return loopback(("192.0.2.80", port))
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolve)
+    proxy = broker.urllib.parse.urlsplit(PROXY)
+    up = broker.Upstream(REGISTRY, REPOSITORY, MATERIAL, time.monotonic() + 60, context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT), proxy=proxy)
+    connection = up.connection(REGISTRY, port=443, context=up.context, timeout=5)
+    assert resolved == [("proxy.example.test", 3128)]
+    assert connection.proxy == PROXY and connection.addresses == loopback(("192.0.2.80", 3128)) and connection.host == REGISTRY
+    direct = broker.Upstream(REGISTRY, REPOSITORY, MATERIAL, time.monotonic() + 60, context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT))
+    assert resolved[-1] == (REGISTRY, 443) and direct.connection(REGISTRY, port=443, timeout=5).proxy is None
+
+
+def test_proxied_delivery_keeps_the_public_resolution_gate_and_tunnels(monkeypatch):
+    up, registry, delivered, calls, resolved = delivery_setup(monkeypatch)
+    up.proxy, up.proxy_addresses = PROXY, loopback(("192.0.2.80", 3128))
+    created = []
+
+    class Tunneled:
+        sock = None
+
+        def __init__(self, host, **options):
+            created.append((host, options))
+
+        def request(self, method, path, headers):
+            calls.append((path, headers))
+
+        def getresponse(self):
+            return delivered
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(broker, "RegistryConnection", Tunneled)
+    output = io.BytesIO()
+    value = boundary(up)
+    up.fetch("GET", BLOB_PATH, lambda response: value.response(output, response, "GET", broker.MAX_BLOB, "blob"))
+    assert resolved == [DELIVERY.encode()] and output.getvalue().endswith(b"payload")
+    host, options = created[0]
+    assert host == DELIVERY and options["proxy"] == PROXY and options["addresses"] == up.proxy_addresses
+    assert options["label"] == "its blob delivery endpoint" and options["port"] == 443
+
+
+@pytest.mark.parametrize("ip", ["10.0.0.5", "127.0.0.1", "169.254.1.1"])
+def test_proxied_delivery_still_refuses_a_nonpublic_resolution(monkeypatch, ip):
+    up, registry, delivered, calls, resolved = delivery_setup(monkeypatch)
+    up.proxy, up.proxy_addresses = PROXY, loopback(("192.0.2.80", 3128))
+    up.resolver_runner = lambda argv, **options: (0, json.dumps([dns_row(ip)]).encode())
+    monkeypatch.setattr(broker, "RegistryConnection", lambda *args, **kwargs: pytest.fail("nonpublic delivery tunneled"))
+    with pytest.raises(broker.BrokerError):
+        up.fetch("GET", BLOB_PATH, lambda response: None)
+
+
+def test_broker_freezes_the_request_proxy_into_its_upstream(tmp_path, monkeypatch):
+    captured = []
+    monkeypatch.setattr(broker, "Upstream", lambda *args, **kwargs: captured.append(kwargs["proxy"]) or object())
+    image = REPOSITORY + "@sha256:" + DIGEST
+    for index, request in enumerate(({"registry": REGISTRY, "image": image, "registryProxy": PROXY}, {"registry": REGISTRY, "image": image})):
+        directory = tmp_path / str(index)
+        directory.mkdir(mode=0o700)
+        broker.Broker(str(directory), request, json.dumps(MATERIAL), time.monotonic() + 60,
+                      lambda *args: pytest.fail("certificate effect"), tls=object())
+    assert captured[0].geturl() == PROXY and captured[1] is None
+
+
+class UnreachableUpstream:
+    private = [PASSWORD]
+
+    def fetch(self, method, path, consume):
+        raise broker.Unreachable("broker could not connect to registry.example.test:443 directly: the connection was refused")
+
+    def close(self):
+        pass
+
+
+def test_unreachable_registry_becomes_the_pull_failure_cause(tmp_path):
+    request = {"registry": REGISTRY, "image": REPOSITORY + "@sha256:" + DIGEST}
+    with broker.Broker(str(tmp_path), request, json.dumps(MATERIAL), time.monotonic() + 60, openssl, upstream=UnreachableUpstream()) as service:
+        port = int(service.environment["HTTPS_PROXY"].rsplit(":", 1)[1])
+        connection = socket.create_connection(("127.0.0.1", port), timeout=5)
+        connection.sendall(("CONNECT " + REGISTRY + ":443 HTTP/1.1\r\n\r\n").encode())
+        assert connection.recv(4096) == b"HTTP/1.1 200 Connection Established\r\n\r\n"
+        context = ssl.create_default_context(cafile=service.cert_directory + "/ca.crt")
+        context.load_cert_chain(service.cert_directory + "/client.cert", service.cert_directory + "/client.key")
+        with contextlib.suppress(ssl.SSLError, ConnectionResetError):
+            with context.wrap_socket(connection, server_hostname=REGISTRY) as secured:
+                secured.sendall(("GET /v2/ HTTP/1.1\r\nHost: " + REGISTRY + "\r\n\r\n").encode())
+                with secured.makefile("rb") as stream:
+                    assert stream.read() == b""
+    assert service.failure_cause == "broker could not connect to registry.example.test:443 directly: the connection was refused"
+
+
+def test_slow_drip_proxy_answer_is_bounded_by_the_connection_share():
+    listener, worker, seen = proxy_server(b"HTTP/1.1 200 Connection established\r\n" + b"X: y\r\n" * 40 + b"\r\n", pause=0.1)
+    port = listener.getsockname()[1]
+    started = time.monotonic()
+    try:
+        connection = broker.RegistryConnection(REGISTRY, addresses=loopback(("127.0.0.1", port)), deadline=time.monotonic() + 30,
+                                               proxy=PROXY, port=443, context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=1)
+        with pytest.raises(broker.Unreachable, match="the connection timed out$"):
+            connection.connect()
+    finally:
+        listener.close()
+        worker.join(timeout=60)
+    assert time.monotonic() - started < 5
+
+
+@pytest.mark.parametrize("host,want", [("registry.example.test", "registry.example.test:443"), ("2001:db8::1", "[2001:db8::1]:443"),
+                                       ("192.0.2.1", "192.0.2.1:443")])
+def test_connect_authority_brackets_ipv6(host, want):
+    assert broker.connect_authority(host, 443) == want
+
+
+def test_a_later_reached_upstream_clears_an_earlier_connection_failure(tmp_path):
+    class Flaky:
+        private = [PASSWORD]
+
+        def __init__(self):
+            self.calls = 0
+
+        def fetch(self, method, path, consume):
+            self.calls += 1
+            if self.calls == 1:
+                raise broker.Unreachable("broker could not connect to registry.example.test:443 directly: the connection was reset")
+            return consume(Response(body=b"{}"))
+
+        def close(self):
+            pass
+
+    request = {"registry": REGISTRY, "image": REPOSITORY + "@sha256:" + DIGEST}
+    with broker.Broker(str(tmp_path), request, json.dumps(MATERIAL), time.monotonic() + 60, openssl, upstream=Flaky()) as service:
+        port = int(service.environment["HTTPS_PROXY"].rsplit(":", 1)[1])
+        causes = []
+        for unused in range(2):
+            connection = socket.create_connection(("127.0.0.1", port), timeout=5)
+            connection.sendall(("CONNECT " + REGISTRY + ":443 HTTP/1.1\r\n\r\n").encode())
+            assert connection.recv(4096) == b"HTTP/1.1 200 Connection Established\r\n\r\n"
+            context = ssl.create_default_context(cafile=service.cert_directory + "/ca.crt")
+            context.load_cert_chain(service.cert_directory + "/client.cert", service.cert_directory + "/client.key")
+            with contextlib.suppress(ssl.SSLError, ConnectionResetError):
+                with context.wrap_socket(connection, server_hostname=REGISTRY) as secured:
+                    secured.sendall(("GET /v2/ HTTP/1.1\r\nHost: " + REGISTRY + "\r\n\r\n").encode())
+                    with secured.makefile("rb") as stream:
+                        stream.read()
+            causes.append(service.failure_cause)
+    assert causes == ["broker could not connect to registry.example.test:443 directly: the connection was reset", ""]

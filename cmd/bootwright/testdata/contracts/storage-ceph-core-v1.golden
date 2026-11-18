@@ -278,6 +278,7 @@ request-schema:
   rbd.pool string
   rbd.sizeBytes int64
   registry string
+  registryProxy string omitempty
   registryRef string
   registryTrustBundleRef string omitempty
   release string

@@ -2467,6 +2467,17 @@ def test_scope_refuses_a_bundle_reference_that_is_not_a_name(core_request, value
         ceph_native.validate_scope(dict(scope, registryTrustBundleRef=value))
 
 
+@pytest.mark.parametrize("value", ["", "https://proxy.example.test:3128", "http://user:secret@proxy.example.test:3128",
+                                   "http://proxy.example.test:3128/path", "http://proxy.example.test:0", "socks5://proxy.example.test", 5])
+def test_scope_refuses_a_registry_proxy_that_is_not_a_bare_connect_endpoint(core_request, value):
+    scope = {key: item for key, item in core_request.items() if key != "action"}
+    assert ceph_native.validate_scope(dict(scope, registryProxy="http://proxy.example.test:3128")) is not None
+    assert ceph_native.registry_proxy(dict(scope, registryProxy="http://proxy.example.test:3128")).hostname == "proxy.example.test"
+    assert ceph_native.registry_proxy(scope) is None
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate_scope(dict(scope, registryProxy=value))
+
+
 def test_host_images_refuses_an_oversized_bound_bundle_before_the_run(core_request, tmp_path):
     scope = dict({key: value for key, value in core_request.items() if key != "action"}, registryTrustBundleRef="registry-ca")
     paths = {"sshKey": "PRIVATE-KEY-SENTINEL", "knownHosts": "192.0.2.1 ssh-ed25519 PUBLIC",

@@ -300,6 +300,7 @@ type Request struct {
 	PublicNetworks           []string                     `json:"publicNetworks"`
 	RBD                      *RBDImage                    `json:"rbd,omitempty"`
 	Registry                 string                       `json:"registry"`
+	RegistryProxy            string                       `json:"registryProxy,omitempty"`
 	RegistryRef              string                       `json:"registryRef"`
 	RegistryTrustBundleRef   string                       `json:"registryTrustBundleRef,omitempty"`
 	Release                  string                       `json:"release"`
@@ -341,7 +342,7 @@ func scopeOf(r Request) ClusterScope {
 		ClusterKeyRef: r.ClusterKeyRef, ClusterNetworks: r.ClusterNetworks, ClusterSSHTransport: r.ClusterSSHTransport, ClusterSSHUser: r.ClusterSSHUser,
 		Security: r.Security, SingleHostDefaults: r.SingleHostDefaults, Config: r.Config, Controller: r.Controller, FSID: r.FSID, Hosts: r.Hosts, Image: r.Image, MonIP: r.MonIP,
 		NFSGaneshaPackageVersion: r.NFSGaneshaPackageVersion, Owner: r.Owner, PackageRepository: r.PackageRepository, PackageRepositoryKey: r.PackageRepositoryKey, Packages: r.Packages,
-		PublicNetworks: r.PublicNetworks, Registry: r.Registry, RegistryRef: r.RegistryRef, RegistryTrustBundleRef: r.RegistryTrustBundleRef, Release: r.Release, Services: r.Services, Stretch: r.Stretch, Version: r.Version}
+		PublicNetworks: r.PublicNetworks, Registry: r.Registry, RegistryProxy: r.RegistryProxy, RegistryRef: r.RegistryRef, RegistryTrustBundleRef: r.RegistryTrustBundleRef, Release: r.Release, Services: r.Services, Stretch: r.Stretch, Version: r.Version}
 }
 
 func FSIDFor(operation, cluster string) string {
@@ -356,6 +357,19 @@ const (
 	distributionReason = "core Ceph realizes only the IBM Storage Ceph distribution"
 	distributionRemedy = "select spec.distribution.ibm"
 )
+
+func (r *Request) sources(c api.Catalog, cluster api.Object) error {
+	spec := cluster.Spec()
+	r.PackageRepository = spec.Get("packageRepository").Text()
+	r.PackageRepositoryKey = spec.Get("packageRepositoryKey").Text()
+	if r.PackageRepository == "" {
+		r.PackageRepository = DefaultPackageRepository
+		r.PackageRepositoryKey = DefaultPackageRepositoryKey
+	}
+	var err error
+	r.RegistryProxy, err = registryProxy(c, cluster, r.Registry)
+	return err
+}
 
 func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request, error) {
 	spec := cluster.Spec()
@@ -393,11 +407,8 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	for _, a := range authored {
 		r.Auxiliary = append(r.Auxiliary, AuxiliaryReference{Name: a.Name, Image: a.Image})
 	}
-	r.PackageRepository = spec.Get("packageRepository").Text()
-	r.PackageRepositoryKey = spec.Get("packageRepositoryKey").Text()
-	if r.PackageRepository == "" {
-		r.PackageRepository = DefaultPackageRepository
-		r.PackageRepositoryKey = DefaultPackageRepositoryKey
+	if err := r.sources(c, cluster); err != nil {
+		return Request{}, err
 	}
 	r.ClusterSSHTransport = spec.Get("cephadm", "clusterSSH", "transport").Text()
 	if r.ClusterSSHTransport == "" {

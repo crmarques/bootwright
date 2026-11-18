@@ -5,7 +5,9 @@ client receives an empty authfile and an ephemeral CA, so a proxy bypass never
 carries credentials. Every upstream connection uses the declared registry trust
 bundle alone when one is bound, and the host TLS trust otherwise.
 Authentication stays at the selected registry authority; only blob reads may
-use one public HTTPS delivery endpoint without registry credentials. Foreign
+use one public HTTPS delivery endpoint without registry credentials. A frozen
+registryProxy carries every upstream connection, the delivery hop included,
+through one HTTP CONNECT tunnel; no environment route is read. Foreign
 token realms refuse. One broker serves one frozen reference: the Ceph image or
 a member of its auxiliary image set; any other reference refuses before any
 connection, file or directory.
@@ -14,6 +16,7 @@ connection, file or directory.
 from __future__ import annotations
 
 import contextlib
+import errno
 import http.client
 import ipaddress
 import json
@@ -126,6 +129,71 @@ class DeliveryResponse:
 
 class BrokerError(ValueError):
     """No private value is included in the exception text."""
+
+
+class ProxyRefused(OSError):
+    """The CONNECT proxy answered with a status other than 200; only the integer status is retained."""
+
+    def __init__(self, status):
+        super().__init__("proxy refused the tunnel")
+        self.status = status
+
+
+class ProxyMalformed(OSError):
+    """The CONNECT proxy's answer was not a bounded HTTP/1.x response head."""
+
+
+class Unreachable(BrokerError):
+    """An upstream connection did not open; the text names only the target, the route and a fixed reason."""
+
+
+def transport_reason(error):
+    """A fixed phrase for a failed connection; no exception text crosses the boundary."""
+    if isinstance(error, ProxyRefused):
+        return "the proxy answered CONNECT with HTTP " + str(error.status)
+    if isinstance(error, ProxyMalformed):
+        return "the proxy answered CONNECT with a malformed response"
+    if isinstance(error, (socket.timeout, TimeoutError)):
+        return "the connection timed out"
+    if isinstance(error, ssl.SSLEOFError):
+        return "the peer closed the connection during the TLS handshake"
+    if isinstance(error, ssl.SSLError):
+        return "the TLS handshake failed"
+    if isinstance(error, ConnectionRefusedError):
+        return "the connection was refused"
+    if isinstance(error, ConnectionResetError):
+        return "the connection was reset"
+    if isinstance(error, OSError) and error.errno in (errno.ENETUNREACH, errno.EHOSTUNREACH):
+        return "the network is unreachable"
+    return "the connection closed before it opened"
+
+
+def connect_authority(host, port):
+    return ("[" + host + "]" if ":" in host else host) + ":" + str(port)
+
+
+def open_tunnel(sock, host, port, until):
+    """One bounded CONNECT exchange within the address's share; the proxy may send nothing beyond its response head."""
+    target = connect_authority(host, port)
+    sock.sendall(("CONNECT " + target + " HTTP/1.1\r\nHost: " + target + "\r\n\r\n").encode("ascii"))
+    head = b""
+    while not head.endswith(b"\r\n\r\n"):
+        # One byte at a time keeps the first TLS record of the tunnel unread; the share bounds the whole head.
+        remaining = until - time.monotonic()
+        if remaining <= 0:
+            raise socket.timeout("proxy response head")
+        sock.settimeout(max(0.01, remaining))
+        block = sock.recv(1)
+        if not block:
+            raise ConnectionResetError(errno.ECONNRESET, "proxy closed")
+        head += block
+        if len(head) > MAX_HEADERS:
+            raise ProxyMalformed("proxy response head")
+    status = re.match(rb"HTTP/1\.[01] ([0-9]{3})[ \r]", head)
+    if status is None:
+        raise ProxyMalformed("proxy status line")
+    if status.group(1) != b"200":
+        raise ProxyRefused(int(status.group(1)))
 
 
 class TokenRefused(BrokerError):
@@ -241,11 +309,15 @@ def read_request(stream):
 
 
 class RegistryConnection(http.client.HTTPSConnection):
-    """Resolved addresses keep DNS out of joinable worker threads; TLS names stay original."""
+    """Resolved addresses keep DNS out of joinable worker threads; TLS names stay original.
 
-    def __init__(self, host, *, addresses, deadline, **options):
+    With a proxy the addresses are the proxy's, and each one opens a CONNECT tunnel to the
+    original host and port before TLS."""
+
+    def __init__(self, host, *, addresses, deadline, proxy=None, label=None, **options):
         super().__init__(host, **options)
-        self.addresses, self.deadline = addresses, deadline
+        self.addresses, self.deadline, self.proxy = addresses, deadline, proxy
+        self.label = label or connect_authority(host, self.port)
         self.cancelled = threading.Event()
 
     def connect(self):
@@ -261,6 +333,8 @@ class RegistryConnection(http.client.HTTPSConnection):
                 self.sock = socket.socket(family, kind, protocol)
                 self.sock.settimeout(max(0.01, share - time.monotonic()))
                 self.sock.connect(address)
+                if self.proxy is not None:
+                    open_tunnel(self.sock, self.host, self.port, share)
                 self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host, do_handshake_on_connect=False)
                 self.sock.settimeout(max(0.01, share - time.monotonic()))
                 self.sock.do_handshake()
@@ -272,8 +346,13 @@ class RegistryConnection(http.client.HTTPSConnection):
                 if self.sock is not None:
                     self.sock.close()
                 self.sock = None
-        if last is not None:
+        if isinstance(last, ssl.SSLCertVerificationError):
             raise last
+        if last is not None:
+            if self.proxy is None:
+                raise Unreachable("broker could not connect to " + self.label + " directly: " + transport_reason(last)
+                                  + "; a host that reaches the registry only through a proxy needs the CephCluster's spec.registryProxy") from None
+            raise Unreachable("broker could not connect to " + self.label + " through the proxy " + self.proxy + ": " + transport_reason(last)) from None
         raise BrokerError("registry connection unavailable")
 
     def close(self):
@@ -284,8 +363,10 @@ class RegistryConnection(http.client.HTTPSConnection):
 class Upstream:
     """Scoped HTTPS registry transport. Basic credentials never leave this owner."""
 
-    def __init__(self, registry, repository, credential, deadline, *, connection=None, clock=time.monotonic, context=None, resolver_runner=None):
+    def __init__(self, registry, repository, credential, deadline, *, connection=None, clock=time.monotonic, context=None, resolver_runner=None,
+                 proxy=None):
         self.host, self.port = authority(registry)
+        self.proxy = None if proxy is None else "http://" + connect_authority(proxy.hostname, proxy.port or 80)
         require(repository.startswith(registry + "/"))
         self.registry, self.namespace = registry, repository.split("/", 1)[1]
         self.deadline, self.clock = deadline, clock
@@ -294,11 +375,17 @@ class Upstream:
         if connection is None:
             # This synchronous setup remains under the owning remote worker's
             # hard deadline. No started broker thread performs name resolution.
-            addresses = socket.getaddrinfo(self.host, self.port, type=socket.SOCK_STREAM)
+            # A proxied route resolves only the proxy; the proxy reaches the registry by its name.
+            if proxy is None:
+                addresses = socket.getaddrinfo(self.host, self.port, type=socket.SOCK_STREAM)
+            else:
+                addresses = socket.getaddrinfo(proxy.hostname, proxy.port or 80, type=socket.SOCK_STREAM)
             require(0 < len(addresses) <= 16)
-            self.connection = lambda host, **options: RegistryConnection(host, addresses=addresses, deadline=deadline, **options)
+            self.proxy_addresses = addresses if proxy is not None else None
+            self.connection = lambda host, **options: RegistryConnection(host, addresses=addresses, deadline=deadline, proxy=self.proxy, **options)
         else:
             self.connection = connection
+            self.proxy_addresses = None
         require(isinstance(credential, dict) and set(credential) == {"url", "username", "password"} and credential["url"] == registry)
         password = credential["password"]
         self.basic = authenticated(registry_auth.basic, credential["username"], password)
@@ -354,7 +441,9 @@ class Upstream:
         except Exception:
             # Neither resolver output nor a signed URL can enter diagnostics.
             raise BrokerError("blob delivery resolution") from None
-        connection = RegistryConnection(host, addresses=addresses, deadline=self.deadline,
+        # Through a proxy the validated public resolution still gates the hop; the proxy dials the name.
+        route = addresses if self.proxy is None else self.proxy_addresses
+        connection = RegistryConnection(host, addresses=route, deadline=self.deadline, proxy=self.proxy, label="its blob delivery endpoint",
                                         port=443, context=self.context, timeout=self.budget())
         headers = {"Accept-Encoding": "identity", "User-Agent": "bootwright-pull-broker-v1"}
         with self.exchange(connection, method, path, headers) as delivered:
@@ -418,7 +507,8 @@ class Broker:
         require(separator and HEX.fullmatch(self.digest) is not None and self.repository.startswith(self.authority + "/"))
         self.namespace = self.repository.split("/", 1)[1]
         self.upstream = upstream or Upstream(self.authority, self.repository, json.loads(private), deadline,
-                                             context=None if trust is None else bundle_context(trust))
+                                             context=None if trust is None else bundle_context(trust),
+                                             proxy=ceph_native.registry_proxy(request))
         self.cert_directory = os.path.join(directory, "native-certs")
         self.tls = tls or certificate(directory, self.cert_directory, self.authority, command)
         self.home = os.path.join(directory, "home")
@@ -436,7 +526,7 @@ class Broker:
         self.stopping = threading.Event()
         self.slots = threading.BoundedSemaphore(MAX_WORKERS)
         self.total = self.accepted = 0
-        self.failure = None
+        self.failure = self.unreachable = None
 
     def path(self, method, path):
         require(method in ("GET", "HEAD"))
@@ -453,12 +543,12 @@ class Broker:
     def failure_cause(self):
         """Latest refusal observed in this invocation, including its native retries."""
         with self.lock:
-            failure, untrusted = self.failure, self.untrusted
+            failure, untrusted, unreachable = self.failure, self.untrusted, self.unreachable
         if untrusted:
             return ("broker could not verify the TLS certificate of " + self.authority
                     + " or its blob delivery endpoint against " + self.anchor)
         if failure is None:
-            return ""
+            return unreachable or ""
         request_class, status = failure
         return "broker observed " + request_class + " upstream HTTP " + str(status)
 
@@ -518,6 +608,9 @@ class Broker:
                 request_class = "registry" if path == "/v2/" else "blob" if maximum == MAX_BLOB else "manifest"
                 try:
                     self.upstream.fetch(method, path, lambda response: self.response(stream, response, method, maximum, request_class))
+                    # A later exchange that reached its upstream clears an earlier connection failure.
+                    with self.lock:
+                        self.unreachable = None
                 except ssl.SSLCertVerificationError:
                     with self.lock:
                         self.untrusted = True
@@ -525,6 +618,9 @@ class Broker:
         except TokenRefused as error:
             with self.lock:
                 self.failure = ("token", error.status)
+        except Unreachable as error:
+            with self.lock:
+                self.unreachable = str(error)
         except (BrokerError, OSError, ValueError, http.client.HTTPException):
             # A closed connection is a native pull error. No exception text or
             # authentication challenge can cross the downstream boundary.

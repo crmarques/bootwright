@@ -119,6 +119,7 @@ CORE = {
     "publicNetworks": ["192.0.2.0/24"],
     "rbd": {"dataPool": "", "features": ["layering"], "name": "disk", "pool": "data", "sizeBytes": 1073741824},
     "registry": "cp.icr.io",
+    "registryProxy": "http://proxy.example.test:3128",
     "registryRef": "ibm-registry",
     "registryTrustBundleRef": "registry-ca",
     "service": {"documents": [{"placement": {"hosts": ["node-1"]}, "service_id": "files", "service_type": "nfs"}], "id": "files", "type": "nfs"},

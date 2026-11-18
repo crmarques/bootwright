@@ -1215,7 +1215,7 @@ def test_refusal_detail_never_contains_credentials_or_token(tmp_path, monkeypatc
         discovery.resolve(basic, discovery.Registry(object(), BOUND_REQUEST), BOUND_REQUEST)
     assert rows == [] and sent[1]["Authorization"] == basic and sent[2]["Authorization"] == "Bearer " + bearer
     service = object.__new__(ceph_pull_broker.Broker)
-    service.lock, service.failure, service.untrusted = threading.Lock(), None, True
+    service.lock, service.failure, service.untrusted, service.unreachable = threading.Lock(), None, True, None
     service.authority, service.anchor = REGISTRY, ceph_pull_broker.anchor(BOUND_REQUEST)
     texts = [str(caught.value), json.dumps(caught.value.native_error), str(discovery.refusal(caught.value)), service.failure_cause]
     assert caught.value.native_error["cause"].endswith("against trust bundle Secret registry-ca")

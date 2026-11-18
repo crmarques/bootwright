@@ -346,8 +346,8 @@ def test_pull_cert_directory_loads_native_client_identity(request_value, tmp_pat
     monkeypatch.setattr(runtime.ceph_pull_broker, "Broker", injected_broker)
 
     class Upstream:
-        def __init__(self, *unused, context=None):
-            assert context is None
+        def __init__(self, *unused, context=None, proxy=None):
+            assert context is None and proxy is None
 
         def close(self):
             pass
@@ -1450,7 +1450,7 @@ def test_pull_http_cause_survives_redaction_and_truncation_without_cross_invocat
             assert trust is None
             self.cert_directory = os.path.join(directory, "native-certs")
             self.lock = threading.Lock()
-            self.failure, self.untrusted = None, False
+            self.failure, self.untrusted, self.unreachable = None, False, None
             self.upstream = SimpleNamespace(private=[PASSWORD])
             self.exited = False
             instances.append(self)

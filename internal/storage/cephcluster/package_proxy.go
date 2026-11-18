@@ -10,8 +10,16 @@ import (
 )
 
 func (a *admission) packageProxy(spec api.Value) {
-	const field = "$.spec.packageRepositoryProxy"
-	choice := spec.Get("packageRepositoryProxy")
+	a.connectProxy(spec, "packageRepositoryProxy", "Ceph package acquisition")
+}
+
+func (a *admission) registryProxy(spec api.Value) {
+	a.connectProxy(spec, "registryProxy", "Ceph host image acquisition")
+}
+
+func (a *admission) connectProxy(spec api.Value, name, consumer string) {
+	field := "$.spec." + name
+	choice := spec.Get(name)
 	a.issues = api.AppendIssues(a.issues, infrastructureservices.ValidateProxy(choice, a.catalog, field, false)...)
 	if !choice.Has("proxyRef") {
 		return
@@ -26,7 +34,7 @@ func (a *admission) packageProxy(spec api.Value) {
 		!validPackageProxyEndpoint(endpoint) ||
 		connection.Has("auth") || connection.Has("trustBundleRef") ||
 		connection.Has("tlsVerification") && connection.Get("tlsVerification").Text() != "full" || choice.Get("noProxy").Len() > 128 {
-		a.issue("api.invariant", field, "Ceph package acquisition supports only an external unauthenticated HTTP CONNECT Proxy with at most 128 bypass entries",
+		a.issue("api.invariant", field, consumer+" supports only an external unauthenticated HTTP CONNECT Proxy with at most 128 bypass entries",
 			"select direct: {} or an external Proxy whose connection.httpsProxy is an http:// endpoint, without auth, trustBundleRef or relaxed TLS verification")
 	}
 }

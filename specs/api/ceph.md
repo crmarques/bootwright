@@ -183,6 +183,17 @@ metadata, RPMs and the same-origin signing key; hosted DVD fetches remain
 direct. Repository TLS and publisher verification remain independent. See
 [package acquisition](../ceph.md#frozen-release-and-trust).
 
+`registryProxy` optionally selects the route of the Ceph hosts' image pulls,
+with the same grammar, admission limits and refusals as
+`packageRepositoryProxy` and independently of it: omission means direct, and
+it inherits no controller, Machine, install-profile or package route. Its
+bypass choice is resolved against the Entitlement registry authority while
+planning, and the resulting endpoint is frozen with the cluster's host scope.
+It carries the registry broker's every upstream connection, the delivery hop
+included; registry TLS stays verified against the
+[registry anchor](../ceph.md#registry-broker). The
+controller's image resolution keeps the controller's own route.
+
 `packageRepositoryTLSVerification` selects
 [client TLS trust](../secrets.md#client-tls-trust), defaulting to `full`;
 non-full policies currently refuse before package acquisition.

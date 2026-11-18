@@ -37,6 +37,24 @@ access for ambiguous or credential-bearing requests. EOF can also represent
 another broker refusal; the synthetic reproduction identifies this parser
 failure without proving a real registry pull succeeded.
 
+## Ping EOF on a host that egresses only through a proxy
+
+On 2026-11-18 every prd-dc1 Ceph host refused `image-pull` with podman's
+`pinging container registry cp.icr.io: Get "https://cp.icr.io/v2/": EOF`
+within seconds, and the cause carried no broker reason. Those hosts reach the
+internet only through an external HTTP proxy, but the broker dialed the
+registry directly, and it closed the native connection on any upstream
+`OSError` without recording one, so podman saw EOF on its first `/v2/` ping.
+Host package acquisition already had its own route, and the controller's image
+resolution kept the controller's, so only the guest pull failed.
+
+The broker now records a failed upstream connection as the pull's cause,
+naming the target, the route and a fixed reason, and a CephCluster's
+[`registryProxy`](../../specs/api/ceph.md#cephcluster) carries the broker's
+upstream connections through one CONNECT tunnel. When this EOF appears with no
+broker reason, read the adapter output for `broker could not connect`, then
+select the hosts' egress Proxy in `registryProxy`.
+
 ## Upstream HTTP status lost behind a broker 502
 
 The broker maps a final non-200 registry response to a local 502. Its JSON
@@ -83,7 +101,7 @@ index resolution does not prove direct blob access: the
 can select and verify a platform manifest without fetching its config blob.
 The manifest and blob paths therefore need separate boundary coverage.
 
-The [storage contract](../../specs/ceph.md#bootstrap-identity-and-continuation)
+The [storage contract](../../specs/ceph.md#registry-broker)
 defines the broker's single delivery hop and credential separation. A signed
 Location is private capability data, even though registry credentials do not
 travel with it. Keep it inside the broker and normalize delivery metadata and

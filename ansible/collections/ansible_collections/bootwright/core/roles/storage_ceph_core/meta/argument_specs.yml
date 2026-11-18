@@ -733,6 +733,8 @@ argument_specs:
           registry:
             type: str
             required: true
+          registryProxy:
+            type: str
           registryRef:
             type: str
             required: true

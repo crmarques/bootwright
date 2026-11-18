@@ -849,52 +849,7 @@ state. The owned per-FSID host runtime tree under
 `/var/lib/bootwright/ceph-host/<fsid>` (profile, route, payload, device
 identities, pull journals, and the ephemeral broker material a killed pull can
 leave) and the `ceph-packages/<fsid>` package journal are retained too; they
-hold no credential. Guest pull credentials enter only the invocation-local
-registry broker over protected stdin. Podman receives an empty authfile and
-an ephemeral mutual-TLS identity; upstream entitlement and bearer credentials
-remain broker-owned. Authentication, token exchanges and manifest reads connect
-only to the frozen registry authority. Every upstream connection, the delivery
-hop included, verifies TLS against the Entitlement's `registry.trustBundleRef`
-alone when it is set (no host trust store, default path or environment
-override), and against the host trust store otherwise; one anchor serves the
-Ceph image and every auxiliary image. A connection that does not verify fails
-the pull, and its native error names the registry authority and the anchor,
-never a credential, token or delivery location;
-foreign token realms and manifest redirects refuse. The broker admits only
-bounded reads within its one frozen repository; one broker serves each member
-of the frozen image set, and a reference outside the set refuses before any
-connection. Local clients without the invocation
-certificate cannot use it, and a proxy bypass carries no entitlement or bearer
-credential. The native client receives an empty signature-lookaside
-configuration; trust stays the frozen digest and the signature policy.
-
-For an admitted blob GET or HEAD, the verified registry may delegate delivery
-through one redirect response (301, 302, 303, 307 or 308). The broker follows that one hop internally;
-it never sends the Location to the native client. The destination must be
-HTTPS on port 443, without userinfo or a fragment. Every resolved address must
-be public unicast; a private, reserved, mixed, scoped, IPv4-mapped or IPv6
-tunneling answer refuses the complete result. Connections use only those validated
-numeric addresses and verify TLS against the original delivery hostname with
-the same anchor.
-Redirect URLs, including signed queries, remain invocation-local private data.
-Delivery requests contain no registry authorization, cookie, proxy credential
-or Referer. A delivery authentication challenge or further redirect refuses
-without another authentication exchange or hop. Delivery response metadata is
-normalized and error bodies are not published, so it cannot echo a private URL
-into the native client's output. The native client still verifies blobs against
-the frozen manifest's digests; a redirect never substitutes an artifact.
-Registry resolution follows the same single delivery hop, under the same rules,
-when it reads a configuration blob.
-
-Delivery shares the existing concurrency, byte and operation deadlines. DNS
-runs in a bounded, isolated subprocess of the existing host interpreter,
-receiving only the validated hostname through stdin and returning bounded
-numeric addresses. Each lookup has at most five seconds plus the existing
-one-second process cleanup allowance. Shutdown refuses admission after DNS and
-at connection registration; already admitted connection attempts remain bounded
-by the existing join deadline.
-Listener, upstream sockets, resolver children and workers finish before the
-private invocation directory is removed.
+hold no credential. The [registry broker](#registry-broker) owns guest pulls.
 
 Each bootstrap, enrollment, service and resource attempt observes first and
 defines partial-completion evidence and safe retry, except two states that
@@ -1152,6 +1107,60 @@ the same host count as the cluster.
 The concurrent rounds are implemented under [B688](milestones/m2.md#b688), and
 the deadline as the only host bound under [B890](milestones/m2.md#b890); the
 live qualification of both remains outstanding.
+
+## Registry broker
+
+Guest pull credentials enter only the invocation-local
+registry broker over protected stdin. Podman receives an empty authfile and
+an ephemeral mutual-TLS identity; upstream entitlement and bearer credentials
+remain broker-owned. Authentication, token exchanges and manifest reads connect
+only to the frozen registry authority. Every upstream connection, the delivery
+hop included, verifies TLS against the Entitlement's `registry.trustBundleRef`
+alone when it is set (no host trust store, default path or environment
+override), and against the host trust store otherwise; one anchor serves the
+Ceph image and every auxiliary image. A connection that does not verify fails
+the pull, and its native error names the registry authority and the anchor,
+never a credential, token or delivery location. A frozen
+[`registryProxy`](api/ceph.md#cephcluster) tunnels each upstream connection
+through HTTP CONNECT before TLS, resolving only the proxy; no ambient route is
+read. A connection that does not open fails the pull, and its native error
+names the registry authority or "its blob delivery endpoint", the route and a
+fixed reason;
+foreign token realms and manifest redirects refuse. The broker admits only
+bounded reads within its one frozen repository; one broker serves each member
+of the frozen image set, and a reference outside the set refuses before any
+connection. Local clients without the invocation
+certificate cannot use it, and a proxy bypass carries no entitlement or bearer
+credential. The native client receives an empty signature-lookaside
+configuration; trust stays the frozen digest and the signature policy.
+
+For an admitted blob GET or HEAD, the verified registry may delegate delivery
+through one redirect response (301, 302, 303, 307 or 308). The broker follows that one hop internally;
+it never sends the Location to the native client. The destination must be
+HTTPS on port 443, without userinfo or a fragment. Every resolved address must
+be public unicast; a private, reserved, mixed, scoped, IPv4-mapped or IPv6
+tunneling answer refuses the complete result. Connections use only those validated
+numeric addresses, or a tunnel to the validated hostname through the proxy,
+and verify TLS against that hostname with the same anchor.
+Redirect URLs, including signed queries, remain invocation-local private data.
+Delivery requests contain no registry authorization, cookie, proxy credential
+or Referer. A delivery authentication challenge or further redirect refuses
+without another authentication exchange or hop. Delivery response metadata is
+normalized and error bodies are not published, so it cannot echo a private URL
+into the native client's output. The native client still verifies blobs against
+the frozen manifest's digests; a redirect never substitutes an artifact.
+Registry resolution follows the same single delivery hop, under the same rules,
+when it reads a configuration blob.
+
+Delivery shares the existing concurrency, byte and operation deadlines. DNS
+runs in a bounded, isolated subprocess of the existing host interpreter,
+receiving only the validated hostname through stdin and returning bounded
+numeric addresses. Each lookup has at most five seconds plus the existing
+one-second process cleanup allowance. Shutdown refuses admission after DNS and
+at connection registration; already admitted connection attempts remain bounded
+by the existing join deadline.
+Listener, upstream sockets, resolver children and workers finish before the
+private invocation directory is removed.
 
 ## Named refusal outcomes
 
