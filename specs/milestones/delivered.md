@@ -17533,3 +17533,15 @@ is observation only and never reaches evidence. Guarded by
 [Q129](backlog.md#audit-remediation-decisions), whether a stopped foreign domain refuses
 too; this guard, like the trunk and restart guards, reads running domains only.
 B568's interim orphan warning stays parked.
+
+## X598 — The remote worker window is stated
+
+### B1587
+
+Under [D276](backlog.md#d276) (audit 006 W6.3, finding E10-06), split from
+[B573](backlog.md#b573). The runner's comment said no adapter effect outlives
+cancellation, which holds only on the controller: a Ceph native worker on a
+managed host runs on to its own limit after a lost channel. The comment now
+says what it covers, and the security spec states the remote window, its
+fence and the item that will close it
+([process boundary](../security.md#process-boundary)).

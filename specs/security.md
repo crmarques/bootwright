@@ -322,6 +322,14 @@ the tree the same way: the runner sends the adapter that signal, then kills its
 process group once the adapter is reaped or the 5-second drain passes,
 whichever comes first. A group kill alone never reaches a worker in a session
 of its own, and sent first it would end the supervisor before its handler ran.
+This ends every process on the controller. A worker a run started on a
+managed host over SSH is not in that tree: a Ceph native worker ends its
+process group on `SIGHUP`, `SIGTERM` or `SIGINT`, but a lost channel that
+delivers no signal leaves it running until its own aggregate limit, 640
+seconds, or the longer budget of a package or bootstrap worker, while the
+attempt already reads canceled or unknown. A concurrent bootstrap is fenced by
+its attempt marker; ending such a worker on disconnect, or a resolution that
+waits out its limit, is [B573](milestones/backlog.md#b573).
 A controller run arms no parent-death signal, so its tree outlives its
 invocation; its supervisor carries the same termination handler, and its
 cancellation, deadline and drain follow the

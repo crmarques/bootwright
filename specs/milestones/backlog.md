@@ -1456,9 +1456,10 @@ can keep a read-only worker alive for the same window. **Smallest fix:** reword
 the runner comment and add a spec clause stating the remote window
 (`specs/security.md:165-177` or `specs/ceph.md:110`); then a remote-ceiling
 wait, or a worker that ends on channel EOF, before any delta re-runs a Ceph
-block. SSH qualification is already open in M2. **Exit evidence:** the spec
-clause and comment now; a test that a canceled remote worker ends, or that the
-engine waits its budget before it resolves.
+block. SSH qualification is already open in M2. **Exit evidence:** a test that
+a canceled remote worker ends, or that the engine waits its budget before it
+resolves. The comment and the spec clause were delivered by
+[X598](delivered.md#x598--the-remote-worker-window-is-stated).
 
 ### B576
 

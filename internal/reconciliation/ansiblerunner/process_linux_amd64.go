@@ -314,7 +314,7 @@ func (r Runner) execute(ctx context.Context, job, scratch string, lock *os.File,
 	// Its own streams are retained as they are produced, so a run that
 	// completes is as readable afterwards as one that failed, and it dies with
 	// this invocation: its supervisor ends the whole tree it owns on the
-	// parent-death signal. No adapter effect outlives cancellation.
+	// parent-death signal: no local process outlives cancellation (specs/security.md, Process boundary).
 	ending := adapterprotocol.Run(ctx, adapterprotocol.Invocation{
 		Program: request.Launch.Program, Arguments: request.Launch.Arguments, Environment: request.Launch.Environment,
 		Automation: automation.path, AutomationLock: automation.lock, Playbook: playbook,
