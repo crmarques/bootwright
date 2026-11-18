@@ -17173,11 +17173,12 @@ physical erase capability and its controller name the controller material by
 the frozen machine port, as installation and discovery do. No contract moved.
 A live controller run is owed for the worker's import of the collection.
 
-## X563 — Coverage floors after the audit program
+## X574 — Coverage floors after the audit program
 
-### B1538
+### B1554
 
-Gate repair found by the audit 005 program's final `make cover`, under the
+Renumbered on 2026-11-17 from X563 and B1538, which another session had
+taken first; its two commits name the old IDs in their `Refs:` lines. Gate repair found by the audit 005 program's final `make cover`, under the
 owner's request of 2026-11-17 that the full gates at the end fix every
 failure. Three packages measured below their floors because code moved into
 them by X530 to X557 kept its pin tests elsewhere:

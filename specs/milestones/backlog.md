@@ -9301,6 +9301,18 @@ The owner also asked (2026-11-17) to complete the whole plan, landing slices on
 focused checks with one full gate at the end, and that full gates fix every
 failure they find, earlier ones included.
 
+The owner answered the plan's three remaining questions on 2026-11-17, each
+with the session's recommendation. The SNO case's static `workloads/` profile
+retires: the parent runbook renders the isolation chart instead (B1470,
+X575). The general compiler and the Ceph admission walk stay two walks over
+the shared leaf rules of X517, so no Ceph message, order or device-path rule
+moves (finding G20-03 closes with no work). Role entry points run through
+ansible-core in the gate: one integration target per role family runs an
+entry point with a local connection against a temporary root and stubbed
+executables, twice, asserting a completed record and no change on replay
+(B1467, X576). That is the owner's permission for the gate's own local runs,
+never for a run against a host.
+
 The owner's focused-check instruction of [D273](#d273) remains in force:
 until E2E acceptance, each slice lands on its focused checks, the changed
 packages' tests and, in the safety class, their race runs, and records that
