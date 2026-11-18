@@ -121,7 +121,7 @@ func TestAFrozenPlacementOffTheControllerRefusesEveryVerb(t *testing.T) {
 			} {
 				subject, _, _ := strings.Cut(verb, " ")
 				reported := diagnostics.Of(attempt())
-				if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+				if len(reported) != 1 || reported[0].Code != "openshift.request-invalid" ||
 					reported[0].Message != "the frozen cluster "+subject+" request is placed off the controller" {
 					t.Fatalf("%s: refusal = %#v", verb, reported)
 				}

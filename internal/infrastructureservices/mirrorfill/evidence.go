@@ -25,7 +25,7 @@ func decodeFilesEvidence(data []byte, digest string) (FilesEvidence, error) {
 		return FilesEvidence{}, err
 	}
 	if evidence.Request != digest || evidence.Version != FilesEvidenceVersion {
-		return FilesEvidence{}, refusal("lifecycle.state", "mirror files evidence names another request or version", "")
+		return FilesEvidence{}, mirrorEvidenceMismatch.Fail("mirror files evidence names another request or version", "")
 	}
 	return evidence, nil
 }
@@ -72,7 +72,7 @@ func filesEffect(evidence FilesEvidence, request FilesRequest, removal bool) rec
 
 func filesDrift(evidence FilesEvidence, request FilesRequest) error {
 	if path, foreign := foreignFile(evidence, request); foreign {
-		return refusal("lifecycle.state", "the artifact mirror holds "+path+", which the frozen request does not name in that place", "")
+		return mirrorDrift.Fail("the artifact mirror holds "+path+", which the frozen request does not name in that place", "")
 	}
-	return refusal("lifecycle.state", "the artifact mirror reports its root absent beside files it holds", "")
+	return mirrorDrift.Fail("the artifact mirror reports its root absent beside files it holds", "")
 }

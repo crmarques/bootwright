@@ -106,7 +106,7 @@ func installPlatform(cluster api.Object, nodes []nodeProjection) (map[string]any
 		}
 		return map[string]any{"baremetal": arm}, nil
 	}
-	return nil, refusalAt("lifecycle.state", "$.spec.install.platform", "this executable installs no cluster on the declared platform",
+	return nil, stopAt(openshiftInputUnprojectable, "$.spec.install.platform", "this executable installs no cluster on the declared platform",
 		"declare a baremetal platform, or none, on "+cluster.Identity())
 }
 
@@ -166,7 +166,7 @@ func clusterNetworking(catalog api.Catalog, cluster api.Object, nodes []nodeProj
 	}
 	networking := cluster.Spec().Get("networking")
 	if networking.Get("clusterNetwork").Len() == 0 || networking.Get("serviceNetwork").Len() == 0 {
-		return nil, refusalAt("lifecycle.state", "$.spec.networking", "normalized cluster networking is empty", "recompile "+cluster.Identity()+" with normalization before projecting spec.networking")
+		return nil, stopAt(openshiftInputUnprojectable, "$.spec.networking", "normalized cluster networking is empty", "recompile "+cluster.Identity()+" with normalization before projecting spec.networking")
 	}
 	out := map[string]any{
 		"machineNetwork": machineNetworks,

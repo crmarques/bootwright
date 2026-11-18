@@ -70,7 +70,7 @@ func (c Capability) requests(ctx context.Context, input lifecycle.PlanInput) ([]
 	var records map[string]installation.MediaRecord
 	read := false
 	if input.State == nil {
-		return nil, nil, refusal("lifecycle.state", "disk discovery requires compiled state", "")
+		return nil, nil, discoveryUnconfigured.Fail("disk discovery requires compiled state", "")
 	}
 	for _, m := range installation.InstalledMachines(input.State.Effective()) {
 		if !discoveryMachine(m) {
@@ -80,7 +80,7 @@ func (c Capability) requests(ctx context.Context, input lifecycle.PlanInput) ([]
 			continue
 		}
 		if c.media == nil {
-			return nil, nil, refusal("lifecycle.state", "disk discovery has no media reader", "")
+			return nil, nil, discoveryUnconfigured.Fail("disk discovery has no media reader", "")
 		}
 		if !read {
 			found, err := c.media.MediaRecords(ctx)
@@ -195,7 +195,7 @@ func (c Capability) Roots(ctx context.Context, input lifecycle.PlanInput) (map[s
 			return nil, err
 		}
 		if !found {
-			return nil, refusal("lifecycle.state", "Machine/"+r.Identity.Object+" has no completed disk discovery for the current policy and media", "run bootwright apply --context "+input.Context.Name+" to prepare inventory, or bootwright machine discover --context "+input.Context.Name+" --name "+r.Identity.Object+" --prepare-prerequisites")
+			return nil, discoveryInventoryMissing.Fail("Machine/"+r.Identity.Object+" has no completed disk discovery for the current policy and media", "run bootwright apply --context "+input.Context.Name+" to prepare inventory, or bootwright machine discover --context "+input.Context.Name+" --name "+r.Identity.Object+" --prepare-prerequisites")
 		}
 		m, _ := input.State.Effective().Find(api.Machine, r.Identity.Object)
 		policy, err := diskselection.PolicyFromValue(substrate.MachineDiscoveryPolicy(m))
@@ -208,7 +208,7 @@ func (c Capability) Roots(ctx context.Context, input lifecycle.PlanInput) (map[s
 		}
 		proof, err := diskselection.Prove(report, report.Binding, policy, protected)
 		if err != nil {
-			return nil, refusal("lifecycle.state", "Machine/"+r.Identity.Object+": "+err.Error(), "inspect the recorded inventory, refine spec.hardware.rootDisk.discover.match, or set spec.hardware.rootDisk.discover.inventory to boot when the BMC inventory cannot answer it, and update the context before planning again")
+			return nil, discoveryRootUnprovable.Fail("Machine/"+r.Identity.Object+": "+err.Error(), "inspect the recorded inventory, refine spec.hardware.rootDisk.discover.match, or set spec.hardware.rootDisk.discover.inventory to boot when the BMC inventory cannot answer it, and update the context before planning again")
 		}
 		proofs[r.Identity.Object] = proof
 	}
@@ -245,7 +245,7 @@ func (c Capability) completedInventory(ctx context.Context, input lifecycle.Plan
 			return inventory, false, nil
 		}
 		if r.Inventory == InventoryBoot && report.Source != diskselection.SourceLinux {
-			return inventory, false, refusal("lifecycle.state", "a BMC disk inventory answers a discovery that declares a boot inventory", "retain the recorded inventory and resolve its ownership before preparing another")
+			return inventory, false, discoveryRecordsMismatch.Fail("a BMC disk inventory answers a discovery that declares a boot inventory", "retain the recorded inventory and resolve its ownership before preparing another")
 		}
 		expected := report.Binding
 		expected.Context, expected.Incarnation, expected.Machine = input.Context.Name, input.Context.Incarnation, r.Identity.Object
@@ -261,10 +261,10 @@ func (c Capability) completedInventory(ctx context.Context, input lifecycle.Plan
 		expected.UUID = strings.ToLower(strings.TrimSpace(pin.UUID))
 		expected.MACs = discoveryMACs(r)
 		if expected.Validate() != nil || report.Validate() != nil || !reflect.DeepEqual(report.Binding, expected) {
-			return inventory, false, refusal("lifecycle.state", "the recorded disk inventory does not match its original machine and execution", "retain the original inventory and resolve its ownership before preparing another")
+			return inventory, false, discoveryRecordsMismatch.Fail("the recorded disk inventory does not match its original machine and execution", "retain the original inventory and resolve its ownership before preparing another")
 		}
 		if found {
-			return inventory, false, refusal("lifecycle.state", "disk discovery has multiple owned proofs", "")
+			return inventory, false, discoveryRecordsConflict.Fail("disk discovery has multiple owned proofs", "")
 		}
 		inventory, found = report, true
 	}
@@ -286,7 +286,7 @@ func discoveryEvidence(data json.RawMessage, digest string) (DiscoveryEvidence, 
 		return e, diskselection.Report{}, err
 	}
 	if e.Version != discoveryVersion || e.Request != digest {
-		return e, diskselection.Report{}, refusal("lifecycle.state", "disk discovery evidence names another contract or request", "")
+		return e, diskselection.Report{}, discoveryEvidenceMismatch.Fail("disk discovery evidence names another contract or request", "")
 	}
 	if len(e.Report) == 0 {
 		return e, diskselection.Report{}, nil
@@ -297,7 +297,7 @@ func discoveryEvidence(data json.RawMessage, digest string) (DiscoveryEvidence, 
 
 func (c Capability) binding(ctx context.Context, e lifecycle.Execution, r DiscoveryRequest, create bool) (diskselection.Binding, error) {
 	if c.identities == nil {
-		return diskselection.Binding{}, refusal("lifecycle.state", "disk discovery has no hardware identity reader", "")
+		return diskselection.Binding{}, discoveryUnconfigured.Fail("disk discovery has no hardware identity reader", "")
 	}
 	proofs := e.ApplyProved
 	if len(proofs) == 0 {
@@ -308,7 +308,7 @@ func (c Capability) binding(ctx context.Context, e lifecycle.Execution, r Discov
 		return diskselection.Binding{}, err
 	}
 	if !found || pin.UUID == "" {
-		return diskselection.Binding{}, refusal("lifecycle.state", "disk discovery has no original physical identity proof", "")
+		return diskselection.Binding{}, discoveryRecordsMissing.Fail("disk discovery has no original physical identity proof", "")
 	}
 	b := diskselection.Binding{Context: e.Context, Incarnation: e.Incarnation, Machine: r.Identity.Object, Operation: e.ApplyOperation, RequestDigest: e.Block.RequestDigest, MediaSHA256: r.BootMedia.SHA256, ToolDigest: DiscoveryContentDigest(), UUID: strings.ToLower(strings.TrimSpace(pin.UUID)), MACs: discoveryMACs(r)}
 	for _, raw := range e.ApplyPreparations {
@@ -318,15 +318,15 @@ func (c Capability) binding(ctx context.Context, e lifecycle.Execution, r Discov
 		}
 		b.Attempt, b.Nonce = previous.Attempt, previous.Nonce
 		if previous.Validate() != nil || !reflect.DeepEqual(b, previous) {
-			return b, refusal("lifecycle.state", "disk inventory attempt belongs to another request or machine", "")
+			return b, discoveryRecordsMismatch.Fail("disk inventory attempt belongs to another request or machine", "")
 		}
 		return previous, nil
 	}
 	if !create || e.Prepare == nil {
-		return b, refusal("lifecycle.state", "disk discovery has no durable attempt preparation", "")
+		return b, discoveryUnconfigured.Fail("disk discovery has no durable attempt preparation", "")
 	}
 	if c.nonce == nil {
-		return b, refusal("lifecycle.state", "disk discovery has no cryptographic nonce source", "")
+		return b, discoveryUnconfigured.Fail("disk discovery has no cryptographic nonce source", "")
 	}
 	b.Nonce, err = c.nonce()
 	if err != nil {
@@ -353,12 +353,12 @@ func (c Capability) run(ctx context.Context, e lifecycle.Execution, operation st
 		return lifecycle.RunResult{}, err
 	}
 	if c.runner == nil {
-		return lifecycle.RunResult{}, refusal("lifecycle.state", "disk discovery has no runner", "")
+		return lifecycle.RunResult{}, discoveryUnconfigured.Fail("disk discovery has no runner", "")
 	}
 	raw, _ := json.Marshal(b)
 	port := r.MachinePort
 	if port.UserVariable == "" || port.PasswordVariable == "" {
-		return lifecycle.RunResult{}, refusal("lifecycle.state", "the frozen machine port names no controller account material", "")
+		return lifecycle.RunResult{}, discoveryRequestInvalid.Fail("the frozen machine port names no controller account material", "")
 	}
 	files := []lifecycle.MaterialFile{
 		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: r.Controller.CredentialsRef, Variable: port.UserVariable},
@@ -381,7 +381,7 @@ func (c Capability) run(ctx context.Context, e lifecycle.Execution, operation st
 		return result, err
 	}
 	if proof.Completed && (!proof.Cleaned || report.Validate() != nil || !reflect.DeepEqual(report.Binding, b)) {
-		return result, refusal("lifecycle.state", "disk discovery did not prove this attempt and its cleanup", "")
+		return result, discoveryIncomplete.Fail("disk discovery did not prove this attempt and its cleanup", "")
 	}
 	return result, nil
 }
@@ -393,7 +393,7 @@ func (c Capability) Apply(ctx context.Context, e lifecycle.Execution) (lifecycle
 	}
 	proof, _, err := discoveryEvidence(r.Evidence, e.Block.RequestDigest)
 	if err != nil || !proof.Completed || !proof.Cleaned {
-		return lifecycle.Result{}, refusal("lifecycle.state", "disk discovery did not complete inventory and cleanup", "")
+		return lifecycle.Result{}, discoveryIncomplete.Fail("disk discovery did not complete inventory and cleanup", "")
 	}
 	return lifecycle.Result{Outcome: reconciliation.OutcomeChanged, Evidence: r.Evidence}, nil
 }
@@ -424,7 +424,7 @@ func (c Capability) Destroy(ctx context.Context, e lifecycle.Execution) (lifecyc
 	}
 	proof, _, err = discoveryEvidence(r.Evidence, e.Block.RequestDigest)
 	if err != nil || !proof.Cleaned {
-		return lifecycle.Result{}, refusal("lifecycle.state", "disk discovery cleanup is incomplete", "")
+		return lifecycle.Result{}, discoveryIncomplete.Fail("disk discovery cleanup is incomplete", "")
 	}
 	return lifecycle.Result{Outcome: reconciliation.OutcomeChanged, Evidence: r.Evidence}, nil
 }

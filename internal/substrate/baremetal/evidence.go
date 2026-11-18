@@ -50,26 +50,26 @@ func ValidatePresence(data []byte, request Request, digest string) error {
 		return err
 	}
 	if !evidence.Postcondition || evidence.Absent {
-		return refusal("lifecycle.state", "the machine adapter did not prove its postcondition", "")
+		return baremetalPostconditionUnproved.Fail("the machine adapter did not prove its postcondition", "")
 	}
 	proved, fault := reportedIdentity(evidence)
 	if fault != "" {
-		return refusal("lifecycle.state", "the management controller at "+request.Controller.Endpoint+" reported "+fault, "")
+		return baremetalControllerReport.Fail("the management controller at "+request.Controller.Endpoint+" reported "+fault, "")
 	}
 	if !proved.Present() {
-		return refusal("lifecycle.state", "the management controller reported no identity for this machine", "")
+		return baremetalControllerReport.Fail("the management controller reported no identity for this machine", "")
 	}
 	if evidence.Power == "" {
-		return refusal("lifecycle.state", "the management controller reported no power state", "")
+		return baremetalControllerReport.Fail("the management controller reported no power state", "")
 	}
 	if reported := slices.Sorted(slices.Values(evidence.Addresses)); !slices.Equal(slices.Compact(reported), request.Addresses()) {
-		return refusal("lifecycle.state", "the machine does not report exactly the hardware addresses this Machine declares", "")
+		return baremetalInventoryMismatch.Fail("the machine does not report exactly the hardware addresses this Machine declares", "")
 	}
 	if len(request.Addresses()) == 0 {
-		return refusal("lifecycle.state", "the machine request declares no hardware address to prove it by", "")
+		return baremetalAddressesUndeclared.Fail("the machine request declares no hardware address to prove it by", "")
 	}
 	if request.RootVolumeRef != nil && (evidence.RootVolume == nil || !request.RootVolumeRef.Matches(*evidence.RootVolume)) || request.RootVolumeRef == nil && evidence.RootVolume != nil {
-		return refusal("lifecycle.state", "the machine proof does not identify the requested logical root volume", "restore the original machine proof")
+		return baremetalInventoryMismatch.Fail("the machine proof does not identify the requested logical root volume", "restore the original machine proof")
 	}
 	return nil
 }
@@ -84,10 +84,10 @@ func ValidateAbsence(data []byte, digest string) error {
 		return err
 	}
 	if !evidence.Postcondition || !evidence.Absent {
-		return refusal("lifecycle.state", "the machine adapter did not prove its removal", "")
+		return baremetalPostconditionUnproved.Fail("the machine adapter did not prove its removal", "")
 	}
 	if evidence.RootVolume != nil || len(evidence.Addresses) != 0 || evidence.UUID != "" || evidence.Serial != "" {
-		return refusal("lifecycle.state", "a removal that retains the machine reports nothing about it", "")
+		return baremetalInventoryMismatch.Fail("a removal that retains the machine reports nothing about it", "")
 	}
 	return nil
 }
@@ -99,7 +99,7 @@ func ValidateAbsence(data []byte, digest string) error {
 func ProvedIdentity(data []byte) (machineref.HardwareIdentity, error) {
 	identity, fault, err := provedIdentity(data)
 	if fault != "" {
-		return machineref.HardwareIdentity{}, refusal("lifecycle.state", "the machine evidence records "+fault, "")
+		return machineref.HardwareIdentity{}, baremetalIdentityUnproved.Fail("the machine evidence records "+fault, "")
 	}
 	return identity, err
 }
@@ -112,14 +112,14 @@ func provedIdentity(data []byte) (machineref.HardwareIdentity, string, error) {
 		return machineref.HardwareIdentity{}, "", err
 	}
 	if !evidence.Postcondition || evidence.Absent {
-		return machineref.HardwareIdentity{}, "", refusal("lifecycle.state", "the machine evidence proves no identity", "")
+		return machineref.HardwareIdentity{}, "", baremetalIdentityUnproved.Fail("the machine evidence proves no identity", "")
 	}
 	identity, fault := reportedIdentity(evidence)
 	if fault != "" {
 		return machineref.HardwareIdentity{}, fault, nil
 	}
 	if !identity.Present() {
-		return machineref.HardwareIdentity{}, "", refusal("lifecycle.state", "the machine evidence proves no identity", "")
+		return machineref.HardwareIdentity{}, "", baremetalIdentityUnproved.Fail("the machine evidence proves no identity", "")
 	}
 	return identity, "", nil
 }
@@ -167,10 +167,10 @@ func PinnedIdentity(machine string, blocks []lifecycle.BlockEvidence) (machinere
 		identity, fault, err := provedIdentity(block.Evidence)
 		switch {
 		case fault != "":
-			return machineref.HardwareIdentity{}, false, refusal("lifecycle.state",
+			return machineref.HardwareIdentity{}, false, baremetalIdentityUnproved.Fail(
 				"the proof that pins Machine/"+machine+" records "+fault, reprove)
 		case err != nil:
-			return machineref.HardwareIdentity{}, false, refusal("lifecycle.state",
+			return machineref.HardwareIdentity{}, false, baremetalIdentityUnproved.Fail(
 				"the proof that pins Machine/"+machine+" cannot be read", reprove)
 		}
 		return identity, true, nil
@@ -184,7 +184,7 @@ func decodeEvidence(data []byte, digest string) (Evidence, error) {
 		return Evidence{}, err
 	}
 	if evidence.Request != digest {
-		return Evidence{}, refusal("lifecycle.state", "the machine evidence names another request", "")
+		return Evidence{}, baremetalEvidenceMismatch.Fail("the machine evidence names another request", "")
 	}
 	return evidence, nil
 }

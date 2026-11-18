@@ -210,16 +210,16 @@ type EraseEvidence struct {
 
 func validateEraseReceipt(receipt *EraseReceipt, request EraseRequest, digest string) error {
 	if receipt == nil || receipt.Version != EraseImplementation || receipt.State != "complete" || receipt.Request != digest || receipt.OriginalAttempt == "" || receipt.UUID == "" || len(receipt.Targets) != len(request.Targets) {
-		return refusal("lifecycle.state", "physical erase has no complete original-attempt receipt", "continue the same removal to reprove the target and read back every erased byte")
+		return stopReceiptIncomplete.Fail("physical erase has no complete original-attempt receipt", "continue the same removal to reprove the target and read back every erased byte")
 	}
 	if !slices.Equal(receipt.MACs, eraseMACs(request)) {
-		return refusal("lifecycle.state", "physical erase receipt has another complete MAC set", "restore the original operation records")
+		return stopEvidenceMismatch.Fail("physical erase receipt has another complete MAC set", "restore the original operation records")
 	}
 	for index, target := range request.Targets {
 		result := receipt.Targets[index]
 		covered := EraseCoverageBytes(target)
 		if result.EraseTarget != target || covered == 0 || result.Written != covered || result.Verified != covered {
-			return refusal("lifecycle.state", "physical erase receipt does not prove every byte its method erases", "continue the same removal")
+			return stopReceiptIncomplete.Fail("physical erase receipt does not prove every byte its method erases", "continue the same removal")
 		}
 	}
 	return nil
@@ -231,7 +231,7 @@ func eraseEvidence(data json.RawMessage, request EraseRequest, digest string, re
 		return err
 	}
 	if proof.Version != EraseImplementation || proof.Request != digest || proof.Removed != removed || !proof.Prepared || proof.Retained {
-		return refusal("lifecycle.state", "physical erase evidence does not prove this operation", "continue the original operation")
+		return stopReceiptIncomplete.Fail("physical erase evidence does not prove this operation", "continue the original operation")
 	}
 	if removed {
 		return validateEraseReceipt(proof.Receipt, request, digest)
@@ -252,7 +252,7 @@ func PhysicalEraseProof(applied reconciliation.Block, removed lifecycle.BlockEvi
 	}
 	if removed.Block.Relaxation == lifecycle.EraseRetain {
 		if !waivedRetention(removed.Evidence, applied.RequestDigest) {
-			return EraseReceipt{}, false, refusal("lifecycle.state", "physical erase waiver evidence does not prove this removal", "restore the original removal records")
+			return EraseReceipt{}, false, stopEvidenceMismatch.Fail("physical erase waiver evidence does not prove this removal", "restore the original removal records")
 		}
 		return waivedProof(request, applied.RequestDigest), true, nil
 	}
@@ -268,7 +268,7 @@ func PhysicalEraseProof(applied reconciliation.Block, removed lifecycle.BlockEvi
 		return EraseReceipt{}, false, err
 	}
 	if strings.TrimSpace(originalUUID) == "" || !strings.EqualFold(strings.TrimSpace(proof.Receipt.UUID), strings.TrimSpace(originalUUID)) {
-		return EraseReceipt{}, false, refusal("lifecycle.state", "physical erase receipt has another original machine UUID", "restore the original apply and removal records")
+		return EraseReceipt{}, false, stopEvidenceMismatch.Fail("physical erase receipt has another original machine UUID", "restore the original apply and removal records")
 	}
 	return *proof.Receipt, true, nil
 }

@@ -17783,3 +17783,20 @@ that names another request or a state the command cannot name, and a power or
 media state the controller did not prove, which keeps its run unknown. Power
 leaves the ledger. Guarded by `TestEveryCatalogedStopIsComposedAndExplained`
 and the package's tests.
+
+## X617 — Eight capabilities' failures are stops
+
+### B1608
+
+Under [D276](backlog.md#d276) (audit 006 W2.3), split from
+[B1563](m1.md#b1563). The libvirt, KubeVirt and bare-metal substrates, disk
+discovery, physical erase, mirror fill, managed services and the OpenShift
+agent install raise their 384 lifecycle sites from 114 declared stops, each
+with its own section of the [stop catalog](../cli/stops.md#disk-discovery-stops),
+which now gives every capability family a section of its own. Messages are
+unchanged; a site that gave no remedy now carries its stop's; outcomes are
+unchanged, and the mirror adapter's unproved postcondition is an `unproved`
+stop like the host firewall's. The eight packages leave the ledger except
+physical erase's three authorization refusals. Guarded by
+`TestEveryCatalogedStopIsComposedAndExplained`, the packages' tests and an
+independent Opus review.

@@ -38,16 +38,16 @@ func ValidateMediaPresence(data []byte, request MediaRequest, digest string) err
 		return err
 	}
 	if !evidence.Postcondition || evidence.Absent {
-		return refusal("lifecycle.state", "the boot-media adapter did not prove its postcondition", "")
+		return openshiftEvidenceUnsettled.Fail("the boot-media adapter did not prove its postcondition", "")
 	}
 	if !evidence.Image {
-		return refusal("lifecycle.state", "the boot media adapter published no image", "")
+		return openshiftEvidenceUnsettled.Fail("the boot media adapter published no image", "")
 	}
 	if evidence.Inputs != digest {
-		return refusal("lifecycle.state", "the published image was built from another request", "")
+		return openshiftEvidenceMismatch.Fail("the published image was built from another request", "")
 	}
 	if evidence.Installer != request.Release.Version {
-		return refusal("lifecycle.state", "the published image was built by another release's installer", "")
+		return openshiftEvidenceMismatch.Fail("the published image was built by another release's installer", "")
 	}
 	return nil
 }
@@ -60,10 +60,10 @@ func ValidateMediaAbsence(data []byte, digest string) error {
 		return err
 	}
 	if !evidence.Postcondition || !evidence.Absent {
-		return refusal("lifecycle.state", "the boot-media adapter did not prove removal", "")
+		return openshiftEvidenceUnsettled.Fail("the boot-media adapter did not prove removal", "")
 	}
 	if evidence.Image || evidence.Work {
-		return refusal("lifecycle.state", "the boot-media removal evidence still reports published content", "")
+		return openshiftEvidenceUnsettled.Fail("the boot-media removal evidence still reports published content", "")
 	}
 	return nil
 }
@@ -76,7 +76,7 @@ func ValidateMediaNoEffect(data []byte, digest string) error {
 		return err
 	}
 	if evidence.Image || evidence.Work {
-		return refusal("lifecycle.state", "the served root or the work area still carries this cluster", "")
+		return openshiftEvidenceUnsettled.Fail("the served root or the work area still carries this cluster", "")
 	}
 	return nil
 }
@@ -90,10 +90,10 @@ func ValidateMediaPartial(data []byte, digest string) error {
 		return err
 	}
 	if evidence.Postcondition || evidence.Absent {
-		return refusal("lifecycle.state", "the boot-media evidence proves a settled state, not a partial one", "")
+		return openshiftEvidenceUnsettled.Fail("the boot-media evidence proves a settled state, not a partial one", "")
 	}
 	if !evidence.Image && !evidence.Work {
-		return refusal("lifecycle.state", "the boot-media evidence reports nothing this operation published", "")
+		return openshiftEvidenceUnsettled.Fail("the boot-media evidence reports nothing this operation published", "")
 	}
 	return nil
 }
@@ -104,7 +104,7 @@ func decodeMediaEvidence(data []byte, digest string) (MediaEvidence, error) {
 		return MediaEvidence{}, err
 	}
 	if evidence.Request != digest {
-		return MediaEvidence{}, refusal("lifecycle.state", "the boot-media evidence names another request", "")
+		return MediaEvidence{}, openshiftEvidenceInvalid.Fail("the boot-media evidence names another request", "")
 	}
 	return evidence, nil
 }
@@ -203,25 +203,25 @@ func ValidateInstallPresence(data []byte, request InstallRequest, digest string)
 		return err
 	}
 	if !evidence.Postcondition || evidence.Absent {
-		return refusal("lifecycle.state", "the installation adapter did not prove its postcondition", "")
+		return openshiftEvidenceUnsettled.Fail("the installation adapter did not prove its postcondition", "")
 	}
 	if evidence.Identity == "" || evidence.Cluster != evidence.Identity {
-		return refusal("lifecycle.state", "the cluster answering is not the cluster this operation installed", "")
+		return openshiftEvidenceMismatch.Fail("the cluster answering is not the cluster this operation installed", "")
 	}
 	if evidence.Release != request.Release.Version {
-		return refusal("lifecycle.state", "the cluster reports another release than the one it was installed for", "")
+		return openshiftEvidenceMismatch.Fail("the cluster reports another release than the one it was installed for", "")
 	}
 	if !evidence.Completed {
-		return refusal("lifecycle.state", "the cluster does not report its installation completed at the declared release", "")
+		return openshiftEvidenceUnsettled.Fail("the cluster does not report its installation completed at the declared release", "")
 	}
 	if len(evidence.Missing) != 0 {
-		return refusal("lifecycle.state", "the cluster is short of a declared node", "")
+		return openshiftEvidenceUnsettled.Fail("the cluster is short of a declared node", "")
 	}
 	if len(evidence.Media) != 0 {
-		return refusal("lifecycle.state", "a node still presents the media it installed from", "")
+		return openshiftEvidenceUnsettled.Fail("a node still presents the media it installed from", "")
 	}
 	if unplaced := Unplaced(request, evidence); len(unplaced) != 0 {
-		return refusal("lifecycle.state", "node "+unplaced[0]+" does not carry the labels and taints its request declares", "")
+		return openshiftEvidenceMismatch.Fail("node "+unplaced[0]+" does not carry the labels and taints its request declares", "")
 	}
 	return nil
 }
@@ -235,10 +235,10 @@ func ValidateInstallAbsence(data []byte, digest string) error {
 		return err
 	}
 	if !evidence.Postcondition || !evidence.Absent {
-		return refusal("lifecycle.state", "the installation adapter did not prove removal", "")
+		return openshiftEvidenceUnsettled.Fail("the installation adapter did not prove removal", "")
 	}
 	if len(evidence.Media) != 0 {
-		return refusal("lifecycle.state", "the installation removal evidence still reports inserted media", "")
+		return openshiftEvidenceUnsettled.Fail("the installation removal evidence still reports inserted media", "")
 	}
 	return nil
 }
@@ -253,7 +253,7 @@ func ValidateInstallReleased(data []byte, digest string) error {
 		return err
 	}
 	if len(evidence.Media) != 0 {
-		return refusal("lifecycle.state", "a node still presents boot media", "")
+		return openshiftEvidenceUnsettled.Fail("a node still presents boot media", "")
 	}
 	return nil
 }
@@ -270,12 +270,12 @@ func ValidateInstallReleasePartial(data []byte, request InstallRequest, digest s
 		return err
 	}
 	if len(evidence.Media) == 0 {
-		return refusal("lifecycle.state", "no node presents boot media", "")
+		return openshiftEvidenceUnsettled.Fail("no node presents boot media", "")
 	}
 	declared := request.Machines()
 	for _, node := range evidence.Media {
 		if !slices.Contains(declared, node) {
-			return refusal("lifecycle.state", "a Machine presenting boot media is not one of this cluster's nodes", "")
+			return openshiftEvidenceMismatch.Fail("a Machine presenting boot media is not one of this cluster's nodes", "")
 		}
 	}
 	return nil
@@ -291,16 +291,16 @@ func ValidateInstallNoEffect(data []byte, digest string, bootRecorded bool) erro
 		return err
 	}
 	if evidence.Cluster != "" {
-		return refusal("lifecycle.state", "a cluster answers, so no effect is unproved", "")
+		return openshiftEvidenceUnsettled.Fail("a cluster answers, so no effect is unproved", "")
 	}
 	if len(evidence.Powered) != 0 || len(evidence.Media) != 0 {
-		return refusal("lifecycle.state", "a node is running or still holds boot media", "")
+		return openshiftEvidenceUnsettled.Fail("a node is running or still holds boot media", "")
 	}
 	if evidence.Inserted {
-		return refusal("lifecycle.state", "a node of this cluster was handed its image, so nodes off and no media inserted do not prove that nothing was installed", "")
+		return openshiftEvidenceUnsettled.Fail("a node of this cluster was handed its image, so nodes off and no media inserted do not prove that nothing was installed", "")
 	}
 	if bootRecorded && !evidence.Booted {
-		return refusal("lifecycle.state", "this operation recorded a boot of its nodes and its work area no longer carries the mark its insert records are read under, so nodes off and no media inserted do not prove that nothing was installed", "")
+		return openshiftEvidenceUnsettled.Fail("this operation recorded a boot of its nodes and its work area no longer carries the mark its insert records are read under, so nodes off and no media inserted do not prove that nothing was installed", "")
 	}
 	return nil
 }
@@ -321,23 +321,23 @@ func ValidateInstallPartial(data []byte, digest string) error {
 		return err
 	}
 	if evidence.Postcondition || evidence.Absent {
-		return refusal("lifecycle.state", "the installation evidence proves a settled state, not a partial one", "")
+		return openshiftEvidenceUnsettled.Fail("the installation evidence proves a settled state, not a partial one", "")
 	}
 	if evidence.Identity == "" {
-		return refusal("lifecycle.state", "this operation recorded no cluster identity", "")
+		return openshiftEvidenceUnsettled.Fail("this operation recorded no cluster identity", "")
 	}
 	if evidence.Cluster == evidence.Identity {
 		return nil
 	}
 	if evidence.Cluster != "" {
-		return refusal("lifecycle.state", "the cluster answering is not the cluster this operation installed", "")
+		return openshiftEvidenceMismatch.Fail("the cluster answering is not the cluster this operation installed", "")
 	}
 	if len(evidence.OwnMedia) == 0 {
-		return refusal("lifecycle.state", "nothing answers and no node presents the image this cluster published", "")
+		return openshiftEvidenceUnsettled.Fail("nothing answers and no node presents the image this cluster published", "")
 	}
 	for _, node := range evidence.Media {
 		if !slices.Contains(evidence.OwnMedia, node) {
-			return refusal("lifecycle.state", "a node presents an image this cluster did not publish", "")
+			return openshiftEvidenceMismatch.Fail("a node presents an image this cluster did not publish", "")
 		}
 	}
 	return nil
@@ -355,16 +355,16 @@ func decodeInstallEvidence(data []byte, digest string) (InstallEvidence, error) 
 		return InstallEvidence{}, err
 	}
 	if named.Booted == nil || named.Inserted == nil {
-		return InstallEvidence{}, refusal("lifecycle.state", "the installation evidence does not say whether its work area was marked and whether a node was handed the image", "")
+		return InstallEvidence{}, openshiftEvidenceInvalid.Fail("the installation evidence does not say whether its work area was marked and whether a node was handed the image", "")
 	}
 	evidence := named.InstallEvidence
 	evidence.Booted, evidence.Inserted = *named.Booted, *named.Inserted
 	if evidence.Request != digest {
-		return InstallEvidence{}, refusal("lifecycle.state", "the installation evidence names another request", "")
+		return InstallEvidence{}, openshiftEvidenceInvalid.Fail("the installation evidence names another request", "")
 	}
 	for _, node := range evidence.OwnMedia {
 		if !slices.Contains(evidence.Media, node) {
-			return InstallEvidence{}, refusal("lifecycle.state", "the installation evidence names own media on a node presenting none", "")
+			return InstallEvidence{}, openshiftEvidenceInvalid.Fail("the installation evidence names own media on a node presenting none", "")
 		}
 	}
 	return evidence, nil
@@ -382,7 +382,7 @@ func validBootPreparation(data json.RawMessage) error {
 		return err
 	}
 	if decoded, err := hex.DecodeString(preparation.Identity); err != nil || len(decoded) != sha256.Size || hex.EncodeToString(decoded) != preparation.Identity {
-		return refusal("lifecycle.state", "the installation's automation recorded a boot that names no identity of this build", "")
+		return openshiftEvidenceInvalid.Fail("the installation's automation recorded a boot that names no identity of this build", "")
 	}
 	return nil
 }

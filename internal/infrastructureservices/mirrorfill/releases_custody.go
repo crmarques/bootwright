@@ -17,7 +17,7 @@ type ReleaseAuth func(pullSecret []byte, origin string, username, password []byt
 
 func (c ReleaseFill) lendReleaseAuth(execution lifecycle.Execution, request ReleaseRequest) (lifecycle.Execution, error) {
 	if c.auth == nil {
-		return execution, refusal("lifecycle.state", "the release copy derives no auth document", "")
+		return execution, mirrorUnconfigured.Fail("the release copy derives no auth document", "")
 	}
 	if err := managedservice.ProveCredential(execution.Material, request.Mirror.CredentialsRef, execution.Context, false); err != nil {
 		return execution, err

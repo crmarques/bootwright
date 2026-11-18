@@ -95,7 +95,7 @@ func (c ImageFill) Request(catalog api.Catalog, controllerMachine, contextName s
 		return ImagesRequest{}, false, nil
 	}
 	if c.images == nil {
-		return ImagesRequest{}, false, refusal("lifecycle.state", "mirror planning requires the acquisition list", "")
+		return ImagesRequest{}, false, mirrorPlanningInputMissing.Fail("mirror planning requires the acquisition list", "")
 	}
 	images, err := c.images(catalog)
 	if err != nil || len(images) == 0 {
@@ -137,18 +137,18 @@ func imagesImpacts(verb reconciliation.Verb, request ImagesRequest) []string {
 
 func imagesRefusals(contextName string, request ImagesRequest) map[string]error {
 	registry := diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: ImagesKind, Name: request.Identity.Registry}
-	refused := func(code, message, remediation string) error {
-		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: code, Message: message, Remediation: remediation, Object: &registry}}}
+	refused := func(stop diagnostics.Stop, message, remediation string) error {
+		return refusedOn(&registry, stop, message, remediation)
 	}
 	machine := "Machine/" + request.Placement.Machine
 	return map[string]error{
-		SkopeoReason: refused("lifecycle.state", machine+" has no working /usr/bin/skopeo, so the image mirror of "+request.Identity.Environment+" cannot copy its images; this attempt copied nothing",
+		SkopeoReason: refused(mirrorSkopeoMissing, machine+" has no working /usr/bin/skopeo, so the image mirror of "+request.Identity.Environment+" cannot copy its images; this attempt copied nothing",
 			"install the skopeo package on "+machine+" with its package manager and repeat the apply, or place Registry/"+request.Identity.Registry+" on a Machine that has it"),
-		"image-digest-mismatch": refused("lifecycle.state", "the image mirror on "+request.Placement.Machine+" reports a digest other than the pinned one for an image it was given, so the fill stopped",
+		"image-digest-mismatch": refused(mirrorDigestMismatch, "the image mirror on "+request.Placement.Machine+" reports a digest other than the pinned one for an image it was given, so the fill stopped",
 			"verify the Registry and the route from "+request.Placement.Machine+" to the image's origin, then run bootwright apply --context "+contextName),
-		"image-unreachable": refused("lifecycle.unknown", machine+" could not copy an image from its origin into the image mirror",
+		"image-unreachable": refused(mirrorOriginUnreachable, machine+" could not copy an image from its origin into the image mirror",
 			"give "+request.Placement.Machine+" a route to the origins bootwright render acquisitions --context "+contextName+" names, then run bootwright apply --context "+contextName),
-		"mirror-unreadable": refused("lifecycle.unknown", machine+" could not read the image mirror at "+request.Mirror.Host+" with its credential and trust anchor",
+		"mirror-unreadable": refused(mirrorUnreadable, machine+" could not read the image mirror at "+request.Mirror.Host+" with its credential and trust anchor",
 			"verify Registry/"+request.Identity.Registry+" is ready and answers its credential, then run bootwright apply --context "+contextName),
 	}
 }

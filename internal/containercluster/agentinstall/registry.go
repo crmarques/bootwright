@@ -37,11 +37,11 @@ func registryMirror(catalog api.Catalog, cluster api.Object) (*RegistryMirror, e
 	location, trust := registry.Spec().Get("url").Text(), registry.Spec().Get("trustBundleRef").Text()
 	if registry.Spec().Get("management").Text() != "external" {
 		if !declared {
-			return nil, refusal("lifecycle.unsupported", "a managed Registry is a cluster's mirror only as the Environment's image mirror, whose host copies the release",
+			return nil, openshiftSelectionUnsupported.Fail("a managed Registry is a cluster's mirror only as the Environment's image mirror, whose host copies the release",
 				"select an external Registry on "+cluster.Identity()+", or name "+registry.Identity()+" in spec.mirror.registry.registryRef on the Environment")
 		}
 		if reason, remedy := mirroredReleaseRefusal(cluster); reason != "" {
-			return nil, refusal("lifecycle.unsupported", reason, remedy)
+			return nil, openshiftSelectionUnsupported.Fail(reason, remedy)
 		}
 		location, trust = environment.Location, environment.TrustBundleRef
 	}

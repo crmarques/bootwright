@@ -245,10 +245,10 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 		return MediaRequest{}, InstallRequest{}, Requirements{}, err
 	}
 	if !substrate.SafeSegment(name) {
-		return empty(refusalAt("lifecycle.state", "$.metadata.name", "the cluster name is not a safe host identifier", "rename "+cluster.Identity()))
+		return empty(stopAt(openshiftInputUnprojectable, "$.metadata.name", "the cluster name is not a safe host identifier", "rename "+cluster.Identity()))
 	}
 	if field, reason, remediation := refusedCluster(catalog, cluster); reason != "" {
-		return empty(refusalAt("lifecycle.unsupported", field, reason, remediation))
+		return empty(stopAt(openshiftSelectionUnsupported, field, reason, remediation))
 	}
 	needs := Requirements{}
 	nodes, err := nodeProjections(catalog, cluster, contextName, controllerMachine, &needs)
@@ -465,7 +465,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		}
 		hints, reason, remediation := installerRootDeviceHints(catalog, bound, target.RootDeviceHints)
 		if reason != "" {
-			return nil, refusal("lifecycle.unsupported", reason, remediation)
+			return nil, openshiftSelectionUnsupported.Fail(reason, remediation)
 		}
 		address, err := installAddress(catalog, bound)
 		if err != nil {
@@ -686,6 +686,12 @@ func refusal(code, message, remediation string) error {
 
 func refusalAt(code, field, message, remediation string) error {
 	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: code, Field: field, Message: message, Remediation: remediation}}}
+}
+
+func stopAt(stop diagnostics.Stop, field, message, remediation string) error {
+	failure := stop.Fail(message, remediation).(*diagnostics.Failure)
+	failure.Diagnostics[0].Field = field
+	return failure
 }
 
 func clusterArms(catalog api.Catalog, cluster api.Object) []substrate.Arm {

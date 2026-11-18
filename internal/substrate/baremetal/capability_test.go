@@ -498,7 +498,7 @@ func TestAProvedClaimRefusesMoreMACsThanOneReservationHolds(t *testing.T) {
 		t.Fatalf("the largest MAC set claimed %d keys (%v), want %d", len(held.Keys), err, infrastructureservices.MaxReservationKeys)
 	}
 	_, err = claim(infrastructureservices.MaxReservationKeys - 1)
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "more than 62 MAC addresses") {
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "baremetal.claim-unnameable" || !strings.Contains(reported[0].Message, "more than 62 MAC addresses") {
 		t.Fatalf("a MAC set beyond the bound = %+v", reported)
 	}
 }

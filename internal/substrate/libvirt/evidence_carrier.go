@@ -15,14 +15,14 @@ func carrierPolicyName(request HostRequest) string {
 
 func carrierHeld(observed CarrierPolicyEvidence, request HostRequest) error {
 	if !observed.Answered || observed.Name != carrierPolicyName(request) {
-		return refusal("lifecycle.state", "the provider host did not answer for its frozen VLAN carrier policy", "")
+		return libvirtHostSilent.Fail("the provider host did not answer for its frozen VLAN carrier policy", "")
 	}
 	if len(request.Legs) == 0 {
 		if observed.Present || observed.Owned {
-			return refusal("lifecycle.state", "the provider host still holds an undeclared VLAN carrier policy", "")
+			return libvirtHostDrifted.Fail("the provider host still holds an undeclared VLAN carrier policy", "")
 		}
 	} else if !observed.Present || !observed.Owned {
-		return refusal("lifecycle.state", "the provider host no longer holds its owned VLAN carrier policy", "")
+		return libvirtHostDrifted.Fail("the provider host no longer holds its owned VLAN carrier policy", "")
 	}
 	return nil
 }
@@ -32,7 +32,7 @@ func matchCarrierPolicy(observed CarrierPolicyEvidence, request HostRequest) err
 		return err
 	}
 	if !observed.Definition {
-		return refusal("lifecycle.state", "the provider host VLAN carrier policy is drifted or awaiting reload", "repeat the apply to restore the owned policy and reload NetworkManager configuration")
+		return libvirtHostDrifted.Fail("the provider host VLAN carrier policy is drifted or awaiting reload", "repeat the apply to restore the owned policy and reload NetworkManager configuration")
 	}
 	return nil
 }

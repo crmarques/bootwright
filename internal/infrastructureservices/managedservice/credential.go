@@ -42,7 +42,7 @@ const passwordFileMaterial = "bootwright:password-file"
 
 func (d Definition) passwordFile(execution lifecycle.Execution, request Request) (lifecycle.Execution, error) {
 	if d.PasswordFile == nil {
-		return execution, Refusal("lifecycle.state", "the managed service capability derives no password file", "")
+		return execution, serviceUnconfigured.Fail("the managed service capability derives no password file", "")
 	}
 	bound := execution.Material[request.CredentialsRef]
 	username, _ := bound.Part(secrets.UsernamePart)
@@ -50,7 +50,7 @@ func (d Definition) passwordFile(execution lifecycle.Execution, request Request)
 	defer clear(password)
 	file, err := d.PasswordFile(username, password)
 	if err != nil {
-		return execution, Refusal("lifecycle.state", "the password file of "+request.Kind+"/"+request.Identity.Service+" could not be derived", "")
+		return execution, servicePasswordFileFailed.Fail("the password file of "+request.Kind+"/"+request.Identity.Service+" could not be derived", "")
 	}
 	material := maps.Clone(execution.Material)
 	material[passwordFileMaterial] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: file})

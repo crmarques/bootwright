@@ -106,7 +106,7 @@ func (c Capability) Requests(catalog api.Catalog, controllerMachine, contextName
 
 func (d Definition) requests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, error) {
 	if !ValidContextName(contextName) {
-		return nil, Refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
+		return nil, serviceRequestInvalid.Fail("the lifecycle context identity is invalid", "")
 	}
 	var requests []Request
 	for _, object := range ManagedObjects(catalog, d) {
@@ -122,7 +122,7 @@ func (d Definition) requests(catalog api.Catalog, controllerMachine, contextName
 func (d Definition) requestFor(catalog api.Catalog, object api.Object, controllerMachine, contextName string) (Request, error) {
 	name := object.Name()
 	if !SafeSegment(name) {
-		return Request{}, Refusal("lifecycle.state", "the managed service name is not a safe host identifier", "rename "+object.Identity())
+		return Request{}, serviceNameUnsafe.Fail("the managed service name is not a safe host identifier", "rename "+object.Identity())
 	}
 	spec := object.Spec()
 	machine, found := catalog.Find(api.Machine, spec.Get("machineRef").Text())

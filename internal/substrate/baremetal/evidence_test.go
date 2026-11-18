@@ -54,6 +54,7 @@ func TestTheProvedIdentityIsReadOnlyFromAPresenceProof(t *testing.T) {
 		})
 	}
 	valid := string(proof(t, "uuid-1", "SN1"))
+	proofsWithoutIdentity := map[string]bool{"null": true, "the absent form": true, "absent naming an identity": true, "unproved": true, "no identity": true}
 	for name, evidence := range map[string][]byte{
 		"null":            []byte("null"),
 		"the absent form": encode(t, Evidence{Absent: true, Addresses: []string{}, Postcondition: true, Request: provedDigest}),
@@ -79,8 +80,12 @@ func TestTheProvedIdentityIsReadOnlyFromAPresenceProof(t *testing.T) {
 			if err == nil {
 				t.Fatalf("evidence %q proved the identity %+v", evidence, identity)
 			}
-			if code := refusedAs(t, err).Code; code != "lifecycle.state" {
-				t.Fatalf("code = %q", code)
+			want := "lifecycle.state"
+			if proofsWithoutIdentity[name] {
+				want = baremetalIdentityUnproved.Code
+			}
+			if code := refusedAs(t, err).Code; code != want {
+				t.Fatalf("code = %q, want %q", code, want)
 			}
 			if identity.Present() {
 				t.Fatalf("a refusal returned the identity %+v", identity)
@@ -155,7 +160,7 @@ func TestOnlyADoneBareMetalApplyProofPinsAMachine(t *testing.T) {
 				t.Fatalf("pin = %+v, %t, %v", identity, found, err)
 			}
 			reported := refusedAs(t, err)
-			if reported.Code != "lifecycle.state" || !strings.Contains(reported.Message, "Machine/server") {
+			if reported.Code != "baremetal.identity-unproved" || !strings.Contains(reported.Message, "Machine/server") {
 				t.Fatalf("refusal = %+v", reported)
 			}
 			if reported.Remediation != "destroy and apply this context so the machine is proved again" {
@@ -211,19 +216,19 @@ func TestAReportedIdentityIsPrintableAndBounded(t *testing.T) {
 			if err == nil {
 				t.Fatal("the proof accepted an identity the evidence may not carry")
 			}
-			assertRefusal(t, err, "the management controller at "+endpoint+" reported "+test.fault, "", value)
+			assertRefusal(t, err, baremetalControllerReport, "the management controller at "+endpoint+" reported "+test.fault, "", value)
 			identity, err := ProvedIdentity(encode(t, evidence))
 			if err == nil || identity.Present() {
 				t.Fatalf("the recorded proof yielded %+v, %v", identity, err)
 			}
-			assertRefusal(t, err, "the machine evidence records "+test.fault, "", value)
+			assertRefusal(t, err, baremetalIdentityUnproved, "the machine evidence records "+test.fault, "", value)
 			identity, found, err := PinnedIdentity("server", []lifecycle.BlockEvidence{
 				published(Implementation, reconciliation.Apply, reconciliation.BlockDone, encode(t, evidence)),
 			})
 			if err == nil || found || identity.Present() {
 				t.Fatalf("pin = %+v, %t, %v", identity, found, err)
 			}
-			assertRefusal(t, err, "the proof that pins Machine/server records "+test.fault, reprove, value)
+			assertRefusal(t, err, baremetalIdentityUnproved, "the proof that pins Machine/server records "+test.fault, reprove, value)
 		})
 	}
 	for name, test := range map[string]struct{ uuid, serial string }{
@@ -251,10 +256,13 @@ func TestAReportedIdentityIsPrintableAndBounded(t *testing.T) {
 	}
 }
 
-func assertRefusal(t *testing.T, err error, message, remediation, value string) {
+func assertRefusal(t *testing.T, err error, stop diagnostics.Stop, message, remediation, value string) {
 	t.Helper()
 	reported := refusedAs(t, err)
-	if reported.Code != "lifecycle.state" || reported.Message != message || reported.Remediation != remediation {
+	if remediation == "" {
+		remediation = stop.Remedy
+	}
+	if reported.Code != stop.Code || reported.Message != message || reported.Remediation != remediation {
 		t.Fatalf("refusal = %+v, want %q remedied by %q", reported, message, remediation)
 	}
 	if strings.Contains(reported.Message, value) || strings.Contains(reported.Remediation, value) {

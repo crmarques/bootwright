@@ -106,7 +106,7 @@ func unrealizedSegments(catalog api.Catalog, provider, machine api.Object) []str
 // canonical object order. It reads no host, endpoint or Secret material.
 func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([]HostRequest, error) {
 	if !api.ValidLexical(api.LexicalName, contextName) {
-		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
+		return nil, kubevirtContextInvalid.Fail("the lifecycle context identity is invalid", "")
 	}
 	placement, err := placementFor(catalog, controllerMachine)
 	if err != nil {
@@ -152,7 +152,7 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 					if strings.HasPrefix(held, machine.Identity()+" NIC ") {
 						remedy = "rename one of the two NICs in spec.hardware.nics of " + machine.Identity()
 					}
-					return nil, refusal("lifecycle.unsupported", "a KubeVirt NIC's MAC address is derived from the context, Machine and NIC names, and "+first+" and "+second+" derive the same address, "+iface.MACAddress,
+					return nil, kubevirtNICMACCollision.Fail("a KubeVirt NIC's MAC address is derived from the context, Machine and NIC names, and "+first+" and "+second+" derive the same address, "+iface.MACAddress,
 						remedy)
 				}
 				owners[iface.MACAddress] = owner
@@ -170,7 +170,7 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 // realizes, in canonical object order.
 func MachineRequests(catalog api.Catalog, controllerMachine, contextName string) ([]MachineRequest, error) {
 	if !api.ValidLexical(api.LexicalName, contextName) {
-		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
+		return nil, kubevirtContextInvalid.Fail("the lifecycle context identity is invalid", "")
 	}
 	var requests []MachineRequest
 	for _, provider := range providers(catalog) {
@@ -189,7 +189,7 @@ func MachineRequests(catalog api.Catalog, controllerMachine, contextName string)
 func machineRequestFor(catalog api.Catalog, provider, machine api.Object, controllerMachine, contextName string) (MachineRequest, error) {
 	name := machine.Name()
 	if !substrate.SafeSegment(name) {
-		return MachineRequest{}, refusal("lifecycle.state", "the Machine name is not a safe host identifier", "rename "+machine.Identity())
+		return MachineRequest{}, kubevirtNameUnsafe.Fail("the Machine name is not a safe host identifier", "rename "+machine.Identity())
 	}
 	target, err := substrate.TargetFor(catalog, machine, contextName, controllerMachine)
 	if err != nil {
@@ -239,7 +239,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 		}
 		network, ok := networkOf(provider, segment)
 		if !ok {
-			return MachineRequest{}, refusal("lifecycle.unsupported", "a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and segment "+reference+" names another kind",
+			return MachineRequest{}, kubevirtNICNetworkKind.Fail("a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and segment "+reference+" names another kind",
 				"select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition segment for every NIC of "+machine.Identity())
 		}
 		multus := network.Name

@@ -34,13 +34,15 @@ func ForeignListenerRefusals(kind, service, bindAddress string, ports []int) map
 			message = "something other than " + identity + " already listens on port " + infrastructureservices.FormatPort(port) +
 				" at an address its wildcard bind " + bindAddress + " covers, so its unit was not started"
 		}
-		refusals[ForeignListenerReason+"-"+infrastructureservices.FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-			Severity: "error", Code: "lifecycle.state", Message: message,
-			Remediation: remedy,
-			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service},
-		}}}
+		refusals[ForeignListenerReason+"-"+infrastructureservices.FormatPort(port)] = serviceRefusal(serviceForeignListener, message, remedy, kind, service)
 	}
 	return refusals
+}
+
+func serviceRefusal(stop diagnostics.Stop, message, remediation, kind, service string) error {
+	failure := stop.Fail(message, remediation).(*diagnostics.Failure)
+	failure.Diagnostics[0].Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service}
+	return failure
 }
 
 const ContainerRuntimeReason = "container-runtime"
@@ -49,13 +51,9 @@ func ContainerRuntimeRefusals(kind, service, machine string, ports []int) map[st
 	identity := kind + "/" + service
 	refusals := map[string]error{}
 	for _, port := range ports {
-		refusals[ContainerRuntimeReason+"-"+infrastructureservices.FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-			Severity:    "error",
-			Code:        "lifecycle.state",
-			Message:     "Machine/" + machine + " has no working /usr/bin/podman, so " + identity + " cannot run its container; this attempt pulled, published or started nothing",
-			Remediation: "install the podman package on Machine/" + machine + " with its package manager and repeat the apply, or place " + identity + " on a Machine that runs containers",
-			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service},
-		}}}
+		refusals[ContainerRuntimeReason+"-"+infrastructureservices.FormatPort(port)] = serviceRefusal(serviceContainerRuntimeMissing,
+			"Machine/"+machine+" has no working /usr/bin/podman, so "+identity+" cannot run its container; this attempt pulled, published or started nothing",
+			"install the podman package on Machine/"+machine+" with its package manager and repeat the apply, or place "+identity+" on a Machine that runs containers", kind, service)
 	}
 	return refusals
 }
@@ -66,12 +64,9 @@ func ListenerRefusals(kind, service, bindAddress string, ports []int) map[string
 		return refusals
 	}
 	for _, port := range ports {
-		refusals["unassigned-bind-address-"+infrastructureservices.FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-			Severity: "error", Code: "lifecycle.state",
-			Message:     "the placement host has no usable local bind address for " + infrastructureservices.HostPort(bindAddress, port) + "; this attempt pulled, published or started nothing",
-			Remediation: "restore the declared address on the placement host, or destroy this context with its original build before importing an assigned bindAddress and matching endpoints and TLS certificate names on " + kind + "/" + service,
-			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service},
-		}}}
+		refusals["unassigned-bind-address-"+infrastructureservices.FormatPort(port)] = serviceRefusal(serviceBindAddressUnassigned,
+			"the placement host has no usable local bind address for "+infrastructureservices.HostPort(bindAddress, port)+"; this attempt pulled, published or started nothing",
+			"restore the declared address on the placement host, or destroy this context with its original build before importing an assigned bindAddress and matching endpoints and TLS certificate names on "+kind+"/"+service, kind, service)
 	}
 	return refusals
 }
@@ -109,20 +104,21 @@ func ReadinessRefusals(kind, service, machine, bindAddress string, ports []int) 
 			reasons = append(reasons, "certificate-mismatch", "readiness-unproved")
 		}
 		for _, reason := range reasons {
-			code := "lifecycle.state"
+			stop := serviceListenerFailed
 			message := "the listener refused or returned an invalid readiness answer"
 			if reason == "readiness-timeout" {
-				code = "lifecycle.unknown"
+				stop = serviceReadinessTimeout
 				message = "the listener did not answer within its bounded readiness window"
 			}
 			if reason == "readiness-unproved" {
-				code = "lifecycle.unknown"
+				stop = serviceReadinessUnproved
 				message = "the listener supplied no usable readiness evidence"
 			}
 			if reason == "certificate-mismatch" {
+				stop = serviceCertificateMismatch
 				message = "the listener presented a different certificate than the operation bound"
 			}
-			refusals[reason+"-"+infrastructureservices.FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: code, Message: message + " on " + infrastructureservices.HostPort(bindAddress, port), Remediation: "restore the declared service listener and retry the operation", Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service}}}}
+			refusals[reason+"-"+infrastructureservices.FormatPort(port)] = serviceRefusal(stop, message+" on "+infrastructureservices.HostPort(bindAddress, port), "restore the declared service listener and retry the operation", kind, service)
 		}
 	}
 	return refusals

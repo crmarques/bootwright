@@ -35,8 +35,8 @@ func TestAForeignListenerRefusalNamesTheSocketAndTheRemedy(t *testing.T) {
 			t.Fatalf("%s: diagnostics = %#v", tc.bind, reported)
 		}
 		got := reported[0]
-		if got.Code != "lifecycle.state" || got.Object == nil || got.Object.Kind != "DNSServer" || got.Object.Name != "dns" {
-			t.Fatalf("%s: refusal = %#v, want lifecycle.state on DNSServer/dns", tc.bind, got)
+		if got.Code != "service.foreign-listener" || got.Object == nil || got.Object.Kind != "DNSServer" || got.Object.Name != "dns" {
+			t.Fatalf("%s: refusal = %#v, want service.foreign-listener on DNSServer/dns", tc.bind, got)
 		}
 		for _, name := range tc.names {
 			if !strings.Contains(got.Message, name) {
@@ -77,8 +77,8 @@ func TestUnassignedBindRefusalNamesTheServiceAndFrozenInputRecovery(t *testing.T
 		for _, bind := range []string{"192.0.2.1", "2001:db8::1"} {
 			refusals := ListenerRefusals(kind, "svc", bind, []int{8080})
 			reported := diagnostics.Of(refusals["unassigned-bind-address-8080"])
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Object == nil || reported[0].Object.Kind != kind || reported[0].Object.Name != "svc" {
-				t.Fatalf("%s: refusal = %#v, want lifecycle.state on %s/svc", bind, reported, kind)
+			if len(reported) != 1 || reported[0].Code != "service.bind-address-unassigned" || reported[0].Object == nil || reported[0].Object.Kind != kind || reported[0].Object.Name != "svc" {
+				t.Fatalf("%s: refusal = %#v, want service.bind-address-unassigned on %s/svc", bind, reported, kind)
 			}
 			if !strings.Contains(reported[0].Message, infrastructureservices.HostPort(bind, 8080)) || !strings.Contains(reported[0].Message, "no usable local bind address") || !strings.Contains(reported[0].Remediation, "destroy this context with its original build") || !strings.Contains(reported[0].Remediation, "TLS certificate names") {
 				t.Fatalf("%s: refusal = %#v, want socket, absence and exact-continuation recovery", bind, reported[0])
@@ -100,8 +100,8 @@ func TestAMissingContainerRuntimeRefusalNamesTheMachineAndThePackage(t *testing.
 			t.Fatalf("%s: refusals = %v, want one per port", kind, keys)
 		}
 		reported := diagnostics.Of(refusals["container-runtime-443"])
-		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Object == nil || reported[0].Object.Kind != kind || reported[0].Object.Name != "svc" {
-			t.Fatalf("%s: refusal = %#v, want lifecycle.state on %s/svc", kind, reported, kind)
+		if len(reported) != 1 || reported[0].Code != "service.container-runtime-missing" || reported[0].Object == nil || reported[0].Object.Kind != kind || reported[0].Object.Name != "svc" {
+			t.Fatalf("%s: refusal = %#v, want service.container-runtime-missing on %s/svc", kind, reported, kind)
 		}
 		if !strings.Contains(reported[0].Message, "Machine/edge-01") || !strings.Contains(reported[0].Message, "/usr/bin/podman") ||
 			!strings.Contains(reported[0].Remediation, "podman package on Machine/edge-01") {

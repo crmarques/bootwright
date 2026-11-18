@@ -24,7 +24,7 @@ func PhysicalEraseUnstarted(original []lifecycle.BlockEvidence, removed []lifecy
 		}
 	}
 	unknown := func() (bool, error) {
-		return false, refusal("lifecycle.state", "physical no-install cleanup has no exact original installation and erase-policy proof", "restore the original apply and removal records")
+		return false, stopRecordsMissing.Fail("physical no-install cleanup has no exact original installation and erase-policy proof", "restore the original apply and removal records")
 	}
 	if len(installs) != 1 {
 		return unknown()

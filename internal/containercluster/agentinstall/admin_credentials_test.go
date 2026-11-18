@@ -203,7 +203,7 @@ func TestInstallANamedAdminCredentialRefusalReachesTheOperatorByName(t *testing.
 	runner := &credentialRunner{reason: nodeRefusal("controller-read", 0)}
 	_, err := NewInstall(runner).WithPasswordHash(hashed).PrepareAdminCredential(context.Background(), execution)
 	d := diagnostics.Of(err)
-	if len(d) != 1 || d[0].Code != "lifecycle.state" || !strings.Contains(d[0].Message, "the management controller did not answer a complete node state read") {
+	if len(d) != 1 || d[0].Code != "openshift.node-refused" || !strings.Contains(d[0].Message, "the management controller did not answer a complete node state read") {
 		t.Fatalf("a named refusal reached the operator as %+v", d)
 	}
 }

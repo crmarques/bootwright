@@ -322,7 +322,7 @@ func TestUnsupportedNamesEveryClusterThisContractCannotInstall(t *testing.T) {
 			}
 			if _, _, _, err := Requests(catalog, "controller", testContext); err == nil {
 				t.Fatal("a cluster this contract cannot install was derived anyway")
-			} else if code := refusalCode(t, err); code != "lifecycle.unsupported" {
+			} else if code := refusalCode(t, err); code != "openshift.selection-unsupported" {
 				t.Fatalf("refusal = %s", code)
 			}
 		})
@@ -372,7 +372,7 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 				t.Fatal("a cluster this contract cannot boot was derived anyway")
 			}
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || reported[0].Message != test.reason {
+			if len(reported) != 1 || reported[0].Code != "openshift.selection-unsupported" || reported[0].Message != test.reason {
 				t.Fatalf("refusal = %#v", reported)
 			}
 			if reported[0].Remediation != test.remediation {
@@ -422,7 +422,7 @@ func TestAMultiNodeClusterOnAnotherPlatformRefusesBeforeRegistration(t *testing.
 			}
 			_, _, _, err := Requests(catalog, "controller", testContext)
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" ||
+			if len(reported) != 1 || reported[0].Code != "openshift.selection-unsupported" ||
 				reported[0].Message != "this executable installs no multi-node cluster on the declared platform" {
 				t.Fatalf("refusal = %#v", reported)
 			}
@@ -568,7 +568,7 @@ func TestAnOffControllerServerRefusesBeforeRegistration(t *testing.T) {
 	}
 	_, _, _, err := Requests(catalog, "controller", testContext)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" ||
+	if len(reported) != 1 || reported[0].Code != "openshift.selection-unsupported" ||
 		reported[0].Message != "a cluster's boot image is built on the controller, so the server it is published through is placed there" {
 		t.Fatalf("refusal = %#v", reported)
 	}
@@ -622,7 +622,7 @@ func TestASupportedClusterIsNotRefused(t *testing.T) {
 func refusedWith(t *testing.T, err error, reason, remediation string) {
 	t.Helper()
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || reported[0].Message != reason {
+	if len(reported) != 1 || reported[0].Code != "openshift.selection-unsupported" || reported[0].Message != reason {
 		t.Fatalf("refusal = %#v", reported)
 	}
 	if reported[0].Remediation != remediation {
@@ -768,7 +768,7 @@ func TestProjectionRefusesUnnormalizedNetworksWithClusterIdentity(t *testing.T) 
 		}
 		_, _, _, err := Requests(api.NewCatalog(objects), "controller", testContext)
 		got := diagnostics.Of(err)
-		if len(got) != 1 || got[0].Code != "lifecycle.state" || got[0].Object == nil || got[0].Object.Name != "sno" || !strings.Contains(got[0].Remediation, "spec.networking") {
+		if len(got) != 1 || got[0].Code != "openshift.input-unprojectable" || got[0].Object == nil || got[0].Object.Name != "sno" || !strings.Contains(got[0].Remediation, "spec.networking") {
 			t.Fatalf("%s: %#v", field, got)
 		}
 	}

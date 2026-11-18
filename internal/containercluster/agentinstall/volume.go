@@ -14,13 +14,13 @@ func (c MediaCapability) volumeValues(execution lifecycle.Execution, request Med
 	if len(request.RootVolumes) != 0 {
 		hosts, ok := config["hosts"].([]any)
 		if !ok {
-			return nil, refusal("lifecycle.state", "the frozen agent configuration has no host list", "")
+			return nil, openshiftRequestInvalid.Fail("the frozen agent configuration has no host list", "")
 		}
 		cloned := make([]any, len(hosts))
 		for i, entry := range hosts {
 			host, ok := entry.(map[string]any)
 			if !ok {
-				return nil, refusal("lifecycle.state", "the frozen agent host is malformed", "")
+				return nil, openshiftRequestInvalid.Fail("the frozen agent host is malformed", "")
 			}
 			cloned[i] = maps.Clone(host)
 		}
@@ -29,35 +29,35 @@ func (c MediaCapability) volumeValues(execution lifecycle.Execution, request Med
 	proofs := map[string]substrate.RootVolumeProof{}
 	for _, binding := range request.RootVolumes {
 		if c.identities == nil {
-			return nil, refusal("lifecycle.state", "the logical root-volume proof reader is not configured", "")
+			return nil, openshiftAdapterUnconfigured.Fail("the logical root-volume proof reader is not configured", "")
 		}
 		pin, found, err := c.identities.PinnedIdentity(binding.Machine, execution.Proved)
 		if err != nil {
 			return nil, err
 		}
 		if !found || !binding.Ref.Matches(pin.RootVolume) {
-			return nil, refusal("lifecycle.state", "Machine/"+binding.Machine+" has no matching logical root-volume proof", "apply the Machine stage before building media")
+			return nil, openshiftMachineProofMissing.Fail("Machine/"+binding.Machine+" has no matching logical root-volume proof", "apply the Machine stage before building media")
 		}
 		hosts, ok := config["hosts"].([]any)
 		if !ok {
-			return nil, refusal("lifecycle.state", "the frozen agent configuration has no host list", "")
+			return nil, openshiftRequestInvalid.Fail("the frozen agent configuration has no host list", "")
 		}
 		matches := 0
 		for _, entry := range hosts {
 			host, ok := entry.(map[string]any)
 			if ok && host["hostname"] == binding.Hostname {
 				if _, exists := host["rootDeviceHints"]; exists {
-					return nil, refusal("lifecycle.state", "the frozen host has competing root selectors", "")
+					return nil, openshiftRequestInvalid.Fail("the frozen host has competing root selectors", "")
 				}
 				host["rootDeviceHints"] = map[string]any{"wwn": pin.RootVolume.WWN}
 				matches++
 			}
 		}
 		if matches != 1 {
-			return nil, refusal("lifecycle.state", "the volume binding does not name exactly one agent host", "")
+			return nil, openshiftRequestInvalid.Fail("the volume binding does not name exactly one agent host", "")
 		}
 		if _, duplicate := proofs[binding.Hostname]; duplicate {
-			return nil, refusal("lifecycle.state", "the media repeats a root-volume binding", "")
+			return nil, openshiftRequestInvalid.Fail("the media repeats a root-volume binding", "")
 		}
 		proofs[binding.Hostname] = pin.RootVolume
 	}

@@ -19,12 +19,9 @@ func runtimeRefusals(contextName, continuation string, request InstallRequest) m
 			"media-eject":      {"the management controller did not prove the boot image released", "restore the BMC connection and virtual-media trust, then repeat the command"},
 			"node-unreachable": {"the node did not answer its required installation ports within the frozen boot budget", "repair the node's installation network and boot path, then repeat " + continuation},
 		} {
-			refusals[nodeRefusal(reason, index)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-				Severity: "error", Code: "lifecycle.state",
-				Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: node.Machine},
-				Message:     "node " + node.Name + " (Machine/" + node.Machine + ", " + node.Address + ") of OpenShiftCluster/" + request.Identity.Cluster + ": " + test.message,
-				Remediation: test.remedy,
-			}}}
+			refused := openshiftNodeRefused.Fail("node "+node.Name+" (Machine/"+node.Machine+", "+node.Address+") of OpenShiftCluster/"+request.Identity.Cluster+": "+test.message, test.remedy).(*diagnostics.Failure)
+			refused.Diagnostics[0].Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: node.Machine}
+			refusals[nodeRefusal(reason, index)] = refused
 		}
 	}
 	return refusals

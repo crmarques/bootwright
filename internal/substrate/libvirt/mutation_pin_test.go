@@ -202,9 +202,9 @@ func TestEveryLibvirtMutationRefusesWhatItCannotRead(t *testing.T) {
 			effect    reconciliation.EffectState
 		}{
 			"runner error":     {context.Background(), &fakeRunner{err: unreachable}, pinned.execution, reconciliation.OutcomeUnknown, described(unreachable), reconciliation.EffectUnknown},
-			"unusable outcome": {context.Background(), &fakeRunner{result: lifecycle.RunResult{Outcome: "", Evidence: present}}, pinned.execution, reconciliation.OutcomeUnknown, described(refusal("lifecycle.state", "the "+pinned.subject+" adapter reported no usable outcome", "")), reconciliation.EffectCompleted},
-			"other outcome":    {context.Background(), &fakeRunner{result: lifecycle.RunResult{Outcome: "skipped", Evidence: present}}, pinned.execution, reconciliation.OutcomeUnknown, described(refusal("lifecycle.state", "the "+pinned.subject+" adapter reported no usable outcome", "")), reconciliation.EffectCompleted},
-			"no adapter":       {context.Background(), nil, pinned.execution, reconciliation.OutcomeFailed, described(refusal("lifecycle.state", "the "+pinned.subject+" adapter is not configured", "")), reconciliation.EffectUnknown},
+			"unusable outcome": {context.Background(), &fakeRunner{result: lifecycle.RunResult{Outcome: "", Evidence: present}}, pinned.execution, reconciliation.OutcomeUnknown, described(libvirtOutcomeUnusable.Fail("the "+pinned.subject+" adapter reported no usable outcome", "")), reconciliation.EffectCompleted},
+			"other outcome":    {context.Background(), &fakeRunner{result: lifecycle.RunResult{Outcome: "skipped", Evidence: present}}, pinned.execution, reconciliation.OutcomeUnknown, described(libvirtOutcomeUnusable.Fail("the "+pinned.subject+" adapter reported no usable outcome", "")), reconciliation.EffectCompleted},
+			"no adapter":       {context.Background(), nil, pinned.execution, reconciliation.OutcomeFailed, described(libvirtUnconfigured.Fail("the "+pinned.subject+" adapter is not configured", "")), reconciliation.EffectUnknown},
 			"cancelled":        {cancelled, &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: present}}, pinned.execution, reconciliation.OutcomeFailed, described(context.Canceled), reconciliation.EffectUnknown},
 			"malformed":        {context.Background(), &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: present}}, malformed, reconciliation.OutcomeFailed, "malformed", reconciliation.EffectUnknown},
 		} {

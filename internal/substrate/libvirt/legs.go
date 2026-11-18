@@ -20,7 +20,7 @@ func legsFor(catalog api.Catalog, provider api.Object, contextName string) ([]Le
 		name := segment.Get("name").Text()
 		device := managed.HostDevice()
 		if !substrate.SafeSegment(name) || !api.ValidLexical(api.LexicalBridge, managed.Bridge) || len(device) > substrate.MaxInterfaceName {
-			return nil, nil, refusal("lifecycle.state", "the tagged managed Network/"+name+" names no safe leg device", "rename Network/"+name+" or shorten its spec.libvirt.bridge")
+			return nil, nil, libvirtDeclarationInvalid.Fail("the tagged managed Network/"+name+" names no safe leg device", "rename Network/"+name+" or shorten its spec.libvirt.bridge")
 		}
 		if prefix, err := netip.ParsePrefix(managed.CIDR); err != nil || !prefix.Addr().Is4() {
 			return nil, nil, refusal("api.value", "the tagged managed Network/"+name+" has no IPv4 subnet", "declare its spec.ipv4.cidr")

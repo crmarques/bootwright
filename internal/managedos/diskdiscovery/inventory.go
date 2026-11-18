@@ -38,10 +38,10 @@ func RecordedInventory(name string, records []lifecycle.BlockEvidence) (Discover
 			return out, false, err
 		}
 		if !e.Completed || !e.Cleaned || report.Validate() != nil || report.Binding.Context != request.Identity.Context || report.Binding.Machine != name || report.Binding.RequestDigest != record.Block.RequestDigest || report.Binding.Operation != record.Operation || report.Binding.MediaSHA256 != request.BootMedia.SHA256 || report.Binding.ToolDigest != record.Block.ContentDigest || !slices.Equal(report.Binding.MACs, discoveryMACs(request)) {
-			return out, false, refusal("lifecycle.state", "the recorded disk inventory has no complete matching provenance", "")
+			return out, false, discoveryRecordsMismatch.Fail("the recorded disk inventory has no complete matching provenance", "")
 		}
 		if found {
-			return out, false, refusal("lifecycle.state", "multiple owned disk inventories compete for one Machine", "")
+			return out, false, discoveryRecordsConflict.Fail("multiple owned disk inventories compete for one Machine", "")
 		}
 		out.Disks = slices.Clone(report.Disks)
 		found = true
@@ -54,7 +54,7 @@ func (c Capability) ProveRoot(e lifecycle.Execution, r installation.Request) err
 		return nil
 	}
 	refused := func() error {
-		return refusal("lifecycle.state", "the frozen root has no matching completed inventory dependency", "restore the original discovery proof before continuing installation")
+		return discoveryRecordsMissing.Fail("the frozen root has no matching completed inventory dependency", "restore the original discovery proof before continuing installation")
 	}
 	dependencies := e.ApplyProved
 	if len(dependencies) == 0 {

@@ -94,8 +94,8 @@ func TestEveryClaimMutationAndResolutionReadsEachObservation(t *testing.T) {
 		refusal string
 	}{
 		"runner error":     {context.Background(), &scriptedRunner{err: unreachable}, unknown, described(unreachable)},
-		"unusable outcome": {context.Background(), &scriptedRunner{result: lifecycle.RunResult{Outcome: "", Evidence: proved}}, unknown, described(refusal("lifecycle.state", "the machine adapter reported no usable outcome", ""))},
-		"no adapter":       {context.Background(), nil, reconciliation.OutcomeFailed, described(refusal("lifecycle.state", "the machine adapter is not configured", ""))},
+		"unusable outcome": {context.Background(), &scriptedRunner{result: lifecycle.RunResult{Outcome: "", Evidence: proved}}, unknown, described(baremetalNoUsableOutcome.Fail("the machine adapter reported no usable outcome", ""))},
+		"no adapter":       {context.Background(), nil, reconciliation.OutcomeFailed, described(baremetalUnconfigured.Fail("the machine adapter is not configured", ""))},
 		"cancelled":        {cancelled, &scriptedRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: proved}}, reconciliation.OutcomeFailed, described(context.Canceled)},
 	} {
 		t.Run(name, func(t *testing.T) {

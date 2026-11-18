@@ -330,17 +330,17 @@ installations of one profile publish.
 
 A socket held outside the contexts this host coordinates is no reservation, so
 the apply proves it before its first effect. A managed network service or
-artifact server whose unit is not active and of which no container exists
-reads its host's TCP and UDP socket tables (TCP for a proxy and an artifact
-server, UDP for a time service, both for a resolver) and refuses when a
-listener holds one of its ports at an address the wildcard rule above makes
-overlap its bind address. Nothing is pulled, published or started. The refusal
-is `lifecycle.state` on the service, names the socket it binds, and its remedy
-is to stop what listens there, or choose another bindAddress, or another port
-for a service whose port is declared; a DNSServer and an NTPServer keep the one
-port validation permits, so theirs offers only the bindAddress. For a wildcard
-bind, whose colliding address the refusal record does not carry, the remedy
-points to the retained run output, which lists every socket found
+artifact server whose unit is not active and of which no container exists reads
+its host's TCP and UDP socket tables (TCP for a proxy and an artifact server,
+UDP for a time service, both for a resolver) and refuses when a listener holds
+one of its ports at an address the wildcard rule above makes overlap its bind
+address. Nothing is pulled, published or started. The refusal is
+`service.foreign-listener` on the service, names the socket it binds, and its
+remedy is to stop what listens there, or choose another bindAddress, or another
+port for a service whose port is declared; a DNSServer and an NTPServer keep the
+one port validation permits, so theirs offers only the bindAddress. For a
+wildcard bind, whose colliding address the refusal record does not carry, the
+remedy points to the retained run output, which lists every socket found
 (`TestAForeignListenerRefusalNamesTheSocketAndTheRemedy`,
 `TestAForeignListenerRemedyOffersOnlyWhatValidationAdmits`).
 
@@ -349,28 +349,29 @@ Dependency readiness never establishes service ownership, and
 reserves nothing.
 
 A managed service's container runs under `podman`, which nothing installs on a
-placement Machine reached over SSH, so the apply first proves
-`/usr/bin/podman --version` runs on its host, before any pull, publication or
-start. A host where it does not (absent or failing) refuses with
-`lifecycle.state` on the service, naming the Machine and the `podman` package;
-its remedy is to install that package there with the host's package manager and
-repeat the apply, or to place the service on a Machine that runs containers
+placement Machine reached over SSH, so the apply first proves `/usr/bin/podman
+--version` runs on its host, before any pull, publication or start. A host where
+it does not (absent or failing) refuses with `service.container-runtime-missing`
+on the service, naming the Machine and the `podman` package; its remedy is to
+install that package there with the host's package manager and repeat the apply,
+or to place the service on a Machine that runs containers
 (`TestAMissingContainerRuntimeRefusalNamesTheMachineAndThePackage`,
 `TestAnApplyOnAnSSHPlacementHandsTheRunnerItsContainerRuntimeRefusal`,
 `test_a_host_without_podman_refuses_before_any_other_task`). A service placed on
-the controller Machine has `podman` from the controller stage
-([host packages](controller.md#host-packages)), and one placed on an SSH Machine
-that hosts a libvirt provider waits for that provider's host block, which
-installs it (`TestAServiceOnAProviderHostMachineReachedOverSSHRequiresTheHostBlock`).
-A removal or an observation on a host without `podman` reads no container and
+the controller Machine has `podman` from the controller stage ([host
+packages](controller.md#host-packages)), and one placed on an SSH Machine that
+hosts a libvirt provider waits for that provider's host block, which installs it
+(`TestAServiceOnAProviderHostMachineReachedOverSSHRequiresTheHostBlock`). A
+removal or an observation on a host without `podman` reads no container and
 removes what the apply left, so a context whose apply refused is destroyed
 without installing it.
 
 Before image acquisition, publication or start, each service with an explicit
 bind address also reads its placement host's assigned addresses through a
 bounded, complete kernel query. An address absent from that observation, or
-present only as tentative or DAD-failed, refuses with `lifecycle.state` on the
-service, naming the socket. An unavailable or incomplete query proves no
+present only as tentative or DAD-failed, refuses with
+`service.bind-address-unassigned` on the service, naming the socket. An
+unavailable or incomplete query proves no
 absence and fails before effects. Wildcard binds keep their existing readiness
 contract. This check assigns no address and changes no interface. A service
 on a managed bridge still waits for the provider that creates that bridge.
@@ -990,9 +991,10 @@ ambient proxy, into a temporary file whose SHA-256 must equal the build's pin
 before it is renamed into place, owned by root, mode `0644` and labeled like
 the served root. A file already present at its pinned size and SHA-256 is not
 read again, so a replay copies nothing and reports unchanged. A file whose
-SHA-256 differs publishes nothing and fails the attempt with `lifecycle.state`
-on the server; a publisher the host cannot read fails it with
-`lifecycle.unknown` (`TestAFillRefusesAFileItCouldNotVerify`). The evidence
+SHA-256 differs publishes nothing and fails the attempt with
+`mirror.digest-mismatch` on the server; a publisher the host cannot read fails
+it with `mirror.origin-unreachable`
+(`TestAFillRefusesAFileItCouldNotVerify`). The evidence
 names, in request order, each file the mirror holds and whether its size and
 SHA-256 match the pin; a held file the request does not name in that place is
 unknown (`TestTheFillReadsItsEffectFromTheFilesTheMirrorHolds`). The fill's
@@ -1013,9 +1015,10 @@ reports unchanged. Any other image is copied with
 read anonymously over verified HTTPS through the mirror host's frozen egress
 route, to `docker://<registry location>/<origin>:sha256-<hex>`, a tag the
 digest spells, and the Registry's manifest digest under that tag is then read
-back: one other than the pin fails the attempt with `lifecycle.state` on the
-Registry, an origin the host cannot copy from fails it with
-`lifecycle.unknown`, and so does a Registry it cannot read. The Registry's
+back: one other than the pin fails the attempt with `mirror.digest-mismatch` on
+the Registry, an origin the host cannot copy from fails it with
+`mirror.origin-unreachable`, and a Registry it cannot read fails it with
+`mirror.unreadable`. The Registry's
 credential and trust anchor are lent to that one task as material, written by
 its module into a private directory beside the copy as an auth file and a
 certificate directory and removed after it whatever its result, and reach the
@@ -1056,10 +1059,12 @@ oc also reads the release's signatures from `storage.googleapis.com` and
 `mirror.openshift.com`, only warning when it cannot, and its report of what it
 copied, which holds no credential, enters the run's log.
 The release is read back as before: a release or component the Registry then
-lacks fails the attempt with `lifecycle.state` on the cluster, and so do a
+lacks fails the attempt with `mirror.release-incomplete` on the cluster, and a
 release held at another digest than the pin and an archive its publisher does
-not list; a client, copy or Registry the host cannot read fails it with
-`lifecycle.unknown`. The evidence names the release digest the Registry holds,
+not list fail it with `mirror.digest-mismatch`; a client or copy the host
+cannot read fails it with `mirror.origin-unreachable` and a Registry it cannot
+read with `mirror.unreadable`. The evidence names the release digest the
+Registry holds,
 each component by name and digest and how many it lacks
 (`TestTheReleaseFillReadsItsEffectFromWhatTheMirrorHolds`); its removal takes
 nothing back, as the image fill's does.

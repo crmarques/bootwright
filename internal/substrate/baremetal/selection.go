@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -14,7 +13,7 @@ import (
 // object order. It reads no host, endpoint or Secret material.
 func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, error) {
 	if !api.ValidLexical(api.LexicalName, contextName) {
-		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
+		return nil, baremetalRequestInvalid.Fail("the lifecycle context identity is invalid", "")
 	}
 	var requests []Request
 	for _, provider := range substrate.ProvidersOn(catalog, substrate.ArmBaremetal) {
@@ -33,7 +32,7 @@ func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Req
 func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, contextName string) (Request, error) {
 	name := machine.Name()
 	if !substrate.SafeSegment(name) {
-		return Request{}, refusal("lifecycle.state", "the Machine name is not a safe host identifier", "rename "+machine.Identity())
+		return Request{}, baremetalNameUnsafe.Fail("the Machine name is not a safe host identifier", "rename "+machine.Identity())
 	}
 	target, err := substrate.TargetFor(catalog, machine, contextName, controllerMachine)
 	if err != nil {
@@ -63,8 +62,4 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 		Provider:      target.Provider,
 		Version:       requestVersion,
 	}, nil
-}
-
-func refusal(code, message, remediation string) error {
-	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }

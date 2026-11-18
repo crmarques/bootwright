@@ -45,7 +45,7 @@ func (r Release) Refusal() error {
 			"set spec.install.pullSecretRef on "+cluster)
 	}
 	if r.Client.URL == "" {
-		return refusal("lifecycle.state", "the controller stage selects no oc for release "+r.Version+" of "+cluster+", which the mirror host copies that release with",
+		return mirrorClientUnselected.Fail("the controller stage selects no oc for release "+r.Version+" of "+cluster+", which the mirror host copies that release with",
 			"set spec.distribution.release.version on "+cluster+" to a release this build installs")
 	}
 	return nil
@@ -102,7 +102,7 @@ func ReleaseClientFor(version, location string) ReleaseClient {
 }
 
 func (r ReleaseRequest) validate() error {
-	invalid := refusal("lifecycle.state", "the frozen mirror release request names a release or client it could not copy into its mirror", "destroy it with the build that applied it")
+	invalid := mirrorRequestInvalid.Fail("the frozen mirror release request names a release or client it could not copy into its mirror", "destroy it with the build that applied it")
 	release, client, mirror := r.Release, r.Client, r.Mirror
 	if r.Identity.Cluster == "" || r.Identity.Environment == "" || r.Identity.Registry == "" || r.PullSecretRef == "" ||
 		!releaseVersionPattern.MatchString(release.Version) || len(release.Version) > 64 || release.Tag != ReleaseTag(release.Version) ||

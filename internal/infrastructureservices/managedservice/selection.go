@@ -91,11 +91,11 @@ func EgressFor(catalog api.Catalog, machine api.Object) (Egress, error) {
 		return Egress{}, Refusal("api.reference", "the placement Machine's proxy does not resolve", "correct spec.proxy on "+machine.Identity())
 	}
 	if proxy.Spec().Get("management").Text() != "external" {
-		return Egress{}, Refusal("lifecycle.state", "a managed service host must egress directly or through an already ready external Proxy", "select an external Proxy or direct access on "+machine.Identity())
+		return Egress{}, serviceEgressUnsupported.Fail("a managed service host must egress directly or through an already ready external Proxy", "select an external Proxy or direct access on "+machine.Identity())
 	}
 	connection := proxy.Spec().Get("connection")
 	if connection.Has("auth", "proxyAuthRef") || connection.Has("trustBundleRef") {
-		return Egress{}, Refusal("lifecycle.state", "proxy authentication and private trust are unsupported for service image acquisition", "select a proxy without authentication or private trust on "+machine.Identity())
+		return Egress{}, serviceEgressUnsupported.Fail("proxy authentication and private trust are unsupported for service image acquisition", "select a proxy without authentication or private trust on "+machine.Identity())
 	}
 	egress.HTTPProxy = connection.Get("httpProxy").Text()
 	egress.HTTPSProxy = connection.Get("httpsProxy").Text()

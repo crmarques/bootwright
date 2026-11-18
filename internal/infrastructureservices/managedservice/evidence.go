@@ -4,6 +4,7 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -60,20 +61,20 @@ func (e Evidence) Ready(request Request, fingerprint string) error {
 	answered := make([]string, 0, len(e.Answers))
 	for _, answer := range e.Answers {
 		if answer.Port != request.Port || answer.Answer == "" {
-			return Refusal("lifecycle.state", "a managed service listener did not answer its declared socket", "")
+			return servicePostconditionUnmet.Fail("a managed service listener did not answer its declared socket", "")
 		}
 		if request.TLS != nil && fingerprint != AnyCertificate && (fingerprint == "" || answer.Fingerprint != fingerprint) {
-			return errors.Join(ErrCertificateMismatch, Refusal("lifecycle.state", "the managed service presented a different certificate than the operation bound",
+			return errors.Join(ErrCertificateMismatch, serviceCertificateMismatch.Fail("the managed service presented a different certificate than the operation bound",
 				"restore the certificate of Secret "+request.TLS.Secret+" this operation bound, or destroy this apply and apply again with the new one"))
 		}
 		if request.TLS == nil && answer.Fingerprint != "" {
-			return Refusal("lifecycle.state", "the managed service evidence names a certificate its request serves none of", "")
+			return serviceEvidenceMismatch.Fail("the managed service evidence names a certificate its request serves none of", "")
 		}
 		answered = append(answered, answer.Address)
 	}
 	slices.Sort(answered)
 	if !slices.Equal(slices.Compact(answered), request.ProbeTargets()) {
-		return Refusal("lifecycle.state", "the managed service did not answer on every declared address", "")
+		return servicePostconditionUnmet.Fail("the managed service did not answer on every declared address", "")
 	}
 	return nil
 }
@@ -98,8 +99,8 @@ func ValidateAbsence(data []byte, digest string) error {
 	return Absence[Request, Evidence](noun, data, digest)
 }
 
-func refuse(noun, message string) error {
-	return Refusal("lifecycle.state", "the "+noun+" "+message, "")
+func refuse(stop diagnostics.Stop, noun, message string) error {
+	return stop.Fail("the "+noun+" "+message, "")
 }
 
 // Presence accepts an apply only with positive evidence for the exact frozen
@@ -116,17 +117,17 @@ func Presence[R Frozen, E Reported[R]](noun string, data []byte, request R, dige
 	observed := evidence.Observed()
 	switch {
 	case observed.Request != digest:
-		return refuse(noun, "evidence names another request")
+		return refuse(serviceEvidenceMismatch, noun, "evidence names another request")
 	case !observed.Postcondition || observed.Absent:
-		return refuse(noun, "did not reach its postcondition")
+		return refuse(servicePostconditionUnmet, noun, "did not reach its postcondition")
 	case observed.Unit != "active":
-		return refuse(noun, "unit is not active")
+		return refuse(servicePostconditionUnmet, noun, "unit is not active")
 	case observed.Container != request.Frame().Image:
-		return refuse(noun, "runs an image the plan did not freeze")
+		return refuse(servicePostconditionUnmet, noun, "runs an image the plan did not freeze")
 	case !observed.ContentRoot:
-		return refuse(noun, "owns no content root")
+		return refuse(servicePostconditionUnmet, noun, "owns no content root")
 	case !observed.StartedAfterFiles:
-		return refuse(noun, "started before a file it runs from was last published")
+		return refuse(servicePostconditionUnmet, noun, "started before a file it runs from was last published")
 	}
 	return evidence.Ready(request, fingerprint)
 }
@@ -151,15 +152,15 @@ func Partial[R Frozen, E Reported[R]](noun string, data []byte, request R, diges
 	observed := evidence.Observed()
 	switch {
 	case observed.Request != digest:
-		return refuse(noun, "evidence names another request")
+		return refuse(serviceEvidenceMismatch, noun, "evidence names another request")
 	case observed.Absent:
-		return refuse(noun, "evidence proves a settled state, not a partial one")
+		return refuse(servicePostconditionUnmet, noun, "evidence proves a settled state, not a partial one")
 	case observed.Postcondition && (observed.Unit != "active" || !observed.ContentRoot || !observed.StartedAfterFiles):
-		return refuse(noun, "evidence claims a postcondition it does not report")
+		return refuse(serviceEvidenceMismatch, noun, "evidence claims a postcondition it does not report")
 	case observed.Unit == "" && observed.Container == "" && !observed.ContentRoot:
-		return refuse(noun, "evidence reports nothing this context owns")
+		return refuse(servicePostconditionUnmet, noun, "evidence reports nothing this context owns")
 	case Presence[R, E](noun, data, request, digest, fingerprint) == nil:
-		return refuse(noun, "evidence proves it complete, not partial")
+		return refuse(servicePostconditionUnmet, noun, "evidence proves it complete, not partial")
 	}
 	return nil
 }
@@ -175,7 +176,7 @@ func Unremoved[R Frozen, E Reported[R]](noun string, data []byte, request R, dig
 		return err
 	}
 	if !unremoved(observed, request.Frame()) {
-		return refuse(noun, "no longer holds everything its removal takes back")
+		return refuse(servicePostconditionUnmet, noun, "no longer holds everything its removal takes back")
 	}
 	return nil
 }
@@ -192,10 +193,10 @@ func RemovalUnfinished[R Frozen, E Reported[R]](noun string, data []byte, reques
 		return err
 	}
 	if observed.Unit == "" && observed.Container == "" && !observed.ContentRoot {
-		return refuse(noun, "evidence reports nothing its removal takes back")
+		return refuse(servicePostconditionUnmet, noun, "evidence reports nothing its removal takes back")
 	}
 	if unremoved(observed, request.Frame()) {
-		return refuse(noun, "still holds everything its removal takes back")
+		return refuse(servicePostconditionUnmet, noun, "still holds everything its removal takes back")
 	}
 	return nil
 }
@@ -209,10 +210,10 @@ func removalEvidence[E interface{ Observed() Observed }](noun string, data []byt
 	}
 	observed := evidence.Observed()
 	if observed.Request != digest {
-		return Observed{}, refuse(noun, "evidence names another request")
+		return Observed{}, refuse(serviceEvidenceMismatch, noun, "evidence names another request")
 	}
 	if observed.Absent {
-		return Observed{}, refuse(noun, "evidence is an absence form, which reports nothing left to take back")
+		return Observed{}, refuse(serviceEvidenceMismatch, noun, "evidence is an absence form, which reports nothing left to take back")
 	}
 	return observed, nil
 }
@@ -231,11 +232,11 @@ func Absence[R Frozen, E Reported[R]](noun string, data []byte, digest string) e
 	observed := evidence.Observed()
 	switch {
 	case observed.Request != digest:
-		return refuse(noun, "evidence names another request")
+		return refuse(serviceEvidenceMismatch, noun, "evidence names another request")
 	case !observed.Postcondition || !observed.Absent:
-		return refuse(noun, "removal proved no absence")
+		return refuse(servicePostconditionUnmet, noun, "removal proved no absence")
 	case observed.Unit != "" || observed.Container != "" || observed.ContentRoot || observed.StartedAfterFiles || observed.Answered:
-		return refuse(noun, "removal left an owned resource behind")
+		return refuse(servicePostconditionUnmet, noun, "removal left an owned resource behind")
 	}
 	return nil
 }

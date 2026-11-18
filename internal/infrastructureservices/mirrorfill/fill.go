@@ -73,7 +73,7 @@ func (c fill[R, E]) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return plan, err
 	}
 	if input.State == nil {
-		return plan, refusal("lifecycle.state", "mirror planning requires compiled desired state", "")
+		return plan, mirrorPlanningInputMissing.Fail("mirror planning requires compiled desired state", "")
 	}
 	requests, err := c.requests(input.State.Effective(), input.Controller, input.Context.Name)
 	if err != nil {
@@ -113,10 +113,10 @@ func (c fill[R, E]) run(ctx context.Context, execution lifecycle.Execution, oper
 		return lifecycle.RunResult{}, request, err
 	}
 	if execution.Block.Kind != c.kind || execution.Block.Object != c.object(request) {
-		return lifecycle.RunResult{}, request, refusal("lifecycle.state", "the "+c.noun+" request does not match its frozen block identity", "")
+		return lifecycle.RunResult{}, request, mirrorRequestInvalid.Fail("the "+c.noun+" request does not match its frozen block identity", "")
 	}
 	if c.runner == nil {
-		return lifecycle.RunResult{}, request, refusal("lifecycle.state", "the "+c.noun+" adapter is not configured", "")
+		return lifecycle.RunResult{}, request, mirrorUnconfigured.Fail("the "+c.noun+" adapter is not configured", "")
 	}
 	canonical, err := c.canonical(request)
 	if err != nil {
@@ -165,7 +165,7 @@ func (c fill[R, E]) mutate(ctx context.Context, execution lifecycle.Execution, o
 	outcome, usable := result.Outcome, result.Outcome.Settled()
 	evidence, err := c.decodeProof(result.Evidence, execution.Block.RequestDigest)
 	if !usable || err != nil || !c.proven(evidence) || c.effect(evidence, request, operation == "destroy") != reconciliation.EffectCompleted {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, refusal("lifecycle.state", "the "+c.noun+" adapter did not prove its postcondition", "")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, mirrorAdapterUnproved.Fail("the "+c.noun+" adapter did not prove its postcondition", "")
 	}
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
@@ -202,7 +202,7 @@ func (c fill[R, E]) ObserveRemoval(ctx context.Context, execution lifecycle.Exec
 	}
 	evidence, err := json.Marshal(c.removed(execution.Block.RequestDigest))
 	if err != nil {
-		return unknown, refusal("lifecycle.state", "the "+c.noun+" removal evidence cannot be encoded", "")
+		return unknown, mirrorEvidenceUnencodable.Fail("the "+c.noun+" removal evidence cannot be encoded", "")
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
 }

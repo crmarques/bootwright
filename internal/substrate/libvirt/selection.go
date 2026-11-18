@@ -42,7 +42,7 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 // canonical object order. It reads no host, endpoint or Secret material.
 func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([]HostRequest, error) {
 	if !api.ValidLexical(api.LexicalName, contextName) {
-		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
+		return nil, libvirtRequestInvalid.Fail("the lifecycle context identity is invalid", "")
 	}
 	var requests []HostRequest
 	for _, provider := range substrate.ProvidersOn(catalog, substrate.ArmLibvirt) {
@@ -58,7 +58,7 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 func hostRequestFor(catalog api.Catalog, provider api.Object, controllerMachine, contextName string) (HostRequest, error) {
 	name := provider.Name()
 	if !substrate.SafeSegment(name) {
-		return HostRequest{}, refusal("lifecycle.state", "the provider name is not a safe host identifier", "rename "+provider.Identity())
+		return HostRequest{}, libvirtDeclarationInvalid.Fail("the provider name is not a safe host identifier", "rename "+provider.Identity())
 	}
 	placement, err := placementFor(catalog, provider, controllerMachine)
 	if err != nil {
@@ -123,10 +123,10 @@ func networksFor(catalog api.Catalog, provider api.Object, contextName string) (
 		name := segment.Get("name").Text()
 		arm := segment.Get("libvirt")
 		if !arm.Present() {
-			return nil, refusal("lifecycle.state", "a libvirt provider segment declares another substrate arm", "correct spec.segments on the provider")
+			return nil, libvirtDeclarationInvalid.Fail("a libvirt provider segment declares another substrate arm", "correct spec.segments on the provider")
 		}
 		if !substrate.SafeSegment(name) {
-			return nil, refusal("lifecycle.state", "the segment or Network name "+name+" is not a safe host identifier", "rename the "+name+" segment or Network")
+			return nil, libvirtDeclarationInvalid.Fail("the segment or Network name "+name+" is not a safe host identifier", "rename the "+name+" segment or Network")
 		}
 		network := Network{Bridge: arm.Get("bridge").Text(), Name: substrate.NetworkName(contextName, name), MTU: substrate.EmittedMTU(segment)}
 		if network.Bridge == "" {
@@ -155,7 +155,7 @@ func networksFor(catalog api.Catalog, provider api.Object, contextName string) (
 // provider's base port and the Machine's position in that provider's own order.
 func MachineRequests(catalog api.Catalog, controllerMachine, contextName string) ([]MachineRequest, error) {
 	if !api.ValidLexical(api.LexicalName, contextName) {
-		return nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
+		return nil, libvirtRequestInvalid.Fail("the lifecycle context identity is invalid", "")
 	}
 	var requests []MachineRequest
 	for _, provider := range substrate.ProvidersOn(catalog, substrate.ArmLibvirt) {
@@ -187,7 +187,7 @@ func MachineRequests(catalog api.Catalog, controllerMachine, contextName string)
 func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placement machineref.Placement, egress managedservice.Egress, contextName string, port int) (MachineRequest, error) {
 	name := machine.Name()
 	if !substrate.SafeSegment(name) {
-		return MachineRequest{}, refusal("lifecycle.state", "the Machine name is not a safe host identifier", "rename "+machine.Identity())
+		return MachineRequest{}, libvirtDeclarationInvalid.Fail("the Machine name is not a safe host identifier", "rename "+machine.Identity())
 	}
 	if port > 65535 {
 		return MachineRequest{}, refusal("api.value", "the provider's emulated BMC range leaves the port space", "lower spec.libvirt.bmcEmulation.port on "+provider.Identity())

@@ -90,26 +90,26 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 	}
 	switch {
 	case evidence.Absent:
-		return refusal("lifecycle.state", "the KubeVirt provider evidence reports its proof released, not proved", "")
+		return kubevirtHostUnproved.Fail("the KubeVirt provider evidence reports its proof released, not proved", "")
 	case len(evidence.Failures) > 0:
-		return refusal("lifecycle.state", "the KubeVirt provider "+request.Identity.Object+" was not proved: "+evidence.Failures[0],
+		return kubevirtHostUnproved.Fail("the KubeVirt provider "+request.Identity.Object+" was not proved: "+evidence.Failures[0],
 			"correct the host or spec.kubevirt on InfraProvider/"+request.Identity.Object+", then run the apply again")
 	case !evidence.Postcondition:
-		return refusal("lifecycle.state", "the KubeVirt provider proof did not prove its postcondition", "")
+		return kubevirtHostUnproved.Fail("the KubeVirt provider proof did not prove its postcondition", "")
 	case !origin(evidence.Server) || evidence.KubeSystemUID == "":
-		return refusal("lifecycle.state", "the KubeVirt provider proof names no server or cluster identity", "")
+		return kubevirtHostUnproved.Fail("the KubeVirt provider proof names no server or cluster identity", "")
 	case evidence.StorageClass == "" || !evidence.ReadWriteMany || !slices.Contains(evidence.RootAccessModes, "ReadWriteMany"):
-		return refusal("lifecycle.state", "the KubeVirt provider proof names no migratable root class", "")
+		return kubevirtHostUnproved.Fail("the KubeVirt provider proof names no migratable root class", "")
 	case evidence.SchedulableNodes < 1:
-		return refusal("lifecycle.state", "the KubeVirt provider proof names no node schedulable for virtual machines", "")
+		return kubevirtHostUnproved.Fail("the KubeVirt provider proof names no node schedulable for virtual machines", "")
 	case evidence.UploadProxy == "":
-		return refusal("lifecycle.state", "the KubeVirt provider proof names no upload proxy", "")
+		return kubevirtHostUnproved.Fail("the KubeVirt provider proof names no upload proxy", "")
 	case len(evidence.Networks) != len(request.Networks):
-		return refusal("lifecycle.state", "the KubeVirt provider proof does not cover every network", "")
+		return kubevirtHostUnproved.Fail("the KubeVirt provider proof does not cover every network", "")
 	}
 	for index, network := range request.Networks {
 		if held := evidence.Networks[index]; held.Attachment != network.Attachment || !held.Present || !attachmentKind(network, held) {
-			return refusal("lifecycle.state", "the KubeVirt provider proof does not prove attachment "+network.Attachment, "")
+			return kubevirtHostUnproved.Fail("the KubeVirt provider proof does not prove attachment "+network.Attachment, "")
 		}
 	}
 	return nil
@@ -130,7 +130,7 @@ func ValidateHostAbsence(data []byte, digest string) error {
 		return err
 	}
 	if !evidence.Absent || !evidence.Postcondition {
-		return refusal("lifecycle.state", "the KubeVirt provider adapter did not publish its proof released", "")
+		return kubevirtHostUnproved.Fail("the KubeVirt provider adapter did not publish its proof released", "")
 	}
 	return nil
 }
@@ -145,19 +145,19 @@ func ValidateMachinePresence(data []byte, request MachineRequest, digest string)
 	}
 	switch {
 	case !evidence.Answered:
-		return refusal("lifecycle.state", "the host cluster did not answer for the VirtualMachine", "")
+		return kubevirtHostSilent.Fail("the host cluster did not answer for the VirtualMachine", "")
 	case !evidence.Postcondition || evidence.Absent:
-		return refusal("lifecycle.state", "the KubeVirt machine adapter did not prove its postcondition", "")
+		return kubevirtMachineUnproved.Fail("the KubeVirt machine adapter did not prove its postcondition", "")
 	case evidence.VirtualMachine != request.Name:
-		return refusal("lifecycle.state", "the KubeVirt machine evidence names another VirtualMachine", "")
+		return kubevirtEvidenceMismatch.Fail("the KubeVirt machine evidence names another VirtualMachine", "")
 	case !evidence.Owned || evidence.Foreign:
-		return refusal("lifecycle.state", "the VirtualMachine "+request.Namespace+"/"+request.Name+" is not this context's", "")
+		return kubevirtMachineForeign.Fail("the VirtualMachine "+request.Namespace+"/"+request.Name+" is not this context's", "")
 	case !origin(evidence.Server) || evidence.KubeSystemUID == "":
-		return refusal("lifecycle.state", "the KubeVirt machine evidence names no server or cluster identity", "")
+		return kubevirtMachineUnproved.Fail("the KubeVirt machine evidence names no server or cluster identity", "")
 	case receipt(evidence, "VirtualMachine", request.Name) == nil:
-		return refusal("lifecycle.state", "the KubeVirt machine evidence records no receipt for its VirtualMachine", "")
+		return kubevirtMachineUnproved.Fail("the KubeVirt machine evidence records no receipt for its VirtualMachine", "")
 	case !volumePresent(evidence, "DataVolume", request.RootVolume):
-		return refusal("lifecycle.state", "the VirtualMachine's root DataVolume is missing", "")
+		return kubevirtMachineUnproved.Fail("the VirtualMachine's root DataVolume is missing", "")
 	}
 	return nil
 }
@@ -172,23 +172,23 @@ func ValidateMachineAbsence(data []byte, digest string) error {
 	}
 	switch {
 	case !evidence.Answered:
-		return refusal("lifecycle.state", "the host cluster did not answer, so the VirtualMachine's removal is not proved", "")
+		return kubevirtHostSilent.Fail("the host cluster did not answer, so the VirtualMachine's removal is not proved", "")
 	case !evidence.Absent || !evidence.Postcondition:
-		return refusal("lifecycle.state", "the KubeVirt machine adapter did not prove removal", "")
+		return kubevirtRemovalUnproved.Fail("the KubeVirt machine adapter did not prove removal", "")
 	case evidence.VirtualMachine != "" || evidence.Instance != "" || evidence.Foreign:
-		return refusal("lifecycle.state", "the KubeVirt removal evidence still reports the VirtualMachine", "")
+		return kubevirtRemovalUnproved.Fail("the KubeVirt removal evidence still reports the VirtualMachine", "")
 	}
 	read := 0
 	for _, volume := range evidence.Volumes {
 		if volume.Present {
-			return refusal("lifecycle.state", "the KubeVirt removal evidence still reports "+volume.Kind+" "+volume.Name, "")
+			return kubevirtRemovalUnproved.Fail("the KubeVirt removal evidence still reports "+volume.Kind+" "+volume.Name, "")
 		}
 		if volume.Kind == "DataVolume" {
 			read++
 		}
 	}
 	if read < 2 {
-		return refusal("lifecycle.state", "the KubeVirt removal evidence did not read both DataVolumes", "")
+		return kubevirtRemovalUnproved.Fail("the KubeVirt removal evidence did not read both DataVolumes", "")
 	}
 	return nil
 }
@@ -202,7 +202,7 @@ func ValidateMachineUnremoved(data []byte, request MachineRequest, digest string
 	}
 	if !evidence.Answered || evidence.VirtualMachine != request.Name || !evidence.Owned ||
 		!volumePresent(evidence, "DataVolume", request.RootVolume) {
-		return refusal("lifecycle.state", "the VirtualMachine no longer holds everything its removal takes back", "")
+		return kubevirtRemovalUnproved.Fail("the VirtualMachine no longer holds everything its removal takes back", "")
 	}
 	return nil
 }
@@ -220,7 +220,7 @@ func ValidateMachineRemovalUnfinished(data []byte, request MachineRequest, diges
 		return err
 	}
 	if ValidateMachineUnremoved(data, request, digest) == nil {
-		return refusal("lifecycle.state", "the VirtualMachine still holds everything its removal takes back", "")
+		return kubevirtRemovalUnproved.Fail("the VirtualMachine still holds everything its removal takes back", "")
 	}
 	return nil
 }
@@ -234,20 +234,20 @@ func ValidateMachinePartial(data []byte, digest string) error {
 		return err
 	}
 	if evidence.Postcondition || evidence.Absent {
-		return refusal("lifecycle.state", "the KubeVirt machine evidence proves a settled state, not a partial one", "")
+		return kubevirtMachineUnproved.Fail("the KubeVirt machine evidence proves a settled state, not a partial one", "")
 	}
 	return holds(evidence)
 }
 
 func holds(evidence MachineEvidence) error {
 	if !evidence.Answered {
-		return refusal("lifecycle.state", "the host cluster did not answer for the VirtualMachine", "")
+		return kubevirtHostSilent.Fail("the host cluster did not answer for the VirtualMachine", "")
 	}
 	if evidence.Foreign {
-		return refusal("lifecycle.state", "a VirtualMachine of the same name exists that is not this context's", "")
+		return kubevirtMachineForeign.Fail("a VirtualMachine of the same name exists that is not this context's", "")
 	}
 	if !evidence.Owned && !slices.ContainsFunc(evidence.Volumes, func(volume VolumeEvidence) bool { return volume.Present }) {
-		return refusal("lifecycle.state", "the KubeVirt machine evidence reports nothing this context owns", "")
+		return kubevirtMachineUnproved.Fail("the KubeVirt machine evidence reports nothing this context owns", "")
 	}
 	return nil
 }
@@ -258,7 +258,7 @@ func decodeMachineRemains(data []byte, digest string) (MachineEvidence, error) {
 		return MachineEvidence{}, err
 	}
 	if evidence.Absent {
-		return MachineEvidence{}, refusal("lifecycle.state", "the KubeVirt machine evidence reports a removal, not what remains", "")
+		return MachineEvidence{}, kubevirtMachineUnproved.Fail("the KubeVirt machine evidence reports a removal, not what remains", "")
 	}
 	return evidence, nil
 }
@@ -292,7 +292,7 @@ func decodeHostEvidence(data []byte, digest string) (HostEvidence, error) {
 		return HostEvidence{}, err
 	}
 	if evidence.Request != digest {
-		return HostEvidence{}, refusal("lifecycle.state", "the KubeVirt provider evidence names another request", "")
+		return HostEvidence{}, kubevirtEvidenceMismatch.Fail("the KubeVirt provider evidence names another request", "")
 	}
 	return evidence, nil
 }
@@ -303,7 +303,7 @@ func decodeMachineEvidence(data []byte, digest string) (MachineEvidence, error) 
 		return MachineEvidence{}, err
 	}
 	if evidence.Request != digest {
-		return MachineEvidence{}, refusal("lifecycle.state", "the KubeVirt machine evidence names another request", "")
+		return MachineEvidence{}, kubevirtEvidenceMismatch.Fail("the KubeVirt machine evidence names another request", "")
 	}
 	return evidence, nil
 }

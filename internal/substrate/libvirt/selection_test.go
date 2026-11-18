@@ -455,5 +455,5 @@ func TestTheEmulatorPullEgressesThroughItsHostMachinesProxyChoice(t *testing.T) 
 		t.Fatalf("egress = %#v, want %#v", got, want)
 	}
 	_, err = MachineRequests(proxied("managed"), "controller", testContext)
-	expectRefusal(t, err, "lifecycle.state")
+	expectRefusal(t, err, "service.egress-unsupported")
 }

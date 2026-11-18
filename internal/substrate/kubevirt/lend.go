@@ -68,7 +68,7 @@ func (l Lender) LendHostAccess(ctx context.Context, execution lifecycle.Executio
 		return secrets.Material{}, func() {}, err
 	}
 	if l.runner == nil || execution.LendProduced == nil {
-		return secrets.Material{}, func() {}, refusal("lifecycle.state", "the access of host cluster "+cluster+" cannot be lent outside an operation that holds its custody", "")
+		return secrets.Material{}, func() {}, kubevirtAccessUncustodied.Fail("the access of host cluster "+cluster+" cannot be lent outside an operation that holds its custody", "")
 	}
 	request := LendRequest{Cluster: cluster, ExpirationSeconds: expiresIn(deadline), Namespace: namespace, Secret: lendSecret(execution), ServiceAccount: substrate.HostAccount,
 		Sweep: lifecycle.Recorded(execution) && !lifecycle.ReadOnlyRun(execution), Version: lendVersion}
@@ -157,15 +157,15 @@ func validateLend(result lifecycle.RunResult, request LendRequest, digest, opera
 	case err != nil:
 		return err
 	case evidence.Request != digest || evidence.Version != lendEvidence || evidence.Secret != request.Secret:
-		return refusal("lifecycle.state", "the KubeVirt host access evidence names another request", "")
+		return kubevirtEvidenceMismatch.Fail("the KubeVirt host access evidence names another request", "")
 	case operation == revokeOperation:
 		if !evidence.Postcondition || !origin(evidence.Server) {
-			return refusal("lifecycle.state", "the access lent from host cluster "+request.Cluster+" was not revoked", "")
+			return kubevirtLendUnproved.Fail("the access lent from host cluster "+request.Cluster+" was not revoked", "")
 		}
 	case !evidence.Postcondition || !found || !origin(evidence.Server):
-		return refusal("lifecycle.state", "the access of host cluster "+request.Cluster+" was not lent", "")
+		return kubevirtLendUnproved.Fail("the access of host cluster "+request.Cluster+" was not lent", "")
 	case evidence.ExpirationSeconds < request.ExpirationSeconds:
-		return refusal("lifecycle.state", "host cluster "+request.Cluster+" granted a token shorter than the run it is lent to",
+		return kubevirtLendUnproved.Fail("host cluster "+request.Cluster+" granted a token shorter than the run it is lent to",
 			"allow ServiceAccount tokens of at least "+(time.Duration(request.ExpirationSeconds)*time.Second).String()+" on "+request.Cluster+", or apply again")
 	}
 	return nil
@@ -197,7 +197,7 @@ type HostCustody func(ctx context.Context, contextName, cluster string) (secrets
 func UtilityExecution(execution lifecycle.Execution, cluster string, read HostCustody) lifecycle.Execution {
 	execution.LendProduced = func(ctx context.Context, input lifecycle.ProducedInput) (secrets.Material, error) {
 		if read == nil || input != HostProducedInput(cluster) {
-			return secrets.Material{}, refusal("lifecycle.state", "a run outside an operation may borrow only the administrator kubeconfig of the host cluster it reaches", "")
+			return secrets.Material{}, kubevirtAccessUncustodied.Fail("a run outside an operation may borrow only the administrator kubeconfig of the host cluster it reaches", "")
 		}
 		material, found, unproved, err := read(ctx, execution.Context, cluster)
 		if err != nil || !found || unproved {

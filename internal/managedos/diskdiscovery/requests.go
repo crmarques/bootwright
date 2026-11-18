@@ -83,7 +83,7 @@ func discoveryRequest(catalog api.Catalog, m api.Object, input lifecycle.PlanInp
 		return DiscoveryRequest{}, needs, err
 	}
 	if !boot.Target.Physical || !boot.Placement.Local() || boot.Private == nil || boot.TLSCertificateRef == "" || boot.Target.Hardware == nil || boot.Target.Controller.TLSVerification == "none" || !boot.Target.Controller.TLSVerify {
-		return DiscoveryRequest{}, needs, refusal("lifecycle.unsupported", "disk discovery requires physical RHEL, controller-local private HTTPS media and verified BMC TLS", "use a controller-local HTTPS artifact server and full or certificate BMC verification")
+		return DiscoveryRequest{}, needs, discoveryUnsupported.Fail("disk discovery requires physical RHEL, controller-local private HTTPS media and verified BMC TLS", "use a controller-local HTTPS artifact server and full or certificate BMC verification")
 	}
 	boot, err = installation.PinMedia(catalog, boot, records)
 	if err != nil {
@@ -108,7 +108,7 @@ func discoveryRequest(catalog api.Catalog, m api.Object, input lifecycle.PlanInp
 	r.Private.Path += "/discovery"
 	r.Private.URL += "/discovery"
 	if !strings.HasPrefix(r.Private.URL, "https://") {
-		return DiscoveryRequest{}, needs, refusal("lifecycle.unsupported", "disk discovery publishes its private inventory media only over HTTPS", "select a controller-local HTTPS artifact server")
+		return DiscoveryRequest{}, needs, discoveryUnsupported.Fail("disk discovery publishes its private inventory media only over HTTPS", "select a controller-local HTTPS artifact server")
 	}
 	return r, needs, nil
 }

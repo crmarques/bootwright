@@ -71,7 +71,7 @@ func DecodeFilesRequest(data []byte) (FilesRequest, error) {
 }
 
 func (r FilesRequest) validate() error {
-	invalid := refusal("lifecycle.state", "the frozen mirror files request names a file it could not publish beneath its root", "destroy it with the build that applied it")
+	invalid := mirrorRequestInvalid.Fail("the frozen mirror files request names a file it could not publish beneath its root", "destroy it with the build that applied it")
 	if len(r.Files) == 0 || len(r.Files) > MaxFiles || !strings.HasPrefix(r.Root, r.ServedRoot+"/") || r.Identity.Environment == "" || r.Identity.Server == "" {
 		return invalid
 	}
@@ -103,6 +103,12 @@ func FilesContentDigest() string {
 
 func FilesBlockID(environment string) string {
 	return reconciliation.BlockIdentity("mirror-files-", environment)
+}
+
+func refusedOn(object *diagnostics.ObjectIdentity, stop diagnostics.Stop, message, remediation string) error {
+	failure := stop.Fail(message, remediation).(*diagnostics.Failure)
+	failure.Diagnostics[0].Object = object
+	return failure
 }
 
 func refusal(code, message, remediation string) error {

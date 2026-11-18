@@ -178,7 +178,7 @@ func TestEveryManagedServiceMutationRefusesWhatItCannotRead(t *testing.T) {
 	cancel()
 	malformed := call
 	malformed.Block.Request = json.RawMessage(`{`)
-	unusableOutcome := described(Refusal("lifecycle.state", "the managed service adapter reported no usable outcome", ""))
+	unusableOutcome := described(serviceOutcomeUnusable.Fail("the managed service adapter reported no usable outcome", ""))
 	settled := lifecycle.RunResult{Outcome: "changed", Evidence: present}
 	for name, test := range map[string]struct {
 		ctx       context.Context
@@ -193,7 +193,7 @@ func TestEveryManagedServiceMutationRefusesWhatItCannotRead(t *testing.T) {
 		"runner error":     {context.Background(), &scriptedRunner{err: unreachable}, false, call, reconciliation.OutcomeUnknown, described(unreachable), 1, reconciliation.EffectUnknown},
 		"unusable outcome": {context.Background(), &scriptedRunner{result: lifecycle.RunResult{Outcome: "", Evidence: present}}, false, call, reconciliation.OutcomeUnknown, unusableOutcome, 1, reconciliation.EffectCompleted},
 		"other outcome":    {context.Background(), &scriptedRunner{result: lifecycle.RunResult{Outcome: "skipped", Evidence: present}}, false, call, reconciliation.OutcomeUnknown, unusableOutcome, 1, reconciliation.EffectCompleted},
-		"no adapter":       {context.Background(), nil, true, call, reconciliation.OutcomeFailed, described(Refusal("lifecycle.state", "the managed service adapter is not configured", "")), 0, reconciliation.EffectUnknown},
+		"no adapter":       {context.Background(), nil, true, call, reconciliation.OutcomeFailed, described(serviceUnconfigured.Fail("the managed service adapter is not configured", "")), 0, reconciliation.EffectUnknown},
 		"cancelled":        {cancelled, &scriptedRunner{result: settled}, false, call, reconciliation.OutcomeFailed, described(context.Canceled), 0, reconciliation.EffectUnknown},
 		"malformed":        {context.Background(), &scriptedRunner{result: settled}, false, malformed, reconciliation.OutcomeFailed, "", 0, reconciliation.EffectUnknown},
 	} {

@@ -139,7 +139,7 @@ func TestAPhysicalNodeWhosePinCannotBeReadRefusesBeforeTheAdapter(t *testing.T) 
 				return
 			}
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != test.refusal {
+			if len(reported) != 1 || reported[0].Code != "openshift.adapter-unconfigured" || reported[0].Message != test.refusal {
 				t.Fatalf("refusal = %#v", reported)
 			}
 		})

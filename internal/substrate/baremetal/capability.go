@@ -33,7 +33,7 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		return lifecycle.CapabilityPlan{}, err
 	}
 	if input.State == nil {
-		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
+		return lifecycle.CapabilityPlan{}, baremetalRequestInvalid.Fail("lifecycle planning requires compiled desired state", "")
 	}
 	requests, err := Requests(input.State.Effective(), input.Controller, input.Context.Name)
 	if err != nil {
@@ -140,7 +140,7 @@ func (c MachineCapability) mutation(operation string) lifecycle.Mutation[Request
 				Absence:  func(evidence []byte) error { return ValidateAbsence(evidence, digest) },
 			}
 		},
-		Unusable: refusal("lifecycle.state", "the machine adapter reported no usable outcome", ""),
+		Unusable: baremetalNoUsableOutcome.Fail("the machine adapter reported no usable outcome", ""),
 	}
 }
 
@@ -178,7 +178,7 @@ func (c MachineCapability) ObserveRemoval(ctx context.Context, execution lifecyc
 	}
 	evidence, err := json.Marshal(Evidence{Absent: true, Addresses: []string{}, Postcondition: true, Request: execution.Block.RequestDigest})
 	if err != nil {
-		return unknown, refusal("lifecycle.state", "the machine removal evidence cannot be encoded", "")
+		return unknown, baremetalRequestInvalid.Fail("the machine removal evidence cannot be encoded", "")
 	}
 	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
 }
@@ -195,7 +195,7 @@ func (c MachineCapability) prepare(ctx context.Context, execution lifecycle.Exec
 		return Request{}, err
 	}
 	if c.runner == nil {
-		return Request{}, refusal("lifecycle.state", "the machine adapter is not configured", "")
+		return Request{}, baremetalUnconfigured.Fail("the machine adapter is not configured", "")
 	}
 	return DecodeRequest(execution.Block.Request)
 }
@@ -235,7 +235,7 @@ func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Bl
 	if identity.UUID != "" {
 		system := strings.ToLower(identity.UUID)
 		if !systemToken.MatchString(system) {
-			return infrastructureservices.HostReservation{}, false, refusal("lifecycle.state",
+			return infrastructureservices.HostReservation{}, false, baremetalClaimUnnameable.Fail(
 				"the system UUID the management controller at "+request.Controller.Endpoint+" reported cannot name a host claim",
 				"correct spec.hardware.bmc.address on Machine/"+request.Identity.Object+" so it names a BMC that reports a standard UUID")
 		}
@@ -243,12 +243,12 @@ func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Bl
 	}
 	addresses := request.Addresses()
 	if len(claim.Keys)+len(addresses) > infrastructureservices.MaxReservationKeys {
-		return infrastructureservices.HostReservation{}, false, refusal("lifecycle.state",
+		return infrastructureservices.HostReservation{}, false, baremetalClaimUnnameable.Fail(
 			"Machine/"+request.Identity.Object+" declares more than "+strconv.Itoa(infrastructureservices.MaxReservationKeys-len(claim.Keys))+" MAC addresses to claim the machine by",
 			"correct spec.hardware.nics on Machine/"+request.Identity.Object)
 	}
 	if identity.UUID == "" && len(addresses) == 0 {
-		return infrastructureservices.HostReservation{}, false, refusal("lifecycle.state",
+		return infrastructureservices.HostReservation{}, false, baremetalClaimUnnameable.Fail(
 			"the management controller at "+request.Controller.Endpoint+" reported no system UUID, and Machine/"+request.Identity.Object+
 				" declares no MAC address to claim the machine by",
 			"correct spec.hardware.nics on Machine/"+request.Identity.Object)

@@ -297,8 +297,8 @@ func TestTheReleaseFillLendsATwoEntryAuthDocumentToTheApplyAlone(t *testing.T) {
 // unknown when a read failed.
 func TestTheReleaseFillNamesEachRefusalAsItsClusters(t *testing.T) {
 	request, _ := releaseRequest(t, releaseDigest)
-	want := map[string]string{"client-unreachable": "lifecycle.unknown", "client-digest-mismatch": "lifecycle.state", "release-unreachable": "lifecycle.unknown",
-		"release-incomplete": "lifecycle.state", "release-digest-mismatch": "lifecycle.state", "mirror-unreadable": "lifecycle.unknown"}
+	want := map[string]string{"client-unreachable": "mirror.origin-unreachable", "client-digest-mismatch": "mirror.digest-mismatch", "release-unreachable": "mirror.origin-unreachable",
+		"release-incomplete": "mirror.release-incomplete", "release-digest-mismatch": "mirror.digest-mismatch", "mirror-unreadable": "mirror.unreadable"}
 	refusals := releaseRefusals("lab", request)
 	if len(refusals) != len(want) {
 		t.Fatalf("refusals = %v", slices.Sorted(maps.Keys(refusals)))
@@ -335,8 +335,8 @@ func TestMirrorReleaseRequestAndEvidenceGolden(t *testing.T) {
 // than leaving its image build waiting for a copy no block plans.
 func TestAReleaseWithNoPullSecretOrClientRefusesNamingItsCluster(t *testing.T) {
 	for code, change := range map[string]func(*Release){
-		"api.required":    func(r *Release) { r.PullSecretRef = "" },
-		"lifecycle.state": func(r *Release) { r.Client = ReleaseClientFor(releaseVersion, "") },
+		"api.required":             func(r *Release) { r.PullSecretRef = "" },
+		"mirror.client-unselected": func(r *Release) { r.Client = ReleaseClientFor(releaseVersion, "") },
 	} {
 		releases := func(catalog api.Catalog) ([]Release, error) {
 			listed, _ := clusterReleases("")(catalog)

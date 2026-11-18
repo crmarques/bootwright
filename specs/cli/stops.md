@@ -148,7 +148,7 @@ refusals of a decision and its plan before any effect.
 | `authorize.relaxation-changed` | operation | none | input | - | fix-then-repeat | an operation continues only under the erase relaxations its plan froze, and the invocation names others | continue it naming the relaxations its plan froze, or replace it with a fresh destroy |
 | `diff.context-moved` | context | none | concurrency | - | repeat | the context changed while diff read it | repeat the diff |
 
-### Host firewall stops
+## Host firewall stops
 
 The managed OS host firewall capability's stops (`internal/managedos/hostfirewall`).
 
@@ -160,7 +160,7 @@ The managed OS host firewall capability's stops (`internal/managedos/hostfirewal
 | `firewall.evidence-mismatch` | block | possible | records | - | repeat | the host firewall evidence names another request or version than the block froze | repeat the operation, which observes the firewall again |
 | `firewall.unproved` | block | unproved | target | - | repeat | the host firewall adapter ended without proving its postcondition | repeat the operation, which observes the firewall before anything else starts |
 
-### Machine power stops
+## Machine power stops
 
 The Machine power and media eject capability's stops (`internal/machine/power`).
 
@@ -170,3 +170,173 @@ The Machine power and media eject capability's stops (`internal/machine/power`).
 | `power.identity-changed` | adapter-run | none | target | - | fix-then-repeat | the management controller answers as another system than the one the context's apply proved, so no power request was sent | correct the Machine's BMC or provider, or take back and apply the context again |
 | `power.evidence-mismatch` | adapter-run | possible | defect | - | repeat | the power or eject evidence names another request, Machine or survey, or a state the command cannot name | repeat the command; report the message if it stops the same way |
 | `power.unproved` | adapter-run | unproved | target | - | repeat | the management controller did not prove the power or media state the command asked for | read the power state again with bootwright machine status, then repeat the command |
+
+## Disk discovery stops
+
+The managed OS disk discovery capability's stops (`internal/managedos/diskdiscovery`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `discovery.unconfigured` | block | none | defect | - | none | disk discovery runs without compiled state or one of the readers and sources it depends on | report the message as a defect |
+| `discovery.request-invalid` | block | none | defect | - | none | the frozen disk discovery request names something its adapter cannot run, so no adapter ran | report the message as a defect |
+| `discovery.unsupported` | context | none | input | - | change-input | the Machine or the artifact server it names cannot host a disk discovery boot | use a controller-local HTTPS artifact server and full or certificate BMC verification |
+| `discovery.machine-installed` | context | none | target | - | change-input | the Machine already has installation ownership, so booting it for discovery would disturb that installation | retain the existing installation or remove it through its recorded lifecycle first |
+| `discovery.prerequisites-missing` | context | none | input | - | other-verb | the controller and infrastructure setup a discovery boot needs is not applied | repeat bootwright machine discover with --prepare-prerequisites to review and confirm controller and infrastructure setup |
+| `discovery.refinement-refused` | context | none | input | - | change-input | a change after preparation reaches beyond the disk-selection fields that may follow it | keep prepared ownership unchanged and update only the disk-selection fields |
+| `discovery.records-missing` | block | none | records | - | abandon-context | the records a disk discovery builds on hold no inventory, proof or identity the block names | restore the context store from a backup |
+| `discovery.records-mismatch` | block | none | records | - | abandon-context | a recorded disk inventory or attempt names another Machine, request or execution than the block froze | retain the original inventory and resolve its ownership before preparing another |
+| `discovery.records-conflict` | block | none | records | - | abandon-context | more than one owned disk inventory competes for one Machine | retain one inventory and resolve the ownership of the others |
+| `discovery.inventory-missing` | context | none | input | - | other-verb | the Machine has no completed disk discovery for its current policy and media | run bootwright machine discover with --prepare-prerequisites |
+| `discovery.root-unprovable` | context | none | input | - | change-input | the recorded inventory does not select exactly one root disk under the Machine's discovery policy | refine spec.hardware.rootDisk.discover.match and update the context before planning again |
+| `discovery.evidence-mismatch` | block | possible | records | - | repeat | the disk discovery evidence names another contract or request than the block froze | repeat the operation, which observes the discovery again |
+| `discovery.incomplete` | block | possible | target | - | repeat | the disk discovery adapter ended without proving its inventory and the cleanup of its boot | repeat the operation, which converges the discovery boot |
+
+## Physical erase stops
+
+The physical erase capability's stops (`internal/managedos/physicalerase`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `erase.unconfigured` | block | none | defect | - | none | the physical erase capability runs without compiled state or a collaborator it needs | report the message as a defect |
+| `erase.custody-unavailable` | block | none | defect | - | repeat | a physical erase was asked to run without durable removal receipt custody, so nothing began | continue the original destroy through the lifecycle engine |
+| `erase.records-missing` | block | none | records | - | abandon-context | the original apply or removal records the physical erase rests on are missing or do not prove it | restore the context store from a backup |
+| `erase.evidence-mismatch` | block | possible | records | - | abandon-context | an erase receipt or waiver names another machine, MAC set or preparation than the records froze | restore the original apply and removal records |
+| `erase.receipt-incomplete` | block | possible | target | - | repeat | the erase evidence does not prove every byte its method erases or the withdrawal of its custody | continue the same removal |
+| `erase.machine-running` | adapter-run | none | target | - | fix-then-repeat | the machine is running, so the offline erase inserted no media into it and did not boot it | stop the machine, then repeat the destroy |
+| `erase.target-mismatch` | adapter-run | none | target | - | fix-then-repeat | the controller answers as another system, or the machine reports other hardware, than the apply proved, so the erase stopped before it acted | correct the controller or the hardware, then repeat the destroy |
+| `erase.controller-unanswered` | adapter-run | none | environment | `unreachable` | fix-then-repeat | the management controller did not answer the system read, so the erase stopped before it acted | restore the controller's access, then repeat the destroy |
+| `erase.controller-refused` | adapter-run | possible | target | - | fix-then-repeat | the management controller refused a virtual-media, boot or power request of the erase | correct its cause through the BMC, then repeat the destroy |
+| `erase.controller-deadline` | adapter-run | possible | deadline | - | fix-then-repeat | the management controller did not complete a phase of the erase within its time bound | restore the controller's responsiveness, then repeat the destroy |
+| `erase.poweroff-unproved` | adapter-run | possible | target | - | fix-then-repeat | the machine did not power off after its erase receipt was acknowledged, so its erase media was not ejected | stop the machine, then repeat the destroy |
+| `erase.worker-failed` | adapter-run | possible | target | - | fix-then-repeat | the RAM erase worker stopped without a complete receipt, so no target is proved erased | stop the machine, then repeat the destroy |
+| `erase.worker-unreachable` | adapter-run | possible | environment | `unreachable` | fix-then-repeat | the controller did not reach the RAM erase worker within its wait, so no target is proved erased | check that the controller reaches the worker's address, then repeat the destroy |
+| `erase.foreign-worker` | adapter-run | possible | target | - | fix-then-repeat | the host answering at the worker's address is not this removal's RAM erase worker, so its receipt was not accepted | look at the BMC console and boot order, then repeat the destroy |
+| `erase.receipt-timeout` | adapter-run | possible | deadline | - | fix-then-repeat | the RAM erase worker did not report a complete receipt within the erase deadline | stop the machine, then repeat the destroy |
+| `erase.custody-mismatch` | adapter-run | none | records | - | fix-then-repeat | the private erase custody on the execution host belongs to another request or differs from what the removal recorded, so it was not used | inspect the custody on the execution host, then repeat the destroy |
+| `erase.boot-media-mismatch` | adapter-run | none | environment | - | fix-then-repeat | the installer image the apply pinned is missing from the media store or no longer matches, so no erase image was built | restore the image with bootwright media add, then repeat the destroy |
+| `erase.image-build-failed` | adapter-run | none | build | - | fix-then-repeat | the erase image could not be built from its pinned installer image within its time bound, so the machine was not booted | check the execution host's free space and tools, then repeat the destroy |
+| `erase.install-network` | adapter-run | none | input | - | authorize | the install network names a bond option or VLAN that the erase image's boot arguments cannot carry, so the machine was not booted | release the machine without erasing its disks |
+
+## Mirror fill stops
+
+The mirror fill capability's stops (`internal/infrastructureservices/mirrorfill`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `mirror.planning-input-missing` | operation | none | defect | - | none | the mirror capability was built without an input its plan reads, so it planned nothing | report the message as a defect |
+| `mirror.request-invalid` | block | none | build | - | registering-build | the frozen mirror request is not one this build can run, so no adapter ran | destroy it with the build that applied it |
+| `mirror.unconfigured` | block | none | defect | - | none | the mirror capability runs without an adapter or helper it needs, so no adapter ran | report the message as a defect |
+| `mirror.adapter-unproved` | block | unproved | target | - | repeat | the mirror adapter ended without proving its postcondition | repeat the operation, which observes the mirror again |
+| `mirror.evidence-mismatch` | block | possible | records | - | repeat | the mirror evidence names another request or version than the block froze, or lies outside its bounds | repeat the operation, which observes the mirror again |
+| `mirror.evidence-unencodable` | block | none | defect | - | none | the mirror's removal evidence could not be encoded | report the message as a defect |
+| `mirror.drift` | resolution | possible | target | - | fix-then-repeat | the mirror holds content its frozen request does not name in that place | restore the mirror to what its frozen request names, then repeat the operation |
+| `mirror.client-unselected` | operation | none | input | - | change-input | the controller stage selects no oc client for the release the mirror host copies | set the cluster's release version to one this build installs |
+| `mirror.skopeo-missing` | adapter-run | none | target | - | fix-then-repeat | the mirror host has no working skopeo, so its images were not copied | install the skopeo package on the mirror host, then repeat the apply |
+| `mirror.digest-mismatch` | adapter-run | possible | target | - | fix-then-repeat | a digest the mirror host read is not the one this build pins, so the fill stopped | verify the origin and the route to it, then repeat the apply |
+| `mirror.release-incomplete` | adapter-run | possible | target | - | fix-then-repeat | the image mirror lacks the release or one of its components after the copy | verify the free space of the mirror's storage, then repeat the apply |
+| `mirror.origin-unreachable` | adapter-run | unproved | environment | `unreachable` | fix-then-repeat | the mirror host could not read content from its origin | give the mirror host a route to the origins, then repeat the apply |
+| `mirror.unreadable` | adapter-run | unproved | target | - | fix-then-repeat | the mirror host could not read the image mirror with its credential and trust anchor | verify the Registry is ready and answers its credential, then repeat the apply |
+
+## KubeVirt substrate stops
+
+The KubeVirt substrate's stops (`internal/substrate/kubevirt`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `kubevirt.context-invalid` | operation | none | input | - | change-input | the lifecycle context's name is not a valid identity, so no KubeVirt request was derived | name the context with a valid lowercase identifier |
+| `kubevirt.name-unsafe` | operation | none | input | - | change-input | a Machine's name cannot be used as a host identifier, so no KubeVirt request was derived | rename the Machine |
+| `kubevirt.nic-mac-collision` | operation | none | input | - | change-input | two NICs derive the same MAC address, so no KubeVirt request was derived | rename one of the NICs or Machines |
+| `kubevirt.nic-network-kind` | operation | none | input | - | change-input | a NIC names a segment that is not a Localnet or bridge network, so no KubeVirt request was derived | select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition segment for the NIC |
+| `kubevirt.plan-without-state` | operation | none | defect | - | none | the KubeVirt capability was asked to plan without compiled desired state | report the message as a defect |
+| `kubevirt.unconfigured` | block | none | defect | - | none | the KubeVirt capability runs without its adapter, so nothing ran | report the message as a defect |
+| `kubevirt.access-uncustodied` | block | none | defect | - | none | the access of a host cluster was asked for outside an operation that holds its custody, so none was lent | report the message as a defect |
+| `kubevirt.ownership-unavailable` | block | none | defect | - | none | the operation that owns a KubeVirt machine's VirtualMachine is not known to its run, so no adapter ran | report the message as a defect |
+| `kubevirt.evidence-unencodable` | block | none | defect | - | none | evidence or a pin the KubeVirt capability composed cannot be encoded | report the message as a defect |
+| `kubevirt.proof-unrecorded` | block | none | records | - | fix-then-repeat | the proof of the host cluster a Machine is realized on is not recorded for the operation, so no adapter ran | run the apply again so the provider's proof precedes its Machines |
+| `kubevirt.host-changed` | block | none | target | - | fix-then-repeat | the host cluster a provider now reaches is not the one its VirtualMachine was realized on, so no adapter ran | restore the host cluster the Machine was realized on, or destroy and apply again |
+| `kubevirt.outcome-unusable` | adapter-run | possible | defect | - | repeat | the KubeVirt adapter reported no outcome the capability can use | repeat the operation, which observes the effect again |
+| `kubevirt.evidence-mismatch` | block | possible | records | - | repeat | the KubeVirt evidence names another request, VirtualMachine or cluster than the block froze | repeat the operation, which observes the effect again |
+| `kubevirt.lend-unproved` | block | possible | target | - | fix-then-repeat | the host access a run was lent did not prove its postcondition on the host cluster | repeat the operation, which lends the access again |
+| `kubevirt.host-unproved` | block | possible | target | - | fix-then-repeat | the KubeVirt provider's proof does not hold the host as OpenShift Virtualization ready for virtual machines | correct the host or spec.kubevirt of the provider, then run the apply again |
+| `kubevirt.host-silent` | block | possible | environment | `unreachable` | fix-then-repeat | the host cluster did not answer for the VirtualMachine, so the evidence proves nothing | restore access to the host cluster, then repeat the operation |
+| `kubevirt.machine-unproved` | block | possible | target | - | repeat | the KubeVirt machine evidence does not prove the VirtualMachine in the state the block asked for | repeat the operation, which observes the VirtualMachine again |
+| `kubevirt.machine-foreign` | block | possible | target | - | fix-then-repeat | a VirtualMachine of the Machine's name exists on the host that this context does not own | remove or rename the VirtualMachine the message names, then repeat the operation |
+| `kubevirt.removal-unproved` | block | possible | target | - | repeat | the KubeVirt removal evidence does not prove the VirtualMachine and what it owned gone, or still whole | repeat the operation, which observes the VirtualMachine again |
+
+## OpenShift agent install stops
+
+The OpenShift agent-based installation capability's stops (`internal/containercluster/agentinstall`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `openshift.plan-state-missing` | context | none | defect | - | none | an OpenShift cluster capability was asked to plan without the compiled desired state | report the message as a defect |
+| `openshift.input-unprojectable` | context | none | input | - | change-input | the declared cluster cannot be projected into an installer configuration, so no installation was planned | correct the cluster the message names and plan again |
+| `openshift.selection-unsupported` | context | none | input | - | change-input | the declared cluster selects something this executable does not install, so no installation was planned | remove or change the selection the message names |
+| `openshift.adapter-unconfigured` | block | none | defect | - | none | the OpenShift cluster capability runs without an adapter or reader it needs, so nothing began | report the message as a defect |
+| `openshift.outcome-unusable` | block | possible | defect | - | repeat | an OpenShift cluster adapter ended and reported no outcome the capability can use | repeat the operation, which observes the cluster again |
+| `openshift.request-invalid` | block | none | defect | - | none | the frozen request of an OpenShift cluster block breaks its bounds or its shape, so no adapter ran | report the message as a defect |
+| `openshift.machine-proof-missing` | block | none | records | - | fix-then-repeat | a Machine the cluster installs on has no recorded proof the installation needs, so nothing began | apply the Machine stage, then repeat the operation |
+| `openshift.evidence-invalid` | block | possible | records | - | repeat | the evidence of an OpenShift cluster adapter is incomplete or names another request | repeat the operation, which observes the cluster again |
+| `openshift.evidence-unsettled` | block | possible | target | - | repeat | the evidence of an OpenShift cluster adapter does not prove the state its block expects | repeat the operation, which observes the cluster again |
+| `openshift.evidence-mismatch` | block | possible | target | - | fix-then-repeat | the evidence of an OpenShift cluster adapter names another cluster, release, image or node than its block froze | find what replaced the cluster the block installed, then repeat the operation |
+| `openshift.node-refused` | adapter-run | possible | target | - | fix-then-repeat | the installation adapter stopped on a node whose management controller, boot image or network refused it | read the message, repair what it names, then repeat the operation |
+| `openshift.kubeconfig-unnamed` | block | possible | target | - | fix-then-repeat | an administrator kubeconfig the cluster produced names no single cluster authority and principal | repeat the operation, which reads the cluster's kubeconfig again |
+
+## Managed service stops
+
+The managed infrastructure service capability's stops (`internal/infrastructureservices/managedservice`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `service.request-invalid` | operation | none | defect | - | none | the plan input a managed service is derived from is not usable, so nothing was planned | report the message as a defect |
+| `service.name-unsafe` | operation | none | input | - | change-input | a managed service's name cannot name its unit, container or directory on the host | rename the service the message names |
+| `service.egress-unsupported` | operation | none | input | - | change-input | the placement host reaches the network through a proxy this build cannot pull a service image through | select direct access or an external proxy without authentication or private trust on the placement host |
+| `service.unconfigured` | block | none | defect | - | none | the managed service capability runs without an adapter or a certificate check it needs | report the message as a defect |
+| `service.password-file-failed` | block | none | defect | - | none | the password file a service authenticates its clients with could not be derived from its credential | report the message as a defect |
+| `service.outcome-unusable` | block | possible | defect | - | repeat | the managed service adapter ended without an outcome the block can settle on | repeat the operation, which observes the service again |
+| `service.evidence-mismatch` | block | possible | records | - | repeat | the evidence a managed service adapter returned names another request or is not a form it may take | repeat the operation, which observes the service again |
+| `service.postcondition-unmet` | block | possible | target | - | repeat | the observed managed service is not in the state the operation leaves it in | repeat the operation, which converges the service |
+| `service.certificate-mismatch` | block | possible | target | - | fix-then-repeat | a listener presented a different certificate than the operation bound | restore the certificate the operation bound, then repeat the operation |
+| `service.foreign-listener` | adapter-run | none | target | - | fix-then-repeat | something other than the service already holds a socket the service binds, so its unit was not started | stop what listens there, or choose another bind address |
+| `service.container-runtime-missing` | adapter-run | none | target | - | fix-then-repeat | the placement host has no working container runtime, so nothing was pulled, published or started | install podman on the placement host, then repeat the operation |
+| `service.bind-address-unassigned` | adapter-run | none | target | - | fix-then-repeat | the placement host holds no local address the service binds, so nothing was pulled, published or started | restore the declared address on the placement host, then repeat the operation |
+| `service.listener-failed` | adapter-run | possible | target | - | fix-then-repeat | the listener refused or returned an invalid readiness answer | restore the declared service listener and retry the operation |
+| `service.readiness-timeout` | adapter-run | unproved | deadline | - | repeat | the listener did not answer within its bounded readiness window | repeat the operation, which observes the listener before anything else starts |
+| `service.readiness-unproved` | adapter-run | unproved | target | - | repeat | the listener supplied no usable readiness evidence | repeat the operation, which observes the listener before anything else starts |
+
+## Bare-metal substrate stops
+
+The bare-metal substrate's stops (`internal/substrate/baremetal`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `baremetal.request-invalid` | operation | none | defect | - | none | a plan reached the physical Machine capability without compiled state, or a request it composed breaks its bounds or its shape, so no adapter ran | report the message as a defect |
+| `baremetal.name-unsafe` | operation | none | input | - | change-input | a physical Machine's name cannot name a host, so no adapter ran | rename the Machine |
+| `baremetal.unconfigured` | block | none | defect | - | none | the physical Machine capability runs without its adapter | report the message as a defect |
+| `baremetal.no-usable-outcome` | block | possible | target | - | repeat | the machine adapter ended without an outcome the block can use | repeat the operation, which observes the machine again |
+| `baremetal.postcondition-unproved` | block | possible | target | - | repeat | the machine adapter ended without proving the postcondition of its verb | repeat the operation, which observes the machine again |
+| `baremetal.controller-report-incomplete` | block | possible | target | - | fix-then-repeat | the management controller reported a fault, or reported no identity or no power state | check the management controller of the Machine, then repeat the operation |
+| `baremetal.inventory-mismatch` | block | possible | target | - | fix-then-repeat | the machine reports an inventory other than the one its Machine declares | check that the machine behind the management controller is the one the Machine declares, then repeat the operation |
+| `baremetal.addresses-undeclared` | block | possible | input | - | change-input | a physical Machine declares no hardware address to prove it by | declare the hardware addresses of the Machine in spec.hardware.nics |
+| `baremetal.claim-unnameable` | block | none | input | - | change-input | what the machine reports and its Machine declares cannot name one host claim, so no adapter ran | correct the hardware the Machine declares |
+| `baremetal.evidence-mismatch` | block | possible | records | - | repeat | the machine evidence names another request or another Machine block than the block froze | repeat the operation, which observes the machine again |
+| `baremetal.identity-unproved` | block | possible | records | - | repeat | the recorded machine evidence proves no identity the context may pin | repeat the operation, which observes the machine again |
+
+## Libvirt substrate stops
+
+The libvirt substrate's stops (`internal/substrate/libvirt`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `libvirt.declaration-invalid` | block | none | input | - | change-input | a libvirt provider, segment, Network or Machine declares a name or arm the host cannot realize, so no adapter ran | correct the declaration the message names |
+| `libvirt.request-invalid` | block | none | defect | - | none | a plan reached the libvirt capability without compiled state, or a request it composed breaks its shape or its bounds, so no adapter ran | report the message as a defect |
+| `libvirt.frozen-request-invalid` | block | none | records | - | registering-build | a frozen libvirt request holds a media presentation this build cannot run, so no adapter ran | destroy it with the build that applied it |
+| `libvirt.unconfigured` | block | none | defect | - | none | a libvirt capability runs without its adapter | report the message as a defect |
+| `libvirt.records-missing` | block | none | records | - | abandon-context | the applied revision places no libvirt profile under a machine whose evidence it holds | restore the context store from a backup |
+| `libvirt.outcome-unusable` | block | possible | target | - | repeat | a libvirt adapter ended without a usable outcome | repeat the operation, which observes the host before anything else starts |
+| `libvirt.postcondition-unproved` | block | possible | target | - | repeat | a libvirt adapter ended without proving the postcondition of its apply or its removal | repeat the operation, which observes the host before anything else starts |
+| `libvirt.evidence-mismatch` | block | possible | records | - | repeat | libvirt evidence names another request than the block froze, or reports a shape that request does not allow | repeat the operation, which observes the host again |
+| `libvirt.host-drifted` | block | possible | target | - | repeat | the provider host or machine does not hold what the frozen libvirt request declares | repeat the apply, which restores what the request declares |
+| `libvirt.host-silent` | block | possible | target | - | fix-then-repeat | the libvirt connection, a driver or NetworkManager did not answer for what the evidence asks about, so nothing is proved | restore the service the message names on the provider host, then repeat the operation |
+| `libvirt.removal-incomplete` | block | possible | target | - | repeat | removal evidence still reports something the removal owns, or does not prove it gone | repeat the destroy, which takes back what remains |
+| `libvirt.ownership-conflict` | block | possible | target | - | fix-then-repeat | an object of the name the provider uses exists without this context's ownership, so no repeat converges it | remove or rename the object the message names, then repeat the operation |

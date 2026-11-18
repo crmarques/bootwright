@@ -96,7 +96,7 @@ func (c Files) Request(catalog api.Catalog, controllerMachine, contextName strin
 		return FilesRequest{}, false, nil
 	}
 	if c.artifacts == nil {
-		return FilesRequest{}, false, refusal("lifecycle.state", "mirror planning requires the acquisition list", "")
+		return FilesRequest{}, false, mirrorPlanningInputMissing.Fail("mirror planning requires the acquisition list", "")
 	}
 	artifacts, err := c.artifacts(catalog)
 	if err != nil {
@@ -155,13 +155,13 @@ func filesImpacts(verb reconciliation.Verb, request FilesRequest) []string {
 
 func filesRefusals(contextName string, request FilesRequest) map[string]error {
 	server := diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: Kind, Name: request.Identity.Server}
-	refused := func(code, message, remediation string) error {
-		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: code, Message: message, Remediation: remediation, Object: &server}}}
+	refused := func(stop diagnostics.Stop, message, remediation string) error {
+		return refusedOn(&server, stop, message, remediation)
 	}
 	return map[string]error{
-		"file-digest-mismatch": refused("lifecycle.state", "a publisher served a client file for the artifact mirror on "+request.Placement.Machine+" whose SHA-256 is not the one this build pins, so it was not published",
+		"file-digest-mismatch": refused(mirrorDigestMismatch, "a publisher served a client file for the artifact mirror on "+request.Placement.Machine+" whose SHA-256 is not the one this build pins, so it was not published",
 			"verify the publisher and the route from "+request.Placement.Machine+" to it, then run bootwright apply --context "+contextName),
-		"file-unreachable": refused("lifecycle.unknown", "Machine/"+request.Placement.Machine+" could not read a client file for the artifact mirror from its publisher, so it was not published",
+		"file-unreachable": refused(mirrorOriginUnreachable, "Machine/"+request.Placement.Machine+" could not read a client file for the artifact mirror from its publisher, so it was not published",
 			"give "+request.Placement.Machine+" a route to the publishers bootwright render acquisitions --context "+contextName+" names, then run bootwright apply --context "+contextName),
 	}
 }

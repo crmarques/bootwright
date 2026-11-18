@@ -24,7 +24,7 @@ func decodeImagesEvidence(data []byte, digest string) (ImagesEvidence, error) {
 		return ImagesEvidence{}, err
 	}
 	if evidence.Request != digest || evidence.Version != ImagesEvidenceVersion {
-		return ImagesEvidence{}, refusal("lifecycle.state", "mirror images evidence names another request or version", "")
+		return ImagesEvidence{}, mirrorEvidenceMismatch.Fail("mirror images evidence names another request or version", "")
 	}
 	return evidence, nil
 }
@@ -68,7 +68,7 @@ func imagesEffect(evidence ImagesEvidence, request ImagesRequest, removal bool) 
 
 func imagesDrift(evidence ImagesEvidence, request ImagesRequest) error {
 	if image, foreign := foreignImage(evidence, request); foreign {
-		return refusal("lifecycle.state", "the image mirror reports "+image+", which the frozen request does not name in that place", "")
+		return mirrorDrift.Fail("the image mirror reports "+image+", which the frozen request does not name in that place", "")
 	}
-	return refusal("lifecycle.state", "the image mirror reports its fill released beside images it holds", "")
+	return mirrorDrift.Fail("the image mirror reports its fill released beside images it holds", "")
 }

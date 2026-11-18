@@ -156,13 +156,14 @@ func TestAFirewallReadinessRefusalNamesItsRemedy(t *testing.T) {
 	request := hostRequest(t)
 	for name, test := range map[string]struct {
 		damage func(*FirewallReadyEvidence)
+		code   string
 		remedy string
 	}{
-		"not ready": {func(e *FirewallReadyEvidence) { e.Ready = false },
+		"not ready": {func(e *FirewallReadyEvidence) { e.Ready = false }, "libvirt.host-drifted",
 			"start firewalld.service, confirm firewall-cmd --state reports running, then repeat the apply"},
-		"unread": {func(e *FirewallReadyEvidence) { e.Answered = false },
+		"unread": {func(e *FirewallReadyEvidence) { e.Answered = false }, "libvirt.evidence-mismatch",
 			"repeat the apply to restore the owned readiness unit; start firewalld first if it is not answering"},
-		"disabled": {func(e *FirewallReadyEvidence) { e.Enabled = false },
+		"disabled": {func(e *FirewallReadyEvidence) { e.Enabled = false }, "libvirt.host-drifted",
 			"repeat the apply to restore the owned readiness unit; start firewalld first if it is not answering"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -172,7 +173,7 @@ func TestAFirewallReadinessRefusalNamesItsRemedy(t *testing.T) {
 			}
 			test.damage(&evidence.FirewallReady)
 			reported := diagnostics.Of(ValidateHostPresence(encode(t, evidence), request, "digest"))
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Remediation != test.remedy {
+			if len(reported) != 1 || reported[0].Code != test.code || reported[0].Remediation != test.remedy {
 				t.Fatalf("a firewall readiness refusal reported %+v", reported)
 			}
 		})
@@ -191,7 +192,7 @@ func TestAnUnreadExternalOnlyFirewallNamesNoUnitToRestore(t *testing.T) {
 	}
 	evidence.FirewallReady.Answered = false
 	reported := diagnostics.Of(ValidateHostPresence(encode(t, evidence), request, "digest"))
-	if len(reported) != 1 || reported[0].Remediation != "" {
+	if len(reported) != 1 || reported[0].Remediation != libvirtEvidenceMismatch.Remedy {
 		t.Fatalf("an external-only host was told to restore a unit it never had: %+v", reported)
 	}
 }

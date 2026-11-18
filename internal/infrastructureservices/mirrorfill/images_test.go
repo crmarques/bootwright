@@ -205,7 +205,7 @@ func TestTheImageFillLendsItsCredentialToTheApplyAloneAndNamesItsRefusals(t *tes
 		reported[0].Object == nil || reported[0].Object.Kind != "Registry" || reported[0].Object.Name != "mirror-registry" {
 		t.Fatalf("refusal = %+v", reported)
 	}
-	if code := diagnostics.Of(imagesRefusals("lab", request)["image-digest-mismatch"])[0].Code; code != "lifecycle.state" {
+	if code := diagnostics.Of(imagesRefusals("lab", request)["image-digest-mismatch"])[0].Code; code != "mirror.digest-mismatch" {
 		t.Fatalf("a digest mismatch is %s", code)
 	}
 	lent := request.Mirror.Materials()

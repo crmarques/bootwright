@@ -110,7 +110,7 @@ plan destroy: err=nil definitions=1 secrets=[mirror-access-key mirror-known-host
       "version": "mirror-files-v1"
     }
   }
-plan without state: err=lifecycle.state|mirror planning requires compiled desired state||- definitions=0 secrets=[]
+plan without state: err=mirror.planning-input-missing|mirror planning requires compiled desired state|report the message as a defect|- definitions=0 secrets=[]
 plan cancelled: err=context canceled definitions=0
 removal: "remove the artifact mirror files of lab from mirror" impacts=["remove-content /var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public/mirror/lab"] consumes=[] err=nil
 removal cancelled: context canceled
@@ -140,65 +140,65 @@ unresolved destroy other request: false {Reason: Remedy:}
 unresolved destroy garbage: false
 unresolved destroy broken request: false
 apply complete changed: outcome=changed evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
-  run mirror-files-v1 apply var=bootwright_mirror_files deadline=35m0s canonical=69d80d1ee52e machine=mirror materials=[id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=file-digest-mismatch=lifecycle.state|a publisher served a client file for the artifact mirror on mirror whose SHA-256 is not the one this build pins, so it was not published|verify the publisher and the route from mirror to it, then run bootwright apply --context lab|ArtifactServer/mirror // file-unreachable=lifecycle.unknown|Machine/mirror could not read a client file for the artifact mirror from its publisher, so it was not published|give mirror a route to the publishers bootwright render acquisitions --context lab names, then run bootwright apply --context lab|ArtifactServer/mirror
+  run mirror-files-v1 apply var=bootwright_mirror_files deadline=35m0s canonical=69d80d1ee52e machine=mirror materials=[id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=file-digest-mismatch=mirror.digest-mismatch|a publisher served a client file for the artifact mirror on mirror whose SHA-256 is not the one this build pins, so it was not published|verify the publisher and the route from mirror to it, then run bootwright apply --context lab|ArtifactServer/mirror // file-unreachable=mirror.origin-unreachable|Machine/mirror could not read a client file for the artifact mirror from its publisher, so it was not published|give mirror a route to the publishers bootwright render acquisitions --context lab names, then run bootwright apply --context lab|ArtifactServer/mirror
 apply complete unchanged: outcome=unchanged evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
-apply complete failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply empty changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply empty unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply empty failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply released changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply released unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply released failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply partial changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply partial unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply partial failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply foreign changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply foreign unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply foreign failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply absent beside held changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply absent beside held unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply absent beside held failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply other request changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply other request unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply other request failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-apply garbage evidence: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+apply complete failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply empty changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply empty unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply empty failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply released changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply released unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply released failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply partial changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply partial unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply partial failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply foreign changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply foreign unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply foreign failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply absent beside held changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply absent beside held unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply absent beside held failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply other request changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply other request unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply other request failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply garbage evidence: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
 apply runner error plain: outcome=unknown evidence= err=plain: adapter stopped
 apply runner error unknown: outcome=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
 apply runner error state: outcome=failed evidence= err=lifecycle.state|adapter refused|fix|-
-apply unconfigured runner: outcome=failed evidence= err=lifecycle.state|the mirror files adapter is not configured||-
-apply foreign block object: outcome=failed evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||- no run
-apply foreign block kind: outcome=failed evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||-
+apply unconfigured runner: outcome=failed evidence= err=mirror.unconfigured|the mirror files adapter is not configured|report the message as a defect|-
+apply foreign block object: outcome=failed evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|- no run
+apply foreign block kind: outcome=failed evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|-
 apply undecodable request: outcome=failed evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
 apply empty execution: outcome=failed evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
-destroy complete changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy complete changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
   run mirror-files-v1 destroy var=bootwright_mirror_files deadline=35m0s canonical=69d80d1ee52e machine=mirror materials=[id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=
-destroy complete unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy complete failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy empty changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy empty unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy empty failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy released changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy released unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy released failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy partial changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy partial unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy partial failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy foreign changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy foreign unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy foreign failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy absent beside held changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy absent beside held unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy absent beside held failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy other request changed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy other request unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy other request failed: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
-destroy garbage evidence: outcome=unknown evidence= err=lifecycle.state|the mirror files adapter did not prove its postcondition||-
+destroy complete unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy complete failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy empty changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy empty unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy empty failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy released changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy released unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy released failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy partial changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy partial unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy partial failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy foreign changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy foreign unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy foreign failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy absent beside held changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy absent beside held unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy absent beside held failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy other request changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy other request unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy other request failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy garbage evidence: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror files adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
 destroy runner error plain: outcome=unknown evidence= err=plain: adapter stopped
 destroy runner error unknown: outcome=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
 destroy runner error state: outcome=failed evidence= err=lifecycle.state|adapter refused|fix|-
-destroy unconfigured runner: outcome=failed evidence= err=lifecycle.state|the mirror files adapter is not configured||-
-destroy foreign block object: outcome=failed evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||- no run
-destroy foreign block kind: outcome=failed evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||-
+destroy unconfigured runner: outcome=failed evidence= err=mirror.unconfigured|the mirror files adapter is not configured|report the message as a defect|-
+destroy foreign block object: outcome=failed evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|- no run
+destroy foreign block kind: outcome=failed evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|-
 destroy undecodable request: outcome=failed evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
 destroy empty execution: outcome=failed evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
 observe complete changed: effect=completed evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
@@ -227,9 +227,9 @@ observe garbage evidence: effect=unknown evidence={ err=nil
 observe runner error plain: effect=unknown evidence= err=plain: adapter stopped
 observe runner error unknown: effect=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
 observe runner error state: effect=unknown evidence= err=lifecycle.state|adapter refused|fix|-
-observe unconfigured runner: effect=unknown evidence= err=lifecycle.state|the mirror files adapter is not configured||-
-observe foreign block object: effect=unknown evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||- no run
-observe foreign block kind: effect=unknown evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||-
+observe unconfigured runner: effect=unknown evidence= err=mirror.unconfigured|the mirror files adapter is not configured|report the message as a defect|-
+observe foreign block object: effect=unknown evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|- no run
+observe foreign block kind: effect=unknown evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|-
 observe undecodable request: effect=unknown evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
 observe empty execution: effect=unknown evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
 observe removal complete changed: effect=no-effect evidence={"absent":false,"files":[{"path":"helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz","verified":true},{"path":"kubectl/v1.37.2/kubectl","verified":true}],"postcondition":true,"request":"2279d31c43e6f878f8b77dbef0603c47b4527424c51cd7cc21119d12fb66de85","version":"mirror-files-evidence-v1"} err=nil
@@ -258,8 +258,8 @@ observe removal garbage evidence: effect=unknown evidence={ err=nil
 observe removal runner error plain: effect=unknown evidence= err=plain: adapter stopped
 observe removal runner error unknown: effect=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
 observe removal runner error state: effect=unknown evidence= err=lifecycle.state|adapter refused|fix|-
-observe removal unconfigured runner: effect=unknown evidence= err=lifecycle.state|the mirror files adapter is not configured||-
-observe removal foreign block object: effect=unknown evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||- no run
-observe removal foreign block kind: effect=unknown evidence= err=lifecycle.state|the mirror files request does not match its frozen block identity||-
+observe removal unconfigured runner: effect=unknown evidence= err=mirror.unconfigured|the mirror files adapter is not configured|report the message as a defect|-
+observe removal foreign block object: effect=unknown evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|- no run
+observe removal foreign block kind: effect=unknown evidence= err=mirror.request-invalid|the mirror files request does not match its frozen block identity|destroy it with the build that applied it|-
 observe removal undecodable request: effect=unknown evidence= err=lifecycle.state|the frozen mirror files request is malformed||-
 observe removal empty execution: effect=unknown evidence= err=lifecycle.state|the frozen mirror files request is malformed||-

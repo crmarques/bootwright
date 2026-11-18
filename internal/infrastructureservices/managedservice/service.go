@@ -104,7 +104,7 @@ func (s Service[R, E]) Plan(ctx context.Context, input lifecycle.PlanInput) (lif
 		return lifecycle.CapabilityPlan{}, err
 	}
 	if input.State == nil {
-		return lifecycle.CapabilityPlan{}, Refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
+		return lifecycle.CapabilityPlan{}, serviceRequestInvalid.Fail("lifecycle planning requires compiled desired state", "")
 	}
 	catalog := input.State.Effective()
 	requests, err := s.port.Requests(catalog, input.Controller, input.Context.Name)
@@ -240,7 +240,7 @@ func (s Service[R, E]) mutation(operation string) lifecycle.Mutation[prepared[R]
 			return s.run(ctx, execution, operation, call.request, call.fingerprint)
 		},
 		Reading:  s.reading,
-		Unusable: Refusal("lifecycle.state", "the "+s.port.Noun+" adapter reported no usable outcome", ""),
+		Unusable: serviceOutcomeUnusable.Fail("the "+s.port.Noun+" adapter reported no usable outcome", ""),
 	}
 }
 
@@ -303,7 +303,7 @@ func (s Service[R, E]) prepare(ctx context.Context, execution lifecycle.Executio
 		return none, "", err
 	}
 	if s.runner == nil {
-		return none, "", Refusal("lifecycle.state", "the "+s.port.Noun+" adapter is not configured", "")
+		return none, "", serviceUnconfigured.Fail("the "+s.port.Noun+" adapter is not configured", "")
 	}
 	request, err := s.decode(execution.Block.Request)
 	if err != nil {
@@ -324,7 +324,7 @@ func (s Service[R, E]) prepare(ctx context.Context, execution lifecycle.Executio
 		}
 	}
 	if s.port.Certificate == nil {
-		return none, "", Refusal("lifecycle.state", "the "+s.port.Noun+" capability proves no serving certificate", "")
+		return none, "", serviceUnconfigured.Fail("the "+s.port.Noun+" capability proves no serving certificate", "")
 	}
 	fingerprint, err := s.port.Certificate(execution.Material, frame.TLSSecret, execution.Context, frame.Served, s.now(), true)
 	if err != nil && verify {
@@ -356,7 +356,7 @@ func (s Service[R, E]) ProveBinding(ctx context.Context, contextName string, blo
 		return nil
 	}
 	if s.port.Certificate == nil {
-		return Refusal("lifecycle.state", "the "+s.port.Noun+" capability proves no serving certificate", "")
+		return serviceUnconfigured.Fail("the "+s.port.Noun+" capability proves no serving certificate", "")
 	}
 	_, err = s.port.Certificate(material, frame.TLSSecret, contextName, frame.Served, s.now(), false)
 	return err

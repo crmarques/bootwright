@@ -87,7 +87,7 @@ func TestUnusedEndpointFieldsRefuseAtTheirPath(t *testing.T) {
 			}
 			_, _, _, err := Requests(api.NewCatalog(objects), "controller", testContext)
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || reported[0].Field != path ||
+			if len(reported) != 1 || reported[0].Code != "openshift.selection-unsupported" || reported[0].Field != path ||
 				reported[0].Object == nil || reported[0].Object.Name != "sno" {
 				t.Fatalf("an authored %s refuses with %+v", path, reported)
 			}

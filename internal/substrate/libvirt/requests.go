@@ -168,10 +168,10 @@ func validateDiskMedia(disks []Disk) error {
 		return nil
 	}
 	if len(disks) == 0 || len(disks) > substrate.MaxDataDisks+1 || disks[0].Name != "root" || disks[0].Target != "vda" {
-		return refusal("lifecycle.state", "the frozen media presentation changes the root or data-disk bound", "")
+		return libvirtFrozenInvalid.Fail("the frozen media presentation changes the root or data-disk bound", "")
 	}
 	if disks[0].Media != "" || disks[0].Bus != "" || disks[0].RotationRate != 0 {
-		return refusal("lifecycle.state", "the frozen media presentation changes the root disk", "")
+		return libvirtFrozenInvalid.Fail("the frozen media presentation changes the root disk", "")
 	}
 	declared := make([]api.Value, 0, len(disks)-1)
 	for _, disk := range disks[1:] {
@@ -183,12 +183,12 @@ func validateDiskMedia(disks []Disk) error {
 	}
 	presentations, valid := substrate.DataDiskPresentations(declared)
 	if !valid {
-		return refusal("lifecycle.state", "the frozen disk media presentation is unsupported", "")
+		return libvirtFrozenInvalid.Fail("the frozen disk media presentation is unsupported", "")
 	}
 	for index, disk := range disks[1:] {
 		presentation := presentations[index]
 		if disk.Bus != presentation.Bus || disk.Media != presentation.Media || disk.RotationRate != presentation.RotationRate || disk.Target != presentation.Target {
-			return refusal("lifecycle.state", "the frozen disk changes its fixed media presentation", "")
+			return libvirtFrozenInvalid.Fail("the frozen disk changes its fixed media presentation", "")
 		}
 	}
 	return nil

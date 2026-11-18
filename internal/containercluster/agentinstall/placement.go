@@ -32,11 +32,11 @@ func (InstallCapability) Project(applied api.Catalog, block reconciliation.Block
 		return nil, err
 	}
 	if observed.Identity == "" || observed.Cluster != observed.Identity {
-		return nil, refusal("lifecycle.state", "the installation evidence does not prove this operation's cluster", "")
+		return nil, openshiftEvidenceMismatch.Fail("the installation evidence does not prove this operation's cluster", "")
 	}
 	cluster, found := applied.Find(api.OpenShiftCluster, request.Identity.Cluster)
 	if !found {
-		return nil, refusal("lifecycle.state", "the applied revision does not declare OpenShiftCluster/"+request.Identity.Cluster, "")
+		return nil, openshiftRequestInvalid.Fail("the applied revision does not declare OpenShiftCluster/"+request.Identity.Cluster, "")
 	}
 	var items []api.Value
 	var notes []string

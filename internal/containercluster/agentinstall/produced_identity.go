@@ -31,7 +31,7 @@ type kubeconfigIdentities struct {
 // recapture that rotates only the client key keeps it.
 func kubeconfigIdentity(value []byte) (string, error) {
 	var config kubeconfigIdentities
-	unnamed := refusal("lifecycle.state", "a custodied administrator kubeconfig names no single cluster authority and principal", "")
+	unnamed := openshiftKubeconfigUnnamed.Fail("a custodied administrator kubeconfig names no single cluster authority and principal", "")
 	if err := yaml.Unmarshal(value, &config); err != nil || len(config.Clusters) != 1 || len(config.Users) != 1 || config.Clusters[0].Cluster.Server == "" {
 		return "", unnamed
 	}

@@ -42,7 +42,7 @@ func machineRows(t *testing.T) map[string]pinnedEvidence {
 	absent := func(e *MachineEvidence) {
 		e.Absent, e.Owned, e.VirtualMachine, e.Volumes = true, false, "", []VolumeEvidence{{Kind: "DataVolume", Name: request.RootVolume}, {Kind: "DataVolume", Name: request.MediaVolume}}
 	}
-	foreignPin := refusal("lifecycle.state", "the KubeVirt machine evidence names another cluster than its provider's proof", "")
+	foreignPin := kubevirtEvidenceMismatch.Fail("the KubeVirt machine evidence names another cluster than its provider's proof", "")
 	row := func(evidence json.RawMessage, apply, destroy reconciliation.Outcome, observe, removal reconciliation.EffectState) pinnedEvidence {
 		pinned := pinnedEvidence{evidence: evidence, apply: apply, destroy: destroy, observe: observe, removal: removal}
 		if apply == reconciliation.OutcomeUnknown {
@@ -209,11 +209,11 @@ func TestEveryKubeVirtMutationRefusesWhatItCannotRead(t *testing.T) {
 	}{
 		"runner error": {context.Background(), &runner{err: unreachable}, false, reconciliation.OutcomeUnknown, described(unreachable), described(unreachable)},
 		"unusable outcome": {context.Background(), &runner{result: lifecycle.RunResult{Outcome: "skipped"}}, false, reconciliation.OutcomeUnknown,
-			described(refusal("lifecycle.state", "the KubeVirt provider adapter reported no usable outcome", "")),
-			described(refusal("lifecycle.state", "the KubeVirt machine adapter reported no usable outcome", ""))},
+			described(kubevirtOutcomeUnusable.Fail("the KubeVirt provider adapter reported no usable outcome", "")),
+			described(kubevirtOutcomeUnusable.Fail("the KubeVirt machine adapter reported no usable outcome", ""))},
 		"no adapter": {context.Background(), nil, true, reconciliation.OutcomeFailed,
-			described(refusal("lifecycle.state", "the KubeVirt provider adapter is not configured", "")),
-			described(refusal("lifecycle.state", "the KubeVirt machine adapter is not configured", ""))},
+			described(kubevirtUnconfigured.Fail("the KubeVirt provider adapter is not configured", "")),
+			described(kubevirtUnconfigured.Fail("the KubeVirt machine adapter is not configured", ""))},
 		"cancelled": {cancelled, &runner{}, false, reconciliation.OutcomeFailed, described(context.Canceled), described(context.Canceled)},
 	} {
 		t.Run(name, func(t *testing.T) {

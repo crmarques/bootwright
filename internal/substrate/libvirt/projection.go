@@ -43,12 +43,12 @@ func (MachineCapability) Project(applied api.Catalog, block reconciliation.Block
 		return nil, err
 	}
 	if !observed.Answered || !observed.Owned || observed.Domain != request.Domain {
-		return nil, refusal("lifecycle.state", "the machine evidence does not prove this context's domain", "")
+		return nil, libvirtEvidenceMismatch.Fail("the machine evidence does not prove this context's domain", "")
 	}
 	name := request.Identity.Object
 	providerRef, profileRef := placement(applied, name)
 	if providerRef == "" || profileRef == "" {
-		return nil, refusal("lifecycle.state", "the applied revision does not place Machine/"+name+" on a libvirt profile", "")
+		return nil, libvirtRecordsMissing.Fail("the applied revision does not place Machine/"+name+" on a libvirt profile", "")
 	}
 	machine := lifecycle.Projection{
 		Kind: api.Machine, Name: name, Notes: machineNotes(name, observed),

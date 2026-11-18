@@ -156,10 +156,10 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 		return err
 	}
 	if !evidence.Postcondition || evidence.Absent {
-		return refusal("lifecycle.state", "the provider host adapter did not prove its postcondition", "")
+		return libvirtPostconditionUnproved.Fail("the provider host adapter did not prove its postcondition", "")
 	}
 	if !evidence.Hypervisor {
-		return refusal("lifecycle.state", "the provider host does not carry the hypervisor closure", "")
+		return libvirtHostDrifted.Fail("the provider host does not carry the hypervisor closure", "")
 	}
 	if err := matchServices(evidence.Services, request.Services); err != nil {
 		return err
@@ -168,23 +168,23 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 		return err
 	}
 	if request.FirewallReadyUnit != "" && !evidence.FirewallReady.Ready {
-		return refusal("lifecycle.state", "the provider host firewall is not proved enabled and ready",
+		return libvirtHostDrifted.Fail("the provider host firewall is not proved enabled and ready",
 			"start firewalld.service, confirm firewall-cmd --state reports running, then repeat the apply")
 	}
 	if err := matchVLANRefusal(evidence.VLANRefusal, request, true); err != nil {
 		return err
 	}
 	if !evidence.URI {
-		return refusal("lifecycle.state", "the declared libvirt connection does not answer", "")
+		return libvirtHostSilent.Fail("the declared libvirt connection does not answer", "")
 	}
 	if !evidence.PoolAnswered || evidence.Pool != "active" {
-		return refusal("lifecycle.state", "the provider's virtual-media pool is not active", "")
+		return libvirtHostDrifted.Fail("the provider's virtual-media pool is not active", "")
 	}
 	if !evidence.PoolOwned {
-		return refusal("lifecycle.state", "the provider's virtual-media pool does not target its frozen directory", "")
+		return libvirtHostDrifted.Fail("the provider's virtual-media pool does not target its frozen directory", "")
 	}
 	if !evidence.PoolAutostart {
-		return refusal("lifecycle.state", "the provider's virtual-media pool does not start with the host", "")
+		return libvirtHostDrifted.Fail("the provider's virtual-media pool does not start with the host", "")
 	}
 	if err := matchRouting(evidence.Routing, request, true); err != nil {
 		return err
@@ -206,16 +206,16 @@ func matchFirewallReady(observed FirewallReadyEvidence, name string) error {
 		if name == "" {
 			remedy = ""
 		}
-		return refusal("lifecycle.state", "the provider host evidence does not prove its frozen firewalld readiness unit", remedy)
+		return libvirtEvidenceMismatch.Fail("the provider host evidence does not prove its frozen firewalld readiness unit", remedy)
 	}
 	if name == "" {
 		if observed.Present || observed.Owned || observed.Enabled || observed.Ready || observed.State != "" {
-			return refusal("lifecycle.state", "the provider host evidence reports an undeclared firewalld readiness unit", "")
+			return libvirtHostDrifted.Fail("the provider host evidence reports an undeclared firewalld readiness unit", "")
 		}
 		return nil
 	}
 	if !observed.Present || !observed.Owned || !observed.Enabled || observed.State != "active" {
-		return refusal("lifecycle.state", "the provider's firewalld readiness unit is not owned, active and enabled", firewallUnitRemedy)
+		return libvirtHostDrifted.Fail("the provider's firewalld readiness unit is not owned, active and enabled", firewallUnitRemedy)
 	}
 	return nil
 }
@@ -226,7 +226,7 @@ func matchFirewallReady(observed FirewallReadyEvidence, name string) error {
 // postcondition as the running state is.
 func matchServices(observed []ServiceEvidence, frozen []string) error {
 	if len(observed) != len(frozen) {
-		return refusal("lifecycle.state", "the provider host evidence does not cover every libvirt driver daemon", "")
+		return libvirtEvidenceMismatch.Fail("the provider host evidence does not cover every libvirt driver daemon", "")
 	}
 	sorted := slices.Clone(observed)
 	slices.SortFunc(sorted, func(x, y ServiceEvidence) int { return strings.Compare(x.Name, y.Name) })
@@ -234,13 +234,13 @@ func matchServices(observed []ServiceEvidence, frozen []string) error {
 	for index, name := range ordered {
 		entry := sorted[index]
 		if entry.Name != name {
-			return refusal("lifecycle.state", "the provider host evidence does not match its frozen driver daemons", "")
+			return libvirtEvidenceMismatch.Fail("the provider host evidence does not match its frozen driver daemons", "")
 		}
 		if entry.State != "active" {
-			return refusal("lifecycle.state", "a libvirt driver daemon the provider depends on is not active", "")
+			return libvirtHostDrifted.Fail("a libvirt driver daemon the provider depends on is not active", "")
 		}
 		if !entry.Enabled {
-			return refusal("lifecycle.state", "a libvirt driver daemon the provider depends on does not start with the host", "")
+			return libvirtHostDrifted.Fail("a libvirt driver daemon the provider depends on does not start with the host", "")
 		}
 	}
 	return nil
@@ -250,13 +250,13 @@ func matchServices(observed []ServiceEvidence, frozen []string) error {
 // own, and requires exactly one entry of the same name and management for each.
 func pairNetworks(observed []NetworkEvidence, frozen []Network) ([]NetworkEvidence, error) {
 	if len(observed) != len(frozen) {
-		return nil, refusal("lifecycle.state", "the provider host evidence does not cover every declared network", "")
+		return nil, libvirtEvidenceMismatch.Fail("the provider host evidence does not cover every declared network", "")
 	}
 	sorted := slices.Clone(observed)
 	slices.SortFunc(sorted, func(x, y NetworkEvidence) int { return strings.Compare(x.Name, y.Name) })
 	for index, network := range frozen {
 		if sorted[index].Name != network.Name || sorted[index].Managed != network.Managed {
-			return nil, refusal("lifecycle.state", "the provider host evidence does not match its frozen networks", "")
+			return nil, libvirtEvidenceMismatch.Fail("the provider host evidence does not match its frozen networks", "")
 		}
 	}
 	return sorted, nil
@@ -270,28 +270,28 @@ func matchNetworks(observed []NetworkEvidence, frozen []Network) error {
 	for index, network := range frozen {
 		entry := sorted[index]
 		if !entry.Bridge {
-			return refusal("lifecycle.state", "a declared network bridge is not present on the provider host", "")
+			return libvirtHostDrifted.Fail("a declared network bridge is not present on the provider host", "")
 		}
 		if network.MTU != 0 && entry.MTU == 0 {
-			return refusal("lifecycle.state", "the provider host did not answer for a declared network bridge's MTU", "")
+			return libvirtHostSilent.Fail("the provider host did not answer for a declared network bridge's MTU", "")
 		}
 		if network.MTU != 0 && entry.MTU != network.MTU {
-			return refusal("lifecycle.state", "a declared network bridge does not carry its frozen MTU", "")
+			return libvirtHostDrifted.Fail("a declared network bridge does not carry its frozen MTU", "")
 		}
 		if !network.Managed {
 			continue
 		}
 		if !entry.Answered || entry.State != "active" {
-			return refusal("lifecycle.state", "a managed libvirt network is not active", "")
+			return libvirtHostDrifted.Fail("a managed libvirt network is not active", "")
 		}
 		if !entry.Owned {
-			return refusal("lifecycle.state", "a managed libvirt network does not carry this context's ownership", "")
+			return libvirtHostDrifted.Fail("a managed libvirt network does not carry this context's ownership", "")
 		}
 		if !entry.Definition {
-			return refusal("lifecycle.state", "a managed libvirt network does not carry its frozen definition", "")
+			return libvirtHostDrifted.Fail("a managed libvirt network does not carry its frozen definition", "")
 		}
 		if !entry.Autostart {
-			return refusal("lifecycle.state", "a managed libvirt network does not start with the host", "")
+			return libvirtHostDrifted.Fail("a managed libvirt network does not start with the host", "")
 		}
 	}
 	return nil
@@ -310,24 +310,24 @@ func ValidateHostAbsence(data []byte, digest string) error {
 		return err
 	}
 	if !evidence.Postcondition || !evidence.Absent {
-		return refusal("lifecycle.state", "the provider host adapter did not prove removal", "")
+		return libvirtPostconditionUnproved.Fail("the provider host adapter did not prove removal", "")
 	}
 	if !evidence.URI {
-		return refusal("lifecycle.state", "the provider host's hypervisor did not answer, so its removal is not proved", "")
+		return libvirtHostSilent.Fail("the provider host's hypervisor did not answer, so its removal is not proved", "")
 	}
 	carrier := evidence.CarrierPolicy
 	if !carrier.Answered || carrier.Present || carrier.Owned {
-		return refusal("lifecycle.state", "the provider host removal evidence does not prove its VLAN carrier policy gone", "")
+		return libvirtRemovalIncomplete.Fail("the provider host removal evidence does not prove its VLAN carrier policy gone", "")
 	}
 	ready := evidence.FirewallReady
 	if !ready.Answered || ready.Present || ready.Owned || ready.Enabled || ready.Ready || ready.State != "" {
-		return refusal("lifecycle.state", "the provider host removal evidence does not prove its firewalld readiness unit gone", "")
+		return libvirtRemovalIncomplete.Fail("the provider host removal evidence does not prove its firewalld readiness unit gone", "")
 	}
 	if vlan := evidence.VLANRefusal; vlan.Present || vlan.Owned || vlan.Enabled || len(vlan.Routes) > 0 || vlan.State != "" || (vlan.Name != "" && !vlan.Answered) {
-		return refusal("lifecycle.state", "the provider host removal evidence does not prove its VLAN refusal unit and routes gone", "")
+		return libvirtRemovalIncomplete.Fail("the provider host removal evidence does not prove its VLAN refusal unit and routes gone", "")
 	}
 	if evidence.Directory == nil || *evidence.Directory {
-		return refusal("lifecycle.state", "the provider host removal evidence does not prove its pool directory gone", "")
+		return libvirtRemovalIncomplete.Fail("the provider host removal evidence does not prove its pool directory gone", "")
 	}
 	if err := connectionsAbsent(evidence); err != nil {
 		return err
@@ -336,20 +336,20 @@ func ValidateHostAbsence(data []byte, digest string) error {
 		return err
 	}
 	if !evidence.PoolAnswered {
-		return refusal("lifecycle.state", "the provider host's storage driver did not answer for its pool, so its removal is not proved", "")
+		return libvirtHostSilent.Fail("the provider host's storage driver did not answer for its pool, so its removal is not proved", "")
 	}
 	if evidence.Pool != "" {
-		return refusal("lifecycle.state", "the provider host removal evidence still reports its pool", "")
+		return libvirtRemovalIncomplete.Fail("the provider host removal evidence still reports its pool", "")
 	}
 	for _, network := range evidence.Networks {
 		if !network.Managed {
 			continue
 		}
 		if !network.Answered {
-			return refusal("lifecycle.state", "the provider host's network driver did not answer for a managed network, so its removal is not proved", "")
+			return libvirtHostSilent.Fail("the provider host's network driver did not answer for a managed network, so its removal is not proved", "")
 		}
 		if network.State != "" || network.Owned {
-			return refusal("lifecycle.state", "the provider host removal evidence still reports a managed network", "")
+			return libvirtRemovalIncomplete.Fail("the provider host removal evidence still reports a managed network", "")
 		}
 	}
 	return nil
@@ -391,7 +391,7 @@ func ValidateHostRemovalUnfinished(data []byte, request HostRequest, digest stri
 		return err
 	}
 	if unremoved(evidence, request) == nil {
-		return refusal("lifecycle.state", "the provider host still holds everything its removal takes back", "")
+		return libvirtEvidenceMismatch.Fail("the provider host still holds everything its removal takes back", "")
 	}
 	return nil
 }
@@ -405,7 +405,7 @@ func decodeHostRemains(data []byte, digest string) (HostEvidence, error) {
 		return HostEvidence{}, err
 	}
 	if evidence.Absent {
-		return HostEvidence{}, refusal("lifecycle.state", "the provider host evidence reports a removal, not what remains", "")
+		return HostEvidence{}, libvirtEvidenceMismatch.Fail("the provider host evidence reports a removal, not what remains", "")
 	}
 	return evidence, nil
 }
@@ -415,24 +415,24 @@ const vlanRefusalRemedy = "repeat the apply, which restores or adopts the refusi
 func matchVLANRefusal(observed VLANRefusalEvidence, request HostRequest, running bool) error {
 	if request.VLANRefusalUnit == "" {
 		if observed.Name != "" || observed.Present || observed.Owned || observed.Enabled || len(observed.Routes) > 0 || observed.State != "" {
-			return refusal("lifecycle.state", "the provider host evidence reports an undeclared VLAN refusal unit", "")
+			return libvirtHostDrifted.Fail("the provider host evidence reports an undeclared VLAN refusal unit", "")
 		}
 		return nil
 	}
 	if !observed.Answered || observed.Name != request.VLANRefusalUnit {
-		return refusal("lifecycle.state", "the provider host evidence does not prove its frozen VLAN refusal unit", vlanRefusalRemedy)
+		return libvirtEvidenceMismatch.Fail("the provider host evidence does not prove its frozen VLAN refusal unit", vlanRefusalRemedy)
 	}
 	if len(request.RefusedPrefixes) == 0 {
 		if observed.Present || observed.Owned || observed.Enabled || len(observed.Routes) > 0 || observed.State != "" {
-			return refusal("lifecycle.state", "the provider host still holds a VLAN refusal unit or route its request no longer declares", vlanRefusalRemedy)
+			return libvirtHostDrifted.Fail("the provider host still holds a VLAN refusal unit or route its request no longer declares", vlanRefusalRemedy)
 		}
 		return nil
 	}
 	if !observed.Present || !observed.Owned || !observed.Enabled || (running && observed.State != "active") {
-		return refusal("lifecycle.state", "the provider's VLAN refusal unit is not owned, active and enabled", vlanRefusalRemedy)
+		return libvirtHostDrifted.Fail("the provider's VLAN refusal unit is not owned, active and enabled", vlanRefusalRemedy)
 	}
 	if !slices.Equal(observed.Routes, request.RefusedPrefixes) {
-		return refusal("lifecycle.state", "the provider host does not hold exactly the unreachable routes for the VLAN subnets it refuses", vlanRefusalRemedy)
+		return libvirtHostDrifted.Fail("the provider host does not hold exactly the unreachable routes for the VLAN subnets it refuses", vlanRefusalRemedy)
 	}
 	return nil
 }
@@ -442,10 +442,10 @@ func matchFirewallHeld(observed FirewallReadyEvidence, name string) error {
 		return matchFirewallReady(observed, name)
 	}
 	if !observed.Answered || observed.Name != name {
-		return refusal("lifecycle.state", "the provider host evidence does not prove its frozen firewalld readiness unit", "")
+		return libvirtEvidenceMismatch.Fail("the provider host evidence does not prove its frozen firewalld readiness unit", "")
 	}
 	if !observed.Present || !observed.Owned || !observed.Enabled {
-		return refusal("lifecycle.state", "the provider's firewalld readiness unit is not owned and enabled", "")
+		return libvirtHostDrifted.Fail("the provider's firewalld readiness unit is not owned and enabled", "")
 	}
 	return nil
 }
@@ -461,10 +461,10 @@ func unremoved(evidence HostEvidence, request HostRequest) error {
 		return err
 	}
 	if !evidence.URI {
-		return refusal("lifecycle.state", "the declared libvirt connection does not answer", "")
+		return libvirtHostSilent.Fail("the declared libvirt connection does not answer", "")
 	}
 	if !evidence.PoolAnswered || evidence.Pool != "active" || !evidence.PoolOwned || evidence.Directory == nil || !*evidence.Directory {
-		return refusal("lifecycle.state", "the provider host no longer holds its active pool and its directory", "")
+		return libvirtHostDrifted.Fail("the provider host no longer holds its active pool and its directory", "")
 	}
 	sorted, err := pairNetworks(evidence.Networks, request.Networks)
 	if err != nil {
@@ -472,7 +472,7 @@ func unremoved(evidence HostEvidence, request HostRequest) error {
 	}
 	for _, entry := range sorted {
 		if entry.Managed && (!entry.Answered || !entry.Owned || entry.State != "active") {
-			return refusal("lifecycle.state", "the provider host no longer holds every managed network it owns active", "")
+			return libvirtHostDrifted.Fail("the provider host no longer holds every managed network it owns active", "")
 		}
 	}
 	if err := carrierHeld(evidence.CarrierPolicy, request); err != nil {
@@ -496,7 +496,7 @@ func ValidateHostPartial(data []byte, digest string) error {
 		return err
 	}
 	if evidence.Postcondition || evidence.Absent {
-		return refusal("lifecycle.state", "the provider host evidence proves a settled state, not a partial one", "")
+		return libvirtEvidenceMismatch.Fail("the provider host evidence proves a settled state, not a partial one", "")
 	}
 	return holdsOwned(evidence)
 }
@@ -506,14 +506,14 @@ func ValidateHostPartial(data []byte, digest string) error {
 // this context's ownership nor a same-named pool targeting another directory.
 func holdsOwned(evidence HostEvidence) error {
 	if evidence.Pool != "" && !evidence.PoolOwned {
-		return refusal("lifecycle.state", "a virtual-media pool of the same name targets another directory than this provider's", "")
+		return libvirtOwnershipConflict.Fail("a virtual-media pool of the same name targets another directory than this provider's", "")
 	}
 	ready := evidence.FirewallReady
 	if ready.Present && (!ready.Answered || !ready.Owned) {
-		return refusal("lifecycle.state", "a firewalld readiness unit exists without this provider's ownership", "")
+		return libvirtOwnershipConflict.Fail("a firewalld readiness unit exists without this provider's ownership", "")
 	}
 	if vlan := evidence.VLANRefusal; vlan.Present && (!vlan.Answered || !vlan.Owned) {
-		return refusal("lifecycle.state", "a VLAN refusal unit exists without this provider's ownership", "")
+		return libvirtOwnershipConflict.Fail("a VLAN refusal unit exists without this provider's ownership", "")
 	}
 	held, err := connectionsOwned(evidence)
 	if err != nil {
@@ -525,7 +525,7 @@ func holdsOwned(evidence HostEvidence) error {
 	}
 	carrier := evidence.CarrierPolicy
 	if carrier.Present && (!carrier.Answered || !carrier.Owned) {
-		return refusal("lifecycle.state", "a VLAN carrier policy exists without this provider's ownership", "")
+		return libvirtOwnershipConflict.Fail("a VLAN carrier policy exists without this provider's ownership", "")
 	}
 	held = held || routed || (carrier.Answered && carrier.Present && carrier.Owned)
 	vlan := evidence.VLANRefusal
@@ -535,12 +535,12 @@ func holdsOwned(evidence HostEvidence) error {
 			continue
 		}
 		if !network.Owned {
-			return refusal("lifecycle.state", "a managed libvirt network exists without this context's ownership", "")
+			return libvirtOwnershipConflict.Fail("a managed libvirt network exists without this context's ownership", "")
 		}
 		present = true
 	}
 	if !present {
-		return refusal("lifecycle.state", "the provider host evidence reports nothing this context owns", "")
+		return libvirtEvidenceMismatch.Fail("the provider host evidence reports nothing this context owns", "")
 	}
 	return nil
 }
@@ -554,25 +554,25 @@ func ValidateMachinePresence(data []byte, request MachineRequest, digest string)
 		return err
 	}
 	if !evidence.Postcondition || evidence.Absent {
-		return refusal("lifecycle.state", "the machine adapter did not prove its postcondition", "")
+		return libvirtPostconditionUnproved.Fail("the machine adapter did not prove its postcondition", "")
 	}
 	if evidence.Domain != request.Domain {
-		return refusal("lifecycle.state", "the machine evidence names another domain", "")
+		return libvirtEvidenceMismatch.Fail("the machine evidence names another domain", "")
 	}
 	if !evidence.Owned {
-		return refusal("lifecycle.state", "the realized domain does not carry this context's ownership", "")
+		return libvirtHostDrifted.Fail("the realized domain does not carry this context's ownership", "")
 	}
 	if evidence.Unit != "active" {
-		return refusal("lifecycle.state", "the machine's management controller unit is not active", "")
+		return libvirtHostDrifted.Fail("the machine's management controller unit is not active", "")
 	}
 	if evidence.Controller != request.Controller.Image {
-		return refusal("lifecycle.state", "the running management controller is not the frozen image", "")
+		return libvirtHostDrifted.Fail("the running management controller is not the frozen image", "")
 	}
 	if evidence.System != request.UUID {
-		return refusal("lifecycle.state", "the management controller does not expose this machine's system", "")
+		return libvirtHostDrifted.Fail("the management controller does not expose this machine's system", "")
 	}
 	if evidence.Power == "" {
-		return refusal("lifecycle.state", "the management controller reported no power state", "")
+		return libvirtHostDrifted.Fail("the management controller reported no power state", "")
 	}
 	return matchDisks(evidence.Disks, request.Disks)
 }
@@ -584,10 +584,10 @@ func matchDisks(observed []DiskEvidence, frozen []Disk) error {
 	}
 	for index, disk := range expected {
 		if sorted[index].SizeGiB != disk.SizeGiB {
-			return refusal("lifecycle.state", "a machine disk is not the size the profile froze", "")
+			return libvirtHostDrifted.Fail("a machine disk is not the size the profile froze", "")
 		}
 		if disk.Media != "" && (sorted[index].Bus != disk.Bus || sorted[index].Target != disk.Target || sorted[index].RotationRate != disk.RotationRate) {
-			return refusal("lifecycle.state", "a machine data disk does not carry its frozen SCSI target and media presentation", "")
+			return libvirtHostDrifted.Fail("a machine data disk does not carry its frozen SCSI target and media presentation", "")
 		}
 	}
 	return nil
@@ -597,7 +597,7 @@ func matchDisks(observed []DiskEvidence, frozen []Disk) error {
 // requires exactly one present entry of the same name for each frozen disk.
 func pairDisks(observed []DiskEvidence, frozen []Disk) ([]DiskEvidence, []Disk, error) {
 	if len(observed) != len(frozen) {
-		return nil, nil, refusal("lifecycle.state", "the machine evidence does not cover every frozen disk", "")
+		return nil, nil, libvirtEvidenceMismatch.Fail("the machine evidence does not cover every frozen disk", "")
 	}
 	sorted := slices.Clone(observed)
 	slices.SortFunc(sorted, func(x, y DiskEvidence) int { return strings.Compare(x.Name, y.Name) })
@@ -605,7 +605,7 @@ func pairDisks(observed []DiskEvidence, frozen []Disk) ([]DiskEvidence, []Disk, 
 	slices.SortFunc(expected, func(x, y Disk) int { return strings.Compare(x.Name, y.Name) })
 	for index, disk := range expected {
 		if sorted[index].Name != disk.Name || !sorted[index].Present {
-			return nil, nil, refusal("lifecycle.state", "a frozen machine disk is missing", "")
+			return nil, nil, libvirtHostDrifted.Fail("a frozen machine disk is missing", "")
 		}
 	}
 	return sorted, expected, nil
@@ -621,21 +621,21 @@ func ValidateMachineAbsence(data []byte, digest string) error {
 		return err
 	}
 	if !evidence.Postcondition || !evidence.Absent {
-		return refusal("lifecycle.state", "the machine adapter did not prove removal", "")
+		return libvirtPostconditionUnproved.Fail("the machine adapter did not prove removal", "")
 	}
 	if !evidence.Answered {
-		return refusal("lifecycle.state", "the hypervisor did not answer for the machine's domain, so its removal is not proved", "")
+		return libvirtHostSilent.Fail("the hypervisor did not answer for the machine's domain, so its removal is not proved", "")
 	}
 	if evidence.Domain != "" || evidence.Unit != "" || evidence.Controller != "" || evidence.System != "" || evidence.Power != "" || evidence.State != "" {
-		return refusal("lifecycle.state", "the machine removal evidence still reports an owned resource", "")
+		return libvirtRemovalIncomplete.Fail("the machine removal evidence still reports an owned resource", "")
 	}
 	for _, disk := range evidence.Disks {
 		if disk.Present {
-			return refusal("lifecycle.state", "the machine removal evidence still reports a disk", "")
+			return libvirtRemovalIncomplete.Fail("the machine removal evidence still reports a disk", "")
 		}
 	}
 	if evidence.Listener == nil || *evidence.Listener {
-		return refusal("lifecycle.state", "the machine removal evidence does not prove its controller socket free", "")
+		return libvirtRemovalIncomplete.Fail("the machine removal evidence does not prove its controller socket free", "")
 	}
 	return nil
 }
@@ -674,7 +674,7 @@ func ValidateMachineRemovalUnfinished(data []byte, request MachineRequest, diges
 		return err
 	}
 	if machineUnremoved(evidence, request) == nil {
-		return refusal("lifecycle.state", "the machine still holds everything its removal takes back", "")
+		return libvirtEvidenceMismatch.Fail("the machine still holds everything its removal takes back", "")
 	}
 	return nil
 }
@@ -688,20 +688,20 @@ func decodeMachineRemains(data []byte, digest string) (MachineEvidence, error) {
 		return MachineEvidence{}, err
 	}
 	if evidence.Absent {
-		return MachineEvidence{}, refusal("lifecycle.state", "the machine evidence reports a removal, not what remains", "")
+		return MachineEvidence{}, libvirtEvidenceMismatch.Fail("the machine evidence reports a removal, not what remains", "")
 	}
 	return evidence, nil
 }
 
 func machineUnremoved(evidence MachineEvidence, request MachineRequest) error {
 	if !evidence.Answered {
-		return refusal("lifecycle.state", "the hypervisor did not answer for the machine's domain", "")
+		return libvirtHostSilent.Fail("the hypervisor did not answer for the machine's domain", "")
 	}
 	if evidence.Domain != request.Domain || !evidence.Owned {
-		return refusal("lifecycle.state", "the machine no longer holds its owned domain", "")
+		return libvirtHostDrifted.Fail("the machine no longer holds its owned domain", "")
 	}
 	if evidence.Unit != "active" || evidence.Controller == "" {
-		return refusal("lifecycle.state", "the machine no longer holds its controller unit active", "")
+		return libvirtHostDrifted.Fail("the machine no longer holds its controller unit active", "")
 	}
 	_, _, err := pairDisks(evidence.Disks, request.Disks)
 	return err
@@ -718,7 +718,7 @@ func ValidateMachinePartial(data []byte, digest string) error {
 		return err
 	}
 	if evidence.Postcondition || evidence.Absent {
-		return refusal("lifecycle.state", "the machine evidence proves a settled state, not a partial one", "")
+		return libvirtEvidenceMismatch.Fail("the machine evidence proves a settled state, not a partial one", "")
 	}
 	return holdsMachine(evidence)
 }
@@ -728,10 +728,10 @@ func ValidateMachinePartial(data []byte, digest string) error {
 // this context's ownership.
 func holdsMachine(evidence MachineEvidence) error {
 	if evidence.Domain != "" && !evidence.Owned {
-		return refusal("lifecycle.state", "a domain of the same name exists without this context's ownership", "")
+		return libvirtOwnershipConflict.Fail("a domain of the same name exists without this context's ownership", "")
 	}
 	if !machineRemains(evidence) {
-		return refusal("lifecycle.state", "the machine evidence reports nothing this context owns", "")
+		return libvirtEvidenceMismatch.Fail("the machine evidence reports nothing this context owns", "")
 	}
 	return nil
 }
@@ -742,7 +742,7 @@ func decodeHostEvidence(data []byte, digest string) (HostEvidence, error) {
 		return HostEvidence{}, err
 	}
 	if evidence.Request != digest {
-		return HostEvidence{}, refusal("lifecycle.state", "the provider host evidence names another request", "")
+		return HostEvidence{}, libvirtEvidenceMismatch.Fail("the provider host evidence names another request", "")
 	}
 	return evidence, nil
 }
@@ -753,10 +753,10 @@ func decodeMachineEvidence(data []byte, digest string) (MachineEvidence, error) 
 		return MachineEvidence{}, err
 	}
 	if evidence.Request != digest {
-		return MachineEvidence{}, refusal("lifecycle.state", "the machine evidence names another request", "")
+		return MachineEvidence{}, libvirtEvidenceMismatch.Fail("the machine evidence names another request", "")
 	}
 	if slices.ContainsFunc(evidence.Attached, func(disk DiskEvidence) bool { return !attachedTarget.MatchString(disk.Target) }) {
-		return MachineEvidence{}, refusal("lifecycle.state", "the machine evidence lists an attached disk under a target no host observation reports", "")
+		return MachineEvidence{}, libvirtEvidenceMismatch.Fail("the machine evidence lists an attached disk under a target no host observation reports", "")
 	}
 	return evidence, nil
 }

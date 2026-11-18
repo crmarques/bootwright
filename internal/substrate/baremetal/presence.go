@@ -11,7 +11,7 @@ func ProvedPresence(block reconciliation.Block, data []byte) (Evidence, bool, er
 		return Evidence{}, true, err
 	}
 	if request.Identity.Object != block.Object || request.Identity.Block != block.ID {
-		return Evidence{}, true, refusal("lifecycle.state", "physical Machine proof names another Machine block", "")
+		return Evidence{}, true, baremetalEvidenceMismatch.Fail("physical Machine proof names another Machine block", "")
 	}
 	if err := ValidatePresence(data, request, block.RequestDigest); err != nil {
 		return Evidence{}, true, err

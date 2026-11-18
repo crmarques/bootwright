@@ -107,7 +107,7 @@ plan destroy: err=nil definitions=1 secrets=[mirror-access-key mirror-ca mirror-
       "version": "mirror-images-v1"
     }
   }
-plan without state: err=lifecycle.state|mirror planning requires compiled desired state||- definitions=0 secrets=[]
+plan without state: err=mirror.planning-input-missing|mirror planning requires compiled desired state|report the message as a defect|- definitions=0 secrets=[]
 plan cancelled: err=context canceled definitions=0
 removal: "release the image mirror of lab on mirror, whose Registry's removal deletes its images" impacts=[] consumes=[] err=nil
 removal cancelled: context canceled
@@ -137,65 +137,65 @@ unresolved destroy other request: false {Reason: Remedy:}
 unresolved destroy garbage: false
 unresolved destroy broken request: false
 apply complete changed: outcome=changed evidence={"absent":false,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true},{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
-  run mirror-images-v1 apply var=bootwright_mirror_images deadline=55m0s canonical=298a872c6268 machine=mirror materials=[image-username/imageUsername/username/mirror-registry-credentials image-password/imagePassword/password/mirror-registry-credentials image-trust/imageTrust/certificate/mirror-ca id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=image-digest-mismatch=lifecycle.state|the image mirror on mirror reports a digest other than the pinned one for an image it was given, so the fill stopped|verify the Registry and the route from mirror to the image's origin, then run bootwright apply --context lab|Registry/mirror-registry // image-unreachable=lifecycle.unknown|Machine/mirror could not copy an image from its origin into the image mirror|give mirror a route to the origins bootwright render acquisitions --context lab names, then run bootwright apply --context lab|Registry/mirror-registry // mirror-unreadable=lifecycle.unknown|Machine/mirror could not read the image mirror at 203.0.113.20:5000 with its credential and trust anchor|verify Registry/mirror-registry is ready and answers its credential, then run bootwright apply --context lab|Registry/mirror-registry // skopeo-missing=lifecycle.state|Machine/mirror has no working /usr/bin/skopeo, so the image mirror of lab cannot copy its images; this attempt copied nothing|install the skopeo package on Machine/mirror with its package manager and repeat the apply, or place Registry/mirror-registry on a Machine that has it|Registry/mirror-registry
+  run mirror-images-v1 apply var=bootwright_mirror_images deadline=55m0s canonical=298a872c6268 machine=mirror materials=[image-username/imageUsername/username/mirror-registry-credentials image-password/imagePassword/password/mirror-registry-credentials image-trust/imageTrust/certificate/mirror-ca id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=image-digest-mismatch=mirror.digest-mismatch|the image mirror on mirror reports a digest other than the pinned one for an image it was given, so the fill stopped|verify the Registry and the route from mirror to the image's origin, then run bootwright apply --context lab|Registry/mirror-registry // image-unreachable=mirror.origin-unreachable|Machine/mirror could not copy an image from its origin into the image mirror|give mirror a route to the origins bootwright render acquisitions --context lab names, then run bootwright apply --context lab|Registry/mirror-registry // mirror-unreadable=mirror.unreadable|Machine/mirror could not read the image mirror at 203.0.113.20:5000 with its credential and trust anchor|verify Registry/mirror-registry is ready and answers its credential, then run bootwright apply --context lab|Registry/mirror-registry // skopeo-missing=mirror.skopeo-missing|Machine/mirror has no working /usr/bin/skopeo, so the image mirror of lab cannot copy its images; this attempt copied nothing|install the skopeo package on Machine/mirror with its package manager and repeat the apply, or place Registry/mirror-registry on a Machine that has it|Registry/mirror-registry
 apply complete unchanged: outcome=unchanged evidence={"absent":false,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true},{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
-apply complete failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply empty changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply empty unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply empty failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply released changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply released unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply released failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply partial changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply partial unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply partial failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply foreign changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply foreign unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply foreign failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply absent beside held changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply absent beside held unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply absent beside held failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply other request changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply other request unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply other request failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-apply garbage evidence: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+apply complete failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply empty changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply empty unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply empty failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply released changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply released unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply released failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply partial changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply partial unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply partial failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply foreign changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply foreign unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply foreign failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply absent beside held changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply absent beside held unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply absent beside held failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply other request changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply other request unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply other request failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+apply garbage evidence: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
 apply runner error plain: outcome=unknown evidence= err=plain: adapter stopped
 apply runner error unknown: outcome=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
 apply runner error state: outcome=failed evidence= err=lifecycle.state|adapter refused|fix|-
-apply unconfigured runner: outcome=failed evidence= err=lifecycle.state|the mirror images adapter is not configured||-
-apply foreign block object: outcome=failed evidence= err=lifecycle.state|the mirror images request does not match its frozen block identity||- no run
-apply foreign block kind: outcome=failed evidence= err=lifecycle.state|the mirror images request does not match its frozen block identity||-
+apply unconfigured runner: outcome=failed evidence= err=mirror.unconfigured|the mirror images adapter is not configured|report the message as a defect|-
+apply foreign block object: outcome=failed evidence= err=mirror.request-invalid|the mirror images request does not match its frozen block identity|destroy it with the build that applied it|- no run
+apply foreign block kind: outcome=failed evidence= err=mirror.request-invalid|the mirror images request does not match its frozen block identity|destroy it with the build that applied it|-
 apply undecodable request: outcome=failed evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
 apply empty execution: outcome=failed evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
-destroy complete changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy complete changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
   run mirror-images-v1 destroy var=bootwright_mirror_images deadline=55m0s canonical=298a872c6268 machine=mirror materials=[id/identity/private-key/mirror-access-key known_hosts/knownHosts/value/mirror-known-hosts] material=[] refusals=
-destroy complete unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy complete failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy empty changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy empty unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy empty failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy complete unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy complete failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy empty changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy empty unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy empty failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
 destroy released changed: outcome=changed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
 destroy released unchanged: outcome=unchanged evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
-destroy released failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy partial changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy partial unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy partial failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy foreign changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy foreign unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy foreign failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy absent beside held changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy absent beside held unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy absent beside held failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy other request changed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy other request unchanged: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy other request failed: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
-destroy garbage evidence: outcome=unknown evidence= err=lifecycle.state|the mirror images adapter did not prove its postcondition||-
+destroy released failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy partial changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy partial unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy partial failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy foreign changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy foreign unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy foreign failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy absent beside held changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy absent beside held unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy absent beside held failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy other request changed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy other request unchanged: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy other request failed: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
+destroy garbage evidence: outcome=unknown evidence= err=mirror.adapter-unproved|the mirror images adapter did not prove its postcondition|repeat the operation, which observes the mirror again|-
 destroy runner error plain: outcome=unknown evidence= err=plain: adapter stopped
 destroy runner error unknown: outcome=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
 destroy runner error state: outcome=failed evidence= err=lifecycle.state|adapter refused|fix|-
-destroy unconfigured runner: outcome=failed evidence= err=lifecycle.state|the mirror images adapter is not configured||-
-destroy foreign block object: outcome=failed evidence= err=lifecycle.state|the mirror images request does not match its frozen block identity||- no run
-destroy foreign block kind: outcome=failed evidence= err=lifecycle.state|the mirror images request does not match its frozen block identity||-
+destroy unconfigured runner: outcome=failed evidence= err=mirror.unconfigured|the mirror images adapter is not configured|report the message as a defect|-
+destroy foreign block object: outcome=failed evidence= err=mirror.request-invalid|the mirror images request does not match its frozen block identity|destroy it with the build that applied it|- no run
+destroy foreign block kind: outcome=failed evidence= err=mirror.request-invalid|the mirror images request does not match its frozen block identity|destroy it with the build that applied it|-
 destroy undecodable request: outcome=failed evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
 destroy empty execution: outcome=failed evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
 observe complete changed: effect=completed evidence={"absent":false,"images":[{"digest":"sha256:3333333333333333333333333333333333333333333333333333333333333333","repository":"docker.io/library/registry","verified":true},{"digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444","repository":"quay.io/metal3-io/sushy-tools","verified":true}],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil
@@ -224,9 +224,9 @@ observe garbage evidence: effect=unknown evidence={ err=nil
 observe runner error plain: effect=unknown evidence= err=plain: adapter stopped
 observe runner error unknown: effect=unknown evidence= err=lifecycle.unknown|adapter lost|retry|-
 observe runner error state: effect=unknown evidence= err=lifecycle.state|adapter refused|fix|-
-observe unconfigured runner: effect=unknown evidence= err=lifecycle.state|the mirror images adapter is not configured||-
-observe foreign block object: effect=unknown evidence= err=lifecycle.state|the mirror images request does not match its frozen block identity||- no run
-observe foreign block kind: effect=unknown evidence= err=lifecycle.state|the mirror images request does not match its frozen block identity||-
+observe unconfigured runner: effect=unknown evidence= err=mirror.unconfigured|the mirror images adapter is not configured|report the message as a defect|-
+observe foreign block object: effect=unknown evidence= err=mirror.request-invalid|the mirror images request does not match its frozen block identity|destroy it with the build that applied it|- no run
+observe foreign block kind: effect=unknown evidence= err=mirror.request-invalid|the mirror images request does not match its frozen block identity|destroy it with the build that applied it|-
 observe undecodable request: effect=unknown evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
 observe empty execution: effect=unknown evidence= err=lifecycle.state|the frozen mirror images request is malformed||-
 observe removal complete changed: effect=completed evidence={"absent":true,"images":[],"postcondition":true,"request":"e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2","version":"mirror-images-evidence-v1"} err=nil

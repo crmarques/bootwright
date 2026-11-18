@@ -9,9 +9,19 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
+
+func managedStop(code string) diagnostics.Stop {
+	for _, stop := range managedservice.Stops() {
+		if stop.Code == code {
+			return stop
+		}
+	}
+	panic(code)
+}
 
 func described(err error) string {
 	if err == nil {
@@ -143,7 +153,7 @@ func TestEveryArtifactServerMutationRefusesWhatItCannotRead(t *testing.T) {
 	cancel()
 	malformed := call
 	malformed.Block.Request = json.RawMessage(`{`)
-	unusableOutcome := described(refusal("lifecycle.state", "the artifact-server adapter reported no usable outcome", ""))
+	unusableOutcome := described(managedStop("service.outcome-unusable").Fail("the artifact-server adapter reported no usable outcome", ""))
 	settled := lifecycle.RunResult{Outcome: "changed", Evidence: present}
 	for name, test := range map[string]struct {
 		ctx       context.Context
@@ -158,7 +168,7 @@ func TestEveryArtifactServerMutationRefusesWhatItCannotRead(t *testing.T) {
 		"runner error":     {context.Background(), &fakeRunner{err: unreachable}, false, call, reconciliation.OutcomeUnknown, described(unreachable), 1, reconciliation.EffectUnknown},
 		"unusable outcome": {context.Background(), &fakeRunner{result: lifecycle.RunResult{Outcome: "", Evidence: present}}, false, call, reconciliation.OutcomeUnknown, unusableOutcome, 1, reconciliation.EffectCompleted},
 		"other outcome":    {context.Background(), &fakeRunner{result: lifecycle.RunResult{Outcome: "skipped", Evidence: present}}, false, call, reconciliation.OutcomeUnknown, unusableOutcome, 1, reconciliation.EffectCompleted},
-		"no adapter":       {context.Background(), nil, true, call, reconciliation.OutcomeFailed, described(refusal("lifecycle.state", "the artifact-server adapter is not configured", "")), 0, reconciliation.EffectUnknown},
+		"no adapter":       {context.Background(), nil, true, call, reconciliation.OutcomeFailed, described(managedStop("service.unconfigured").Fail("the artifact-server adapter is not configured", "")), 0, reconciliation.EffectUnknown},
 		"cancelled":        {cancelled, &fakeRunner{result: settled}, false, call, reconciliation.OutcomeFailed, described(context.Canceled), 0, reconciliation.EffectUnknown},
 		"malformed":        {context.Background(), &fakeRunner{result: settled}, false, malformed, reconciliation.OutcomeFailed, "", 0, reconciliation.EffectUnknown},
 	} {

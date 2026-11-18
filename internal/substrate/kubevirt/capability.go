@@ -64,7 +64,7 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		return lifecycle.CapabilityPlan{}, err
 	}
 	if input.State == nil {
-		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
+		return lifecycle.CapabilityPlan{}, kubevirtPlanWithoutState.Fail("lifecycle planning requires compiled desired state", "")
 	}
 	catalog := input.State.Effective()
 	requests, err := HostRequests(catalog, input.Controller, input.Context.Name)
@@ -176,7 +176,7 @@ func (c HostCapability) mutation(operation string) lifecycle.Mutation[HostReques
 				Absence:  func(evidence []byte) error { return ValidateHostAbsence(evidence, digest) },
 			}
 		},
-		Unusable: refusal("lifecycle.state", "the KubeVirt provider adapter reported no usable outcome", ""),
+		Unusable: kubevirtOutcomeUnusable.Fail("the KubeVirt provider adapter reported no usable outcome", ""),
 	}
 }
 
@@ -214,7 +214,7 @@ func (c HostCapability) released(ctx context.Context, execution lifecycle.Execut
 		Absent: true, Failures: []string{}, Networks: []NetworkEvidence{}, Postcondition: true, Request: execution.Block.RequestDigest,
 	})
 	if err != nil {
-		return nil, refusal("lifecycle.state", "the KubeVirt provider removal evidence cannot be encoded", "")
+		return nil, kubevirtEvidenceUnencodable.Fail("the KubeVirt provider removal evidence cannot be encoded", "")
 	}
 	return evidence, nil
 }
@@ -271,7 +271,7 @@ func (c HostCapability) prepare(ctx context.Context, execution lifecycle.Executi
 		return HostRequest{}, err
 	}
 	if c.runner == nil {
-		return HostRequest{}, refusal("lifecycle.state", "the KubeVirt provider adapter is not configured", "")
+		return HostRequest{}, kubevirtUnconfigured.Fail("the KubeVirt provider adapter is not configured", "")
 	}
 	return DecodeHostRequest(execution.Block.Request)
 }
@@ -350,7 +350,7 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		return lifecycle.CapabilityPlan{}, err
 	}
 	if input.State == nil {
-		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
+		return lifecycle.CapabilityPlan{}, kubevirtPlanWithoutState.Fail("lifecycle planning requires compiled desired state", "")
 	}
 	requests, err := MachineRequests(input.State.Effective(), input.Controller, input.Context.Name)
 	if err != nil {
@@ -449,7 +449,7 @@ func (c MachineCapability) mutation(operation string) lifecycle.Mutation[Machine
 		Prepare: c.prepare, Run: func(ctx context.Context, execution lifecycle.Execution, _ string, request MachineRequest) (lifecycle.RunResult, error) {
 			return c.run(ctx, execution, operation, request)
 		}, Reading: machineReading,
-		Unusable: refusal("lifecycle.state", "the KubeVirt machine adapter reported no usable outcome", ""),
+		Unusable: kubevirtOutcomeUnusable.Fail("the KubeVirt machine adapter reported no usable outcome", ""),
 		Proved: func(execution lifecycle.Execution, request MachineRequest, result lifecycle.RunResult) error {
 			return samePin(result.Evidence, execution.Block.RequestDigest, execution.ApplyProved, request.Provider)
 		},
@@ -467,7 +467,7 @@ func samePin(data []byte, digest string, records []lifecycle.BlockEvidence, prov
 		return err
 	}
 	if evidence.KubeSystemUID != pinned.KubeSystemUID {
-		return refusal("lifecycle.state", "the KubeVirt machine evidence names another cluster than its provider's proof", "")
+		return kubevirtEvidenceMismatch.Fail("the KubeVirt machine evidence names another cluster than its provider's proof", "")
 	}
 	return nil
 }
@@ -508,7 +508,7 @@ func (c MachineCapability) prepare(ctx context.Context, execution lifecycle.Exec
 		return MachineRequest{}, err
 	}
 	if c.runner == nil {
-		return MachineRequest{}, refusal("lifecycle.state", "the KubeVirt machine adapter is not configured", "")
+		return MachineRequest{}, kubevirtUnconfigured.Fail("the KubeVirt machine adapter is not configured", "")
 	}
 	return DecodeMachineRequest(execution.Block.Request)
 }
@@ -529,7 +529,7 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 		return lifecycle.RunResult{}, err
 	}
 	if execution.ApplyOperation == "" || operation != "observe" && execution.ApplyRegistered == "" {
-		return lifecycle.RunResult{}, refusal("lifecycle.state", "the KubeVirt machine's ownership identity is unavailable", "")
+		return lifecycle.RunResult{}, kubevirtOwnershipUnavailable.Fail("the KubeVirt machine's ownership identity is unavailable", "")
 	}
 	pinned, err := provedHost(execution.ApplyProved, request.Provider)
 	if err != nil {
@@ -538,14 +538,14 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 	pinned.Receipts = []Receipt{}
 	if previous, err := decodeMachineEvidence(execution.PreviousEvidence, execution.Block.RequestDigest); err == nil {
 		if previous.KubeSystemUID != "" && previous.KubeSystemUID != pinned.KubeSystemUID {
-			return lifecycle.RunResult{}, refusal("lifecycle.state", "the host cluster of "+request.Provider+" is not the one this VirtualMachine was realized on",
+			return lifecycle.RunResult{}, kubevirtHostChanged.Fail("the host cluster of "+request.Provider+" is not the one this VirtualMachine was realized on",
 				hostRemedy(request))
 		}
 		pinned.Receipts = previous.Receipts
 	}
 	encoded, err := json.Marshal(pinned)
 	if err != nil {
-		return lifecycle.RunResult{}, refusal("lifecycle.state", "the KubeVirt machine's pinned host cannot be encoded", "")
+		return lifecycle.RunResult{}, kubevirtEvidenceUnencodable.Fail("the KubeVirt machine's pinned host cannot be encoded", "")
 	}
 	materials, release, err := lentAccess(ctx, c.lender, &execution, request.HostCluster, request.KubeconfigRef, request.Namespace, request.Placement, machineDeadline)
 	if err != nil {
@@ -584,7 +584,7 @@ func provedHost(records []lifecycle.BlockEvidence, provider string) (proof, erro
 		evidence, _ := decodeHostEvidence(record.Evidence, record.Block.RequestDigest)
 		return proof{KubeSystemUID: evidence.KubeSystemUID, Server: evidence.Server, StorageClass: evidence.StorageClass}, nil
 	}
-	return proof{}, refusal("lifecycle.state", "the proof of the host cluster of InfraProvider/"+provider+" is not recorded for this operation",
+	return proof{}, kubevirtProofUnrecorded.Fail("the proof of the host cluster of InfraProvider/"+provider+" is not recorded for this operation",
 		"run the apply again so the provider's proof precedes its Machines")
 }
 
@@ -686,7 +686,7 @@ func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Bl
 	}
 	key, ok := ClaimKey(observed.Server, request.Namespace, request.Name)
 	if !ok {
-		return infrastructureservices.HostReservation{}, false, refusal("lifecycle.state", "the KubeVirt machine evidence names no server to claim its VirtualMachine by", "")
+		return infrastructureservices.HostReservation{}, false, kubevirtMachineUnproved.Fail("the KubeVirt machine evidence names no server to claim its VirtualMachine by", "")
 	}
 	return infrastructureservices.HostReservation{Context: contextName, Kind: "substrate-machine", Service: request.Identity.Object, Keys: []string{key}}, true, nil
 }

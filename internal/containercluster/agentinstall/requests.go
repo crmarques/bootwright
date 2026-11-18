@@ -338,14 +338,14 @@ func DecodeInstallRequest(data []byte) (InstallRequest, error) {
 		return InstallRequest{}, err
 	}
 	if request.Budgets.FanOut < 1 || request.Budgets.FanOut > 16 || request.Budgets.RoundMarginSeconds <= 0 {
-		return InstallRequest{}, refusal("lifecycle.state", "the frozen installation has no bounded node rounds", "plan the installation again")
+		return InstallRequest{}, openshiftRequestInvalid.Fail("the frozen installation has no bounded node rounds", "plan the installation again")
 	}
 	for _, node := range request.Nodes {
 		if node.StateReadSeconds <= 0 || node.StateReadSeconds > 3600 || !slices.Contains([]string{"api", "emulated", "physical"}, node.ControllerKind) {
-			return InstallRequest{}, refusal("lifecycle.state", "the frozen installation node has no bounded controller kind", "plan the installation again")
+			return InstallRequest{}, openshiftRequestInvalid.Fail("the frozen installation node has no bounded controller kind", "plan the installation again")
 		}
 		if node.Physical && !validRootProof(node.Hardware) || !node.Physical && node.Hardware != nil || node.Physical != (node.ControllerKind == "physical") {
-			return InstallRequest{}, refusal("lifecycle.state", "the frozen physical installation node has no complete root selector proof", "plan the installation again")
+			return InstallRequest{}, openshiftRequestInvalid.Fail("the frozen physical installation node has no complete root selector proof", "plan the installation again")
 		}
 	}
 	return request, nil
@@ -375,7 +375,7 @@ func validRootProof(hardware *Hardware) bool {
 // block placed anywhere else before an adapter runs.
 func onTheController(placement machineref.Placement, subject string) error {
 	if placement.Machine == "" || placement != (machineref.Placement{Connection: machineref.ConnectionLocal, Machine: placement.Machine}) {
-		return refusal("lifecycle.state", "the frozen "+subject+" request is placed off the controller", "")
+		return openshiftRequestInvalid.Fail("the frozen "+subject+" request is placed off the controller", "")
 	}
 	return nil
 }
@@ -441,10 +441,10 @@ func sortedUnique(values []string) []string {
 
 func validateDelivery(kind string, image Publication, workRoot string) error {
 	if kind != "fetch" && kind != "push" {
-		return refusal("lifecycle.state", "the frozen media delivery kind is unknown", "plan the installation again")
+		return openshiftRequestInvalid.Fail("the frozen media delivery kind is unknown", "plan the installation again")
 	}
 	if kind == "push" && (image.URL != "" || image.Path != workRoot+"/"+ImageFile) {
-		return refusal("lifecycle.state", "pushed media must name only the image in its controller work area", "plan the installation again")
+		return openshiftRequestInvalid.Fail("pushed media must name only the image in its controller work area", "plan the installation again")
 	}
 	return nil
 }

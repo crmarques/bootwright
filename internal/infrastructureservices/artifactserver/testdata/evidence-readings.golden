@@ -1,67 +1,67 @@
 absent:
   apply no-effect: accepted
   removal completed: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   absence: accepted
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  partial: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unfinished: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
 absent, another request:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unfinished: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
 absent, container left:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unfinished: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
 absent, listener left:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unfinished: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
 absent, root left:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unfinished: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
 absent, started after files:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unfinished: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
 absent, unclaimed:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unfinished: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
 absent, unit left:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unfinished: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
 garbage:
   apply unknown: accepted
   removal unknown: accepted
@@ -73,184 +73,184 @@ garbage:
 nothing, unclaimed:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence reports nothing this context owns Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence reports nothing its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server evidence reports nothing this context owns Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server evidence reports nothing its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present:
   apply completed: accepted
   removal no-effect: accepted
   presence: accepted
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves it complete, not partial Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server evidence proves it complete, not partial Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, absent flag:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal left an owned resource behind Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server evidence proves a settled state, not a partial one Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unfinished: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence is an absence form, which reports nothing left to take back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
 present, another certificate:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:an artifact-server listener presented a different certificate than the operation bound Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, another image:
   apply partial: accepted
   removal partial: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server runs an image the plan did not freeze Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server runs an image the plan did not freeze Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unremoved: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   unfinished: accepted
 present, another request:
   apply unknown: accepted
   removal unknown: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unfinished: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence names another request Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
 present, extra listener:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not cover every listener Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, http with a certificate:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:an HTTP artifact-server listener reported a certificate Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, malformed certificate:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:an artifact-server listener supplied no usable certificate fingerprint Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, moved listener:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not match its frozen listeners Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, no certificate:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:an artifact-server listener supplied no usable certificate fingerprint Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, no container:
   apply partial: accepted
   removal partial: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server runs an image the plan did not freeze Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server runs an image the plan did not freeze Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unremoved: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   unfinished: accepted
 present, no content root:
   apply unknown: accepted
   removal partial: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server owns no content root Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence claims a postcondition it does not report Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server owns no content root Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence claims a postcondition it does not report Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   unfinished: accepted
 present, no postcondition:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, no root unclaimed:
   apply partial: accepted
   removal partial: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unremoved: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   unfinished: accepted
 present, no status line:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:an artifact-server listener did not answer with an HTTP status line Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, one listener missing:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not cover every listener Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, renamed listener:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not match its frozen listeners Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, silent:
   apply partial: accepted
   removal no-effect: accepted
   presence: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence does not cover every listener Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, stale and unclaimed:
   apply partial: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, started before files:
   apply unknown: accepted
   removal no-effect: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server started before a file it runs from was last published Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence claims a postcondition it does not report Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server started before a file it runs from was last published Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence claims a postcondition it does not report Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
   unremoved: accepted
-  unfinished: [{Severity:error Code:lifecycle.state Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unfinished: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server still holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
 present, unit failed:
   apply unknown: accepted
   removal partial: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server unit is not active Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  partial: [{Severity:error Code:lifecycle.state Message:the artifact-server evidence claims a postcondition it does not report Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server unit is not active Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  partial: [{Severity:error Code:service.evidence-mismatch Message:the artifact-server evidence claims a postcondition it does not report Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which observes the service again Cause:records Recovery:repeat Certainty:possible}]
+  unremoved: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   unfinished: accepted
 present, unit failed unclaimed:
   apply partial: accepted
   removal partial: accepted
-  presence: [{Severity:error Code:lifecycle.state Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
-  absence: [{Severity:error Code:lifecycle.state Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  presence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server did not reach its postcondition Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
+  absence: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server removal proved no absence Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   partial: accepted
-  unremoved: [{Severity:error Code:lifecycle.state Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation: Cause: Recovery: Certainty:}]
+  unremoved: [{Severity:error Code:service.postcondition-unmet Message:the artifact-server no longer holds everything its removal takes back Source:<nil> Object:<nil> Field: Remediation:repeat the operation, which converges the service Cause:target Recovery:repeat Certainty:possible}]
   unfinished: accepted

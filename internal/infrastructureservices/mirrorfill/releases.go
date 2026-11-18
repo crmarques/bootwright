@@ -85,7 +85,7 @@ func (c ReleaseFill) Requests(catalog api.Catalog, controllerMachine, contextNam
 		return nil, nil
 	}
 	if c.releases == nil {
-		return nil, refusal("lifecycle.state", "mirror planning requires the cluster releases", "")
+		return nil, mirrorPlanningInputMissing.Fail("mirror planning requires the cluster releases", "")
 	}
 	releases, err := c.releases(catalog)
 	if err != nil || len(releases) == 0 {
@@ -132,22 +132,22 @@ func releaseImpacts(verb reconciliation.Verb, request ReleaseRequest) []string {
 
 func releaseRefusals(contextName string, request ReleaseRequest) map[string]error {
 	cluster := diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: ReleaseKind, Name: request.Identity.Cluster}
-	refused := func(code, message, remediation string) error {
-		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: code, Message: message, Remediation: remediation, Object: &cluster}}}
+	refused := func(stop diagnostics.Stop, message, remediation string) error {
+		return refusedOn(&cluster, stop, message, remediation)
 	}
 	machine, repeat := "Machine/"+request.Placement.Machine, "bootwright apply --context "+contextName
 	return map[string]error{
-		"client-unreachable": refused("lifecycle.unknown", machine+" could not read the release's oc or its published checksums from "+request.Client.URL+", so the release was not copied",
+		"client-unreachable": refused(mirrorOriginUnreachable, machine+" could not read the release's oc or its published checksums from "+request.Client.URL+", so the release was not copied",
 			"give "+request.Placement.Machine+" a route to the origins bootwright render acquisitions --context "+contextName+" names, then run "+repeat),
-		"client-digest-mismatch": refused("lifecycle.state", "the oc archive "+machine+" read from "+request.Client.URL+" does not match the SHA-256 its publisher lists, so it was not run",
+		"client-digest-mismatch": refused(mirrorDigestMismatch, "the oc archive "+machine+" read from "+request.Client.URL+" does not match the SHA-256 its publisher lists, so it was not run",
 			"verify the publisher and the route from "+request.Placement.Machine+" to it, then run "+repeat),
-		"release-unreachable": refused("lifecycle.unknown", machine+" could not copy the release "+request.Release.Version+" from "+request.Release.Repository+" into the image mirror at "+request.Mirror.Host,
+		"release-unreachable": refused(mirrorOriginUnreachable, machine+" could not copy the release "+request.Release.Version+" from "+request.Release.Repository+" into the image mirror at "+request.Mirror.Host,
 			"verify that Secret/"+request.PullSecretRef+" holds a quay.io entry that reads the release, that "+request.Placement.Machine+" reaches quay.io and Registry/"+request.Identity.Registry+" answers its credential, then run "+repeat),
-		"release-incomplete": refused("lifecycle.state", "the image mirror at "+request.Mirror.Host+" lacks the release "+request.Release.Version+" or one of its components after the copy, so the cluster would not install from it",
+		"release-incomplete": refused(mirrorReleaseIncomplete, "the image mirror at "+request.Mirror.Host+" lacks the release "+request.Release.Version+" or one of its components after the copy, so the cluster would not install from it",
 			"verify the free space of Registry/"+request.Identity.Registry+"'s storage on "+request.Placement.Machine+", then run "+repeat),
-		"release-digest-mismatch": refused("lifecycle.state", "the image mirror at "+request.Mirror.Host+" holds the release "+request.Release.Tag+" at another digest than the pinned one, so the fill stopped",
+		"release-digest-mismatch": refused(mirrorDigestMismatch, "the image mirror at "+request.Mirror.Host+" holds the release "+request.Release.Tag+" at another digest than the pinned one, so the fill stopped",
 			"verify spec.distribution.release.image on OpenShiftCluster/"+request.Identity.Cluster+" names the release "+request.Release.Version+", then run "+repeat),
-		"mirror-unreadable": refused("lifecycle.unknown", machine+" could not read the image mirror at "+request.Mirror.Host+" with its credential and trust anchor",
+		"mirror-unreadable": refused(mirrorUnreadable, machine+" could not read the image mirror at "+request.Mirror.Host+" with its credential and trust anchor",
 			"verify Registry/"+request.Identity.Registry+" is ready and answers its credential, then run "+repeat),
 	}
 }

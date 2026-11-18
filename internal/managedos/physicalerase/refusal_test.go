@@ -50,6 +50,24 @@ func TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy(t *testing
 	stop := "bootwright machine stop --context lab --name " + machine + " --force"
 	retain := "bootwright destroy --context lab --authorize erase=" + machine + ":retain"
 	custody := "/var/lib/bootwright-hosted/lab/machines/" + machine + "/erase/apply-1"
+	codes := map[string]string{
+		eraseMachineRunning:     "erase.machine-running",
+		eraseIdentityMismatch:   "erase.target-mismatch",
+		eraseHardwareMismatch:   "erase.target-mismatch",
+		eraseTargetUnanswered:   "erase.controller-unanswered",
+		eraseControllerRefused:  "erase.controller-refused",
+		eraseControllerDeadline: "erase.controller-deadline",
+		erasePowerOffUnproved:   "erase.poweroff-unproved",
+		eraseWorkerFailed:       "erase.worker-failed",
+		eraseWorkerUnreachable:  "erase.worker-unreachable",
+		eraseForeignWorker:      "erase.foreign-worker",
+		eraseReceiptTimeout:     "erase.receipt-timeout",
+		eraseForeignCustody:     "erase.custody-mismatch",
+		eraseCustodyDrift:       "erase.custody-mismatch",
+		eraseBootMediaMismatch:  "erase.boot-media-mismatch",
+		eraseImageBuildFailed:   "erase.image-build-failed",
+		eraseInstallNetwork:     "erase.install-network",
+	}
 	for reason, want := range map[string][]string{
 		eraseMachineRunning:     {"is running", stop, destroy},
 		eraseIdentityMismatch:   {"answers as another system", destroy, retain},
@@ -73,8 +91,8 @@ func TestPhysicalEraseNamesEachRefusalWithItsCauseAndTheDestroyRemedy(t *testing
 			capability := New(runner).WithIdentities(&pinReader{pinned: true, identity: machineref.HardwareIdentity{UUID: "example-system"}})
 			result, err := capability.Destroy(context.Background(), execution)
 			found := diagnostics.Of(err)
-			if len(found) != 1 || found[0].Code != "lifecycle.state" || found[0].Object == nil || found[0].Object.Name != machine || result.Outcome != reconciliation.OutcomeFailed {
-				t.Fatalf("refusal %s = %+v (%v), want one failed lifecycle.state of Machine/%s", reason, result, found, machine)
+			if len(found) != 1 || found[0].Code != codes[reason] || found[0].Object == nil || found[0].Object.Name != machine || result.Outcome != reconciliation.OutcomeFailed {
+				t.Fatalf("refusal %s = %+v (%v), want one failed %s of Machine/%s", reason, result, found, codes[reason], machine)
 			}
 			text := found[0].Message + " " + found[0].Remediation
 			for _, part := range want {
@@ -141,7 +159,7 @@ func TestEraseMaterialsTakeTheirNamesFromTheMachinePort(t *testing.T) {
 	if execution.Block.Request, err = request.Canonical(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := capability.Destroy(context.Background(), execution); len(runner.requests) != 1 || len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "lifecycle.state" {
+	if _, err := capability.Destroy(context.Background(), execution); len(runner.requests) != 1 || len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Code != "erase.records-missing" {
 		t.Fatalf("a port naming no password material was not refused before a run: %v", diagnostics.Of(err))
 	}
 }

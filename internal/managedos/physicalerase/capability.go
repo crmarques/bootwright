@@ -48,7 +48,7 @@ func (c Capability) WithMedia(reader installation.MediaRecords) Capability {
 func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
 	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
 	if input.State == nil {
-		return plan, refusal("lifecycle.state", "physical erase planning requires compiled state", "")
+		return plan, stopUnconfigured.Fail("physical erase planning requires compiled state", "")
 	}
 	catalog := input.State.Effective()
 	selected := map[string]api.Object{}
@@ -65,7 +65,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return plan, err
 	}
 	if c.media == nil {
-		return plan, refusal("lifecycle.state", "physical erase requires a media reader", "")
+		return plan, stopUnconfigured.Fail("physical erase requires a media reader", "")
 	}
 	records, err := c.media.MediaRecords(ctx)
 	if err != nil {
@@ -275,7 +275,7 @@ func installationStarted(execution lifecycle.Execution, request EraseRequest) (b
 		}
 		return true, nil
 	}
-	return false, refusal("lifecycle.state", "physical erase has no original installation effect boundary", "restore the original apply records before continuing removal")
+	return false, stopRecordsMissing.Fail("physical erase has no original installation effect boundary", "restore the original apply records before continuing removal")
 }
 
 func installedRootWWN(execution lifecycle.Execution, request EraseRequest) (string, error) {
@@ -289,7 +289,7 @@ func installedRootWWN(execution lifecycle.Execution, request EraseRequest) (stri
 		}
 		return installation.RecordedRootWWN(original, request.Install, request.InstallDigest)
 	}
-	return "", refusal("lifecycle.state", "physical erase has no original installation effect boundary", "restore the original apply records before continuing removal")
+	return "", stopRecordsMissing.Fail("physical erase has no original installation effect boundary", "restore the original apply records before continuing removal")
 }
 
 func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
@@ -306,7 +306,7 @@ func (Capability) RemovesHost(block reconciliation.Block) bool {
 
 func (c Capability) identity(execution lifecycle.Execution, request EraseRequest) (map[string]string, error) {
 	if c.identities == nil {
-		return nil, refusal("lifecycle.state", "physical erase has no original machine identity reader", "")
+		return nil, stopUnconfigured.Fail("physical erase has no original machine identity reader", "")
 	}
 	proofs := execution.ApplyProved
 	if len(proofs) == 0 {
@@ -317,17 +317,17 @@ func (c Capability) identity(execution lifecycle.Execution, request EraseRequest
 		return nil, err
 	}
 	if !found || pin.UUID == "" {
-		return nil, refusal("lifecycle.state", "physical erase requires the original system UUID proof", "restore the original apply records")
+		return nil, stopRecordsMissing.Fail("physical erase requires the original system UUID proof", "restore the original apply records")
 	}
 	return pin.PinValues(""), nil
 }
 
 func (c Capability) run(ctx context.Context, execution lifecycle.Execution, request, effective EraseRequest, operation string) (lifecycle.RunResult, error) {
 	if c.runner == nil {
-		return lifecycle.RunResult{}, refusal("lifecycle.state", "physical erase runner is missing", "")
+		return lifecycle.RunResult{}, stopUnconfigured.Fail("physical erase runner is missing", "")
 	}
 	if operation == "destroy" && execution.PrepareRemoval == nil {
-		return lifecycle.RunResult{}, refusal("lifecycle.state", "physical erase requires durable removal receipt custody before any effect", "continue the original destroy through the lifecycle engine")
+		return lifecycle.RunResult{}, stopCustodyUnavailable.Fail("physical erase requires durable removal receipt custody before any effect", "continue the original destroy through the lifecycle engine")
 	}
 	values, err := c.identity(execution, request)
 	if err != nil {
@@ -335,7 +335,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, requ
 	}
 	install := request.Install
 	if install.Target.Hardware == nil {
-		return lifecycle.RunResult{}, refusal("lifecycle.state", "physical erase has no frozen physical hardware", "restore the original apply records")
+		return lifecycle.RunResult{}, stopRecordsMissing.Fail("physical erase has no frozen physical hardware", "restore the original apply records")
 	}
 	recorded, err := installedRootWWN(execution, request)
 	if err != nil {
@@ -360,11 +360,11 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, requ
 		values["relaxationBase64"] = base64.StdEncoding.EncodeToString([]byte(execution.Block.Relaxation))
 	}
 	if values["applyOperation"] == "" {
-		return lifecycle.RunResult{}, refusal("lifecycle.state", "physical erase has no original apply operation", "")
+		return lifecycle.RunResult{}, stopRecordsMissing.Fail("physical erase has no original apply operation", "")
 	}
 	port := install.Target.MachinePort
 	if port.UserVariable == "" || port.PasswordVariable == "" {
-		return lifecycle.RunResult{}, refusal("lifecycle.state", "the frozen machine port names no controller account material", "")
+		return lifecycle.RunResult{}, stopRecordsMissing.Fail("the frozen machine port names no controller account material", "")
 	}
 	materials := []lifecycle.MaterialFile{
 		{Name: "fleet-id", Part: secrets.PrivateKeyPart, Secret: install.FleetKeyRef, Variable: "fleetIdentity"},
@@ -414,7 +414,7 @@ func eraseLineage(data json.RawMessage, request EraseRequest, execution lifecycl
 	}
 	uuid, err := base64.StdEncoding.DecodeString(encodedUUID)
 	if err != nil || len(uuid) == 0 || !strings.EqualFold(strings.TrimSpace(proof.UUID), strings.TrimSpace(string(uuid))) {
-		return refusal("lifecycle.state", "physical erase receipt has another original machine UUID", "restore the original apply and removal records")
+		return stopEvidenceMismatch.Fail("physical erase receipt has another original machine UUID", "restore the original apply and removal records")
 	}
 	prefix := execution.Operation + "/" + execution.Block.ID + "/"
 	number, found := strings.CutPrefix(proof.OriginalAttempt, prefix)
@@ -425,7 +425,7 @@ func eraseLineage(data json.RawMessage, request EraseRequest, execution lifecycl
 		if next == "" {
 			next = "bootwright destroy --context " + execution.Context
 		}
-		return refusal("lifecycle.state", "physical erase receipt has another removal attempt lineage",
+		return stopReceiptIncomplete.Fail("physical erase receipt has another removal attempt lineage",
 			"run "+next+" again; a removal erases under its own attempt lineage and sets an earlier removal's receipt aside without adopting it")
 	}
 	if err := validateEraseReceipt(&proof, request, execution.Block.RequestDigest); err != nil {
@@ -438,7 +438,7 @@ func eraseLineage(data json.RawMessage, request EraseRequest, execution lifecycl
 			return err
 		}
 		if canonicaljson.Prove(canonical, stored, canonicaljson.Bare) != nil {
-			return refusal("lifecycle.state", "physical erase receipt differs from its durable removal preparation", "restore the original removal records")
+			return stopEvidenceMismatch.Fail("physical erase receipt differs from its durable removal preparation", "restore the original removal records")
 		}
 	}
 	return nil

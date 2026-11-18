@@ -61,7 +61,7 @@ func (c MediaCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		return lifecycle.CapabilityPlan{}, err
 	}
 	if input.State == nil {
-		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
+		return lifecycle.CapabilityPlan{}, openshiftPlanStateMissing.Fail("lifecycle planning requires compiled desired state", "")
 	}
 	requests, _, requirements, err := plannedRequests(input)
 	if err != nil {
@@ -180,7 +180,7 @@ func (c MediaCapability) mutation(operation string, reading func(MediaRequest, s
 		Run: func(ctx context.Context, execution lifecycle.Execution, _ string, request MediaRequest) (lifecycle.RunResult, error) {
 			return c.run(ctx, execution, operation, request)
 		},
-		Unusable: refusal("lifecycle.state", "the boot-media adapter reported no usable outcome", ""),
+		Unusable: openshiftOutcomeUnusable.Fail("the boot-media adapter reported no usable outcome", ""),
 	}
 }
 
@@ -277,7 +277,7 @@ func (c MediaCapability) prepare(ctx context.Context, execution lifecycle.Execut
 		return MediaRequest{}, err
 	}
 	if c.runner == nil {
-		return MediaRequest{}, refusal("lifecycle.state", "the boot-media adapter is not configured", "")
+		return MediaRequest{}, openshiftAdapterUnconfigured.Fail("the boot-media adapter is not configured", "")
 	}
 	return DecodeMediaRequest(execution.Block.Request)
 }
@@ -384,7 +384,7 @@ func (c MediaCapability) publicHalf(execution lifecycle.Execution, reference str
 			lifecycle.ReopenBindings(execution.Context, execution.Continuation))
 	}
 	if c.authorizedKey == nil {
-		return "", refusal("lifecycle.state", "the public-key reader is not configured", "")
+		return "", openshiftAdapterUnconfigured.Fail("the public-key reader is not configured", "")
 	}
 	return c.authorizedKey(material, reference)
 }

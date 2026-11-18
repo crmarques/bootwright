@@ -1279,9 +1279,9 @@ argument, an environment variable, the evidence or a log.
 Both frozen requests carry the controller arm alone: connection `local` and the
 controller Machine's name, with no other placement field, the only placement
 planning produces because [the image is built on the controller](#boot-media).
-Either decoder refuses any other placement with `lifecycle.state`, so apply,
-destroy, observation and removal planning each refuse such a block before an
-adapter runs, and no run carries a placement's identity or host key.
+Either decoder refuses any other placement with `openshift.request-invalid`, so
+apply, destroy, observation and removal planning each refuse such a block
+before an adapter runs, and no run carries a placement's identity or host key.
 
 Selected FIPS clusters project `fips: true` and use the exact release's
 publisher-verified RHEL 9 `openshift-install-fips` executable. Controller

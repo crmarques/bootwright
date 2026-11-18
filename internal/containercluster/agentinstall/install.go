@@ -51,7 +51,7 @@ func (c InstallCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		return lifecycle.CapabilityPlan{}, err
 	}
 	if input.State == nil {
-		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
+		return lifecycle.CapabilityPlan{}, openshiftPlanStateMissing.Fail("lifecycle planning requires compiled desired state", "")
 	}
 	_, requests, requirements, err := plannedRequests(input)
 	if err != nil {
@@ -232,7 +232,7 @@ func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execu
 	outcome, usable := result.Outcome, result.Outcome.Settled()
 	if !usable {
 		lifecycle.ClearProduced(result.Produced)
-		return unknown, refusal("lifecycle.state", "the installation adapter reported no usable outcome", "")
+		return unknown, openshiftOutcomeUnusable.Fail("the installation adapter reported no usable outcome", "")
 	}
 	digest := execution.Block.RequestDigest
 	if operation == "apply" {
@@ -367,7 +367,7 @@ func (c InstallCapability) prepare(ctx context.Context, execution lifecycle.Exec
 		return InstallRequest{}, err
 	}
 	if c.runner == nil {
-		return InstallRequest{}, refusal("lifecycle.state", "the installation adapter is not configured", "")
+		return InstallRequest{}, openshiftAdapterUnconfigured.Fail("the installation adapter is not configured", "")
 	}
 	request, err := DecodeInstallRequest(execution.Block.Request)
 	if err != nil {
@@ -499,7 +499,7 @@ func (c InstallCapability) lendHosted(ctx context.Context, execution *lifecycle.
 		later := time.Duration(len(hosts)-len(names)-1) * substrate.KubeVirtLendBound
 		if c.access == nil {
 			release()
-			return nil, func() {}, refusal("lifecycle.state", "the lender of host cluster "+node.Controller.HostCluster+"'s access is not configured", "")
+			return nil, func() {}, openshiftAdapterUnconfigured.Fail("the lender of host cluster "+node.Controller.HostCluster+"'s access is not configured", "")
 		}
 		material, back, err := c.access.LendHostAccess(ctx, *execution, node.Controller.HostCluster, substrate.KubeVirtNamespace(node.Controller.Endpoint), request.Placement, request.Deadline()+later)
 		if err != nil {
@@ -563,7 +563,7 @@ func (c InstallCapability) pinValues(execution lifecycle.Execution, operation st
 			continue
 		}
 		if c.identities == nil {
-			return nil, refusal("lifecycle.state", "the reader of Machine/"+node.Machine+"'s pinned identity is not configured", "")
+			return nil, openshiftAdapterUnconfigured.Fail("the reader of Machine/"+node.Machine+"'s pinned identity is not configured", "")
 		}
 		proved := execution.Proved
 		if pinnedPort && len(execution.ApplyProved) != 0 {
@@ -574,12 +574,12 @@ func (c InstallCapability) pinValues(execution lifecycle.Execution, operation st
 			return nil, err
 		}
 		if node.Hardware != nil && node.Hardware.RootVolumeRef != nil && (!pinned || !node.Hardware.RootVolumeRef.Matches(pin.RootVolume)) {
-			return nil, refusal("lifecycle.state", "the existing root volume has no matching durable Machine proof", "apply the Machine stage before building and installing")
+			return nil, openshiftMachineProofMissing.Fail("the existing root volume has no matching durable Machine proof", "apply the Machine stage before building and installing")
 		}
 		if pinned {
 			maps.Copy(values, pin.PinValues(nodeVariable(index)))
 		} else if pinnedPort && operation == "apply" {
-			return nil, refusal("lifecycle.state", "Machine/"+node.Machine+"'s machine block recorded no identity its port is pinned to in this operation, so no entry point of that port can prove it",
+			return nil, openshiftMachineProofMissing.Fail("Machine/"+node.Machine+"'s machine block recorded no identity its port is pinned to in this operation, so no entry point of that port can prove it",
 				"run bootwright apply --context "+execution.Context+" so the Machine's block records them")
 		}
 	}

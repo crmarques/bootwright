@@ -95,7 +95,7 @@ func relaxedRequest(request EraseRequest, relaxation string) (EraseRequest, erro
 		request.Targets = effectiveTargets(request, relaxation)
 		return request, nil
 	}
-	return EraseRequest{}, refusal("lifecycle.state", "physical erase block carries the relaxation "+relaxation+", which this build does not perform", "restore the original removal records")
+	return EraseRequest{}, stopRecordsMissing.Fail("physical erase block carries the relaxation "+relaxation+", which this build does not perform", "restore the original removal records")
 }
 
 func eraseMACs(request EraseRequest) []string {
@@ -125,10 +125,10 @@ func waivedProof(request EraseRequest, digest string) EraseReceipt {
 
 func (c Capability) withdraw(ctx context.Context, execution lifecycle.Execution, request EraseRequest, operation string) (lifecycle.RunResult, error) {
 	if c.runner == nil {
-		return lifecycle.RunResult{}, refusal("lifecycle.state", "physical erase runner is missing", "")
+		return lifecycle.RunResult{}, stopUnconfigured.Fail("physical erase runner is missing", "")
 	}
 	if execution.ApplyOperation == "" {
-		return lifecycle.RunResult{}, refusal("lifecycle.state", "physical erase has no original apply operation", "")
+		return lifecycle.RunResult{}, stopRecordsMissing.Fail("physical erase has no original apply operation", "")
 	}
 	canonical, err := request.Canonical()
 	if err != nil {
@@ -152,7 +152,7 @@ func (c Capability) destroyWaived(ctx context.Context, execution lifecycle.Execu
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
 	if !waivedRetention(result.Evidence, execution.Block.RequestDigest) {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, refusal("lifecycle.state", "physical erase waiver did not prove its leftover private publication and boot-private custody withdrawn", "continue the same destroy")
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, stopReceiptIncomplete.Fail("physical erase waiver did not prove its leftover private publication and boot-private custody withdrawn", "continue the same destroy")
 	}
 	return lifecycle.Result{Outcome: reconciliation.OutcomeChanged, Evidence: result.Evidence}, nil
 }

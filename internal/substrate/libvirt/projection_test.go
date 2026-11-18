@@ -262,7 +262,7 @@ func TestMachineProjectionRefusesEvidenceItDoesNotOwn(t *testing.T) {
 			damage(&evidence)
 			projections, err := project(t, labCatalog(), projectionRequest(t), encode(t, evidence))
 			reported := diagnostics.Of(err)
-			if projections != nil || len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+			if projections != nil || len(reported) != 1 || reported[0].Code != "libvirt.evidence-mismatch" ||
 				reported[0].Message != "the machine evidence does not prove this context's domain" {
 				t.Fatalf("project = %+v, %+v", projections, reported)
 			}
@@ -296,7 +296,7 @@ func TestMachineProjectionRefusesAMachineTheAppliedRevisionDoesNotPlace(t *testi
 		t.Run(name, func(t *testing.T) {
 			projections, err := project(t, catalog, projectionRequest(t), projectionEvidence(t, "root-only"))
 			reported := diagnostics.Of(err)
-			if projections != nil || len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+			if projections != nil || len(reported) != 1 || reported[0].Code != "libvirt.records-missing" ||
 				reported[0].Message != "the applied revision does not place Machine/rhel-01 on a libvirt profile" {
 				t.Fatalf("project = %+v, %+v", projections, reported)
 			}

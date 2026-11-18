@@ -48,7 +48,7 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		return lifecycle.CapabilityPlan{}, err
 	}
 	if input.State == nil {
-		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
+		return lifecycle.CapabilityPlan{}, libvirtRequestInvalid.Fail("lifecycle planning requires compiled desired state", "")
 	}
 	requests, err := HostRequests(input.State.Effective(), input.Controller, input.Context.Name)
 	if err != nil {
@@ -177,7 +177,7 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		return lifecycle.CapabilityPlan{}, err
 	}
 	if input.State == nil {
-		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
+		return lifecycle.CapabilityPlan{}, libvirtRequestInvalid.Fail("lifecycle planning requires compiled desired state", "")
 	}
 	catalog := input.State.Effective()
 	requests, err := MachineRequests(catalog, input.Controller, input.Context.Name)
@@ -322,7 +322,7 @@ func (c HostCapability) mutation(operation string) lifecycle.Mutation[HostReques
 		Prepare: c.prepare, Run: func(ctx context.Context, execution lifecycle.Execution, _ string, request HostRequest) (lifecycle.RunResult, error) {
 			return c.run(ctx, execution, operation, request)
 		}, Reading: hostReading,
-		Unusable: refusal("lifecycle.state", "the provider host adapter reported no usable outcome", ""),
+		Unusable: libvirtOutcomeUnusable.Fail("the provider host adapter reported no usable outcome", ""),
 	}
 }
 
@@ -367,7 +367,7 @@ func (c HostCapability) prepare(ctx context.Context, execution lifecycle.Executi
 		return HostRequest{}, err
 	}
 	if c.runner == nil {
-		return HostRequest{}, refusal("lifecycle.state", "the provider host adapter is not configured", "")
+		return HostRequest{}, libvirtUnconfigured.Fail("the provider host adapter is not configured", "")
 	}
 	return DecodeHostRequest(execution.Block.Request)
 }
@@ -412,7 +412,7 @@ func (c MachineCapability) mutation(operation string) lifecycle.Mutation[Machine
 		Prepare: c.prepare, Run: func(ctx context.Context, execution lifecycle.Execution, _ string, request MachineRequest) (lifecycle.RunResult, error) {
 			return c.run(ctx, execution, operation, request)
 		}, Reading: machineReading,
-		Unusable: refusal("lifecycle.state", "the machine adapter reported no usable outcome", ""),
+		Unusable: libvirtOutcomeUnusable.Fail("the machine adapter reported no usable outcome", ""),
 	}
 }
 
@@ -453,7 +453,7 @@ func (c MachineCapability) prepare(ctx context.Context, execution lifecycle.Exec
 		return MachineRequest{}, err
 	}
 	if c.runner == nil {
-		return MachineRequest{}, refusal("lifecycle.state", "the machine adapter is not configured", "")
+		return MachineRequest{}, libvirtUnconfigured.Fail("the machine adapter is not configured", "")
 	}
 	return DecodeMachineRequest(execution.Block.Request)
 }

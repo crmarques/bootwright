@@ -1255,18 +1255,18 @@ here.
 
 A reported `UUID` and `SerialNumber` are recorded without their surrounding
 space, and each must then be at most 128 characters, every one of them
-printable: a letter, mark, number, punctuation, symbol or the ASCII space, by
-Go `unicode.IsPrint` and Python `str.isprintable`, the rule the CLI's
-[safe display text](cli/output.md#json-output) escapes by. One that is
-longer, or holds any other character, a control, a space other than U+0020 or
-a format character such as a bidi override, a zero-width space or a
-byte-order mark, refuses `lifecycle.state` naming the field and the BMC
-endpoint, never the value, because a pin carries that identity into every later
-comparison and refusal. The adapter that publishes the proof and the decoder
-that accepts it each apply the rule, and so does every reading of a recorded
-proof, so a pin never holds such a character; a recorded proof that breaks it
-refuses naming the Machine and the field. `Manufacturer` and `Model` are only
-trimmed and bounded to 128 characters, because nothing compares or prints them.
+printable: a letter, mark, number, punctuation, symbol or the ASCII space, by Go
+`unicode.IsPrint` and Python `str.isprintable`, the rule the CLI's [safe display
+text](cli/output.md#json-output) escapes by. One that is longer, or holds any
+other character, a control, a space other than U+0020 or a format character such
+as a bidi override, a zero-width space or a byte-order mark, refuses
+`baremetal.controller-report-incomplete` naming the field and the BMC endpoint,
+never the value, because a pin carries that identity into every later comparison
+and refusal. The adapter that publishes the proof and the decoder that accepts
+it each apply the rule, and so does every reading of a recorded proof, so a pin
+never holds such a character; a recorded proof that breaks it refuses naming the
+Machine and the field. `Manufacturer` and `Model` are only trimmed and bounded
+to 128 characters, because nothing compares or prints them.
 
 This proof is what the [installation](managed-os.md#physical-installation)
 relies on before it erases a disk, and it is deliberately stricter than a name
@@ -1302,7 +1302,7 @@ that set ([D252](milestones/backlog.md#d252) (2), widened by
 [D253](milestones/backlog.md#d253);
 `TestTwoSpellingsOfOneUUIDLessServerConflict`). A claim whose `bmc:` key,
 `bmc-system:` key and MAC keys would exceed the 64 keys one reservation holds
-refuses `lifecycle.state` naming the Machine's `nics`
+refuses `baremetal.claim-unnameable` naming the Machine's `nics`
 (`TestAProvedClaimRefusesMoreMACsThanOneReservationHolds`). Two contexts of one controller
 store that both drive one server by its BMC therefore never drive it at once:
 the second registration refuses, and so does a
@@ -1339,7 +1339,7 @@ proof claims one exclusive, unqualified `bmc-mac:<mac>` key per address, in
 colon-separated lower-case form, before any block placed on the Machine
 starts, and a fresh apply keeps the keys its held claim proved; a host
 reporting no such address claims nothing and warns `substrate.unclaimed-server`
-naming the Machine, and one reporting more than 64 refuses `lifecycle.state`. Either context's claim therefore refuses
+naming the Machine, and one reporting more than 64 refuses `baremetal.claim-unnameable`. Either context's claim therefore refuses
 `controller.conflict` while the other holds the server, under any spelling of
 its BMC address or of a declared MAC
 (`TestAnSSHReachedServerAndItsBMCDriverConflictInEitherOrder`). A guest

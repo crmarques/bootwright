@@ -31,7 +31,7 @@ func (c Capability) AutomaticPreparation(ctx context.Context, input lifecycle.Pl
 	var pending, targets []string
 	for _, r := range requests {
 		if input.AppliedEvidence == nil {
-			return nil, refusal("lifecycle.state", "automatic preparation has no ownership reader", "")
+			return nil, discoveryUnconfigured.Fail("automatic preparation has no ownership reader", "")
 		}
 		owned, err := input.AppliedEvidence(ctx, installation.Kind, r.Identity.Object)
 		if err != nil {
@@ -59,7 +59,7 @@ func (c Capability) AutomaticPreparation(ctx context.Context, input lifecycle.Pl
 
 func (c Capability) ValidatePreparation(ctx context.Context, input lifecycle.PlanInput, scope reconciliation.PreparationScope) error {
 	if input.State == nil || input.AppliedEvidence == nil {
-		return refusal("lifecycle.state", "disk discovery needs compiled state and durable ownership", "")
+		return discoveryUnconfigured.Fail("disk discovery needs compiled state and durable ownership", "")
 	}
 	for _, name := range scope.Targets {
 		m, found := input.State.Effective().Find(api.Machine, name)
@@ -72,7 +72,7 @@ func (c Capability) ValidatePreparation(ctx context.Context, input lifecycle.Pla
 		}
 		for _, record := range owned {
 			if installation.IsInstallation(record.Implementation) || physicalerase.IsErase(record.Implementation) {
-				return refusal("lifecycle.state", "Machine/"+name+" already has installation ownership and cannot be booted for discovery", "retain the existing installation or remove it through its recorded lifecycle first")
+				return discoveryMachineInstalled.Fail("Machine/"+name+" already has installation ownership and cannot be booted for discovery", "retain the existing installation or remove it through its recorded lifecycle first")
 			}
 		}
 	}
@@ -95,7 +95,7 @@ func (c Capability) ValidatePreparation(ctx context.Context, input lifecycle.Pla
 			if !slices.ContainsFunc(owned, func(record lifecycle.BlockEvidence) bool {
 				return record.Verb == reconciliation.Apply && record.State == reconciliation.BlockDone
 			}) {
-				return refusal("lifecycle.state", "discovery prerequisites are not applied for Machine/"+r.Identity.Object, "repeat bootwright machine discover with --prepare-prerequisites to review and confirm controller and infrastructure setup")
+				return discoveryPrerequisitesMissing.Fail("discovery prerequisites are not applied for Machine/"+r.Identity.Object, "repeat bootwright machine discover with --prepare-prerequisites to review and confirm controller and infrastructure setup")
 			}
 		}
 	}
@@ -118,7 +118,7 @@ func (c Capability) AdvancePreparation(ctx context.Context, input lifecycle.Prep
 		}
 		m, found := input.State.Effective().Find(api.Machine, r.Identity.Object)
 		if found && discoveryMachine(m) && r.DiscoveryProof == nil {
-			return refusal("lifecycle.state", "installation addition has no frozen discovery proof", "")
+			return discoveryRecordsMissing.Fail("installation addition has no frozen discovery proof", "")
 		}
 	}
 	return ctx.Err()
@@ -126,7 +126,7 @@ func (c Capability) AdvancePreparation(ctx context.Context, input lifecycle.Prep
 
 func (c Capability) refinement(before, after api.Catalog, owned reconciliation.Plan, inventory func(string) ([]diskselection.Disk, error)) error {
 	refused := func() error {
-		return refusal("lifecycle.state", "only root-discovery policy and unowned storage-device refinements may follow preparation", "keep prepared ownership unchanged and update only the disk-selection fields")
+		return discoveryRefinementRefused.Fail("only root-discovery policy and unowned storage-device refinements may follow preparation", "keep prepared ownership unchanged and update only the disk-selection fields")
 	}
 	if len(before.Objects()) != len(after.Objects()) {
 		return refused()
@@ -187,7 +187,7 @@ func (c Capability) refinementInventory(ctx context.Context, input lifecycle.Pre
 	return func(name string) ([]diskselection.Disk, error) {
 		controller, err := lifecycle.ControllerMachine(input.State.Effective())
 		if err != nil || input.AppliedEvidence == nil {
-			return nil, refusal("lifecycle.state", "disk refinement has no original inventory reader", "")
+			return nil, discoveryUnconfigured.Fail("disk refinement has no original inventory reader", "")
 		}
 		if _, err := c.Roots(ctx, lifecycle.PlanInput{Context: input.Context, State: input.State, Controller: controller, AppliedEvidence: input.AppliedEvidence}); err != nil {
 			return nil, err
@@ -198,7 +198,7 @@ func (c Capability) refinementInventory(ctx context.Context, input lifecycle.Pre
 		}
 		inventory, found, err := RecordedInventory(name, records)
 		if err != nil || !found {
-			return nil, refusal("lifecycle.state", "disk refinement has no matching original inventory", "")
+			return nil, discoveryRecordsMissing.Fail("disk refinement has no matching original inventory", "")
 		}
 		return inventory.Disks, nil
 	}

@@ -60,7 +60,7 @@ func DecodeImagesRequest(data []byte) (ImagesRequest, error) {
 }
 
 func (r ImagesRequest) validate() error {
-	invalid := refusal("lifecycle.state", "the frozen mirror images request names an image it could not copy by digest into its mirror", "destroy it with the build that applied it")
+	invalid := mirrorRequestInvalid.Fail("the frozen mirror images request names an image it could not copy by digest into its mirror", "destroy it with the build that applied it")
 	mirror := r.Mirror
 	if len(r.Images) == 0 || len(r.Images) > MaxImages || r.Identity.Environment == "" || r.Identity.Registry == "" || !mirrorHostPattern.MatchString(mirror.Host) ||
 		mirror.CredentialsRef == "" || mirror.CredentialsType != "usernamePassword" || mirror.TrustBundleRef == "" {

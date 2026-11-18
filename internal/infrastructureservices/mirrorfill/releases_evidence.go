@@ -31,14 +31,14 @@ func decodeReleaseEvidence(data []byte, digest string) (ReleaseEvidence, error) 
 		return ReleaseEvidence{}, err
 	}
 	if evidence.Request != digest || evidence.Version != ReleaseEvidenceVersion {
-		return ReleaseEvidence{}, refusal("lifecycle.state", "mirror release evidence names another request or version", "")
+		return ReleaseEvidence{}, mirrorEvidenceMismatch.Fail("mirror release evidence names another request or version", "")
 	}
 	if len(evidence.Components) > MaxComponents || evidence.Missing < 0 || evidence.Missing > MaxComponents || evidence.Digest != "" && !imageDigestPattern.MatchString(evidence.Digest) {
-		return ReleaseEvidence{}, refusal("lifecycle.state", "mirror release evidence names a component or digest outside its bounds", "")
+		return ReleaseEvidence{}, mirrorEvidenceMismatch.Fail("mirror release evidence names a component or digest outside its bounds", "")
 	}
 	for _, component := range evidence.Components {
 		if !componentNamePattern.MatchString(component.Name) || len(component.Name) > 128 || !imageDigestPattern.MatchString(component.Digest) {
-			return ReleaseEvidence{}, refusal("lifecycle.state", "mirror release evidence names a component or digest outside its bounds", "")
+			return ReleaseEvidence{}, mirrorEvidenceMismatch.Fail("mirror release evidence names a component or digest outside its bounds", "")
 		}
 	}
 	return evidence, nil
@@ -64,7 +64,7 @@ func releaseEffect(evidence ReleaseEvidence, request ReleaseRequest, removal boo
 
 func releaseDrift(evidence ReleaseEvidence, request ReleaseRequest) error {
 	if evidence.Digest != "" && request.Release.Digest != "" && evidence.Digest != request.Release.Digest {
-		return refusal("lifecycle.state", "the image mirror holds the release "+request.Release.Tag+" at "+evidence.Digest+", not the pinned "+request.Release.Digest, "")
+		return mirrorDrift.Fail("the image mirror holds the release "+request.Release.Tag+" at "+evidence.Digest+", not the pinned "+request.Release.Digest, "")
 	}
-	return refusal("lifecycle.state", "the image mirror reports its release copy released beside a release it holds", "")
+	return mirrorDrift.Fail("the image mirror reports its release copy released beside a release it holds", "")
 }
