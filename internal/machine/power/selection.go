@@ -23,11 +23,11 @@ type realizations func(name string) (machine.OwnershipState, bool, error)
 // the Machine to a proved identity first, never what the adapter is asked.
 func requestFor(catalog api.Catalog, contextName, name string, verb Verb, force bool, realized realizations) (Request, bool, bool, error) {
 	if !slices.Contains([]Verb{Start, Stop, Restart, EjectMedia}, verb) {
-		return Request{}, false, false, failure("lifecycle.state", "unsupported power verb", "")
+		return Request{}, false, false, powerRequestInvalid.Fail("unsupported power verb", "")
 	}
 	context, valid := api.ParseContextName(contextName)
 	if !valid {
-		return Request{}, false, false, failure("lifecycle.state", "the context name is not a lowercase DNS label", "")
+		return Request{}, false, false, powerRequestInvalid.Fail("the context name is not a lowercase DNS label", "")
 	}
 	if err := undeclared(catalog, contextName, []string{name}); err != nil {
 		return Request{}, false, false, err

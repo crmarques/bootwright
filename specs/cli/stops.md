@@ -159,3 +159,14 @@ The managed OS host firewall capability's stops (`internal/managedos/hostfirewal
 | `firewall.records-missing` | block | none | records | - | abandon-context | the host firewall block names no apply its evidence came from | restore the context store from a backup |
 | `firewall.evidence-mismatch` | block | possible | records | - | repeat | the host firewall evidence names another request or version than the block froze | repeat the operation, which observes the firewall again |
 | `firewall.unproved` | block | unproved | target | - | repeat | the host firewall adapter ended without proving its postcondition | repeat the operation, which observes the firewall before anything else starts |
+
+### Machine power stops
+
+The Machine power and media eject capability's stops (`internal/machine/power`).
+
+| Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `power.request-invalid` | adapter-run | none | input | - | fix-then-repeat | the power request names a verb or context the command does not take, so nothing was sent | repeat the command with a supported verb and context |
+| `power.identity-changed` | adapter-run | none | target | - | fix-then-repeat | the management controller answers as another system than the one the context's apply proved, so no power request was sent | correct the Machine's BMC or provider, or take back and apply the context again |
+| `power.evidence-mismatch` | adapter-run | possible | defect | - | repeat | the power or eject evidence names another request, Machine or survey, or a state the command cannot name | repeat the command; report the message if it stops the same way |
+| `power.unproved` | adapter-run | unproved | target | - | repeat | the management controller did not prove the power or media state the command asked for | read the power state again with bootwright machine status, then repeat the command |

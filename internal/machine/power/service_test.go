@@ -618,7 +618,7 @@ func TestAProvedMachineCarriesItsIdentityToTheAdapter(t *testing.T) {
 // controller reported. A run with no pin can name no refusal at all.
 func TestAPinnedRunRefusesAnotherSystemNamingTheMachineAndTheRemedy(t *testing.T) {
 	want := []diagnostics.Diagnostic{{
-		Severity: "error", Code: "lifecycle.state",
+		Severity: "error", Code: "power.identity-changed", Certainty: diagnostics.CertaintyNone, Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
 		Message: "the management controller at https://bmc.example.test/redfish/v1/Systems/1 answers as another system " +
 			"than the one this context's current apply proved, so no power request was sent",
 		Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "Machine", Name: "metal"},
@@ -917,12 +917,12 @@ func TestEjectEvidenceIsAcceptedOnlyForADeviceReadBackEmpty(t *testing.T) {
 		evidence Evidence
 		code     string
 	}{
-		{"still presenting", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Media: MediaPresent, PreviousMedia: MediaPresent, Request: "digest"}, "lifecycle.unknown"},
-		{"unproved", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Media: MediaUnknown, PreviousMedia: MediaPresent, Request: "digest"}, "lifecycle.unknown"},
-		{"no media read", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Request: "digest"}, "lifecycle.state"},
-		{"another value", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Media: "own", PreviousMedia: MediaPresent, Request: "digest"}, "lifecycle.unknown"},
-		{"no postcondition", Evidence{Machine: "guest", Power: machine.PowerOn, Media: MediaNone, PreviousMedia: MediaPresent, Request: "digest"}, "lifecycle.unknown"},
-		{"no power", Evidence{Machine: "guest", Postcondition: true, Media: MediaNone, PreviousMedia: MediaPresent, Request: "digest"}, "lifecycle.unknown"},
+		{"still presenting", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Media: MediaPresent, PreviousMedia: MediaPresent, Request: "digest"}, "power.unproved"},
+		{"unproved", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Media: MediaUnknown, PreviousMedia: MediaPresent, Request: "digest"}, "power.unproved"},
+		{"no media read", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Request: "digest"}, "power.evidence-mismatch"},
+		{"another value", Evidence{Machine: "guest", Postcondition: true, Power: machine.PowerOn, Media: "own", PreviousMedia: MediaPresent, Request: "digest"}, "power.unproved"},
+		{"no postcondition", Evidence{Machine: "guest", Power: machine.PowerOn, Media: MediaNone, PreviousMedia: MediaPresent, Request: "digest"}, "power.unproved"},
+		{"no power", Evidence{Machine: "guest", Postcondition: true, Media: MediaNone, PreviousMedia: MediaPresent, Request: "digest"}, "power.unproved"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := validate(encode(t, test.evidence), request, "digest")

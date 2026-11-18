@@ -68,7 +68,7 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, rea
 	pinned func(string) (machine.HardwareIdentity, error)) ([]ReadSurvey, error) {
 	context, valid := api.ParseContextName(contextName)
 	if !valid {
-		return nil, failure("lifecycle.state", "the context name is not a lowercase DNS label", "")
+		return nil, powerRequestInvalid.Fail("the context name is not a lowercase DNS label", "")
 	}
 	controllerMachine, err := lifecycle.ControllerMachine(catalog)
 	if err != nil {

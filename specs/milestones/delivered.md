@@ -17770,3 +17770,16 @@ the composed catalog test now holds every package's stop to its row field by
 field, so a capability's stops need no test of their own. The host firewall
 leaves the ledger. Guarded by `TestEveryCatalogedStopIsComposedAndExplained`
 and the package's tests.
+
+## X616 — Machine power's failures are stops
+
+### B1607
+
+Under [D276](backlog.md#d276) (audit 006 W2.3), split from
+[B1563](m1.md#b1563). Machine power and media eject's 17 lifecycle sites raise
+four [machine power stops](../cli/stops.md#machine-power-stops): an invalid
+request, a management controller that answers as another system, evidence
+that names another request or a state the command cannot name, and a power or
+media state the controller did not prove, which keeps its run unknown. Power
+leaves the ledger. Guarded by `TestEveryCatalogedStopIsComposedAndExplained`
+and the package's tests.

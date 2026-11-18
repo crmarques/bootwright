@@ -222,7 +222,7 @@ func TestAnUnresolvableTargetOrVerbRefuses(t *testing.T) {
 	if remedy := diagnostics.Of(err)[0].Remediation; remedy != "declare spec.hardware.bmc on Machine/controller, or place it on a provider that emulates a management controller" {
 		t.Fatalf("a Machine with no controller remedy = %q", remedy)
 	}
-	if _, _, _, err := requestFor(catalog(), "lab", "guest", "suspend", false, realized()); code(t, err) != "lifecycle.state" {
+	if _, _, _, err := requestFor(catalog(), "lab", "guest", "suspend", false, realized()); code(t, err) != "power.request-invalid" {
 		t.Fatalf("unsupported verb: %v", err)
 	}
 }

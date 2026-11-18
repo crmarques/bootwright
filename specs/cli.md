@@ -1685,7 +1685,7 @@ as settled.
 
 A physical Machine whose [pin](substrates.md#physical-machine-realization) the
 apply behind the current operation recorded is held to it: a management controller
-reporting another identity refuses `lifecycle.state` with exit `1` before any power request. The
+reporting another identity refuses `power.identity-changed` with exit `1` before any power request. The
 adapter names that refusal to its runner before it fails, so the diagnostic's
 object is the Machine, its message names the management controller endpoint and
 that it answers as another system, and its remedy is to correct the Machine's

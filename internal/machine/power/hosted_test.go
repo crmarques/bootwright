@@ -227,7 +227,7 @@ func TestASwappedClusterOrForeignVirtualMachineRefusesEveryHostedVerb(t *testing
 			_, err := hostedService(&boundary{}, runner, access).converge(context.Background(),
 				PowerRequest{ContextName: "lab", Names: []string{"node-0"}, Verb: verb, Force: force, SkipConfirmation: true})
 			found := diagnostics.Of(err)
-			if len(found) != 1 || found[0].Code != "lifecycle.state" || !strings.Contains(found[0].Remediation, "hostClusterRef") ||
+			if len(found) != 1 || found[0].Code != "power.identity-changed" || !strings.Contains(found[0].Remediation, "hostClusterRef") ||
 				strings.Contains(found[0].Remediation, "bmc.address") || found[0].Object == nil || found[0].Object.Name != "node-0" {
 				t.Fatalf("%s (force %t) refused %+v (%v)", verb, force, found, err)
 			}

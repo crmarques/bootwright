@@ -33,10 +33,10 @@ func validate(data []byte, request Request, digest string) (Evidence, error) {
 		return Evidence{}, err
 	}
 	if evidence.Request != digest {
-		return Evidence{}, failure("lifecycle.state", "the power evidence names another request", "")
+		return Evidence{}, powerEvidenceMismatch.Fail("the power evidence names another request", "")
 	}
 	if evidence.Machine != request.Identity.Object {
-		return Evidence{}, failure("lifecycle.state", "the power evidence names another Machine", "")
+		return Evidence{}, powerEvidenceMismatch.Fail("the power evidence names another Machine", "")
 	}
 	command := powerCommand(string(request.Identity.Context), request)
 	if request.Verb == EjectMedia {
@@ -45,26 +45,26 @@ func validate(data []byte, request Request, digest string) (Evidence, error) {
 	reread := "once its BMC answers, read its power state with bootwright machine list --context " + string(request.Identity.Context) +
 		" --power-status, and repeat " + command + " if it is not " + expected(request.Verb)
 	if !evidence.Postcondition {
-		return Evidence{}, failure("lifecycle.unknown", "the management controller did not prove the power state this operation asked for", reread)
+		return Evidence{}, powerUnproved.Fail("the management controller did not prove the power state this operation asked for", reread)
 	}
 	if !slices.Contains([]string{machine.PowerOn, machine.PowerOff}, evidence.Power) {
-		return Evidence{}, failure("lifecycle.unknown", "the management controller reported no usable power state", reread)
+		return Evidence{}, powerUnproved.Fail("the management controller reported no usable power state", reread)
 	}
 	if evidence.Media != "" || evidence.PreviousMedia != "" {
-		return Evidence{}, failure("lifecycle.state", "the power evidence reports media a power verb never reads", "")
+		return Evidence{}, powerEvidenceMismatch.Fail("the power evidence reports media a power verb never reads", "")
 	}
 	if evidence.Power != expected(request.Verb) {
-		return Evidence{}, failure("lifecycle.unknown", "the machine did not reach the power state this operation asked for", unreached(command, request))
+		return Evidence{}, powerUnproved.Fail("the machine did not reach the power state this operation asked for", unreached(command, request))
 	}
 	return evidence, nil
 }
 
 func ejected(evidence Evidence, command string) (Evidence, error) {
 	if !slices.Contains([]string{MediaNone, MediaPresent, MediaUnknown}, evidence.PreviousMedia) {
-		return Evidence{}, failure("lifecycle.state", "the eject evidence reports no media state before the eject", "")
+		return Evidence{}, powerEvidenceMismatch.Fail("the eject evidence reports no media state before the eject", "")
 	}
 	if !evidence.Postcondition || evidence.Media != MediaNone || !slices.Contains([]string{machine.PowerOn, machine.PowerOff}, evidence.Power) {
-		return Evidence{}, failure("lifecycle.unknown", "the management controller did not prove the virtual-media device presents nothing",
+		return Evidence{}, powerUnproved.Fail("the management controller did not prove the virtual-media device presents nothing",
 			"repeat "+command+" once the management controller answers")
 	}
 	return evidence, nil
@@ -120,25 +120,25 @@ func validateReading(data []byte, survey ReadSurvey, digest string) (map[string]
 		return nil, err
 	}
 	if evidence.Request != digest {
-		return nil, failure("lifecycle.state", "the power reading names another survey", "")
+		return nil, powerEvidenceMismatch.Fail("the power reading names another survey", "")
 	}
 	readings := make(map[string]string, len(survey.Targets))
 	for _, reading := range evidence.Machines {
 		if !slices.Contains([]string{machine.PowerOn, machine.PowerOff, machine.PowerUnknown}, reading.Power) {
-			return nil, failure("lifecycle.state", "the power reading reports a state this command cannot name", "")
+			return nil, powerEvidenceMismatch.Fail("the power reading reports a state this command cannot name", "")
 		}
 		if _, repeated := readings[reading.Machine]; repeated {
-			return nil, failure("lifecycle.state", "the power reading answers for one Machine twice", "")
+			return nil, powerEvidenceMismatch.Fail("the power reading answers for one Machine twice", "")
 		}
 		readings[reading.Machine] = reading.Power
 	}
 	for _, target := range survey.Targets {
 		if _, answered := readings[target.Object]; !answered {
-			return nil, failure("lifecycle.state", "the power reading does not answer for every Machine it was asked about", "")
+			return nil, powerEvidenceMismatch.Fail("the power reading does not answer for every Machine it was asked about", "")
 		}
 	}
 	if len(readings) != len(survey.Targets) {
-		return nil, failure("lifecycle.state", "the power reading answers for a Machine it was not asked about", "")
+		return nil, powerEvidenceMismatch.Fail("the power reading answers for a Machine it was not asked about", "")
 	}
 	return readings, nil
 }

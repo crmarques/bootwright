@@ -48,7 +48,7 @@ func TestPowerEvidenceRemediesNameTheExactCommand(t *testing.T) {
 			{"the wrong state", Evidence{Machine: "guest", Postcondition: true, Power: wrong, Request: "digest"}, test.unreached},
 		} {
 			_, err := validate(encode(t, evidence.evidence), request, "digest")
-			if got := diagnostics.Of(err); len(got) != 1 || got[0].Code != "lifecycle.unknown" || got[0].Remediation != evidence.remedy {
+			if got := diagnostics.Of(err); len(got) != 1 || got[0].Code != "power.unproved" || got[0].Remediation != evidence.remedy {
 				t.Fatalf("%s: %s refused with %#v, want the remedy %q", test.command, evidence.name, got, evidence.remedy)
 			}
 		}

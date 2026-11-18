@@ -600,12 +600,10 @@ func identityRefusal(frozen Request, output string) error {
 	if output != "" {
 		remediation += "; " + output + " for both identities"
 	}
-	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-		Severity: "error", Code: "lifecycle.state", Remediation: remediation,
-		Message: "the management controller at " + frozen.Controller.Endpoint +
-			" answers as another system than the one this context's current apply proved, so no power request was sent",
-		Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: frozen.Identity.Object},
-	}}}
+	refused := powerIdentityChanged.Fail("the management controller at "+frozen.Controller.Endpoint+
+		" answers as another system than the one this context's current apply proved, so no power request was sent", remediation).(*diagnostics.Failure)
+	refused.Diagnostics[0].Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: frozen.Identity.Object}
+	return refused
 }
 
 // pinValues carries a proved identity to the adapter encoded, under the keys a

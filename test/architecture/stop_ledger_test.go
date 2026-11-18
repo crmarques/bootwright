@@ -24,7 +24,6 @@ func stopLedger() map[string]int {
 		"internal/infrastructureservices/mirrorfill":     36,
 		"internal/machine":                               7,
 		"internal/machine/hardware":                      11,
-		"internal/machine/power":                         17,
 		"internal/managedos/diskdiscovery":               31,
 		"internal/managedos/installation":                120,
 		"internal/managedos/media":                       1,
