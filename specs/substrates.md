@@ -219,7 +219,7 @@ Before it defines a managed network, the apply reads the host's addresses,
 routes, IPv4 and IPv6, and link names. A link of the managed bridge's name that
 no owned network of this context runs, or a route that no owned network of this
 context holds and that is identical to the managed prefix, nested inside it or
-broader than it and on-link (no gateway), refuses `lifecycle.state` before any
+broader than it and on-link (no gateway), refuses `runner.task-failed` before any
 network is defined, naming the link or the route and the Network's `bridge`
 or address as the field to change. A route of the main table that is broader
 than the managed prefix and names a gateway on every hop, a VPN `/8` covering
@@ -291,8 +291,8 @@ specifies.
 Before it installs anything, and before any network is defined, the apply reads
 every IPv4 and IPv6 route of every table, and an unanswered listing refuses.
 A route that is identical to a subnet, nested inside it or broader than it
-refuses `lifecycle.state` naming the route, its type, device and table and the
-subnet, and is never replaced, unless it is the main table's route through a
+refuses `runner.task-failed` naming the route, its type, device and table and
+the subnet, and is never replaced, unless it is the main table's route through a
 gateway on every hop that is strictly broader than the subnet, the default
 route for one, which the refusal exists to override. Another unit's refusing
 route, protocol 251 in the main table under another metric, refuses the same
@@ -385,7 +385,7 @@ its name and any other domain by its own, with
 `bootwright machine stop --context <context> --name <machine>` as the remedy
 before the apply is repeated; when the hypervisor does not answer which domains run on it, the
 apply refuses the same way and names the connection. Either refusal is the
-adapter's own: the operator receives `lifecycle.state` and finds the names in
+adapter's own: the operator receives `runner.task-failed` and finds the names in
 the adapter output retained beside the attempt's log.
 
 **Virtual-media pool.** One directory pool `bootwright-<context>-<provider>-vmedia`
@@ -648,7 +648,7 @@ A provider with a leg requires `NetworkManager.service` active and
 `/usr/bin/nmcli` present; the host block proves both and never installs,
 enables or starts them, and their absence refuses before any effect, as
 firewall readiness does. Before any effect on apply each of these refuses
-`lifecycle.state`, naming it: a profile of a frozen connection's
+`runner.task-failed`, naming it: a profile of a frozen connection's
 name with another UUID; a profile of its UUID this context does not own; any
 other profile whose `connection.interface-name` is the trunk or a leg device; a
 link of the trunk's or a leg device's name that no owned active connection
@@ -852,7 +852,7 @@ chains with the trunk as its interfaces, which no in-tree test proves.
 
 Before any effect, on apply and on destroy, a table of the name while the unit
 is not owned and running, and an `nft` read that does not answer, refuse
-`lifecycle.state`; `/usr/sbin/nft` must be present. An apply writes the
+`runner.task-failed`; `/usr/sbin/nft` must be present. An apply writes the
 ruleset file when its content differs, then rewrites the unit when its content
 differs and reloads systemd, as it also does while systemd reports the unit
 needs a daemon reload, starts the unit while it does not run, and

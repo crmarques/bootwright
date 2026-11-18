@@ -995,7 +995,7 @@ They accept these phases, and a lifecycle run [one more](#adapter-stop-records):
 | --- | --- | --- | --- | --- | --- | --- |
 | `loaded` | both | adapter → runner | `phase` | before any effect | first, once | Acknowledgement EOF or another reply fails the adapter before its first effect. |
 | `prepared` | controller | adapter → runner | `phase`, `preparation`: exactly `addedSources`, the sorted source identities of the frozen request's tools | after the runner matches these sources to the frozen request and publishes them durably | once, after `loaded` and before any `continue` | Unmatched, with any other member, or unpublished, it is never acknowledged, so no tool is installed. |
-| `prepared` | lifecycle | adapter → runner | `phase`, `preparation`: an object the run's capability validates | after the capability validates it and the runner records it durably as the running attempt's preparation | once, after `loaded`, only on an apply's own attempt | It is never acknowledged unless validated and recorded, so the effect it precedes never runs: out of bounds or on a read-only run it breaks the protocol; refused by the capability, the run fails with the capability's diagnostic; unrecorded, it fails with the store's diagnostic, or with `lifecycle.unknown` `the attempt's preparation could not be recorded` when the store names none. |
+| `prepared` | lifecycle | adapter → runner | `phase`, `preparation`: an object the run's capability validates | after the capability validates it and the runner records it durably as the running attempt's preparation | once, after `loaded`, only on an apply's own attempt | It is never acknowledged unless validated and recorded, so the effect it precedes never runs: out of bounds or on a read-only run it breaks the protocol; refused by the capability, the run fails with the capability's diagnostic; unrecorded, it fails with the store's diagnostic, or with `runner.preparation-unrecorded` `the attempt's preparation could not be recorded` when the store names none. |
 | `continue` | controller | adapter → runner | `phase` | before any tool installation; it authorizes every frozen tool | once, after `prepared` | Acknowledgement EOF fails the adapter before any tool. |
 | `group` | lifecycle | adapter → runner | `phase`, `group`, `status`; optionally [`progress` and `detail`](#adapter-warnings-and-group-progress) | none | after `loaded` | Progress only; a settled status advances completion only for a group the frozen block declares. |
 | `completed` | both | adapter → runner | `phase`, `outcome`, `evidence`: an object of at least one member; for a lifecycle run optionally `warnings` | none | last, once | Absent when the channel closes, the run has no result. |
@@ -1073,7 +1073,7 @@ drained for 5 seconds, or 60 once a controller run is prepared or cancelled,
 and the result is lost. A descendant still holding the adapter's own output
 after it exits is cut at the drain bound, 5 seconds for a lifecycle run and 60
 for a controller run. After a zero exit the result is lost too: the run fails
-`lifecycle.unknown` or `controller.unknown`, never with a completed result. A
+`runner.no-result` or `controller.unknown`, never with a completed result. A
 failed exit stays the failed exit.
 
 A lifecycle attempt is then `unknown` after a refusal, a deadline, a lost result

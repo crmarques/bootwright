@@ -190,11 +190,12 @@ The `descriptor` is empty for a built-in package and, for an authored add-on,
 the 64 lowercase hexadecimal digits of the SHA-256 of its normalized
 definition, so an edited definition changes the request. An authored request
 has no `placementNamespaces` and no Secret, and it is never looked up as a
-registry package: apply and observation refuse it with `lifecycle.state`,
-naming the package, when this build's registry holds a package of its name or
-when its frozen program creates anything outside the add-on's own namespace
-other than that Namespace and the CatalogSource in `openshift-marketplace`,
-before any adapter call, while retiring it still works.
+registry package: apply and observation refuse it with
+`addon.frozen-other-build`, naming the package, when this build's registry
+holds a package of its name or when its frozen program creates anything
+outside the add-on's own namespace other than that Namespace and the
+CatalogSource in `openshift-marketplace`, before any adapter call, while
+retiring it still works.
 The content digest covers the implementation, request, evidence
 and program versions and the ownership and approval rule tags; a change to what
 a package renders changes the request, so another build continues an operation

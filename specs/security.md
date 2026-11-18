@@ -199,7 +199,7 @@ registration, and withdrawn with the private subtree; the same exclusions
 hold. The lifecycle runner writes each such file once
 and then clears its copy of the value, so a run request whose material list
 names one file twice, or binds one adapter variable to two files, refuses with
-`lifecycle.state` before the runner creates its job directory or writes any
+`runner.request-invalid` before the runner creates its job directory or writes any
 file. It writes each file at its name joined to the job directory, and the
 adapter finds each file's path beside the request's material values in one
 variable map, so a file named by anything but one segment of lowercase letters,
@@ -346,7 +346,7 @@ execution host create that parent, and the staging parent above it, when
 absent. A parent that is a link, owned by another account, or open to another
 account's write, or a scratch parent other than mode 0700 or on a noexec
 filesystem, refuses before any scratch is touched, naming the directory and
-its remedy: the runner with `lifecycle.state` before any job exists or the
+its remedy: the runner with `runner.scratch-unusable` before any job exists or the
 adapter runs, the module by failing its task
 (`TestAnUnsafeOrNoexecScratchParentRefusesBeforeTheRun`,
 `TestTheRunnerScratchesBeneathTheStagingParent`). Before it writes anything else into

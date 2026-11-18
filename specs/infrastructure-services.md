@@ -107,7 +107,7 @@ and port, such as several entries, a hashed, listed, patterned or marked host,
 another host or port, or no decodable key of an accepted type, refuses
 `trust.identity` naming the Secret and the Machine, and a run whose pinned
 known-hosts file is not its placement's own `knownHostsRef` refuses
-`lifecycle.state`; no ssh reads either
+`runner.host-key-unbound`; no ssh reads either
 (`TestAnSSHPlacementRefusesKnownHostsNotOneEntryForItsHostBeforeItConnects`).
 The rule holds for every run, a continuation and a removal included: an
 operation whose frozen Secret holds more than one entry refuses until its
@@ -310,7 +310,7 @@ own SSH host keys are read, read-only and through held root-owned directories,
 from its sshd public key files `/etc/ssh/ssh_host_ed25519_key.pub`,
 `/etc/ssh/ssh_host_ecdsa_key.pub` and `/etc/ssh/ssh_host_rsa_key.pub`, and a
 placement whose pinned host key is one of them, reached at another address or
-port, refuses `lifecycle.state` before anything is reserved or registered,
+port, refuses `plan.host-key-unbound` before anything is reserved or registered,
 naming the addresses the controller Machine declares; its remedy is to reach
 the controller at port `22` on one of them, to declare the address on the
 controller Machine when the port is `22`, to place the work on the

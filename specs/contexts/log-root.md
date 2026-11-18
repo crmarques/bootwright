@@ -100,7 +100,7 @@ removes a run in progress (`TestARunInProgressIsNeverRetired`), proves the name
 still names that file, and makes it durable before a result names it. A run
 that cannot hold the file it created removes it
 (`TestARunThatCannotOpenLeavesNoFile`). A directory whose next number would be
-past `999999` refuses `lifecycle.state`, naming the `runs/` directory to remove
+past `999999` refuses `contextfs.runs-exhausted`, naming the `runs/` directory to remove
 (`TestBoundedRunNumbersRefuseOnceExhausted`).
 
 ## Setup output

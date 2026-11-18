@@ -444,7 +444,7 @@ applied. A block whose capability cannot name or classify its Secrets holds
 every version its binding pins, and a `caBundle` is always a trust anchor.
 Every Secret a capability's plan binds is named by one of the blocks it
 planned, so a block's hold never rests on another block of the lineage;
-planning refuses `lifecycle.state` for a capability that binds one none of its
+planning refuses `engine.request-defect` for a capability that binds one none of its
 blocks names, a defect of the build. A binding no
 registered operation names holds every version it pins while an apply has
 raised its running evidence and is not yet registered, when the keyring did

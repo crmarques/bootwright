@@ -31,7 +31,7 @@ What "equal" means in each admitted scenario:
   `PlanDigest`, `AutomationDigest` or `Executable`, re-plans nothing and
   reaches no host: `done` means the records are complete for this input, not
   that the target equals the declaration. Changed input refuses
-  `lifecycle.state` "the desired state changed after this apply completed",
+  `lifecycle.state` (now `apply.input-changed`) "the desired state changed after this apply completed",
   which since X91 names what changed (`namedChange`) or keeps the general
   message when the frozen revision cannot be read or compiled.
 - **Request-relative observation (half-provisioned).** A non-done operation of

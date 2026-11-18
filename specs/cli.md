@@ -264,7 +264,7 @@ without read-ahead. Decline, non-interactive input, cancellation or an I/O
 failure refuses, and the command performs none of the effects it asked about.
 A declined, non-interactive or unanswerable confirmation refuses under the
 confirming command's own code (`controller.install`, `controller.uninstall`, `media.store`,
-`machine.power`, `lifecycle.state`, `trust.identity`, `context.state` or
+`machine.power`, `command.unconfirmed`, `trust.identity`, `context.state` or
 `secret.store.conflict`), with the reason in its message and the command
 repeated with `--yes` in `next:`; a cancellation names no command. The
 repeated command is the invocation's own: its command path and every flag it
@@ -1598,8 +1598,8 @@ that lists the fingerprints and the `--expect` that records them (D183, Q97).
 `machine start`, `machine stop` and `machine restart` converge one exact
 Machine to a power state, and `machine eject-media` converges its virtual-media
 device to presenting nothing. They are bounded operations, not desired state: they
-register no lifecycle operation, freeze no plan, and change no ownership,
-continuation, or frozen plan, so a machine an operator stopped is still a
+register no lifecycle operation, freeze no plan and change no ownership,
+continuation or plan, so a machine an operator stopped is still a
 machine this context owns and will reconcile. [An eject](#machine-media-eject)
 otherwise follows a stop.
 
@@ -1608,7 +1608,7 @@ otherwise follows a stop.
 is the single-Machine operation described below, unchanged. Two or more
 members run that same operation for every Machine concurrently as one batch,
 under the rules that follow; the sections below state the single-Machine
-operation, and each of the batch's runs is exactly it. Canonical order is
+operation. Canonical order is
 ascending bytewise Machine name, and it orders refusals, progress positions,
 the confirmation's object list, the result rows, the logs and the diagnostics.
 
@@ -1670,7 +1670,7 @@ operation and a lifecycle mutation never run against the same host at once.
 A request is not evidence: the result reports the state the management
 controller proved once the operation settled, together with the state before it and whether
 anything changed. A state that never arrived within the bounded window is
-`lifecycle.unknown` with exit `1`, never a success. Its remedy names the exact
+`power.unproved` with exit `1`. Its remedy names the exact
 commands: a management controller that proved no usable state is read again with
 `bootwright machine list --context <context> --power-status` once it answers,
 and the same request repeated if the Machine is not in the state it asked for;
@@ -1689,14 +1689,15 @@ reporting another identity refuses `power.identity-changed` with exit `1` before
 adapter names that refusal to its runner before it fails, so the diagnostic's
 object is the Machine, its message names the management controller endpoint and
 that it answers as another system, and its remedy is to correct the Machine's
-management controller address or destroy and apply the context so the machine is proved
+management controller address or destroy and apply the context to prove the machine
 again, pointing at the run's retained output for the identities. That output
 names the Machine and both identities, and the diagnostic repeats neither: each
 is what a management controller reported, so it is printed with every character
 its [evidence](substrates.md#physical-machine-realization) refuses as not
 printable removed, then cut to its 128-character bound. A
-record or pin of that Machine that cannot be read refuses
-`lifecycle.state` before any confirmation or run.
+record of that Machine that cannot be read refuses with its
+[stop](cli/stops.md#operation-record-stops), and a pin with
+`baremetal.identity-unproved`, before any confirmation or run.
 
 A power command never acts on the host that runs Bootwright. One naming the
 environment's controller Machine refuses `machine.power` before any request, and
