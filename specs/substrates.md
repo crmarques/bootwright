@@ -404,10 +404,6 @@ domains are plugged into a managed network or its bridge, or answers one that
 is not shut off, naming the network and each such domain as the apply's restart
 refusal does.
 
-Not yet met: the removal derives the quiescence of its networks and pool from
-this context's Machines and observes no domain on the host; tracked as
-[B567](milestones/backlog.md#b567).
-
 **Reservations.** `bridge:<name>` for every managed Network, because a
 bridge name is host-global; `prefix:<masked prefix>` for every managed
 Network, because the host routes its prefix to that bridge;

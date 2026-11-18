@@ -177,6 +177,25 @@
   loop_control:
     label: '{{ item.bridge }}'
 
+# Stopping a network disconnects every domain plugged into it, this context's
+# or not, so the removal refuses before its first effect while one runs there
+# or while the hypervisor does not answer which do.
+- name: Refuse to remove a network nothing proves idle
+  ansible.builtin.assert:
+    that:
+      - item.guestsAnswered
+      - item.guests | length == 0
+    fail_msg: >-
+      network {{ item.name }} still carries
+      {{ item.guests | join(', ') if item.guests else 'domains the hypervisor did not answer for' }};
+      stop each Machine with bootwright machine stop --context
+      {{ bootwright_substrate_host_request.identity.context }} --name <machine>,
+      and any other domain named, then repeat the removal
+    quiet: true
+  loop: '{{ substrate_libvirt_host_before.observation.networkGuests }}'
+  loop_control:
+    label: '{{ item.name }}'
+
 # The legs go first and the trunks after them, before the libvirt networks;
 # the routing table that isolates the legs goes only once no leg exists.
 - name: Remove each VLAN leg and then each trunk this provider owns

@@ -741,7 +741,7 @@ def test_the_provider_host_evidence_carries_every_field_the_observation_proves(t
     request = {"networks": [], "packages": [], "poolName": "p", "poolPath": str(tmp_path / "pool"), "services": [],
                "uri": "qemu:///system", "identity": {"context": "lab", "object": "host"}}
     observation = observe_host(run, request)
-    observation_only = {"collisions", "collisionsAnswered", "connectionRefusals", "drifted", "routingForwarding",
+    observation_only = {"collisions", "collisionsAnswered", "connectionRefusals", "drifted", "networkGuests", "routingForwarding",
                         "routingRefusals", "shadows", "trunks"}
     framing = {"absent", "postcondition", "request"}
     for form in (substrate_host_protocol.presence, substrate_host_protocol.absence):

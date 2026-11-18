@@ -119,7 +119,7 @@ B568 precedes any delta scenario.
 
 ### Blocking
 
-**[B567](../../specs/milestones/backlog.md#b567): a libvirt provider-host
+**[B567](../../specs/milestones/delivered.md#b567): a libvirt provider-host
 destroy stops a managed network other tenants' running domains use.** The
 removal runs `net-destroy` and `net-undefine` on every owned network
 (`ansible/collections/ansible_collections/bootwright/core/roles/substrate_libvirt_host/tasks/destroy.yml:101-134`)

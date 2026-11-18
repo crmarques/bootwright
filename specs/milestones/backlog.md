@@ -133,7 +133,6 @@ Alias cell.
 | [B561](#b561) | new, 2026-10-14 (D152) | product | Controller setup | A standalone CPython for a host whose repositories offer no locked Python ABI | D152's clause 3: every supported host offers a locked ABI |
 | [B562](#b562) | new, 2026-10-14 (D152) | enabling | Controller setup | CI proposes a lock refresh when a newer ansible-core 2.21 patch or dependency appears | D152's clause 4: `outdated` is advisory and the owner regenerates the lock |
 | [B563](#b563) | new, 2026-10-14 (D152) | product | Controller setup, with State reconciliation | apply rebuilds the runtime for another Python ABI after an OS upgrade without setup | D152's clause 8: a new ABI may need dnf, which only setup and the controller stage run |
-| [B567](#b567) | new, 2026-10-14 (X91 audit) | safety | Substrate | Provider-host removal proves no domain is attached to a managed network before it stops the network | D155 requires the guard and B568 interim warning before further shared-host destroy; named safety slice required |
 | [B568](#b568) | new, 2026-10-14 (X91 audit) | safety | Substrate, Infrastructure services and Managed OS | A context incarnation identity enters every ownership marker, so a same-name context never adopts an abandoned object | D155 accepts the persistent random incarnation design; define exact formats and migration in a named slice before implementation |
 | [B569](#b569) | new, 2026-10-14 (X91 audit) | safety | State reconciliation | The operation store refuses a transition the block table does not admit | Found by the X91 audit; no path reaches it today: the scheduler is the only caller |
 | [B570](#b570) | new, 2026-10-14 (X91 audit) | defect | State reconciliation | A fresh destroy records a host-free removal answer on the apply's block only after quiescence is proved | Found by the X91 audit; no milestone depends on it: it changes the D119 table and rides with the check-naming item B460 |
@@ -1299,57 +1298,6 @@ whose interpreter is already installed and whose wheels are cached needs no
 dnf. **Exit evidence:** a lifecycle test in which a changed ABI with its
 interpreter present and its wheels cached rebuilds without setup, and one in
 which a missing interpreter still refuses with "run bootwright setup".
-
-### B567
-
-[D155](#d155) requires definition and delivery of this guard with B568's
-interim orphan warning before further `destroy` on a shared libvirt host.
-Implementation still needs its named safety slice. Destroying a libvirt
-provider host runs `virsh net-destroy` and `net-undefine` on every owned managed network
-(`ansible/collections/ansible_collections/bootwright/core/roles/substrate_libvirt_host/tasks/destroy.yml:101-134`)
-and never asks libvirt which running domains are plugged into the network or its
-bridge. `HostCapability.Quiescent` answers quiescent unconditionally, because its
-machines are probed in this removal (`internal/substrate/libvirt/capability.go:558-563`),
-which assumes that only this context's Machines use the network. Nothing outside
-one catalog enforces it: admission's shared-bridge check covers one context
-(`internal/substrate/admission.go:428-466`), host reservations claim `bridge:`,
-`libvirt-network:` and `prefix:` keys only for managed attachments
-(`internal/substrate/libvirt/requests.go:167-182`), and an `external` attachment,
-the default, claims nothing. Another context's Machines, or the operator's own
-domains, can therefore share a managed bridge, and `destroy` removes it from
-under them. The apply path guards the same hazard for a drifted network
-(`ansible/collections/ansible_collections/bootwright/core/roles/substrate_libvirt_host/tasks/apply.yml:177-210`
-and `network_guests` in
-`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/substrate_libvirt.py:311-336`);
-destroy has no equivalent, and the engine gate runs only for a fresh destroy
-(`internal/reconciliation/lifecycle/execution.go:1078-1093`), so a continuation
-skips it. The code matches `specs/substrates.md:167-170`, which says quiescence
-is derived rather than observed, and that sentence contradicts
-`specs/substrates.md:147-153` (stopping a network disconnects every domain
-plugged into it) and `specs/state-reconciliation.md:1787` (removal takes only
-what is out of use). **Impact:** running workloads outside the destroying context
-lose their uplink and cannot restart until the bridge exists again; the other
-context's settled apply still reports `done`, so nothing reports the damage. The
-shipped examples all attach to `virbr-lab` on the controller host. **Smallest
-fix:** the removal observation lists guests for every owned active network, not
-only a drifted one; `destroy.yml` gains, before the first `net-destroy`, the two
-refusals `apply.yml` has (the listing did not answer, or a domain that is not
-shut off is plugged in), which also covers a continuation;
-`HostCapability.Quiescent` probes instead of asserting and refuses
-`lifecycle.live` naming the attached domains, so the refusal comes before
-registration; the two spec sentences and the comment at `capability.go:558` say
-so. Under D142 and D145 the role guard continues a live operation and needs no
-destroy. The host-wide `bridge-use:` reservation, so that an external
-attachment conflicts with another context's managed bridge, is tracked as
-[B803](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts). **Open:** whether a shut-off domain defined on the
-network or bridge also refuses, since it cannot start once the bridge is gone.
-**Exit evidence:** a collection unit test that
-`destroy.yml` refuses on an unanswered listing and on a plugged-in domain that is
-not shut off, a destroy test with a shut-off foreign domain defined on the
-bridge that asserts the answer to the open question, a capability test that
-`Quiescent` returns `lifecycle.live` naming
-the attached domains, a lifecycle test that a continuation refuses the same way,
-and `make docs-check` over the amended spec sentences.
 
 ### B568
 
@@ -3965,7 +3913,7 @@ and are open; an answer that adopts new work opens its item.
 | Q126 | Does the examples index carry a status projection (R2-05-08)? | (a) One generated projection (admission golden, plan-tested, accepted) from existing evidence, with a consistency check.; (b) Decline: rows state outcomes and link the acceptance ledger. | (b): a status column repeats state the milestone pages and the ledger own. | — | open |
 | Q127 | What does an omitted CephCluster `distribution` select, now that its default always refuses at plan? | (a) Make `distribution` required.; (b) Default to an implementation that plans.; (c) Keep the refusing default and its refusal row. | (a): V2-02 removed the same trap for the SSH transport. | — | open |
 | Q128 | Is the stretch NVMe-oF refusal at ceph.md's stretch services stated on a vendor requirement? | (a) Restate it on a Bootwright-owned basis, such as gateway placement per data site, and widen the vendor-support lint to vendor-attributed requirements.; (b) Keep the vendor-cited reason pending D203's review. | (a), reviewed with D203. | [D203](#d203) | open |
-| Q129 | Does a stopped foreign guest that references a retiring libvirt network or bridge refuse its removal? | (a) Refuse when any foreign domain, shut off included, references it.; (b) Refuse only for running guests, accepting that a stopped one loses its start path. An unreadable inventory refuses under either answer. | (a) | [B567](#b567) | open |
+| Q129 | Does a stopped foreign guest that references a retiring libvirt network or bridge refuse its removal? | (a) Refuse when any foreign domain, shut off included, references it.; (b) Refuse only for running guests, accepting that a stopped one loses its start path. An unreadable inventory refuses under either answer. | (a) | [B567](delivered.md#b567) | open |
 | Q130 | How does a context prove ownership across a recreation under the same name? | (a) Mint a random incarnation, persist it atomically, bind every ownership proof to it, and refuse old stores and marks with a named retirement path.; (b) Keep name-derived ownership with the D155 warning. | (a), with the cut-over and whole-store restore defined before code. | [B568](#b568) | open |
 | Q131 | Does an interrupted Ceph enrollment continue forward? | (a) Continue only from a matching frozen request, durable per-host receipts and live FSID, host and daemon proofs; unrecorded native state stays unknown.; (b) Keep refusing; the abandoning purge stays the only exit. | (a), with its journal states and commit points defined first. | [B659](m2.md#b659) | open |
 | Q132 | How does a host with partial OSD DB/WAL metadata recover? | (a) Classify first, then a journaled clear of narrowly enumerated owned shapes whose device identity is proved.; (b) A documented operator repair procedure only; Bootwright keeps refusing. | (a), narrowly; foreign or unknown metadata keeps refusing. | [B662](m2.md#b662) | open |
@@ -4878,7 +4826,7 @@ or authorizing an agent-run privileged or entitled test.
 
 ### D153
 
-**accepted-by D155** (2026-10-14, the owner): "today bootwright must accept only this scenario: non-existent real state ... half-provisioned/setup ... real state already equals desired state ... bootwright could have an command: bootwright diff ... do not implement this support yet, just make code, logic and architecture ready for this in the future ... reconciliation must be predictable and safe. target environment can never be broken with bootwright apply". Taken by the session, pending the owner's review: (1) `apply` admits exactly three scenarios: a fresh apply where the context's records show no operation or a completed destroy, a continuation of an incomplete apply over byte-identical input, and an idempotent settle of a completed apply over unchanged input. Changed input over a completed apply keeps refusing before any effect and names what changed, with destroy then apply as the remedy; `TestApplyAdmitsOnlyTheFourScenarios` pins the placement. (2) `bootwright diff` is read-only: it compares the context's selected desired state with what its apply realized, object by object, reads durable records only, or with `--observe` each realized block's target through that block's read-only observation, writes no record, takes no lock beyond the shared read lock and exits 0 whenever it renders. (3) Every further scenario is added one per named slice by the recipe in the design: a decision, a spec row and a `stateMachineRows` case, the prerequisite items, and one branch in the changed-input path, all in one commit; none is implemented here, and this slice builds only seams with a present consumer (the comparison, the read-only guard, the retained-revision reader). (4) The settled scenario means "the records prove the frozen plan done over unchanged input": a settled apply attests its own records and reaches no host. Drift that `diff --observe` shows is reported, never repaired. [X91](delivered.md#x91--read-only-diff-and-the-delta-seam) delivers it; the audit's blocking findings [B567](#b567) and [B568](#b568) stay parked and recommended as a dedicated safety slice before any further `destroy` on a shared libvirt host. Needs the owner's decision: whether a settle also requires the current build to freeze the same plan ([B574](#retired); the recommendation is not now). Needs the owner's decision: whether input restored byte for byte after an edit settles a completed apply ([B598](#b598)). Needs the owner's decision: the libvirt redefine semantics and what machine evidence proves ([B576](#b576)). Needs the owner's decision: whether Ceph pool `size` and `min_size` drift is refused or reported (B587). Needs the owner's decision: the context incarnation identity design ([B568](#b568)).
+**accepted-by D155** (2026-10-14, the owner): "today bootwright must accept only this scenario: non-existent real state ... half-provisioned/setup ... real state already equals desired state ... bootwright could have an command: bootwright diff ... do not implement this support yet, just make code, logic and architecture ready for this in the future ... reconciliation must be predictable and safe. target environment can never be broken with bootwright apply". Taken by the session, pending the owner's review: (1) `apply` admits exactly three scenarios: a fresh apply where the context's records show no operation or a completed destroy, a continuation of an incomplete apply over byte-identical input, and an idempotent settle of a completed apply over unchanged input. Changed input over a completed apply keeps refusing before any effect and names what changed, with destroy then apply as the remedy; `TestApplyAdmitsOnlyTheFourScenarios` pins the placement. (2) `bootwright diff` is read-only: it compares the context's selected desired state with what its apply realized, object by object, reads durable records only, or with `--observe` each realized block's target through that block's read-only observation, writes no record, takes no lock beyond the shared read lock and exits 0 whenever it renders. (3) Every further scenario is added one per named slice by the recipe in the design: a decision, a spec row and a `stateMachineRows` case, the prerequisite items, and one branch in the changed-input path, all in one commit; none is implemented here, and this slice builds only seams with a present consumer (the comparison, the read-only guard, the retained-revision reader). (4) The settled scenario means "the records prove the frozen plan done over unchanged input": a settled apply attests its own records and reaches no host. Drift that `diff --observe` shows is reported, never repaired. [X91](delivered.md#x91--read-only-diff-and-the-delta-seam) delivers it; the audit's blocking findings [B567](delivered.md#b567) and [B568](#b568) stay parked and recommended as a dedicated safety slice before any further `destroy` on a shared libvirt host. Needs the owner's decision: whether a settle also requires the current build to freeze the same plan ([B574](#retired); the recommendation is not now). Needs the owner's decision: whether input restored byte for byte after an edit settles a completed apply ([B598](#b598)). Needs the owner's decision: the libvirt redefine semantics and what machine evidence proves ([B576](#b576)). Needs the owner's decision: whether Ceph pool `size` and `min_size` drift is refused or reported (B587). Needs the owner's decision: the context incarnation identity design ([B568](#b568)).
 
 ### D154
 

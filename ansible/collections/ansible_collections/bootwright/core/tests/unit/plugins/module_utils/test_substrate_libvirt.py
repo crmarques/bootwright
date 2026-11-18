@@ -488,6 +488,26 @@ def drift_request(tmp_path):
     }
 
 
+def test_the_observation_names_what_runs_on_each_owned_active_network(tmp_path):
+    answers = guests_answers(**{
+        "version": (0, "", ""),
+        "net-dumpxml bootwright-lab-guests": (0, CARRIED_NETWORK, ""),
+        "net-dumpxml --inactive bootwright-lab-guests": (0, CARRIED_NETWORK, ""),
+        "net-info bootwright-lab-guests": (0, "Active:         yes\n", ""),
+    })
+    observation = observe_host(runner_for(answers), drift_request(tmp_path))
+    assert observation["drifted"] == []
+    assert observation["networkGuests"] == [
+        {"name": "bootwright-lab-guests", "guests": ["Machine rhel-01", "domain workstation"], "guestsAnswered": True},
+    ]
+    silent = dict(answers, **{"list --name": (1, "", "error: failed to connect to the hypervisor\n")})
+    assert observe_host(runner_for(silent), drift_request(tmp_path))["networkGuests"] == [
+        {"name": "bootwright-lab-guests", "guests": [], "guestsAnswered": False},
+    ]
+    stopped = dict(answers, **{"net-info bootwright-lab-guests": (0, "Active:         no\n", "")})
+    assert observe_host(runner_for(stopped), drift_request(tmp_path))["networkGuests"] == []
+
+
 def test_the_observation_names_what_runs_on_each_drifted_network_alone(tmp_path):
     answers = guests_answers(**{
         "version": (0, "", ""),

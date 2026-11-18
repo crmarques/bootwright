@@ -796,9 +796,10 @@ def observe_host(runner, request):
     holds, whether it drifted and the domains plugged into it, which neither a
     reactivation nor a removal may disconnect. A trunk or leg device is a link
     the host collision check reads too, and a leg's prefix a route, so both
-    reach `collisions`.
+    reach `collisions`. `networkGuests` names, for each owned active managed
+    network, the domains plugged into it, which a removal may not disconnect.
     """
-    networks, drifted, ours = [], [], set()
+    networks, drifted, ours, active = [], [], set(), []
     answers = uri_answers(runner, request["uri"])
     context = str((request.get("identity") or {}).get("context") or "")
     for network in request.get("networks") or []:
@@ -813,6 +814,7 @@ def observe_host(runner, request):
             entry["owned"], entry["uuid"], entry["autostart"] = state["owned"], state["uuid"], state["autostart"]
             if state["owned"] and state["state"] == "active":
                 ours.update({str(network["bridge"]), str(state["bridge"] or "")} - {""})
+                active.append((network["name"], state["bridge"]))
             if state["drifted"]:
                 guests = network_guests(runner, request["uri"], network["name"], state["bridge"], context)
                 drifted.append({"name": network["name"], "guests": guests or [], "guestsAnswered": guests is not None})
@@ -844,6 +846,7 @@ def observe_host(runner, request):
         "hypervisor": packages_present(runner, request.get("packages") or []),
         "networkManager": connections["networkManager"],
         "networks": networks,
+        "networkGuests": networks_guests(runner, request["uri"], active, context),
         "pool": pool["state"],
         "poolAnswered": pool["answered"],
         "poolAutostart": pool["autostart"],
@@ -858,6 +861,36 @@ def observe_host(runner, request):
         "uri": answers,
         "vlanRefusal": observe_vlan_refusal(runner, request),
     }
+
+
+def networks_guests(runner, uri, networks, context):
+    """For each owned active network, the domains plugged into it, or unanswered.
+
+    One listing and one definition per domain serve every network, so the
+    removal that stops them proves none of them in use first.
+    """
+    if not networks:
+        return []
+    code, output = virsh(runner, uri, "list", "--name")
+    roots = None
+    if code == 0 and len(output) < MAX_OUTPUT:
+        roots = []
+        for name in [line.strip() for line in output.splitlines() if line.strip()]:
+            code, described = virsh(runner, uri, "dumpxml", name)
+            try:
+                roots.append((name, ElementTree.fromstring(described)) if code == 0 and len(described) < MAX_OUTPUT else None)
+            except ElementTree.ParseError:
+                roots.append(None)
+        if None in roots:
+            roots = None
+    found = []
+    for network, bridge in networks:
+        if roots is None:
+            found.append({"name": network, "guests": [], "guestsAnswered": False})
+            continue
+        guests = sorted(guest_name(root, name, context) for name, root in roots if attaches(root, network, bridge))
+        found.append({"name": network, "guests": guests, "guestsAnswered": True})
+    return found
 
 
 def trunk_guests(runner, request, trunks, answers, context):

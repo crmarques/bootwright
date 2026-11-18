@@ -5902,7 +5902,7 @@ and the delta seam".
 **Outcome, B564 (the audit and the seam):** a reconciliation audit of `apply`
 and `destroy` ([lessons](../../.agents/knowledge/reconciliation-audit-2026-10.md))
 found two blocking defects outside the decision engine, parked as
-[B567](backlog.md#b567) and [B568](backlog.md#b568), and the rest as
+[B567](#b567) and [B568](backlog.md#b568), and the rest as
 [B569](backlog.md#b569) to [B605](backlog.md#b605) beside the existing items it
 names. The engine's frozen plan, closed records and re-proof under the
 exclusive lock held. The slice adds `reconciliation.Compare` in
@@ -6027,7 +6027,7 @@ properties) and `TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses`;
 
 **Constraints left behind:** the audit's two blocking findings stay parked, and
 a dedicated safety slice is recommended before any further `destroy` on a
-shared libvirt host: [B567](backlog.md#b567), a libvirt provider-host removal
+shared libvirt host: [B567](#b567), a libvirt provider-host removal
 that stops a managed network other tenants' running domains use, and
 [B568](backlog.md#b568), ownership by context name, which lets a recreated
 same-name context adopt abandoned objects. Under `diff --observe` the Ceph
@@ -17511,3 +17511,25 @@ or a zone admitted no SSH. A local start now proves every port a running sshd
 listens on in the zone of every connected interface, and refuses with
 `ssh-admission` otherwise ([managed OS implementations](../managed-os.md#implementations)).
 Guarded by `test_managedos_host_firewall_admission.py`.
+
+## X597 — A provider host's removal proves its networks idle
+
+### B567
+
+Moved from the backlog's parked items, 2026-11-18, under [D276](backlog.md#d276)
+(audit 006 W6.2, finding X09-02, High). Destroying a libvirt provider host
+stopped and undefined every owned managed network without asking which domains
+were plugged into it, so another context's guests, or the operator's own, lost
+their network with no warning; only the trunks were guarded. The host
+observation now lists, for each owned active network, the domains plugged into
+it, from one listing and one definition per domain, and the removal refuses
+before its first effect while one runs there or while the hypervisor does not
+answer, naming the network and each domain, as the trunk guard does. Every
+destroy runs it, a continuation included
+([provider host realization](../substrates.md#provider-host-realization)). The listing
+is observation only and never reaches evidence. Guarded by
+`test_the_observation_names_what_runs_on_each_owned_active_network`,
+`test_libvirt_host_destroy_guard.py` and the evidence-fields test. Open:
+[Q129](backlog.md#audit-remediation-decisions), whether a stopped foreign domain refuses
+too; this guard, like the trunk and restart guards, reads running domains only.
+B568's interim orphan warning stays parked.
