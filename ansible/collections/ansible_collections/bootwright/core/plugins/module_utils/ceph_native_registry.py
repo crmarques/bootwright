@@ -5,13 +5,135 @@ from __future__ import annotations
 # Exact type identity is the validation here: a bool is not an int and a capability object is never a subclass.
 # pylint: disable=unidiomatic-typecheck
 
+import contextlib
 import hashlib
+import ipaddress
 import os
+import re
+import stat
 
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
-    REGISTRY_FILE, REGISTRY_NAME, registry_authority, registry_directory, registry_exists, registry_metadata, registry_metadata_record, registry_read,
-    registry_scope, require,
+    REGISTRY_FILE, REGISTRY_NAME, Refusal, publish_regular, registry_authority, registry_directory, registry_exists, registry_metadata,
+    registry_metadata_record, registry_proxy, registry_read, registry_scope, require,
 )
+
+ROUTE_PARENT = "/etc/containers"
+ROUTE_DIRECTORY = ROUTE_PARENT + "/containers.conf.d"
+ROUTE_PREFIX = "90-bootwright-ceph-"
+ROUTE_MARKER = "native-route.json"
+ROUTE_VERSION = "ceph-native-route-v1"
+ROUTE_LIMIT = 4096
+ROUTE_HOST = re.compile(r"[a-z0-9._-]{1,253}\Z")
+
+
+def route_name(request):
+    token = hashlib.sha256((request["fsid"] + "\x00" + request["owner"]).encode()).hexdigest()
+    return ROUTE_PREFIX + token + ".conf"
+
+
+def route_endpoint(request):
+    """The frozen registryProxy as podman's engine reads it, rebuilt from its parsed parts so no other byte reaches the file."""
+    parsed = registry_proxy(request)
+    if parsed is None:
+        return None
+    host = parsed.hostname
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        require(ROUTE_HOST.fullmatch(host) is not None, "request")
+        authority = host
+    else:
+        authority = "[" + literal.compressed + "]" if literal.version == 6 else literal.compressed
+    return "http://" + authority + ("" if parsed.port is None else ":" + str(parsed.port))
+
+
+def route_record(request):
+    """The podman engine route a proxied cluster's host keeps, and its record; (None, None) for the direct route. The engine variables
+    route only the native client's own pulls: a broker pull sets the same names itself, and podman never overrides a set variable;
+    http_proxy = false keeps them out of every container."""
+    endpoint = route_endpoint(request)
+    if endpoint is None:
+        return None, None
+    content = ("# Bootwright: this host's native image pulls leave through the Ceph cluster's frozen registryProxy.\n"
+               "[engine]\n"
+               'env = ["HTTPS_PROXY=' + endpoint + '", "HTTP_PROXY=' + endpoint + '"]\n'
+               "\n"
+               "[containers]\n"
+               "http_proxy = false\n").encode("ascii")
+    return {"version": ROUTE_VERSION, "name": route_name(request), "sha256": hashlib.sha256(content).hexdigest()}, content
+
+
+def protected_directory(fd):
+    info = os.fstat(fd)
+    require(stat.S_ISDIR(info.st_mode) and info.st_uid == 0 and info.st_mode & 0o022 == 0, "registry-ownership")
+
+
+@contextlib.contextmanager
+def route_directory(create=False):
+    """podman's root drop-in directory, root-owned and writable by root alone; with create, made beneath an equally protected parent.
+    Without create, a missing directory raises FileNotFoundError for the caller to read as absence."""
+    try:
+        parent = os.open(ROUTE_PARENT, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except FileNotFoundError:
+        if create:
+            raise Refusal("registry-ownership") from None
+        raise
+    try:
+        protected_directory(parent)
+        name = os.path.basename(ROUTE_DIRECTORY)
+        try:
+            directory = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent)
+        except FileNotFoundError:
+            if not create:
+                raise
+            with contextlib.suppress(FileExistsError):
+                os.mkdir(name, 0o755, dir_fd=parent)
+                os.fsync(parent)
+            directory = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent)
+    finally:
+        os.close(parent)
+    try:
+        protected_directory(directory)
+        yield directory
+    finally:
+        os.close(directory)
+
+
+def route_read(directory, name):
+    """A drop-in's bytes, read once without following a link, or None when the name is absent; any other kind of file refuses."""
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=directory)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise Refusal("registry-ownership") from None
+    with os.fdopen(fd, "rb") as handle:
+        info = os.fstat(handle.fileno())
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid == 0 and info.st_mode & 0o022 == 0
+                and info.st_size <= ROUTE_LIMIT, "registry-ownership")
+        data = handle.read(ROUTE_LIMIT + 1)
+        require(len(data) == info.st_size, "registry-ownership")
+        return data
+
+
+def route_present(request, recorded, remove=False):
+    """Whether this cluster's podman engine route remains on the host; with remove, unlink it once its bytes prove it the one
+    `recorded` binds. A file under this cluster's name that no record binds refuses."""
+    expected, content = route_record(request)
+    name = route_name(request)
+    try:
+        with route_directory() as directory:
+            data = route_read(directory, name)
+            if data is None:
+                return False
+            require(expected is not None and recorded == expected and data == content, "registry-ownership")
+            if not remove:
+                return True
+            os.unlink(name, dir_fd=directory)
+            os.fsync(directory)
+            return False
+    except FileNotFoundError:
+        return False
 
 
 class Registry:
@@ -146,6 +268,36 @@ class Registry:
             require(registry_metadata(item[0]) == record["metadata"] and registry_metadata(item[0], pending=True) == pending["metadata"], "registry-ownership")
             registry_scope(self.worker.request, item[1])
             require(wanted is None or item[1] == wanted, "registry-ownership")
+        self.prove_route()
+
+    def prepare_route(self):
+        """Publish this host's podman engine route before any native pull can need it; a name this cluster's record does not bind refuses.
+        The record is durable before the file, and a frozen direct route keeps no record."""
+        record, content = route_record(self.worker.request)
+        owned = self.worker.markers.read(ROUTE_MARKER)
+        require(owned is None or owned == record, "registry-ownership")
+        if record is None:
+            return False
+        with route_directory(create=True) as directory:
+            existing = route_read(directory, record["name"])
+            require(existing is None or owned == record and existing == content, "registry-ownership")
+            if owned is None:
+                self.worker.markers.write(ROUTE_MARKER, record)
+            if existing is None:
+                publish_regular(directory, record["name"], content, 0)
+        self.prove_route()
+        return existing is None
+
+    def prove_route(self):
+        """The recorded route still holds exactly its bytes; a direct route holds no record."""
+        record, content = route_record(self.worker.request)
+        require(self.worker.markers.read(ROUTE_MARKER) == record, "registry-ownership")
+        if record is not None:
+            try:
+                with route_directory() as directory:
+                    require(route_read(directory, record["name"]) == content, "registry-ownership")
+            except FileNotFoundError:
+                raise Refusal("registry-ownership") from None
 
     def provider_registry_absent(self):
         # Reading names avoids disclosing values. Any stored credential would

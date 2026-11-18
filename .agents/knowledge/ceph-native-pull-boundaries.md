@@ -55,6 +55,30 @@ upstream connections through one CONNECT tunnel. When this EOF appears with no
 broker reason, read the adapter output for `broker could not connect`, then
 select the hosts' egress Proxy in `registryProxy`.
 
+## Manager pulls that bypass the broker on a proxied host
+
+On the same day the next prd-dc1 run bootstrapped the seed and enrolled every
+host, then the cluster block ended `native-timeout` at
+`ceph_native.bounded_command`. The bootstrap host's `/var/log/ceph/cephadm.log`
+showed the manager's own `cephadm --image <digest> pull` repeating every two
+minutes, each podman attempt `dial tcp ...:443: i/o timeout` straight to
+`cp.icr.io`: license acceptance runs image information and the signed `20.2.2`
+cephadm's `command_display_license` (`__main__.py:3887`) pulls before it reads
+the license, as `command_pull` (`:2336`) does. Those pulls run through the
+manager's SSH, not the broker, so `registryProxy` never reached them, and
+Bootwright's own call waited on the manager until its deadline.
+
+The [native pull route](../../specs/ceph.md#native-pull-route) gives podman
+the proxy through a `containers.conf.d` engine drop-in. Two podman facts, read
+from podman `v5.8.2`'s `go.podman.io/common v0.67.1`, `pkg/config/config.go`,
+make it safe. `setupEnv` (line 1168) skips an engine variable whose name the
+process already defines (lines 1175-1178), so a broker pull's own
+`HTTPS_PROXY`, `HTTP_PROXY` and empty `NO_PROXY` stand. `GetDefaultEnvEx`
+(line 988) copies podman's process proxy variables, engine ones included, into
+each container while `[containers] http_proxy` is true, so the drop-in sets it
+false. When a cluster block on a proxied host times out after enrollment, read
+the manager host's `cephadm.log` for repeated `pull` lines before anything else.
+
 ## Upstream HTTP status lost behind a broker 502
 
 The broker maps a final non-200 registry response to a local 502. Its JSON

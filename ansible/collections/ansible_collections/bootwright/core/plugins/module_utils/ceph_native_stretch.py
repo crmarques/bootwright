@@ -718,6 +718,16 @@ class TiebreakerRemoval:
             raise
         return remaining
 
+    def route_present(self, remove=False):
+        """Whether this cluster's podman engine route remains; with remove, unlink it once its record and bytes prove it this cluster's."""
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_registry as registry
+        try:
+            return registry.route_present(self.request, self.markers.read(registry.ROUTE_MARKER), remove=remove)
+        except Refusal as error:
+            if str(error) == "registry-ownership":
+                raise Refusal("tiebreaker-foreign") from None
+            raise
+
     def units(self):
         prefix = "ceph-" + self.fsid
         found = [name for name in listing(UNIT_ROOT) if name.startswith(prefix)]
@@ -746,10 +756,13 @@ class TiebreakerRemoval:
 
     def traced(self):
         """Whether a trace this cluster's authorize phase leaves outside the FSID's layout remains with no marker to name it: a key
-        line tagged with this cluster's owner in the cluster SSH user's authorized_keys, this cluster's sshd drop-in, or its registry
-        credential anchor."""
+        line tagged with this cluster's owner in the cluster SSH user's authorized_keys, this cluster's sshd drop-in, its podman engine
+        route, or its registry credential anchor."""
         token = hashlib.sha256((self.fsid + "\x00" + self.request["owner"]).encode()).hexdigest()
         if present("/etc/ssh/sshd_config.d/" + "05-bootwright-ceph-" + token + ".conf"):
+            return True
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_registry as registry
+        if present(registry.ROUTE_DIRECTORY + "/" + registry.route_name(self.request)):
             return True
         anchor = ".bootwright-registry-" + hashlib.sha256((self.request["owner"] + "\x00" + self.fsid).encode()).hexdigest()
         try:
@@ -775,7 +788,8 @@ class TiebreakerRemoval:
         return any(tag in line.split() for line in lines)
 
     def footprint(self, authorization):
-        return dict(self.scoped(), daemons=self.daemons(), key=self.key_present(authorization), credential=self.credential_present())
+        return dict(self.scoped(), daemons=self.daemons(), key=self.key_present(authorization), credential=self.credential_present(),
+                    route=self.route_present())
 
     def prove(self):
         """Read only: this cluster's owner marker, its records, and a footprint that is only its own; None for a host the cluster's
@@ -823,6 +837,8 @@ class TiebreakerRemoval:
             self.remove_key(authorization)
         if footprint["credential"]:
             self.credential_present(remove=True)
+        if footprint["route"]:
+            self.route_present(remove=True)
         if argv is not None:
             self.worker.command(argv, timeout=RM_CLUSTER_TIMEOUT, json_result=False)
         require(not any(self.footprint(authorization).values()), "not-removed")

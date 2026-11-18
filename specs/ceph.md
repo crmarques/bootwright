@@ -1162,6 +1162,23 @@ by the existing join deadline.
 Listener, upstream sockets, resolver children and workers finish before the
 private invocation directory is removed.
 
+## Native pull route
+
+The manager starts its own pulls on the hosts, outside the broker: license
+acceptance and image information run `cephadm pull`, and a deploy pulls a
+missing image. With a frozen `registryProxy`, each host's authorization
+publishes, before its registry credential, a podman engine drop-in in
+`/etc/containers/containers.conf.d` named for the cluster's FSID and owner. It
+sets `HTTPS_PROXY` and `HTTP_PROXY` to the endpoint rebuilt from the frozen
+proxy's parsed parts, and `[containers] http_proxy = false`, so containers
+receive no proxy variable. podman applies an engine variable only when its
+process lacks it, and a broker pull sets the same names, so the broker's route
+stands. The file is root's, its directory writable by root alone, and its
+record is durable before it; a name no record binds, other bytes, a link or a
+direct route with a record refuses `registry-ownership`. Every registry proof
+proves it, and a tiebreaker or retained-root removal removes it as part of the
+cluster's footprint. A direct route publishes none.
+
 ## Named refusal outcomes
 
 A named refusal of a Ceph block ends the attempt with its entry's code. An

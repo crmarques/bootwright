@@ -64,7 +64,7 @@ func cephMarkerNames() []string {
 		"initial-mgr-original-ready.json", "manifest.json", "monitoring-haproxy-attempt.json", "monitoring-haproxy-complete.json",
 		"monitoring-log-config-attempt.json",
 		"monitoring-log-config-complete.json", "monitoring-template-attempt.json", "monitoring-template-complete.json",
-		"native-teardown.json", "nfs-export-attempt.", "nfs-export-id.",
+		"native-route.json", "native-teardown.json", "nfs-export-attempt.", "nfs-export-id.",
 		"nfs-pool-id.json", "nfs-pool.json", "nvmeof-attempt.", "nvmeof-complete.", "object-bucket-", "object-user-",
 		"osd-device-", "osd-device-intent.json", "owner.json", "physical-device-binding.json", "podman-auth.json",
 		"policy-", "policy-attempt-", "policy-id-", "policy.json", "pool-", "pool-attempt-", "pool-id-",

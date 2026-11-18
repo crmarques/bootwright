@@ -191,7 +191,9 @@ bypass choice is resolved against the Entitlement registry authority while
 planning, and the resulting endpoint is frozen with the cluster's host scope.
 It carries the registry broker's every upstream connection, the delivery hop
 included; registry TLS stays verified against the
-[registry anchor](../ceph.md#registry-broker). The
+[registry anchor](../ceph.md#registry-broker). It also carries each host's
+native pulls, such as the manager's license acceptance, through the
+[native pull route](../ceph.md#native-pull-route). The
 controller's image resolution keeps the controller's own route.
 
 `packageRepositoryTLSVerification` selects

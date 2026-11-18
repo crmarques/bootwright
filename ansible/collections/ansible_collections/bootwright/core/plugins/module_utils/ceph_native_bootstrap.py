@@ -136,7 +136,8 @@ class Bootstrap:
             require(not matching or recorded == identity and matching == [line], "foreign-authorization")
             self.worker.registry_preflight(registry)
             self.worker.tunnel_policy_preflight()
-            registry_changed = self.worker.prepare_registry(registry)
+            route_changed = self.worker.prepare_route()
+            registry_changed = self.worker.prepare_registry(registry) or route_changed
             managers = next(s["placement"]["hosts"] for s in self.worker.request["services"] if s["service_type"] == "mgr")
             if self.worker.host["name"] in managers:
                 self.worker.transport({name: private[name] for name in ("clusterPrivateKey", "clusterPublicKey", "knownHosts")})

@@ -1817,6 +1817,10 @@ class Worker:
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_registry
         return ceph_native_registry.Registry(self).prove_registry(wanted)
 
+    def prepare_route(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_registry
+        return ceph_native_registry.Registry(self).prepare_route()
+
     def provider_registry_absent(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_registry
         return ceph_native_registry.Registry(self).provider_registry_absent()
