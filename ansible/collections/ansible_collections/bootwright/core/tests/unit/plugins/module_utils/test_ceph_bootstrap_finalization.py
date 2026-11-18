@@ -98,44 +98,27 @@ def test_missing_call_home_flag_observation_never_initializes(native, call_home)
     assert effects == [] and native.markers.writes == []
 
 
-def test_call_home_initialization_requires_enabled_intent(native, call_home):
-    unused, effects = call_home
-    native.request["callHome"] = "disabled"
-    with pytest.raises(ceph_native.Refusal, match="^call-home-unqualified$"):
-        native.initialize_call_home(True)
-    assert effects == [] and native.markers.writes == []
-
-
 def untouched(*args, **kwargs):
-    pytest.fail("an opt-in Call Home left disabled read or wrote a marker: " + repr((args, kwargs)))
+    pytest.fail("a disabled Call Home read or wrote a marker: " + repr((args, kwargs)))
 
 
-def test_opt_in_call_home_left_disabled_has_no_step_marker_or_effect(native, call_home):
+UNANCHORED = "unanchored"
+
+
+@pytest.mark.parametrize("host,image", [(fixtures.OLD, fixtures.OLD), (fixtures.CURRENT, fixtures.CURRENT), (fixtures.CURRENT, fixtures.OLD),
+                                        (fixtures.OLD, fixtures.CURRENT), (fixtures.OLD, UNANCHORED), (UNANCHORED, fixtures.CURRENT)])
+def test_disabled_call_home_has_no_step_marker_or_effect_on_any_model_and_proves_its_module_off(native, call_home, host, image):
     state, effects = call_home
     native.request["callHome"] = "disabled"
-    native.selection = fixtures.built(fixtures.OLD)
+    native.selection = fixtures.built(*(fixtures.specs.zipapp(fixtures.specs.ANCHOR[:-1]) if value == UNANCHORED else value for value in (host, image)))
     native.markers.read = native.markers.write = untouched
+    native.require_call_home_path()
     assert native.initialize_call_home(True) == (True, False) and native.initialize_call_home(False) == (True, False)
     assert native.configure_call_home(True) == (True, False) and native.configure_call_home(False) == (True, False)
-    assert native.accept_call_home() is False
-    assert effects == [] and native.selection.applied == {"ceph-call-home-opt-in"}
+    assert native.accept_call_home() is False and effects == []
     state["enabled"] = True
     with pytest.raises(ceph_native.Refusal, match="^call-home-drift$"):
         native.initialize_call_home(False)
-
-
-@pytest.mark.parametrize("host,image", [(fixtures.CURRENT, fixtures.CURRENT), (fixtures.OLD, fixtures.CURRENT), (fixtures.CURRENT, fixtures.OLD),
-                                        (fixtures.OLD, "unanchored")])
-@pytest.mark.parametrize("step", ["initialize", "configure", "accept"])
-def test_every_other_disabled_call_home_path_keeps_the_enabled_only_guard(native, call_home, host, image, step):
-    unused, effects = call_home
-    native.request["callHome"] = "disabled"
-    native.selection = fixtures.built(host, fixtures.specs.zipapp(fixtures.specs.ANCHOR[:-1]) if image == "unanchored" else image)
-    native.markers.read = native.markers.write = untouched
-    with pytest.raises(ceph_native.Refusal, match="^call-home-unqualified$"):
-        {"initialize": lambda: native.initialize_call_home(True), "configure": lambda: native.configure_call_home(True),
-         "accept": native.accept_call_home}[step]()
-    assert effects == [] and native.selection.applied == set()
 
 
 def test_enabled_intent_on_an_opt_in_manager_keeps_the_general_call_home_step(native, call_home):

@@ -185,7 +185,6 @@ Alias cell.
 | [B671](#b671) | new, 2026-10-19 (X103) | enabling | Infrastructure components and `cmd/bootwright` tests | A plan test pins the block set of the `lab-services` apply and destroy plans | Test hardening; no defect shown |
 | [B672](#b672) | new, 2026-10-19 (X103) | enabling | Developer tooling | `make docs-check` runs the pinned yamllint over tracked example YAML, or the formatting reference records the omission | Gate hardening; no example fails today |
 | [B674](#b674) | new, 2026-10-19 (X102) | safety | Ceph host lifecycle, with B491 | A release whose cluster block never started removes the owned host runtime tree and any broker scratch | A new destructive host effect needing its own removal proof |
-| [B675](#b675) | new, 2026-10-19 (X102) | product | Storage, Ceph Call Home | `spec.distribution.ibm.callHome: disabled` passes the opt-out flag when the selected build declares it | Keyed on artifact facts, not a version label; a feature gap outside a defect slice |
 | [B676](#b676) | new, 2026-10-19 (X103) | product | Controller | `spec.dependencyVersions.libvirt` honours a NEVRA pin through host `dnf`, or the field leaves the grammar | Implementation scope, not a compatibility rule |
 | [B677](#b677) | new, 2026-10-19 (X102) | enabling | Storage | The misnamed `unsupported-release` Ceph refusal token is renamed `unsupported-coordinates` | Cosmetic, and it collides with the closed reason lists the m2c lanes edit |
 | [B679](#b679) | new, 2026-10-19 (X102) | enabling | Storage and State reconciliation | The edges X102's lanes and reviews left untested, unmeasured or unreconciled are tested or recorded | Found in X102; each is hardening of a path no known input reaches |
@@ -2067,19 +2066,6 @@ retained. **Outcome:** such a release removes the owned tree and the scratch.
 **Requires:** [B491](m2.md#b491)'s teardown contract. **Definition:**
 `Needs definition`. **Exit evidence:** a destroy test that removes only the
 owned tree, and one that refuses a tree it does not own.
-
-### B675
-
-When the selected build declares `--disable-ibm-call-home` (the
-`host-cephadm.call-home-opt-out` fact in `native_specializations.py`),
-`spec.distribution.ibm.callHome: disabled` today refuses `call-home-unqualified` instead of
-passing the flag. Found by the D163 sweep. **Outcome:** the flag is passed,
-and the [storage API](../api/ceph.md) states it. **Why parked:** the fact
-comes from the artifacts and not from a version label, so it is not a D163
-removal, and it is a feature gap outside a defect slice. **Requires:** none.
-**Definition:** `Specified`. **Exit evidence:** a seam test on a synthetic build
-that declares the option, and the existing refusal kept for a build that does
-not.
 
 ### B676
 

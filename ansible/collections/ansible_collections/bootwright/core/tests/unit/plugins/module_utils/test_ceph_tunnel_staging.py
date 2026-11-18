@@ -244,10 +244,20 @@ def test_staging_does_not_extend_to_uninspected_provider_tools(stage_request, fi
 
 
 @pytest.mark.parametrize("build", sorted(specs.BUILDS))
-def test_the_bootstrap_argv_leaves_the_call_home_path_to_the_worker(stage_request, build):
+def test_disabled_call_home_passes_the_opt_out_flag_except_on_an_opt_in_build(stage_request, build):
     enabled = staging.bootstrap_argv(stage_request, scratch(stage_request), chosen(build))
+    assert "--disable-ibm-call-home" not in enabled
     stage_request["callHome"] = "disabled"
-    assert staging.bootstrap_argv(stage_request, scratch(stage_request), chosen(build)) == enabled
+    disabled = staging.bootstrap_argv(stage_request, scratch(stage_request), chosen(build))
+    assert disabled == enabled + (["--disable-ibm-call-home"] if specs.BUILDS[build] else [])
+
+
+@pytest.mark.parametrize("shape", sorted(specs.UNREADABLE))
+def test_an_unanchored_host_cephadm_keeps_the_general_opt_out_flag(stage_request, shape):
+    stage_request["callHome"] = "disabled"
+    selection = specs.selection(specs.UNREADABLE[shape]())
+    assert staging.bootstrap_argv(stage_request, scratch(stage_request), selection) == todays_argv(stage_request) + ["--disable-ibm-call-home"]
+    assert selection.applied == set()
 
 
 def test_sshd_include_tree_is_closed_without_effects():

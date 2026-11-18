@@ -166,6 +166,8 @@ def bootstrap_argv(request, scratch, selection):
             "--config", os.path.join(scratch, "ceph.conf")]
     if selection.variant("ceph.bootstrap.license-flag") == "pass":
         argv.append("--automatically-accept-license")
+    if request["callHome"] == "disabled" and selection.variant("ceph.call-home-model") == "opt-out":
+        argv.append("--disable-ibm-call-home")
     if request.get("singleHostDefaults"):
         argv.append("--single-host-defaults")
     networks = request.get("clusterNetworks")

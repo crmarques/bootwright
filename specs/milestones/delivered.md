@@ -7075,7 +7075,7 @@ a Ceph release) and gap1-test-weakening-2-1 (an OS gate; its residual
 diagnostic is parked). Owner questions B650 to B656, answered by
 [D165](backlog.md#d165) and closed in
 [X104](#x104--owner-answers-of-2026-10-19). Parked: [B657](backlog.md#b657) to B664,
-[B674](backlog.md#b674), [B675](backlog.md#b675), [B677](backlog.md#b677),
+[B674](backlog.md#b674), [B675](m2.md#b675), [B677](backlog.md#b677),
 [B678](#x277--parked-defects-fixed-on-request) and [B679](backlog.md#b679). The audit also noted that
 the numbering of the peer branch `m2c` against the ids on main
 (milestones-docs-1) is the peer's to reconcile above D164, B681 and X103; this

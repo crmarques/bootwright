@@ -1627,9 +1627,7 @@ class Worker:
 
     def call_home_state(self):
         """A completion record never replaces current native module proof."""
-        opt_in = self.request["callHome"] != "enabled" and self.selection.variant("ceph.call-home-model") == "opt-in"
-        if self.request["callHome"] != "enabled" and not opt_in:
-            return
+        disabled = self.request["callHome"] == "disabled"
         modules = self.ceph("mgr", "module", "ls")
         require(isinstance(modules, dict), "native-output")
         selected = {}
@@ -1639,7 +1637,7 @@ class Worker:
             require(len(set(value)) == len(value), "native-output")
             selected[field] = set(value)
         enabled = selected["enabled_modules"] | selected["always_on_modules"]
-        if opt_in:
+        if disabled:
             require("call_home_agent" not in enabled, "call-home-drift")
             return
         require("call_home_agent" in enabled and "call_home_agent" not in selected["force_disabled_modules"], "call-home-drift")
@@ -1694,15 +1692,13 @@ class Worker:
         return runtime.cephadm_payload(self.host_preparation())
 
     def require_call_home_path(self):
-        model = self.selection.variant("ceph.call-home-model")
-        require(self.request["callHome"] == ("enabled" if model == "opt-out" else "disabled"), "call-home-unqualified")
+        """Disabled Call Home has a path on every model: the general bootstrap passes --disable-ibm-call-home, and an opt-in build
+        leaves it at its native default. Enabled Call Home has none on an opt-in build."""
+        require(self.request["callHome"] == "disabled" or self.selection.variant("ceph.call-home-model") == "opt-out", "call-home-unqualified")
 
     def call_home_applicable(self):
-        """Opt-in Call Home left disabled has no step; every other path keeps the enabled-only guard."""
-        if self.request["callHome"] == "disabled" and self.selection.variant("ceph.call-home-model") == "opt-in":
-            return False
-        require(self.request["callHome"] == "enabled", "call-home-unqualified")
-        return True
+        """Disabled Call Home has no step on any model; its proof is that call_home_agent stays off."""
+        return self.request["callHome"] == "enabled"
 
     def require_declared_options(self, argv):
         """An anchored host parser must declare every option; an unanchored one leaves cephadm's argparse to judge."""

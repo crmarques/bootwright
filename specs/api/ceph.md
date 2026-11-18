@@ -225,12 +225,11 @@ key or unsigned RPM refuses before package installation.
 
 The `ibm` arm's `callHome` is required, with no default, and is `enabled` or
 `disabled`. `enabled` keeps the provider's Call Home reporting active after
-bootstrap; `disabled` leaves it inactive. The selected build decides how an
-intent is realized: on a build whose Call Home is opt-in, `disabled` is the
-native default and requires the `call_home_agent` module not enabled, and
-`enabled` refuses `call-home-unqualified`; on a build whose Call Home is
-automatic, `disabled` refuses `call-home-unqualified`. Either refusal comes
-before the cluster is claimed but after the ceph-host blocks ran from the
+bootstrap; `disabled` leaves it inactive. `disabled` runs no Call Home step
+and requires the `call_home_agent` module not enabled: bootstrap passes
+`--disable-ibm-call-home`, except on a build whose Call Home is opt-in, where
+`disabled` is the native default. On that build `enabled` refuses
+`call-home-unqualified`. The refusal comes before the cluster is claimed but after the ceph-host blocks ran from the
 frozen input, so a corrected `callHome` is an input change: `bootwright
 destroy` takes back what the apply owns, then `context update` and a fresh
 apply carry it (D162).

@@ -1707,13 +1707,21 @@ def test_a_manager_without_the_license_contract_is_ready_without_license_keys(co
     native, calls = twenty_one_observation(core_request)
     assert native.observe()["ready"] is True
     assert "IBM_LICENSE_NOT_ACCEPTED" not in native.blocking and native.markers.writes == []
-    assert native.selection.applied == {"ceph-mgr-without-license-contract", "ceph-call-home-opt-in"}
+    assert native.selection.applied == {"ceph-mgr-without-license-contract"}
     assert all("accept-license" not in argv and "enable-call-home" not in argv for argv in calls)
 
 
 @pytest.mark.parametrize("field", ["enabled_modules", "always_on_modules"])
 def test_an_enabled_call_home_agent_on_an_opt_in_cluster_is_drift(core_request, field):
     native, unused = twenty_one_observation(core_request, dict(QUIET_MANAGER, **{field: QUIET_MANAGER[field] + ["call_home_agent"]}))
+    with pytest.raises(ceph_native.Refusal, match="^call-home-drift$"):
+        native.observe()
+
+
+@pytest.mark.parametrize("field", ["enabled_modules", "always_on_modules"])
+def test_an_enabled_call_home_agent_on_a_cluster_bootstrapped_with_the_opt_out_flag_is_drift(core_request, field):
+    native, unused = twenty_one_observation(core_request, dict(QUIET_MANAGER, **{field: QUIET_MANAGER[field] + ["call_home_agent"]}))
+    native.selection = specs.selection(specs.synthesized("20.2.2-349.el9cp"))
     with pytest.raises(ceph_native.Refusal, match="^call-home-drift$"):
         native.observe()
 
