@@ -75,7 +75,10 @@ presented by a mutation before confirmation carries no such statement.
 The shared renderer presents status meaning, resource identity, grouped facts,
 and the next safe action. Successful headlines use `✓`, pending or unchanged
 headlines use `○`, and failed or unknown headlines use `!`; `--ascii` selects
-ASCII equivalents. Diagnostics use explicit `error` or `warning` severity with the safe subject
+ASCII equivalents. An operation that paused and also failed, as a destroy that
+pauses for its Machines to stop does, reads `○ <Verb> paused until the operator
+acts on the error below` and exits `1`; only a pause the operator selected reads
+as success. Diagnostics use explicit `error` or `warning` severity with the safe subject
 and its detail group. Progress retains explicit state words such as `[RUNNING]`, `[DONE]`,
 `[SKIPPED]`, `[FAIL]`, `[CANCELED]` and `[UNKNOWN]`.
 

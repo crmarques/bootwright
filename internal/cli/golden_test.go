@@ -895,6 +895,19 @@ func cliGoldens() []cliGolden {
 		},
 		{golden: "cli-apply-paused", args: "apply --yes --stage infrastructure-services,substrates", record: func(r *dispatchRecord) { r.result.lifecycleOperation = operation("paused") }},
 		{
+			// A destroy paused at its stop proof failed: the operator must stop
+			// the Machines, so its headline never reads as success.
+			golden: "cli-destroy-paused-for-stop", args: "destroy --yes", code: 1,
+			record: func(r *dispatchRecord) {
+				result := operation("paused")
+				result.Verb, result.Receipt.Verb, result.Receipt.Next, result.NextCommand = "destroy", "destroy", "continue-destroy", "bootwright destroy --context lab"
+				r.result.lifecycleOperation = result
+				r.err = diagnostics.NewFailureWithRemediation("lifecycle.live", "Machine rhel-01 is still running", "", "stop it with bootwright machine stop --context lab --name rhel-01, then repeat bootwright destroy --context lab")
+			},
+			stderr: "  error  lifecycle.live\n    Machine rhel-01 is still running\n" +
+				"    Next: stop it with bootwright machine stop --context lab --name rhel-01, then repeat\n    bootwright destroy --context lab\n",
+		},
+		{
 			golden: "cli-apply-unknown", args: "apply --yes", code: 1,
 			record: func(r *dispatchRecord) {
 				r.result.lifecycleOperation = operation("unknown")

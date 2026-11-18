@@ -60,7 +60,7 @@ func (r *Runner) writeExecutedLifecycle(path string, result commandResult, diagn
 	if structuredFormat(presentationFor(r.config.Out).Format) {
 		return true, writeStructuredOperation(r.config.Out, path, result.lifecycleOperation, diagnostics, 1)
 	}
-	if err := writeLifecycleOperation(r.config.Out, result.lifecycleOperation); err != nil {
+	if err := writeLifecycleOperationAs(r.config.Out, result.lifecycleOperation, true); err != nil {
 		return true, err
 	}
 	return true, writeHumanDiagnostics(r.config.ErrOut, displayDiagnosticsInOrder(append(slices.Clone(result.lifecycleOperation.Warnings), diagnostics...)))

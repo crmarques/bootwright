@@ -326,6 +326,10 @@ func writeLifecyclePlan(out io.Writer, result *lifecycle.PlanResult) error {
 }
 
 func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) error {
+	return writeLifecycleOperationAs(out, result, false)
+}
+
+func writeLifecycleOperationAs(out io.Writer, result *lifecycle.OperationResult, stopped bool) error {
 	var text display
 	status := "OK"
 	if result.Receipt.State != "done" && result.Receipt.State != "paused" {
@@ -335,7 +339,11 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 		status = "UNKNOWN"
 	}
 	verb := strings.ToUpper(result.Verb[:1]) + result.Verb[1:]
-	text.headline(status, verb+" "+result.Receipt.State)
+	title := verb + " " + result.Receipt.State
+	if stopped && result.Receipt.State == "paused" {
+		status, title = "PAUSED", title+" until the operator acts on the error below"
+	}
+	text.headline(status, title)
 	if result.Settled {
 		text.section("")
 		text.lines([]string{settledNote(result.Verb, result.Recovered)})

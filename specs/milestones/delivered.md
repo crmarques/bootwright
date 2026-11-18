@@ -17445,3 +17445,17 @@ results of `apply`, `destroy` and `status`
 ([lifecycle and status results](../cli/output.md#lifecycle-and-status-results)).
 Guarded by `TestAPendingBlockNamesWhatItWaitsFor` and the `cli-apply-failed`
 goldens.
+
+## X592 — A destroy paused for its Machines never reads as success
+
+### B1582
+
+Under [D276](backlog.md#d276) (audit 006 W1.2, finding X17-04, and clause (7)
+taken by the session pending the owner's review), split from
+[B1562](m1.md#b1562). A destroy that paused at its stop proof printed a green
+`Destroy paused` headline yet exited `1` with an error. It now reads `○ Destroy
+paused until the operator acts on the error below`, keeping its exit status `1`
+and its diagnostic ([human output](../cli/output.md#human-output)). Guarded by
+the `cli-destroy-paused-for-stop` golden. A code of its own for this stop
+waits for the stop catalog of [B1563](m1.md#b1563); an error of the lineage read
+or a probe there still reads as paused.
