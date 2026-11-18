@@ -17264,3 +17264,14 @@ more than a point above its floor of 83.9%, because X568 added tests to the
 package and left the floor. `make cover-floors` raised that floor to 85.9% and
 the floor of `api/v1alpha1`, which had risen within its point, from 81.4% to
 81.6%. No code or test changed and no floor fell.
+
+### B1558
+
+Gate repair found by the same run once X573 had landed beside it: on the
+rebased tree `make cover` failed again, every test passing, because
+`internal/machine/power` measured 93.1%, below its floor of 93.3%. Three paths
+of [`machine eject-media`](../cli.md#machine-media-eject) had no test: the
+eject of a Machine the current destroy removed, the deadline a hosted KubeVirt
+eject is lent its token for, and the progress steps of an eject run. A test of
+each brings the package to 93.8%, and each was seen to fail with its path
+altered. No production code changed and no floor moved.

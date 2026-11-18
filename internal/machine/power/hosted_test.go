@@ -117,7 +117,11 @@ func (a *hostedAdapter) Run(_ context.Context, request lifecycle.RunRequest) (li
 	if err := json.Unmarshal(request.Canonical, &frozen); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	evidence, err := json.Marshal(Evidence{Machine: frozen.Identity.Object, Postcondition: true, Power: expected(frozen.Verb), Previous: "on", Request: request.Digest, Changed: true})
+	answered := Evidence{Machine: frozen.Identity.Object, Postcondition: true, Power: expected(frozen.Verb), Previous: "on", Request: request.Digest, Changed: true}
+	if frozen.Verb == EjectMedia {
+		answered.Media, answered.PreviousMedia = MediaNone, MediaPresent
+	}
+	evidence, err := json.Marshal(answered)
 	return lifecycle.RunResult{Outcome: "changed", Evidence: evidence}, err
 }
 
@@ -176,6 +180,37 @@ func TestEveryPowerVerbOnAHostedMachineIsLentOneTokenItClears(t *testing.T) {
 			}
 		})
 	}
+}
+
+// An eject on a hosted Machine is lent its one token for the eject's own
+// deadline, the arm's media eject bound, four state reads and 300 s for the
+// run itself, reaches the port with the Machine's pin, and reports the media
+// it proved and the power it left alone.
+func TestAHostedEjectIsLentItsTokenForTheEjectsOwnDeadline(t *testing.T) {
+	runner, access := &hostedAdapter{}, &hostLender{}
+	results, err := hostedService(&boundary{}, runner, access).EjectMedia(context.Background(),
+		PowerRequest{ContextName: "lab", Names: []string{"node-0"}, SkipConfirmation: true})
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	if len(access.lends) != 1 || len(runner.runs) != 1 {
+		t.Fatalf("lends %d, runs %d, want one of each", len(access.lends), len(runner.runs))
+	}
+	lend, run := access.lends[0], runner.runs[0]
+	if lend.Cluster != "host" || lend.Machine != "node-0" || lend.Digest != run.Digest || lend.Deadline != 20*time.Minute || run.Deadline != lend.Deadline {
+		t.Fatalf("lend = %+v for run deadline %s", lend, run.Deadline)
+	}
+	if run.MaterialValues["pinnedUUIDBase64"] == "" || run.MaterialValues["pinnedSerialBase64"] == "" || run.Refusals[identityMismatch] == nil {
+		t.Fatalf("the hosted eject carries no pin: %+v", run.MaterialValues)
+	}
+	var frozen Request
+	if err := json.Unmarshal(run.Canonical, &frozen); err != nil || frozen.Verb != EjectMedia || frozen.Force || frozen.Controller.HostCluster != "host" {
+		t.Fatalf("frozen request = %s (%v)", run.Canonical, err)
+	}
+	if row := results.Machines[0]; row.Machine != "node-0" || row.Media != MediaNone || row.PreviousMedia != MediaPresent || row.Power != machine.PowerOn || !row.Changed {
+		t.Fatalf("the hosted eject reported %+v", row)
+	}
+	access.cleared(t)
 }
 
 // A port that finds another cluster behind the minted access, or a

@@ -2,11 +2,13 @@ package power
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // removalService answers for the KubeVirt Machines as a destroy that is
@@ -107,5 +109,31 @@ func TestAReadingDuringADestroyReportsEachMachineByWhatStands(t *testing.T) {
 		if run.MaterialValues["pinnedUUIDBase640"] == "" || run.MaterialValues["pinnedSerialBase640"] == "" {
 			t.Fatalf("a reading ran unpinned: %+v", run.MaterialValues)
 		}
+	}
+}
+
+// An eject of a Machine the current destroy removed has no device left to
+// read: it reports the media none and unchanged, as a stop reports the Machine
+// off, in one settled step, without a runtime, a lend, a pin read or a run.
+func TestAnEjectOfAMachineTheCurrentDestroyRemovedReportsNoMedia(t *testing.T) {
+	runtime, runner, access, identities, reporter := &boundary{}, &hostedAdapter{}, &hostLender{}, &pins{identity: vmPin, found: true}, &announced{}
+	removal := removalService(runtime, runner, access, identities)
+	removal.reporter = reporter
+	results, err := removal.EjectMedia(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"node-0"}, SkipConfirmation: true})
+	if err != nil || len(results.Machines) != 1 {
+		t.Fatalf("eject = %+v (%v)", results, diagnostics.Of(err))
+	}
+	row := results.Machines[0]
+	if row.Machine != "node-0" || row.Verb != EjectMedia || row.Media != MediaNone || row.PreviousMedia != MediaNone ||
+		row.Power != machine.PowerOff || row.Previous != "" || row.Changed {
+		t.Fatalf("the eject of a removed Machine reported %+v", row)
+	}
+	if runtime.entered != 0 || len(access.lends) != 0 || len(runner.runs) != 0 || len(identities.asked) != 0 {
+		t.Fatalf("a removed Machine's eject entered %d runtimes, lent %d, ran %d, read pins %v", runtime.entered, len(access.lends), len(runner.runs), identities.asked)
+	}
+	settled := lifecycle.ProgressEvent{Block: "power", Description: "Eject the media of Machine/node-0", Detail: "media none",
+		Status: "unchanged", Position: 1, Total: 1}
+	if len(reporter.events) != 1 || !reflect.DeepEqual(reporter.events[0], settled) || len(reporter.locations) != 0 {
+		t.Fatalf("progress = %+v, log locations %v", reporter.events, reporter.locations)
 	}
 }

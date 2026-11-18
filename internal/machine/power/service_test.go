@@ -852,6 +852,56 @@ func TestAnEjectFreezesItsVerbAndReportsTheMediaItProved(t *testing.T) {
 	}
 }
 
+// An eject is one progress step too: the role's media groups are its
+// sub-steps, in the operator's words, and it settles with the media it proved
+// rather than the power it left alone. A device not proved empty settles
+// unproved, with nothing reported as its media.
+func TestAnEjectReportsOneStepWithTheRolesMediaGroups(t *testing.T) {
+	groups := [][2]string{{"read-media", "running"}, {"read-media", "ok"}, {"eject-media", "running"}, {"eject-media", "ok"}}
+	step := func(group, detail, status string) lifecycle.ProgressEvent {
+		return lifecycle.ProgressEvent{Block: "power", Description: "Eject the media of Machine/guest", Group: group, Detail: detail,
+			Status: status, Position: 1, Total: 1}
+	}
+	for _, test := range []struct {
+		name   string
+		runner Runner
+		want   []lifecycle.ProgressEvent
+	}{
+		{"an eject that released media", &adapter{power: "on", changed: true, media: [2]string{MediaNone, MediaPresent}, groups: groups}, []lifecycle.ProgressEvent{
+			step("", "", "running"),
+			step("read-media", "read the presented media", "running"),
+			step("read-media", "read the presented media", "ok"),
+			step("eject-media", "eject the presented media", "running"),
+			step("eject-media", "eject the presented media", "ok"),
+			step("", "media none", "changed"),
+		}},
+		{"an eject of a device already empty", &adapter{power: "off", media: [2]string{MediaNone, MediaNone}, groups: groups}, []lifecycle.ProgressEvent{
+			step("", "", "running"),
+			step("read-media", "read the presented media", "running"),
+			step("read-media", "read the presented media", "ok"),
+			step("eject-media", "eject the presented media", "running"),
+			step("eject-media", "eject the presented media", "ok"),
+			step("", "media none", "unchanged"),
+		}},
+		{"an eject that left the device presenting", &adapter{power: "on", media: [2]string{MediaPresent, MediaPresent}}, []lifecycle.ProgressEvent{
+			step("", "", "running"),
+			step("", "", "unknown"),
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			reporter := &announced{}
+			_, _ = New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, test.runner, nil, nil, reporter, nil).
+				EjectMedia(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}, SkipConfirmation: true})
+			if len(reporter.order) == 0 || reporter.order[0] != "logs" || slices.Contains(reporter.order[1:], "logs") {
+				t.Fatalf("reported in the order %v, want the log location first", reporter.order)
+			}
+			if !reflect.DeepEqual(reporter.events, test.want) {
+				t.Fatalf("progress =\n%+v\nwant\n%+v", reporter.events, test.want)
+			}
+		})
+	}
+}
+
 func TestEjectEvidenceIsAcceptedOnlyForADeviceReadBackEmpty(t *testing.T) {
 	request := Request{Identity: Identity{Context: "lab", Object: "guest"}, Verb: EjectMedia}
 	for _, power := range []string{machine.PowerOn, machine.PowerOff} {
