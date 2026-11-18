@@ -17252,3 +17252,15 @@ W6.2 to W6.4 were delivered by
 [X520](#x520--every-module-runs-under-test) and
 [X522](#x522--one-walker-for-the-role-tests).
 
+## X577 — Coverage gate repairs
+
+### B1556
+
+Gate repair found on 2026-11-17 by a full run of `make check`, `make race` and
+`make cover`, under the owner's request to run the full tests and fix what
+they find. `make check` and `make race` passed; `make cover` failed on its
+floor check alone, every test passing: `internal/substrate` measured 86.4%,
+more than a point above its floor of 83.9%, because X568 added tests to the
+package and left the floor. `make cover-floors` raised that floor to 85.9% and
+the floor of `api/v1alpha1`, which had risen within its point, from 81.4% to
+81.6%. No code or test changed and no floor fell.
