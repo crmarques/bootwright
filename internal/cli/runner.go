@@ -337,7 +337,7 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 }
 
 func (r *Runner) writeServiceDiagnostics(command *cobra.Command, path string, result commandResult, reported []diagnostic, usage bool, logs []string) int {
-	reported = remediatedFor(command, reported)
+	reported = remediatedFor(command, reported, result.contextName())
 	spec := specFor(path)
 	if failed := spec.render.failed; failed != nil {
 		if handled, _ := failed(r, renderCall{command: command, path: path, result: result}, reported); handled {
@@ -370,10 +370,12 @@ func (r *Runner) writeServiceDiagnostics(command *cobra.Command, path string, re
 	return exitCode
 }
 
-func remediatedFor(command *cobra.Command, reported []diagnostic) []diagnostic {
+func remediatedFor(command *cobra.Command, reported []diagnostic, resolved string) []diagnostic {
 	var contextName string
 	if flag := command.Flags().Lookup("context"); flag != nil && dnsLabel(flag.Value.String()) {
 		contextName = flag.Value.String()
+	} else if (flag == nil || flag.Value.String() == "") && dnsLabel(resolved) {
+		contextName = resolved
 	}
 	remediated := make([]diagnostic, len(reported))
 	for i, d := range reported {

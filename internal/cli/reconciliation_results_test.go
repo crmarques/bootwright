@@ -476,6 +476,19 @@ func TestADefaultRemediationNamesTheInvokingContext(t *testing.T) {
 	}
 }
 
+// An operation on the current context names the context its result resolved.
+func TestADefaultRemediationNamesTheResolvedContext(t *testing.T) {
+	failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "the operation did not complete"}}}
+	record := &dispatchRecord{result: commandResult{lifecycleOperation: &lifecycle.OperationResult{Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: "apply"}}, err: failure}
+	var out, errOut bytes.Buffer
+	if code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"apply", "--yes"}); code != 1 {
+		t.Fatalf("code = %d", code)
+	}
+	if !strings.Contains(errOut.String(), "Next: run bootwright status --context lab to see the records and the next step\n") {
+		t.Fatalf("stderr = %q", errOut.String())
+	}
+}
+
 // A --context value that is not a context name never reaches a remedy: the
 // default keeps its placeholder.
 func TestADefaultRemediationKeepsThePlaceholderForAnInvalidContext(t *testing.T) {
@@ -491,7 +504,7 @@ func TestADefaultRemediationKeepsThePlaceholderForAnInvalidContext(t *testing.T)
 		if err := command.Flags().Set("context", name); err != nil {
 			t.Fatal(err)
 		}
-		if got := remediatedFor(command, []diagnostic{failure}); got[0].Remediation != want {
+		if got := remediatedFor(command, []diagnostic{failure}, "lab"); got[0].Remediation != want {
 			t.Fatalf("--context %q remedies %q, want %q", name, got[0].Remediation, want)
 		}
 	}
@@ -527,7 +540,7 @@ func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 			if !strings.HasSuffix(rendered, "next: continue-"+path+"\n") {
 				t.Fatalf("result does not end with its receipt: %q", rendered)
 			}
-			if errOut.String() != "  error  lifecycle.state\n    the operation did not complete\n    Next: run bootwright status --context <context> to see the records and the next step\n" {
+			if errOut.String() != "  error  lifecycle.state\n    the operation did not complete\n    Next: run bootwright status --context lab to see the records and the next step\n" {
 				t.Fatalf("stderr = %q", errOut.String())
 			}
 		})

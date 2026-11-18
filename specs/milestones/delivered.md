@@ -17392,3 +17392,15 @@ order and its own diagnostic last, in both modes
 Guarded by the `cli-apply-failed-in-engine-order` goldens. Still with B1562 from
 W1.2: the step that was running, the pending reasons, the receipt of an early
 stop and the paused destroy.
+
+## X586 — A default remedy names the current context
+
+### B1576
+
+Under [D276](backlog.md#d276) (audit 006 W1.5), split from
+[B1562](m1.md#b1562). A default remedy printed `--context <context>` whenever
+the invocation used the current context instead of naming one, so the command
+it offered could not be run as printed. It now names the context the lifecycle
+result resolved ([diagnostic taxonomy and order](../cli/output.md#diagnostic-taxonomy-and-order)).
+Guarded by `TestADefaultRemediationNamesTheResolvedContext` and
+`TestFailedOperationKeepsItsResultLogAndReceipt`.

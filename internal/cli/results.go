@@ -30,6 +30,18 @@ func encodingFailure(ctx context.Context, err error) error {
 	return &resultFailure{"runtime.encode", "effective state could not be encoded", 1}
 }
 
+func (r commandResult) contextName() string {
+	switch {
+	case r.lifecycleOperation != nil:
+		return r.lifecycleOperation.Context.Name
+	case r.lifecyclePlan != nil:
+		return r.lifecyclePlan.Context.Name
+	case r.lifecycleStatus != nil:
+		return r.lifecycleStatus.Context.Name
+	}
+	return ""
+}
+
 // createdLogs preserves each private log reference even when its invocation failed.
 func (r commandResult) createdLogs() []string {
 	if r.lifecycleOperation != nil {

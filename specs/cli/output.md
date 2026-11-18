@@ -499,7 +499,8 @@ registered code that can be an error
 `TestEveryErrorDiagnosticIsWrittenWithARemediation`); a `cli.usage` error and a
 warning get none. A default that names a context-backed command carries
 `--context`, the invoking invocation's context when it named a valid context
-name and `<context>` otherwise
+name, the context its lifecycle result resolved when it named none, and
+`<context>` otherwise
 (`TestEveryDefaultNamingAContextBackedCommandCarriesTheContext`,
 `TestADefaultRemediationNamesTheInvokingContext`,
 `TestADefaultRemediationKeepsThePlaceholderForAnInvalidContext`).
