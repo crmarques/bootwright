@@ -18,16 +18,16 @@ type lineage []lineageMember
 
 func lineageOf(ctx context.Context, store recordReader, head lineageMember) (lineage, error) {
 	if head.operation.Verb != reconciliation.Apply {
-		return nil, failure("lifecycle.state", "the operation "+head.operation.ID+" heads a lineage and is no apply", "restore the context store")
+		return nil, engineRecordsDamaged.Fail("the operation "+head.operation.ID+" heads a lineage and is no apply", "restore the context store")
 	}
 	chain := lineage{head}
 	seen := map[string]bool{head.operation.ID: true}
 	for id := head.operation.Predecessor; id != ""; {
 		switch {
 		case seen[id]:
-			return nil, failure("lifecycle.state", "the applies this operation adds to name one another in a cycle", "restore the context store")
+			return nil, engineRecordsDamaged.Fail("the applies this operation adds to name one another in a cycle", "restore the context store")
 		case len(seen) >= operationstore.MaxOperations:
-			return nil, failure("lifecycle.state", "the applies this operation adds to exceed the operations a context retains", "restore the context store")
+			return nil, engineRecordsDamaged.Fail("the applies this operation adds to exceed the operations a context retains", "restore the context store")
 		}
 		seen[id] = true
 		record, err := store.ReadOperation(ctx, id)
@@ -35,7 +35,7 @@ func lineageOf(ctx context.Context, store recordReader, head lineageMember) (lin
 			return nil, err
 		}
 		if record.Verb != reconciliation.Apply {
-			return nil, failure("lifecycle.state", "the operation this apply adds to is no apply", "restore the context store")
+			return nil, engineRecordsDamaged.Fail("the operation this apply adds to is no apply", "restore the context store")
 		}
 		plan, err := store.ReadPlan(ctx, id)
 		if err != nil {
@@ -129,13 +129,13 @@ func (l lineage) definitions() []reconciliation.BlockDefinition {
 func (l lineage) routed(block string) (lineageMember, error) {
 	switch len(l) {
 	case 0:
-		return lineageMember{}, failure("lifecycle.state", "the operation names no apply to route the block "+block+" to", "restore the context store")
+		return lineageMember{}, engineRecordsDamaged.Fail("the operation names no apply to route the block "+block+" to", "restore the context store")
 	case 1:
 		return l[0], nil
 	}
 	owner, held := l.ownerOf(block)
 	if !held {
-		return lineageMember{}, failure("lifecycle.state", "no apply of the lineage of "+l.head().operation.ID+" holds the block "+block, "restore the context store")
+		return lineageMember{}, engineRecordsDamaged.Fail("no apply of the lineage of "+l.head().operation.ID+" holds the block "+block, "restore the context store")
 	}
 	return owner, nil
 }
@@ -239,7 +239,7 @@ func sourceLineage(ctx context.Context, store recordReader, source string) (line
 }
 
 func notAnApply() error {
-	return failure("lifecycle.state", "the operation this removal takes back is no apply", "restore the context store")
+	return engineRecordsDamaged.Fail("the operation this removal takes back is no apply", "restore the context store")
 }
 
 func appliedView(ctx context.Context, store recordReader, applied operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState) (reconciliation.Plan, map[string]reconciliation.BlockState, error) {

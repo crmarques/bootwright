@@ -41,7 +41,7 @@ func (s Service) objectEvidence(ctx context.Context, contextName, kind, object s
 		return nil, err
 	}
 	if kind == "" || object == "" {
-		return nil, failure("lifecycle.state", "an evidence read names no object", "")
+		return nil, engineRequestDefect.Fail("an evidence read names no object", "")
 	}
 	name, err := s.resolve(ctx, contextName)
 	if err != nil {
@@ -61,7 +61,7 @@ func (s Service) objectEvidence(ctx context.Context, contextName, kind, object s
 
 func (s Service) objectEvidenceAt(ctx context.Context, view View, kind, object string, owners ownersOf) ([]BlockEvidence, error) {
 	if kind == "" || object == "" {
-		return nil, failure("lifecycle.state", "an evidence read names no object", "")
+		return nil, engineRequestDefect.Fail("an evidence read names no object", "")
 	}
 	var found []BlockEvidence
 	err := func() error {
@@ -144,7 +144,7 @@ func provedDependencies(ctx context.Context, store OperationStore, operation ope
 	for _, id := range block.Prerequisites {
 		owner, found := held.ownerOf(id)
 		if !found {
-			return nil, failure("lifecycle.state", "no apply of the lineage of "+operation.ID+" holds the prerequisite "+id, "restore the context store")
+			return nil, applyPrerequisiteLost.Fail("no apply of the lineage of "+operation.ID+" holds the prerequisite "+id, "restore the context store")
 		}
 		prerequisite, _ := owner.plan.Block(id)
 		evidence, err := blockEvidence(ctx, store, owner.operation.ID, prerequisite, operation.Verb)
@@ -164,7 +164,7 @@ func (s Service) applyDependencies(ctx context.Context, store recordReader, appl
 		return nil, err
 	}
 	if operation.Verb != reconciliation.Apply {
-		return nil, failure("lifecycle.state", "dependency identity must come from the original apply", "")
+		return nil, engineRequestDefect.Fail("dependency identity must come from the original apply", "")
 	}
 	plan, err := store.ReadPlan(ctx, applyOperation)
 	if err != nil {
@@ -181,7 +181,7 @@ func (s Service) applyDependencies(ctx context.Context, store recordReader, appl
 	}
 	index := slices.IndexFunc(plan.Blocks, func(block reconciliation.Block) bool { return block.ID == blockID })
 	if index < 0 {
-		return nil, failure("lifecycle.state", "the original apply has no dependency identity for this block", "")
+		return nil, engineRecordsDamaged.Fail("the original apply has no dependency identity for this block", "")
 	}
 	dependencies := map[string]bool{}
 	pending := slices.Clone(plan.Blocks[index].Dependencies)
@@ -194,7 +194,7 @@ func (s Service) applyDependencies(ctx context.Context, store recordReader, appl
 		dependencies[id] = true
 		dependency := slices.IndexFunc(plan.Blocks, func(block reconciliation.Block) bool { return block.ID == id })
 		if dependency < 0 {
-			return nil, failure("lifecycle.state", "the original apply names a missing dependency", "")
+			return nil, engineRecordsDamaged.Fail("the original apply names a missing dependency", "")
 		}
 		pending = append(pending, plan.Blocks[dependency].Dependencies...)
 	}
@@ -233,7 +233,7 @@ func applyPreparations(ctx context.Context, store recordReader, applyOperation, 
 		return nil, err
 	}
 	if operation.Verb != reconciliation.Apply {
-		return nil, failure("lifecycle.state", "dependency identity must come from the original apply", "")
+		return nil, engineRequestDefect.Fail("dependency identity must come from the original apply", "")
 	}
 	record, err := store.Block(ctx, applyOperation, blockID)
 	if err != nil {

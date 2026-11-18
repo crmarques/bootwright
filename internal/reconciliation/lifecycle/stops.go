@@ -139,6 +139,27 @@ var (
 	applyUntilBeforePreparation = diagnostics.Stop{Code: "apply.until-before-preparation", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
 		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryOtherVerb,
 		Meaning: "the add-on boundary --until names cannot be planned before preparation completes", Remedy: "run apply to complete preparation, then select --until"}
+	engineRecordsDamaged = diagnostics.Stop{Code: "engine.records-damaged", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryAbandonContext,
+		Meaning: "the context's operation records do not form the lineage or removal the operation needs", Remedy: "restore the context store from a backup, or delete the context with what it may still own"}
+	applyProducedInputMissing = diagnostics.Stop{Code: "apply.produced-input-missing", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseRecords, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a block borrows an output its producer has not proved, or no longer offers", Remedy: "complete the producer block, then repeat the operation"}
+	engineRecaptureMismatch = diagnostics.Stop{Code: "engine.recapture-mismatch", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyPossible,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "an output a block recaptured presents another identity than the one custody holds", Remedy: "find what replaced the effect the block proved; the context's records name the original"}
+	engineResolvedUnperformed = diagnostics.Stop{Code: "engine.resolved-unperformed", Level: diagnostics.LevelResolution, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryRepeat,
+		Meaning: "an observation proved a frozen effect never performed, or left part done, so the block is failed and retried", Remedy: "repeat the operation, which retries the block"}
+	destroyPostconditionUnknown = diagnostics.Stop{Code: "destroy.postcondition-unknown", Level: diagnostics.LevelBlock, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseTarget, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a retried removal read its target again and still could not tell its postcondition, so it performed no effect", Remedy: "restore the target the removal reads, then repeat the destroy"}
+	prepareRefused = diagnostics.Stop{Code: "prepare.refused", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseInput, Recovery: diagnostics.RecoveryFixThenRepeat,
+		Meaning: "a preparation cannot start or advance over the context's current operation or input", Remedy: "finish or take back the current operation, or restore the input the preparation recorded"}
+	prepareUnsupported = diagnostics.Stop{Code: "prepare.unsupported", Level: diagnostics.LevelOperation, Certainty: diagnostics.CertaintyNone,
+		Cause: diagnostics.CauseBuild, Recovery: diagnostics.RecoveryNone,
+		Meaning: "this executable registers no preparation for the requested owner", Remedy: "use a build that registers the preparation"}
 )
 
 var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineRecordsDenied, engineRecordsDevice, engineEscaped, engineStartUnrecorded,
@@ -147,6 +168,8 @@ var stops = []diagnostics.Stop{engineRecordsFull, engineRecordsReadOnly, engineR
 	applyNotAnAddition, applyPrerequisiteLost, applyNothingDeclared, applyStageEmpty, applyStageExcludesRetry, applyUntilUnknown,
 	planInputUncompilable, planCapabilityMissing, planCapabilityDefect, planHostKeyUnbound, planEnvironmentInvalid,
 	engineUnindexedRecords, engineRequestDefect, engineOtherBuild, enginePlanMoved, engineInputMoved, engineBindingLost, authorizeUnneeded,
-	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected, applyUntilBeforePreparation}
+	authorizeMissing, authorizeStale, authorizeRebindInvalid, destroyStageSelected, applyUntilBeforePreparation,
+	engineRecordsDamaged, applyProducedInputMissing, engineRecaptureMismatch, engineResolvedUnperformed, destroyPostconditionUnknown,
+	prepareRefused, prepareUnsupported}
 
 func Stops() []diagnostics.Stop { return slices.Clone(stops) }

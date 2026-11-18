@@ -77,7 +77,7 @@ func (s Service) PlanPreparation(ctx context.Context, request PrepareRequest) (*
 func (s Service) requestedPreparation(request PrepareRequest) (*reconciliation.PreparationScope, error) {
 	definition, found := s.preparationDefinition(request.Kind)
 	if !found {
-		return nil, failure("lifecycle.unsupported", "the preparation owner is not registered", "")
+		return nil, prepareUnsupported.Fail("the preparation owner is not registered", "")
 	}
 	targets := slices.Clone(request.Targets)
 	slices.Sort(targets)
@@ -86,11 +86,11 @@ func (s Service) requestedPreparation(request PrepareRequest) (*reconciliation.P
 
 func (s Service) admitPreparation(scope reconciliation.PreparationScope) (*reconciliation.PreparationScope, error) {
 	if err := scope.Validate(); err != nil {
-		return nil, failure("lifecycle.state", err.Error(), "")
+		return nil, prepareRefused.Fail(err.Error(), "")
 	}
 	definition, found := s.preparationDefinition(scope.Kind)
 	if !found || !validPreparationDefinition(definition) || !definition.admitsCommand(scope.Command) {
-		return nil, failure("lifecycle.unsupported", "this executable has no registered preparation for "+scope.Kind, "")
+		return nil, prepareUnsupported.Fail("this executable has no registered preparation for "+scope.Kind, "")
 	}
 	return &scope, nil
 }
@@ -125,7 +125,7 @@ func (s Service) preparationOwned(ctx context.Context, view View) (reconciliatio
 		return reconciliation.Plan{}, err
 	}
 	if operation.Verb != reconciliation.Apply {
-		return reconciliation.Plan{}, failure("lifecycle.state", "a preparation cannot replace a removal", "")
+		return reconciliation.Plan{}, prepareRefused.Fail("a preparation cannot replace a removal", "")
 	}
 	frozen, err := store.ReadPlan(ctx, operation.ID)
 	if err != nil {
@@ -177,9 +177,9 @@ func (d decider) admitPreparationCommand(frozen reconciliation.Plan, operation o
 		return nil
 	}
 	if frozen.Preparation != nil {
-		return failure("lifecycle.state", "the unfinished operation is a frozen preparation and cannot become an installation", d.preparationCommand(operation.Context, frozen))
+		return prepareRefused.Fail("the unfinished operation is a frozen preparation and cannot become an installation", d.preparationCommand(operation.Context, frozen))
 	}
-	return failure("lifecycle.state", "finish or remove the current operation before starting preparation", "continue its recorded command or destroy it with its original executable")
+	return prepareRefused.Fail("finish or remove the current operation before starting preparation", "continue its recorded command or destroy it with its original executable")
 }
 
 func (d decider) preparationCommand(name string, plan reconciliation.Plan) string {
@@ -207,7 +207,7 @@ func (d decider) preparationAddition(ctx context.Context, view View, store recor
 	if incomplete, err := unfinishedOver(ctx, store, operation, frozen, states); err != nil {
 		return nil, err
 	} else if len(incomplete) != 0 {
-		return nil, refusal(failure("lifecycle.state", "preparation has incomplete effects", unfinishedApplyExits(view)))
+		return nil, refusal(prepareRefused.Fail("preparation has incomplete effects", unfinishedApplyExits(view)))
 	}
 	state, err := d.sources.compile(ctx, view)
 	if err != nil {
@@ -217,7 +217,7 @@ func (d decider) preparationAddition(ctx context.Context, view View, store recor
 	if inputDrift(view, operation) != "" {
 		previous, _, ok := d.compiledBoth(ctx, view, operation)
 		if !ok {
-			return nil, refusal(failure("lifecycle.state", "the preparation input cannot be compared with its recorded revision", changeRemedy(view)))
+			return nil, refusal(prepareRefused.Fail("the preparation input cannot be compared with its recorded revision", changeRemedy(view)))
 		}
 		before = previous
 	}
@@ -238,7 +238,7 @@ func (d decider) preparationAddition(ctx context.Context, view View, store recor
 	}
 	delta := reconciliation.Compare(owned, fresh)
 	if first, changed := delta.First(); changed && first.Change != reconciliation.Added {
-		return nil, refusal(failure("lifecycle.state", fmt.Sprintf("preparation transition would change owned block %s", first.Block), changeRemedy(view)))
+		return nil, refusal(prepareRefused.Fail(fmt.Sprintf("preparation transition would change owned block %s", first.Block), changeRemedy(view)))
 	}
 	if delta.Count(reconciliation.Added) == 0 {
 		return nil, nil
@@ -249,7 +249,7 @@ func (d decider) preparationAddition(ctx context.Context, view View, store recor
 	}
 	definition, found := d.preparationDefinition(scope.Kind)
 	if !found || !validPreparationDefinition(definition) || !definition.admitsCommand(scope.Command) {
-		return nil, refusal(failure("lifecycle.unsupported", "the preparation owner is not registered or is incomplete", ""))
+		return nil, refusal(prepareUnsupported.Fail("the preparation owner is not registered or is incomplete", ""))
 	}
 	if err := definition.Advance(ctx, PreparationAdvance{AppliedEvidence: d.planner.planInput(view, state, binding.controller, d.preparation).AppliedEvidence, Scope: *scope, Context: view.Identity(), State: state, Before: before, Owned: owned, Fresh: fresh}); err != nil {
 		return nil, verdict(err)

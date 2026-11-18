@@ -24,7 +24,7 @@ type producedRead func(context.Context, string, string) (secretstore.ProducedMat
 func (s Service) producedReferences(block reconciliation.Block) ([]ProducedInput, error) {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
-		return nil, failure("lifecycle.state", "the produced input consumer does not resolve", "")
+		return nil, planCapabilityMissing.Fail("the produced input consumer does not resolve", "")
 	}
 	consumer, ok := capability.(ProducedInputConsumer)
 	if !ok {
@@ -36,7 +36,7 @@ func (s Service) producedReferences(block reconciliation.Block) ([]ProducedInput
 	}
 	for i, ref := range refs {
 		if ref.Kind == "" || ref.Object == "" || !reconciliation.ValidSegment(ref.Output) || slices.Contains(refs[:i], ref) {
-			return nil, failure("lifecycle.state", "block "+block.ID+" names an invalid or repeated produced input", "repair the package's produced input references")
+			return nil, planCapabilityDefect.Fail("block "+block.ID+" names an invalid or repeated produced input", "repair the package's produced input references")
 		}
 	}
 	return slices.Clone(refs), nil
@@ -64,12 +64,12 @@ func (s Service) producedProducer(ref ProducedInput, definitions []reconciliatio
 			continue
 		}
 		if producer != "" {
-			return "", failure("lifecycle.state", "produced input "+ref.Kind+"/"+ref.Object+"/"+ref.Output+" has several producers", "select one producer for this output")
+			return "", planCapabilityDefect.Fail("produced input "+ref.Kind+"/"+ref.Object+"/"+ref.Output+" has several producers", "select one producer for this output")
 		}
 		producer = definition.ID
 	}
 	if producer == "" {
-		return "", failure("lifecycle.state", "produced input "+ref.Kind+"/"+ref.Object+"/"+ref.Output+" has no producer", "include the producer in this plan")
+		return "", planCapabilityDefect.Fail("produced input "+ref.Kind+"/"+ref.Object+"/"+ref.Output+" has no producer", "include the producer in this plan")
 	}
 	return producer, nil
 }
@@ -127,7 +127,7 @@ func (s Service) producedLender(block reconciliation.Block, definitions []reconc
 		}
 		producer, declared := producers[ref]
 		if closed || !declared {
-			return secrets.Material{}, failure("lifecycle.state", "block "+block.ID+" cannot borrow an undeclared or expired produced input", "repeat the operation with its frozen input")
+			return secrets.Material{}, applyProducedInputMissing.Fail("block "+block.ID+" cannot borrow an undeclared or expired produced input", "repeat the operation with its frozen input")
 		}
 		entry, found, err := read(ctx, producer, ref.Output)
 		if err != nil {
@@ -136,7 +136,7 @@ func (s Service) producedLender(block reconciliation.Block, definitions []reconc
 		}
 		if !found || entry.Unproved && !removal {
 			entry.Material.Clear()
-			return secrets.Material{}, failure("lifecycle.state", "produced input "+producer+"/"+ref.Output+" is missing or unproved", "complete the producer block "+producer+" before applying this consumer")
+			return secrets.Material{}, applyProducedInputMissing.Fail("produced input "+producer+"/"+ref.Output+" is missing or unproved", "complete the producer block "+producer+" before applying this consumer")
 		}
 		lent = append(lent, entry.Material)
 		return entry.Material, nil
@@ -183,7 +183,7 @@ func (s Service) prepareProducedExecution(ctx context.Context, tx Transaction, s
 			return nil, err
 		}
 		if len(held) == 0 {
-			return nil, failure("lifecycle.state", "the removal names no apply to borrow produced inputs from", "restore the context store")
+			return nil, engineRecordsDamaged.Fail("the removal names no apply to borrow produced inputs from", "restore the context store")
 		}
 		definitions = held.lending(held.head().plan)
 	case operation.Predecessor != "":

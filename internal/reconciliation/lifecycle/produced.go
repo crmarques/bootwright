@@ -86,7 +86,7 @@ func (s Service) sameProducer(ctx context.Context, selected secretstore.Context,
 			return err
 		}
 		if before != "" && before != after {
-			return failure("lifecycle.state",
+			return engineRecaptureMismatch.Fail(
 				"the "+output.Name+" block "+producer.ID+" recaptured presents another identity ("+after+") than the one custody holds ("+before+"), so it does not replace it",
 				"find what replaced the effect "+producer.ID+" proved; this context's records name the original")
 		}

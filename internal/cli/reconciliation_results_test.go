@@ -548,14 +548,14 @@ func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 }
 
 func TestRefusedOperationPresentsOnlyItsDiagnostic(t *testing.T) {
-	failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.stage", Message: "no block carries the selected stage"}}}
+	failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "no block carries the selected stage"}}}
 	record := &dispatchRecord{err: failure}
 	var out, errOut bytes.Buffer
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"apply", "--stage", "substrates", "--yes"})
 	if code != 1 || out.String() != "" {
 		t.Fatalf("refusal code=%d stdout=%q", code, out.String())
 	}
-	if errOut.String() != "  error  lifecycle.stage\n    no block carries the selected stage\n    Next: select a stage that has a startable block\n" {
+	if errOut.String() != "  error  lifecycle.state\n    no block carries the selected stage\n    Next: run bootwright status --context <context> to see the records and the next step\n" {
 		t.Fatalf("stderr = %q", errOut.String())
 	}
 }

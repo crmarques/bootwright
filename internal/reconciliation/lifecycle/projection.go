@@ -118,32 +118,32 @@ func admissible(paths []ProjectedPath, discovers []api.Kind, applied api.Catalog
 	holder := projection.Holder
 	switch {
 	case projection.Kind == api.Secret || !slices.Contains(api.Kinds(), projection.Kind):
-		return failure("lifecycle.state", "its projection names a kind its implementation does not observe: "+string(projection.Kind), "")
+		return planCapabilityDefect.Fail("its projection names a kind its implementation does not observe: "+string(projection.Kind), "")
 	case projection.Name == "":
-		return failure("lifecycle.state", "its projection of "+string(projection.Kind)+" names no object", "")
+		return planCapabilityDefect.Fail("its projection of "+string(projection.Kind)+" names no object", "")
 	case !api.ValidLexical(api.LexicalName, projection.Name):
-		return failure("lifecycle.state", "its projection of "+string(projection.Kind)+" names an object by an invalid name: "+strconv.Quote(projection.Name), "")
+		return planCapabilityDefect.Fail("its projection of "+string(projection.Kind)+" names an object by an invalid name: "+strconv.Quote(projection.Name), "")
 	case holder != nil && !api.ValidLexical(api.LexicalName, holder.Name):
-		return failure("lifecycle.state", "its projection of "+identity+" names a holder by an invalid name: "+strconv.Quote(holder.Name), "")
+		return planCapabilityDefect.Fail("its projection of "+identity+" names a holder by an invalid name: "+strconv.Quote(holder.Name), "")
 	case !declared && !slices.Contains(discovers, projection.Kind):
-		return failure("lifecycle.state", "its projection names an object the applied revision does not declare: "+identity, "")
+		return planCapabilityDefect.Fail("its projection names an object the applied revision does not declare: "+identity, "")
 	case holder != nil && !declaredIn(applied, holder.Kind, holder.Name):
-		return failure("lifecycle.state", "its projection of "+identity+" names a holder the applied revision does not declare: "+string(holder.Kind)+"/"+holder.Name, "")
+		return planCapabilityDefect.Fail("its projection of "+identity+" names a holder the applied revision does not declare: "+string(holder.Kind)+"/"+holder.Name, "")
 	case holder != nil && !referencesKind(holder.Kind, holder.Field, projection.Kind):
-		return failure("lifecycle.state", "its projection of "+identity+" names a holder field that does not reference "+string(projection.Kind)+": "+holder.Field, "")
+		return planCapabilityDefect.Fail("its projection of "+identity+" names a holder field that does not reference "+string(projection.Kind)+": "+holder.Field, "")
 	case projection.Observed.Type() != api.Mapping:
-		return failure("lifecycle.state", "its projection of "+identity+" is not a spec mapping", "")
+		return planCapabilityDefect.Fail("its projection of "+identity+" is not a spec mapping", "")
 	case len(projection.Notes) > maxProjectionNotes:
-		return failure("lifecycle.state", "its projection of "+identity+" carries more than "+strconv.Itoa(maxProjectionNotes)+" notes", "")
+		return planCapabilityDefect.Fail("its projection of "+identity+" carries more than "+strconv.Itoa(maxProjectionNotes)+" notes", "")
 	}
 	for _, note := range projection.Notes {
 		if len(note) > maxProjectionNote || strings.ContainsFunc(note, unicode.IsControl) {
-			return failure("lifecycle.state", "its projection of "+identity+" carries a note longer than "+strconv.Itoa(maxProjectionNote)+" bytes or holding a control character", "")
+			return planCapabilityDefect.Fail("its projection of "+identity+" carries a note longer than "+strconv.Itoa(maxProjectionNote)+" bytes or holding a control character", "")
 		}
 	}
 	for _, path := range claimedPaths(projection.Observed, api.Schema(projection.Kind), "spec") {
 		if !slices.Contains(paths, ProjectedPath{Kind: projection.Kind, Path: path}) {
-			return failure("lifecycle.state", "its projection claims a field its implementation does not observe: "+path, "")
+			return planCapabilityDefect.Fail("its projection claims a field its implementation does not observe: "+path, "")
 		}
 	}
 	return nil
@@ -187,7 +187,7 @@ func refuseLentMaterial(projections []Projection, material map[string]secrets.Ma
 		}
 	}
 	if carriesLent(texts, material) {
-		return failure("lifecycle.state", "a projection of block "+block+" carries Secret material, so diff shows nothing",
+		return planCapabilityDefect.Fail("a projection of block "+block+" carries Secret material, so diff shows nothing",
 			unobservedDiff(contextName)+", and report this defect")
 	}
 	return nil

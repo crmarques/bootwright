@@ -340,7 +340,7 @@ func TestUnregisteredFlagRefusesAMachineThePlanDoesNotUnregister(t *testing.T) {
 			}
 			_, err := journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, Unregistered: []string{unknown}})
 			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.authorization" ||
+			if len(reported) != 1 || reported[0].Code != "authorize.unneeded" ||
 				reported[0].Message != "this destroy removes no subscription registration from Machine/"+unknown+", so --unregistered "+unknown+" acknowledges nothing" ||
 				reported[0].Remediation != "repeat bootwright destroy --context "+lifecycle.JourneyContext+" without --unregistered "+unknown {
 				t.Fatalf("the destroy naming %s = %#v (%v)", unknown, reported, err)

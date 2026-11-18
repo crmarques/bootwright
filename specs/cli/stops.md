@@ -91,6 +91,10 @@ refusals of a decision and its plan before any effect.
 | `destroy.incomplete` | operation | possible | unclassified | - | repeat | the destroy ended with blocks not proved gone; the diagnostics before it say why | repeat the destroy once each cause is fixed |
 | `destroy.in-use` | removal-phase | none | target | - | fix-then-repeat | a removal would take back state that is still in use, so it takes back nothing at that boundary | stop what the message names, then repeat the destroy |
 | `destroy.consumer-survives` | removal-phase | none | target | - | fix-then-repeat | a removal would retire what a consumer that outlives it still uses | keep this context while the consumer runs; a destroy takes back what a consumer uses only when the consumer leaves with owned virtual node Machines the same destroy deletes |
+| `apply.produced-input-missing` | block | none | records | - | fix-then-repeat | a block borrows an output its producer has not proved, or no longer offers | complete the producer block, then repeat the operation |
+| `engine.recapture-mismatch` | block | possible | target | - | fix-then-repeat | an output a block recaptured presents another identity than the one custody holds | find what replaced the effect the block proved; the context's records name the original |
+| `engine.resolved-unperformed` | resolution | none | target | - | repeat | an observation proved a frozen effect never performed, or left part done, so the block is failed and retried | repeat the operation, which retries the block |
+| `destroy.postcondition-unknown` | block | none | target | - | fix-then-repeat | a retried removal read its target again and still could not tell its postcondition, so it performed no effect | restore the target the removal reads, then repeat the destroy |
 
 #### Decisions
 
@@ -116,8 +120,9 @@ refusals of a decision and its plan before any effect.
 | `engine.binding-lost` | operation | none | records | - | abandon-context | a Secret binding the operation froze is lost, so its material cannot be lent again | restore the context's keyring from a complete backup, or delete the context and remove what it named by hand |
 | `destroy.stage-selected` | operation | none | input | - | fix-then-repeat | the next operation is a destroy, which accepts no stage selection | repeat the command without --stage and --until |
 | `apply.until-before-preparation` | operation | none | input | - | other-verb | the add-on boundary --until names cannot be planned before preparation completes | run apply to complete preparation, then select --until |
+| `engine.records-damaged` | operation | none | records | - | abandon-context | the context's operation records do not form the lineage or removal the operation needs | restore the context store from a backup, or delete the context with what it may still own |
 
-#### Plans and authorizations
+#### Plans, preparations and authorizations
 
 | Code | Level | Certainty | Cause | Fault | Recovery | Meaning | Remedy |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -130,3 +135,5 @@ refusals of a decision and its plan before any effect.
 | `authorize.missing` | operation | none | input | - | authorize | the plan has consequences no --authorize grants | review the plan, then repeat the command with the authorization it names |
 | `authorize.stale` | operation | none | input | - | authorize | an --authorize digest names steps the plan no longer holds, or an unattended run binds none | review the plan, then repeat the command with the digest it prints |
 | `authorize.rebind-invalid` | operation | none | input | - | fix-then-repeat | an --authorize rebind names a Secret the operation cannot rebind | repeat the command naming each rotated access credential once as --authorize rebind=<secret> |
+| `prepare.refused` | operation | none | input | - | fix-then-repeat | a preparation cannot start or advance over the context's current operation or input | finish or take back the current operation, or restore the input the preparation recorded |
+| `prepare.unsupported` | operation | none | build | - | none | this executable registers no preparation for the requested owner | use a build that registers the preparation |

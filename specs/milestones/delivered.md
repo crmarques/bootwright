@@ -17707,3 +17707,21 @@ the erase relaxation. The engine section of the catalog splits into three
 leaves, and the engine's ledger falls from 173 to 139. Guarded by
 `TestTheEnginesStopsAreTheCatalogsEngineStops` and the engine's refusal,
 authorization, continuation and journey tests and their race run.
+
+## X611 — Records, produced inputs and preparations are stops
+
+### B1600
+
+Under [D276](backlog.md#d276) (audit 006 W2.1, third chunk of the engine
+refusals), split from [B1563](m1.md#b1563). Fifty-four more sites become seven
+new [engine stops](../cli/stops.md#engine-stops) and earlier ones: records that
+do not form the lineage or removal an operation needs (`engine.records-damaged`),
+a produced input not proved or no longer offered, a recapture of another
+identity, a resolution that proved an effect never performed or part done, a
+retried removal that still cannot read its postcondition, and the preparation
+refusals (`prepare.refused`, `prepare.unsupported`); the projection, evidence
+and produced-input contract defects join `plan.capability-defect` and
+`engine.request-defect`, the executable mismatches `engine.other-build`. The
+engine's ledger falls from 139 to 85. Guarded by
+`TestTheEnginesStopsAreTheCatalogsEngineStops`, the engine's produced-input,
+lineage, preparation and journey tests and their race run.

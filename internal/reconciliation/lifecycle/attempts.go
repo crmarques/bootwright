@@ -39,7 +39,7 @@ func (s Service) attempt(ctx context.Context, run invocation, block reconciliati
 	tx, store, boundary, operation, plan := run.tx, run.store, run.boundary, run.operation, run.plan
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
-		return "", failure("lifecycle.state",
+		return "", engineOtherBuild.Fail(
 			"this executable does not offer the implementation this block froze",
 			"install the executable that registered this operation")
 	}
@@ -229,7 +229,7 @@ func (s Service) resolveUnknown(ctx context.Context, run invocation, block recon
 	removal := reading.plan != nil
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
-		return "", failure("lifecycle.state",
+		return "", engineOtherBuild.Fail(
 			"this executable cannot observe the implementation this block froze",
 			"install the executable that registered this operation")
 	}
@@ -311,11 +311,11 @@ func (s Service) resolveUnknown(ctx context.Context, run invocation, block recon
 	case removal && state == reconciliation.BlockFailed:
 		return state, nil
 	case resolvedEffect == reconciliation.EffectNoEffect:
-		return state, failure("lifecycle.state",
+		return state, engineResolvedUnperformed.Fail(
 			"the frozen effect was never performed",
 			resolutionRemedy(tx.Identity().Name, operation.Verb, plan, false))
 	case resolvedEffect == reconciliation.EffectPartial || resolvedEffect == reconciliation.EffectInconclusive:
-		return state, failure("lifecycle.state", retriedEffect[resolvedEffect], resolutionRemedy(tx.Identity().Name, operation.Verb, plan, true))
+		return state, engineResolvedUnperformed.Fail(retriedEffect[resolvedEffect], resolutionRemedy(tx.Identity().Name, operation.Verb, plan, true))
 	}
 	explanation := s.explainIn(ctx, store, operation, verb, observed, observation.Evidence)
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "unresolved", Block: block.ID, Detail: explanation.Reason})
@@ -373,7 +373,7 @@ func observedAs(contextName string, operation operationstore.Operation, block re
 	}
 	taken, found := removalPlan.Block(block.ID)
 	if !found {
-		return reconciliation.Block{}, "", failure("lifecycle.state",
+		return reconciliation.Block{}, "", engineRecordsDamaged.Fail(
 			"this removal carries no block that takes back "+block.ID, reviewStatus(contextName))
 	}
 	return taken, reconciliation.Destroy, nil
@@ -446,7 +446,7 @@ func acknowledgedReleases(contextName string, plan reconciliation.Plan, preStop 
 	passing := contextCommand(contextName, string(plan.Verb), authorizing(plan)...)
 	for _, name := range slices.Compact(slices.Sorted(slices.Values(names))) {
 		if !objects[name] {
-			return failure("lifecycle.authorization",
+			return authorizeUnneeded.Fail(
 				"this destroy removes no subscription registration from Machine/"+name+", so --unregistered "+name+" acknowledges nothing",
 				"repeat "+passing+" without --unregistered "+name)
 		}
@@ -493,11 +493,11 @@ func (s Service) invoke(ctx context.Context, run invocation, block reconciliatio
 				RetainDependencies: tx.RetainDependencies,
 				Prepare: func(inner context.Context, preparation prerequisites.StagePreparation) error {
 					if resolution != 0 {
-						return failure("lifecycle.state", "an observation may not authorize a host effect", "")
+						return engineRequestDefect.Fail("an observation may not authorize a host effect", "")
 					}
 					encoded, err := json.Marshal(preparation)
 					if err != nil {
-						return failure("lifecycle.state", "the attempt before-state cannot be canonically represented", "")
+						return engineRequestDefect.Fail("the attempt before-state cannot be canonically represented", "")
 					}
 					return store.RecordPreparation(inner, operation.ID, block.ID, attempt, encoded)
 				},
@@ -616,7 +616,7 @@ func (s Service) locateIn(ctx context.Context, store recordReader, view prerequi
 	capability, ok := s.capabilities.Resolve(stage.Kind, stage.Implementation)
 	locator, locates := capability.(ToolLocator)
 	if !ok || !locates {
-		return "", failure("lifecycle.state",
+		return "", engineOtherBuild.Fail(
 			"this executable cannot locate the clients the controller stage of this operation installed",
 			"install the executable that registered this operation")
 	}
@@ -922,7 +922,7 @@ func rereadBeforeRemoval(ctx context.Context, capability Capability, execution E
 	case err == nil && (observed.Effect == reconciliation.EffectNoEffect || observed.Effect == reconciliation.EffectPartial):
 		return Result{}, false, nil
 	case err == nil:
-		err = failure("lifecycle.state", "the retried removal read its target again and still could not tell its postcondition, so it performed no effect", "")
+		err = destroyPostconditionUnknown.Fail("the retried removal read its target again and still could not tell its postcondition, so it performed no effect", "")
 	}
 	return Result{Outcome: reconciliation.OutcomeUnknown}, true, err
 }

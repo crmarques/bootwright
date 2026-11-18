@@ -496,7 +496,7 @@ func TestALentSecretInAProjectionRefusesBeforeOutput(t *testing.T) {
 	if result != nil {
 		t.Fatalf("a lent secret reached a result: %+v", result)
 	}
-	refusedWith(t, err, "lifecycle.state", "a projection of block alpha carries Secret material, so diff shows nothing",
+	refusedWith(t, err, "plan.capability-defect", "a projection of block alpha carries Secret material, so diff shows nothing",
 		"run bootwright diff --context lab without --observe, and report this defect")
 }
 

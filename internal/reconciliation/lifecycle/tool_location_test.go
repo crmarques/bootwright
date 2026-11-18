@@ -166,7 +166,7 @@ func TestALookupWithoutAnAnsweringControllerStageRefuses(t *testing.T) {
 					stagedDefinition("artifacts", reconciliation.StageInfrastructureServices),
 				})
 			},
-			code:        "lifecycle.state",
+			code:        "engine.other-build",
 			remediation: "install the executable that registered this operation",
 		},
 	}
