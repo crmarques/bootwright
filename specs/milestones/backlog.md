@@ -327,6 +327,7 @@ Alias cell.
 | [B1552](#b1552) | new, 2026-11-17 (X572) | defect | Storage | A hosted-DVD Ceph host updated within its release from the CDN or a configured repository prepares without a downgrade refusal | No such update source can be read back as a package source yet; no owner run has met it |
 | [B1555](#b1555) | new, 2026-11-17 (X573 review) | product | Substrate, with CLI | `machine eject-media` releases every virtual-media device a management controller exposes, not only the one Bootwright inserts through | Bootwright inserts through one device, so only that one has refused an insert; no owner run has met another |
 | [B1557](#b1557) | new, 2026-11-17 (X576) | enabling | Verification tooling, with each owning context | The role families that call fixed executables, fixed host roots or remote endpoints run their entry points through ansible-core in the gate | Each needs an executable, root or endpoint override in the role, a custody change the owner has not asked for |
+| [B1588](#b1588) | new, 2026-11-18 (X597 review) | safety | Substrate | A libvirt guest listing reads each domain by its UUID, so no domain name is read as another domain's ID | Low confidence that libvirt admits an all-digit domain name; the fix touches every guest-listing fixture |
 
 ### B82
 
@@ -3728,6 +3729,21 @@ roadmap step or batch, and the Not yet met lines in the specs point to them.
 Like every parked item, these authorize nothing: a lane, an item or a set of
 lanes runs on an explicit request, which attaches its items to a slice.
 
+
+### B1588
+
+**Owner:** Substrate. **Kind:** safety. **Requires:** none.
+**Definition:** Candidate, from the independent review of
+[X597](delivered.md#x597--a-provider-hosts-removal-proves-its-networks-idle):
+the guest listings of the provider host's networks, trunks and drifted networks
+(`network_guests` and `networks_guests` in
+`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/substrate_libvirt.py`)
+list running domains by name and read each with `virsh dumpxml <name>`, which
+looks a domain up by ID first, then UUID, then name. A domain named with digits
+alone, if libvirt admits one, could be read as another domain, and a guest
+plugged into a network missed. **Outcome:** each listing reads `virsh list
+--uuid` and each definition by UUID, naming the domain from its definition.
+**Exit evidence:** a listing test with an all-digit domain name.
 
 ### B1345
 
