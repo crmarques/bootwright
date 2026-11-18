@@ -17841,3 +17841,13 @@ goldens. The kernel CephFS and RBD client checks of the
 and the external consumer's gate ([B761](m4.md#b761)) still qualify the
 clients; the consumer's `aes` default is parked as
 [B1612](backlog.md#b1612).
+
+## X621 — The host firewall's unused refusal helper is removed
+
+### B1613
+
+A defect found by the full gate of [X620](#x620--the-cluster-cephx-key-type-proves-aes256k):
+after [X615](#x615--the-host-firewalls-failures-are-stops) raised the host
+firewall's failures from stops, its `refusal` helper had no caller, and
+`make check`'s static analysis refused it as unused (U1000). The helper is
+removed; behavior is unchanged.
