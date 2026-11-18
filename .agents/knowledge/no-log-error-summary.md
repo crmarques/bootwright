@@ -63,3 +63,14 @@ discards that value from `module.no_log_values` once it has proved it one of
 its closed set, as `ceph_cluster.SELECTORS` does; every other leaf stays
 masked. `test_ceph_refusal_record.py` runs the real module entry point
 through this masking.
+
+The second case surfaced only after a real erase (2026-11-18, B1578): the
+`physical_erase` module's `material` carries the removal's `originalAttempt`,
+which the erase receipt repeats, so the receipt reached Go as
+`VALUE_SPECIFIED_IN_NO_LOG_PARAMETER` and the destroy refused `physical erase
+receipt has another removal attempt lineage`, while the receipt file on the
+controller read correctly. `physical_erase.unmask_lineage` discards the
+attempt and the apply operation once each matches its identifier's shape;
+`test_physical_erase_run.py` polls through the real masking. A unit test that
+calls a module's helpers directly never sees this; the remaining adapters are
+[B1089](../../specs/milestones/m2.md#b1089).

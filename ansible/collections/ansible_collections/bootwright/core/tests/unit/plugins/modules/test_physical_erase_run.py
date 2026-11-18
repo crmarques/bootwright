@@ -117,6 +117,23 @@ def test_each_phase_drives_the_controller_and_the_controller_is_closed_after_eve
     assert controller["closed"] == 6 and controller["created"] is False
 
 
+def test_the_receipt_keeps_its_lineage_while_every_other_material_value_stays_masked(controller, run_module, monkeypatch):
+    attempt = "op-5eaa54ad5cf69a109c2d2774f7550e1e/physical-erase-srv4203/1"
+    apply_operation = "op-3acb1098908f820acb5e3e3079516d38"
+    secret = "/run/bootwright/material/fleet-id"
+    receipt = {"state": "complete", "originalAttempt": attempt, "work": "/var/lib/bootwright-hosted/lab/" + apply_operation, "leak": secret}
+    monkeypatch.setattr(custody.Controller, "poll", lambda self: {"answer": "complete", "receipt": receipt})
+    material = {"originalAttempt": attempt, "applyOperation": apply_operation, "fleetIdentity": secret}
+    polled = run_module(module, dict(arguments("poll"), material=material))
+    assert polled["receipt"]["originalAttempt"] == attempt
+    assert polled["receipt"]["work"] == receipt["work"]
+    assert secret not in json.dumps(polled)
+    shapeless = dict(material, originalAttempt=secret, applyOperation="op-not-an-operation")
+    receipt.update(originalAttempt=secret, work="op-not-an-operation")
+    masked = run_module(module, dict(arguments("poll"), material=shapeless))
+    assert secret not in json.dumps(masked) and "op-not-an-operation" not in json.dumps(masked)
+
+
 def test_finish_removes_only_with_a_receipt_and_hands_the_controller_the_removed_evidence(controller, run_module):
     refused = run_module(module, arguments("finish"))
     assert refused["failed"] is True and refused["msg"] == REFUSED and controller["calls"] == []

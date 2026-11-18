@@ -87,6 +87,8 @@ controller:
 """
 
 import json
+import re
+
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_controller as custody
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_worker as worker
@@ -127,6 +129,21 @@ BUILT = {
 # image build and the read-only observation.
 NAMING_PHASES = EFFECT_PHASES + ("build", "observe")
 UNPREPARED = {"prepared": False, "removed": False}
+# The removal's lineage identifiers travel in the no_log material beside its
+# secrets, and the receipt and evidence repeat them. They are not secret, so
+# they are kept out of the result masking, which would replace them.
+LINEAGE = {
+    "originalAttempt": re.compile(r"op-[0-9a-f]{32}/[a-z0-9-]{1,128}/[1-9][0-9]{0,8}"),
+    "applyOperation": re.compile(r"op-[0-9a-f]{32}"),
+}
+
+
+def unmask_lineage(module):
+    """Discard each lineage identifier from the masked set once it is proved that identifier's shape."""
+    for key, shape in LINEAGE.items():
+        value = module.params["material"].get(key)
+        if isinstance(value, str) and shape.fullmatch(value):
+            module.no_log_values.discard(value)
 
 
 def main():
@@ -139,6 +156,7 @@ def main():
         },
         supports_check_mode=False,
     )
+    unmask_lineage(module)
     controller = None
     try:
         phase = module.params["phase"]
